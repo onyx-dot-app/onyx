@@ -93,9 +93,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      assistant message with tool_calls carries no thinking blocks, guarding against
      "Expected thinking or redacted_thinking, but found tool_use"
    - The guard tests `thinking is not None` rather than whether thinking is enabled,
-     so it also drops thinking={"type": "disabled"}, the one value that cannot
-     produce that error: disabled thinking is the state in which Anthropic requires
-     those blocks to be absent
+     so it also drops the off types, thinking={"type": "disabled"} and Sonnet 5.5's
+     {"type": "between_tools"}, the values that cannot produce that error: off
+     thinking is the state in which Anthropic requires those blocks to be absent
    - Reasoning off then silently becomes the API's own default on every turn after a
      tool call, which on the Claude 5 line is full reasoning
    - Bedrock Converse carries its own copy of the same check in
@@ -823,23 +823,28 @@ def _patch_responses_api_bridge_check() -> None:
     )
 
 
-def _disabled_thinking(optional_params: dict) -> dict | None:
-    """The thinking param when it explicitly asks for no thinking at all."""
+# The thinking types that turn up-front thinking off: disabled everywhere it is
+# accepted, between_tools on Sonnet 5.5, which rejects disabled.
+_THINKING_OFF_TYPES = frozenset({"disabled", "between_tools"})
+
+
+def _thinking_off(optional_params: dict) -> dict | None:
+    """The thinking param when it explicitly asks for no up-front thinking."""
     thinking = optional_params.get("thinking")
-    if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+    if isinstance(thinking, dict) and thinking.get("type") in _THINKING_OFF_TYPES:
         return thinking
     return None
 
 
 def _patch_anthropic_keeps_disabled_thinking() -> None:
     """
-    Patches the two Anthropic request transforms to keep an explicit
-    thinking={"type": "disabled"} on a turn whose history carries tool calls
-    with no thinking blocks.
+    Patches the two Anthropic request transforms to keep an explicit off
+    thinking type (disabled, or between_tools on Sonnet 5.5) on a turn whose
+    history carries tool calls with no thinking blocks.
 
     Upstream drops the param there to avoid "Expected thinking or
     redacted_thinking, but found tool_use", but it gates on `thinking is not
-    None` rather than on thinking being enabled. Disabled thinking cannot raise
+    None` rather than on thinking being enabled. Off thinking cannot raise
     that error: it is the state where Anthropic requires the blocks to be
     absent, which is exactly what we send. Dropping it silently returns the
     model to its default effort, which on the Claude 5 line is full reasoning.
@@ -865,7 +870,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             litellm_params: dict,
             headers: dict,
         ) -> dict:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             body = original_transform_request(
                 self, model, messages, optional_params, litellm_params, headers
             )
@@ -893,7 +898,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             headers: Optional[dict] = None,
             drop_params: bool = False,
         ) -> Any:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             data = original_request_helper(
                 self,
                 model=model,

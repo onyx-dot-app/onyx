@@ -394,6 +394,25 @@ class CredentialCapabilityReport(BaseModel):
     verdicts: dict[CredentialCapability, CapabilityVerdict]
     check_results: list[CapabilityCheckResult]
 
+    def required_failures(self) -> list[CapabilityCheckResult]:
+        """The failed checks that block indexing: required and applicable."""
+        return [
+            result
+            for result in self.check_results
+            if result.required
+            and result.applicable
+            and result.status == CapabilityCheckStatus.FAILED
+        ]
+
+
+class PendingCheck(BaseModel):
+    """A named check with no result yet, as its definition describes it."""
+
+    capability: CredentialCapability
+    check_id: str
+    display_name: str
+    required: bool
+
 
 class NamedCheckRun(BaseModel):
     """The outcome of the named checks after the blocking budget."""
@@ -401,7 +420,11 @@ class NamedCheckRun(BaseModel):
     # Results of the checks that finished, reused draft results included.
     finished_results: list[CapabilityCheckResult]
     # Checks that were still running at the end of the budget.
-    unfinished_check_ids: frozenset[str]
+    unfinished_checks: list[PendingCheck]
+
+    @property
+    def unfinished_check_ids(self) -> frozenset[str]:
+        return frozenset(check.check_id for check in self.unfinished_checks)
 
     @property
     def failed_required_results(self) -> list[CapabilityCheckResult]:
@@ -421,9 +444,10 @@ class ProposedPairingValidation(BaseModel):
     # legacy validation failed. The named checks do not run then.
     validation_error: str | None = None
     # Named checks only: the finished results, and the checks still running at
-    # the end of the blocking budget.
+    # the end of the blocking budget, by id and with their definitions.
     check_results: list[CapabilityCheckResult] = []
     unfinished_check_ids: frozenset[str] = frozenset()
+    unfinished_checks: list[PendingCheck] = []
 
     @property
     def blocks_pairing(self) -> bool:

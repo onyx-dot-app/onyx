@@ -559,7 +559,7 @@ def test_query_failure_and_disconnect_do_not_replace_application_errors(
 def test_rejected_requests_are_not_failed_queries(
     query_sink: Mock, code: OnyxErrorCode, reported: bool
 ) -> None:
-    @query.telemetry_query(mode="search")
+    @query.telemetry_query(mode=query.QueryMode.SEARCH)
     def search() -> None:
         raise OnyxError(code)
 
@@ -577,7 +577,7 @@ def test_search_stream_times_the_first_results(
     ticks = iter([1.0, 1.5])
     monkeypatch.setattr(query, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
 
-    @query.telemetry_query(mode="search")
+    @query.telemetry_query(mode=query.QueryMode.SEARCH)
     def stream() -> Iterator[object]:
         yield object()
         yield SearchDocsPacket()
@@ -614,7 +614,7 @@ def test_stop_button_and_api_origin_map_to_reported_outcome_and_channel(
 
 def test_each_query_has_its_own_id(query_sink: Mock) -> None:
     for _ in range(2):
-        query.QueryObservation(channel="web", mode="chat").finish()
+        query.QueryObservation(channel="web", mode=query.QueryMode.CHAT).finish()
     ids = {uuid.UUID(call.args[1]["query_id"]) for call in query_sink.call_args_list}
     assert len(ids) == 2
 

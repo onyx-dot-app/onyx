@@ -36,6 +36,11 @@ separate "run detail" screen. If a run needs an approval the task wasn't
 configured to grant, or if it fails outright, the user gets a notification.
 Scheduled runs never clutter the normal Craft session sidebar.
 
+Deleting from the task detail page removes the task from the cached overview
+and replaces the detail URL with `/craft/v1/tasks`. Browser Back does not
+return to that deleted detail entry. A failed deletion keeps the detail page
+open for another attempt (`web/src/app/craft/v1/tasks/[id]/page.tsx`).
+
 ---
 
 ## 2. Surfaces
@@ -105,10 +110,11 @@ run could saturate would stall dispatch for every tenant
   `trigger_source` (`scheduled`/`manual_run_now`), `skip_reason`/`error_class`/
   `error_detail`, `started_at`/`finished_at`, `summary` (short text pulled
   from the final agent message).
-- `ScheduledTaskPreApprovedTarget`: one row per `(task, gated_app)` grant.
-  `UNIQUE(scheduled_task_id, gated_app_id)`. The `gated_app` row is an
-  external app or an MCP server. The table name is `scheduled_task_pre_approved_app`
-  and predates MCP support. See §4.4.
+- `ScheduledTaskEnabledApp`: membership keyed by `(scheduled_task_id, gated_app_id)`.
+  Missing membership blocks every action in that app, including workspace-managed actions.
+- `ScheduledTaskActionPolicy`: one choice per `(scheduled_task_id, gated_app_id, action_id)`.
+  New tasks copy personal choices when an app is first enabled. Existing tasks retain their choices, including empty maps that require approval. Workspace restrictions remain live.
+
 - `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`/`SLACK`): set at
   session-create time (`SCHEDULED` by the executor). The normal Craft sidebar query
   filters to `INTERACTIVE`, which is how scheduled runs stay out of it. A
@@ -123,6 +129,12 @@ run could saturate would stall dispatch for every tenant
   so pre-approvals don't change what `decision == APPROVED` means elsewhere.
 
 ---
+
+### Action permission storage
+
+`backend/alembic/versions/131ed5e307a4_add_craft_action_policy_storage.py` adds personal and task policy tables and the app user-management switch. It converts known actions in previously pre-approved apps to ALWAYS, then removes the old grant table. Missing task settings require approval when user management is enabled. It adds no approval deadline, run snapshot, or run foreign key.
+
+`backend/alembic/versions/131ed5e307a4_add_craft_action_policy_storage.py` adds app memberships. It enables every previously pre-approved task/app pair, including apps with no known actions. Only known actions receive auto-approval choices. New tasks have no memberships by default.
 
 ## 4. How it works
 
@@ -177,7 +189,7 @@ per tenant every 30 s):
    so it never provisions a webapp dev server; see
    `[[craft-webapp-proxy]]` §4.5.
 3. Writes the user prompt as turn 0, links `run.session_id` (status
-   `RUNNING`), and commits, before any agent turn or egress can occur. This ordering is load-bearing for §4.4's pre-approval boundary.
+   `RUNNING`), and commits, before any agent turn or egress can occur. This ordering is load-bearing for §4.4's task-policy boundary.
 4. `_drive_agent` takes the per-session prompt slot, stamps the turn
    deadline (soft budget plus hard cap), and runs the prompt through
    `SessionManager.yield_sandbox_events`. It writes each event with
@@ -190,7 +202,8 @@ per tenant every 30 s):
 5. On success, marks `succeeded` with a summary
    (`_summary_from_state`/`_summary_from_session_messages`). On a
    `RequestPermissionRequest` the agent can't resolve alone, marks
-   `awaiting_approval` and notifies (`NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL`).
+   `failed` with `agent_permission_required` and notifies (`NotificationType.SCHEDULED_TASK_FAILED`).
+   Closing the event stream aborts the underlying turn; no durable resume is claimed.
    On any executor-level failure (crash, budget exceeded, terminal agent error, a cancelled turn), marks
    `failed` and notifies (`NotificationType.SCHEDULED_TASK_FAILED`). There
    are no retries in this version: a failed run is one row, and the user
@@ -201,85 +214,56 @@ have been `queued` too long or `running` past budget and marks them
 `failed`, catching a run whose worker died without updating the row. The
 sweeper does not send a notification.
 
-### 4.4 Pre-approvals: unattended egress without a human in the loop
+### 4.4 Per-action policies
 
-Scope: this section covers only the egress-proxy gate
-(`backend/onyx/sandbox_proxy/addons/gate.py`), the mechanism
-`[[craft-external-apps]]` documents for interactive sessions. A second,
-unrelated approval path, ACP `RequestPermissionRequest` (which is what
-produces the `awaiting_approval` run status in §4.3), is owned by a
-separate approvals project and is untouched by this section.
+The task editor shows Apps and MCP servers as full-width plugin rows with enable switches.
+New tasks start with all apps off. Disabled editable rows show the switch without a status label.
+Enabled rows show action counts and Manage actions; actions do not expand inline.
+When creating a task, first enable starts with current personal choices. Existing tasks keep their saved choices, including an empty map that defaults to Ask.
+Disabling preserves saved choices; re-enabling restores them. Later personal edits do not change saved task choices.
+Manage actions opens a modal for one app. Search narrows the visible actions; each row has Auto-approve, Ask, and Disabled buttons.
+Bulk controls affect only visible editable actions. Reset all to workspace defaults affects every
+editable action in that app, regardless of search. Workspace-locked choices remain unchanged.
+The matching-action count sits on the left; Set permissions aligns on the right.
+Its menu offers Auto-approve, Ask, Disabled, and a separated workspace reset action. Personal and task modals share the editor in `web/src/sections/actions/PolicyEditor.tsx`.
+Save changes is available only after a policy changes. It copies choices into the task form draft.
+Closing a changed modal asks the user to discard changes or keep editing.
+The task form's Save persists the draft; modal actions do not write to the database.
 
-The problem: the gate's normal `ASK` policy parks a request for up to
-180 seconds waiting for a human click, then expires it and the sandbox
-gets a 403. A scheduled task's author is essentially never present during
-a cron fire, so every gated action in a scheduled run would fail this way
-by default.
+Task edits apply to subsequent requests, including active runs. Task permission responses keep action configuration
+separate from the `enabled` gate; new task creation uses personal defaults for first enable. `effective_policy` always describes the task setting.
 
-**How a pre-approval is bounded, precisely:**
+`backend/onyx/db/action_policy.py` owns the shared permission rules. A task-disabled app blocks every request first. Workspace DENY always blocks.
+When user management is off, workspace settings apply. Otherwise a task uses its own saved policy;
+missing task settings mean ASK. Personal conversations use personal overrides or workspace defaults.
 
-- **Granted per external app or MCP server, per task**, never per individual
-  action and never globally. The gate resolves a request to exactly
-  one target first, so a target-level grant covers every
-  action that target exposes by construction. `ScheduledTaskPreApprovedTarget`
-  is the row that encodes this: `(scheduled_task_id, gated_app_id)`.
-- **The grant is only live while the specific run it applies to is
-  actually running.** The gate's lookup (`_scheduled_task_grant` in
-  `gate.py`, backed by `get_live_scheduled_run_grants` in
-  `onyx/db/scheduled_task.py`) requires the session's owning
-  `scheduled_task_run.status == RUNNING`, not merely
-  `BuildSession.origin == SCHEDULED`. A `BuildSession` keeps
-  `origin=SCHEDULED` forever, and the session view leaves the chat input
-  open once a run finishes, so without the `RUNNING` check a follow-up
-  message typed into a *finished* scheduled session would silently inherit
-  the task's grants. The executor commits `session_id` with `RUNNING` in the
-  same write before any agent egress can occur (§4.3 step 3), so there is
-  no window where a grant could apply before the run row says so.
-  The gate memoizes the lookup per session in `_grant_cache`
-  (`_GRANT_CACHE_TTL_S` = 60 seconds). Nothing invalidates it when the run
-  ends. A follow-up in the first 60 seconds after the terminal transition
-  can still use the cached grant. The same cache can also hold a stale
-  "no grant" result for the first seconds of a run.
-- **Admin `DENY` always wins, before a grant is ever consulted.** The
-  gate's verdict order is `DENY` (403, no row) then `ALWAYS` (forward, no
-  row) then `ASK` (the only branch where a pre-approval grant is checked at
-  all). A grant cannot override a `DENY` policy; it only short-circuits the
-  park-and-wait for actions the admin already permits with confirmation.
-- **A partially-granted run degrades gracefully, per app.** Requests to an
-  app the task didn't grant park and expire exactly as they would with no
-  pre-approval feature at all; only the granted app's requests skip the
-  park.
-- **Every unattended forward is recorded, not silent.** A pre-decided
-  `action_approval` row is inserted already `APPROVED`, tagged
-  `decided_via=pre_approval`, and a
-  `NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION` notification fires
-  on the first such forward per `(run, target)` (deduped via
-  `create_notification`'s `additional_data` key, which must stay to exactly
-  `(run_id, target_kind, target_id)` or the dedup breaks).
-- **Fail-closed on the forwarding path.** mitmproxy's default behavior on an
-  unhandled addon exception is to forward the original request, bypassing
-  the gate. The auto-approved dispatch path is wrapped so any unhandled
-  exception there returns a 403 instead, so a already-committed `APPROVED`
-  row can never be followed by an unguarded forward.
+The proxy resolves the active RUNNING task for each request before forwarding. It does not cache
+whole-app grants. After a wait, it rechecks settings and the original run context. A request whose
+run ended cannot fall back to personal permissions. Separate interactive conversations use personal settings.
 
-Grants are managed as checkboxes in the task editor (`pre_approved_app_ids`
-and `pre_approved_mcp_server_ids` on create/patch); only the task's author can see or change them, since
-tasks and their runs are user-scoped. Editing a task's prompt does not
-silently reset its grants: they are shown and edited as an explicit,
-separate choice.
+Approve for session remains available. It satisfies ASK for specific actions in that session and
+never overrides DENY. The proxy keeps its bounded 180-second wait; execution is not durably paused.
+Rejected and expired requests remain visible in approval history. A recovered action failure does
+not automatically change the executor's success result.
+
+Create and patch accept `action_policies`, a list of app IDs and action-policy maps. Omitted settings
+on patch remain unchanged. The editor sends the choices shown in its draft. Empty maps clear editable choices;
+the backend never treats an empty map as a request to copy personal settings. Submitted app scopes replace their editable choices atomically; inaccessible
+apps and hidden choices remain stored. `/scheduled-tasks/{id}/action-policies` projects current
+settings and lock reasons for the task owner.
 
 ---
 
 ## 5. Contracts and invariants
 
-1. **A pre-approved action must be bounded by exactly what the user
-   granted: one app, one `RUNNING` run of that task (plus the 60-second
-   grant-cache grace window after the run ends, §4.4).** Any change
-   that widens the grant lookup (e.g. matching on `origin=SCHEDULED` alone,
-   or on a terminal-status run) reopens the follow-up-message leak
-   described in §4.4.
-2. **`DENY` must be checked before any pre-approval lookup runs.** A
-   pre-approval is only ever consulted inside the `ASK` branch.
+1. **Task permissions apply only to the active RUNNING execution.** Losing the prompt
+   lease closes the producer and aborts the scheduled turn; there is no successor runner. Recheck after waits;
+   a finished run cannot authorize later requests through a cached grant. Requests
+   from scheduled sessions without a running task are blocked, rather than using
+   personal settings. A newly opened task editor waits for fresh policy data;
+   later refreshes do not replace its draft. Saving refreshes the task policy cache.
+2. **DENY wins before session approvals.** Workspace restrictions and live task choices
+   must be resolved before any auto-approved forwarding.
 3. **A failed run must notify, not fail silently.** Every terminal failure
    path in `executor.py` calls `_notify` with
    `NotificationType.SCHEDULED_TASK_FAILED`; a new failure exit added to the
@@ -312,7 +296,7 @@ separate choice.
   scheduled session; `[[craft-webapp-proxy]]` documents the one thing that
   is skipped (webapp dev-server provisioning, since `nextjs_port` is `None`).
 - [[craft-external-apps]]: the egress-proxy gate and its policy model that
-  pre-approvals short-circuit.
+  scheduled execution shares.
 - [[notifications]]: `SCHEDULED_TASK_FAILED`, `SCHEDULED_TASK_AWAITING_APPROVAL`,
   `SCHEDULED_TASK_PRE_APPROVED_ACTION`.
 - [[auth-and-identity]]: every endpoint and every grant is scoped to the
@@ -331,8 +315,8 @@ separate choice.
 |---|---|
 | changes the dispatcher's claim query or locking | concurrent-tick safety (`FOR UPDATE SKIP LOCKED`), and that `next_run_at` still advances in the same transaction |
 | changes run status transitions | the notification call sites in `executor.py`, and the run-history clickability rules in the frontend (`docs/craft/fix-live-scheduled-task-runs.md`) |
-| changes the pre-approval grant lookup or its scope | re-read §4.4 in full; this is the part of the feature where a widened match is a real security regression, not just a UX bug |
-| adds a new gated-app-request path in the egress proxy | whether it should be reachable by a pre-approval grant at all, and whether `DENY` still short-circuits before the grant check |
+| changes active task context or policy lookup | re-read §4.4 in full; this is the part of the feature where a widened match is a real security regression, not just a UX bug |
+| adds a new gated-app-request path in the egress proxy | whether all saved policies and workspace restrictions apply before forwarding |
 | changes `BuildSession.origin` handling | the sidebar filter query, and any other place that assumes `INTERACTIVE` is the only origin |
 | changes the executor's session-creation call | verify `origin=SCHEDULED` and `session_id` are still committed with `RUNNING` before any agent turn (no window for a grant to apply before the run is actually running) |
 | adds a new Celery task to this feature | which worker's `-Q` list includes its queue (see `[[background-jobs]]`'s table); whether it belongs on `scheduled_tasks` or on `primary`, per the reasoning in §2 |
@@ -344,11 +328,11 @@ separate choice.
 ### Tests
 
 ```bash
-# External dependency unit (real SQL): pre-approval grant scoping and
+# External dependency unit (real SQL): task policy ownership and
 # executor persistence behavior.
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_scheduled_task_pre_approvals.py
+cd backend && uv run pytest tests/external_dependency_unit/permissions/test_action_policies.py
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_scheduled_task_executor.py
-# Unit: the gate's grant-source short-circuit, stubbed DB.
+# Unit: live policy enforcement and session approvals, stubbed DB.
 cd backend && uv run pytest tests/unit/sandbox_proxy/test_gate.py
 # Unit: schedule compilation and dispatch-adjacent logic.
 cd backend && uv run pytest tests/unit/onyx/server/features/craft/scheduled_tasks
@@ -379,12 +363,13 @@ file and on code review, not automation.
 4. Open the finished run from the task's run history; confirm it opens the
    normal Craft session view with the scheduled-run banner, and that the
    session does not appear in the regular Craft sidebar.
-5. For the pre-approval path: configure a task with a granted app that has
-   an `ASK`-policy action, run it, and confirm the action forwards without
-   parking, an `action_approval` row exists with `decided_via=pre_approval`,
-   and a `SCHEDULED_TASK_PRE_APPROVED_ACTION` notification appears. Then
-   send a follow-up message on the same, now-finished session and confirm
-   the same app's action *does* park (the `RUNNING` check must exclude it).
+5. Enable an app and open Manage actions. Search for an action and change its policy.
+   Cancel, confirm Discard changes, and reopen to verify the change was discarded. Save changes, then save the task.
+6. Set one task action to Auto-approve while personal settings use Ask. Run the task and confirm
+   the action proceeds without a prompt. After the run finishes, send a follow-up that uses
+   the same action and confirm the proxy blocks it in the scheduled session.
+7. Disable the app and save the task. Confirm the next task request is blocked.
+   Re-enable the app and confirm its saved action choices remain.
 
 ### What "working" looks like
 
@@ -394,7 +379,7 @@ file and on code review, not automation.
   dropped, and the schedule still advances.
 - A failed run always produces a `SCHEDULED_TASK_FAILED` notification; no
   failure is invisible to the user.
-- A pre-approval only fires for its own app, on its own `RUNNING` run.
+- Task policies apply only to enabled apps during that task's `RUNNING` run.
 
 ---
 
@@ -419,9 +404,8 @@ file and on code review, not automation.
   session yet) and `SKIPPED` (no session at all) stay non-openable.
 - **A scheduled session's chat input is not permanently locked.** Once a
   run reaches a terminal state, the user can send ordinary follow-up
-  messages in that same session. This is intentional, but it is exactly
-  the case §4.4's `RUNNING`-status check exists to keep out of the
-  pre-approval grant.
+  messages in that same session. Managed app requests remain blocked after the run
+  ends. Start a separate interactive conversation to use personal app settings.
 - **There are no retries.** A failed run is terminal; nothing resends the
   prompt automatically. Do not assume idempotent retry behavior when
   reasoning about a partially-completed action inside a failed run.

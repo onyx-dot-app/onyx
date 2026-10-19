@@ -1,8 +1,7 @@
 """Classify an intercepted HTTPS request into a gated action.
 
-The gate addon treats both a `None` return and any matcher exception as
-"not gated" — the real security boundary is the proxy's iptables egress
-lockdown, not this heuristic.
+A `None` result identifies unrelated traffic. MCP protocol requests retain their target.
+Exceptions are failures and must never authorize credential injection.
 """
 
 import json
@@ -14,26 +13,26 @@ from urllib.parse import parse_qs
 from uuid import UUID
 
 from mitmproxy import http
-from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
-from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import get_craft_enabled_mcp_servers
 from onyx.db.models import ExternalApp, MCPServer
 from onyx.db.users import fetch_user_by_id
-from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
-    apply_credential_gate,
     recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
-from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
+from onyx.sandbox_proxy.models import (
+    McpProtocolRequest,
+    McpRpcClassification,
+    McpRpcKind,
+)
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     AmbiguousMCPTargetError,
     match_request,
@@ -48,13 +47,13 @@ MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
 
 # MCP tools default to ASK; a server's self-declared `readOnlyHint` never
 # auto-grants. Only an admin override relaxes a tool.
-MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
+MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
 
 
 class RequestEvaluator(Protocol):
     def evaluate(
         self, request: http.Request, tenant_id: str, user_id: UUID
-    ) -> AllMatchedActions | None: ...
+    ) -> AllMatchedActions | McpProtocolRequest | None: ...
 
 
 class CompositeRequestEvaluator(RequestEvaluator):
@@ -70,7 +69,7 @@ class CompositeRequestEvaluator(RequestEvaluator):
 
     def evaluate(
         self, request: http.Request, tenant_id: str, user_id: UUID
-    ) -> AllMatchedActions | None:
+    ) -> AllMatchedActions | McpProtocolRequest | None:
         for evaluator in self._evaluators:
             matched = evaluator.evaluate(request, tenant_id, user_id)
             if matched is not None:
@@ -108,12 +107,14 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
 
     Opens its own short tenant-scoped DB session (mirrors ``IdentityResolver``):
     load the tenant's apps, resolve the one owning the request URL, recognise the
-    catalog action(s) via ``recognize_actions``, then apply the credential gate via
-    ``apply_credential_gate`` to produce the verdict.
+    catalog actions via ``recognize_actions``. Credentials do not affect recognition.
     """
 
     def evaluate(
-        self, request: http.Request, tenant_id: str, user_id: UUID
+        self,
+        request: http.Request,
+        tenant_id: str,
+        user_id: UUID,  # noqa: ARG002
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db, enabled_only=True)
@@ -128,14 +129,7 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
                 path=(request.path or "").split("?", 1)[0],
                 body=request.raw_content,
             )
-            matched_actions = apply_credential_gate(
-                app,
-                proxied,
-                recognize_actions(db, app, proxied),
-                is_available=app_is_available(db, app, user_id),
-            )
-            if matched_actions is None:
-                return None
+            matched_actions = recognize_actions(app, proxied)
 
         return matched_actions.model_copy(update={"payload": _request_payload(request)})
 
@@ -147,10 +141,10 @@ class McpRequestEvaluator(RequestEvaluator):
     rule the credential resolver uses, scoped to the servers the sandbox user may
     access, then parses the JSON-RPC body:
 
-    * protocol plumbing (handshake, discovery, resources) → ``None`` (off-catalog;
-      the resolver injects credentials and the request forwards ungated);
+    * protocol plumbing (handshake, discovery, resources) → ``McpProtocolRequest``;
+      the gate checks task app access without asking for action approval;
     * ``tools/call`` → an ``AllMatchedActions`` over the invoked tool(s), each
-      carrying its effective per-tool policy (admin override else default ASK);
+      carrying the default ASK policy; saved settings are resolved by the gate;
     * unclassifiable body on a matched host → a single ``DENY`` action so the
       gate fails closed instead of forwarding with injected credentials.
 
@@ -163,7 +157,7 @@ class McpRequestEvaluator(RequestEvaluator):
         request: http.Request,
         tenant_id: str,
         user_id: UUID,
-    ) -> AllMatchedActions | None:
+    ) -> AllMatchedActions | McpProtocolRequest | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             # Access-scoped candidates, so duplicate URLs split across groups
             # attribute to the one the user can reach rather than colliding.
@@ -193,17 +187,12 @@ class McpRequestEvaluator(RequestEvaluator):
                 kind=GatedAppKind.MCP_SERVER, id=server.id, app_name=server.name
             )
 
-            # Once attributed to an MCP host, a failure must fail closed: the
-            # gate turns evaluator exceptions into "off-catalog", and the MCP
-            # resolver claims by host — the request would forward with injected
-            # credentials, ungated.
+            # Malformed managed requests stay denied, independently of user settings.
             try:
-                classification = classify_mcp_request(
-                    request.method or "", request.raw_content
-                )
+                classification = classify_mcp_request(request)
                 if classification.kind is McpRpcKind.PLUMBING:
-                    return None
-                actions = _mcp_tool_actions(classification, server, request, db)
+                    return McpProtocolRequest(target=gated_target)
+                actions = _mcp_tool_actions(classification, server, request)
             except Exception:
                 logger.exception(
                     "mcp_evaluator_error tenant=%s server=%s host=%s; denying",
@@ -216,7 +205,7 @@ class McpRequestEvaluator(RequestEvaluator):
                         action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
                         display_name="Unrecognized MCP request",
                         description="MCP gating failed; blocked.",
-                        policy=EndpointPolicy.DENY,
+                        policy=ActionPolicy.DENY,
                     ),
                 )
 
@@ -229,7 +218,6 @@ def _mcp_tool_actions(
     classification: McpRpcClassification,
     server: MCPServer,
     request: http.Request,
-    db: Session,
 ) -> tuple[MatchedAction, ...]:
     """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
@@ -242,10 +230,9 @@ def _mcp_tool_actions(
                     f"{request.method} {path} could not be parsed "
                     "as an MCP tool call or protocol message; blocked."
                 ),
-                policy=EndpointPolicy.DENY,
+                policy=ActionPolicy.DENY,
             ),
         )
-    stored = get_action_policies(db, GatedAppKind.MCP_SERVER, server.id)
     # One action per distinct tool (grants and policies key by tool name), with
     # the batch multiplicity surfaced so the approval card doesn't understate a
     # request that invokes the same tool several times.
@@ -258,7 +245,7 @@ def _mcp_tool_actions(
                 f"Call the “{tool_name}” tool on {server.name}."
                 + (f" This request invokes it {count} times." if count > 1 else "")
             ),
-            policy=stored.get(tool_name, MCP_TOOL_DEFAULT_POLICY),
+            policy=MCP_TOOL_DEFAULT_POLICY,
         )
         for tool_name, count in counts.items()
     )

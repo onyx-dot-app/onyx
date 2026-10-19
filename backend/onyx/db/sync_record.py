@@ -108,12 +108,32 @@ def fetch_latest_sync_record(
     return result.scalar_one_or_none()
 
 
+def record_sync_record_error(
+    db_session: Session,
+    entity_id: int,
+    sync_type: SyncType,
+    error_message: str,
+    finish: bool,
+) -> None:
+    """Stores why the latest sync of the entity failed. ``finish`` also ends it
+    as FAILED, for a sync nothing else finalizes."""
+    sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
+    if sync_record is None:
+        return
+    sync_record.error_message = error_message
+    if finish:
+        sync_record.sync_status = SyncStatus.FAILED
+        sync_record.sync_end_time = func.now()
+    db_session.commit()
+
+
 def update_sync_record_status(
     db_session: Session,
     entity_id: int,
     sync_type: SyncType,
     sync_status: SyncStatus,
     num_docs_synced: int | None = None,
+    num_docs_failed: int | None = None,
 ) -> None:
     """Update the status of a sync record.
 
@@ -123,6 +143,7 @@ def update_sync_record_status(
         sync_type: The type of sync operation
         sync_status: The new status to set
         num_docs_synced: Optional number of documents synced to update
+        num_docs_failed: Optional number of documents that failed to sync
     """
     sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
     if sync_record is None:
@@ -136,6 +157,8 @@ def update_sync_record_status(
     sync_record.sync_status = sync_status
     if num_docs_synced is not None:
         sync_record.num_docs_synced = num_docs_synced
+    if num_docs_failed is not None:
+        sync_record.num_docs_failed = num_docs_failed
 
     if sync_status.is_terminal():
         sync_record.sync_end_time = func.now()

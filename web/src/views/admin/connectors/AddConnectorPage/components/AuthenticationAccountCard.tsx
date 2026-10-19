@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
 import {
   Button,
@@ -21,6 +21,7 @@ import {
   SvgCheckSquare,
   SvgChevronDown,
   SvgChevronUp,
+  SvgEdit,
   SvgLinkedDots,
   SvgPlay,
   SvgTrash,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/credentials/components/ShareAccountField";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
 import { IconLoader } from "@opal/loaders";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
@@ -97,6 +99,8 @@ interface AuthenticationAccountCardProps {
   onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
   onDeselect: () => void;
+  /** Shown in place of the pick button on a card that shows an account rather than offers it. `null` shows nothing. */
+  action?: React.ReactNode;
   /** Called once the user confirms the deletion. */
   onDelete: () => void;
   /** Whether the details below the header are open. */
@@ -116,6 +120,8 @@ interface AuthenticationAccountCardProps {
   onSaveAccount: (
     update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
   ) => Promise<{ admin_public: boolean; groups?: number[] }>;
+  /** Shows the action that changes the saved values in place. */
+  onUpdateCredentials?: () => void;
 }
 /**
  * One saved account in the Authentication Account section. The whole card
@@ -131,6 +137,7 @@ export default function AuthenticationAccountCard({
   quietSelection = false,
   onSelect,
   onDeselect,
+  action,
   onDelete,
   detailsOpen,
   onDetailsOpenChange,
@@ -138,26 +145,19 @@ export default function AuthenticationAccountCard({
   onRerunChecks,
   groupsLocked,
   onSaveAccount,
+  onUpdateCredentials,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
-  const format = useFormatter();
   const { user, permissions } = useUser();
   const [starting, setStarting] = useState<boolean>(false);
   const running: boolean = starting || checkReport?.run_status === "running";
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
-    ? format.dateTime(new Date(lastChecked), {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      })
+    ? formatDateTimeLog(lastChecked)
     : null;
 
   async function rerunChecks() {
@@ -272,11 +272,7 @@ export default function AuthenticationAccountCard({
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
-  const addedOn: string = format.dateTime(new Date(credential.time_created), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const addedOn: string = formatDateLog(credential.time_created);
 
   // The creator, by display name where they set one. An account with no
   // creator shows no owner.
@@ -294,6 +290,42 @@ export default function AuthenticationAccountCard({
     isOwnAccount ||
     (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
       (credential.admin_public || credential.user_id === null));
+
+  // The control beside the chevron: a caller's own, else the pick state.
+  function pickControl(): React.ReactNode {
+    if (action !== undefined) return action;
+    if (selected) {
+      return (
+        <Button
+          variant="action"
+          prominence="tertiary"
+          rightIcon={SvgCheckSquare}
+          tabIndex={-1}
+        >
+          {t("selected.label")}
+        </Button>
+      );
+    }
+    if (selectable) {
+      // Repeats the card's own action, so it leaves the tab order.
+      return (
+        <Button
+          prominence="tertiary"
+          rightIcon={SvgArrowRightCircle}
+          tabIndex={-1}
+        >
+          {t("useButton.label")}
+        </Button>
+      );
+    }
+    return (
+      <div className="p-1.5">
+        <Text font="secondary-body" color="text-03">
+          {t("unsupportedRealm.label")}
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -363,6 +395,15 @@ export default function AuthenticationAccountCard({
                         width="fit"
                         height="fit"
                       >
+                        {onUpdateCredentials && (
+                          <Button
+                            prominence="tertiary"
+                            icon={SvgEdit}
+                            aria-label={t("updateButton.label")}
+                            tooltip={t("updateButton.tooltip")}
+                            onClick={onUpdateCredentials}
+                          />
+                        )}
                         <Button
                           variant="danger"
                           prominence="tertiary"
@@ -516,34 +557,11 @@ export default function AuthenticationAccountCard({
               gap={1}
               width="fit"
             >
-              {selected ? (
-                <Button
-                  variant="action"
-                  prominence="tertiary"
-                  rightIcon={SvgCheckSquare}
-                  tabIndex={-1}
-                >
-                  {t("selected.label")}
-                </Button>
-              ) : selectable ? (
-                // Repeats the card's own action, so it leaves the tab order.
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  tabIndex={-1}
-                >
-                  {t("useButton.label")}
-                </Button>
-              ) : (
-                <div className="p-1.5">
-                  <Text font="secondary-body" color="text-03">
-                    {t("unsupportedRealm.label")}
-                  </Text>
-                </div>
-              )}
+              {pickControl()}
               <Button
                 icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"
+                tooltip={t("viewDetails.tooltip")}
                 aria-label={
                   detailsOpen
                     ? t("collapseButton.ariaLabel")

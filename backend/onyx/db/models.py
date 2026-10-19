@@ -69,17 +69,18 @@ from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
     ArtifactType,
     BuildSessionStatus,
+    CapabilityCheckRunStatus,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     DefaultAppMode,
-    EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
     GrantSource,
@@ -387,12 +388,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=True,
         default=None,
     )
-    language: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        default="en",
-        server_default="en",
-    )
+    # UI language. None = follow Settings.default_language.
+    language: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
     default_app_mode: Mapped[DefaultAppMode] = mapped_column(
         Enum(DefaultAppMode, native_enum=False),
@@ -1056,6 +1053,11 @@ class ConnectorCredentialPair(Base):
     # grants no access at query time and the restricted guard hides its
     # documents. Cleared once its permissions are in the document index.
     perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # An admin started indexing despite the hold its connector checks put on
+    # the first attempt. It outranks a check run started before it.
+    indexing_hold_released_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # Backfills an applied edit requested, oldest first. The indexing beat
@@ -2007,6 +2009,9 @@ class Connector(Base):
 
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Seconds between scheduled runs of each pair's connector checks. None
+    # means the checks run only on request.
+    check_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -2044,6 +2049,13 @@ class Connector(Base):
             if self.prune_freq < 300:
                 raise ValueError(
                     "prune_freq must be greater than or equal to 5 minutes."
+                )
+
+    def validate_check_freq(self) -> None:
+        if self.check_freq is not None:
+            if self.check_freq < 300:
+                raise ValueError(
+                    "check_freq must be greater than or equal to 5 minutes."
                 )
 
 
@@ -2169,6 +2181,56 @@ class CredentialCapabilityReportRow(Base):
             unique=True,
             postgresql_where=text("connector_id IS NULL"),
         ),
+    )
+
+
+class CapabilityCheckRun(Base):
+    """One run of a scope's capability checks, kept after the report row moves
+    on. Rows are written by the same lifecycle as the report row and keyed on
+    its ``run_id``, so a superseded run never lands on a later row."""
+
+    __tablename__ = "capability_check_run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False
+    )
+    # NULL for a config-less credential-time run.
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, unique=True
+    )
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    status: Mapped[CapabilityCheckRunStatus] = mapped_column(
+        Enum(CapabilityCheckRunStatus, native_enum=False), nullable=False
+    )
+    # The serialized ``CredentialCapabilityReport`` this run produced; None
+    # until it completes.
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # Why the run never produced a report.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_capability_check_run_scope_time",
+            "credential_id",
+            "connector_id",
+            "time_created",
+        ),
+        # Serves the cascade when a connector is deleted.
+        Index("ix_capability_check_run_connector_id", "connector_id"),
     )
 
 
@@ -2675,6 +2737,11 @@ class IndexAttempt(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # When the attempt reached a final status. Unset on attempts that finished
+    # before this column existed.
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair", back_populates="index_attempts"
@@ -3009,6 +3076,31 @@ class IndexAttemptError(Base):
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
 
+class CCPairRunResolution(Base):
+    """A failed run, or a run with errors, an admin marked resolved. It keeps
+    its status: the feed only moves it out of the open failures and errors."""
+
+    __tablename__ = "cc_pair_run_resolution"
+
+    # A CCPairRunKind value. A run id is unique only within its kind's table.
+    run_kind: Mapped[str] = mapped_column(String, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    resolved_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # None when the system resolved it.
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
 class IndexAttemptStageMetric(Base):
     """Per-stage timing aggregate for an `IndexAttempt`.
 
@@ -3088,11 +3180,14 @@ class SyncRecord(Base):
     sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, native_enum=False))
 
     num_docs_synced: Mapped[int] = mapped_column(Integer, default=0)
+    num_docs_failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     sync_start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Why the sync failed, for the pair's run history. Only prunes write it.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index(
@@ -4102,6 +4197,20 @@ class Tool(Base):
     )
 
 
+class ToolUserPreference(Base):
+    __tablename__ = "tool_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""
 
@@ -4126,6 +4235,9 @@ class OAuthConfig(Base):
     scopes: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
     additional_params: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    supports_pkce: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     # Metadata
@@ -5962,6 +6074,11 @@ class MCPServer(Base):
     oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # CIMD makes the authorization server fetch this deployment's client metadata
+    # document. When off, auto-discovery registers through DCR instead.
+    oauth_cimd_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
         Enum(MCPServerStatus, native_enum=False),
@@ -6021,6 +6138,23 @@ class MCPServer(Base):
         "UserGroup",
         secondary="mcp_server__user_group",
         back_populates="accessible_mcp_servers",
+    )
+
+
+class MCPServerUserPreference(Base):
+    __tablename__ = "mcp_server_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
 
 
@@ -6144,6 +6278,16 @@ class DocPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
@@ -6155,6 +6299,13 @@ class DocPermissionSyncAttempt(Base):
             "ix_permission_sync_attempt_latest_for_cc_pair",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the doc permission sync lock
+        Index(
+            "uq_doc_permission_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_permission_sync_attempt_status_time",
@@ -6214,6 +6365,16 @@ class ExternalGroupPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
@@ -6225,6 +6386,13 @@ class ExternalGroupPermissionSyncAttempt(Base):
             "ix_group_sync_attempt_cc_pair_time",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the group sync lock
+        Index(
+            "uq_group_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_group_sync_attempt_status_time",
@@ -6814,6 +6982,7 @@ class ActionApproval(Base):
     """
 
     __tablename__ = "action_approval"
+    __table_args__ = (Index("ix_action_approval_session", "session_id"),)
 
     approval_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -6912,33 +7081,6 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
-    pre_approved_targets: Mapped[list["ScheduledTaskPreApprovedTarget"]] = relationship(
-        "ScheduledTaskPreApprovedTarget",
-        back_populates="task",
-        cascade="all, delete-orphan",
-        order_by="ScheduledTaskPreApprovedTarget.id",
-    )
-
-    @property
-    def pre_approved_external_app_ids(self) -> list[int]:
-        """Granted external-app ids. MCP-server grants are excluded because
-        their target ids live in a different id space."""
-        return [
-            grant.gated_app.external_app_id
-            for grant in self.pre_approved_targets
-            if grant.gated_app.external_app_id is not None
-        ]
-
-    @property
-    def pre_approved_mcp_server_ids(self) -> list[int]:
-        """Granted MCP-server ids. External-app grants are excluded because
-        their target ids live in a different id space."""
-        return [
-            grant.gated_app.mcp_server_id
-            for grant in self.pre_approved_targets
-            if grant.gated_app.mcp_server_id is not None
-        ]
-
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
         #                       AND next_run_at <= now() ORDER BY next_run_at
@@ -7026,50 +7168,6 @@ class ScheduledTaskRun(Base):
         # Session-view banner lookup: get_scheduled_run_context filters by
         # session_id on every session open.
         Index("ix_scheduled_task_run_session", "session_id"),
-    )
-
-
-class ScheduledTaskPreApprovedTarget(Base):
-    """One (task, target) pre-approval grant: the matched target's ASK-gated
-    actions skip the approval park for the task's RUNNING runs.
-
-    The target is a ``gated_app`` row (external app or MCP server). Deleting the
-    task or the target (both CASCADE) drops the grant; a stale grant on a removed
-    target is meaningless. The unique constraint keeps grants idempotent and its
-    index serves the per-task lookup.
-    """
-
-    # The table name predates MCP support. Keep it to avoid a schema-only rename.
-    __tablename__ = "scheduled_task_pre_approved_app"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    scheduled_task_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("gated_app.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    task: Mapped[ScheduledTask] = relationship(
-        "ScheduledTask", back_populates="pre_approved_targets"
-    )
-    # selectin: the pre-approved target-id properties read gated_app for every
-    # grant, so batch them in one SELECT rather than one per grant.
-    gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
-
-    __table_args__ = (
-        UniqueConstraint(
-            "scheduled_task_id",
-            "gated_app_id",
-            name="uq_scheduled_task_pre_approved_app",
-        ),
     )
 
 
@@ -7454,17 +7552,16 @@ class GatedApp(Base):
     """Polymorphic identity for a gated egress target — one row per external app
     or MCP server.
 
-    The approval pipeline (per-action policy, approval rows, scheduled-task
-    pre-approvals) references this single id instead of a per-catalog FK, so a
+    The approval pipeline (action policy, approval rows, scheduled-task
+    permissions) references this single id instead of a per-catalog FK, so a
     new target type adds one nullable column here rather than a column on every
-    consumer table. Rows are created lazily via
-    ``onyx.db.gated_app.get_or_create_gated_app_id`` (the migration backfilled
+    consumer table. Rows are created with their target (the migration backfills
     pre-existing targets), so a row's existence doesn't imply the target was
     ever policied or approved.
 
     Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
     derived from which. Deleting the underlying target CASCADEs this row away,
-    which in turn CASCADEs its policies and pre-approvals.
+    which in turn CASCADEs its policies.
     """
 
     __tablename__ = "gated_app"
@@ -7479,6 +7576,10 @@ class GatedApp(Base):
         Integer,
         ForeignKey("mcp_server.id", ondelete="CASCADE"),
         nullable=True,
+    )
+
+    users_can_manage_policies: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
 
     # Constraints are named to match the live schema created by the migration.
@@ -7519,18 +7620,18 @@ class GatedApp(Base):
         return self.kind, self.target_id
 
 
-class GatedActionPolicy(Base):
-    """Admin's per-action policy override for a gated target, keyed by the
+class WorkspaceActionPolicy(Base):
+    """Admin's action policy override for a gated target, keyed by the
     ``gated_app`` identity row.
 
-    Sparse: only actions the admin has set are stored; an action without a row
-    resolves to ``ASK`` (the default ask-approval behaviour).
+    Sparse: only actions the admin has set are stored. Missing actions use the
+    provider catalog default; MCP tools default to ``ASK``.
 
     ``action_id`` is a catalog id (external apps) or a tool name (MCP servers);
     display (name/description) comes from the code catalog / discovered tools.
     """
 
-    __tablename__ = "gated_action_policy"
+    __tablename__ = "workspace_action_policy"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     gated_app_id: Mapped[int] = mapped_column(
@@ -7539,8 +7640,8 @@ class GatedActionPolicy(Base):
         nullable=False,
     )
     action_id: Mapped[str] = mapped_column(Text, nullable=False)
-    policy: Mapped[EndpointPolicy] = mapped_column(
-        Enum(EndpointPolicy, native_enum=False),
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False),
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -7559,8 +7660,66 @@ class GatedActionPolicy(Base):
         UniqueConstraint(
             "gated_app_id",
             "action_id",
-            name="uq_gated_action_policy",
+            name="uq_workspace_action_policy",
         ),
+    )
+
+
+class UserActionPolicy(Base):
+    """A user's saved choice for an app action, independent of credentials."""
+
+    __tablename__ = "user_action_policy"
+    __table_args__ = (Index("ix_user_action_policy_gated_app", "gated_app_id"),)
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
+    )
+
+
+class ScheduledTaskEnabledApp(Base):
+    """An app this task may use; absent membership blocks every app action."""
+
+    __tablename__ = "scheduled_task_enabled_app"
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("gated_app.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class ScheduledTaskActionPolicy(Base):
+    """A scheduled task's independent choices; absent actions require approval."""
+
+    __tablename__ = "scheduled_task_action_policy"
+    __table_args__ = (
+        Index("ix_scheduled_task_action_policy_gated_app", "gated_app_id"),
+    )
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    policy: Mapped[ActionPolicy] = mapped_column(
+        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
     )
 
 

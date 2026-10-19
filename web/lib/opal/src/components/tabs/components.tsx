@@ -184,7 +184,7 @@ function TabsList({
       style={
         variant === "contained"
           ? {
-              gridTemplateColumns: `repeat(${React.Children.count(children)}, 1fr)`,
+              gridTemplateColumns: `repeat(${React.Children.toArray(children).length}, 1fr)`,
             }
           : undefined
       }

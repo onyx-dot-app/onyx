@@ -56,6 +56,7 @@ def _server(
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=provider_mode,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=(
             "https://accounts.example.com/authorize" if known_provider else None
         ),
@@ -137,7 +138,7 @@ def _install_callback_dependencies(
     user_config = SimpleNamespace(id=101)
     attempt_store = MagicMock()
     attempt_store.consume.return_value = SimpleNamespace(payload=flow)
-    monkeypatch.setattr(api, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(api, "MCP_OAUTH_ATTEMPTS", attempt_store)
     monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)
     monkeypatch.setattr(mcp_db, "user_can_access_mcp_server", lambda *_args: True)
     monkeypatch.setattr(api, "get_user_connection_config", lambda *_args: user_config)
@@ -288,7 +289,7 @@ def test_callback_claim_is_bound_to_authenticated_user(
     attempt_store.consume.side_effect = OnyxError(
         OnyxErrorCode.INVALID_INPUT, "Invalid OAuth state"
     )
-    monkeypatch.setattr(api, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(api, "MCP_OAUTH_ATTEMPTS", attempt_store)
 
     with pytest.raises(OnyxError, match="Invalid OAuth state"):
         asyncio.run(
@@ -322,7 +323,7 @@ def test_provider_denial_claims_flow_without_exchanging_code(
             )
         )
     complete_flow.assert_not_awaited()
-    cast(MagicMock, api.mcp_oauth_attempt_store()).consume.assert_called_once_with(
+    cast(MagicMock, api.MCP_OAUTH_ATTEMPTS).consume.assert_called_once_with(
         owner_id=str(user.id),
         state=_STATE,
     )

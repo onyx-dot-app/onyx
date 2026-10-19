@@ -6,6 +6,50 @@
  *
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
+import type {
+  CCPairRunLevel,
+  CCPairRunsQuery,
+  CCPairThroughputWindow,
+  IndexingConnectorsQuery,
+} from "@/lib/connectors/types";
+
+/** The query string a runs feed takes, for one pair or the fleet. */
+function runsQueryParams(query: CCPairRunsQuery): string {
+  const params = new URLSearchParams({
+    page_num: String(query.pageNum),
+    page_size: String(query.pageSize),
+  });
+  if (query.since !== null) params.set("since", query.since);
+  if (query.until !== null) params.set("until", query.until);
+  for (const kind of query.kinds ?? []) params.append("kinds", kind);
+  for (const group of query.statusGroups ?? []) {
+    params.append("status_groups", group);
+  }
+  if (query.q) params.set("q", query.q);
+  if (query.errors !== null) params.set("errors", query.errors);
+  if (query.superseded !== null) {
+    params.set("superseded", String(query.superseded));
+  }
+  if (query.resolved !== null) {
+    params.set("resolved", String(query.resolved));
+  }
+  return params.toString();
+}
+
+function resolvableCountParams(
+  level: CCPairRunLevel | null,
+  q: string,
+  since: string | null,
+  until: string | null
+): string {
+  const params = new URLSearchParams();
+  if (level !== null) params.set("level", level);
+  if (q) params.set("q", q);
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
+  return params.toString();
+}
+
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
@@ -52,7 +96,6 @@ export const SWR_KEYS = {
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
   llmRouterModels: "/api/admin/llm/router-models",
-  llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
@@ -220,8 +263,10 @@ export const SWR_KEYS = {
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
-  buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+  buildSessionApprovalStatus: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/status`,
+  buildSessionApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -273,6 +318,8 @@ export const SWR_KEYS = {
 
   // ── MCP Server (per-ID) ───────────────────────────────────────────────────
   adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+  adminMcpOAuthDiscovery: (id: number) =>
+    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
@@ -287,29 +334,75 @@ export const SWR_KEYS = {
   // Every stored capability report of one source's credentials.
   credentialCheckReports: (source: string) =>
     `/api/manage/admin/credential/capability-reports?source=${source}`,
+  // Every file-list page of one connector starts with this, so `mutate` can match them all.
+  connectorFilesPrefix: (connectorId: number) =>
+    `/api/manage/admin/connector/${connectorId}/files?`,
+  connectorFiles: (connectorId: number, pageNum: number, pageSize: number) =>
+    `${SWR_KEYS.connectorFilesPrefix(connectorId)}page_num=${pageNum}&page_size=${pageSize}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>
     `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
+  ccPairLatestIndexAttempt: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
+  // Every runs feed query of one pair starts with this, so `mutate` can match them all.
+  ccPairRunsPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
+  ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) =>
+    `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${runsQueryParams(query)}`,
+  ccPairResolvableRunsCountPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs/resolvable-count?`,
+  ccPairResolvableRunsCount: (
+    ccPairId: number,
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
+  ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
+
+  // ── Index Monitoring ──────────────────────────────────────────────────────
+  // The indexing status page's fleet-wide reads, over every readable pair.
+  indexMonitoringOverview: (window: CCPairThroughputWindow) =>
+    `/api/manage/admin/index-monitoring/overview?window=${window}`,
+  // Every connector list query starts with this, so `mutate` can match them all.
+  indexMonitoringConnectorsPrefix:
+    "/api/manage/admin/index-monitoring/connectors?",
+  indexMonitoringConnectors: (query: IndexingConnectorsQuery) => {
+    const params = new URLSearchParams({
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+    });
+    if (query.q) params.set("q", query.q);
+    if (query.status !== null) params.set("status", query.status);
+    return `${SWR_KEYS.indexMonitoringConnectorsPrefix}${params.toString()}`;
+  },
+  // Every fleet runs feed query starts with this, so `mutate` can match them all.
+  indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
+  indexMonitoringResolvableRunsCountPrefix:
+    "/api/manage/admin/index-monitoring/runs/resolvable-count?",
+  indexMonitoringResolvableRunsCount: (
+    level: CCPairRunLevel | null,
+    q: string,
+    since: string | null,
+    until: string | null
+  ) =>
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
+  indexMonitoringRuns: (query: CCPairRunsQuery) =>
+    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
-  // ── CC-Pair Sync Attempts ─────────────────────────────────────────────────
-  // The `*Probe` variants are single-row reads used to surface the
-  // `applicable` flag without paying for a full page; see
-  // `useSyncAttemptsPaginatedFetch`.
-  ccPairPermissionSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
-  ccPairPermissionSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
-  ccPairExternalGroupSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
-  ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
+  ccPairHierarchyBreakdown: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/hierarchy-breakdown`,
   ccPairDataAccess: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/data-access`,
+  ccPairManageAccess: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/manage-access`,
 
   // ── Indexing Errors ───────────────────────────────────────────────────────
   // Base key for the per-cc-pair errors endpoint. The page also reads
@@ -317,11 +410,38 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+  // One attempt's open errors, searched by message or document id.
+  ccPairAttemptErrors: (
+    ccPairId: number,
+    query: {
+      indexAttemptId: number;
+      q: string;
+      pageNum: number;
+      pageSize: number;
+    }
+  ) => {
+    const params = new URLSearchParams({
+      index_attempt_id: String(query.indexAttemptId),
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+      include_resolved: "false",
+    });
+    if (query.q) params.set("q", query.q);
+    return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;
+  },
 
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
+  personalActionPolicies: "/api/build/action-policies",
+  appActionPolicies: (
+    kind: "external_app" | "mcp_server",
+    targetId: number,
+    admin = false
+  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
+  taskActionPolicies: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
   scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>

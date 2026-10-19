@@ -77,32 +77,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "mistral-7b-instruct-v0.3": {
-      "attachment": false,
-      "cost": {
-        "input": 0.11,
-        "output": 0.11
-      },
-      "limit": {
-        "context": 65536,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Mistral-7B-Instruct-v0.3",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-04-01",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "mistral-nemo-instruct-2407": {
       "attachment": false,
       "cost": {

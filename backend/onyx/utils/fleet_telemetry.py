@@ -146,6 +146,7 @@ _FIELDS: dict[str, frozenset[str]] = {
         {
             "query_id",
             "tool_usage",
+            "llm_cycles",
             "channel",
             "mode",
             "outcome",
@@ -205,6 +206,8 @@ _FIELDS: dict[str, frozenset[str]] = {
             "users_processed",
             "groups_processed",
             "memberships_synced",
+            "last_progress_at",
+            "last_heartbeat_at",
         }
     ),
     "queue": frozenset({"queue", "depth", "shared"}),

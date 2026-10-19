@@ -1,7 +1,7 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
-from typing import Annotated, Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 from uuid import UUID
 
 from pydantic import (
@@ -15,18 +15,31 @@ from pydantic import (
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    CredentialCapabilityReport,
+)
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
+from onyx.db.cc_pair_runs_models import CCPairRunPage
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     HierarchyNodeType,
     PermissionSyncStatus,
     ProcessingMode,
+    SyncStatus,
 )
 from onyx.db.index_attempt_metrics_models import (
     STAGE_SCOPE,
@@ -34,6 +47,7 @@ from onyx.db.index_attempt_metrics_models import (
     StageScope,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     Connector,
     ConnectorCredentialPair,
     Credential,
@@ -42,6 +56,7 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptStageMetric,
     IndexingStatus,
+    SyncRecord,
     TaskStatus,
 )
 from onyx.db.models import Document as DbDocument
@@ -96,6 +111,8 @@ class ConnectorBase(BaseModel):
     # In seconds, None for one time index with no refresh
     refresh_freq: int | None = None
     prune_freq: int | None = None
+    # In seconds, None runs the connector checks only on request
+    check_freq: int | None = None
     indexing_start: datetime | None = None
 
 
@@ -104,7 +121,11 @@ class ConnectorUpdateRequest(ConnectorBase):
     groups: list[int] = Field(default_factory=list)
 
     def to_connector_base(self) -> ConnectorBase:
-        return ConnectorBase(**self.model_dump(exclude={"access_type", "groups"}))
+        # Only the request's own fields, so an omitted check_freq stays omitted
+        # (update_connector keeps the stored schedule) instead of becoming null.
+        return ConnectorBase(
+            **self.model_dump(exclude_unset=True, exclude={"access_type", "groups"})
+        )
 
 
 class ConnectorSnapshot(ConnectorBase):
@@ -126,6 +147,7 @@ class ConnectorSnapshot(ConnectorBase):
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
             prune_freq=connector.prune_freq,
+            check_freq=connector.check_freq,
             credential_ids=(
                 credential_ids
                 or [association.credential.id for association in connector.credentials]
@@ -258,19 +280,36 @@ class IndexAttemptSnapshot(BaseModel):
     docs_removed_from_index: int
     error_msg: str | None
     error_count: int
+    # Unresolved document-level errors, the ones a targeted reindex can retry.
+    open_doc_error_count: int
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
+    # When a finished attempt ended. `time_updated` moves days later when
+    # checkpoint cleanup touches the row, so it is no stand-in.
+    time_finished: str | None
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
     # A one-off run over poll_range_start..poll_range_end outside the pair's
     # incremental cursor; it does not drive the pair's status.
     is_backfill: bool = False
+    # Indexed under the FUTURE search settings of a running model switch.
+    is_new_model: bool = False
 
     @classmethod
     def from_index_attempt_db_model(
-        cls, index_attempt: IndexAttempt, error_count: int
+        cls, index_attempt: IndexAttempt, error_count: int, open_doc_error_count: int
     ) -> "IndexAttemptSnapshot":
+        # Attempts from before time_finished existed end at their last heartbeat
+        # check, and at their start when they never reached one.
+        finished = (
+            index_attempt.time_finished
+            or index_attempt.last_heartbeat_time
+            or index_attempt.time_started
+            or index_attempt.time_created
+            if index_attempt.is_finished()
+            else None
+        )
         return IndexAttemptSnapshot(
             id=index_attempt.id,
             status=index_attempt.status,
@@ -280,6 +319,7 @@ class IndexAttemptSnapshot(BaseModel):
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
             error_msg=index_attempt.error_msg,
             error_count=error_count,
+            open_doc_error_count=open_doc_error_count,
             full_exception_trace=index_attempt.full_exception_trace,
             time_started=(
                 index_attempt.time_started.isoformat()
@@ -287,8 +327,13 @@ class IndexAttemptSnapshot(BaseModel):
                 else None
             ),
             time_updated=index_attempt.time_updated.isoformat(),
+            time_finished=finished.isoformat() if finished else None,
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
+            is_new_model=(
+                index_attempt.search_settings is not None
+                and index_attempt.search_settings.status.is_future()
+            ),
             is_backfill=index_attempt.is_backfill,
         )
 
@@ -494,21 +539,319 @@ class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
-class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
-    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+class CCPairIndexRun(BaseModel):
+    kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
+    time_created: datetime
+    attempt: IndexAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
 
-    ``applicable`` is False when the cc-pair's source does not run the kind
-    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
-    has neither doc sync nor group sync). The frontend uses this to render an
-    explanatory message instead of an empty-state — the two are distinct
-    states: ``applicable=True, items=[], total_items=0`` legitimately means
-    "no attempts yet" and must not be confused with "this kind of sync isn't
-    applicable for this source".
-    """
 
-    applicable: bool
-    items: list[PaginatedType]
+class CCPairDocPermissionSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
+    time_created: datetime
+    attempt: DocPermissionSyncAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
+
+
+class CCPairGroupSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
+    time_created: datetime
+    attempt: ExternalGroupSyncAttemptSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
+
+
+class PruneRunSnapshot(BaseModel):
+    """One prune of the pair, from its pruning sync record."""
+
+    id: int
+    status: SyncStatus
+    docs_removed: int
+    docs_failed: int
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_sync_record(cls, record: SyncRecord) -> "PruneRunSnapshot":
+        return cls(
+            id=record.id,
+            status=record.sync_status,
+            docs_removed=record.num_docs_synced,
+            docs_failed=record.num_docs_failed,
+            error_message=record.error_message,
+            time_created=record.sync_start_time.isoformat(),
+            time_started=record.sync_start_time.isoformat(),
+            time_finished=(
+                record.sync_end_time.isoformat() if record.sync_end_time else None
+            ),
+        )
+
+
+class CheckRunSnapshot(BaseModel):
+    """One run of the pair's connector checks and what it found."""
+
+    id: int
+    status: CapabilityCheckRunStatus
+    trigger: CapabilityCheckTrigger
+    # Empty until the run completes, and for a run that broke.
+    check_results: list[CapabilityCheckResult]
+    # Why a run broke.
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_check_run(cls, run: CapabilityCheckRun) -> "CheckRunSnapshot":
+        results: list[CapabilityCheckResult] = []
+        if run.report is not None:
+            results = CredentialCapabilityReport.model_validate(
+                run.report
+            ).check_results
+        # The history keeps the findings, the response honors the workspace switch.
+        hide_findings_if_disabled(results)
+        return cls(
+            id=run.id,
+            status=run.status,
+            trigger=run.trigger,
+            check_results=results,
+            error_message=run.error_message,
+            time_created=run.time_created.isoformat(),
+            time_started=run.time_created.isoformat(),
+            time_finished=(
+                run.time_finished.isoformat() if run.time_finished else None
+            ),
+        )
+
+
+class CCPairPruneRun(BaseModel):
+    kind: Literal[CCPairRunKind.PRUNING] = CCPairRunKind.PRUNING
+    time_created: datetime
+    attempt: PruneRunSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
+
+
+class CCPairChecksRun(BaseModel):
+    kind: Literal[CCPairRunKind.CHECKS] = CCPairRunKind.CHECKS
+    time_created: datetime
+    attempt: CheckRunSnapshot
+    # When an admin resolved the run. It keeps its status.
+    resolved_at: datetime | None = None
+
+
+CCPairRun = Annotated[
+    CCPairIndexRun
+    | CCPairDocPermissionSyncRun
+    | CCPairGroupSyncRun
+    | CCPairPruneRun
+    | CCPairChecksRun,
+    Field(discriminator="kind"),
+]
+
+
+class CCPairRunsResponse(BaseModel):
+    """One page of the pair's runs, newest first."""
+
+    items: list[CCPairRun]
+    # Runs matching every filter, across the kinds asked for.
     total_items: int
+    # The kinds this pair runs, whatever was asked for.
+    kinds: list[CCPairRunKind]
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class RunFeed(BaseModel):
+    """One page of a run feed, for a pair's own feed and the fleet's: the rows
+    for lookups, the items to serve, the runs matching every filter, and the
+    counts per status group ignoring the status filter."""
+
+    # ORM rows ride inside, as in db/projects.py
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    page: CCPairRunPage
+    items: list[CCPairRun]
+    total_items: int
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class CCPairThroughputWindow(str, Enum):
+    """How far back a throughput chart reaches."""
+
+    HOURS_1 = "1h"
+    HOURS_12 = "12h"
+    HOURS_24 = "24h"
+    DAYS_7 = "7d"
+
+    def duration(self) -> timedelta:
+        match self:
+            case CCPairThroughputWindow.HOURS_1:
+                return timedelta(hours=1)
+            case CCPairThroughputWindow.HOURS_12:
+                return timedelta(hours=12)
+            case CCPairThroughputWindow.HOURS_24:
+                return timedelta(hours=24)
+            case CCPairThroughputWindow.DAYS_7:
+                return timedelta(days=7)
+
+
+class CCPairThroughputRun(BaseModel):
+    started: datetime
+    # None while the run is still going.
+    ended: datetime | None
+    status: IndexingStatus
+
+
+class CCPairThroughputResponse(BaseModel):
+    """A rough estimate of the documents indexed in each equal slice of the
+    window, oldest first (each run's total spread evenly over its span, since
+    nothing records when a document landed), and the runs that overlap it,
+    oldest first."""
+
+    window_start: datetime
+    window_end: datetime
+    docs_indexed: list[int]
+    runs: list[CCPairThroughputRun]
+
+
+class IndexingOverviewResponse(BaseModel):
+    """The pairs the caller can read at a glance: how many run an index now and
+    how many are active at all, the documents indexed in the window against the
+    documents held, and the window's throughput."""
+
+    indexing_connectors: int
+    active_connectors: int
+    recent_docs_indexed: int
+    total_docs_indexed: int
+    throughput: CCPairThroughputResponse
+
+
+class CCPairRunKey(BaseModel):
+    kind: CCPairRunKind
+    attempt_id: int
+
+
+class CCPairRunsResolveRequest(BaseModel):
+    runs: list[CCPairRunKey] = Field(min_length=1, max_length=500)
+
+
+class CCPairRunLevel(str, Enum):
+    """An activity panel level that holds open runs."""
+
+    FAILURES = "failures"
+    ERRORS = "errors"
+
+
+class CCPairRunsResolveMatchingRequest(BaseModel):
+    """The open runs of one activity level, or of every level when ``level`` is
+    None, narrowed as the runs feed narrows them."""
+
+    level: CCPairRunLevel | None = None
+    q: str | None = Field(default=None, max_length=200)
+    since: datetime | None = None
+    until: datetime | None = None
+    kinds: list[CCPairRunKind] | None = None
+
+
+class CCPairRunsResolveResponse(BaseModel):
+    resolved_count: int
+
+
+class CCPairRunsResolveMatchingResponse(BaseModel):
+    resolved_count: int
+    # The pairs that had a run marked, so a client refetches only their feeds.
+    cc_pair_ids: list[int]
+
+
+class CCPairRunsResolvableCountResponse(BaseModel):
+    count: int
+
+
+class CCPairRef(BaseModel):
+    """A pair named in a fleet-wide feed."""
+
+    id: int
+    name: str
+    source: DocumentSource
+    # The caller may re-fetch single documents of this pair: they may submit a
+    # targeted reindex, operate the pair, and its connector resolves documents.
+    can_resolve: bool
+    # The caller may mark this pair's runs resolved: they may submit a targeted
+    # reindex and operate the pair, whatever the connector supports.
+    can_resolve_runs: bool
+
+
+class IndexingRun(BaseModel):
+    """One run in the fleet-wide feed, with the pair it ran on."""
+
+    cc_pair: CCPairRef
+    run: CCPairRun
+
+
+class IndexingRunsResponse(BaseModel):
+    """One page of the readable pairs' runs, newest first."""
+
+    items: list[IndexingRun]
+    # Runs matching every filter.
+    total_items: int
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class IndexingConnectorStatus(str, Enum):
+    """How the status page buckets a pair, in the order the list sorts them."""
+
+    INDEXING = "indexing"
+    FAILED = "failed"
+    PAUSED = "paused"
+    SCHEDULED = "scheduled"
+    INDEXED = "indexed"
+
+
+class IndexingConnectorRow(BaseModel):
+    """One pair in the status page's list, with its latest index attempt."""
+
+    cc_pair_id: int
+    name: str
+    source: DocumentSource
+    access_type: AccessType
+    # The pair's own state, which names the tag for a pair that is deleting,
+    # invalid or on its first index. `status` is the bucket.
+    cc_pair_status: ConnectorCredentialPairStatus
+    status: IndexingConnectorStatus
+    creator_email: str | None
+    # The owner's display name. Clients fall back to the email when it is unset.
+    creator_name: str | None
+    docs_indexed: int
+    last_success: datetime | None
+    latest_index_attempt: IndexAttemptSnapshot | None
+    # Place by age in the line of index attempts handed to the queue, from 1,
+    # while the latest waits there. The queue serves first runs ahead of
+    # repeats, so a repeat can wait a little longer than its place says.
+    queue_position: int | None
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
+    permissions: dict[str, bool]
+
+
+class IndexingConnectorsResponse(BaseModel):
+    """One page of the readable pairs, sorted by status then name."""
+
+    items: list[IndexingConnectorRow]
+    # Pairs matching the search and the status filter.
+    total_items: int
+    # Per status, ignoring the status filter, so the counts stay put while one is applied.
+    status_counts: dict[IndexingConnectorStatus, int]
+    # Federated connectors have no runs or documents. Admins see them after the
+    # pairs on the first page, under the search but outside the status filter.
+    federated_connectors: list[FederatedConnectorStatus]
 
 
 class PendingBackfillSnapshot(BaseModel):
@@ -558,6 +901,8 @@ class CCPairHierarchyBreakdown(BaseModel):
     # The rows can overlap (a listed page inside a listed space), so the row
     # counts plus this count can be more than the cc-pair's total.
     other_doc_count: int
+    # Config fields whose values the rows list, so the page shows no row for them.
+    config_fields: list[str]
 
 
 class CCPairFullInfo(BaseModel):
@@ -599,6 +944,9 @@ class CCPairFullInfo(BaseModel):
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
     supports_targeted_reindex: bool
+    # The source names checks of its own, so check runs can be scheduled and
+    # listed. A source without them only records the blocking validation.
+    has_named_checks: bool
 
     # Written at create time on the association route but not returned until now,
     # so a client could never refresh or import them.
@@ -669,6 +1017,7 @@ class CCPairFullInfo(BaseModel):
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
         supports_targeted_reindex: bool = False,
+        has_named_checks: bool = False,
         indexing_hold: IndexingHold | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
@@ -734,6 +1083,7 @@ class CCPairFullInfo(BaseModel):
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
             supports_targeted_reindex=supports_targeted_reindex,
+            has_named_checks=has_named_checks,
             groups=groups or [],
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
@@ -1037,6 +1387,8 @@ class ConnectorFileInfo(BaseModel):
 
 class ConnectorFilesResponse(BaseModel):
     files: list[ConnectorFileInfo]
+    # Every file of the connector, not just the ones in `files`.
+    total_items: int
 
 
 class ObjectCreationIdResponse(BaseModel):

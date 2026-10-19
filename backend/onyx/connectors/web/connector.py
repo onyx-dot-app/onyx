@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Playwright, TimeoutError
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
@@ -28,12 +29,17 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
-from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS, UrlRewriteRule
+from onyx.connectors.web.config import (
+    UPLOAD_MODE_REMOVED_MESSAGE,
+    WEB_CONNECTOR_VALID_SETTINGS,
+    UrlRewriteRule,
+)
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.os_reaper import reap_zombie_children
 
 # Re-exported for backwards compatibility with existing tests/callers that
 # patch these names on `onyx.connectors.web.connector`.
@@ -48,7 +54,6 @@ from onyx.utils.playwright_fetch import (
 from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -120,6 +125,15 @@ class ScrapeSessionContext:
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
+
+        # Teardown orphans Chromium helpers onto the docfetching subreaper;
+        # drain them now instead of letting zombies pile up until the run ends
+        reap_zombie_children()
+
+
+def _is_download_error(e: Exception) -> bool:
+    """page.goto() on a file link (ZIP, DOCX, ...) fails this way, every time."""
+    return isinstance(e, PlaywrightError) and "Download is starting" in str(e)
 
 
 class ScrapeResult:
@@ -334,12 +348,6 @@ def _ensure_valid_url(url: str) -> str:
     return url
 
 
-def _read_urls_file(location: str) -> list[str]:
-    with open(location, "r") as f:
-        urls = [_ensure_valid_url(line.strip()) for line in f if line.strip()]
-    return urls
-
-
 def _handle_cookies(context: BrowserContext, url: str) -> None:
     """Handle cookies for the given URL to help with bot detection"""
     try:
@@ -401,11 +409,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-        self.authorization_url: str | None = (
-            None
-            if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD
-            else _ensure_valid_url(base_url)
-        )
+        if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
+            raise ConnectorValidationError(UPLOAD_MODE_REMOVED_MESSAGE)
+        self.authorization_url: str = _ensure_valid_url(base_url)
         # Config arrives as raw JSON (list[dict]); validate into rule models.
         rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
         self.url_rewrites = _parse_url_rewrites(rules)
@@ -419,18 +425,6 @@ class WebConnector(LoadConnector, SlimConnector):
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
             self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
-
-        elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
-            # Explicitly check if running in multi-tenant mode to prevent potential security risks
-            if MULTI_TENANT:
-                raise ValueError(
-                    "Upload input for web connector is not supported in cloud environments"
-                )
-
-            logger.warning(
-                "This is not a UI supported Web Connector flow, are you sure you want to do this?"
-            )
-            self.to_visit_list = _read_urls_file(base_url)
 
         else:
             raise ValueError(
@@ -752,6 +746,14 @@ class WebConnector(LoadConnector, SlimConnector):
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
                 except Exception as e:
+                    if _is_download_error(e):
+                        # A download link, not a page: deterministic, so neither
+                        # retry nor relaunch the browser (the context is fine)
+                        session_ctx.last_error = (
+                            f"Skipped '{initial_url}': not a renderable page"
+                        )
+                        logger.warning(session_ctx.last_error)
+                        break
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
                     session_ctx.initialize()

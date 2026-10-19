@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "Autenticar e conectar a {serverName}",
-        "label": "Autenticar"
+        "ariaLabel": "Configurar autenticação para {serverName}",
+        "label": "Configurar autenticação"
       },
       "deleteButton": {
         "ariaLabel": "Excluir o servidor {serverName}",
@@ -124,69 +124,59 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "Conecte um servidor MCP (Model Context Protocol) para adicionar ações personalizadas.",
         "title": "Adicionar servidor MCP"
-      },
-      "authStatus": {
-        "apiTokenDescription": "Token de API configurado",
-        "connectedDescription": "Conectado",
-        "oauthDescription": "OAuth conectado a {owner}",
-        "title": "Autenticado e conectado"
       },
       "cancelButton": {
         "label": "Cancelar"
       },
       "description": {
-        "placeholder": "Mais detalhes sobre o servidor MCP",
+        "placeholder": "O que sua equipe pode fazer com este servidor?",
         "suffix": "opcional",
         "title": "Descrição"
       },
-      "disconnectButton": {
-        "tooltip": "Desconectar servidor"
-      },
-      "editConfigsButton": {
-        "label": "Editar configurações"
-      },
-      "manageHeader": {
-        "description": "Atualize a configuração do seu servidor MCP e gerencie a autenticação.",
-        "title": "Gerenciar servidor MCP"
-      },
       "name": {
-        "placeholder": "Dê um nome ao seu servidor MCP",
+        "placeholder": "ex.: Linear",
         "required": "O nome do servidor é obrigatório",
         "title": "Nome do servidor"
       },
       "serverUrl": {
         "invalid": "Deve ser uma URL válida",
-        "required": "A URL do servidor é obrigatória",
-        "subDescription": "Conecte-se apenas a servidores em que você confia. Você é responsável pelas ações realizadas com esta conexão e por manter suas ferramentas atualizadas.",
         "title": "URL do servidor MCP"
       },
       "submitButton": {
-        "addLabel": "Adicionar servidor",
-        "addingLabel": "Adicionando...",
         "saveLabel": "Salvar alterações",
         "savingLabel": "Salvando..."
       },
       "toasts": {
-        "createFailed": "Falha ao criar o servidor MCP",
-        "serverCreated": "Servidor MCP criado com sucesso",
-        "serverUpdated": "Servidor MCP atualizado com sucesso",
         "updateFailed": "Falha ao atualizar o servidor MCP"
+      },
+      "access": {
+        "title": "Controle de acesso",
+        "description": "Escolha quem pode usar este MCP.",
+        "public": {
+          "label": "Público",
+          "description": "Qualquer pessoa na sua organização pode usar este MCP"
+        },
+        "groups": {
+          "label": "Grupos de usuários",
+          "description": "Os grupos de usuários selecionados podem usar este MCP.",
+          "placeholder": "Adicionar grupos de usuários",
+          "required": "Selecione pelo menos um grupo de usuários."
+        },
+        "scoped": {
+          "description": "Escolha pelo menos um grupo que você gerencia."
+        },
+        "retainedUsers": "{count, plural, one {Também compartilhado diretamente com # usuário.} other {Também compartilhado diretamente com # usuários.}}",
+        "planTag": "Business",
+        "planNote": "O acesso por grupos exige um plano Business."
+      },
+      "defaultChat": {
+        "title": "Disponível no chat padrão do Onyx"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "Adicione um esquema OpenAPI para criar ações personalizadas.",
         "title": "Adicionar ação OpenAPI"
-      },
-      "authStatus": {
-        "configuredTitle": "Autenticação configurada",
-        "enabledTitle": "Autenticado e ativado",
-        "headersDescription": "Cabeçalhos de autenticação personalizados configurados",
-        "oauthDescription": "Autenticação OAuth configurada",
-        "oauthNamedDescription": "OAuth conectado via {name}",
-        "passthroughDescription": "Repasse de autenticação ativado"
       },
       "cancelButton": {
         "label": "Cancelar"
@@ -201,15 +191,10 @@
         "subDescription": "Especifique um esquema OpenAPI que defina as APIs que você quer disponibilizar como parte desta ação. Você pode usar os espaços reservados `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` e `USER_EMAIL` em qualquer lugar do esquema (por exemplo, URL do servidor, caminhos, valores padrão de parâmetros). Eles serão substituídos pelos valores da solicitação atual no momento da chamada. Saiba mais sobre [ações OpenAPI]({docsUrl}).",
         "title": "Definição do esquema OpenAPI"
       },
-      "disableButton": {
-        "tooltip": "Desativar ação"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "Somente o criador da ação ou um administrador pode gerenciar a autenticação",
-        "label": "Editar configurações"
+        "disabledTooltip": "Somente o criador da ação ou um administrador pode gerenciar a autenticação"
       },
       "editHeader": {
-        "description": "Atualize o esquema OpenAPI desta ação.",
         "title": "Editar ação OpenAPI"
       },
       "empty": {
@@ -221,9 +206,6 @@
       },
       "method": {
         "noSummary": "Nenhum resumo fornecido"
-      },
-      "serverUrl": {
-        "description": "URL encontrada no esquema. Conecte-se apenas a servidores em que você confia."
       },
       "submitButton": {
         "addLabel": "Adicionar ação",
@@ -279,54 +261,52 @@
       "additionalAuthParams": {
         "label": "Parâmetros de autenticação adicionais (JSON)"
       },
-      "advanced": {
-        "description": "Configure um provedor OAuth conhecido com endpoints explícitos de autorização e de token em vez da descoberta automática.",
-        "title": "Avançado"
-      },
       "apiKey": {
         "required": "O token de API é obrigatório"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "Chave compartilhada (admin)"
+          "label": "Token compartilhado"
         },
         "perUser": {
-          "label": "Chave individual (por usuário)"
+          "label": "Token pessoal"
         }
       },
       "authPerformer": {
-        "required": "O executor da autenticação é obrigatório"
+        "label": "Credenciais",
+        "required": "Escolha credenciais pessoais ou compartilhadas."
       },
       "authType": {
         "apiToken": {
-          "description": "Use uma chave de API individual por usuário ou uma chave de API compartilhada com toda a organização.",
-          "label": "Chave de API"
+          "label": "Chave de API",
+          "description": "Use uma chave de API individual por usuário ou uma chave de API compartilhada com toda a organização."
         },
         "label": "Método de autenticação",
         "none": {
-          "description": "Não recomendado",
-          "label": "Nenhum"
+          "label": "Sem autenticação",
+          "description": "Não recomendado"
         },
         "oauth": {
-          "description": "Cada usuário precisa se autenticar via OAuth com as próprias credenciais.",
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Cada usuário precisa se autenticar via OAuth com as próprias credenciais."
         },
         "placeholder": "Selecionar método",
         "ptOauth": {
-          "description": "Encaminhar o token de acesso OAuth do usuário usado para autenticar no {appName}.",
-          "label": "Repasse de OAuth"
+          "label": "Repasse de OAuth",
+          "description": "Encaminhar o token de acesso OAuth do usuário usado para autenticar no {appName}."
         },
         "required": "O tipo de autenticação é obrigatório"
       },
       "authorizationEndpoint": {
         "label": "Endpoint de autorização",
-        "required": "O endpoint de autorização é obrigatório no modo de provedor conhecido"
+        "required": "Insira o endpoint de autorização do seu provedor."
       },
       "cancelButton": {
         "label": "Cancelar"
       },
       "clientId": {
-        "label": "Client ID"
+        "label": "Client ID",
+        "required": "Insira seu ID de cliente OAuth."
       },
       "clientSecret": {
         "label": "Client Secret"
@@ -335,25 +315,31 @@
         "additionalParamsInvalid": "JSON de parâmetros de autenticação adicionais inválido",
         "additionalParamsInvalidWithReason": "JSON de parâmetros de autenticação adicionais inválido: {reason}",
         "additionalParamsNotObject": "Os parâmetros de autenticação adicionais devem ser um objeto JSON",
-        "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}",
         "saveAuthFailed": "Falha ao salvar a configuração de autenticação",
-        "saveConfigFailed": "Falha ao salvar a configuração do servidor"
+        "saveConfigFailed": "Falha ao salvar a configuração do servidor",
+        "saveStage": "Não foi possível salvar as configurações da conexão",
+        "oauthStage": "Não foi possível iniciar o login",
+        "discoveryStage": "Não foi possível carregar as ferramentas do servidor",
+        "loadStage": "Não foi possível carregar as configurações da conexão",
+        "clientRegistrationFailed": "O registro automático do cliente falhou. Use seu próprio cliente OAuth ou verifique os requisitos de configuração do provedor.",
+        "discoveryFailed": "Não foi possível encontrar as configurações de login OAuth. Verifique a URL do servidor ou insira os endpoints do seu provedor.",
+        "connectionFailed": "Não foi possível acessar o servidor OAuth. Verifique a URL do servidor e tente novamente.",
+        "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente.",
+        "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}"
       },
       "header": {
-        "defaultTitle": "Autenticar servidor MCP",
-        "description": "Autentique sua conexão para começar a usar o servidor MCP.",
-        "title": "Autenticar *{name}*"
-      },
-      "knownProvider": {
-        "hint": "O modo de provedor conhecido exige a configuração dos endpoints. Endpoints de referência do Google: autorização {authorizationEndpoint} e token {tokenEndpoint}."
+        "defaultTitle": "Configurar autenticação",
+        "description": "Configurar a autenticação do servidor MCP",
+        "title": "Configurar *{name}*"
       },
       "noAuthNotice": {
-        "description": "Nenhuma autenticação será usada nesta conexão. Confirme que você confia neste servidor. Você é responsável pelas ações realizadas com esta conexão.",
-        "title": "Sem autenticação para este servidor MCP"
+        "description": "Os usuários podem usar este servidor sem fazer login. Os cabeçalhos personalizados configurados continuam sendo enviados.",
+        "title": "Autenticação não necessária"
       },
       "oauthInfo": {
-        "discovery": "O Client ID e o secret são opcionais. Durante a descoberta automática, o {appName} usa um Client ID Metadata Document (CIMD) quando há suporte e recorre ao Dynamic Client Registration (DCR).",
-        "manualRegistration": "Se o seu servidor não oferecer suporte a nenhum dos métodos, registre primeiro a sua instância do {appName} no provedor do servidor. Conceda ao {appName} os escopos necessários para as suas ações."
+        "discovery": "Cada usuário entra com sua própria conta.",
+        "manualRegistration": "Registre este URI de redirecionamento no seu provedor.",
+        "title": "Configuração OAuth"
       },
       "passThroughNotice": {
         "description": "O {appName} vai encaminhar o token de acesso OAuth do usuário diretamente ao servidor como um cabeçalho Authorization. Verifique se o servidor é compatível com a autenticação pelo mesmo provedor.",
@@ -361,14 +347,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "Use o fluxo de challenge/discovery do SDK do MCP (padrão).",
-          "label": "Descoberta automática"
+          "description": "Ler as configurações de login publicadas pelo servidor.",
+          "label": "Encontrar endpoints de login automaticamente"
         },
         "knownProvider": {
-          "description": "Use os endpoints de autorização/token configurados.",
-          "label": "Provedor conhecido"
+          "description": "Insira as URLs de login e de token manualmente.",
+          "label": "Inserir endpoints manualmente"
         },
-        "label": "Modo do provedor",
+        "label": "Endpoints OAuth",
         "placeholder": "Selecione o modo"
       },
       "redirectUri": {
@@ -379,42 +365,78 @@
         "label": "Substituição de escopos (separados por vírgula)"
       },
       "sharedApiKey": {
-        "description": "Não use sua chave de API pessoal. Confirme que esta chave é adequada para compartilhar com todos na sua organização.",
+        "description": "Esta chave é usada para testar a configuração e conectar todas as pessoas com acesso. Use uma chave do espaço de trabalho, não uma chave pessoal.",
         "label": "Chave de API",
         "placeholder": "Chave de API compartilhada da sua organização"
       },
       "submitButton": {
-        "label": "Conectar",
-        "pendingLabel": "Conectando..."
+        "label": "Salvar alterações",
+        "pendingLabel": "Salvando…"
       },
       "tokenEndpoint": {
         "label": "Endpoint de token",
-        "required": "O endpoint de token é obrigatório no modo de provedor conhecido"
+        "required": "Insira o endpoint de token do seu provedor."
       },
       "transport": {
-        "required": "O transporte é obrigatório"
+        "required": "O transporte é obrigatório",
+        "label": "Transporte da conexão",
+        "description": "Use Streamable HTTP, a menos que o servidor exija SSE legado. Esta configuração não é detectada no servidor.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (legado)"
+      },
+      "advancedSettings": {
+        "title": "Configurações avançadas"
+      },
+      "apiTokenInfo": {
+        "title": "Configuração da chave de API",
+        "description": "Escolha se cada usuário se conecta com um token pessoal ou se todos usam um token compartilhado."
+      },
+      "oauthSetup": {
+        "label": "Configuração OAuth",
+        "automatic": {
+          "label": "Configurar automaticamente",
+          "description": "Permita que {appName} registre um cliente OAuth usando as configurações publicadas pelo servidor."
+        },
+        "ownClient": {
+          "label": "Usar seu próprio cliente OAuth",
+          "description": "Insira um ID de cliente do seu provedor. Adicione um segredo apenas se necessário."
+        }
+      },
+      "cimd": {
+        "label": "Usar documento de metadados do cliente",
+        "description": "Quando ativado, o provedor busca o documento de metadados do cliente do {appName} pela Internet pública. Desative isto se esta instância do {appName} for privada. O {appName} então usa o registro automático de cliente."
+      },
+      "discovery": {
+        "checking": "Verificando a configuração automática…",
+        "supported": "A configuração automática está disponível",
+        "requiresClient": "Este servidor não anuncia suporte ao registro automático de clientes. Recomendamos configurar seu próprio cliente OAuth. Você ainda pode tentar o registro automático.",
+        "missing": "Verifique a URL do servidor ou insira os endpoints de login e de token do seu provedor.",
+        "unreachable": "O servidor pode estar indisponível ou bloqueando solicitações de descoberta.",
+        "retry": "Verificar novamente",
+        "manual": "Inserir configurações OAuth manualmente",
+        "useOwnClient": "Usar seu próprio cliente OAuth",
+        "unreachableTitle": "Não foi possível determinar se a configuração automática está disponível",
+        "missingTitle": "Não foi possível encontrar os endpoints OAuth",
+        "requiresClientTitle": "A configuração automática pode estar indisponível"
+      },
+      "advanced": {
+        "description": "Configure um provedor OAuth conhecido com endpoints explícitos de autorização e de token em vez da descoberta automática.",
+        "title": "Avançado"
+      },
+      "knownProvider": {
+        "hint": "O modo de provedor conhecido exige a configuração dos endpoints. Endpoints de referência do Google: autorização {authorizationEndpoint} e token {tokenEndpoint}."
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "Cartão do servidor MCP {title}"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "Tem certeza de que deseja excluir este servidor MCP?",
-          "description": "Todas as ferramentas conectadas a <emphasis>{title}</emphasis> serão removidas. A exclusão é irreversível."
+          "description": "Isso exclui <emphasis>{title}</emphasis> e todas as suas ferramentas para todos os usuários da sua organização. A exclusão é irreversível."
         },
         "submitButton": {
           "label": "Excluir"
         },
         "title": "Excluir servidor MCP"
-      },
-      "lastRefreshed": {
-        "label": "Ferramentas atualizadas pela última vez {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "Atualizar ferramentas",
-        "tooltip": "Atualizar ferramentas"
       }
     },
     "mcpOauthCallback": {
@@ -476,25 +498,10 @@
       },
       "toasts": {
         "deleteFailed": "Falha ao excluir o servidor MCP",
-        "disableAllFailed": "Falha ao desativar todas as ferramentas",
         "disconnectFailed": "Falha ao desconectar o servidor MCP",
-        "enableAllFailed": "Falha ao ativar todas as ferramentas",
         "fetchToolsFailed": "Falha ao buscar as ferramentas: {error}",
-        "noToolsToDisable": "Nenhuma ferramenta para desativar",
         "reconnectFailed": "Falha ao reconectar o servidor MCP",
-        "refreshToolsFailed": "Falha ao atualizar as ferramentas",
-        "renameFailed": "Falha ao renomear o servidor MCP",
-        "serverDeleted": "Servidor MCP excluído com sucesso",
-        "serverDisconnected": "Servidor MCP desconectado com sucesso",
-        "serverReconnected": "Servidor MCP reconectado com sucesso",
-        "serverRenamed": "Servidor MCP renomeado com sucesso",
-        "toolDisabled": "Ferramenta desativada com sucesso",
-        "toolEnabled": "Ferramenta ativada com sucesso",
-        "toolUpdateFailed": "Falha ao atualizar a ferramenta",
-        "toolsDisabled": "{count, plural, one {# ferramenta desativada com sucesso} other {# ferramentas desativadas com sucesso}}",
-        "toolsEnabled": "{count, plural, one {# ferramenta ativada com sucesso} other {# ferramentas ativadas com sucesso}}",
-        "toolsFetched": "Conexão estabelecida e ferramentas obtidas com sucesso",
-        "toolsRefreshed": "Ferramentas atualizadas com sucesso"
+        "serverDeleted": "Servidor MCP excluído com sucesso"
       }
     },
     "openApiAuthModal": {
@@ -554,9 +561,6 @@
       "loading": {
         "label": "Carregando a configuração existente..."
       },
-      "oauthLoginNotice": {
-        "description": "O repasse de OAuth exige um método de login compatível com OAuth (Google ou OIDC)."
-      },
       "passThroughNotice": {
         "description": "O {appName} vai encaminhar o token de acesso OAuth do usuário diretamente ao servidor como um cabeçalho Authorization. Verifique se o servidor é compatível com a autenticação pelo mesmo provedor.",
         "title": "Use o repasse para serviços com provedor de identidade compartilhado."
@@ -577,6 +581,34 @@
       "tokenUrl": {
         "label": "URL do token",
         "required": "A URL do token é obrigatória"
+      },
+      "pkce": {
+        "label": "Usar PKCE",
+        "description": "Ative apenas se o provedor OAuth oferecer suporte a PKCE com o método de desafio S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Insira endereços HTTPS válidos para verificar o suporte a PKCE.",
+          "checking": "Verificando o suporte anunciado a PKCE…",
+          "supported": "O provedor anuncia suporte a S256 PKCE.",
+          "unsupported": "O provedor não anuncia suporte a S256 PKCE.",
+          "unknown": "Não foi possível verificar o suporte a PKCE. Você ainda pode escolher a configuração manualmente."
+        },
+        "description": "Testa estas configurações não salvas sem salvar configurações ou tokens. O consentimento do provedor pode conceder a este aplicativo acesso à sua conta.",
+        "testing": "Testando conexão…",
+        "test": "Testar conexão",
+        "successPkce": "Autorização concluída com parâmetros PKCE. Isso não prova que o provedor exige PKCE.",
+        "success": "Autorização concluída sem PKCE.",
+        "result": {
+          "blocked": "Permita janelas pop-up e tente novamente.",
+          "closed": "A janela de teste foi fechada ou desconectada. Conclua qualquer teste aberto ou tente novamente.",
+          "stale": "As configurações mudaram. Teste as configurações atuais novamente.",
+          "failed": "O teste de autorização falhou. Verifique as configurações e tente novamente.",
+          "denied": "A autorização do provedor foi recusada ou cancelada.",
+          "interrupted": "O teste expirou ou foi interrompido. Inicie um novo teste."
+        },
+        "returnToSettings": "Volte à janela de configurações para ver o resultado.",
+        "close": "Fechar janela"
       }
     },
     "openApiCard": {
@@ -605,27 +637,15 @@
       "addButton": {
         "label": "Adicionar ação OpenAPI"
       },
-      "authModal": {
-        "authenticateTitle": "Autenticar {name}",
-        "defaultTitle": "Autenticar ação OpenAPI",
-        "updateTitle": "Atualizar a autenticação de {name}"
-      },
       "empty": {
         "description": "Adicione ações personalizadas a partir de esquemas OpenAPI."
       },
       "toasts": {
-        "actionRenamed": "Ação OpenAPI renomeada com sucesso",
-        "authHeadersSaved": "Cabeçalhos de autenticação de {name} salvos com sucesso.",
-        "authPassthroughSaved": "Repasse de autenticação de {name} salvo com sucesso.",
         "authSaveFailed": "Falha ao salvar as configurações de autenticação.",
         "authSaved": "Autenticação de {name} salva com sucesso.",
-        "authUpdated": "Autenticação de {name} atualizada com sucesso.",
         "deleteFailed": "Falha ao excluir a ferramenta.",
-        "deleteUnexpectedError": "Ocorreu um erro inesperado ao excluir a ferramenta.",
         "disconnectFailed": "Falha ao desconectar a ação OpenAPI.",
-        "renameFailed": "Falha ao renomear a ação OpenAPI",
-        "toolDeleted": "{name} excluído com sucesso.",
-        "toolDisconnected": "{name} foi desconectado."
+        "toolDeleted": "{name} excluído com sucesso."
       }
     },
     "perUserAuth": {
@@ -633,9 +653,9 @@
         "placeholder": "Digite {field}"
       },
       "credentials": {
-        "perUserDescription": "As credenciais a seguir não serão compartilhadas com sua organização.",
-        "perUserTitle": "Somente para sua própria conta",
+        "perUserDescription": "Use suas credenciais para testar este MCP e carregar suas ferramentas. Elas são salvas apenas na sua conta.",
         "sharedDescription": "Estes valores são usados para todos os usuários da sua organização.",
+        "perUserTitle": "Somente para sua própria conta",
         "sharedTitle": "Valores compartilhados da organização"
       },
       "headers": {
@@ -646,8 +666,8 @@
           "message": "Pelo menos um valor de cabeçalho deve incluir o espaço reservado {apiKey}."
         },
         "keyTitle": "Nome do cabeçalho",
-        "label": "Cabeçalhos de autenticação",
-        "perUserDescription": "Formate os cabeçalhos para que cada usuário preencha as credenciais individuais dele. Use espaços reservados como <mono>{apiKey}</mono> ou <mono>{userEmail}</mono>. Os usuários serão solicitados a fornecer valores para os espaços reservados (exceto user_email).",
+        "label": "Cabeçalhos personalizados",
+        "perUserDescription": "Use <mono>{apiKey}</mono> para a chave de API de cada usuário. <mono>{userEmail}</mono> usa o e-mail automaticamente. Outros marcadores solicitam um valor ao usuário.",
         "sharedDescription": "Formate os cabeçalhos enviados com as credenciais compartilhadas da sua organização. Use espaços reservados como <mono>{apiKey}</mono> no valor de pelo menos um cabeçalho; ele é substituído pela chave compartilhada da sua organização.",
         "valueTitle": "Valor do cabeçalho"
       }
@@ -660,7 +680,7 @@
         "label": "Perguntar"
       },
       "deny": {
-        "label": "Negar"
+        "label": "Desativada"
       }
     },
     "switchList": {
@@ -809,6 +829,398 @@
         "ariaLabel": "Pesquisar ferramentas",
         "placeholder": "Pesquisar ferramentas…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://seu-servidor-mcp.com/mcp"
+    },
+    "memberPlugins": {
+      "chat": {
+        "trigger": {
+          "label": "Plugins"
+        },
+        "search": {
+          "placeholder": "Buscar plugins"
+        },
+        "empty": {
+          "text": "Nenhum plugin está disponível neste chat.",
+          "searchText": "Nenhum plugin corresponde à sua busca."
+        },
+        "loading": {
+          "label": "Carregando plugins"
+        },
+        "loadError": {
+          "text": "Não foi possível carregar alguns plugins. Tente novamente."
+        },
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "browse": {
+          "label": "Explorar plugins"
+        },
+        "toggle": {
+          "ariaLabel": "Usar {name} neste chat"
+        },
+        "connect": {
+          "label": "Conectar"
+        },
+        "connection": {
+          "connected": "Conectado",
+          "workspace": "Conexão do espaço de trabalho",
+          "session": "Conexão da sessão",
+          "none": "Não requer conexão",
+          "oauth": "Conecte sua conta",
+          "credentials": "Adicione suas credenciais",
+          "checking": "Verificando conexão",
+          "unconfigured": "Requer configuração do espaço de trabalho",
+          "unavailable": "Conexão indisponível"
+        },
+        "intent": {
+          "unavailable": "Este plugin não está disponível para o agente deste chat.",
+          "invalid": "O link deste plugin é inválido."
+        }
+      },
+      "oauthComplete": {
+        "success": {
+          "title": "Plugin conectado",
+          "description": "Volte à aba anterior para continuar."
+        },
+        "error": {
+          "title": "Conexão não confirmada",
+          "description": "Volte à aba anterior e tente conectar novamente."
+        },
+        "return": {
+          "label": "Voltar aos plugins"
+        },
+        "close": {
+          "label": "Fechar aba"
+        }
+      },
+      "title": "Plugins",
+      "description": "Conecte suas contas para usar os plugins do espaço de trabalho.",
+      "manageWorkspace": "Gerenciar plugins do espaço de trabalho",
+      "search": "Buscar plugins",
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Aplicativos do Craft"
+      },
+      "row": {
+        "view": "Ver {name}",
+        "connect": "Conectar {name}"
+      },
+      "status": {
+        "connected": "Conectado",
+        "workspace": "Conexão do espaço de trabalho",
+        "session": "Usa seu login",
+        "none": "Pronto para usar",
+        "oauth": "Conecte sua conta",
+        "credentials": "Adicione suas credenciais",
+        "unconfigured": "Requer configuração do espaço de trabalho",
+        "checking": "Verificando conexão",
+        "unavailable": "Conexão indisponível"
+      },
+      "availability": {
+        "label": "Status da conexão de {name}",
+        "chat": "Chat principal",
+        "craft": "Craft",
+        "on": "Ativado",
+        "off": "Desativado",
+        "unknown": "Desconhecida"
+      },
+      "state": {
+        "loading": "Carregando plugins",
+        "serversError": "Não foi possível carregar os plugins MCP.",
+        "toolsError": "Não foi possível carregar as ferramentas dos plugins.",
+        "oauthError": "Não foi possível carregar as conexões das contas.",
+        "retry": "Tentar novamente",
+        "noResultsTitle": "Nenhum plugin correspondente",
+        "noResultsDescription": "Tente outro nome ou outra descrição.",
+        "clearSearch": "Ver todos os plugins",
+        "appsError": "Não foi possível carregar os apps do Craft.",
+        "appsLoading": "Carregando apps do Craft",
+        "emptyTitle": "Nenhum plugin encontrado",
+        "emptyDescription": "Tente outro filtro de conexão ou peça ao administrador do seu espaço de trabalho para adicionar um plugin."
+      },
+      "detail": {
+        "connection": "Conexão",
+        "tools": "Ferramentas",
+        "toolCount": "{count, plural, one {# ferramenta} other {# ferramentas}}",
+        "noTools": "Não há ferramentas visíveis salvas para este plugin.",
+        "connect": "Conectar conta",
+        "useInChat": "Usar no Chat",
+        "disconnect": "Desconectar conta",
+        "disconnectTitle": "Desconectar {name}?",
+        "disconnectDescription": "Isso remove a conexão da sua conta. A disponibilidade no espaço de trabalho permanece igual.",
+        "oauthDisconnectWarning": "Todos os plugins e aplicativos que usam a mesma configuração OAuth compartilham esta conexão de conta. Desconectar remove sua conexão de todos eles.",
+        "disconnecting": "Desconectando...",
+        "disconnectFailed": "Não foi possível desconectar sua conta. Tente novamente.",
+        "cancel": "Cancelar",
+        "close": "Concluído",
+        "openInCraft": "Abrir no Craft"
+      },
+      "connection": {
+        "title": "Conectar {name}",
+        "description": "Seu espaço de trabalho configurou este plugin. Conecte sua conta para usá-lo.",
+        "credentialsDescription": "Insira suas credenciais para este plugin. A conexão da sua conta é separada da conexão de outros membros.",
+        "oauthDescription": "Continue para entrar com sua conta. Seu provedor mostrará o acesso solicitado.",
+        "continue": "Continuar para {name}",
+        "connect": "Conectar",
+        "connecting": "Conectando...",
+        "cancel": "Cancelar",
+        "done": "Concluído",
+        "workspaceDescription": "Seu espaço de trabalho fornece esta conexão. Você não precisa conectar uma conta.",
+        "sessionDescription": "Este plugin usa seu login atual.",
+        "noneDescription": "Este plugin não requer uma conexão de conta.",
+        "connectedDescription": "Sua conta está conectada.",
+        "unconfiguredDescription": "Um administrador do espaço de trabalho precisa concluir a configuração deste plugin antes que você possa conectá-lo.",
+        "checkingDescription": "O status da sua conexão ainda está carregando. Tente novamente quando terminar.",
+        "unavailableDescription": "Não foi possível carregar o status da sua conexão. Tente novamente na página Plugins.",
+        "errors": {
+          "popup_blocked": "Seu navegador bloqueou a janela de login. Permita pop-ups e tente novamente.",
+          "cancelled": "O login foi cancelado. Você pode tentar novamente.",
+          "timed_out": "O login demorou demais. Tente novamente.",
+          "credentials_required": "Insira todas as credenciais necessárias.",
+          "unconfigured": "Um administrador do espaço de trabalho precisa concluir a configuração deste plugin.",
+          "not_connected": "Não foi possível confirmar a conexão da sua conta. Tente novamente.",
+          "request_failed": "A conexão falhou. Tente novamente."
+        }
+      },
+      "filters": {
+        "label": "Status da conexão",
+        "all": "Todos",
+        "connected": "Conectados",
+        "needsSignIn": "Login necessário",
+        "showAll": "Ver todos os plugins"
+      },
+      "defaults": {
+        "chat": "Ativar no chat principal por padrão",
+        "craft": "Ativar no Craft por padrão",
+        "chatDescription": "Aplica-se ao chat padrão. Os agentes personalizados mantêm suas próprias configurações de ferramentas.",
+        "craftDescription": "Usar este MCP nas suas sessões do Craft.",
+        "unavailable": "Seu administrador desativou este plugin para {surface}.",
+        "saveFailed": "Não foi possível salvar seus padrões de plugins. Tente novamente."
+      },
+      "openapi": {
+        "chatOnly": "Somente Chat",
+        "chatOnlyDescription": "Este plugin está disponível no Chat, não no Craft."
+      },
+      "appSkills": {
+        "search": "Buscar habilidades",
+        "count": "{count, plural, one {# habilidade} other {# habilidades}}",
+        "empty": "Nenhuma habilidade está associada a este aplicativo.",
+        "noMatches": "Nenhuma habilidade corresponde à busca.",
+        "error": "Não foi possível carregar as habilidades.",
+        "enabled": "Ativada",
+        "disabled": "Desativada",
+        "loading": "Carregando habilidades…"
+      },
+      "externalApp": {
+        "description": "Use sua conta no Craft.",
+        "craftOnly": "Somente Craft",
+        "craftOnlyDescription": "Este app está disponível no Craft. O chat principal não oferece suporte a ele."
+      }
+    },
+    "plugins": {
+      "availability": {
+        "mainChat": "Chat principal",
+        "craft": "Craft",
+        "on": "Ativado",
+        "off": "Desativado",
+        "unknown": "Desconhecido",
+        "enabled": "Ativado",
+        "disabled": "Desativado",
+        "chatEnabled": "Chat ativado",
+        "chatDisabled": "Chat desativado",
+        "chatUnknown": "Estado do Chat desconhecido",
+        "craftEnabled": "Craft ativado",
+        "craftDisabled": "Craft desativado"
+      },
+      "controls": {
+        "disconnect": "Ativar ou desativar para o espaço de trabalho",
+        "enable": "Ativar para o espaço de trabalho",
+        "disable": "Desativar para o espaço de trabalho",
+        "manageAvailability": "Gerenciar disponibilidade no espaço de trabalho",
+        "more": "Mais ações",
+        "disableChat": "Desativar no chat principal",
+        "enableChat": "Ativar no chat principal",
+        "disableCraft": "Desativar no Craft",
+        "enableCraft": "Ativar no Craft"
+      },
+      "craftApp": {
+        "tabs": {
+          "configuration": "Configuração",
+          "permissions": "Permissões",
+          "skills": "Habilidades"
+        }
+      },
+      "disableConfirmation": {
+        "workspaceTitle": "Desativar {name} para o espaço de trabalho?",
+        "workspaceDescription": "Isso desativa {name} para todos no seu espaço de trabalho, incluindo agentes personalizados. As configurações e credenciais salvas são mantidas. Você pode ativá-lo novamente.",
+        "scope": "Todos os usuários da sua organização",
+        "chatTitle": "Desativar {name} no chat principal?",
+        "chatDescription": "Isso remove {name} do chat padrão para todos os usuários da sua organização. Os agentes personalizados não são afetados. Você pode ativá-lo novamente.",
+        "craftTitle": "Desativar {name} no Craft?",
+        "craftDescription": "Isso torna {name} indisponível no Craft para todos os usuários da sua organização. O chat principal não é afetado. Você pode ativá-lo novamente."
+      },
+      "openapi": {
+        "schemaPreview": {
+          "detected": "{count, plural, one {# ferramenta detectada} other {# ferramentas detectadas}}",
+          "viewTools": "Ver ferramentas",
+          "saveToUpdate": "Salve as alterações para atualizar as ferramentas."
+        },
+        "createTitle": "Adicionar um plugin OpenAPI",
+        "detailDescription": "Gerencie esta API e as ferramentas disponíveis para seus agentes.",
+        "detailsTitle": "Detalhes do plugin",
+        "schemaTitle": "Esquema OpenAPI",
+        "notFound": "Plugin não encontrado",
+        "loadFailed": "Não foi possível carregar este plugin",
+        "unavailable": "Este plugin pode ter sido excluído ou você pode não ter acesso.",
+        "readOnly": "Você pode visualizar este plugin. Sua conta não pode alterar suas configurações.",
+        "deleteDescription": "Isso exclui permanentemente o plugin OpenAPI e sua configuração."
+      },
+      "title": "Plugins",
+      "description": "Conecte ferramentas e aplicativos ao seu espaço de trabalho.",
+      "search": {
+        "placeholder": "Pesquisar plugins"
+      },
+      "add": {
+        "label": "Adicionar",
+        "mcp": "Adicionar servidor MCP personalizado",
+        "openapi": "Adicionar ação OpenAPI"
+      },
+      "catalog": {
+        "slack": {
+          "summary": "Pesquise conversas e envie mensagens",
+          "description": "Pesquise conversas e envie mensagens. Requer um aplicativo Slack registrado."
+        },
+        "hubspot": {
+          "summary": "Trabalhe com contatos e negócios",
+          "description": "Trabalhe com contatos e negócios. Requer um conector MCP do HubSpot."
+        },
+        "asana": {
+          "summary": "Gerencie tarefas e projetos",
+          "description": "Gerencie tarefas e projetos. Requer um cliente OAuth registrado."
+        },
+        "linear": {
+          "summary": "Gerencie tarefas, projetos e equipes",
+          "description": "Gerencie tarefas, projetos e equipes."
+        },
+        "notion": {
+          "summary": "Pesquise e atualize seu espaço de trabalho do Notion",
+          "description": "Pesquise e atualize seu espaço de trabalho do Notion."
+        },
+        "sentry": {
+          "summary": "Investigue erros e problemas de desempenho",
+          "description": "Investigue erros e problemas de desempenho."
+        },
+        "atlassian": {
+          "summary": "Trabalhe com Jira e Confluence",
+          "description": "Trabalhe com Jira e Confluence.",
+          "approvalNote": "Sua organização Atlassian pode exigir aprovação de um administrador."
+        },
+        "setupGuide": "Guia de configuração",
+        "add": {
+          "label": "Adicionar {name}"
+        }
+      },
+      "row": {
+        "manage": {
+          "label": "Gerenciar {name}"
+        },
+        "view": {
+          "label": "Ver {name}"
+        }
+      },
+      "kind": {
+        "mcp": "MCP",
+        "openapi": "OpenAPI",
+        "external-app": "Aplicativos do Craft"
+      },
+      "filters": {
+        "label": "Tipo de plugin",
+        "all": "Todos",
+        "apps": "Aplicativos do Craft"
+      },
+      "state": {
+        "mcpError": "Não foi possível carregar os servidores MCP.",
+        "listErrorDescription": "Não foi possível carregar esta lista de plugins. Tente novamente em instantes.",
+        "openapiError": "Não foi possível carregar as ações OpenAPI.",
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "loading": "Carregando plugins",
+        "empty": {
+          "title": "Nenhum plugin instalado",
+          "description": "Adicione um plugin ao seu espaço de trabalho.",
+          "explore": {
+            "label": "Explorar plugins"
+          }
+        },
+        "noResults": {
+          "title": "Nenhum plugin encontrado",
+          "description": "Tente outro nome, descrição ou URL do servidor.",
+          "clear": {
+            "label": "Ver todos os plugins"
+          }
+        },
+        "externalAppsError": "Não foi possível carregar os apps"
+      }
+    },
+    "mcpSetup": {
+      "connectTo": "Conectar a {name}",
+      "contactingServer": "Contactando o servidor",
+      "detectingAuthentication": "Detectando a autenticação",
+      "stagePending": "Em andamento",
+      "stageSuccess": "Concluído",
+      "stageError": "Falhou",
+      "stageWaiting": "Aguardando",
+      "progress": "Progresso da configuração",
+      "serverStep": "Servidor",
+      "connectionStep": "Conexão",
+      "permissionDenied": "Você não tem permissão para adicionar servidores MCP.",
+      "reviewSettings": "Revise as configurações do servidor antes de conectar.",
+      "urlDescription": "Insira a URL do servidor para detectar a conexão e a autenticação.",
+      "detectedTransport": "Transporte: {transport}",
+      "retry": "Verificar novamente",
+      "authenticationUndetected": "Escolha o método de autenticação na próxima página.",
+      "configureManually": "Configurar manualmente",
+      "details": "Detalhes",
+      "checking": "Verificando servidor…",
+      "unreachable": "Não foi possível conectar a este servidor MCP",
+      "retryCheck": "Verifique a URL e a disponibilidade do servidor e tente novamente.",
+      "blocked": "Esta URL está bloqueada pelas configurações de segurança de saída.",
+      "publicDetected": "Nenhuma autenticação necessária",
+      "oauthDetected": "OAuth detectado",
+      "manualRequired": "Escolha a autenticação manualmente",
+      "chooseAuthentication": "Não foi possível determinar como este servidor autentica. Escolha um método abaixo.",
+      "connect": "Conectar",
+      "publicDetails": "Ferramentas disponíveis: {count}",
+      "serverDetails": "Detalhes do servidor",
+      "authentication": "Autenticação",
+      "continue": "Continuar",
+      "back": "Voltar"
+    },
+    "mcpTools": {
+      "title": "Ferramentas",
+      "enabledTab": "Ferramentas disponíveis",
+      "policiesTab": "Permissões do Craft",
+      "refresh": "Atualizar ferramentas",
+      "loadError": "Não foi possível carregar as ferramentas",
+      "saveError": "Não foi possível salvar as configurações das ferramentas",
+      "refreshError": "Não foi possível atualizar as ferramentas",
+      "search": "Buscar ferramentas"
+    },
+    "mcpDetail": {
+      "configuration": "Configuração do servidor",
+      "authentication": "Autenticação",
+      "loadError": "Não foi possível carregar o servidor MCP",
+      "notFound": "Servidor MCP não encontrado",
+      "unavailable": "Este servidor pode ter sido excluído, ou você pode não ter acesso.",
+      "retry": "Tentar novamente",
+      "availabilitySaved": "Disponibilidade atualizada"
     }
   },
   "admin": {
@@ -1031,6 +1443,9 @@
         },
         "lumapps": {
           "description": "Páginas e comunidades da intranet"
+        },
+        "youtrack": {
+          "description": "Rastreador de issues e gestão de projetos"
         },
         "canvas": {
           "description": "Cursos, páginas e avisos"
@@ -1748,6 +2163,39 @@
       }
     },
     "chatPreferences": {
+      "chatNaming": {
+        "description": "Modelo usado para nomear sessões de chat. Por padrão, usa o modelo de cada sessão.",
+        "resetButton": {
+          "label": "Redefinir"
+        },
+        "sessionModel": {
+          "label": "Usar modelo padrão"
+        },
+        "title": "Modelo para nomear chats"
+      },
+      "searchSelectionModel": {
+        "description": "Seleciona e verifica os documentos recuperados. Um modelo mais barato pode reduzir os custos de busca, mas pode afetar a qualidade das respostas.",
+        "resetButton": {
+          "label": "Redefinir"
+        },
+        "sessionModel": {
+          "label": "Usar modelo padrão"
+        },
+        "title": "Modelo de seleção da busca"
+      },
+      "taskModels": {
+        "title": "Seleção de modelos",
+        "loadFailed": "Não foi possível carregar os modelos de tarefas",
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "noProviders": {
+          "title": "Conecte um provedor de modelos de linguagem"
+        },
+        "addProvider": {
+          "label": "Adicionar provedor"
+        }
+      },
       "advanced": {
         "title": "Opções avançadas"
       },
@@ -1766,13 +2214,6 @@
       "betaTag": {
         "label": "beta"
       },
-      "chatNaming": {
-        "description": "Modelo usado para nomear automaticamente as sessões de chat. O padrão é o próprio modelo de cada sessão — fixe aqui um modelo pequeno e rápido se o seu modelo principal não conseguir atender a solicitações simultâneas.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "title": "Modelo de nomeação de chats"
-      },
       "connectors": {
         "empty": {
           "title": "Nenhum conector configurado"
@@ -1785,6 +2226,10 @@
       "deepResearch": {
         "description": "Sistema de pesquisa agêntico que atua na web e nas fontes conectadas. Usa muito mais tokens por consulta.",
         "title": "Pesquisa profunda"
+      },
+      "defaultLanguage": {
+        "description": "O idioma da interface para usuários que não escolheram um nas próprias configurações.",
+        "title": "Idioma padrão"
       },
       "disableDefaultChat": {
         "description": "Isso obriga os usuários a sempre começar em um agente. Os novos chats serão criados no primeiro agente fixado. Defina agentes em destaque para ajudar os novos usuários a começar.",
@@ -1926,11 +2371,15 @@
         "title": "Controle de temperatura"
       },
       "toasts": {
-        "chatNamingReset": "A nomeação de chats voltou ao modelo da sessão",
-        "chatNamingResetFailed": "Falha ao redefinir o modelo de nomeação de chats",
-        "chatNamingUpdateFailed": "Falha ao atualizar o modelo de nomeação de chats",
-        "chatNamingUpdated": "Modelo de nomeação de chats atualizado",
+        "chatNamingUpdated": "Modelo para nomear chats atualizado",
+        "chatNamingReset": "Modelo para nomear chats redefinido para o modelo padrão",
+        "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
+        "chatNamingResetFailed": "Falha ao redefinir o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
+        "searchSelectionReset": "Modelo de seleção da busca redefinido para o modelo padrão",
+        "searchSelectionResetFailed": "Falha ao redefinir o modelo de seleção da busca",
+        "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
+        "searchSelectionUpdated": "Modelo de seleção da busca atualizado",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
@@ -2036,23 +2485,11 @@
           "days": "{count, plural, one {# dia} other {# dias}}",
           "hours": "{count, plural, one {# hora} other {# horas}}",
           "minutes": "{count, plural, one {# minuto} other {# minutos}}"
-        },
-        "indexingStart": {
-          "label": "Início da indexação"
-        },
-        "pruningFrequency": {
-          "label": "Frequência de limpeza"
-        },
-        "refreshFrequency": {
-          "label": "Frequência de atualização"
         }
       },
       "configItem": {
         "booleanFalse": "Falso",
         "booleanTrue": "Verdadeiro",
-        "edit": {
-          "tooltip": "Editar"
-        },
         "showAll": {
           "label": "Mostrar tudo ({count} itens)"
         },
@@ -2076,53 +2513,10 @@
         "description": "Este erro ocorreu durante a tentativa de exclusão do conector. Você pode tentar excluir novamente clicando no botão \"Excluir\".",
         "title": "Erro de exclusão"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Documentos sincronizados",
-          "errorMessage": "Mensagem de erro",
-          "permissionErrors": "Erros de permissão",
-          "status": "Status",
-          "timeStarted": "Horário de início"
-        },
-        "empty": {
-          "description": "As execuções de sincronização das permissões dos documentos são agendadas em segundo plano. Elas podem demorar a aparecer — tente atualizar em cerca de 30 segundos.",
-          "title": "Ainda não há tentativas de sincronização das permissões dos documentos"
-        },
-        "errorModal": {
-          "title": "Erro na sincronização das permissões dos documentos"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "Confira <link>nossa documentação</link> para mais informações sobre como configurar este conector."
         }
-      },
-      "errorsModal": {
-        "columns": {
-          "documentId": "ID da falha",
-          "errorMessage": "Mensagem de erro",
-          "status": "Status",
-          "time": "Horário"
-        },
-        "description": "Veja abaixo os erros encontrados durante a indexação. Cada linha representa um documento ou entidade com falha.",
-        "empty": {
-          "description": "Nenhum erro encontrado nesta página"
-        },
-        "fullReindex": {
-          "description": "Clique no botão abaixo para iniciar uma reindexação completa e tentar resolver estes erros. Esta reindexação completa pode demorar muito mais do que uma atualização normal."
-        },
-        "resolveAllButton": {
-          "label": "Resolver tudo"
-        },
-        "status": {
-          "resolved": "Resolvido",
-          "unresolved": "Não resolvido"
-        },
-        "targetedReindex": {
-          "description": "Clique no botão abaixo para buscar novamente apenas os documentos com falha. É muito mais rápido do que uma reindexação completa."
-        },
-        "title": "Erros de indexação",
-        "unknownDocument": "Desconhecido"
       },
       "fileManagement": {
         "addFilesButton": {
@@ -2174,7 +2568,8 @@
           "cannotRemoveAllFiles": "Não é possível remover todos os arquivos de um conector. Exclua o conector se for isso que você quer.",
           "filesUpdated": "Arquivos atualizados com sucesso! O índice de documentos está sendo atualizado em segundo plano. Os novos arquivos estão sendo indexados e os arquivos removidos serão retirados dos resultados de pesquisa.",
           "updateFailed": "Falha ao atualizar os arquivos"
-        }
+        },
+        "units": "{count, plural, one {arquivo} other {arquivos}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -2182,23 +2577,6 @@
         },
         "selectedFiles": {
           "heading": "{multiple, select, true {Arquivos selecionados} other {Arquivo selecionado}}"
-        }
-      },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Mensagem de erro",
-          "groups": "Grupos",
-          "memberships": "Associações",
-          "status": "Status",
-          "timeStarted": "Horário de início",
-          "users": "Usuários"
-        },
-        "empty": {
-          "description": "As execuções de sincronização das associações de grupo são agendadas em segundo plano. Elas podem demorar a aparecer — tente atualizar em cerca de 30 segundos.",
-          "title": "Ainda não há tentativas de sincronização das associações de grupo"
-        },
-        "errorModal": {
-          "title": "Erro na sincronização das associações de grupo"
         }
       },
       "groupRestriction": {
@@ -2220,39 +2598,8 @@
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Mensagem de erro",
-          "newDocs": "Novos documentos",
-          "status": "Status",
-          "timeStarted": "Horário de início",
-          "totalDocs": "Total de documentos",
-          "totalDocsTooltip": "Número total de documentos substituídos no índice durante esta tentativa de indexação"
         },
-        "docsPerMinute": "{rate} documentos / min",
-        "docsRemoved": "(também removeu {count} documentos detectados como excluídos na origem)",
-        "empty": {
-          "description": "As tentativas de indexação são agendadas em segundo plano e podem demorar a aparecer. Tente atualizar a página em cerca de 30 segundos!",
-          "title": "Nenhuma tentativa de indexação agendada ainda"
-        },
-        "noAdditionalDocs": "Nenhum documento adicional processado",
-        "reindexTooltip": {
-          "completed": "Esta tentativa de indexação foi uma reindexação completa. Todos os documentos da origem foram sincronizados com o sistema.",
-          "inProgress": "Esta tentativa de indexação é uma reindexação completa. Todos os documentos da origem estão sendo sincronizados com o sistema."
-        },
-        "stageMetricsButton": {
-          "tooltip": "Ver métricas por etapa"
-        },
-        "viewTrace": {
-          "ariaLabel": "Ver rastreamento completo"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "Encontramos alguns problemas ao processar alguns documentos. <details>Ver detalhes.</details>",
-        "resolvingStatus": "Resolvendo as falhas",
-        "title": "Alguns documentos não foram indexados"
+        "managerCount": "{count, plural, one {# gerente do grupo} other {# gerentes do grupo}}"
       },
       "invalidState": {
         "description": "Este conector está em um estado inválido. Atualize suas credenciais ou crie um novo conector antes de reindexar.",
@@ -2270,7 +2617,6 @@
           }
         },
         "reIndex": {
-          "label": "Reindexar",
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
             "invalid": "Corrija a configuração do conector antes de reindexar",
@@ -2279,45 +2625,32 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausar"
+            "label": "Pausar indexação e sincronizações",
+            "description": "Cancelar as indexações e sincronizações de permissões em andamento e futuras. Os documentos indexados ficarão desatualizados, mas continuarão pesquisáveis."
           },
           "resume": {
-            "label": "Retomar"
+            "label": "Retomar indexação e sincronizações",
+            "description": "Reiniciar as indexações e sincronizações de permissões."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"
           }
         },
         "trigger": {
-          "label": "Gerenciar"
+          "label": "Gerenciar índice"
+        },
+        "updateIndex": {
+          "label": "Atualizar índice",
+          "description": "Buscar alterações e indexar os documentos desde a última indexação bem-sucedida."
+        },
+        "fullReindex": {
+          "label": "Reindexar tudo",
+          "description": "Reindexar todos os documentos da fonte. Pode levar **horas ou dias** dependendo do tamanho."
+        },
+        "startIndexing": {
+          "label": "Iniciar indexação",
+          "description": "Ignorar as verificações do conector e indexar agora."
         }
-      },
-      "permissionSyncStatus": {
-        "canceled": {
-          "label": "Cancelada"
-        },
-        "completedWithErrors": {
-          "label": "Concluída com erros"
-        },
-        "failed": {
-          "label": "Falhou"
-        },
-        "fallback": {
-          "label": "Não iniciada"
-        },
-        "inProgress": {
-          "label": "Em andamento"
-        },
-        "notStarted": {
-          "label": "Agendada"
-        },
-        "success": {
-          "label": "Concluída com sucesso"
-        }
-      },
-      "pruningFrequencyModal": {
-        "description": "Com que frequência o conector deve fazer a limpeza (em horas)",
-        "title": "Frequência de limpeza"
       },
       "reEnableModal": {
         "actionButton": {
@@ -2326,186 +2659,107 @@
         "additionalDetails": "Este conector foi marcado como inválido anteriormente. Confirme que sua configuração está correta antes de reativar. Tem certeza de que deseja continuar?",
         "entityType": "Conector inválido"
       },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Isso vai causar uma reindexação completa de todos os documentos da origem.",
-          "note": "<strong>OBSERVAÇÃO:</strong> dependendo do número de documentos armazenados na origem, isso pode demorar muito."
-        },
-        "fullReindexButton": {
-          "label": "Executar reindexação completa"
-        },
-        "title": "Executar indexação",
-        "update": {
-          "description": "Isso vai buscar e indexar todos os documentos que mudaram e/ou foram adicionados desde a última indexação bem-sucedida."
-        },
-        "updateButton": {
-          "label": "Executar atualização"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "Com que frequência o conector deve atualizar (em minutos)",
-        "title": "Frequência de atualização"
-      },
-      "sections": {
-        "advanced": {
-          "title": "Avançado"
-        },
-        "advancedConfiguration": {
-          "title": "Configuração avançada"
-        },
-        "connectorConfiguration": {
-          "title": "Configuração do conector"
-        },
-        "credential": {
-          "title": "Credencial"
-        },
-        "indexing": {
-          "title": "Indexação"
-        },
-        "indexingAttempts": {
-          "title": "Tentativas de indexação"
-        }
-      },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Ocultar o overhead da tentativa"
-          },
-          "showButton": {
-            "label": "Mostrar o overhead da tentativa"
-          }
-        },
-        "batchTotal": {
-          "empty": "Nenhum lote concluído ainda",
-          "summary": "Lote médio: {avgLabel}, {count, plural, one {# lote} other {# lotes}} — distribuição mostrada abaixo."
-        },
-        "empty": {
-          "description": "Nenhum dado de tempo por etapa foi registrado para esta tentativa ainda. Tentativas antigas, executadas antes da instrumentação de etapas, não têm métricas."
-        },
         "loadError": {
-          "description": "Não foi possível carregar os dados de tempo por etapa desta tentativa. O pipeline é executado mesmo quando o registro de métricas não está disponível, portanto isso não indica um problema na indexação em si.",
           "title": "Falha ao carregar as métricas por etapa"
         },
-        "loading": "Carregando as métricas por etapa…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Tempo médio",
-            "calls": "Chamadas",
-            "max": "Máx",
-            "min": "Mín",
-            "stage": "Etapa",
-            "totalTime": "Tempo total"
-          },
           "empty": "Nenhum dado de etapa por lote registrado."
         },
-        "sort": {
-          "label": "Ordenar:",
-          "pipelineOrder": {
-            "label": "Ordem do pipeline"
+        "buckets": {
+          "fetchSource": {
+            "label": "Busca na fonte"
           },
-          "timeTaken": {
-            "label": "Tempo gasto"
+          "batchPreProcessing": {
+            "label": "Pré-processamento de lotes"
+          },
+          "chunking": {
+            "label": "Divisão em chunks"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "vectorDbWrite": {
+            "label": "Gravação no banco vetorial"
+          },
+          "postProcessing": {
+            "label": "Pós-processamento"
           }
         },
         "stages": {
           "batchLoad": {
-            "description": "Lê o lote de volta do armazenamento de objetos para a memória do worker.",
             "label": "Carga do lote"
           },
           "batchTotal": {
-            "description": "Tempo total decorrido no processamento de um único lote do início ao fim.",
             "label": "Total do lote"
           },
           "batchUnaccounted": {
-            "description": "Tempo do lote não atribuído a nenhuma etapa nomeada. Um valor alto sugere falta de instrumentação.",
             "label": "Não contabilizado"
           },
           "checkpointLoad": {
-            "description": "Carrega o checkpoint salvo para que a tentativa continue de onde a execução anterior parou.",
             "label": "Carga do checkpoint"
           },
           "chunking": {
-            "description": "Divide cada documento nos chunks que são transformados em embeddings e indexados.",
             "label": "Divisão em chunks"
           },
           "connectorFetch": {
-            "description": "Tempo que o conector gasta chamando a API da origem e entregando os documentos brutos.",
             "label": "Busca do conector"
           },
           "connectorValidation": {
-            "description": "Verifica se o conector está configurado corretamente e acessível antes de começar a busca.",
             "label": "Validação do conector"
           },
           "contextualRag": {
-            "description": "Gera resumos de contexto por chunk com um LLM para melhorar a qualidade da recuperação.",
             "label": "RAG contextual"
           },
           "coordLockAcquireWait": {
-            "description": "Aguarda o bloqueio de coordenação que protege os contadores de progresso compartilhados da tentativa.",
             "label": "Espera pelo bloqueio de coordenação"
           },
           "coordinationUpdate": {
-            "description": "Atualiza os contadores de progresso da tentativa para que a interface reflita o lote concluído.",
             "label": "Atualização da coordenação"
           },
           "docBatchEnqueue": {
-            "description": "Publica o lote armazenado na fila do Celery para que um worker de docprocessing o processe.",
             "label": "Enfileiramento do lote de documentos"
           },
           "docBatchStore": {
-            "description": "Grava um lote de documentos buscados no armazenamento de objetos para os workers de docprocessing.",
             "label": "Armazenamento do lote de documentos"
           },
           "docDbPrepare": {
-            "description": "Determina quais documentos são novos ou atualizados e prepara as linhas do banco de dados.",
             "label": "Preparação do banco de documentos"
           },
           "docLockAcquireWait": {
-            "description": "Aguarda os bloqueios por documento para que tentativas simultâneas não gravem o mesmo documento.",
             "label": "Espera pelo bloqueio de documento"
           },
           "docprocessingSetup": {
-            "description": "Prepara o worker: carrega as configurações de pesquisa, o modelo de embedding e os clientes de índice.",
             "label": "Configuração do docprocessing"
           },
           "embedding": {
-            "description": "Chama o modelo de embedding para transformar os chunks em vetores. Normalmente é a etapa mais lenta.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Anexa o controle de acesso, os boosts e outros metadados a cada chunk antes da gravação.",
             "label": "Preparação do enriquecimento"
           },
           "finalization": {
-            "description": "Libera os recursos do worker e o lote assim que o processamento termina.",
             "label": "Finalização"
           },
           "gcCollect": {
-            "description": "Tempo gasto na coleta de lixo explícita entre os lotes.",
             "label": "Coleta de lixo"
           },
           "hierarchyUpsert": {
-            "description": "Grava a hierarquia de pastas ou espaços da origem para que os documentos possam ser filtrados por local.",
             "label": "Upsert da hierarquia"
           },
           "imageProcessing": {
-            "description": "Extrai e resume as imagens para que o conteúdo delas vire texto pesquisável.",
             "label": "Processamento de imagens"
           },
           "permissionValidation": {
-            "description": "Confirma que a credencial tem as permissões necessárias para ler os documentos da origem.",
             "label": "Validação de permissões"
           },
           "postIndexDbUpdate": {
-            "description": "Atualiza as linhas dos documentos no Postgres depois que a gravação no índice é concluída.",
             "label": "Atualização do banco após a indexação"
           },
           "queueWait": {
-            "description": "Tempo que um lote espera na fila até um worker de docprocessing começar.",
             "label": "Espera na fila"
           },
           "vectorDbWrite": {
-            "description": "Grava os chunks com embeddings no índice de documentos.",
             "label": "Gravação no banco vetorial"
           },
           "embeddingRateLimitWait": {
@@ -2518,63 +2772,44 @@
           }
         }
       },
-      "stageMetricsModal": {
-        "description": "Tempos por lote e por tentativa desta tentativa de indexação.",
-        "title": "Métricas por etapa da indexação"
-      },
       "statusCard": {
         "documentsIndexed": {
-          "label": "Documentos indexados"
+          "label": "Documentos no índice"
         },
-        "indexingSpeed": "({speed} documentos / min)",
+        "indexingSpeed": "{speed} documentos/min",
+        "indexingSpeedTooltip": "Documentos indexados por minuto desde a criação do conector",
         "lastIndexed": {
-          "label": "Última indexação"
+          "value": "Última indexação {when}"
         },
-        "lastSynced": {
-          "label": "Última sincronização"
+        "statusLine": "Status da indexação - {detail}",
+        "documents": {
+          "label": "Recentes / Total",
+          "total": "/ {total}",
+          "totalLabel": "Total"
         },
-        "permissionSyncing": {
-          "label": "Sincronização de permissões"
+        "throughput": {
+          "ariaLabel": "Documentos indexados ao longo do tempo",
+          "tooltip": "{count, plural, one {# documento} other {# documentos}}",
+          "loadError": "Não foi possível carregar o gráfico.",
+          "rangeFilter": "Execuções criadas neste trecho do gráfico"
         },
-        "status": {
-          "label": "Status"
-        }
-      },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "Ver a mensagem de erro completa"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Sincronização das permissões dos documentos",
-          "notApplicableDescription": "Este conector não usa uma tarefa separada de sincronização das permissões dos documentos."
+        "hold": {
+          "checks_running": "Executando verificações pré-indexação",
+          "checks_failed_to_run": "Em espera: as verificações não foram executadas",
+          "required_checks_failed": "Em espera: verificações obrigatórias falharam",
+          "start": "Iniciar indexação",
+          "released": "Indexação iniciada",
+          "releaseFailed": "Não foi possível iniciar a indexação",
+          "viewChecks": "Ver verificações do conector"
         },
-        "groupMembership": {
-          "label": "Sincronização das associações de grupo",
-          "notApplicableDescription": "Este conector não usa uma tarefa separada de sincronização das associações de grupo."
-        },
-        "indexing": {
-          "label": "Indexação"
-        },
-        "loadError": {
-          "title": "Falha ao carregar as tentativas de sincronização"
-        },
-        "notApplicable": {
-          "title": "Não se aplica"
-        }
+        "title": "Status da indexação"
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
-        "completeReindexStarting": "Iniciando a reindexação completa...",
         "deletionScheduleFailed": "Falha ao agendar a exclusão do conector - {message}",
-        "indexingProcessStartFailed": "Falha ao iniciar o processo de indexação",
         "indexingStartFailed": "Falha ao iniciar a indexação",
         "indexingStartUnexpectedError": "Ocorreu um erro inesperado ao tentar iniciar a indexação",
         "indexingUpdateStarted": "Atualização da indexação iniciada com sucesso",
-        "indexingUpdateStarting": "Iniciando a atualização da indexação...",
-        "invalidPruningFrequency": "Frequência de limpeza inválida: precisa ser um número válido",
-        "invalidRefreshFrequency": "Frequência de atualização inválida: precisa ser um número inteiro",
         "nameUpdateFailed": "Falha ao atualizar o nome do conector",
         "nameUpdated": "Nome do conector atualizado com sucesso",
         "noUnresolvedErrors": "Nenhum erro não resolvido para tentar novamente.",
@@ -2583,7 +2818,376 @@
         "refreshFrequencyUpdateFailed": "Falha ao atualizar a frequência de atualização do conector",
         "refreshFrequencyUpdated": "Frequência de atualização do conector atualizada com sucesso",
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
-        "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados."
+        "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
+        "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
+        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector",
+        "runResolved": "Marcado como resolvido.",
+        "runResolveFailed": "Não foi possível resolver: {message}",
+        "runsResolved": "{count, plural, one {# execução marcada como resolvida} other {# execuções marcadas como resolvidas}}."
+      },
+      "backButton": {
+        "label": "Todos os conectores"
+      },
+      "account": {
+        "title": "Conta de autenticação",
+        "editButton": {
+          "label": "Editar conta"
+        }
+      },
+      "configuration": {
+        "title": "Configurações de indexação",
+        "description": "{source} • {count, plural, one {# configuração} other {# configurações}}",
+        "editButton": {
+          "label": "Editar configurações"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Pasta} other {Pastas}}",
+            "source": "{count, plural, one {Fonte} other {Fontes}}",
+            "stub": "{count, plural, one {Nó} other {Nós}}",
+            "shared_drive": "{count, plural, one {Drive compartilhado} other {Drives compartilhados}}",
+            "my_drive": "{count, plural, one {Meu Drive} other {Meus Drives}}",
+            "space": "{count, plural, one {Espaço} other {Espaços}}",
+            "page": "{count, plural, one {Página} other {Páginas}}",
+            "project": "{count, plural, one {Projeto} other {Projetos}}",
+            "database": "{count, plural, one {Banco de dados} other {Bancos de dados}}",
+            "workspace": "{count, plural, one {Espaço de trabalho} other {Espaços de trabalho}}",
+            "site": "{count, plural, one {Site} other {Sites}}",
+            "drive": "{count, plural, one {Biblioteca de documentos} other {Bibliotecas de documentos}}",
+            "channel": "{count, plural, one {Canal} other {Canais}}",
+            "mailbox": "{count, plural, one {Caixa de correio} other {Caixas de correio}}"
+          },
+          "counts": {
+            "folder": "{count, plural, one {# pasta} other {# pastas}}",
+            "source": "{count, plural, one {# fonte} other {# fontes}}",
+            "stub": "{count, plural, one {# nó} other {# nós}}",
+            "shared_drive": "{count, plural, one {# Drive compartilhado} other {# Drives compartilhados}}",
+            "my_drive": "{count, plural, one {# Meu Drive} other {# Meus Drives}}",
+            "space": "{count, plural, one {# espaço} other {# espaços}}",
+            "page": "{count, plural, one {# página} other {# páginas}}",
+            "project": "{count, plural, one {# projeto} other {# projetos}}",
+            "database": "{count, plural, one {# banco de dados} other {# bancos de dados}}",
+            "workspace": "{count, plural, one {# espaço de trabalho} other {# espaços de trabalho}}",
+            "site": "{count, plural, one {# site} other {# sites}}",
+            "drive": "{count, plural, one {# biblioteca de documentos} other {# bibliotecas de documentos}}",
+            "channel": "{count, plural, one {# canal} other {# canais}}",
+            "mailbox": "{count, plural, one {# caixa de correio} other {# caixas de correio}}"
+          },
+          "notIndexed": "Não indexado",
+          "other": "Outros documentos",
+          "loadError": "Não foi possível carregar a distribuição de documentos.",
+          "open": "Abrir na fonte",
+          "empty": "Nenhum documento indexado ainda.",
+          "unavailable": "Disponível após a primeira execução bem-sucedida.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {documento} other {documentos}}"
+        },
+        "summary": "{realm} • {counts}",
+        "hostPrefix": "{host}: {realm}",
+        "hostType": "Tipo de hospedagem do {source}"
+      },
+      "sharing": {
+        "title": "Configurações de compartilhamento",
+        "summary": {
+          "everyone": "Documentos compartilhados com **todos**",
+          "groups": "Documentos compartilhados com **{count, plural, one {# grupo} other {# grupos}}**",
+          "sync": "Acesso aos documentos **sincronizado com {source}**",
+          "managedByAdmins": "Gerenciado por **administradores**",
+          "managedByGroups": "Gerenciado por **{count, plural, one {# grupo} other {# grupos}}**",
+          "syncRestricted": "Acesso aos documentos **sincronizado com {source}**, restrito a **{count, plural, one {# grupo} other {# grupos}}**",
+          "groupsPending": "Documentos compartilhados com **grupos específicos**",
+          "syncRestrictedPending": "Acesso aos documentos **sincronizado com {source}**, restrito a **grupos específicos**"
+        },
+        "manageAccess": {
+          "title": "Acesso de gerenciamento do conector",
+          "unavailable": "Você não pode ver quem gerencia este conector."
+        },
+        "editButton": {
+          "label": "Editar acesso"
+        },
+        "groupsUnavailable": "Não foi possível carregar os grupos.",
+        "summaryLine": {
+          "access": "{access}",
+          "accessAndManaged": "{access}; {managed}"
+        }
+      },
+      "schedule": {
+        "refresh": "Atualizar a cada **{every}**",
+        "prune": "Limpar a cada **{every}**",
+        "checks": "Verificar a cada **{every}**",
+        "summary": {
+          "refresh": "{refresh}",
+          "prune": "{prune}",
+          "checks": "{checks}",
+          "refreshAndPrune": "{refresh}; {prune}",
+          "refreshAndChecks": "{refresh}; {checks}",
+          "pruneAndChecks": "{prune}; {checks}",
+          "refreshAndPruneAndChecks": "{refresh}; {prune}; {checks}"
+        }
+      },
+      "runs": {
+        "kinds": {
+          "label": "Tipo de execução",
+          "all": "Todos os tipos",
+          "indexing": "Índice de documentos",
+          "doc_permission_sync": "Sincronização de permissões",
+          "group_sync": "Sincronização de membros de grupos",
+          "pruning": "Limpeza de documentos",
+          "checks": "Verificações do conector"
+        },
+        "detail": {
+          "queued": "Na fila",
+          "running": "Em execução",
+          "rate": "{rate} documentos/min",
+          "finished": "{time} ({minutes, number} min)",
+          "rateFinished": "{rate} documentos/min ({minutes, number} min)",
+          "membershipRate": "{rate} associações/min"
+        },
+        "actions": {
+          "stages": "Ver métricas por etapa",
+          "cancel": "Cancelar",
+          "logs": "Ver logs",
+          "checks": "Ver resultados das verificações"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
+        },
+        "newModel": {
+          "label": "Novo modelo",
+          "tooltip": "Indexado com o modelo de embedding que substituirá o modelo atual."
+        },
+        "figures": {
+          "indexed": "indexados",
+          "synced": "sincronizados",
+          "removed": "removidos",
+          "checksRun": "{count, plural, one {# verificação executada} other {# verificações executadas}}",
+          "memberships": "associações",
+          "checks": "verificações executadas"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
+          "updatedDocs": "Documentos atualizados",
+          "removedDocs": "{count, plural, one {# documento removido} other {# documentos removidos}}",
+          "users": "{count, plural, one {# usuário} other {# usuários}}",
+          "groups": "{count, plural, one {# grupo} other {# grupos}}",
+          "running": "{count, plural, one {# execução em andamento} other {# execuções em andamento}}",
+          "succeeded": "{count, plural, one {# execução bem-sucedida} other {# execuções bem-sucedidas}}",
+          "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}",
+          "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
+          "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
+          "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
+          "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
+        },
+        "search": {
+          "placeholder": "Pesquisar execuções de indexação…"
+        },
+        "window": {
+          "label": "Período",
+          "all": "Todo o período",
+          "h1": "Última hora",
+          "h12": "Últimas 12 horas",
+          "h24": "Últimas 24 horas",
+          "d7": "Últimos 7 dias",
+          "d30": "Últimos 30 dias"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "Todos os status",
+          "running": "Em execução",
+          "succeeded": "Bem-sucedidas",
+          "failed": "Com falha",
+          "canceled": "Canceladas"
+        },
+        "loadError": {
+          "title": "Não foi possível carregar as execuções."
+        },
+        "empty": {
+          "title": "Nenhuma execução de indexação recente",
+          "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
+          "pastRuns": "{count, plural, one {# execução anterior} other {# execuções anteriores}}",
+          "view": "Ver",
+          "viewAria": "{count, plural, one {Ver # execução anterior} other {Ver # execuções anteriores}}",
+          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
+        },
+        "units": "{count, plural, one {execução} other {execuções}}",
+        "errorModal": {
+          "indexing": "Erro na execução de indexação",
+          "doc_permission_sync": "Erro na sincronização de permissões de documentos",
+          "group_sync": "Erro na sincronização de membros de grupos",
+          "pruning": "Erro na limpeza de documentos",
+          "checks": "Erro nas verificações do conector"
+        },
+        "toasts": {
+          "canceled": "A execução está sendo cancelada.",
+          "cancelFailed": "Não foi possível cancelar a execução. Tente novamente."
+        },
+        "checkResults": {
+          "title": "Verificações do conector",
+          "close": "Fechar",
+          "count": "({count})"
+        },
+        "showing": "Mostrando <mono>{from}</mono>~<mono>{to}</mono> de <mono>{total}</mono>"
+      },
+      "activity": {
+        "search": {
+          "placeholder": "Pesquisar histórico de atividade…"
+        },
+        "counts": {
+          "failures": "{count, plural, one {# execução falhou} other {# execuções falharam}}",
+          "errors": "{count, plural, one {# execução com erros de documentos} other {# execuções com erros de documentos}}"
+        },
+        "filter": {
+          "label": "Mostrar",
+          "all": "Qualquer nível",
+          "failures": "Falhas",
+          "errors": "Erros",
+          "other": "Outros",
+          "resolved": "Resolvido"
+        },
+        "groups": {
+          "failures": "{count, plural, =0 {Falhas} one {# falha} other {# falhas}}",
+          "errors": "{count, plural, =0 {Erros} one {# erro} other {# erros}}",
+          "other": "Outros",
+          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "A indexação falhou.",
+            "failedWith": "A indexação falhou: {reason}.",
+            "running": "Indexação em andamento com erros.",
+            "stopped": "Indexação interrompida com erros.",
+            "errors": "Indexação concluída com erros.",
+            "resolved": "Erros de indexação resolvidos.",
+            "succeeded": "Indexação concluída com sucesso.",
+            "inProgress": "Indexação em andamento.",
+            "canceled": "Indexação interrompida."
+          },
+          "doc_permission_sync": {
+            "failed": "A sincronização de permissões falhou.",
+            "failedWith": "A sincronização de permissões falhou: {reason}.",
+            "running": "Sincronização de permissões em andamento com erros.",
+            "stopped": "Sincronização de permissões interrompida com erros.",
+            "errors": "Permissões sincronizadas com erros.",
+            "resolved": "Erros de sincronização de permissões resolvidos.",
+            "succeeded": "Permissões sincronizadas com sucesso.",
+            "inProgress": "Sincronizando permissões.",
+            "canceled": "Sincronização de permissões interrompida."
+          },
+          "group_sync": {
+            "failed": "A sincronização de membros de grupos falhou.",
+            "failedWith": "A sincronização de membros de grupos falhou: {reason}.",
+            "running": "Sincronização de membros de grupos em andamento com erros.",
+            "stopped": "Sincronização de membros de grupos interrompida com erros.",
+            "errors": "Membros de grupos sincronizados com erros.",
+            "resolved": "Erros de sincronização de membros de grupos resolvidos.",
+            "succeeded": "Associações de grupo sincronizadas com sucesso.",
+            "inProgress": "Sincronizando associações de grupo.",
+            "canceled": "Sincronização de grupos interrompida."
+          },
+          "pruning": {
+            "failed": "A limpeza falhou.",
+            "failedWith": "A limpeza falhou: {reason}.",
+            "running": "Limpeza em andamento com erros.",
+            "stopped": "Limpeza interrompida com erros.",
+            "errors": "Limpeza concluída com erros.",
+            "resolved": "Erros de limpeza resolvidos.",
+            "succeeded": "Limpeza concluída com sucesso.",
+            "inProgress": "Limpeza em andamento.",
+            "canceled": "Limpeza interrompida."
+          },
+          "checks": {
+            "failed": "As verificações do conector falharam.",
+            "failedWith": "As verificações do conector falharam: {reason}.",
+            "running": "Verificações do conector em andamento com erros.",
+            "stopped": "Verificações do conector interrompidas com erros.",
+            "errors": "Verificações do conector concluídas com erros.",
+            "resolved": "Erros das verificações do conector resolvidos.",
+            "succeeded": "Verificações do conector aprovadas.",
+            "inProgress": "Verificações do conector em andamento.",
+            "canceled": "Verificações do conector interrompidas."
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# documento indexado} other {# documentos indexados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "doc_permission_sync": "{count, plural, one {# permissão de documento sincronizada} other {# permissões de documento sincronizadas}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "group_sync": "{count, plural, one {# grupo sincronizado} other {# grupos sincronizados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "pruning": "{count, plural, one {# documento removido} other {# documentos removidos}}. Duração da limpeza: {minutes, plural, one {# minuto} other {# minutos}}.",
+          "checks": "{count, plural, one {# verificação executada} other {# verificações executadas}}. Duração da verificação: {minutes, plural, one {# minuto} other {# minutos}}.",
+          "checksFailed": "{count, plural, one {# verificação falhou} other {# verificações falharam}}."
+        },
+        "tags": {
+          "stackTrace": "Rastreamento de pilha",
+          "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "doc_permission_sync": "{count, plural, one {Permissões de # documento não sincronizadas} other {Permissões de # documentos não sincronizadas}}",
+          "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
+          "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "resolved": "Resolvido",
+          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}"
+        },
+        "more": "Mostrar mais",
+        "empty": {
+          "title": "Nenhuma atividade recente",
+          "resolved": "Sem execuções resolvidas",
+          "filtered": "Nada corresponde a esta pesquisa.",
+          "failures": "Sem falhas",
+          "errors": "Sem erros",
+          "other": "Nenhuma outra execução"
+        },
+        "loadError": {
+          "title": "Não foi possível carregar a atividade."
+        },
+        "docs": {
+          "title": "Documentos com falha",
+          "search": {
+            "placeholder": "Pesquisar documentos…"
+          },
+          "resolveAll": "Repetir todos",
+          "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
+          "resolveAllUnsupported": "Este conector não pode reindexar documentos individuais. Reindexe o conector para tentar novamente.",
+          "resolveOne": "Repetir este documento",
+          "retry": "{count, plural, one {Repetir # documento} other {Repetir # documentos}}",
+          "more": "Mais",
+          "less": "Menos",
+          "unknownDocument": "Documento desconhecido",
+          "empty": "Sem erros de documentos em aberto",
+          "loadError": "Não foi possível carregar os documentos com falha.",
+          "open": "Abrir o documento"
+        },
+        "trace": {
+          "header": "Rastreamento de pilha • ID da execução: {id}",
+          "copy": "Copiar o rastreamento de pilha",
+          "runId": "ID da execução: {id}"
+        },
+        "actions": {
+          "resolve": "Resolver"
+        },
+        "resolveAll": {
+          "button": "Resolver tudo o que é exibido",
+          "title": "Resolver todas as execuções exibidas?",
+          "description": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual. Elas mantêm o status e passam para a seção de resolvidas.",
+          "fleetDescription": "Isso marca como {count, plural, one {resolvida # execução} other {resolvidas # execuções}} que correspondem ao filtro atual, nos conectores que você gerencia. Elas mantêm o status e passam para a seção de resolvidas.",
+          "confirm": "Resolver tudo"
+        },
+        "resolved": {
+          "label": "Resolvidos"
+        }
+      },
+      "stageDetails": {
+        "title": "Detalhes das etapas",
+        "heading": {
+          "top": "Detalhes",
+          "bottom": "das etapas"
+        },
+        "calls": "Lotes",
+        "averageTime": "Tempo médio",
+        "maxTime": "Tempo máximo",
+        "uneven": {
+          "tooltip": "Os tempos por lote variam muito nesta etapa"
+        },
+        "close": "Fechar detalhes das etapas"
       }
     },
     "connectorTitle": {
@@ -2752,6 +3356,10 @@
             "label": "Excluir conta",
             "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
           },
+          "updateButton": {
+            "label": "Atualizar credenciais",
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
+          },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
           },
@@ -2793,6 +3401,9 @@
           },
           "shareLocked": {
             "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+          },
+          "viewDetails": {
+            "tooltip": "Ver detalhes"
           }
         },
         "accountUnavailable": {
@@ -2810,9 +3421,6 @@
         "checking": "Verificando a credencial…",
         "fieldInvalid": "Verifique o campo \"{field}\": {detail}",
         "rejected": "Esta credencial não pode ser usada com estas configurações. {detail}"
-      },
-      "credentialsLoadError": {
-        "title": "Falha ao carregar as credenciais."
       },
       "field": {
         "optionalSuffix": {
@@ -2836,10 +3444,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Sua credencial do Gmail foi criada. Gerencie ou revogue essa credencial na lista de credenciais.",
-          "title": "Autenticação concluída"
-        },
         "authFailed": {
           "toast": "Falha na autenticação com o Gmail - {error}"
         },
@@ -2847,51 +3451,12 @@
           "label": "Autenticar com o Gmail",
           "pendingLabel": "Autenticando..."
         },
-        "createButton": {
-          "label": "Criar credencial",
-          "pendingLabel": "Criando..."
-        },
-        "credentialsLoadError": {
-          "title": "Falha ao carregar as credenciais do Gmail."
-        },
-        "invalidFile": {
-          "toast": "Arquivo inválido - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Arquivo inválido - era esperada uma chave JSON de conta de serviço"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Envie uma chave de conta de serviço antes de criar uma credencial"
-        },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Gmail você quer indexar.",
-          "title": "Opção 1: app OAuth",
           "sharedScopesNote": "O Google solicita acesso ao Gmail e ao Google Drive juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Gmail, desmarque os escopos do Google Drive na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Digite o e-mail de um administrador ou proprietário da organização Google que é dona das contas do Gmail que você quer indexar.",
-          "invalidEmail": "Precisa ser um e-mail válido",
-          "label": "E-mail do administrador principal",
-          "placeholder": "admin@suaempresa.com",
-          "required": "Obrigatório"
-        },
-        "section": {
-          "title": "Autenticação do Gmail"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Falha ao criar a credencial de conta de serviço - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Credencial de conta de serviço criada com sucesso"
-        },
-        "serviceAccountOption": {
-          "title": "Opção 2: conta de serviço"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Envie ou cole a chave JSON da sua conta de serviço"
         }
       },
       "header": {
@@ -3050,6 +3615,10 @@
         "units": {
           "hours": "horas",
           "minutes": "minutos"
+        },
+        "checkFrequency": {
+          "title": "Executar verificações a cada",
+          "description": "Verifica a conexão, seus recursos e sua integridade."
         }
       },
       "settings": {
@@ -3105,6 +3674,1119 @@
       },
       "optionsListInput": {
         "placeholder": "Escolha {label} na lista ou digite"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "Ative o processamento de anexos de páginas, incluindo imagens e documentos",
+              "label": "Incluir anexos"
+            },
+            "scoped_token": {
+              "label": "Este é um token de API com escopos",
+              "description": "Tokens com escopos exigem roteamento pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "IDs de reuniões",
+              "description": "Cada reunião recorrente é indexada ocorrência por ocorrência. O Zoom retorna apenas as ocorrências dos últimos 15 meses, então as mais antigas ficam fora do alcance de um ID de reunião. Para indexar um histórico mais antigo, filtre por e-mail do anfitrião ou por Grupo do Zoom, pois nenhum dos dois tem esse limite."
+            },
+            "webinar_ids": {
+              "label": "IDs de webinars",
+              "description": "Webinars também exigem o complemento Webinar, ativado para o anfitrião. Ao contrário dos IDs de reunião, o histórico de webinars não tem limite de 15 meses."
+            },
+            "host_emails": {
+              "label": "E-mails dos anfitriões",
+              "description": "Indexa todas as sessões que essas pessoas hospedam, dos tipos marcados abaixo. Um e-mail que não corresponde a nenhum usuário do Zoom é relatado como erro de indexação, e não ignorado em silêncio."
+            },
+            "group_id": {
+              "label": "ID do Grupo do Zoom",
+              "description": "Indexa todas as sessões hospedadas pelos membros de um Grupo do Zoom, dos tipos marcados abaixo. O Zoom relê a lista de membros a cada execução, então quem entra ou sai é identificado sem editar este conector."
+            },
+            "include_meetings": {
+              "label": "Incluir reuniões",
+              "description": "Aplica-se a E-mails dos anfitriões e a Grupo do Zoom. As listas de IDs acima já indicam o tipo de cada ID."
+            },
+            "include_webinars": {
+              "label": "Incluir webinars",
+              "description": "Aplica-se a E-mails dos anfitriões e a Grupo do Zoom. Webinars também exigem o complemento Webinar, ativado para o anfitrião."
+            },
+            "treat_link_access_as_public": {
+              "label": "Tratar acesso por link como público",
+              "description": "Só importa com a sincronização de permissões. Quando ativado, uma gravação cujo Acesso por link é \"Qualquer pessoa com o link\" ou uma regra de login fica visível para todos os usuários do Onyx, e uma regra de domínio para os usuários desses domínios. Quando desativado, cada transcrição fica visível somente para o proprietário da gravação, pois o Zoom não informa quem está em \"Pessoas com acesso\"."
+            },
+            "plan_tier": {
+              "label": "Plano do Zoom",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "Define a velocidade com que este conector pode chamar o Zoom. Escolha `pro` em uma conta Pro e `business_plus` em Business, Education, Enterprise ou Partner."
+            },
+            "rate_limit_percent": {
+              "label": "Limite de taxa da API do Zoom",
+              "description": "Porcentagem inteira, de 1 a 100, do limite de taxa do Zoom da conta que este conector pode usar. Em branco significa 50, o que deixa margem para as outras integrações do Zoom do cliente. Cada conector do Zoom controla seu próprio ritmo e não enxerga os outros, então dois conectores na mesma conta do Zoom usam essa porcentagem cada um. Divida o valor se você executar vários."
+            }
+          },
+          "description": "Configurar conector do Zoom",
+          "subtext": "Indexa a transcrição da Gravação na Nuvem de cada sessão do Zoom, em um plano Zoom Pro ou superior. Uma sessão que nunca foi gravada na nuvem é ignorada. Defina uma data de Início da indexação em Avançado. O Zoom lista as gravações um mês por solicitação, então, sem essa data, a primeira varredura pede todos os meses até 2013 e gasta a cota de API da sua conta em anos que não têm nada."
+        },
+        "web": {
+          "description": "Configurar conector da Web",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "placeholder": "https://example.com"
+            },
+            "web_connector_type": {
+              "label": "Método de rastreamento",
+              "options": {
+                "recursive": "recursivo",
+                "single": "único",
+                "sitemap": "sitemap"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "Rolar antes de rastrear",
+              "description": "Ative se o site exigir rolagem para carregar o conteúdo desejado"
+            },
+            "url_rewrites": {
+              "label": "Reescritas de URL",
+              "description": "Reescreve as URLs dos documentos antes de armazenar. Útil ao rastrear por um espelho interno e armazenar os links públicos canônicos, por exemplo https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "Prefixo da URL de origem",
+              "rightLabel": "Prefixo de substituição",
+              "leftPlaceholder": "https://espelho-interno.example.com",
+              "rightPlaceholder": "https://docs.example.com"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "Configurar conector do LumApps",
+          "fields": {
+            "base_url": {
+              "label": "URL base da API (host da célula)",
+              "description": "O host da célula/API do seu LumApps, por exemplo https://go-cell-005.api.lumapps.com (não o site de documentação api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "ID da organização",
+              "description": "O ID da sua organização no LumApps (numérico)."
+            },
+            "instance_ids": {
+              "label": "IDs de instâncias (sites)",
+              "description": "Restringe a indexação a IDs específicos de instância/site. Deixe vazio para indexar todo o conteúdo visível para o usuário de serviço."
+            },
+            "custom_content_types": {
+              "label": "IDs de tipos de conteúdo personalizados",
+              "description": "Restringe a IDs específicos de tipos de conteúdo personalizados. Deixe vazio para indexar todos os tipos de conteúdo."
+            },
+            "lang": {
+              "label": "Idioma",
+              "description": "Idioma usado no título/corpo do conteúdo e nos rótulos de metadados (ISO 639-1, por exemplo en, fr)."
+            }
+          }
+        },
+        "youtrack": {
+          "description": "Configurar o conector do YouTrack",
+          "fields": {
+            "base_url": {
+              "label": "URL do YouTrack",
+              "description": "Seu endereço do YouTrack, por ex. https://example.youtrack.cloud. Para o YouTrack Server, inclua o caminho de contexto, por ex. https://example.com/youtrack."
+            },
+            "projects": {
+              "label": "Projetos",
+              "description": "Nomes curtos dos projetos a indexar (por ex. ABC). Deixe vazio para indexar todos os projetos que o token pode ler."
+            }
+          }
+        },
+        "github": {
+          "description": "Configurar conector do GitHub",
+          "fields": {
+            "github_base_url": {
+              "label": "URL do GitHub Enterprise Server",
+              "description": "Deixe em branco para github.com.",
+              "placeholder": "https://github.example.com"
+            },
+            "repo_owner": {
+              "label": "Proprietário do repositório"
+            },
+            "github_mode": {
+              "label": "Conteúdo do GitHub a indexar",
+              "tabs": {
+                "repo": {
+                  "label": "Repositório específico"
+                },
+                "everything": {
+                  "label": "Tudo"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Nome(s) do repositório",
+              "description": "Para vários repositórios, informe os nomes separados por vírgula (por exemplo, repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os repositórios aos quais as credenciais fornecidas têm acesso!"
+            },
+            "include_prs": {
+              "label": "Incluir pull requests",
+              "description": "Indexa os pull requests dos repositórios"
+            },
+            "include_issues": {
+              "label": "Incluir issues",
+              "description": "Indexa as issues dos repositórios"
+            },
+            "include_files": {
+              "label": "Incluir documentos",
+              "description": "Indexa documentos baseados em texto (markdown, texto etc.) dos repositórios"
+            },
+            "branch": {
+              "label": "Branch",
+              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente."
+            }
+          }
+        },
+        "testrail": {
+          "description": "Configurar conector do TestRail",
+          "fields": {
+            "testrail_base_url": {
+              "label": "URL base do TestRail",
+              "placeholder": "https://acme.testrail.io"
+            },
+            "project_ids": {
+              "label": "IDs de projetos",
+              "description": "Lista separada por vírgulas de IDs de projetos do TestRail a indexar (por exemplo, 1 ou 1,2,3). Deixe vazio para indexar todos os projetos."
+            },
+            "cases_page_size": {
+              "label": "Tamanho da página de casos",
+              "description": "Número de casos de teste a buscar por página na API do TestRail (padrão: 250)"
+            },
+            "max_pages": {
+              "label": "Máximo de páginas",
+              "description": "Número máximo de páginas a buscar, para evitar loops infinitos (padrão: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "Limite de caracteres para ignorar documento",
+              "description": "Ignora a indexação de casos de teste que excedem este limite de caracteres (padrão: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "Configurar conector do GitLab",
+          "fields": {
+            "gitlab_url": {
+              "label": "URL do GitLab",
+              "placeholder": "https://gitlab.com"
+            },
+            "project_owner": {
+              "label": "Proprietário do projeto"
+            },
+            "project_name": {
+              "label": "Nome do projeto"
+            },
+            "include_mrs": {
+              "label": "Incluir MRs",
+              "description": "Indexa os merge requests dos repositórios"
+            },
+            "include_issues": {
+              "label": "Incluir issues",
+              "description": "Indexa as issues dos repositórios"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Configurar conector do Bitbucket",
+          "subtext": "Configurar conector do Bitbucket (somente Cloud). Você pode indexar um workspace, projetos específicos ou repositórios.",
+          "fields": {
+            "workspace": {
+              "label": "Workspace",
+              "description": "O workspace do Bitbucket a indexar (por exemplo, \"atlassian\" em https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "Conteúdo do Bitbucket a indexar",
+              "tabs": {
+                "repo": {
+                  "label": "Repositórios específicos"
+                },
+                "project": {
+                  "label": "Projeto(s)"
+                },
+                "workspace": {
+                  "label": "Workspace"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Slugs dos repositórios",
+              "description": "Para vários repositórios, informe os slugs separados por vírgula (por exemplo, repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "Chave(s) do projeto",
+              "description": "Uma ou mais chaves de projeto do Bitbucket (separadas por vírgula) para indexar todos os repositórios desses projetos (por exemplo, PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "Workspace",
+              "description": "Este conector indexará todos os repositórios do workspace."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "Configurar conector do GitBook",
+          "fields": {
+            "space_id": {
+              "label": "ID do space",
+              "description": "O ID do space do GitBook a indexar. Ele pode ser encontrado na URL de uma página do space. Por exemplo, se a sua URL for `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, o ID do seu space será `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Configurar conector do Google Drive",
+          "fields": {
+            "credential_kind": {
+              "label": "Tipo de credencial"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "Geral"
+                },
+                "Specific": {
+                  "label": "Específico"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "Incluir drives compartilhados",
+              "description": {
+                "oauth": "Isso permite que o Onyx indexe tudo nos drives compartilhados aos quais você tem acesso.",
+                "serviceAccount": "Isso permite que o Onyx indexe tudo nos drives compartilhados da sua organização."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "Incluir Meu Drive",
+                "serviceAccount": "Incluir o Meu Drive de todos"
+              },
+              "description": {
+                "oauth": "Isso permite que o Onyx indexe tudo no seu Meu Drive.",
+                "serviceAccount": "Isso permite que o Onyx indexe tudo no Meu Drive de todos."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "Isso permite que o Onyx indexe todos os arquivos compartilhados com você.",
+              "label": "Incluir todos os arquivos compartilhados com você"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "Informe uma lista, separada por vírgulas, das URLs dos drives compartilhados que você deseja indexar. Você precisa ter acesso a esses drives compartilhados.",
+                "serviceAccount": "Informe uma lista, separada por vírgulas, das URLs dos drives compartilhados que você deseja indexar."
+              },
+              "label": "URLs dos drives compartilhados"
+            },
+            "shared_folder_urls": {
+              "description": "Informe uma lista, separada por vírgulas, das URLs das pastas que você deseja indexar. Os arquivos dessas pastas (e de todas as subpastas) serão indexados.",
+              "label": "URLs das pastas"
+            },
+            "my_drive_emails": {
+              "description": "Informe uma lista, separada por vírgulas, dos e-mails dos usuários cujo Meu Drive você deseja indexar.",
+              "label": "E-mails do Meu Drive"
+            },
+            "specific_user_emails": {
+              "description": "Informe uma lista, separada por vírgulas, de e-mails de usuários específicos a indexar. Isso indexará apenas os arquivos acessíveis a esses usuários.",
+              "label": "E-mails de usuários específicos"
+            },
+            "exclude_domain_link_only": {
+              "label": "Ocultar arquivos acessíveis só por link de domínio",
+              "description": "Quando ativado, o Onyx ignora arquivos compartilhados de forma ampla (domínio ou público), mas que exigem o link para acesso."
+            }
+          }
+        },
+        "gmail": {
+          "description": "Configurar conector do Gmail"
+        },
+        "bookstack": {
+          "description": "Configurar conector do Bookstack",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "URL base do BookStack",
+              "placeholder": "https://bookstack.example.com"
+            }
+          }
+        },
+        "outline": {
+          "description": "Configurar conector do Outline",
+          "fields": {
+            "outline_base_url": {
+              "label": "URL base do Outline",
+              "placeholder": "https://app.getoutline.com"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Configurar conector do Confluence",
+          "fields": {
+            "is_cloud": {
+              "label": "É Cloud",
+              "description": "Escolha Confluence Cloud para um site em atlassian.net, ou Confluence Data Center para um site Confluence Server ou Data Center hospedado por conta própria."
+            },
+            "wiki_base": {
+              "label": "URL do site",
+              "placeholder": "https://seu-dominio.atlassian.net/wiki"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "space": {
+                  "label": "Space"
+                },
+                "page": {
+                  "label": "Página"
+                },
+                "cql": {
+                  "label": "Consulta CQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todas as páginas às quais as credenciais fornecidas têm acesso!"
+            },
+            "space": {
+              "label": "Chave do space",
+              "description": "A chave do space do Confluence a indexar (por exemplo, `KB`)."
+            },
+            "page_id": {
+              "label": "ID da página",
+              "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
+            },
+            "index_recursively": {
+              "label": "Indexar recursivamente",
+              "description": "Se ativado, indexaremos a página indicada pelo ID da página, bem como todas as suas páginas filhas."
+            },
+            "cql_query": {
+              "label": "Consulta CQL",
+              "description": "IMPORTANTE: No momento, só oferecemos suporte a consultas CQL que retornam objetos do tipo 'page'. Isso significa que toda consulta CQL deve conter 'type=page' como único filtro de tipo. Também é importante não usar filtros de 'lastModified', pois eles causam problemas na lógica de sondagem do conector. Não use ORDER BY, porque o conector define sua própria ordenação. Ainda assim, obteremos todos os anexos e comentários das páginas retornadas pela consulta CQL. Qualquer filtro de 'lastmodified' será sobrescrito. Consulte a [documentação de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) da Atlassian para mais detalhes."
+            }
+          }
+        },
+        "jira": {
+          "description": "Configurar conector do Jira",
+          "subtext": "Configure qual conteúdo do Jira indexar. Você pode indexar tudo ou especificar um projeto.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL do site",
+              "placeholder": "https://seu-dominio.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "project": {
+                  "label": "Projeto"
+                },
+                "jql": {
+                  "label": "Consulta JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todas as issues às quais as credenciais fornecidas têm acesso!"
+            },
+            "project_key": {
+              "label": "Chave do projeto",
+              "description": "A chave de um projeto específico a indexar (por exemplo, 'PROJ')."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Uma consulta JQL personalizada para filtrar as issues do Jira.\n\nIMPORTANTE: Não inclua filtros baseados em tempo na consulta JQL, pois eles entram em conflito com a lógica do conector. Além disso, não inclua cláusulas ORDER BY.\n\nConsulte a [documentação de JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) da Atlassian para mais detalhes sobre a sintaxe."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista de bloqueio de e-mails de comentários",
+              "description": "Em geral é útil para ignorar determinados bots. Adicione os e-mails dos usuários cujos comentários NÃO devem ser indexados."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Configurar conector do Salesforce",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "Tipo de configuração",
+              "tabs": {
+                "simple": {
+                  "label": "Simples"
+                },
+                "advanced": {
+                  "label": "Avançado"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "Objetos solicitados",
+              "description": "Especifique os tipos de objeto do Salesforce que você quer indexar. Se não tiver certeza, não especifique nenhum objeto e o Onyx indexará 'Account' por padrão.\n\nDica: Use a forma singular do nome do objeto (por exemplo, 'Opportunity' em vez de 'Opportunities')."
+            },
+            "custom_query_config": {
+              "label": "Configuração de consulta personalizada",
+              "description": "Informe uma configuração JSON que defina com precisão quais campos e objetos filhos indexar. Isso dá a você controle total sobre a estrutura dos dados.\n\nExemplo: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[Veja nossa documentação]({docsAdminsPath}/connectors/official/salesforce) para mais detalhes."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "Configurar conector do SharePoint",
+          "fields": {
+            "sites": {
+              "label": "Sites",
+              "description": "- Se nenhum site for especificado, todos os sites da sua organização serão indexados (permissão `Sites.Read.All` necessária).\n- Especificar `https://onyxai.sharepoint.com/sites/support`, por exemplo, indexa somente este site.\n- Especificar `https://onyxai.sharepoint.com/sites/support/subfolder`, por exemplo, indexa somente esta pasta.\n- Para indexar os sites pessoais dos usuários, use o [conector do OneDrive]({docsAdminsPath}/connectors/official/onedrive).\n- Especificar sites funciona atualmente para instâncias do SharePoint em inglês, espanhol ou alemão. Fale com a equipe do Onyx se precisar de suporte a outro idioma."
+            },
+            "include_site_documents": {
+              "label": "Indexar documentos",
+              "description": "Indexa os documentos de todas as bibliotecas ou pastas do SharePoint definidas acima."
+            },
+            "include_site_pages": {
+              "label": "Indexar sites ASPX",
+              "description": "Indexa as páginas aspx de todos os sites do SharePoint definidos acima, mesmo que uma biblioteca ou pasta seja especificada."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "Tratar links de compartilhamento como públicos",
+              "description": "Quando ativado, documentos com um link de compartilhamento (anônimo ou para toda a organização) são tratados como públicos (visíveis para todos os usuários do Onyx). Quando desativado, somente usuários e grupos com atribuições de função explícitas podem ver o documento."
+            },
+            "excluded_sites": {
+              "label": "Sites excluídos",
+              "description": "URLs de sites ou padrões glob a excluir da indexação. Os sites correspondentes nunca serão indexados, mesmo que apareçam na lista de sites acima. Exemplos: `https://contoso.sharepoint.com/sites/archive` (exato), `*://*/sites/archive-*` (padrão glob)."
+            },
+            "excluded_paths": {
+              "label": "Caminhos excluídos",
+              "description": "Padrões glob de caminhos de arquivo a excluir da indexação dentro das bibliotecas de documentos. Os padrões são comparados com o caminho relativo completo e com o nome do arquivo. Exemplos: `*.tmp` (arquivos temporários), `~$*` (arquivos de bloqueio do Office), `Archive/*` (pasta)."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "Sufixo de domínio do SharePoint",
+              "description": "O sufixo de domínio dos sites do SharePoint (por exemplo, sharepoint.com). Na maioria das implantações, mantenha o padrão. Para GCC High, use sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "Configurar conector do Teams",
+          "fields": {
+            "teams": {
+              "label": "Teams",
+              "description": "Especifique 0 ou mais Teams a indexar. Por exemplo, especificar o Team 'Support' da organização 'onyxai' fará com que indexemos apenas as mensagens enviadas em canais pertencentes ao Team 'Support'. Se nenhum Team for especificado, todos os Teams da sua organização serão indexados."
+            },
+            "include_attachments": {
+              "description": "Indexa os arquivos da guia Arquivos de cada canal como documentos próprios, com os leitores que o SharePoint concede a eles. Exige uma credencial de certificado, Files.Read.All ou Sites.Read.All no Graph, e Sites.FullControl.All na API do SharePoint para ler os leitores de cada arquivo. Com Sites.Selected, conceda ao aplicativo controle total em cada site de canal."
+            },
+            "include_inline_images": {
+              "label": "Incluir imagens embutidas",
+              "description": "Indexa as imagens coladas nas mensagens do canal junto com a respectiva conversa. Não exige nenhuma permissão extra. Nada é baixado enquanto a extração e a análise de imagens estiverem desativadas nas configurações de busca."
+            },
+            "include_meeting_transcripts": {
+              "label": "Incluir transcrições de reuniões",
+              "description": "Indexa as transcrições de reuniões agendadas como documentos próprios, legíveis pelo organizador e pelos participantes. Exige as permissões de aplicativo OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All e User.Read.All, a configuração do tenant que permite o acesso da API do Graph às transcrições e uma política de acesso de aplicativo concedida aos organizadores. Reuniões de canal não são cobertas. As transcrições dos últimos seis meses são indexadas, e uma transcrição sai do índice quando passa disso."
+            },
+            "include_meeting_chats": {
+              "label": "Incluir chats de reuniões",
+              "description": "Indexa o que as pessoas escrevem no chat de uma reunião agendada, um documento por dia, legível pelos membros do chat. Exige as permissões de aplicativo Chat.Read.All e User.Read.All. Cobre reuniões organizadas neste tenant: a Microsoft não fornece o chat de uma reunião criada por outra organização."
+            },
+            "meeting_organizers": {
+              "label": "Organizadores de reuniões",
+              "description": "Nomes de usuário principal (UPN) dos organizadores cujas transcrições e chats de reuniões serão indexados. Deixe vazio para incluir todos os usuários ativos com licença do Teams."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Configurar conector do Outlook",
+          "fields": {
+            "mailboxes": {
+              "label": "Caixas de correio",
+              "description": "Nomes de usuário principal ou endereços de e-mail principais das caixas de correio a indexar. Deixe este campo e Grupos de caixas de correio vazios para indexar todas as caixas de correio que o registro do aplicativo pode abrir. Caixas de correio compartilhadas nunca são incluídas automaticamente e devem ser listadas aqui."
+            },
+            "mailbox_groups": {
+              "label": "Grupos de caixas de correio",
+              "description": "Nomes de exibição ou IDs de objeto de grupos do Entra. A caixa de correio de cada membro é indexada, incluindo membros de grupos aninhados, de modo que um tenant possa ser limitado às pessoas que usam o Onyx. Exige a permissão de aplicativo GroupMember.Read.All."
+            },
+            "include_attachments": {
+              "description": "Indexa o texto dos anexos de arquivo. Imagens embutidas, itens aninhados e links da nuvem são ignorados."
+            },
+            "include_calendar": {
+              "label": "Incluir calendário",
+              "description": "Indexa o calendário de cada caixa de correio, além dos e-mails. Exige a permissão de aplicativo Calendars.Read."
+            },
+            "excluded_folders": {
+              "label": "Pastas excluídas",
+              "description": "Nomes de pastas a ignorar em todas as caixas de correio, além de Lixo Eletrônico, Itens Excluídos, Rascunhos e Caixa de Saída, que sempre são ignoradas."
+            },
+            "calendar_past_days": {
+              "label": "Dias passados do calendário",
+              "description": "Usado quando Incluir calendário está ativado. Define até quanto tempo atrás a janela do calendário alcança. Eventos mais antigos saem do índice na próxima limpeza, conforme a janela avança. Ampliá-la depois exige uma reindexação, pois eventos sem alterações não voltam sozinhos."
+            },
+            "calendar_future_days": {
+              "label": "Dias futuros do calendário",
+              "description": "Usado quando Incluir calendário está ativado. Define até quanto tempo à frente a janela do calendário alcança. Ampliá-la depois exige uma reindexação, pois eventos sem alterações não voltam sozinhos."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Configurar conector do Discourse",
+          "fields": {
+            "base_url": {
+              "label": "URL base"
+            },
+            "categories": {
+              "label": "Categorias"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Configurar conector do Drupal Wiki",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "description": "A URL base da sua instância do Drupal Wiki (por exemplo, https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "Conteúdo do Drupal Wiki a indexar",
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "specific": {
+                  "label": "Spaces/páginas específicos"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os spaces aos quais as credenciais fornecidas têm acesso!"
+            },
+            "spaces": {
+              "label": "IDs de spaces",
+              "description": "Especifique um ou mais IDs de spaces a indexar. Somente valores numéricos são permitidos."
+            },
+            "pages": {
+              "label": "IDs de páginas",
+              "description": "Especifique um ou mais IDs de páginas a indexar. Somente valores numéricos são permitidos."
+            }
+          }
+        },
+        "axero": {
+          "description": "Configurar conector do Axero",
+          "fields": {
+            "base_url": {
+              "label": "URL base do Axero",
+              "placeholder": "https://axero.example.com"
+            },
+            "spaces": {
+              "label": "Spaces",
+              "description": "Especifique zero ou mais Spaces a indexar (pelos IDs dos Spaces). Se nenhum ID de Space for especificado, todos os Spaces serão indexados."
+            }
+          }
+        },
+        "productboard": {
+          "description": "Configurar conector do Productboard"
+        },
+        "slack": {
+          "description": "Configurar conector do Slack",
+          "fields": {
+            "channels": {
+              "label": "Canais",
+              "description": "Especifique 0 ou mais canais a indexar. Escolha um canal na lista para acompanhá-lo pelo ID, de modo que uma renomeação não interrompa a indexação, ou digite o nome de um canal que a lista não mostra, como um canal privado ao qual o bot foi convidado. Se nenhum canal for especificado, todos os canais do seu workspace serão indexados."
+            },
+            "channel_regex_enabled": {
+              "label": "Ativar regex de canais",
+              "description": "Se ativado, trataremos os \"canais\" especificados acima como expressões regulares. As mensagens de um canal serão importadas pelo conector se o nome do canal corresponder por completo a qualquer uma das expressões regulares especificadas.\n\nPor exemplo, especificar `.*-support.*` como \"canal\" fará o conector incluir todos os canais com \"-support\" no nome."
+            },
+            "exclude_channels": {
+              "label": "Canais a excluir",
+              "description": "Especifique 0 ou mais canais a excluir. As exclusões são aplicadas depois do filtro \"Canais\" acima, então um canal que corresponde a ambos é excluído. Se nenhum canal for especificado, nada é excluído."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "Ativar regex de canais excluídos",
+              "description": "Se ativado, trataremos os \"canais a excluir\" especificados acima como expressões regulares. Um canal será excluído se o nome dele corresponder por completo a qualquer uma das expressões regulares especificadas.\n\nPor exemplo, especificar `.*-alerts` como \"canal a excluir\" fará o conector ignorar todos os canais cujo nome termina em \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "Incluir mensagens de bots",
+              "description": "Se ativado, as mensagens de bots e aplicativos serão indexadas. Útil para canais que são principalmente feeds de bots (por exemplo, atualizações de CRM, notas automatizadas)."
+            }
+          }
+        },
+        "slab": {
+          "description": "Configurar conector do Slab",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "description": "Especifique a URL base da sua equipe no Slab. Será algo como: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Configurar conector do Guru"
+        },
+        "gong": {
+          "description": "Configurar conector do Gong",
+          "fields": {
+            "gong_base_url": {
+              "label": "URL base da API do Gong",
+              "description": "O padrão é `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
+            },
+            "workspaces": {
+              "label": "Workspaces",
+              "description": "Especifique 0 ou mais workspaces a indexar. Informe o ID do workspace ou o nome EXATO do workspace no Gong. Se nenhum workspace for especificado, as transcrições de todos os workspaces serão indexadas."
+            }
+          }
+        },
+        "loopio": {
+          "description": "Configurar conector do Loopio",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Subdomínio do Loopio",
+              "description": "O subdomínio do seu site do Loopio, como `acme` em `acme.loopio.com`.",
+              "placeholder": "acme"
+            },
+            "loopio_stack_name": {
+              "label": "Nome do Stack do Loopio",
+              "description": "Deve ser idêntico ao nome em Library Management. Deixe em branco se quiser indexar todos os Stacks"
+            }
+          }
+        },
+        "file": {
+          "description": "Configurar conector de arquivos",
+          "fields": {
+            "file_locations": {
+              "label": "Arquivos"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Configurar conector do Zulip",
+          "fields": {
+            "realm_name": {
+              "label": "Nome do realm"
+            },
+            "realm_url": {
+              "label": "URL do realm"
+            }
+          }
+        },
+        "coda": {
+          "description": "Configurar conector do Coda"
+        },
+        "notion": {
+          "description": "Configurar conector do Notion",
+          "fields": {
+            "root_page_id": {
+              "label": "ID da página raiz",
+              "description": "Se especificado, indexará somente a página indicada e todas as suas páginas filhas. Se deixado em branco, indexará todas as páginas às quais a integração recebeu acesso."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "Configurar conector do HubSpot",
+          "fields": {
+            "object_types": {
+              "label": "Tipos de objeto",
+              "options": {
+                "tickets": "Tickets",
+                "companies": "Empresas",
+                "deals": "Negócios",
+                "contacts": "Contatos"
+              },
+              "description": "Escolha quais tipos de objeto do HubSpot indexar. Todos os tipos são selecionados por padrão."
+            }
+          }
+        },
+        "document360": {
+          "description": "Configurar conector do Document360",
+          "fields": {
+            "workspace": {
+              "label": "Workspace"
+            },
+            "categories": {
+              "label": "Categorias",
+              "description": "Especifique 0 ou mais categorias a indexar. Por exemplo, especificar a categoria 'Help' fará com que indexemos apenas o conteúdo da categoria 'Help'. Se nenhuma categoria for especificada, todas as categorias do seu workspace serão indexadas."
+            }
+          }
+        },
+        "clickup": {
+          "description": "Configurar conector do ClickUp",
+          "fields": {
+            "connector_type": {
+              "label": "Tipo de conector",
+              "options": {
+                "list": "lista",
+                "folder": "pasta",
+                "space": "space",
+                "workspace": "workspace"
+              }
+            },
+            "connector_ids": {
+              "label": "IDs do conector",
+              "description": "Especifique 0 ou mais IDs de onde indexar."
+            },
+            "retrieve_task_comments": {
+              "label": "Recuperar comentários de tarefas",
+              "description": "Se marcado, todos os comentários de cada tarefa também serão recuperados e indexados."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Configurar conector do Google Sites",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "placeholder": "https://sites.google.com/view/seu-site"
+            },
+            "file_locations": {
+              "label": "Exportação do site",
+              "description": "Envie um arquivo `.zip` com o HTML do seu Google Site."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Configurar conector do Zendesk",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Subdomínio do Zendesk",
+              "description": "O subdomínio do seu site do Zendesk, como `acme` em `acme.zendesk.com`.",
+              "placeholder": "acme"
+            },
+            "content_type": {
+              "label": "Tipo de conteúdo",
+              "options": {
+                "articles": "artigos",
+                "tickets": "tickets"
+              }
+            },
+            "calls_per_minute": {
+              "label": "Chamadas de API por minuto",
+              "description": "Restringe quantas chamadas à API do Zendesk este conector pode fazer por minuto (aplica-se somente a este conector). Veja os padrões: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Configurar conector do Box",
+          "fields": {
+            "folder_ids": {
+              "label": "Pastas",
+              "description": "IDs ou URLs de pastas do Box (por exemplo, https://app.box.com/folder/123456789) a indexar. Deixe vazio para indexar tudo o que é visível para o usuário autenticado."
+            },
+            "include_web_links": {
+              "label": "Incluir links da web",
+              "description": "Indexa também os links da web (favoritos) do Box como documentos leves."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Configurar conector do Dropbox"
+        },
+        "s3": {
+          "description": "Configurar conector do S3",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "region_name": {
+              "label": "Região da AWS",
+              "description": "A região da AWS do bucket (por exemplo, us-east-1). Obrigatória para buckets em partições fora do padrão, como GovCloud (us-gov-west-1); caso contrário, a resolução de região padrão é usada."
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "r2": {
+          "description": "Configurar conector do R2",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "european_residency": {
+              "label": "Residência de dados na UE",
+              "description": "Marque esta opção se o seu bucket tem residência de dados na UE ativada."
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Configurar conector do Google Cloud Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket",
+              "description": "Nome do bucket do GCS a indexar, por exemplo my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "Prefixo do caminho"
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "Configurar conector do OCI Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Configurar conector da Wikipedia",
+          "fields": {
+            "language_code": {
+              "label": "Código do idioma",
+              "description": "Informe um código de idioma válido da Wikipedia (por exemplo, 'en', 'es')"
+            },
+            "categories": {
+              "label": "Categorias a indexar",
+              "description": "Especifique 0 ou mais nomes de categorias a indexar. Na maioria dos sites da Wikipedia, são páginas com nome no formato 'Category: XYZ', que listam outras páginas/categorias. Especifique apenas o nome da categoria, não a URL."
+            },
+            "pages": {
+              "label": "Páginas",
+              "description": "Especifique 0 ou mais nomes de páginas a indexar."
+            },
+            "recurse_depth": {
+              "label": "Profundidade de recursão",
+              "description": "Ao indexar categorias que têm subcategorias, define quantos níveis indexar. Especifique 0 para indexar somente a própria categoria (ou seja, sem recursão). Especifique -1 para profundidade de recursão ilimitada. Observe que, em raros casos, uma categoria pode conter a si mesma em suas dependências, o que causa um loop infinito. Use -1 somente se tiver certeza de que isso não acontecerá."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Configurar conector do Xenforo",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "A URL do fórum XenForo v2.2 a indexar. Pode ser um quadro ou um tópico."
+            }
+          }
+        },
+        "asana": {
+          "description": "Configurar conector do Asana",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "ID do workspace",
+              "description": "O ID do workspace do Asana a indexar. Você o encontra em https://app.asana.com/api/1.0/workspaces. É um número parecido com 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "IDs de projetos",
+              "description": "IDs de projetos específicos do Asana a indexar, separados por vírgulas. Deixe vazio para indexar todos os projetos do workspace. Exemplo: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "ID da equipe",
+              "description": "ID de uma equipe a usar para acessar tarefas visíveis para a equipe. Isso permite indexar tarefas visíveis para a equipe, além das tarefas públicas. Deixe vazio se você não quiser usar este recurso."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "Configurar conector do MediaWiki",
+          "fields": {
+            "language_code": {
+              "label": "Código do idioma",
+              "description": "Informe um código de idioma válido do MediaWiki (por exemplo, 'en', 'es')"
+            },
+            "hostname": {
+              "label": "URL do site MediaWiki"
+            },
+            "categories": {
+              "label": "Categorias a indexar",
+              "description": "Especifique 0 ou mais nomes de categorias a indexar. Na maioria dos sites MediaWiki, são páginas com nome no formato 'Category: XYZ', que listam outras páginas/categorias. Especifique apenas o nome da categoria, não a URL."
+            },
+            "pages": {
+              "label": "Páginas",
+              "description": "Especifique 0 ou mais nomes de páginas a indexar. Especifique apenas o nome da página, não a URL."
+            },
+            "recurse_depth": {
+              "label": "Profundidade de recursão",
+              "description": "Ao indexar categorias que têm subcategorias, define quantos níveis indexar. Especifique 0 para indexar somente a própria categoria (ou seja, sem recursão). Especifique -1 para profundidade de recursão ilimitada. Observe que, em raros casos, uma categoria pode conter a si mesma em suas dependências, o que causa um loop infinito. Use -1 somente se tiver certeza de que isso não acontecerá."
+            }
+          }
+        },
+        "discord": {
+          "description": "Configurar conector do Discord",
+          "fields": {
+            "server_ids": {
+              "label": "IDs de servidores",
+              "description": "Especifique 0 ou mais IDs de servidores a incluir. Somente os canais dentro deles serão usados na indexação"
+            },
+            "channel_names": {
+              "label": "Canais",
+              "description": "Especifique 0 ou mais canais a indexar. Por exemplo, especificar o canal \"support\" fará com que indexemos apenas o conteúdo do canal \"#support\". Se nenhum canal for especificado, todos os canais aos quais o bot tem acesso serão indexados."
+            },
+            "start_date": {
+              "label": "Data de início",
+              "description": "Somente mensagens posteriores a esta data serão indexadas. Formato: AAAA-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Configurar conector do Freshdesk",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Domínio do Freshdesk",
+              "description": "O subdomínio do seu site do Freshdesk, como `acme` em `acme.freshdesk.com`.",
+              "placeholder": "acme"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Configurar conector do Fireflies"
+        },
+        "braintrust": {
+          "description": "Configurar conector do Braintrust",
+          "fields": {
+            "project_name": {
+              "label": "Nome do projeto",
+              "description": "Indexa somente prompts, datasets e experimentos deste projeto. Deixe vazio para indexar toda a organização."
+            },
+            "experiment_row_lookback_days": {
+              "label": "Retrospectiva de linhas de experimentos (dias)",
+              "description": "Indexa os resultados por linha somente de experimentos criados dentro deste número de dias. Os resumos dos experimentos são sempre indexados. Defina 0 para indexar as linhas de todos os experimentos."
+            }
+          }
+        },
+        "canvas": {
+          "description": "Configurar conector do Canvas",
+          "fields": {
+            "canvas_base_url": {
+              "label": "URL base do Canvas",
+              "description": "por exemplo, https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Configurar conector do Egnyte",
+          "fields": {
+            "domain": {
+              "label": "Domínio do Egnyte",
+              "description": "O subdomínio do seu site do Egnyte, como `acme` em `acme.egnyte.com`.",
+              "placeholder": "acme"
+            },
+            "folder_path": {
+              "label": "Caminho da pasta",
+              "description": "O caminho da pasta a indexar (por exemplo, '/Shared/Documents'). Deixe vazio para indexar tudo."
+            }
+          }
+        },
+        "airtable": {
+          "description": "Configurar conector do Airtable",
+          "fields": {
+            "airtable_scope": {
+              "label": "Conteúdo do Airtable a indexar",
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "specific": {
+                  "label": "Tabela específica"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Tudo",
+              "description": "Este conector descobrirá e indexará automaticamente todas as bases e tabelas acessíveis pelo seu token de API."
+            },
+            "airtable_url": {
+              "label": "URL do Airtable",
+              "description": "Cole a URL do navegador ao visualizar a tabela, por exemplo https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "ID de compartilhamento",
+              "description": "Opcional. Se quiser que os links de registros usem a URL de uma visualização compartilhada, informe aqui o ID de compartilhamento, por exemplo shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "Tratar todos os campos, exceto anexos, como metadados",
+              "description": "Escolha esta opção se o conteúdo principal a indexar são os anexos e todas as outras colunas são metadados desses anexos."
+            }
+          }
+        },
+        "highspot": {
+          "description": "Configurar conector do Highspot",
+          "fields": {
+            "highspot_url": {
+              "label": "URL do Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
+            },
+            "highspot_scope": {
+              "label": "Conteúdo do Highspot a indexar",
+              "tabs": {
+                "spots": {
+                  "label": "Spots específicos"
+                },
+                "everything": {
+                  "label": "Tudo"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Nome(s) do spot",
+              "description": "Para vários spots, informe os spots um por um."
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os spots aos quais as credenciais fornecidas têm acesso!"
+            }
+          }
+        },
+        "imap": {
+          "description": "Configurar conector de e-mail",
+          "fields": {
+            "host": {
+              "label": "Host do servidor IMAP",
+              "description": "O nome do host do servidor IMAP (por exemplo, imap.gmail.com, outlook.office365.com)"
+            },
+            "port": {
+              "label": "Porta do servidor IMAP",
+              "description": "A porta do servidor IMAP (padrão: 993 para SSL)"
+            },
+            "mailboxes": {
+              "label": "Caixas de correio",
+              "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
+            }
+          }
+        }
       }
     },
     "costOverrides": {
@@ -3167,6 +4849,10 @@
         "saveFailed": "Falha ao salvar a substituição: {message}",
         "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -3361,9 +5047,6 @@
         },
         "createdOnBy": {
           "label": "Criada em <i>{date}</i> por <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "Credencial nº {id}"
         }
       },
       "create": {
@@ -3418,23 +5101,6 @@
         },
         "confirmTitle": "Confirmar exclusão"
       },
-      "edit": {
-        "name": {
-          "label": "Nome (opcional):"
-        },
-        "permissions": {
-          "note": "Certifique-se de atualizar para uma credencial com as permissões adequadas!"
-        },
-        "resetButton": {
-          "label": "Redefinir alterações"
-        },
-        "updateButton": {
-          "label": "Atualizar"
-        },
-        "updateError": {
-          "toast": "Erro ao atualizar a credencial"
-        }
-      },
       "displayNames": {
         "accessKeyId": "ID da chave de acesso de {source}",
         "secretAccessKey": "Chave de acesso secreta de {source}",
@@ -3474,7 +5140,6 @@
         "namespace": "Namespace do {source}",
         "region": "Região do {source}",
         "portalId": "ID do portal do {source}",
-        "oauthTokens": "Tokens OAuth do {source}",
         "isSandbox": "Ambiente de sandbox",
         "serviceUserEmail": "E-mail do usuário de serviço",
         "zuliprcContent": "Conteúdo do Zuliprc",
@@ -3488,6 +5153,7 @@
         "gongBaseUrl": "Opcional. Para dados fora dos EUA, defina o host da sua região, como https://[region].api.gong.io.",
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
+        "youtrackToken": "Um token permanente de um usuário do YouTrack que pode ler todos os projetos a indexar. Crie-o no seu perfil do YouTrack, em Segurança da conta.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
@@ -3514,34 +5180,12 @@
           "s3AssumeRole": "Neste modo, a instância do Amazon EC2 assume a função que já tem para acessar o S3. Nenhuma outra credencial é necessária."
         }
       },
-      "modal": {
-        "createTitle": "Criar credencial de {source}",
-        "editTitle": "Editar credencial",
-        "updateTitle": "Atualizar credenciais"
-      },
-      "modify": {
-        "createButton": {
-          "label": "Criar"
-        },
-        "instructions": {
-          "message": "Selecione uma credencial conforme necessário! Certifique-se de ter selecionado uma credencial com as permissões adequadas para este conector!"
-        },
-        "selectButton": {
-          "label": "Selecionar"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "Conectar"
         },
         "connectError": {
           "title": "Não foi possível conectar"
-        },
-        "redirectFailed": {
-          "message": "Não foi possível redirecionar você para entrar com {source}. Tente novamente."
-        },
-        "retryButton": {
-          "label": "Tentar novamente"
         },
         "signIn": {
           "description": "{appName} requer escopos somente leitura.",
@@ -3551,44 +5195,28 @@
           "message": "Não foi possível iniciar o OAuth"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "Problema ao trocar a credencial: {detail}"
-        },
-        "success": {
-          "toast": "Credencial trocada com sucesso!"
-        }
+      "validation": {
+        "authMethodRequired": "Selecione um método de autenticação",
+        "empty": "O campo {field} não pode ficar vazio",
+        "fileRequired": "Selecione um arquivo para {field}",
+        "invalidEmail": "Informe um e-mail válido em {field}",
+        "required": "Preencha o campo {field}"
       },
-      "table": {
-        "actions": {
-          "label": "Ações"
-        },
-        "created": {
-          "header": "Criado"
-        },
-        "edit": {
-          "ariaLabel": "Editar credencial"
-        },
-        "empty": {
-          "message": "Não existem credenciais para este conector!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "Última atualização"
-        },
+      "edit": {
         "name": {
-          "header": "Nome"
+          "label": "Nome (opcional):"
         },
-        "select": {
-          "label": "Selecionar"
+        "permissions": {
+          "note": "Certifique-se de atualizar para uma credencial com as permissões adequadas!"
         },
-        "selected": {
-          "badge": "selecionada"
+        "resetButton": {
+          "label": "Redefinir alterações"
         },
-        "untitled": {
-          "label": "Sem título"
+        "updateButton": {
+          "label": "Atualizar"
+        },
+        "updateError": {
+          "toast": "Erro ao atualizar a credencial"
         }
       },
       "update": {
@@ -3599,12 +5227,8 @@
           "toast": "Credencial atualizada"
         }
       },
-      "validation": {
-        "authMethodRequired": "Selecione um método de autenticação",
-        "empty": "O campo {field} não pode ficar vazio",
-        "fileRequired": "Selecione um arquivo para {field}",
-        "invalidEmail": "Informe um e-mail válido em {field}",
-        "required": "Preencha o campo {field}"
+      "modal": {
+        "editTitle": "Editar credencial"
       }
     },
     "customAnalytics": {
@@ -4175,24 +5799,11 @@
           "description": "Adicione um aplicativo para disponibilizá-lo a todos na sua organização.",
           "title": "Ainda não há aplicativos"
         },
-        "panel": {
-          "blurb": "Configurado uma vez para toda a organização. Edite um aplicativo para definir credenciais compartilhadas, políticas de ação e habilidades associadas."
-        },
         "tab": {
-          "label": "Aplicativos",
-          "labelWithCount": "Aplicativos · {count, number}"
+          "label": "Aplicativos"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "Ações de {name}"
-        },
-        "availableInCraft": {
-          "label": "Disponível no Craft"
-        },
-        "customTag": {
-          "label": "Personalizado"
-        },
         "deleteAction": {
           "label": "Excluir"
         },
@@ -4202,34 +5813,12 @@
           "submit": {
             "label": "Excluir aplicativo"
           },
-          "submitting": {
-            "label": "Excluindo…"
-          },
           "title": "Excluir “{name}”?"
-        },
-        "editAction": {
-          "label": "Editar"
         },
         "toasts": {
           "deleteFailed": "Falha ao excluir \"{name}\"",
-          "disableFailed": "Falha ao desativar \"{name}\"",
           "enableFailed": "Falha ao ativar \"{name}\""
-        },
-        "toggle": {
-          "disableAriaLabel": "Desativar {name}",
-          "enableAriaLabel": "Ativar {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# ação} other {# ações}}",
-        "customSkills": "{count, plural, one {# habilidade personalizada} other {# habilidades personalizadas}}",
-        "noCredentials": "sem credenciais",
-        "noCustomSkills": "sem habilidades personalizadas",
-        "orgCredentialsSet": "credenciais da organização definidas",
-        "perUserCredentials": "credenciais por usuário",
-        "providedByOnyx": "fornecido pelo Onyx",
-        "tools": "{count, plural, one {# ferramenta} other {# ferramentas}}",
-        "upstreamPatterns": "{count, plural, one {# padrão upstream} other {# padrões upstream}}"
       },
       "loading": {
         "label": "Carregando…"
@@ -4237,33 +5826,16 @@
       "mcpServers": {
         "empty": {
           "description": "Conecte um servidor em Ações e ative-o aqui para sua organização.",
-          "openActionsButton": {
-            "label": "Abrir Ações"
-          },
           "title": "Ainda não há servidores MCP"
         },
-        "manageInActionsButton": {
-          "label": "Gerenciar em Ações"
-        },
-        "panel": {
-          "blurb": "Ative um servidor para que os membros com acesso a ele usem suas ferramentas no Craft. Edite-o para definir a política de aprovação de cada ferramenta. As conexões e o acesso aos servidores são gerenciados em Ações."
-        },
         "tab": {
-          "label": "Servidores MCP",
-          "labelWithCount": "Servidores MCP · {count, number}"
+          "label": "Servidores MCP"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "Adicionar aplicativo"
-        },
-        "backToCraftButton": {
-          "label": "Voltar ao Craft"
-        },
         "description": "Configure os aplicativos que o agente Craft da sua organização pode usar. Cada membro conecta sua própria conta na página Aplicativos do Craft."
       },
       "warnings": {
-        "invalidSkill": "habilidade inválida",
         "providerUnavailable": "provedor indisponível"
       }
     },
@@ -4682,6 +6254,9 @@
           "name": "Básico",
           "description": "Grupo padrão para todos os usuários com permissões básicas."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -4955,6 +6530,9 @@
           "name": "Processamento de consultas",
           "description": "Executa em cada consulta do usuário antes de entrar no pipeline. Permite reescrever, filtrar ou rejeitar consultas."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://seu-endpoint-api.com"
       }
     },
     "imageGeneration": {
@@ -5010,8 +6588,7 @@
       },
       "form": {
         "apiKey": {
-          "comboPlaceholder": "Insira uma nova chave de API ou selecione um provedor existente",
-          "idle": "Insira uma nova chave de API ou selecione um provedor existente.",
+          "idle": "Insira sua chave de API.",
           "label": "Chave de API",
           "placeholder": "Insira sua chave de API",
           "required": "A chave de API é obrigatória"
@@ -5056,9 +6633,6 @@
         },
         "editHeader": {
           "title": "Editar {title}"
-        },
-        "invalidProviderSelection": {
-          "message": "Seleção de provedor inválida"
         },
         "loading": {
           "placeholder": "Carregando..."
@@ -5696,153 +7270,88 @@
           "saved": "Limite salvo.",
           "failed": "Não foi possível salvar o limite."
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
-      "status": {
+      "connectorCreated": {
+        "toast": "Conector criado com sucesso"
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexando / ativos",
+          "label": "Conectores"
+        },
+        "documents": {
+          "caption": "Indexados recentemente / total",
+          "label": "Documentos"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "Não foi possível carregar a visão geral."
+      },
+      "activities": {
+        "title": "Atividades",
+        "history": "Histórico completo de atividades",
+        "viewLogs": "Ver registros",
+        "panel": {
+          "title": "Histórico de atividades",
+          "close": "Fechar painel",
+          "pairTitle": "Histórico de atividades de {name}"
+        }
+      },
+      "list": {
+        "search": {
+          "placeholder": "Pesquisar conectores…"
+        },
+        "statusFilter": {
+          "label": "Status",
+          "all": "Todos os status"
+        },
+        "counts": {
+          "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",
+          "indexing": "{count, plural, one {# conector indexando} other {# conectores indexando}}",
+          "failed": "{count, plural, one {# conector com falha} other {# conectores com falha}}",
+          "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}"
+        },
         "access": {
-          "inherited": {
-            "label": "Herdado de {source}"
-          },
-          "organizationPublic": {
-            "label": "Público na organização"
-          },
-          "private": {
-            "label": "Privado"
-          }
+          "public": "Público",
+          "private": "Privado",
+          "sync": "Sincronização automática",
+          "sync_restricted": "Sincronização automática, restrita"
         },
-        "connectorCreated": {
-          "toast": "Conector criado com sucesso"
+        "detail": {
+          "queued": "{position, selectordinal, other {#º}} na fila",
+          "lastIndexed": "Última indexação {when}",
+          "neverIndexed": "Ainda não indexado"
         },
-        "empty": {
-          "message": "Parece que você ainda não configurou nenhum conector. Acesse a página [Adicionar conector](/admin/connectors) para começar!"
+        "docs": {
+          "label": "docs",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "Gerenciar",
+          "manageFederated": "Gerenciar conector federado",
+          "expand": "Ver detalhes",
+          "collapse": "Ocultar detalhes",
+          "pause": "Pausar",
+          "resume": "Retomar"
         },
         "federated": {
-          "access": {
-            "label": "Acesso federado"
-          },
-          "indexed": {
-            "label": "Indexado"
-          },
-          "notApplicable": {
-            "label": "N/D"
-          }
+          "tag": "Federado"
         },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "Sincronização automática"
-            },
-            "private": {
-              "label": "Privado"
-            },
-            "public": {
-              "label": "Público"
-            },
-            "title": "Tipo de acesso"
-          },
-          "applyButton": {
-            "label": "Aplicar"
-          },
-          "docCount": {
-            "placeholder": "Quantidade",
-            "title": "Quantidade de documentos"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "Concluído com erros"
-            },
-            "failed": {
-              "label": "Falhou"
-            },
-            "inProgress": {
-              "label": "Em andamento"
-            },
-            "interrupted": {
-              "label": "Interrompido"
-            },
-            "notStarted": {
-              "label": "Não iniciado"
-            },
-            "success": {
-              "label": "Sucesso"
-            },
-            "title": "Último status"
-          },
-          "title": "Filtrar conectores"
+        "empty": {
+          "title": "Nenhum conector ainda",
+          "description": "Acesse a página [Adicionar conector](/admin/connectors) para começar.",
+          "filteredTitle": "Nenhum conector corresponde a esses filtros."
         },
-        "filters": {
-          "accessBadge": {
-            "label": "Acesso: {values}"
-          },
-          "clearBadge": {
-            "label": "Limpar"
-          },
-          "docsAnyBadge": {
-            "label": "Documentos {operator} qualquer"
-          },
-          "docsBadge": {
-            "label": "Documentos {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "Status: {values}"
-          }
-        },
-        "loadError": {
-          "message": "Erro ao carregar o status da indexação."
-        },
-        "manageConnector": {
-          "tooltip": "Gerenciar conector"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "Gerenciar conector federado"
-        },
-        "search": {
-          "placeholder": "Pesquisar conectores..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "Conectores ativos"
-          },
-          "publicConnectors": {
-            "label": "Conectores públicos"
-          },
-          "totalConnectors": {
-            "label": "Total de conectores"
-          },
-          "totalDocsIndexed": {
-            "label": "Total de documentos indexados"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "Tudo em dia! Não há mais conectores para mostrar"
-          },
-          "lastIndexed": {
-            "header": "Última indexação"
-          },
-          "name": {
-            "header": "Nome"
-          },
-          "permissions": {
-            "header": "Permissões / acesso"
-          },
-          "status": {
-            "header": "Status"
-          },
-          "totalDocs": {
-            "header": "Total de documentos"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "Recolher tudo"
-          },
-          "expand": {
-            "label": "Expandir tudo"
-          }
-        }
-      }
+        "loadError": "Não foi possível carregar os conectores.",
+        "units": "{count, plural, one {conector} other {conectores}}"
+      },
+      "title": "Status de indexação dos conectores"
     },
     "languageModels": {
       "availableProviders": {
@@ -6353,6 +7862,7 @@
         "providerDeleteFailed": "Falha ao excluir o provedor: {message}",
         "providerDeleted": "Provedor excluído com sucesso!",
         "providerLoadFailed": "Não foi possível carregar o provedor: {message}",
+        "providerResolveFailed": "Não foi possível resolver o provedor",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
@@ -6368,6 +7878,16 @@
           "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
           "error": "Falha ao carregar os modelos de roteamento.",
           "retry": "Tentar novamente"
+        }
+      },
+      "providers": {
+        "custom": {
+          "productName": "Modelos personalizados",
+          "companyName": "Provedores compatíveis com LiteLLM"
+        },
+        "openAICompatible": {
+          "productName": "Modelos personalizados",
+          "companyName": "Endpoints compatíveis com OpenAI"
         }
       }
     },
@@ -7029,6 +8549,11 @@
         "securitySettingsUpdated": "Configurações de segurança atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -7709,7 +9234,8 @@
           },
           "nameField": {
             "description": "Slug único em minúsculas usado na URL de login. Não pode ser alterado depois.",
-            "title": "Nome"
+            "title": "Nome",
+            "placeholder": "empresa-a"
           },
           "providerTypeField": {
             "description": "O protocolo que este provedor usa para autenticar.",
@@ -7779,7 +9305,8 @@
         },
         "openidConfigUrl": {
           "label": "URL de configuração do OpenID",
-          "description": "A URL do documento de descoberta OpenID Connect do IdP."
+          "description": "A URL do documento de descoberta OpenID Connect do IdP.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "Exigir claim de e-mail verificado",
@@ -7787,27 +9314,33 @@
         },
         "idpEntityId": {
           "label": "ID da entidade do IdP",
-          "description": "O ID de entidade (emissor) do provedor de identidade."
+          "description": "O ID de entidade (emissor) do provedor de identidade.",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "URL de SSO do IdP",
-          "description": "O endpoint do IdP que recebe as solicitações de login."
+          "description": "O endpoint do IdP que recebe as solicitações de login.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "Certificado X.509 do IdP",
-          "description": "O certificado de assinatura do IdP, usado para verificar asserções."
+          "description": "O certificado de assinatura do IdP, usado para verificar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "ID da entidade do SP",
-          "description": "O ID de entidade desta instância, registrado no IdP."
+          "description": "O ID de entidade desta instância, registrado no IdP.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "Certificado X.509 do SP",
-          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções."
+          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "Chave privada do SP",
-          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada."
+          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "Atributo de e-mail",
@@ -7971,27 +9504,34 @@
         "deleted": {
           "message": "Resposta padrão {id} excluída"
         }
+      },
+      "placeholders": {
+        "matchRegex": "chamado\\s*(?:de\\s*)?(?:ti|suporte)"
       }
     },
     "status": {
       "badges": {
         "canceled": "Cancelado",
-        "completedWithErrors": "Concluído com erros",
         "deleting": "Excluindo",
-        "error": "Erro",
         "failed": "Falhou",
-        "inProgress": "Em andamento",
         "indexed": "Indexado",
         "indexing": "Indexando",
         "initialIndexing": "Indexação inicial",
         "interrupted": "Interrompido",
         "invalid": "Inválido",
         "invalidConnectorTooltip": "O conector está em um estado inválido. Atualize as credenciais ou crie um novo conector.",
-        "none": "Nenhum",
         "notStarted": "Não iniciado",
         "paused": "Pausado",
         "scheduled": "Agendado",
-        "succeeded": "Bem-sucedido"
+        "synced": "Sincronizado",
+        "syncing": "Sincronizando",
+        "pruning": "Limpando",
+        "pruned": "Limpo",
+        "checking": "Verificando",
+        "passed": "Concluído",
+        "failedToRun": "Não executado",
+        "completedWithErrors": "Concluído com erros",
+        "error": "Erro"
       }
     },
     "systemInfo": {
@@ -8134,6 +9674,9 @@
         "logo": {
           "alt": "Logotipo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -8309,11 +9852,11 @@
         "title": "Desconectar {label}"
       },
       "field": {
-        "optional": {
-          "title": "{label} (opcional)"
-        },
         "required": {
           "error": "{label} é obrigatório"
+        },
+        "optional": {
+          "title": "{label} (opcional)"
         }
       },
       "loadError": {
@@ -8357,11 +9900,13 @@
             },
             "project": {
               "label": "Nome do projeto",
-              "description": "Nome do projeto do Braintrust onde os traces são registrados."
+              "description": "Nome do projeto do Braintrust onde os traces são registrados.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "URL da API",
-              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -8378,7 +9923,8 @@
             },
             "host": {
               "label": "URL base da API",
-              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -8935,6 +10481,9 @@
       },
       "unexpectedError": {
         "message": "Ocorreu um erro inesperado."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -9051,11 +10600,14 @@
         },
         "searxngBaseUrl": {
           "label": "URL base do SearXNG",
-          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html)."
+          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html).",
+          "placeholder": "https://sua-instancia-searxng.com"
         },
         "firecrawlBaseUrl": {
           "label": "URL base da API",
-          "description": "A URL base da sua API do Firecrawl."
+          "description": "A URL base da sua API do Firecrawl.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -9094,7 +10646,7 @@
       "groups": {
         "failed": "{count} com falha",
         "indeterminate": "{count} não verificadas",
-        "passed": "{count} concluídas",
+        "passed": "{count} bem-sucedidas",
         "skipped": "{count} ignoradas",
         "running": "{count} em execução",
         "expected": "{count} esperadas"
@@ -9119,7 +10671,7 @@
       },
       "foldButton": {
         "fold": "Recolher",
-        "expand": "Expandir"
+        "expand": "Ver tudo"
       },
       "titleCount": "({complete}/{total})",
       "summary": {
@@ -9133,9 +10685,20 @@
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
-        "completed": "Verificações concluídas.",
         "inProgress": "Verificações em andamento...",
+        "completed": "Verificações concluídas.",
         "waiting": "Aguardando as configurações do conector..."
+      },
+      "advisory": {
+        "title": "Parte do conteúdo não será indexada.",
+        "description": "**{count, plural, one {# verificação não obrigatória do conector falhou.} other {# verificações não obrigatórias do conector falharam.}}** Elas não bloqueiam a indexação completa do conector, mas o conteúdo afetado não será indexado.",
+        "proceed": "Você ainda pode criar o conector e resolver isso depois.",
+        "viewButton": {
+          "label": "Ver verificações com falha"
+        },
+        "proceedButton": {
+          "label": "Criar conector mesmo assim"
+        }
       }
     },
     "connectorEdit": {
@@ -9172,7 +10735,8 @@
         },
         "uploadFailed": {
           "toast": "Não foi possível enviar os arquivos: {detail}"
-        }
+        },
+        "units": "{count, plural, one {arquivo} other {arquivos}}"
       },
       "planFailed": {
         "toast": "Não foi possível calcular o plano: {detail}"
@@ -9206,11 +10770,30 @@
         },
         "validation": {
           "title": "Validação",
-          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
-          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "unchanged": "As configurações que exigem validação não foram alteradas.",
+          "outcome": {
+            "failed": {
+              "title": "A validação falhou",
+              "description": "As novas configurações falharam na validação. Corrija-as antes de aplicar."
+            },
+            "warnings": {
+              "title": "Validação aprovada com avisos",
+              "description": "Algumas verificações opcionais falharam ou não puderam ser confirmadas. Você ainda pode aplicar."
+            },
+            "incomplete": {
+              "title": "A validação não terminou",
+              "description": "As verificações concluídas foram aprovadas. Você ainda pode aplicar."
+            },
+            "passed": {
+              "title": "Validação aprovada",
+              "description": "As novas configurações passaram em todas as verificações."
+            }
+          },
           "error": {
             "title": "As configurações não são válidas"
-          }
+          },
+          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
+          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar."
         },
         "warnings": {
           "title": "Avisos"
@@ -10314,6 +11897,40 @@
     }
   },
   "chat": {
+    "mcpConnections": {
+      "trigger": {
+        "label": "As ferramentas precisam de credenciais ({count})",
+        "tooltip": "Algumas ferramentas ficam indisponíveis até você conectar sua conta ou adicionar credenciais."
+      },
+      "modal": {
+        "title": "Conectar ferramentas",
+        "description": "Adicione suas credenciais para usar estas ferramentas no Onyx.",
+        "hint": "Você pode continuar conversando sem conectar estas ferramentas, mas os recursos do seu agente podem ficar limitados."
+      },
+      "connect": {
+        "label": "Conectar",
+        "accessibleLabel": "Conectar {server}"
+      },
+      "reconnect": {
+        "label": "Reconectar",
+        "accessibleLabel": "Reconectar {server}"
+      },
+      "connecting": {
+        "label": "Conectando…"
+      },
+      "connected": {
+        "label": "Conectado"
+      },
+      "required": {
+        "label": "Credenciais necessárias"
+      },
+      "done": {
+        "label": "Concluído"
+      },
+      "error": {
+        "description": "Não foi possível conectar. Tente novamente."
+      }
+    },
     "app": {
       "failedFiles": {
         "toast": "{count, plural, one {Um arquivo falhou e foi removido: {names}} other {Alguns arquivos falharam e foram removidos: {names}}}"
@@ -10760,6 +12377,9 @@
         "credentials": {
           "text": "Suas credenciais serão validadas no servidor e armazenadas com segurança."
         }
+      },
+      "backButton": {
+        "label": "Voltar às ferramentas"
       }
     },
     "messages": {
@@ -11289,18 +12909,6 @@
         },
         "modifyAction": {
           "label": "modificar"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "Editar {property}"
-        },
-        "submitButton": {
-          "label": "Atualizar propriedade",
-          "loadingLabel": "Atualizando..."
-        },
-        "valueInput": {
-          "placeholder": "Valor da propriedade"
         }
       },
       "feedback": {
@@ -12398,6 +14006,31 @@
         "label": "Fazer upgrade do plano"
       },
       "availableFor": "Disponível no {plan}"
+    },
+    "placeholders": {
+      "email": "email@suaempresa.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://seu-recurso.cognitiveservices.azure.com/openai/deployments/nome-da-implantacao/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://seu-recurso.cognitiveservices.azure.com/openai/deployments/nome-da-implantacao/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://nome_do_seu_recurso.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://regiao_do_seu_recurso.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://seu-gateway-bifrost.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://seu-proxy-litellm.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "meu-projeto-vertex",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -12449,7 +14082,8 @@
       },
       "status": {
         "approved": "Aprovado",
-        "rejected": "Rejeitado"
+        "rejected": "Rejeitado",
+        "expired": "Expirada"
       },
       "submit": {
         "errorFallback": "Falha ao enviar a decisão"
@@ -12536,7 +14170,7 @@
           }
         },
         "managedDescription": "Fornecido pela Onyx: configure o que o agente pode fazer.",
-        "managedNote": "Este app é fornecido pela Onyx: as credenciais são gerenciadas para você. Escolha abaixo o que o agente pode fazer. Os usuários o conectam pela página de Apps.",
+        "managedNote": "O Onyx gerencia as credenciais. Defina as políticas de ações em Permissões. Os membros se conectam em Plugins.",
         "saveButton": "Salvar"
       },
       "customApp": {
@@ -12581,7 +14215,10 @@
           }
         },
         "saveButton": "Salvar",
-        "savingButton": "Salvando…"
+        "savingButton": "Salvando…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
@@ -12609,45 +14246,18 @@
         "title": "Conectando seu app"
       },
       "page": {
-        "connectButton": "Conectar",
-        "connectingButton": "Redirecionando…",
-        "disconnectButton": "Desconectar",
         "empty": {
           "description": "Nenhum app ou servidor MCP configurado para sua organização ainda.",
           "title": "Nada para conectar ainda"
         },
-        "errors": {
-          "disconnectFailed": "Falha ao desconectar",
-          "startAuthFailed": "Falha ao iniciar a autorização"
-        },
         "header": {
           "description": "Conecte as ferramentas que o Onyx Craft pode usar como contexto enquanto trabalha.",
-          "manageButton": "Gerenciar apps",
-          "searchPlaceholder": "Pesquisar apps...",
           "title": "Apps"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Integrações que a Onyx suporta diretamente. Cada uma vem com habilidades que ensinam o Craft a usá-la: comece por aqui.",
-            "empty": "Nenhum app configurado para sua organização ainda.",
-            "emptyTitle": "Nenhum app ainda",
-            "tabLabel": "Apps · {count}"
-          },
-          "mcp": {
-            "blurb": "Servidores que um administrador disponibilizou para o Craft. Use-os quando o app de que você precisa não estiver listado em Apps, ou quando quiser especificamente as ferramentas MCP próprias de um servidor.",
-            "empty": "Nenhum servidor MCP foi disponibilizado para o Craft.",
-            "emptyTitle": "Nenhum servidor MCP ainda",
-            "tabLabel": "Servidores MCP · {count}"
-          }
         },
         "loading": {
           "label": "Carregando…"
         },
         "reviewSkillsButton": "Revisar habilidades",
-        "search": {
-          "noMatchesDescription": "Nada aqui corresponde à sua pesquisa.",
-          "noMatchesTitle": "Nenhuma correspondência"
-        },
         "status": {
           "connected": "Conectado",
           "connectedNeedsSkills": "Conectado · nem todas as habilidades associadas estão habilitadas",
@@ -12657,10 +14267,6 @@
         }
       },
       "policyEditor": {
-        "advanced": {
-          "description": "Defina uma política para cada ação individualmente.",
-          "title": "Avançado"
-        },
         "cancelButton": "Cancelar",
         "loading": {
           "label": "Carregando…"
@@ -12669,10 +14275,15 @@
           "askOption": "Perguntar",
           "autoApproveOption": "Aprovar automaticamente",
           "customOption": "Personalizado",
-          "description": "Escolha o que o agente pode fazer. “Perguntar” consulta você no chat antes de cada ação; “Aprovar automaticamente” executa sem perguntar. Use Avançado para definir uma política por ação.",
+          "defaultOption": "Padrão",
+          "description": "Escolha o que o agente pode fazer. “Perguntar” solicita aprovação antes de cada ação; “Aprovar automaticamente” executa sem perguntar.",
           "title": "Permissões"
         },
-        "savingButton": "Salvando…"
+        "savingButton": "Salvando…",
+        "advanced": {
+          "description": "Defina uma política para cada ação individualmente.",
+          "title": "Avançado"
+        }
       },
       "skillsStep": {
         "description": "Opcional: associe habilidades existentes ou crie uma para este app.",
@@ -13278,6 +14889,9 @@
       "toast": {
         "deleteFailed": "Falha ao excluir a sessão",
         "deleted": "\"{title}\" foi excluído."
+      },
+      "plugins": {
+        "label": "Plugins"
       }
     },
     "skillsStale": {
@@ -13345,10 +14959,6 @@
             "label": "Nome",
             "placeholder": "ex.: Resumo semanal de escalonamentos de clientes"
           },
-          "preApproval": {
-            "description": "O Craft pode usar os apps e servidores MCP selecionados sem pausar quando esta tarefa é executada sem supervisão. Outras solicitações de aprovação pausam a execução e podem fazê-la falhar.",
-            "label": "Apps e servidores MCP pré-aprovados"
-          },
           "prompt": {
             "description": "Esta mensagem é enviada ao Craft cada vez que a tarefa dispara.",
             "label": "Prompt",
@@ -13407,31 +15017,6 @@
       "newPage": {
         "description": "Salve um prompt + agendamento. O Craft o executará em um cronograma.",
         "title": "Nova tarefa agendada"
-      },
-      "preApproval": {
-        "appFallbackName": "App nº {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "Nenhum app ou servidor MCP disponível no Craft ainda."
-        },
-        "errors": {
-          "loadFailed": "Não foi possível carregar os apps e servidores MCP. Atualize para tentar novamente.",
-          "partialLoadFailed": "Algumas opções de pré-aprovação não puderam ser carregadas. Atualize para tentar novamente."
-        },
-        "loading": {
-          "label": "Carregando apps e servidores MCP…"
-        },
-        "mcpGroupTitle": "Servidores MCP",
-        "mcpServerFallbackName": "Servidor MCP nº {id}",
-        "status": {
-          "connected": "Conectado",
-          "connectionRequired": "Conexão necessária",
-          "unavailable": "Não está mais disponível"
-        },
-        "summary": {
-          "partialLoadFailed": "Alguns detalhes de pré-aprovação não puderam ser carregados. Atualize para tentar novamente.",
-          "title": "Apps e servidores MCP pré-aprovados"
-        }
       },
       "runHistory": {
         "columns": {
@@ -13807,6 +15392,51 @@
       "viewPlans": {
         "label": "Ver planos"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "Configurações de aprovação de {name}",
+      "title": "Configurações de aprovação",
+      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft e nas novas tarefas; as tarefas existentes mantêm suas próprias configurações.",
+      "taskDescription": "Somente aplicativos ativados estão disponíveis para esta tarefa. As alterações se aplicam apenas a esta tarefa.",
+      "newTaskDescription": "Ative os aplicativos que esta tarefa pode usar. Cada aplicativo começa com suas configurações de ações atuais.",
+      "workspace_disabled": "Desativada para o espaço de trabalho",
+      "workspace_managed": "Gerenciado pelo espaço de trabalho",
+      "userManagement": "Permitir que usuários gerenciem configurações de aprovação",
+      "userManagementDescription": "Usuários podem alterar a aprovação de ações disponíveis.",
+      "loading": "Carregando configurações de aprovação…",
+      "loadError": "Não foi possível carregar as configurações de aprovação.",
+      "retry": "Tentar novamente",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "cancel": "Cancelar",
+      "saveError": "Não foi possível salvar as configurações de aprovação.",
+      "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
+      "emptyApps": "Nenhum aplicativo disponível.",
+      "expired": "O prazo de aprovação expirou. A ação não foi executada.",
+      "rejected": "Solicitação rejeitada. Esta solicitação não foi executada.",
+      "deadline": "Aprovar até {time}",
+      "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
+      "enableForTask": "Ativar para esta tarefa",
+      "enableAppForTask": "Ativar {app} para esta tarefa",
+      "enabledForTask": "Ativado para esta tarefa",
+      "disabledForTask": "Desativado para esta tarefa",
+      "externalApp": "Aplicativo",
+      "mcpServer": "Servidor MCP",
+      "taskAppsTitle": "Aplicativos e servidores MCP",
+      "actionPolicies": "Configurações de aprovação",
+      "policyCounts": "{auto} automáticas · {ask} perguntar · {disabled} desativadas",
+      "manageActions": "Gerenciar ações",
+      "viewActions": "Ver ações",
+      "taskModalDescription": "As alterações se aplicam ao salvar a tarefa. As restrições do espaço de trabalho sempre se aplicam.",
+      "searchActions": "Buscar ações",
+      "setPermissions": "Definir permissões",
+      "applyMatching": "{count} ações editáveis correspondentes",
+      "noMatchingActions": "Nenhuma ação corresponde à busca.",
+      "close": "Fechar",
+      "saveChanges": "Salvar alterações",
+      "resetDefaults": "Redefinir tudo para os padrões",
+      "resetAll": "Redefinir tudo para os padrões do espaço de trabalho",
+      "workspaceDisabledTooltip": "Um administrador desativou esta ação para o espaço de trabalho."
     }
   },
   "knowledge": {
@@ -14130,6 +15760,9 @@
       "oneMonth": "1M",
       "sevenDays": "7D",
       "threeMonths": "3M"
+    },
+    "divider": {
+      "viewAll": "Ver tudo"
     },
     "iconTooltip": {
       "label": "Mais informações"
@@ -14476,7 +16109,8 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
-      }
+      },
+      "workspaceDefault": "Padrão ({language})"
     },
     "layout": {
       "header": {
@@ -14753,6 +16387,9 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
+        "plugins": {
+          "label": "Plugins"
+        },
         "mcpActions": {
           "label": "Ações MCP"
         },
@@ -14878,6 +16515,9 @@
       },
       "searchChats": {
         "label": "Pesquisar chats"
+      },
+      "plugins": {
+        "label": "Plugins"
       }
     },
     "chatButton": {
@@ -15341,6 +16981,9 @@
         "transferredToast": {
           "message": "Propriedade transferida."
         }
+      },
+      "placeholders": {
+        "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
       }
     },
     "page": {

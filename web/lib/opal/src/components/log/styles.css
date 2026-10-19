@@ -12,16 +12,22 @@
 .opal-log .opal-log-icon {
   @apply shrink-0 text-text-03;
 }
+.opal-log[data-opal-log-status="info"] .opal-log-icon {
+  @apply text-status-info-05;
+}
 .opal-log[data-opal-log-status="success"] .opal-log-icon {
   @apply text-status-success-05;
 }
 .opal-log[data-opal-log-status="warning"] .opal-log-icon {
-  @apply text-theme-amber-05;
+  @apply text-status-warning-05;
 }
 .opal-log[data-opal-log-status="error"] .opal-log-icon {
   @apply text-status-error-05;
 }
 
+.opal-log[data-opal-log-weight="heavy"][data-opal-log-status="info"] {
+  @apply bg-status-info-00;
+}
 .opal-log[data-opal-log-weight="heavy"][data-opal-log-status="success"] {
   @apply bg-status-success-00;
 }

@@ -1,3 +1,6 @@
+import ipaddress
+import re
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -5,9 +8,15 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    get_workspace_action_policies,
+    replace_workspace_action_policies,
+    users_can_manage_policies,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     ExternalAppType,
     GatedAppKind,
     Permission,
@@ -29,7 +38,6 @@ from onyx.db.external_app import (
     upsert_external_app_user_credential,
     validate_auth_template,
 )
-from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
@@ -42,7 +50,6 @@ from onyx.external_apps.providers.registry import (
     fetch_available_built_in_apps,
     get_onyx_managed_provider,
     get_provider_for_app,
-    resolve_action_overrides,
 )
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.server.features.build import connect_app
@@ -82,9 +89,10 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 def _to_admin_response(
     app: ExternalApp,
     *,
-    stored: dict[str, EndpointPolicy],
+    stored: dict[str, ActionPolicy],
+    db_session: Session,
 ) -> ExternalAppAdminResponse:
-    # ``stored`` is the app's per-action policy overrides.
+    # ``stored`` is the app's approval policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
@@ -102,6 +110,9 @@ def _to_admin_response(
         ),
         enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
+        users_can_manage_policies=users_can_manage_policies(
+            db_session, GatedAppKind.EXTERNAL_APP, app.id
+        ),
         associated_skills=[
             ExternalAppAssociatedSkill(
                 id=skill.id,
@@ -138,6 +149,40 @@ def _to_user_response(
         if key in stored_raw
     }
     authenticated = all(key in stored_raw for key in required_keys)
+    service_urls: list[str] = []
+    for pattern in app.upstream_url_patterns:
+        if app.app_type != ExternalAppType.CUSTOM:
+            pattern = pattern.removeprefix("^")
+        authority = pattern.partition("://")[2].split("/", 1)[0].rsplit("@", 1)[-1]
+        if app.app_type != ExternalAppType.CUSTOM:
+            if "?" in authority or re.search(r"(?<!\\)\.", authority):
+                continue
+            pattern = pattern.replace(r"\.", ".").replace(r"\-", "-")
+        host_port, separator, query = authority.partition("?")
+        if separator and "=" not in query:
+            continue
+        if re.search(r"[\s*+|(){}^$]", host_port):
+            continue
+        try:
+            parsed = urlsplit(pattern)
+            hostname = parsed.hostname
+            port = parsed.port
+            if parsed.scheme not in ("http", "https") or not hostname:
+                continue
+            if ":" in hostname:
+                hostname = f"[{ipaddress.IPv6Address(hostname).compressed}]"
+            elif not re.fullmatch(
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*",
+                hostname,
+            ):
+                continue
+        except ValueError:
+            continue
+        origin = f"{parsed.scheme}://{hostname}"
+        if port is not None and port != {"http": 80, "https": 443}[parsed.scheme]:
+            origin += f":{port}"
+        if origin not in service_urls:
+            service_urls.append(origin)
 
     return ExternalAppUserResponse(
         id=app.id,
@@ -147,6 +192,7 @@ def _to_user_response(
         credential_values=credential_values,
         authenticated=authenticated,
         supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
+        service_urls=service_urls,
     )
 
 
@@ -175,12 +221,10 @@ def create_built_in_external_app(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx; use PATCH /admin/apps/{id} to "
-            "set action policies.",
+            "set approval policies.",
         )
 
-    action_policies = resolve_action_overrides(
-        request.app_type, request.action_policies, {}
-    )
+    action_policies = request.action_policies or {}
 
     app = create_external_app(
         db_session=db_session,
@@ -191,13 +235,26 @@ def create_built_in_external_app(
         organization_credentials=request.organization_credentials,
         action_policies=action_policies,
     )
+    if request.users_can_manage_policies is not None:
+        replace_workspace_action_policies(
+            db_session,
+            get_or_create_gated_app_id(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+            None,
+            users_can_manage=request.users_can_manage_policies,
+        )
     skill = associate_built_in_skill__no_commit(db_session, app)
 
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
     # ``action_policies`` is exactly what was persisted — no need to re-read.
-    return _to_admin_response(app, stored=action_policies)
+    return _to_admin_response(
+        app,
+        stored=get_workspace_action_policies(
+            db_session, GatedAppKind.EXTERNAL_APP, app.id
+        ),
+        db_session=db_session,
+    )
 
 
 @admin_router.patch("/apps/{external_app_id}")
@@ -224,11 +281,7 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
-    action_policies = resolve_action_overrides(
-        app.app_type,
-        request.action_policies,
-        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
-    )
+    action_policies = request.action_policies
     affected_skills_by_id = {
         skill.id: skill for skill in get_skills_for_external_app(db_session, app.id)
     }
@@ -246,8 +299,15 @@ def update_external_app_admin(
         organization_credentials=(
             UNSET if managed else none_as_unset(request.organization_credentials)
         ),
-        action_policies=action_policies,
+        action_policies=action_policies if action_policies is not None else UNSET,
     )
+    if request.users_can_manage_policies is not None:
+        replace_workspace_action_policies(
+            db_session,
+            get_or_create_gated_app_id(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+            None,
+            users_can_manage=request.users_can_manage_policies,
+        )
     if request.associated_skill_ids is not None:
         affected_skills_by_id.update(
             {
@@ -270,8 +330,13 @@ def update_external_app_admin(
     db_session.commit()
     if request.associated_skill_ids is not None:
         db_session.expire(app, ["associated_skills"])
-    # ``action_policies`` is exactly what was persisted — no need to re-read.
-    return _to_admin_response(app, stored=action_policies)
+    return _to_admin_response(
+        app,
+        stored=get_workspace_action_policies(
+            db_session, GatedAppKind.EXTERNAL_APP, app.id
+        ),
+        db_session=db_session,
+    )
 
 
 @admin_router.post("/apps/custom")
@@ -305,10 +370,16 @@ def create_custom_external_app(
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
     )
+    replace_workspace_action_policies(
+        db_session,
+        get_or_create_gated_app_id(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+        None,
+        users_can_manage=request.users_can_manage_policies,
+    )
     db_session.commit()
 
     # A freshly created custom app has no stored policy overrides.
-    return _to_admin_response(app, stored={})
+    return _to_admin_response(app, stored={}, db_session=db_session)
 
 
 @admin_router.get("/apps")
@@ -322,7 +393,10 @@ def list_external_apps_admin(
     return [
         _to_admin_response(
             app,
-            stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+            db_session=db_session,
+            stored=get_workspace_action_policies(
+                db_session, GatedAppKind.EXTERNAL_APP, app.id
+            ),
         )
         for app in apps
     ]

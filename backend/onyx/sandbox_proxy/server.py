@@ -187,6 +187,8 @@ def _build_mitm_master() -> DumpMaster:
             confdir=_MITM_CONFDIR,
             mode=["regular"],
             ssl_insecure=False,
+            # Every forwarded request must pass the HTTP policy and credential hooks.
+            rawtcp=False,
             ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
         ),
         with_termlog=False,
@@ -201,7 +203,9 @@ async def _run_master(master: DumpMaster) -> None:
     await master.run()
 
 
-def build_resolvers() -> list[CredentialResolver]:
+def build_resolvers(
+    mcp_resolver: MCPServerResolver | None = None,
+) -> list[CredentialResolver]:
     """Builds the registered credential resolvers, in first-claim-wins order.
 
     Host-claim sets are designed to be disjoint (external-app requests are
@@ -211,7 +215,7 @@ def build_resolvers() -> list[CredentialResolver]:
     """
     return [
         OnyxPatResolver(),
-        MCPServerResolver(),
+        mcp_resolver if mcp_resolver is not None else MCPServerResolver(),
         ExternalAppResolver(),
     ]
 
@@ -306,12 +310,14 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        resolvers = build_resolvers()
+        mcp_resolver = MCPServerResolver()
+        resolvers = build_resolvers(mcp_resolver)
         logger.info(
             "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
         )
         gate = GateAddon(
+            mcp_resolver=mcp_resolver,
             destination_policy=destination_policy,
             identity=identity,
             request_evaluator=CompositeRequestEvaluator(

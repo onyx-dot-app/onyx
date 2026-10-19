@@ -99,6 +99,7 @@ test("storedCheckResults reads the pair's report before the credential's", () =>
       check_results: [result([channels([{ value: "C1", label }])])],
     },
     time_updated: "2026-10-13T00:00:00Z",
+    progress: null,
   });
   const reports = [report(3, "from-pair"), report(null, "from-credential")];
   const reportFor = (credentialId: number, connectorId: number | null = null) =>

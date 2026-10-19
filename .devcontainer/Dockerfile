@@ -8,7 +8,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \

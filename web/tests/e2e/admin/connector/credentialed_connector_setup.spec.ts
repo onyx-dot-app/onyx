@@ -11,13 +11,15 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
  *
  * Confluence is the source because it needs a credential and the credential
  * endpoint stores the JSON without contacting the source, so a placeholder
- * credential can be created and cleaned up through the API. The form is never
- * submitted: that would validate against a real Confluence instance. The
- * connector checks are mocked for the same reason.
+ * credential can be created and cleaned up through the API. A test that
+ * clicks Create answers the request itself, since a real one would validate
+ * against a real Confluence instance. The checks are mocked for the same reason.
  */
 const SOURCE = "confluence";
 const WIKI_BASE = "https://example.atlassian.net/wiki";
 const OTHER_WIKI_BASE = "https://other-example.atlassian.net/wiki";
+// The non-required check the mock fails on request.
+const OPTIONAL_CHECK = "Page comments are readable";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
@@ -127,5 +129,48 @@ test.describe("Credentialed connector setup", () => {
     await expect(siteUrl).toHaveValue(WIKI_BASE);
     await expect(siteUrl).toBeDisabled();
     await setupPage.runChecks();
+  });
+
+  test("a failed check that is not required warns before Create and lets it through", async ({
+    page,
+  }) => {
+    const setupPage = new ConnectorSetupPage(page, SOURCE);
+    await setupPage.mockChecks({ failedOptionalCheck: true });
+    await setupPage.failCreateRequests();
+    await setupPage.goto();
+    await expect(setupPage.credentialRow(credentialId)).toBeVisible({
+      timeout: 10_000,
+    });
+    await setupPage.selectCredential(credentialId);
+    const siteUrl = setupPage.textField("wiki_base");
+    await siteUrl.fill(WIKI_BASE);
+    await siteUrl.blur();
+    await setupPage.runChecks();
+    await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
+
+    // The failed check does not block Create, but Create warns of it first.
+    await expect(setupPage.createConnectorButton).toBeEnabled();
+    // Folded and away from the card, so View Failed Checks has to open it
+    // and scroll.
+    await setupPage.foldChecksCard();
+    await expect(setupPage.checkRow(OPTIONAL_CHECK)).toBeHidden();
+    await setupPage.scrollToEnd();
+    await setupPage.createConnectorButton.click();
+    await expect(setupPage.failedChecksAdvisory).toBeVisible();
+    await expect(setupPage.failedChecksAdvisory).toContainText(
+      "1 non-required connector check failed."
+    );
+
+    // View Failed Checks closes the advisory and opens the checks card.
+    await setupPage.viewFailedChecksButton.click();
+    await expect(setupPage.failedChecksAdvisory).toBeHidden();
+    await expect(setupPage.checkRow(OPTIONAL_CHECK)).toBeInViewport();
+
+    // Create Anyway sends the create request.
+    await setupPage.createConnectorButton.click();
+    const createRequest = setupPage.waitForCreateRequest();
+    await setupPage.createAnywayButton.click();
+    expect((await createRequest).method()).toBe("POST");
+    await expect(setupPage.failedChecksAdvisory).toBeHidden();
   });
 });

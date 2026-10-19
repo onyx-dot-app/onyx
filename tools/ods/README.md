@@ -220,6 +220,120 @@ ods backend model_server
 ods backend model_server --port 9001
 ```
 
+### `stack` - Run the Local Dev Stack of a Worktree
+
+Run the whole local dev stack from a source checkout without an editor:
+Compose infrastructure, migrations, and the application services from
+`.vscode/launch.json` as background processes. It is built for several agents
+and worktrees on one machine.
+
+```shell
+ods stack <up|start|restart|stop|down|status|logs|plan> [flags]
+```
+
+Every worktree gets its own Compose project (the directory name plus a hash of
+the path; `--project` overrides it), its own host ports, and its own state in
+its git metadata (`git rev-parse --git-path ods-stack`): `state.json`, the
+lifecycle lock, and `logs/<service>.log`. Port leases are shared across
+worktrees in `~/.local/share/onyx-dev/stack/ports.json` under a short lock, so
+a worktree keeps its ports across restarts and two worktrees never pick the
+same port. A leased port that something else took is replaced on the next
+start.
+
+`up` takes the worktree's lifecycle lock, so two agents running `up` at the
+same time converge on one stack: the second waits and then finds everything
+running. It then:
+
+1. Creates `.vscode/.env` and `.vscode/.env.web` from the templates when they
+   are missing, with placeholders blanked, and turns a symlinked env file into
+   a worktree-local copy. It never prints or replaces a value.
+2. Checks `uv`, `bun` and `docker`, runs `uv sync --frozen` and `bun install`
+   when needed (`--skip-prepare` skips this step).
+3. Leases the infrastructure and application ports, writes the Compose port
+   variables, and runs `ods compose dev --infra` for this project.
+4. Writes the infrastructure port variables to `.vscode/.env` (as `ods env`
+   does) and runs `alembic upgrade head` with `POSTGRES_HOST=localhost` and
+   the leased port set explicitly.
+5. Reconciles the services: a service whose process is still the one started
+   earlier and whose command and environment are unchanged keeps running;
+   everything else is stopped and started. An interrupted `up` is finished
+   by the next one.
+6. Waits until the web server (`/api/auth/type`) and API server (`/health`)
+   answer, then prints the status.
+
+Services run in their own process groups with the shell, the launch
+configuration's `envFile` and `env`, and the stack's hosts and ports on top
+(`POSTGRES_HOST`, `REDIS_HOST`, `OPENSEARCH_HOST`, `MODEL_SERVER_HOST`,
+`PORT`, `WEB_DOMAIN`, `INTERNAL_URL`, `MCP_SERVER_PORT`, `MCP_INTERNAL_URL`,
+`MODEL_SERVER_PORT`). `stop` signals only the groups it started, checked by
+pid, group and start time, and waits for every descendant to exit before it
+forgets a service. `down` also stops the Compose containers; volumes and port
+leases are kept.
+
+**Profiles** (`--profile`):
+
+| Profile | Services |
+|---------|----------|
+| `minimal` | Web Server, API Server |
+| `default` | `minimal` plus the primary, light, beat, docfetching, docprocessing and user_file_processing Celery workers |
+| `full` | Every service in the `Run All Onyx Services` compound |
+
+The model server comes from Compose. `--local-model-server` runs it from the
+checkout instead, on its own leased port, and leaves the Compose inference
+server down. The Slack bot (`full` only) binds its metrics server to port 8000;
+the stack never leases 8000 and skips the bot when the port is taken.
+
+**Flags** (`up`, `start`, `restart`):
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--profile` | `default` | `minimal`, `default` or `full` |
+| `--local-model-server` | `false` | Run the model server from the checkout |
+| `--timeout` | `3m` | How long to wait for the services to become healthy |
+| `--lock-wait` | `10m` | How long to wait for another lifecycle command on this worktree |
+| `--stop-timeout` | `20s` | Grace period before a stale service is killed |
+| `--skip-prepare` | `false` | Skip `uv sync` and `bun install` |
+| `--json` | `false` | Print the status as JSON |
+
+`status --json` reports the project, profile, phase (`preparing`, `infra`,
+`migrating`, `starting`, `ready`, `degraded`, `stopped`, `failed`), the leased
+ports, the URLs, each service with its state (`running`, `exited`, `skipped`),
+pid, health and log path, and any errors. A service that exited or is
+unhealthy also carries `log_tail`, the last lines of its log, so an agent can
+read the failure from the status alone. Its exit code is 0 when the stack is
+ready, 2 when it is not, and 1 when the worktree has no stack.
+
+`up`, `start` and `restart` always print the status, also on failure. They
+exit 1 when startup fails, including a missing tool, dependency installation,
+Compose, migrations, or an exited required service. Migration diagnostics appear in `errors`.
+They exit 2 when running services do not become healthy within `--timeout`.
+They exit 3 when another lifecycle command still held the worktree lock after
+`--lock-wait`; the printed status is then the last recorded one.
+A service without a health check must stay alive for five seconds before the
+stack counts as ready, so a crash on startup is reported rather than hidden.
+
+**Examples:**
+
+```shell
+# Start everything a feature branch needs
+ods stack up
+
+# The whole compound, as JSON for an agent
+ods stack up --profile full --json
+
+# Inspect, follow one service, restart the services only
+ods stack status --json
+ods stack logs api --follow
+ods stack restart
+
+# Stop the services and keep the containers, or stop both
+ods stack stop
+ods stack down
+
+# See what a profile would run
+ods stack plan --profile full
+```
+
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
 
 The dev stack runs the object store (SeaweedFS) only: `ods compose dev` keeps

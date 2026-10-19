@@ -117,6 +117,66 @@ export async function deleteDefaultCraftModel(): Promise<void> {
   }
 }
 
+export async function setDefaultChatNamingModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-chat-naming", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function deleteDefaultChatNamingModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-chat-naming", {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function setDefaultSearchSelectionModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-search-selection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function deleteDefaultSearchSelectionModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-search-selection", {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
 /**
  * Delete an LLM provider.
  * @param providerId - The provider ID to delete

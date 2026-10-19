@@ -107,7 +107,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
 | `backend/onyx/background/celery/`, `background/periodic_poller.py`, `background/task_utils.py`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `db/scheduled_task.py`, `db/sync_record.py` | background-jobs |
-| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
+| `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/configs/app_configs.py` | editions-and-gating |
 | `backend/onyx/configs/chat_configs.py` | chat-persistence, context-assembly, llm-providers |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
@@ -122,6 +122,8 @@ here. Read the component that documents the setting in its env table.
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `*/onyxbot/slack/handlers/handle_standard_answers.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `db/release_notes.py`, `db/admin_banner.py`, `server/features/notifications/`, `features/release_notes/`, `features/admin_banner/` | notifications |
+| `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps, craft-streaming |
+| `backend/onyx/db/action_policy.py`, `backend/onyx/server/features/build/action_policies.py`, `web/src/sections/actions/PolicyEditor.tsx`, `web/src/lib/plugins/types.ts` | craft-external-apps, craft-scheduled-tasks, craft-admin, editions-and-gating |
 | `backend/onyx/db/models.py` | **any**. Check which tables the diff touches, then map those. |
 | `backend/alembic/`, `backend/alembic_tenants/` | the component that owns the table being migrated |
 | `backend/onyx/server/settings/`, `server/security/`, `db/security_settings.py` | editions-and-gating, auth-and-identity |
@@ -163,7 +165,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/server/features/build/` | craft-sessions |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
-| `backend/onyx/sandbox_proxy/` | craft-webapp-proxy |
+| `backend/onyx/sandbox_proxy/` | craft-external-apps |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `backend/onyx/onyxbot/discord/` | discord-bot |
 | `docs/craft/` | the matching `craft-*` component |
@@ -173,9 +175,15 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
+| `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
+| `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
+| `web/src/app/app/plugins/` | mcp-and-custom-tools, chat-frontend |
+| `web/src/app/craft/v1/plugins/` | craft-external-apps, mcp-and-custom-tools |
+| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
+| `web/src/app/craft/v1/tasks/components/TaskActionPolicies.tsx` | craft-scheduled-tasks |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
 | `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |
@@ -184,9 +192,14 @@ so verify the callers rather than a single component.
 | `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
-| `web/src/app/admin/agents/` | agents-personas |
+| `web/src/app/admin/agents/`, `web/src/lib/agents/` | agents-personas |
+| `web/src/views/admin/ChatPreferencesPage.tsx` | chat-preferences |
 | `web/src/app/admin/language-models/` | llm-providers |
-| `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
+| `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | mcp-and-custom-tools |
+| `web/src/sections/actions/`, `web/src/lib/mcp/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
 | `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
@@ -196,7 +209,8 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |
 | `web/src/app/admin/web-search/` | web-search |
 | `web/src/app/admin/voice/`, `admin/image-generation/`, `admin/code-interpreter/` | voice, image-generation, code-execution |
-| `web/src/app/auth/`, `web/src/app/oauth-config/` | auth-and-identity |
+| `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/` | auth-and-identity |
+| `web/src/sections/actions/` | mcp-and-custom-tools |
 | `web/src/app/api/` | the component owning the proxied endpoint |
 | `web/src/refresh-components/`, `web/src/components/` | the calling component. Also see the Opal migration rule in `web/AGENTS.md`. |
 | `web/tests/e2e/` | the component the test covers |

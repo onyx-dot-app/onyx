@@ -9,7 +9,6 @@ import { Form, Formik, FormikHelpers } from "formik";
 import { Section, toast } from "@opal/layouts";
 import type { Connector } from "@/lib/connectors/types";
 import type { Credential } from "@/lib/credentials/types";
-import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type { CredentialActionType } from "@/lib/credentials/types";
 import {
   createValidationSchema,
@@ -175,10 +174,6 @@ export default function CreateCredential({
       formikHelpers.setSubmitting(false);
     }
   };
-
-  if (sourceType == "gmail") {
-    return <GmailMain />;
-  }
 
   const spec = getCredentialSpec(sourceType);
   if (!spec) {

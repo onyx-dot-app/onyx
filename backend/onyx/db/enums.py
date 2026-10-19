@@ -118,6 +118,34 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class CCPairRunKind(str, PyEnum):
+    """A kind of run in a pair's run history."""
+
+    INDEXING = "indexing"
+    DOC_PERMISSION_SYNC = "doc_permission_sync"
+    GROUP_SYNC = "group_sync"
+    PRUNING = "pruning"
+    CHECKS = "checks"
+
+
+class CCPairRunStatusGroup(str, PyEnum):
+    """How the run history buckets the attempt statuses of every kind."""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class CCPairRunErrors(str, PyEnum):
+    """Runs by their document errors: some still open, all of them resolved,
+    or none at all."""
+
+    UNRESOLVED = "unresolved"
+    RESOLVED = "resolved"
+    NONE = "none"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
@@ -487,6 +515,7 @@ class ScheduledTaskErrorClass(str, PyEnum):
     TIMEOUT = "timeout"
     STUCK = "stuck"
     AGENT_EXCEPTION = "agent_exception"
+    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
@@ -534,6 +563,7 @@ class ExternalAppType(str, PyEnum):
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
     NOTION = "NOTION"
+    ZENDESK = "ZENDESK"
     CUSTOM = "CUSTOM"
 
     @property
@@ -544,7 +574,7 @@ class ExternalAppType(str, PyEnum):
         return self is not ExternalAppType.CUSTOM
 
 
-class EndpointPolicy(str, PyEnum):
+class ActionPolicy(str, PyEnum):
     """What the egress layer does with an outbound request once it has been
     matched to an action of a connected external app."""
 
@@ -556,10 +586,10 @@ class EndpointPolicy(str, PyEnum):
 # Strictness ordering: higher = stricter. When one request matches several
 # actions, the strictest policy governs (sort/`max` with this key); readers
 # of a persisted `actions` list rely on `actions[0]` being the strictest.
-POLICY_SEVERITY: dict[EndpointPolicy, int] = {
-    EndpointPolicy.ALWAYS: 0,
-    EndpointPolicy.ASK: 1,
-    EndpointPolicy.DENY: 2,
+POLICY_SEVERITY: dict[ActionPolicy, int] = {
+    ActionPolicy.ALWAYS: 0,
+    ActionPolicy.ASK: 1,
+    ActionPolicy.DENY: 2,
 }
 
 
@@ -654,6 +684,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    SEARCH_SELECTION = "search_selection"
     CRAFT = "craft"
 
 
@@ -901,6 +932,18 @@ class CapabilityCheckTrigger(str, PyEnum):
     PERM_SYNC_ATTEMPT = "perm_sync_attempt"
     # Recorded from the validation that applies an edit to an existing cc-pair.
     CONNECTOR_CONFIG_UPDATE = "connector_config_update"
+    # The beat re-ran a pair's checks on its connector's check frequency.
+    SCHEDULED = "scheduled"
+
+
+class CapabilityCheckRunStatus(str, PyEnum):
+    """How one run in a pair's check history ended. FAILED means a required,
+    applicable check failed; other failures leave the run PASSED."""
+
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    FAILED_TO_RUN = "failed_to_run"
 
 
 class CapabilityReportRunStatus(str, PyEnum):

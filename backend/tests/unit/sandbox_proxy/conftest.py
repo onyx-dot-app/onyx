@@ -11,27 +11,36 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import ssl
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from mitmproxy import http
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
 )
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
-from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIPLookup
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentityResolver,
+    SandboxIPLookup,
+)
 
 _SANDBOX_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -131,8 +140,8 @@ def make_flow(
     return flow
 
 
-class StubResolver(_IdentityResolver):
-    """`_IdentityResolver` stub with canned returns (resolves sandbox + session)."""
+class StubResolver(SandboxIdentityResolver):
+    """`SandboxIdentityResolver` stub with canned returns (resolves sandbox + session)."""
 
     def __init__(
         self,
@@ -211,7 +220,7 @@ def make_matched_actions(
     display_name: str = "Post a message",
     description: str = "Post a message to a channel or conversation.",
     payload: dict[str, Any] | None = None,
-    policy: EndpointPolicy = EndpointPolicy.ASK,
+    policy: ActionPolicy = ActionPolicy.ASK,
     external_app_id: int = 42,
     app_name: str = "Slack",
 ) -> AllMatchedActions:
@@ -259,3 +268,55 @@ class NoMatchedRequest(RequestEvaluator):
 
 def unused_cache(_tenant_id: str) -> CacheBackend:
     raise AssertionError("Off-catalog requests do not use the approval cache")
+
+
+@pytest.fixture
+def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Allow test loopback servers through the real SSRF address checks."""
+    from onyx.server.security.models import SSRFProtectionLevel
+
+    settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+
+    def read_settings(*, allow_fallback: bool = True) -> MagicMock:
+        assert not allow_fallback
+        return settings
+
+    monkeypatch.setattr(
+        "onyx.sandbox_proxy.destination_policy.get_security_settings", read_settings
+    )
+    return settings
+
+
+def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
+    key: rsa.RSAPrivateKey = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    subject: x509.Name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
+    now: dt.datetime = dt.datetime.now(dt.timezone.utc)
+    certificate: x509.Certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path: Path = tmp_path / "upstream.crt"
+    key_path: Path = tmp_path / "upstream.key"
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context, cert_path

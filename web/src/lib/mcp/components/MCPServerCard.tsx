@@ -8,7 +8,7 @@ import { Button, Card, InputTypeIn, ShadowDiv } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { Card as CardLayout, InputHorizontal, Section } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgSliders } from "@opal/icons";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { InputSwitchField } from "@opal/form";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -83,7 +83,7 @@ export default function MCPServerCard({
                     title={tool.name}
                     description={tool.description}
                   >
-                    <SwitchField
+                    <InputSwitchField
                       name={toolFieldName}
                       disabled={!isServerEnabled}
                     />
@@ -149,7 +149,7 @@ export default function MCPServerCard({
                   enabledCount={enabledCount}
                   totalCount={enabledTools.length}
                 />
-                <SwitchField
+                <InputSwitchField
                   name={serverEnabledField}
                   onCheckedChange={(checked) => {
                     enabledTools.forEach((tool) => {

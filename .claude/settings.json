@@ -9,7 +9,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'IFS= read -r PATH <<%s__ONYX_PATH_EOF__\\n%s\\n__ONYX_PATH_EOF__\\nexport PATH\\n' '\\' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac"
+            "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'IFS= read -r PATH <<%s__ONYX_PATH_EOF__\\n%s\\n__ONYX_PATH_EOF__\\nexport PATH\\n' '\\' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac",
+            "statusMessage": "Add the repo .venv to PATH"
           }
         ]
       },
@@ -19,7 +20,8 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
-            "timeout": 45
+            "timeout": 45,
+            "statusMessage": "Check that the branch has the latest main"
           }
         ]
       }
@@ -30,7 +32,8 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/pre_commit_on_stop.py\"",
-            "timeout": 600
+            "timeout": 600,
+            "statusMessage": "Run pre-commit on the files this turn changed"
           }
         ]
       }
@@ -41,12 +44,27 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/pre_commit_on_stop.py\"",
-            "timeout": 60
+            "timeout": 60,
+            "statusMessage": "Record the files this turn starts with"
           },
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Check that the branch has the latest main"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/opal_migrate_on_edit.py\"",
+            "timeout": 30,
+            "statusMessage": "Check the edited web files for Opal migrations"
           }
         ]
       }

@@ -244,6 +244,18 @@ progress. If `USER_USAGE_TRACKING_ENABLED` is true, `setup_tracing` also
 registers `tracing/processors/user_usage_processor.py:UserUsageTracingProcessor`
 directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 
+A span opened with no trace in scope becomes a `NoOpSpan` and reaches no
+processor (`framework/provider.py:create_span`), so every entry point that runs
+LLM work must open a root trace first. Today those are `chat/llm_loop.py`
+(`run_llm_loop`), `deep_research/dr_loop.py`, `chat/compression.py`,
+`server/query_and_chat/chat_backend.py` (`chat_session_naming`),
+`server/features/build/session/naming.py`, `indexing/indexing_pipeline.py`,
+`indexing/port_reembed.py`, `server/gateway/tracing.py:llm_gateway_trace`, and
+`server/features/search/api.py` (`search_api`, with an `internal_search`
+function span around `SearchTool.run` so the trace shape matches chat's). Trace
+metadata uses `framework/create.py:ChatTraceMetadata` where a chat session
+exists and `SearchTraceMetadata` (tenant, user, persona) where none does.
+
 ### 4.4 The two instrumentation entry points
 
 - `tracing/llm_utils.py:llm_generation_span(llm, flow, ...)`: for any call that
@@ -407,7 +419,10 @@ every five minutes.
   fails with a 4xx `OnyxError` sends no event. This includes a chat that a
   query-processing hook rejects (`QUERY_REJECTED`): the chat stream sends the
   error as a `StreamingError` packet, and `QueryObservation.error_packet` reads
-  only its code.
+  only its code. Chat queries also report `llm_cycles`: `chat/llm_loop.py:run_llm_loop`
+  calls `Emitter.llm_step_started` before each LLM call, and `Emitter.emit` records
+  each model's count when it queues its first answer text. Deep research reports
+  the `deep_research` mode and no cycle count.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.
@@ -652,10 +667,10 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 - **`utils/telemetry.py` is not fleet telemetry.** It holds the Cloud PostHog
   analytics calls (`mt_cloud_telemetry`, `mt_cloud_identify_user`), which run only
   under `MULTI_TENANT`. `DISABLE_TELEMETRY` does not affect them.
-- **`telemetry_chat` reads the channel from a keyword argument.** It reads
-  `new_msg_req` from the call's keywords (`utils/fleet_query_telemetry.py:_channel`).
-  If a caller passes it by position, the query event reports the channel `web`.
-  Nothing fails.
+- **`telemetry_chat` reads the channel and mode from a keyword argument.** It reads
+  `new_msg_req` from the call's keywords (`utils/fleet_query_telemetry.py:_channel`
+  and `_mode`). If a caller passes it by position, the query event reports the
+  channel `web` and the mode `chat`. Nothing fails.
 - **Discord queries report the channel `api`.** The send-message endpoint sets
   the origin to `api` for an API key or PAT caller
   (`server/query_and_chat/chat_backend.py:handle_send_chat_message`), and the

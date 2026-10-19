@@ -60,6 +60,9 @@ interface ContentXlProps {
   /** Enable inline editing of the title. */
   editable?: boolean;
 
+  /** When the pencil shows: on hover of the block, or at rest too. Default: `"hover"`. */
+  editButton?: "hover" | "rest";
+
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
 
@@ -115,6 +118,7 @@ function ContentXl({
   descriptionMaxLines,
   strikethrough,
   editable,
+  editButton = "hover",
   onTitleChange,
   moreIcon1: MoreIcon1,
   moreIcon2: MoreIcon2,
@@ -236,6 +240,7 @@ function ContentXl({
           <div
             className={cn(
               "opal-content-xl-edit-button",
+              editButton === "hover" && "opal-content-xl-edit-button-hover",
               config.editButtonPadding
             )}
           >

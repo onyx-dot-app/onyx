@@ -53,7 +53,7 @@ import ScheduledRunBanner, {
 } from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
-import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsRegion";
+import SessionApprovalsRegion from "@/app/craft/components/approvals/SessionApprovalsRegion";
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
@@ -237,9 +237,6 @@ function ChatPanelContent({
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
-  const nameBuildSession = useBuildSessionStore(
-    (state) => state.nameBuildSession
-  );
   const {
     streamMessage,
     interruptStreaming,
@@ -275,9 +272,6 @@ function ChatPanelContent({
     (state) => state.removeQueuedMessage
   );
   const activeTurnId = session?.activeTurnId ?? null;
-  const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -522,20 +516,6 @@ function ChatPanelContent({
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
         );
 
-        // Schedule naming after delay (message will be saved by then)
-        // Note: Don't call refreshSessionHistory() here - it would overwrite the
-        // optimistic update from consumePreProvisionedSession() before the message is saved
-        if (nameSessionTimeoutRef.current !== null) {
-          clearTimeout(nameSessionTimeoutRef.current);
-        }
-        // Session naming is a store action that must survive unmount. Firing
-        // before the 1s save window would name against an unsaved message.
-        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
-        nameSessionTimeoutRef.current = setTimeout(() => {
-          nameSessionTimeoutRef.current = null;
-          nameBuildSession(newSessionId);
-        }, 1000);
-
         // Stream the response (uses session ID directly, not currentSessionId)
         await streamMessage(newSessionId, message, chosen, attachments);
       }
@@ -550,7 +530,6 @@ function ChatPanelContent({
       streamMessage,
       consumePreProvisionedSession,
       createSession,
-      nameBuildSession,
       router,
       hasUploadingFiles,
       getCurrentMessageFiles,
@@ -701,7 +680,7 @@ function ChatPanelContent({
                               <span>{t("responseStopped.label")}</span>
                             </div>
                           )}
-                          <LiveApprovalsRegion
+                          <SessionApprovalsRegion
                             sessionId={sessionId ?? existingSessionId ?? null}
                           />
                         </>

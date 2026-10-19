@@ -3,12 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
+import { Collapsible, Text } from "@opal/components";
 import { SvgChevronDown, SvgCheckCircle } from "@opal/icons";
 import {
   TodoListState,
@@ -100,7 +95,7 @@ export default function TodoListCard({
   const allCompleted = completed === total && total > 0;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
           "w-full border-[0.5px] rounded-lg overflow-hidden",
@@ -109,7 +104,7 @@ export default function TodoListCard({
             : "bg-background-neutral-01 border-border-01"
         )}
       >
-        <CollapsibleTrigger asChild>
+        <Collapsible.Trigger asChild>
           <button
             className={cn(
               "w-full flex items-center justify-between px-3 py-2",
@@ -153,9 +148,9 @@ export default function TodoListCard({
               )}
             />
           </button>
-        </CollapsibleTrigger>
+        </Collapsible.Trigger>
 
-        <CollapsibleContent>
+        <Collapsible.Content>
           <div className="px-3 pb-3 pt-0 space-y-0.5">
             {todoList.todos.map((todo, index) => (
               <TodoItemRow key={`${todoList.id}-${index}`} todo={todo} />
@@ -168,8 +163,8 @@ export default function TodoListCard({
               </span>
             )}
           </div>
-        </CollapsibleContent>
+        </Collapsible.Content>
       </div>
-    </Collapsible>
+    </Collapsible.Root>
   );
 }

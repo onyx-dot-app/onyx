@@ -68,7 +68,7 @@ shows only when an index run fails or returns nothing.
 
 | File | Holds |
 |---|---|
-| `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. |
+| `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. Its copy (labels, descriptions, tab and option names) is message keys under `admin.connectorsList` (`connectors.<source>.fields.<field>...`); `useConnectorConfiguration` returns the translated config, which every rendering and validation path uses. |
 | `web/src/lib/connectors/constants.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source. `getSourceMetadata`, `isValidSource` and the other getters live in `web/src/lib/connectors/utils.ts`; `SourceMetadata` and `SourceCategory` in `web/src/lib/connectors/types/source.ts`. |
 
 `backend/onyx/connectors/README.md:96,113` names exactly these two files as the
@@ -86,7 +86,7 @@ frontend changes a new connector requires.
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
 | GET | `/admin/connector/status`, `/admin/connector/indexing-status` (POST) | Status and index-attempt history for the admin UI. |
 | GET | `/admin/connector/failed-indexing-status` | |
-| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. |
+| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. The GET lists one page of the file list (`page_num`, `page_size`, plus `total_items` in the response) and resolves file records and legacy sizes for that page only; without `page_size` it still returns every file, as unpaginated callers expect. A zip can hold thousands of files, so both admin file lists page through them (`InlineFileManagement.tsx` over this route, `EditFileLocations.tsx` over the form's own list). |
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
@@ -147,7 +147,16 @@ encryption. This component only consumes the pairing at run time (§4).
   `ImageSection.image_file_id` points at a file-store blob. `TabularSection`
   stages a CSV in the file store (`csv_file_id`) and is streamed row-by-row at
   chunk time so a large sheet never sits on the worker heap
-  (`TabularSection.materialize_text`).
+  (`TabularSection.materialize_text`). When `SKIP_SPREADSHEET_CONTENT` is true,
+  `cross_connector_utils/tabular_section_utils.py:tabular_file_to_sections`
+  returns one `<content-skipped>` `TextSection` instead and parses and stages
+  nothing, so the file indexes as its title only.
+  `extract_and_stage_tabular_file` still stages the raw file. Google Drive,
+  SharePoint/OneDrive (`microsoft_utils/drive_items.py`), blob, Drupal Wiki and
+  the file connector pass the setting. The placeholder is part of the content
+  hash, so a file is re-indexed the next time it is fetched after the setting
+  changes. Docprocessing replaces tabular sections that still reach it in the
+  same way ([[indexing-pipeline]] §4.3).
 - **`DocumentBase`** / **`Document`** (`Document` requires `id`, `source`,
   `sections`, `semantic_identifier`, and `metadata`. On `DocumentBase`, `id` and
   `source` are optional, and the other three are still required. The remaining
@@ -426,7 +435,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have
 a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
@@ -440,7 +449,7 @@ JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
 register real ones today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
@@ -503,7 +512,34 @@ the first index attempt waits on it. `findings.py:bounded_options` and
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
-[[indexing-pipeline]] §4.2.
+[[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
+When one has `FAILED` in the form's latest run, Create first opens an advisory
+(`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
+that states the count and offers to show the checks card or to create the
+connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
+When an edit changes the config, the credential or the access type, the plan modal
+(`web/src/views/admin/connectors/EditConnectorPage/EditPlanModal.tsx`) lists every
+check of the blocking validation with the checks card's rows, titled with the outcome;
+a check that did not finish in time shows as pending. Apply records the validation as
+a check run with trigger `CONNECTOR_CONFIG_UPDATE`, which the pair's run feed lists.
+
+An admin can start the held attempt from the connector page's status card
+(`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps
+`ConnectorCredentialPair.indexing_hold_released_at`; `get_first_indexing_hold`
+ignores a report whose run started before the stamp, so a later run holds again.
+
+Every run of a scope's checks also writes a `capability_check_run` row
+(`db/credential_capability.py`): the RUNNING mark opens it, the completion
+closes it as `PASSED` or `FAILED` (a required, applicable check failed) with the
+report, a failure mark or the stale sweep closes it as `FAILED_TO_RUN` with the
+reason. `Connector.check_freq` (the schedule section's "Run Checks Every", saved
+through the pair `property` route as `check_frequency`) makes the
+`CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS` beat task start a pair's checks with
+trigger `SCHEDULED` once that long has passed since its last run. The connector
+page's run feed (`GET /admin/cc-pair/{id}/runs`, `db/cc_pair_runs.py`) lists
+these runs as kind `checks`, with a popover of the results, and the pair's
+prunes as kind `pruning` from its `sync_record` rows, which now carry the
+`error_message` a failed prune generator recorded.
 
 ### 4.9 Typed configs and credential families
 
@@ -552,14 +588,19 @@ request that sends form values as connector config: Create, check runs and plans
 and binding checks.
 
 A source's credential spec (`web/src/lib/credentials/constants.ts`) shapes the new
-account. Gmail is the one source that still sets accounts up on its own page
-(`OWN_ACCOUNT_SETUP` in `AddConnectorPage/newAccount.ts`). Google Drive types its
-account in: a "Service Account" tab (`google_primary_admin`, then
-`google_service_account_key`, a `jsonFile` field that holds the key file's text) and
-an "OAuth" tab. The OAuth method is `ownSetup`: its tab renders `DriveOAuthSetup`
-(`AddConnectorPage/form/gdrive/Credential.tsx`), whose Google sign-in saves the
-account itself, so the form saves no draft for it. `draft_credentials.py` rejects a
-Google draft whose key is not a service-account key's JSON text.
+account. Gmail and Google Drive share `GOOGLE_ACCOUNT_SPEC`: a "Service Account" tab
+(`google_primary_admin`, then `google_service_account_key`, a `jsonFile` field that
+holds the key file's text) and an "OAuth" tab. The OAuth method is `ownSetup`: its
+tab renders `GoogleOAuthSetup` (`AddConnectorPage/form/google/GoogleOAuthSetup.tsx`),
+whose Google sign-in saves the account itself, so the form saves no draft for it. A
+saved Google account's tab comes from its keys, since an uploaded OAuth app and a
+service account both store `authentication_method: "uploaded"`. `draft_credentials.py`
+rejects a Google-family draft whose key is not a service-account key's JSON text.
+
+Google discovery clients use `google_utils/resources.py:get_google_service` with a
+`GoogleService` enum. Each member pairs its API name with its version: Docs v1,
+Drive v3, Admin directory_v1, or Gmail v1. The helper preserves service-account
+impersonation and passes OAuth credentials through unchanged.
 
 A config also picks how the cc-pair status page breaks the documents down by
 hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
@@ -670,12 +711,12 @@ family keep the source's shape and stay usable by that source only.
 
 | If your change... | Also check |
 |---|---|
-| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/connectors/constants.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
+| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`, with its copy under `admin.connectorsList.connectors.<source>` in every locale), `web/src/lib/connectors/constants.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
 | changes the `Document`/`Section`/`SlimDocument` model | every connector that constructs one directly (no central factory does this for them); [[indexing-pipeline]]'s consumption of the new/changed field; the dedup logic keyed on `Document.id` and `content_hash` |
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
 | changes `capabilities.py` or the `CredentialCapability` enum | `capability_checks/applicability.py`, `registry.py`, `runner.py`, and the `credential_capability_report` schema; the admin UI surface that reads capability reports |
-| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github` `source_operations.py`) and the import-fence test guarding SDK imports |
+| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github`, `youtrack` `source_operations.py`) and the import-fence test guarding SDK imports |
 | changes pruning's diff logic | the invariant in §5.5; verify a connector auth failure still raises rather than producing an empty slim result |
 | touches `credentials_provider.py` | the Redis lock TTL and rotation semantics for every `CredentialsConnector`; static-credential paths used by daily tests |
 
@@ -767,8 +808,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have a gateway; most connectors still make source-API
-  calls inline, so the "one file that talks to the source" guarantee only holds for those eleven today.
+  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have a gateway; most connectors still make source-API
+  calls inline, so the "one file that talks to the source" guarantee only holds for those twelve today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

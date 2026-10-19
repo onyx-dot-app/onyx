@@ -17,7 +17,8 @@ export function SecretField({ field }: SecretFieldProps) {
 
   return (
     <InputVertical
-      title={field.optional ? t("field.optional.title", { label }) : label}
+      title={label}
+      suffix={field.optional ? "optional" : undefined}
       withLabel={field.name}
       subDescription={
         field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
@@ -25,11 +26,7 @@ export function SecretField({ field }: SecretFieldProps) {
     >
       <PasswordInputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? label)
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : label}
       />
     </InputVertical>
   );
@@ -45,7 +42,8 @@ export function ConfigField({ field }: ConfigFieldProps) {
 
   return (
     <InputVertical
-      title={field.optional ? t("field.optional.title", { label }) : label}
+      title={label}
+      suffix={field.optional ? "optional" : undefined}
       withLabel={field.name}
       subDescription={
         field.descriptionKey ? markdown(t(field.descriptionKey)) : undefined
@@ -53,11 +51,7 @@ export function ConfigField({ field }: ConfigFieldProps) {
     >
       <InputTypeInField
         name={field.name}
-        placeholder={
-          field.placeholderKey
-            ? t(field.placeholderKey)
-            : (field.placeholder ?? "")
-        }
+        placeholder={field.placeholderKey ? t(field.placeholderKey) : ""}
       />
     </InputVertical>
   );

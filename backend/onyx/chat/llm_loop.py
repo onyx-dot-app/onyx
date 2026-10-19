@@ -1077,6 +1077,9 @@ def run_llm_loop(
             # This measures how long the user waits before the answer starts streaming
             pre_answer_processing_time = time.monotonic() - loop_start_time
 
+            # Counted here, not in run_llm_step: deep research shares its emitter
+            # with parallel research agents.
+            emitter.llm_step_started()
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,

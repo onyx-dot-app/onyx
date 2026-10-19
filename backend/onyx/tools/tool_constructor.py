@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -9,14 +9,19 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.mcp import (
+    get_mcp_server_by_id,
+    get_mcp_server_user_preferences,
+    user_can_access_mcp_server,
+)
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.tools import get_builtin_tool
+from onyx.db.tools import get_builtin_tool, get_tool_user_preferences
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
@@ -164,6 +169,7 @@ def construct_tools(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
     """Build tools from captured settings; resolve current service credentials."""
     with get_session_with_current_tenant_if_none(db_session) as db_session:
@@ -173,6 +179,7 @@ def construct_tools(
             emitter=emitter,
             user=user,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             search_tool_config=search_tool_config,
             custom_tool_config=custom_tool_config,
             file_reader_tool_config=file_reader_tool_config,
@@ -192,6 +199,7 @@ def _construct_tools_impl(
     file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+    selection_llm_factory: Callable[[], LLM] | None = None,
 ) -> dict[int, list[Tool]]:
     tool_dict: dict[int, list[Tool]] = {}
 
@@ -204,7 +212,35 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
+    mcp_preferences = (
+        get_mcp_server_user_preferences(
+            list(
+                {
+                    tool.mcp_server_id
+                    for tool in configuration.tools
+                    if tool.mcp_server_id is not None
+                }
+            ),
+            user.id,
+            db_session,
+        )
+        if configuration.persona_id == DEFAULT_PERSONA_ID
+        else {}
+    )
     user_oauth_token: str | None = user.live_oauth_token
+    openapi_preferences = (
+        get_tool_user_preferences(
+            [
+                tool.id
+                for tool in configuration.tools
+                if tool.openapi_schema is not None
+            ],
+            user.id,
+            db_session,
+        )
+        if configuration.persona_id == DEFAULT_PERSONA_ID
+        else {}
+    )
 
     search_settings = get_current_search_settings(db_session)
     document_index = get_default_document_index(search_settings, None)
@@ -216,6 +252,7 @@ def _construct_tools_impl(
             user=user,
             persona_search_info=configuration.search,
             llm=llm,
+            selection_llm_factory=selection_llm_factory,
             document_index=document_index,
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,
@@ -394,6 +431,9 @@ def _construct_tools_impl(
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
+            preference = openapi_preferences.get(db_tool_model.id)
+            if preference is not None and not preference.enabled_in_chat:
+                continue
             if not custom_tool_config:
                 custom_tool_config = CustomToolConfig()
 
@@ -454,6 +494,9 @@ def _construct_tools_impl(
 
         # Handle MCP tools
         elif db_tool_model.mcp_server_id:
+            preference = mcp_preferences.get(db_tool_model.mcp_server_id)
+            if preference is not None and not preference.enabled_in_chat:
+                continue
             if db_tool_model.mcp_server_id in mcp_tool_cache:
                 tool_dict[db_tool_model.id] = [
                     mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
@@ -461,6 +504,12 @@ def _construct_tools_impl(
                 continue
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
+
+            if (
+                configuration.persona_id == DEFAULT_PERSONA_ID
+                and not user_can_access_mcp_server(user, mcp_server.id, db_session)
+            ):
+                continue
 
             try:
                 mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)

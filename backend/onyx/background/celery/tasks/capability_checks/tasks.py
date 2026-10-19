@@ -16,8 +16,12 @@ from typing import Any
 from uuid import UUID
 
 from celery import Task, shared_task
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.configs.app_configs import (
+    CONNECTOR_CHECKS_ENABLED,
+)
 from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
@@ -42,7 +46,10 @@ from onyx.connectors.capability_checks.draft_runs import (
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import CapabilityCheckResult
-from onyx.connectors.capability_checks.registry import get_capability_checks
+from onyx.connectors.capability_checks.registry import (
+    get_capability_checks,
+    has_named_capability_checks,
+)
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
     capability_check_run_stale_after,
@@ -50,12 +57,20 @@ from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.capability_checks.stored_run_progress import (
+    StoredRunProgressRecorder,
+)
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.connector_credential_pair import (
+    get_cc_pairs_with_check_schedule,
+    get_connector_credential_pair,
+)
 from onyx.db.credential_capability import (
+    delete_capability_check_runs_older_than,
+    get_latest_capability_check_run_time,
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
@@ -66,8 +81,13 @@ from onyx.db.credentials import (
     fetch_credential_by_id,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
+from onyx.db.models import ConnectorCredentialPair, Credential
+from onyx.server.documents.capability_check_runs import (
+    CapabilityRunEnqueueError,
+    start_capability_check_run,
+)
 
 
 def _await_draft_results(
@@ -200,6 +220,29 @@ def run_capability_checks_task(
                 access_type=parsed_access_type,
                 connector_specific_config=config,
             )
+        merged_prior: list[CapabilityCheckResult] = [
+            *awaited_results,
+            *(
+                CapabilityCheckResult.model_validate(result)
+                for result in prior_results or []
+            ),
+        ]
+        run_check_id_set = (
+            frozenset(run_check_ids) if run_check_ids is not None else None
+        )
+        progress: StoredRunProgressRecorder | None = None
+        if parsed_run_id is not None:
+            progress = StoredRunProgressRecorder(
+                parsed_run_id,
+                [
+                    check
+                    for check in get_capability_checks(source)
+                    if run_check_id_set is None or check.check_id in run_check_id_set
+                ],
+                merged_prior,
+                capability_check_run_stale_after(source),
+            )
+            progress.start()
         report = generate_capability_report(
             credential,
             source=source,
@@ -208,15 +251,9 @@ def run_capability_checks_task(
             input_type=input_type,
             trigger=parsed_trigger,
             access_type=parsed_access_type,
-            check_ids=frozenset(run_check_ids) if run_check_ids is not None else None,
+            on_result=progress.on_result if progress is not None else None,
+            check_ids=run_check_id_set,
         )
-        merged_prior: list[CapabilityCheckResult] = [
-            *awaited_results,
-            *(
-                CapabilityCheckResult.model_validate(result)
-                for result in prior_results or []
-            ),
-        ]
         if merged_prior:
             report = merge_capability_results(report, merged_prior)
         with get_session_with_current_tenant() as db_session:
@@ -242,7 +279,7 @@ def run_capability_checks_task(
                 f"credential {credential_id}, connector {connector_id} "
                 f"(run {run_id}, tenant {tenant_id})."
             )
-    except Exception:
+    except Exception as e:
         # The worker is alive, so record the failure now: without this the scope
         # would read RUNNING until the sweep's staleness window expires. Hard
         # kills still rely on the sweep.
@@ -252,6 +289,7 @@ def run_capability_checks_task(
                 credential_id=credential_id,
                 connector_id=connector_id,
                 run_id=parsed_run_id,
+                error_message=str(e),
             )
             db_session.commit()
         raise
@@ -412,8 +450,69 @@ def check_for_stale_capability_runs(
         db_session.commit()
 
 
+def _checks_due(
+    db_session: Session, cc_pair: ConnectorCredentialPair, now: datetime
+) -> bool:
+    """A pair is due when its check frequency has passed since its checks last
+    started, or since the connector was made if they never ran."""
+    check_freq = cc_pair.connector.check_freq
+    if check_freq is None:
+        return False
+    last_run = get_latest_capability_check_run_time(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    since = last_run or cc_pair.connector.time_created
+    return now >= since + timedelta(seconds=check_freq)
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS,
+    bind=True,
+)
+def check_for_scheduled_capability_checks(
+    self: Task,  # noqa: ARG001
+    *,
+    tenant_id: str,
+) -> None:
+    """Starts the checks of every active pair whose check frequency is due.
+    A pair whose checks are already running is left to that run."""
+    if not CONNECTOR_CHECKS_ENABLED:
+        return
+    with get_session_with_current_tenant() as db_session:
+        cc_pairs = get_cc_pairs_with_check_schedule(db_session)
+        now = get_db_current_time(db_session)
+        for cc_pair in cc_pairs:
+            source = cc_pair.connector.source
+            if not has_named_capability_checks(source):
+                continue
+            if not _checks_due(db_session, cc_pair, now):
+                continue
+            try:
+                row = start_capability_check_run(
+                    db_session,
+                    user=None,
+                    credential_id=cc_pair.credential_id,
+                    connector_id=cc_pair.connector_id,
+                    source=source,
+                    trigger=CapabilityCheckTrigger.SCHEDULED,
+                )
+            except CapabilityRunEnqueueError:
+                task_logger.exception(
+                    f"Scheduled capability checks could not start for pair "
+                    f"{cc_pair.id} (tenant {tenant_id})."
+                )
+                continue
+            if row is not None:
+                task_logger.info(
+                    f"Scheduled capability checks started for pair {cc_pair.id} "
+                    f"(tenant {tenant_id})."
+                )
+
+
 # Far longer than any form session: a draft is changed on every edit.
 DRAFT_CREDENTIAL_MAX_AGE = timedelta(days=7)
+# How long a finished connector check run stays in the run history.
+CHECK_RUN_RETENTION = timedelta(days=90)
 
 
 @shared_task(
@@ -430,4 +529,22 @@ def cleanup_stale_draft_credentials(*, tenant_id: str) -> None:
     if deleted:
         task_logger.info(
             f"Deleted {deleted} stale draft credential(s) (tenant {tenant_id})."
+        )
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_OLD_CAPABILITY_CHECK_RUNS,
+    ignore_result=True,
+    trail=False,
+)
+def cleanup_old_capability_check_runs(*, tenant_id: str) -> None:
+    """Deletes finished check runs past the retention window, so the run
+    history stays bounded. The latest-only report row is untouched."""
+    with get_session_with_current_tenant() as db_session:
+        deleted = delete_capability_check_runs_older_than(
+            db_session, retain_for=CHECK_RUN_RETENTION
+        )
+    if deleted:
+        task_logger.info(
+            f"Deleted {deleted} old capability check run(s) (tenant {tenant_id})."
         )

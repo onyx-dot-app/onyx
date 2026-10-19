@@ -35,7 +35,7 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { InputSwitchField } from "@opal/form";
 import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
@@ -228,9 +228,9 @@ function ConfigInput({
   const name = `config.${field.name}`;
   const placeholder = field.placeholderKey
     ? t(field.placeholderKey)
-    : field.placeholder;
+    : undefined;
   if (field.kind === "switch") {
-    return <SwitchField name={name} />;
+    return <InputSwitchField name={name} />;
   }
   if (field.kind === "chips") {
     return <TagListField name={name} placeholder={placeholder} />;
@@ -389,7 +389,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   >
                     <InputTypeInField
                       name="name"
-                      placeholder="company-a"
+                      placeholder={t("modals.provider.nameField.placeholder")}
                       variant={isEditing ? "disabled" : undefined}
                     />
                   </InputVertical>

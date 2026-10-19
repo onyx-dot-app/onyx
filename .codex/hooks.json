@@ -7,7 +7,8 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/ensure_latest_main.py\"",
-            "timeout": 45
+            "timeout": 45,
+            "statusMessage": "Check that the branch has the latest main"
           }
         ]
       }
@@ -18,7 +19,8 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/pre_commit_on_stop.py\"",
-            "timeout": 600
+            "timeout": 600,
+            "statusMessage": "Run pre-commit on the files this turn changed"
           }
         ]
       }
@@ -29,12 +31,27 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/pre_commit_on_stop.py\"",
-            "timeout": 60
+            "timeout": 60,
+            "statusMessage": "Record the files this turn starts with"
           },
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/ensure_latest_main.py\"",
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "Check that the branch has the latest main"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/opal_migrate_on_edit.py\"",
+            "timeout": 30,
+            "statusMessage": "Check the edited web files for Opal migrations"
           }
         ]
       }

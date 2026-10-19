@@ -7,7 +7,7 @@ import pytest
 
 from onyx.sandbox_proxy.sandbox_identity import resolution as identity_mod
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
-from onyx.sandbox_proxy.sandbox_identity.resolution import IdentityResolver
+from onyx.sandbox_proxy.sandbox_identity.resolution import IdentityResolver, source_ip
 from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 
@@ -136,3 +136,17 @@ def test_with_session_then_without_session_round_trips() -> None:
     session_id = uuid4()
 
     assert sandbox.with_session(session_id).without_session() == sandbox
+
+
+@pytest.mark.parametrize(
+    "address, expected",
+    [
+        ("10.0.0.1", "10.0.0.1"),
+        ("::ffff:10.0.0.1", "10.0.0.1"),
+        ("2001:db8::1", "2001:db8::1"),
+        ("2001:0db8:0:0:0:0:0:1", "2001:db8::1"),
+        ("invalid", None),
+    ],
+)
+def test_source_ip_normalizes_peer(address: str, expected: str | None) -> None:
+    assert source_ip((address, 12345)) == expected

@@ -11,7 +11,17 @@ from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    PeerAddress,
+    SandboxIdentityResolver,
+    source_ip,
+)
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 if TYPE_CHECKING:
     from socket import _RetAddress
@@ -67,44 +77,97 @@ def is_internal(config: DestinationPolicyConfig, address: IPAddress) -> bool:
 
 
 def resolve_destination(
-    config: DestinationPolicyConfig, host: str, port: int
+    config: DestinationPolicyConfig,
+    host: str,
+    port: int,
+    *,
+    scheme: str = "",
+    peer: PeerAddress | None = None,
+    identity: SandboxIdentityResolver | None = None,
+    mcp_resolver: MCPServerResolver | None = None,
+    upstream_addresses: tuple[str, ...] = (),
 ) -> tuple[str, ...] | None:
-    """Return all validated addresses in DNS order, or None if any is blocked."""
+    """Validate existing upstream addresses, or resolve DNS once for a new connection.
+
+    Internal MCP access requires source identity, exact origin, and tenant SSRF permission.
+    Missing context denies the exception. Public and Onyx destinations need no MCP lookup.
+    """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
         return None
     addresses: list[IPAddress]
-    try:
-        addresses = [ipaddress.ip_address(host)]
-    except ValueError:
+    if upstream_addresses:
         try:
-            answers: Sequence[
-                tuple[int, int, int, str, tuple[str | int | bytes, ...]]
-            ] = socket.getaddrinfo(
-                host,
-                port,
-                family=socket.AF_UNSPEC,
-                type=socket.SOCK_STREAM,
-                proto=socket.IPPROTO_TCP,
-            )
-            addresses = [ipaddress.ip_address(str(answer[4][0])) for answer in answers]
-        except (OSError, ValueError) as exc:
-            logger.warning(
-                "Destination resolution failed host=%s port=%s: %s", host, port, exc
-            )
+            addresses = [ipaddress.ip_address(ip) for ip in upstream_addresses]
+        except ValueError:
             return None
+    else:
+        try:
+            addresses = [ipaddress.ip_address(host)]
+        except ValueError:
+            try:
+                answers: Sequence[
+                    tuple[int, int, int, str, tuple[str | int | bytes, ...]]
+                ] = socket.getaddrinfo(
+                    host,
+                    port,
+                    family=socket.AF_UNSPEC,
+                    type=socket.SOCK_STREAM,
+                    proto=socket.IPPROTO_TCP,
+                )
+                addresses = [
+                    ipaddress.ip_address(str(answer[4][0])) for answer in answers
+                ]
+            except (OSError, ValueError) as exc:
+                logger.warning(
+                    "Destination resolution failed host=%s port=%s: %s", host, port, exc
+                )
+                return None
     if not addresses:
         return None
-    is_api: bool = host == config.api_host and port == config.api_port
-    if not is_api and any(is_internal(config, address) for address in addresses):
+    resolved = tuple(dict.fromkeys(str(address) for address in addresses))
+    is_api = host == config.api_host and port == config.api_port
+    if is_api or not any(is_internal(config, address) for address in addresses):
+        return resolved
+
+    if identity is None or mcp_resolver is None or scheme not in {"http", "https"}:
         return None
-    return tuple(dict.fromkeys(str(address) for address in addresses))
+    try:
+        src_ip = source_ip(peer)
+        if src_ip is None:
+            return None
+        sandbox = identity.resolve_sandbox(src_ip)
+        if sandbox is None or not mcp_resolver.allows_destination(
+            sandbox, scheme, host, port
+        ):
+            return None
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+        try:
+            params = outbound_ssrf_params(
+                get_security_settings(allow_fallback=False).ssrf_protection_level
+            )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    except Exception:
+        logger.exception("mcp_destination_error host=%s port=%s", host, port)
+        return None
 
-
-def is_destination_blocked(
-    config: DestinationPolicyConfig, host: str, port: int
-) -> bool:
-    return resolve_destination(config, host, port) is None
+    if not params.allow_private_network:
+        return None
+    # Validate the same answers that will be pinned, including embedded IPv4.
+    for target in (host, *(str(_embedded_address(ip)) for ip in addresses)):
+        authority = f"[{target}]" if ":" in target else target
+        try:
+            validate_outbound_http_url(
+                f"{scheme}://{authority}:{port}",
+                allow_private_network=params.allow_private_network,
+                block_loopback_and_link_local=params.block_loopback_and_link_local,
+                block_link_local_only=params.block_link_local_only,
+                resolve_dns=False,
+            )
+        except (SSRFException, ValueError):
+            return None
+    return resolved
 
 
 def pin_destination(host: str, port: int, addresses: tuple[str, ...]) -> None:

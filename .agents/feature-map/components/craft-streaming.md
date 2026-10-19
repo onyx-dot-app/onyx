@@ -37,6 +37,20 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
+Connected app setup cards link to **App permissions**. This opens the approvals tab in plugin details, without delaying authentication.
+The editor covers external apps and MCP servers. Workspace-disabled actions
+remain visible and locked. Task editors use the same action rows with
+independent saved choices.
+
+Approval cards keep **Approve once**, **Approve for session**, and **Reject**.
+All three call the approval decision endpoint. The session polls lightweight
+approval status every ten seconds. Status changes refresh the history. The history
+contains live requests and recent outcomes. Completed requests become compact,
+neutral tool rows with details collapsed. Expired requests state that the action
+did not run; only pending requests keep the attention border and decision buttons.
+Approval cards use the server live status to show expiry. Device clock differences cannot block decisions.
+The displayed approval deadline comes from the server; a browser does not own the wait.
+
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.
@@ -346,6 +360,11 @@ Malformed quoted fields show an error with a raw-download action.
 Tabs and layout remain independent of stream rendering. Inventory responses require the same session instance.
 Passive reads also require the captured turn; active reads can update metadata after a queued turn starts.
 Tab creation and selection always check the requesting turn. Recreated sessions reject responses from retired instances.
+
+The first accepted interactive turn starts automatic naming through the session store.
+This happens after message persistence and before view ownership checks.
+Naming survives navigation and unmount; failed submissions do not start naming.
+It does not delay stream attachment. See [[craft-sessions]] for name persistence and fallback rules.
 
 ## 5. Contracts and invariants
 

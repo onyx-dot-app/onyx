@@ -7,17 +7,17 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import and_, or_, select, update
+from sqlalchemy.orm import Session, load_only, selectinload
 
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     POLICY_SEVERITY,
+    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    EndpointPolicy,
     GatedAppKind,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger
 
@@ -50,7 +50,7 @@ def insert_action_approval(
         raise ValueError("actions must be non-empty")
     sorted_actions = sorted(
         actions,
-        key=lambda a: POLICY_SEVERITY[EndpointPolicy(a["policy"])],
+        key=lambda a: POLICY_SEVERITY[ActionPolicy(a["policy"])],
         reverse=True,
     )
     gated_app_id = (
@@ -77,6 +77,7 @@ def try_record_decision(
     approval_id: UUID,
     decision: ApprovalDecision,
     decided_via: ApprovalDecidedVia | None = None,
+    created_after: datetime | None = None,
 ) -> ActionApproval | None:
     """Conditional UPDATE that succeeds only while `decision IS NULL`.
 
@@ -94,6 +95,8 @@ def try_record_decision(
         .returning(ActionApproval)
         .execution_options(synchronize_session=False)
     )
+    if created_after is not None:
+        stmt = stmt.where(ActionApproval.created_at >= created_after)
     row = db_session.execute(stmt).scalar_one_or_none()
     db_session.flush()
     if row is not None:
@@ -110,7 +113,7 @@ def get_action_approval(
 
 
 def get_action_approval_for_user(
-    db_session: Session, approval_id: UUID, user_id: UUID
+    db_session: Session, approval_id: UUID, user_id: UUID, *, lock_session: bool = False
 ) -> ActionApproval | None:
     """Row only if the caller owns the parent build_session.
 
@@ -122,7 +125,52 @@ def get_action_approval_for_user(
         .where(ActionApproval.approval_id == approval_id)
         .where(BuildSession.user_id == user_id)
     )
+    if lock_session:
+        # Serialize grants before either request locks its own approval row.
+        stmt = stmt.with_for_update(of=BuildSession)
     return db_session.scalar(stmt)
+
+
+def list_session_action_approvals(
+    db_session: Session,
+    session_id: UUID,
+    *,
+    created_after: datetime,
+    status_only: bool = False,
+) -> list[ActionApproval]:
+    """All live requests and the 50 most recent completed or expired requests."""
+    is_live = and_(
+        ActionApproval.decision.is_(None),
+        ActionApproval.created_at >= created_after,
+    )
+    recent_outcomes = (
+        select(ActionApproval.approval_id)
+        .where(ActionApproval.session_id == session_id, ~is_live)
+        .order_by(ActionApproval.created_at.desc(), ActionApproval.approval_id.desc())
+        .limit(50)
+    )
+    return list(
+        db_session.scalars(
+            select(ActionApproval)
+            .where(
+                ActionApproval.session_id == session_id,
+                or_(is_live, ActionApproval.approval_id.in_(recent_outcomes)),
+            )
+            .options(
+                load_only(
+                    ActionApproval.approval_id,
+                    ActionApproval.created_at,
+                    ActionApproval.decision,
+                    raiseload=True,
+                )
+                if status_only
+                else selectinload(ActionApproval.gated_app)
+            )
+            .order_by(
+                ActionApproval.created_at.desc(), ActionApproval.approval_id.desc()
+            )
+        )
+    )
 
 
 def list_session_pending_action_approvals(

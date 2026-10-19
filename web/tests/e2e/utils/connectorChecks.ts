@@ -12,8 +12,8 @@ const RUN_ID = "e2e-check-run";
 export const MOCK_DRAFT_CREDENTIAL_ID = 999_999;
 
 /**
- * The one check the mock knows: required, and it validates the credential, so
- * it gates the rest of the form as well as Create.
+ * The required check: it validates the credential, so it gates the rest of the
+ * form as well as Create.
  */
 function signInCheck(state: DraftCheckState["state"]): DraftCheckState {
   return {
@@ -34,12 +34,39 @@ function signInCheck(state: DraftCheckState["state"]): DraftCheckState {
   };
 }
 
+/** A check that is not required: failed, it never blocks the form or Create. */
+function commentsCheck(state: DraftCheckState["state"]): DraftCheckState {
+  return {
+    ...signInCheck(state),
+    check_id: "comments",
+    display_name: "Page comments are readable",
+    required: false,
+    validates_binding: false,
+    message: state === "failed" ? "The account cannot read comments." : "",
+  };
+}
+
+export interface MockConnectorChecksOptions {
+  /** The plan also lists a non-required check, which every run fails. */
+  failedOptionalCheck?: boolean;
+}
+
 /**
  * Answers the draft check endpoints: the plan lists one required check that
- * validates the credential, and every run passes it. The real checks call the
- * source with the credential, which a test credential cannot pass.
+ * validates the credential, and every run passes it (`failedOptionalCheck` adds a
+ * non-required one that fails). The real checks need a credential the source accepts.
  */
-export async function mockPassingConnectorChecks(page: Page): Promise<void> {
+export async function mockPassingConnectorChecks(
+  page: Page,
+  { failedOptionalCheck = false }: MockConnectorChecksOptions = {}
+): Promise<void> {
+  const checksFor = (
+    required: DraftCheckState["state"],
+    optional: DraftCheckState["state"]
+  ): DraftCheckState[] =>
+    failedOptionalCheck
+      ? [signInCheck(required), commentsCheck(optional)]
+      : [signInCheck(required)];
   await page.route("**/api/manage/admin/connector-checks/plan", (route) => {
     const request: DraftCheckPlanRequest = route.request().postDataJSON();
     const plan: DraftCheckPlan = {
@@ -47,7 +74,7 @@ export async function mockPassingConnectorChecks(page: Page): Promise<void> {
       access_type: request.access_type,
       form_errors: {},
       unknown_fields: [],
-      checks: [signInCheck("pending")],
+      checks: checksFor("pending", "pending"),
     };
     return route.fulfill({ json: plan });
   });
@@ -68,7 +95,7 @@ export async function mockPassingConnectorChecks(page: Page): Promise<void> {
         status: "completed",
         form_errors: {},
         unknown_fields: [],
-        checks: [signInCheck("passed")],
+        checks: checksFor("passed", "failed"),
       };
       await route.fulfill({ json: latest });
     }

@@ -18,6 +18,39 @@ import type {
 // Indexing
 // ---------------------------------------------------------------------------
 
+/** Cancels one running or queued index attempt. Resolves to `null` once the
+ * server takes it, else to its error detail or `fallback`. */
+export async function cancelIndexAttempt(
+  indexAttemptId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+/** Starts a pair's first index attempt despite its failed checks. Resolves to the error message, or `null` on success. */
+export async function releaseIndexingHold(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
 export async function triggerIndexing(
   fromBeginning: boolean,
   connectorId: number,
@@ -154,7 +187,7 @@ export const submitGoogleSite = async (
   base_url: string,
   refreshFreq: number,
   pruneFreq: number,
-  indexingStart: Date,
+  indexingStart: string | null,
   access_type: AccessType,
   groups: number[],
   name?: string,

@@ -1,0 +1,80 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { Code, CopyButton, Popover, ShadowDiv, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import {
+  PLACEMENT_PROPS,
+  type PopoverPlacement,
+} from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+
+export interface StackTracePopoverContentProps {
+  runId: number;
+  trace: string;
+  placement?: PopoverPlacement;
+}
+
+/** A run's stack trace beside or below its card, with a copy button. The caller provides the Popover and its trigger. */
+export default function StackTracePopoverContent({
+  runId,
+  trace,
+  placement = "beside",
+}: StackTracePopoverContentProps) {
+  const t = useTranslations("admin.connector.activity");
+  return (
+    <Popover.Content
+      width={120}
+      {...PLACEMENT_PROPS[placement]}
+      aria-label={t("tags.stackTrace")}
+      // Focus the panel, not its first button, so the copy tooltip opens only on hover.
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.focus();
+        }
+      }}
+    >
+      <Section
+        alignItems="stretch"
+        gap={1}
+        padding={1}
+        height="auto"
+        className="min-h-0"
+      >
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          gap={1}
+          height="fit"
+          className="shrink-0"
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            gap={0.25}
+            padding={1}
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            <Text font="secondary-body" color="text-03" maxLines={1}>
+              {t("trace.header", { id: runId })}
+            </Text>
+          </Section>
+          <CopyButton
+            prominence="tertiary"
+            size="xs"
+            getCopyText={() => trace}
+            aria-label={t("trace.copy")}
+          />
+        </Section>
+        <ShadowDiv className="max-h-120 overflow-x-auto">
+          <Code tint showCopyButton={false}>
+            {trace}
+          </Code>
+        </ShadowDiv>
+      </Section>
+    </Popover.Content>
+  );
+}

@@ -50,6 +50,7 @@ div.relative                               <- bounding wrapper
 | `interaction` | `"rest" \| "hover" \| "active"` | auto         | JS-controlled interaction override. Falls back to Radix `data-state="open"` or Opal Dropdown `aria-expanded`. |
 | `tooltip`     | `string`                        | —            | Tooltip text shown on hover                                                  |
 | `tooltipSide` | `TooltipSide`                   | `"top"`      | Which side the tooltip appears on                                            |
+| `transparent` | `boolean`                       | `false`      | No fill at rest (`background-tint-01` by default); the tint shows on hover   |
 
 ## Usage
 

@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_SLACK_CLIENT_ID,
     EXT_APP_SLACK_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -49,7 +49,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/conversations.list"),
             RestRoute(method="POST", path="/api/conversations.info"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_READ,
@@ -61,7 +61,7 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/conversations.history"),
             RestRoute(method="POST", path="/api/conversations.replies"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.USERS_READ,
@@ -71,14 +71,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="POST", path="/api/users.list"),
             RestRoute(method="POST", path="/api/users.info"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.SEARCH_READ,
         normalised_name="Search messages",
         description="Full-text search across messages the user can see.",
         matches=(RestRoute(method="POST", path="/api/search.messages"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_WRITE,
@@ -109,6 +109,18 @@ _ENDPOINTS: list[EndpointSpec] = [
         ),
     ),
 ]
+
+
+def _oauth_response_object(response_data: dict[str, Any], key: str) -> dict[str, Any]:
+    value = response_data.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Slack returned an invalid OAuth response.",
+        )
+    return value
 
 
 class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
@@ -186,7 +198,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         # Slack v2 with `user_scope` returns the user token nested
         # under `authed_user`; the top-level `access_token` would be
         # the bot token, which we don't request.
-        authed_user = response_data.get("authed_user") or {}
+        authed_user = _oauth_response_object(response_data, "authed_user")
         access_token = authed_user.get("access_token")
         if not access_token:
             raise OnyxError(
@@ -195,10 +207,11 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "token. Make sure the Slack app has user token scopes "
                 "configured.",
             )
+        team = _oauth_response_object(response_data, "team")
         creds: dict[str, Any] = {
             "access_token": access_token,
-            "team_id": (response_data.get("team") or {}).get("id"),
-            "team_name": (response_data.get("team") or {}).get("name"),
+            "team_id": team.get("id"),
+            "team_name": team.get("name"),
             "authed_user_id": authed_user.get("id"),
             "scope": authed_user.get("scope"),
         }
@@ -211,5 +224,5 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
         # The user token's granted scopes live under `authed_user.scope` (the
         # top-level `scope` would be the bot's), comma-delimited.
-        authed_user = response_data.get("authed_user") or {}
+        authed_user = _oauth_response_object(response_data, "authed_user")
         return parse_granted_scopes(authed_user.get("scope"))

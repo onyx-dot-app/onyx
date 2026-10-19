@@ -140,6 +140,10 @@ env-credential Google login router next to the provider rows. `oauth_refresher.p
 provider row. The removed `AUTH_TYPE=google_oauth|oidc|saml` is not read:
 `verify_auth_setting` (`auth/users.py`) only warns on stale values.
 
+`server/security/store.py:get_security_settings` keeps environment fallback for pre-tenant authentication and failed reads.
+Authorization callers can set `allow_fallback=False` to require tenant context and a successful settings read.
+Both modes share the tenant cache; failed reads never populate it.
+
 ---
 
 ## 3. Data model
@@ -150,7 +154,7 @@ User ──< OAuthAccount (fastapi-users; oauth_name + linked SSOProvider identi
      ──< ApiKey (as owner_id and as the credential's own user_id)
      ──< PersonalAccessToken
      ──< User__UserGroup >── UserGroup ──< PermissionGrant
-     ──< OAuthUserToken >── OAuthConfig  (per-tool/MCP OAuth, distinct from login OAuth)
+     ──< OAuthUserToken >── OAuthConfig  (custom-action OAuth, distinct from login OAuth)
 
 SSOProvider ── encrypted `config` blob (protocol-specific) + allowed_email_domains
 ScimToken   ── hashed bearer token for IdP-driven provisioning
@@ -223,9 +227,15 @@ false. The Community downgrade sets every token inactive
 
 ### `OAuthConfig` / `OAuthUserToken` (`models.py`)
 
-Per-tool/MCP OAuth (for custom actions calling third-party APIs), unrelated
-to login SSO. `client_id`/`client_secret` and the token blob are
-`EncryptedString`/`EncryptedJson`.
+Custom-action OAuth lets each user connect a third-party account to an OpenAPI action.
+`client_id`/`client_secret` and the token blob use `EncryptedString`/`EncryptedJson`.
+`supports_pkce` defaults to false; administrators can enable S256 PKCE for compatible providers.
+MCP stores its credentials separately in `MCPConnectionConfig` ([[mcp-and-custom-tools]] §3).
+
+`GET /user-oauth-token/status` reports literal access-token expiration and saved
+refresh capability separately. `can_refresh` requires a nonempty refresh token
+and configured client credentials. Status reads never refresh tokens or call providers.
+Refresh capability does not prove that the provider will accept a refresh request.
 
 ---
 
@@ -435,6 +445,66 @@ The consent page uses explicit Allow and Deny actions. Connected apps under
 Accounts & Access lists the user's grants and requires confirmation to disconnect.
 
 ---
+
+### Shared outgoing OAuth primitives
+
+`backend/onyx/oauth/authorization_attempt.py` owns pending authorization attempts.
+The store resolves the tenant cache for each operation. Attempts bind an owner,
+namespace, random state, expiry, and typed feature payload. Consumption uses
+`getdel` before token exchange, so each attempt can complete only once.
+Payloads may contain PKCE verifiers. Saved authorization flows keep client secrets outside the attempt.
+Draft connection tests protect unsaved settings with the deployment's credential encryption mechanism.
+This mechanism encrypts values in EE; CE stores them without encryption.
+Draft settings expire in a separate attempt namespace. Provider access and refresh tokens are never cached for tests.
+
+`backend/onyx/oauth/protocol.py` owns pure authorization URL and token-body
+construction. Endpoint query parameters and configured extras cannot override
+state, client identity, redirect URI, response type, scope, or PKCE fields.
+MCP also owns `resource`; action configurations may supply it as an extension.
+Provider adapters retain scope spelling, client authentication, and token parsing.
+Feature routes own permissions, configuration snapshots, and credential storage.
+
+### Custom-action OAuth authorization
+
+`server/features/oauth_config/api.py` starts an attempt through `POST /oauth-config/initiate`.
+The payload holds the configuration ID, validated internal return path, configuration hash, and optional PKCE verifier.
+The hash covers credentials, endpoints, scopes, additional parameters, callback URL, and PKCE setting.
+Client secrets remain outside the attempt payload.
+
+`POST /oauth-config/callback` consumes the caller's attempt before contacting the provider.
+It rejects deleted configurations and configuration changes, including cleared credentials.
+The shared exchange helper sends the stored verifier when PKCE is enabled.
+The route stores the resulting token for the caller and returns the validated return path.
+Provider failures return HTTP 502 with a safe message; the user must start authorization again.
+Database failures propagate separately from provider failures.
+Code exchange and token refresh share HTTP and response validation.
+Both reject redirects and apply a 30-second request timeout. Invalid responses do not replace saved tokens.
+Configuration snapshots check decrypted credential values, so cleared credentials are not shown as configured.
+
+Configuration creation, updates, and initiation reject reserved authorization parameters in endpoint queries and configured extras.
+Action configurations may still supply `resource` through additional parameters.
+Management keeps its owner-or-admin permission checks; initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
+
+### Custom-action OAuth setup checks
+
+`POST /admin/oauth-config/pkce-support` checks OAuth or OpenID Connect provider metadata.
+It requires global `MANAGE_ACTIONS` permission; scoped group-management authority does not grant discovery access.
+The authorization and token endpoints must match the submitted pair before metadata can establish support.
+The result distinguishes advertised S256 support, no advertised S256 support, and unknown support.
+Discovery observes the outbound URL policy and does not send client credentials.
+The manual PKCE setting remains available; detection does not prove that a provider enforces PKCE.
+
+`POST /admin/oauth-config/test/initiate` tests unsaved form values.
+An optional existing configuration ID permits reuse of masked credentials after an ownership check.
+Tests preserve an explicit empty client secret, matching saved authorization; token exchange omits that secret.
+The server applies the deployment's credential protection to the draft configuration.
+It stores the result in an owner-bound, tenant-scoped authorization attempt.
+The test uses the same registered callback URI as saved action authorization.
+A popup session-storage marker selects `POST /admin/oauth-config/test/callback` on return.
+That route consumes the test attempt, exchanges the code, and discards the tokens.
+It returns success and the PKCE setting used, without saving configuration or user tokens.
+Both test endpoints require action-management permission; the popup marker grants no access.
+Provider consent can still create a grant, even though Onyx discards the tokens.
 
 ## 5. Contracts and invariants
 

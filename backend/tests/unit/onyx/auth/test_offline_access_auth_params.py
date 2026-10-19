@@ -3,9 +3,8 @@ asks for offline access; these params must be injected into every flow."""
 
 from urllib.parse import parse_qs, urlparse
 
-from onyx.auth.oauth_token_manager import (
-    OAuthFlowParams,
-    build_oauth_authorization_url,
+from onyx.oauth.protocol import (
+    build_authorization_url,
     ensure_offline_access_auth_params,
 )
 
@@ -44,12 +43,9 @@ def test_non_google_prebuilt_url_unchanged() -> None:
 
 
 def test_build_authorization_url_adds_google_offline_access() -> None:
-    url = build_oauth_authorization_url(
-        OAuthFlowParams(
-            authorization_url=_GOOGLE_AUTH_ENDPOINT,
-            token_url="https://oauth2.googleapis.com/token",
-            client_id="x",
-        ),
+    url = build_authorization_url(
+        authorization_url=_GOOGLE_AUTH_ENDPOINT,
+        client_id="x",
         redirect_uri="https://app.example.com/callback",
         state="s",
     )
@@ -59,13 +55,10 @@ def test_build_authorization_url_adds_google_offline_access() -> None:
 
 
 def test_build_authorization_url_additional_params_override_defaults() -> None:
-    url = build_oauth_authorization_url(
-        OAuthFlowParams(
-            authorization_url=_GOOGLE_AUTH_ENDPOINT,
-            token_url="https://oauth2.googleapis.com/token",
-            client_id="x",
-            additional_params={"prompt": "select_account"},
-        ),
+    url = build_authorization_url(
+        authorization_url=_GOOGLE_AUTH_ENDPOINT,
+        client_id="x",
+        additional_params={"prompt": "select_account"},
         redirect_uri="https://app.example.com/callback",
         state="s",
     )
@@ -75,12 +68,9 @@ def test_build_authorization_url_additional_params_override_defaults() -> None:
 
 
 def test_build_authorization_url_endpoint_embedded_params_win() -> None:
-    url = build_oauth_authorization_url(
-        OAuthFlowParams(
-            authorization_url=f"{_GOOGLE_AUTH_ENDPOINT}?prompt=select_account",
-            token_url="https://oauth2.googleapis.com/token",
-            client_id="x",
-        ),
+    url = build_authorization_url(
+        authorization_url=f"{_GOOGLE_AUTH_ENDPOINT}?prompt=select_account",
+        client_id="x",
         redirect_uri="https://app.example.com/callback",
         state="s",
     )
@@ -90,12 +80,9 @@ def test_build_authorization_url_endpoint_embedded_params_win() -> None:
 
 
 def test_build_authorization_url_non_google_untouched() -> None:
-    url = build_oauth_authorization_url(
-        OAuthFlowParams(
-            authorization_url="https://example.com/authorize",
-            token_url="https://example.com/token",
-            client_id="x",
-        ),
+    url = build_authorization_url(
+        authorization_url="https://example.com/authorize",
+        client_id="x",
         redirect_uri="https://app.example.com/callback",
         state="s",
     )

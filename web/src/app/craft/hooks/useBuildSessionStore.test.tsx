@@ -19,6 +19,7 @@ import * as panelPreferences from "@/app/craft/services/outputPanelPreferences";
 import type {
   OutputInventory,
   ApiDetailedSessionResponse,
+  ApiSessionResponse,
   BuildMessageAttachment,
 } from "@/app/craft/types/streamingTypes";
 
@@ -3985,4 +3986,109 @@ describe("deleting a live session", () => {
       }
     }
   );
+});
+
+// --- Session naming ---
+describe("Session naming", () => {
+  const sessionId = "naming-session";
+  const response: ApiSessionResponse = {
+    id: sessionId,
+    user_id: "user",
+    name: "Saved name",
+    status: "active",
+    created_at: "2026-10-15T00:00:00Z",
+    last_activity_at: "2026-10-15T00:00:00Z",
+    nextjs_port: null,
+    sandbox: null,
+    artifacts: [],
+    sharing_scope: "private",
+    origin: "INTERACTIVE",
+    agent_provider: null,
+    agent_model: null,
+    skills_stale: false,
+  };
+  beforeEach(() => {
+    useBuildSessionStore.setState({
+      sessionHistory: [
+        { id: sessionId, title: "Fresh Craft", createdAt: new Date() },
+      ],
+    });
+  });
+
+  it("uses the name saved by the server in one request", async () => {
+    jest.mocked(api.updateSessionName).mockResolvedValue(response);
+    await useBuildSessionStore.getState().nameBuildSession(sessionId);
+    expect(api.updateSessionName).toHaveBeenCalledTimes(1);
+    expect(api.updateSessionName).toHaveBeenCalledWith(sessionId, null);
+    expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+      "Saved name"
+    );
+  });
+
+  it.each(["My name", "Fresh Craft"])(
+    "does not replace a manual rename to %s with a delayed automatic response",
+    async (name) => {
+      const automatic = deferred<ApiSessionResponse>();
+      jest
+        .mocked(api.updateSessionName)
+        .mockReturnValueOnce(automatic.promise)
+        .mockResolvedValueOnce({ ...response, name });
+      const naming = useBuildSessionStore
+        .getState()
+        .nameBuildSession(sessionId);
+      await useBuildSessionStore.getState().renameBuildSession(sessionId, name);
+      automatic.resolve(response);
+      await naming;
+      expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+        name
+      );
+    }
+  );
+  it("applies automatic naming after a failed manual rename refreshes history", async () => {
+    const automatic = deferred<ApiSessionResponse>();
+    const failure = new Error("Rename failed");
+    jest
+      .mocked(api.updateSessionName)
+      .mockReturnValueOnce(automatic.promise)
+      .mockRejectedValueOnce(failure);
+    jest
+      .mocked(api.fetchSessionHistory)
+      .mockResolvedValue([
+        { id: sessionId, title: "Fresh Craft", createdAt: new Date() },
+      ]);
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const naming = useBuildSessionStore
+        .getState()
+        .nameBuildSession(sessionId);
+      await expect(
+        useBuildSessionStore.getState().renameBuildSession(sessionId, "My name")
+      ).rejects.toBe(failure);
+      expect(api.fetchSessionHistory).toHaveBeenCalled();
+      automatic.resolve(response);
+      await naming;
+      expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+        "Saved name"
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it("updates the saved title after history refresh replaces the placeholder", async () => {
+    const automatic = deferred<ApiSessionResponse>();
+    jest.mocked(api.updateSessionName).mockReturnValueOnce(automatic.promise);
+    jest
+      .mocked(api.fetchSessionHistory)
+      .mockResolvedValue([
+        { id: sessionId, title: "Session naming...", createdAt: new Date() },
+      ]);
+    const naming = useBuildSessionStore.getState().nameBuildSession(sessionId);
+    await useBuildSessionStore.getState().refreshSessionHistory();
+    automatic.resolve(response);
+    await naming;
+    expect(useBuildSessionStore.getState().sessionHistory[0]?.title).toBe(
+      "Saved name"
+    );
+  });
 });

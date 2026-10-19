@@ -4,7 +4,7 @@
 > is relayed through `sandbox-proxy`, a `mitmproxy`-based man-in-the-middle
 > that terminates TLS with its own CA and identifies the sandbox and user.
 > It matches each call against connected external apps and MCP servers. For
-> a matched call it enforces an admin policy (`ALWAYS`/`ASK`/`DENY`) and
+> a matched call it resolves workspace and personal or task policies and
 > injects the real credential in place of a sandbox-visible placeholder. It
 > resolves the session only for `ASK` actions. It forwards unmatched traffic
 > upstream unchanged, under the sandbox egress rules.
@@ -14,13 +14,13 @@
 **Edition:** CE, with a Cloud-only lockdown on built-in credential editing (see `[[craft-admin]]`)
 **Owns:**
 `backend/onyx/sandbox_proxy/` (`server.py`, `request_evaluator.py`,
-`credential_injection.py`, `approval_cache.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
+`credential_injection.py`, `approval_cache.py`, `destination_policy.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
 `sandbox_identity/docker.py`, `certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`, `errors.py`,
 `logging_utils.py`, `mcp_jsonrpc.py`, `addons/gate.py`, `resolvers/external_app.py`,
 `resolvers/mcp_server.py`, `resolvers/mcp_matching.py`, `resolvers/onyx_pat.py`),
 `backend/onyx/external_apps/` (`credentials.py`, `token_refresh.py`,
 `matching/engine.py`, `matching/rules.py`, `matching/request.py`, `providers/`),
-`backend/onyx/db/external_app.py`, `backend/onyx/db/gated_app.py`,
+`backend/onyx/db/external_app.py`, `backend/onyx/db/action_policy.py`,
 `backend/onyx/server/features/build/external_apps/` (`api.py`, `models.py`,
 `oauth.py`), `backend/onyx/server/features/build/approvals/api.py`,
 `backend/onyx/server/features/build/db/action_approval.py`
@@ -68,13 +68,20 @@ sync (`server.py:_Readiness`).
 
 ### User-facing HTTP endpoints (outside the proxy)
 
+Member app responses include `service_urls`: unique literal HTTP(S) origins for display.
+The projection strips credentials, paths, queries, and default ports. Built-in
+escaped hostname dots and hyphens are decoded. Unescaped regex dots and ambiguous
+regex or wildcard hosts are omitted.
+Raw upstream patterns, authentication templates, and organization credentials remain admin-only.
+
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
 | POST | `/api/build/apps/oauth/callback` | `handle_external_app_oauth_callback` (`oauth.py`) | Exchanges the authorization code, stamps `expires_at`, stores per-user credentials. |
-| GET | `/api/build/approvals/sessions/{session_id}/live` | `list_live_approvals` (`server/features/build/approvals/api.py`) | Polled by the frontend to render pending approval cards. |
-| POST | `/api/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | User approves or rejects a parked request. |
-| POST | `/api/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Approves and remembers the grant for the rest of the session (see §4.5). |
+| GET | `/api/build/approvals/sessions/{session_id}/live` | `list_live_approvals` (`server/features/build/approvals/api.py`) | Returns pending approval cards. |
+| GET | `/api/build/approvals/sessions/{session_id}/status` | `list_session_approval_status` (`approvals/api.py`) | Polls IDs, decisions, and server liveness without loading request payloads. |
+| GET | `/api/build/approvals/sessions/{session_id}` | `list_session_approvals` (`approvals/api.py`) | Owner-scoped: all live requests plus the 50 most recent outcomes, including rejected and expired requests. |
+| POST | `/api/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | Accepts `approve_once`, `approve_session`, or `reject`. |
 
 Admin CRUD for `ExternalApp` (`/api/build/admin/apps*`) is owned by
 `[[craft-admin]]`; this document owns what those settings mean at request
@@ -92,7 +99,7 @@ time.
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/certificate_authority/bootstrap.py:build_ca_store`, `sandbox_proxy/sandbox_identity/resolution.py:build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`certificate_authority/kubernetes.py`). |
 | `SANDBOX_PROXY_CA_VOLUME_PATH` | `configs.py` | Docker CA persistence volume (`certificate_authority/docker.py`). |
-| `ONYX_SERVER_URL` | `configs.py` | The one internal host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
+| `ONYX_SERVER_URL` | `configs.py` | The configured internal API host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | `configs.py` | How long the proxy parks a request awaiting an `ASK` decision before claiming `EXPIRED` (`gate.py:_await_decision`). |
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
@@ -101,7 +108,13 @@ time.
 The proxy requires `SANDBOX_PROXY_INTERNAL_CIDRS` at startup when the listener
 uses IPv6 or global clients are enabled. Invalid CIDRs also prevent startup.
 Internal destinations remain blocked for HTTP and CONNECT. The exact
-`ONYX_SERVER_URL` host and port remain the only internal destination exception.
+`ONYX_SERVER_URL` host and port remain an internal destination exception.
+Craft-enabled MCP servers also permit their exact scheme, host, and port for
+users with access in the sandbox tenant. The resolver caches access for 30 seconds.
+Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
+This exception uses `get_security_settings(allow_fallback=False)`; failed reads cannot substitute environment defaults.
+Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
+MCP requests cannot upgrade to WebSocket or other protocols that bypass HTTP action checks.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
@@ -126,7 +139,7 @@ ExternalApp ----------------------< ExternalAppUserCredential (per user, per app
 
 GatedApp (kind, target_id) -- one row per external_app OR mcp_server
     |  external_app_id XOR mcp_server_id  (ck_gated_app_single_target)
-    +--< GatedActionPolicy (action_id -> ALWAYS|ASK|DENY, sparse)
+    +--< WorkspaceActionPolicy (action_id -> ALWAYS|ASK|DENY, sparse)
 
 ActionApproval  -- one row per gated request the proxy parked or auto-decided
     session_id -> BuildSession
@@ -137,7 +150,11 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). They
+  come from the client for fixed-host built-ins and custom apps. Per-account
+  providers resolve their own patterns after the database write path restores
+  masked credentials. Zendesk uses the same validated subdomain for its gateway,
+  OAuth endpoints, and skill files. `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
 - `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
@@ -145,19 +162,18 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
   scope grant, a list when it did; the two must not be conflated.
 - `GatedApp` (`models.py`): the shared identity row for anything
   policy-gated. `CheckConstraint ck_gated_app_single_target` enforces exactly
-  one of `external_app_id` / `mcp_server_id`. Rows are created lazily
-  (`onyx/db/gated_app.py:get_or_create_gated_app_id`); a target with no row
-  has never been policied or approved.
-- `GatedActionPolicy` (`models.py`): sparse per-action override, one row
+  one of `external_app_id` / `mcp_server_id`. Rows are created with external apps and MCP servers. The migration fills missing
+  identities for existing targets. Permission GET endpoints do not create rows.
+- `WorkspaceActionPolicy` (`models.py`): sparse per-action override, one row
   per `(gated_app_id, action_id)`. An unset action resolves to the catalog's
   `default_policy` at read time
-  (`external_apps/providers/registry.py:effective_policy`), not a stored row
+  (`external_apps/providers/registry.py:action_policy_views`), not a stored row
   with a default value.
 - `ActionApproval` (`models.py`): one row per gated request, whether
   parked for a human or auto-decided by a grant. `decision IS NULL` means
   pending or a proxy-crash orphan; `actions[0]` (JSONB, insertion-sorted
   strictest-first) is what governed the request
-  (`server/features/build/db/action_approval.py:insert_action_approval`).
+  (`db/action_approval.py:insert_action_approval`).
 - `Sandbox.encrypted_pat` (`models.py`): the sandbox's own scoped Onyx
   API token, decrypted only inside `OnyxPatResolver.resolve`
   (`sandbox_proxy/resolvers/onyx_pat.py`).
@@ -165,6 +181,52 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
   attributed to; see `[[craft-sessions]]`.
 
 ---
+
+### Action permission ownership
+
+Members manage app and MCP approval settings in the existing plugin detail modal at
+`/app/plugins` and `/craft/v1/plugins`. Connected Craft-capable plugins have an Approval settings tab.
+OpenAPI plugins do not expose this tab: main Chat does not enforce Craft approval settings.
+Connecting an external app or Craft MCP server opens its approval settings after authentication succeeds.
+The Connection tab retains account controls and the existing default-use switches.
+Admin, personal, and task forms share `web/src/sections/actions/PolicyEditor.tsx`.
+Search narrows visible actions. The matching-action count sits on the left; Set permissions aligns on the right.
+This menu offers Auto-approve, Ask, Disabled, and a separated reset action. Each row uses the same Auto-approve, Ask, and Disabled buttons as MCP tools.
+Workspace-disabled controls show a hover tooltip that explains the admin restriction.
+Save stays disabled until a policy changes. Closing with unsaved changes requires discard confirmation.
+Bulk policy changes affect shown editable actions.
+Personal Reset all clears overrides so choices inherit workspace defaults, regardless of search.
+Task Reset all copies workspace defaults into independent task choices. Locked choices stay unchanged.
+Admin Reset all restores catalog defaults.
+All controls change only the modal draft. Personal Save persists it; task Save changes updates the task
+form draft, which persists when the user saves the task.
+
+`workspace_action_policy` stores workspace restrictions and defaults.
+Users can edit MCP approval settings while they have personally disabled the server in Craft.
+Personal and task configuration catalogs retain these servers and their saved approval settings.
+The MCP credential resolver still blocks personally disabled servers at execution time.
+
+`user_action_policy` stores personal choices; `scheduled_task_action_policy`
+stores independent task choices. `gated_app.users_can_manage_policies` controls
+whether personal and task choices apply. Workspace `DENY` always blocks.
+With user management disabled, workspace settings apply. Otherwise missing
+personal settings inherit the workspace default, while missing task settings ask.
+`onyx/db/action_policy.py:resolve_action_policies` owns these rules.
+The same module owns shared app identity lookup, workspace policy storage, and batched policy reads.
+One-app modals use `GET /action-policies/{kind}/{target_id}` under the user or admin router.
+Personal approval tabs fetch a fresh snapshot on first opening. Each modal opening owns its request.
+MCP workspace editors also wait for current server data before creating their draft.
+Later refreshes do not replace that draft. Switching tabs preserves edits. Saving disables the user-management switch.
+Closing a linked permissions modal removes only its `actionPolicies` query parameter.
+Reads return `effective_policy`, `workspace_policy`, and `stored_policy` for each action.
+Saves validate catalog IDs and workspace restrictions directly; they do not construct UI responses.
+All workspace write routes call `replace_workspace_action_policies` for validation and persistence. `db/external_app.py` owns app configuration and credentials.
+
+`ApprovalChoice` accepts `approve_once`, `approve_session`, or `reject`. These are request choices;
+`ApprovalDecision` stores `APPROVED`, `REJECTED`, or `EXPIRED`. There is one decision endpoint.
+
+The migration preserves workspace policy values and converts known actions in
+pre-approved task apps into task policy rows. It adds no permission snapshots.
 
 ## 4. How it works
 
@@ -183,9 +245,25 @@ sandbox process (opencode / a tool call)
      sandbox_proxy/addons/gate.py:GateAddon.http_connect
   │
 2. Destination checks and address pinning
-     is_destination_blocked(config, host, port) rejects non-global addresses
-     and configured internal CIDRs, except ONYX_SERVER_URL's exact host:port.
+     resolve_destination applies one policy across all three hooks.
+     For new connections, it resolves DNS once. For reused connections, it checks
+     their addresses. Public addresses and ONYX_SERVER_URL's exact host:port pass.
+     Other addresses require an accessible Craft MCP origin.
+     CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
+     or the accepted CONNECT origin before allowing internal MCP addresses.
+     For internal addresses, resolve_destination identifies the source sandbox,
+     checks exact MCP origin access, and reads tenant SSRF settings without fallback.
+     resolve_destination applies these settings to the original DNS answers,
+     including embedded IPv4, with the shared URL validator.
+     Public and Onyx destinations do not require MCP or tenant-settings reads.
+     Only these validated addresses are pinned.
+     Raw TCP forwarding is disabled, so CONNECT payloads must pass HTTP checks.
      http_connect and request check destinations before processing traffic.
+     The gate records approved addresses for pending upstream connections, then
+     replaces them with the actual peer address when connected. Each request checks
+     matching pool candidates because mitmproxy selects the connection after request().
+     Disconnects and connection failures remove these records. This stores connection
+     facts, not access decisions, so policy changes apply to reused sockets.
      server_connect resolves and validates all answers again, then pins the
      upstream TCP connection to those addresses through UpstreamEventLoop.
      No new hostname lookup occurs between validation and connection.
@@ -213,28 +291,29 @@ sandbox process (opencode / a tool call)
      McpRequestEvaluator, first non-None verdict wins. The external-app
      evaluator matches request.url against every enabled app's
      upstream_url_patterns (resolve_app_for_url), then classifies the request
-     into catalog action(s) via recognize_actions + apply_credential_gate.
+     into catalog action(s) via recognize_actions, carrying catalog defaults.
+     Missing credentials never remove a managed action from recognition.
      The MCP evaluator attributes by host + longest-path-prefix
      (resolvers/mcp_matching.py:match_request) among the user's accessible
      craft-enabled MCP servers, then parses the JSON-RPC body
      (mcp_jsonrpc.py:classify_mcp_request) to find the invoked tool name(s).
-     A matcher exception, or no app/server owning the URL at all, yields
-     matched_actions = None ("off-catalog").
+     Only traffic with no owning app/server yields None. MCP protocol setup
+     returns McpProtocolRequest and requires a verified session and task app access.
+     Unknown external-app actions require approval. Recognition errors block.
      sandbox_proxy/request_evaluator.py:CompositeRequestEvaluator.evaluate
   │
 6. Policy evaluation
-     matched_actions is None        -> off-catalog: skip policy evaluation (ungated),
-                                        but continue to step 7 for host-based credential
-                                        injection or a credential-error block.
-     governing_action.policy DENY   -> 403 policy_denied, no DB row, request not forwarded.
-     governing_action.policy ALWAYS -> proceed straight to credential injection (step 7).
-     governing_action.policy ASK    -> resolve the originating BuildSession from the
-                                        in-band session tag (fail closed if absent/
-                                        unverifiable); check for a reusable grant
-                                        (scheduled-task pre-approval, or a live
-                                        session grant); if none, persist an
-                                        ActionApproval row, announce it, and park
-                                        on a wake channel until decided or expired.
+     Resolve the verified session before any managed action can proceed.
+     Read current workspace and personal or active-task settings from the DB.
+     For batches, the strictest resolved policy governs:
+     DENY   -> 403 policy_denied, no approval row, no forwarding.
+     ALWAYS -> inject credentials using the current resolved permission.
+     ASK    -> check an existing session grant. Otherwise persist an approval,
+               announce it, and wait for its decision or expiry.
+     After a grant or approval, recheck the original execution and live policies.
+     Read approval scope from its saved decision, including API-approved batches.
+     A finished task cannot fall back to personal settings for its waiting request.
+     No app/task permission cache or whole-app task grant can bypass this flow.
      sandbox_proxy/addons/gate.py:GateAddon._resolve_and_match, ._await_decision
   │
 7. Credential injection
@@ -362,7 +441,7 @@ process's memory and the encrypted DB columns
 `Sandbox.encrypted_pat`, all `EncryptedJson`/`SensitiveValue`). A sandbox
 attempting to curl the credential-issuing DB or the proxy's own control
 plane directly, rather than through a matched app request, would be a
-request to an internal address and blocked by `is_destination_blocked`
+request to an internal address and blocked by `resolve_destination`
 (§4.1 step 2) before it ever reached anything that could answer.
 
 ### 4.5 Approvals
@@ -372,14 +451,15 @@ For an `ASK`-policied action with no applicable grant,
 adds it to an in-memory `ParkedApprovals` set, and best-effort `RPUSH`es its
 id onto `approval:announce:{session_id}` (`approval_cache.py:announce_approval`)
 so the chat-stream merger can surface the card on the live SSE stream; a miss
-just falls back to the frontend's next `/live` poll
-(`GET /api/build/approvals/sessions/{session_id}/live`). The proxy then
+just falls back to the frontend's next status poll
+(`GET /api/build/approvals/sessions/{session_id}/status`). A status change refreshes
+the full history once. The proxy then
 `BLPOP`s `approval:wake:{approval_id}` for up to
 `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`
 (`approval_cache.py:wait_for_wake`); the user's decision
 (`POST /api/build/approvals/{approval_id}/decision`) writes the DB row via
 `try_record_decision` (the sole race arbiter,
-`server/features/build/db/action_approval.py:try_record_decision`) and
+`db/action_approval.py:try_record_decision`) and
 `RPUSH`es the wake key. A timeout with no wake claims `EXPIRED`
 conditionally, falling back to whatever decision actually won the DB race
 (`gate.py:_claim_expired_or_read_winner`). See `[[craft-sessions]]` for how
@@ -387,25 +467,78 @@ the session and its live stream are structured; see
 `[[observability]]` for notification delivery
 (`_notify_approval_requested`).
 
-Two grant sources let an `ASK` request bypass the human prompt entirely:
+The shared decision handler checks ownership and the existing 180-second eligibility window.
+Conditional writes arbitrate approval, rejection, and proxy expiry. Identical retries return the
+saved result; retries cannot change approval scope. Session grants and matching pending decisions
+commit before cache updates and wake notifications. Session grants lock the parent session before updating approval rows to prevent concurrent grants from deadlocking. `ApprovalView.expires_at` is computed from
+creation time and configuration for display; no deadline column is stored.
+`can_approve_for_session` is false for unrecognized external actions and deleted targets.
 
-- **Scheduled-task pre-approval** (`_scheduled_task_grant`): a `RUNNING`
-  scheduled run whose task configuration pre-approved this `(kind, target_id)`.
-- **Session grant** (`_session_grant`): the user previously chose
-  "approve for this session" via `submit_session_grant`; cached per-action in
-  Redis (`approval_cache.cached_session_grants_cover`) with the persisted
-  `ActionApproval` rows as the durable source of truth.
+A **session grant** (`_session_grant`) can approve the currently permitted
+`ASK` actions after the user chooses "Approve for session". Cached action IDs
+use persisted `ActionApproval` rows as the source of truth. Each reuse writes
+an approved row with `decided_via=SESSION_GRANT`. Live Disabled settings still
+block; the proxy rechecks them before forwarding. Unknown external actions
+require individual approval; historical `unspecified` session grants do not apply.
 
-Either grant source still writes an `ActionApproval` row (pre-decided
-`APPROVED`, tagged with the originating `decided_via`), so the audit trail is
-identical in shape whether a human or a grant decided.
+Task permissions use the same resolver as personal settings. They no longer
+use whole-app grants or a separate grant cache. The proxy reads the active run
+for each request and pins its identity across approval waits.
 
 ### 4.6 OAuth connect and token refresh
 
+Members manage external-app accounts at `/app/plugins` and
+`/craft/v1/plugins`. The Craft list excludes OpenAPI actions and uses
+`craft_connected` for MCP credentials. External apps remain Craft-only.
+The shared directory fills the remaining Craft pane and centers its content.
+Search sits beside connection filters below the heading. Craft and CraftEmpty
+stories cover the populated and empty layouts.
+The old `/craft/v1/apps` route preserves query parameters when redirecting.
+The nested OAuth callback still exchanges the code before returning.
+Connected app details retain a Review skills link when an associated skill
+is disabled. Craft MCP details omit the unfetched Chat tool catalog.
+
+OAuth start accepts an optional safe internal `return_path`. It persists
+that path in Redis state and returns it after exchange. Plugin popup flows
+then verify the app's authenticated state before notifying the opener.
+Without that path, the existing Craft SetupCard popup protocol stays unchanged.
+
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
-authorize URL (`server/features/build/external_apps/oauth.py`); the callback
-exchanges the code, stamps an absolute `expires_at`
-(`external_apps/token_utils.py:stamp_expires_at`) and stores the granted scopes verbatim.
+authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).
+Each attempt is bound to the user, tenant, app, and OAuth configuration.
+`AuthorizationAttemptStore` keeps attempts for ten minutes through `CacheBackend`.
+GitHub, Linear, and Zendesk use S256 PKCE. Other providers keep their existing exchange format.
+The callback consumes the attempt before token exchange and rejects changed configuration.
+A failed exchange requires a new connection attempt; retries cannot reuse state.
+The callback rejects malformed provider data and non-string access tokens before storage.
+Providers own scope parameters, client authentication, and token and grant extraction.
+The callback stamps an absolute `expires_at`
+(`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
+
+Zendesk uses a Confidential OAuth client with S256 PKCE and a client secret.
+It requests `read`, `tickets:write`, `hc:write`,
+`side_conversations:write`, and `macros:write` scopes. All five are requested.
+Help Center, side conversations, and macros have separate read and write action policies.
+Reads default to `ALWAYS`; writes default to `ASK`, including nested and bulk resource routes.
+The skill uses its existing `call` command for these workflows. Articles start as drafts;
+macro examples use a personal restriction. Zendesk roles and feature availability still apply.
+View and trigger write scopes are not requested.
+Search and ticket audits require broad `read`; resource-specific read scopes do not cover these endpoints.
+Existing users must reconnect after allowed scopes change to obtain the new grant.
+
+The resolved `OAuthFlowSpec` comes from
+`OAuthExternalAppProvider.resolve_oauth_flow`, not straight from the
+spec: a provider whose endpoints live on the customer's own host (Zendesk's
+`<subdomain>.zendesk.com`) resolves them from the app's organization
+credentials. Both OAuth routes and the refresh path resolve them the same
+way. The attempt fingerprint includes these resolved endpoints, so an account
+change rejects pending callbacks before any token exchange. The same resolved
+configuration supplies URLs, scopes, and PKCE settings. Refresh requires the
+resolved token URL; it cannot fall back to an unresolved spec template.
+
+`OAuthExternalAppProvider.extract_credentials` maps standard OAuth token responses for GitHub and Zendesk.
+Providers with different fields or nested tokens override this mapping.
+Absent refresh fields remain omitted, so refresh merging preserves stored values.
 
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`
@@ -481,18 +614,27 @@ they can never disagree about which server owns a request; see
    request. `_resolve_and_match` sets the 403 and returns before `request()`
    ever reaches credential injection or forwarding
    (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
-3. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
+3. **An app's `upstream_url_patterns` pin a literal upstream host.**
+   The host is the credential-injection boundary: a pattern spanning a whole
+   domain would let a prompt-injected agent spend this tenant's token on
+   another account of the same vendor. `UrlGlob` enforces this for `CUSTOM`
+   apps (the host may hold no wildcard). Fixed-host built-ins use submitted
+   regexes. Per-account providers resolve their patterns on create and config
+   updates, after masked credentials are restored. Zendesk validates one DNS
+   label and escapes it before substitution. Invalid account values reject the
+   write instead of saving a gateway that cannot inject credentials.
+4. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the
    IP-resolved user" check in `resolve_session_by_id`; removing it would let
    a compromised sandbox process attribute an approval to any session,
    including a different user's if that check is what enforces the boundary.
-4. **The CA is scoped to the sandbox and must never leave it.** The private
+5. **The CA is scoped to the sandbox and must never leave it.** The private
    key lives only in the CA store (`Secret`/volume) and the proxy process;
    only the public cert is projected to sandboxes. A change that starts
    mounting `ca.key` (or the K8s `Secret` itself) into the sandbox namespace
    breaks this.
-5. **An unmatched request's default depends on *what* went unmatched, and
+6. **An unmatched request's default depends on *what* went unmatched, and
    the two cases differ:**
    - A request that matches **no connected app and no MCP host at all**
      (`resolve_app_for_url` finds nothing, and no MCP server host claims
@@ -505,39 +647,46 @@ they can never disagree about which server owns a request; see
      `server_url` prefix is not pass-through. `MCPServerResolver.claims`
      still claims the host, and `MCPServerResolver.resolve` blocks the
      request with `CredentialUnavailableError` (`credential_error`).
-   - A request that matches a **connected, available app** but no specific
-     catalog action defaults to a synthesized whole-domain `ASK`
-     (`WHOLE_DOMAIN_ACTION_TYPE = "unspecified"`,
-     `matching/engine.py:apply_credential_gate`), not `ALWAYS`. An app whose
-     credentials are currently unavailable forwards bare (no prompt) unless a
-     matched action is explicitly `DENY`, in which case the `DENY` still
-     applies without credentials.
-   - An MCP tool call with no admin override defaults to `ASK`
-     (`request_evaluator.py:MCP_TOOL_DEFAULT_POLICY`).
-6. **MCP matching must fail closed when the body cannot be parsed.** Any
+   - A request that matches a **connected app** but no catalog action
+     defaults to `ASK` (`WHOLE_DOMAIN_ACTION_TYPE = "unspecified"`,
+     `matching/engine.py:recognize_actions`). Required credentials are checked
+     separately before injection. Missing credentials block the request;
+     credentialless apps can still proceed when permission allows it.
+   - An MCP tool's catalog default is `ASK`
+     (`request_evaluator.py:MCP_TOOL_DEFAULT_POLICY`). The shared resolver
+     applies workspace and owner choices before enforcement.
+   - MCP protocol requests retain their server attribution. They require a verified
+     session and, during a task run, explicit task access to that app. This includes
+     resources, prompts, initialization, and bodyless GET/DELETE requests.
+     These requests do not require action approval.
+   - Tasks cannot use an app until it is enabled for that task. This check precedes
+     workspace defaults, personal settings, and session approvals. Disabling an app
+     also blocks requests that are waiting for approval.
+7. **MCP matching must fail closed when the body cannot be parsed.** Any
    non-plumbing, non-well-formed-`tools/call` body on a matched MCP host is
    `UNCLASSIFIABLE` and becomes a synthetic `DENY`
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
-7. **The upstream socket must use only validated destination addresses.**
+8. **The upstream socket must use only validated destination addresses.**
    `http_connect` and `request` reject forbidden destinations early.
+   Requests recheck pending and connected upstream addresses under current policy.
    `server_connect` calls `resolve_destination` and rejects the entire answer
    set if any address is forbidden. `pin_destination` and `UpstreamEventLoop`
    use those approved addresses for the TCP connection without another DNS
    lookup. Preserve the original hostname for TLS SNI, certificate verification,
    and credential matching. Keep the real TLS tests when changing mitmproxy;
    they verify address pinning, hostname checks, and credential injection.
-8. **`try_record_decision` is the only writer of a terminal decision;** any
+9. **`try_record_decision` is the only writer of a terminal decision;** any
    new path that can end an approval (a new UI action, a new grant source)
    must go through it, not write `ActionApproval.decision` directly, or the
    proxy's wake/expire race arbiter breaks.
-9. **External-app matcher exceptions are fail-open to "off-catalog", by
-   design; credential resolution and destination blocking are the actual
-   security boundary, not the matcher.** A bug in `recognize_actions` must
-   not become a way to reach an internal address or bypass the CA/identity
-   layers; it only affects whether a request looks like an app action versus
-   general internet traffic. MCP is different. After `McpRequestEvaluator`
-   attributes a request to a server, an exception from
-   `classify_mcp_request` becomes a synthetic `DENY` (fail closed).
+10. **Recognition and policy-loading failures block forwarding.** An error
+    cannot become ordinary ungated traffic or authorize credential injection.
+    MCP classification errors on attributed servers remain synthetic `DENY`.
+11. **Managed actions require a verified session, including Auto-approve.**
+    Resolve context before selecting personal or task settings. After approval,
+    recheck policies and the original run before forwarding. Scheduled sessions
+    without a running task cannot fall back to personal settings. Rebuild batch order
+    after policy resolution so the strictest current action governs.
 
 ---
 
@@ -545,7 +694,7 @@ they can never disagree about which server owns a request; see
 
 **Depends on**
 - `[[craft-admin]]`: owns `ExternalApp`/`GatedApp` admin CRUD, the
-  catalog `default_policy` and `GatedActionPolicy` values this document reads at request
+  catalog `default_policy` and `WorkspaceActionPolicy` values this document reads at request
   time, and the network-lockdown-vs-action-gate distinction this document's
   §5 restates precisely for the proxy's own enforcement code.
 - `[[craft-sandboxes]]`: the sandbox pod/container this proxy identifies by
@@ -569,7 +718,7 @@ they can never disagree about which server owns a request; see
 - Every Craft sandbox session that connects an external app or MCP server,
   or calls back into the Onyx API.
 - `[[observability]]`: `create_notification` calls for
-  `APPROVAL_REQUESTED` and pre-approved/session-granted actions.
+  `APPROVAL_REQUESTED` and session-granted actions.
 
 ---
 
@@ -583,9 +732,9 @@ they can never disagree about which server owns a request; see
 | changes identity resolution (`sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`, `sandbox_identity/docker.py`) | the duplicate-IP fail-loud check at initial sync; `/healthz` readiness semantics; the session-tag verification in `resolve_session_by_id` (§4.3); both `SandboxIPLookup` backends must stay behavior-identical |
 | changes credential injection (`credential_injection.py`, any resolver) | the first-claim-wins resolver order in `server.py:build_resolvers`; whether a claim with no headers (`CLAIMED`) vs. a hard failure (`BLOCKED`) is still correct for the new resolver; `logging_utils.py`'s "header names only, never values" invariant |
 | changes the CA bootstrap or persistence (`certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`) | every running sandbox's trust store (a rotated CA without a coordinated sandbox restart breaks every in-flight TLS interception); the K8s cross-namespace `ConfigMap` projection; the half-written-state fail-loud recovery path |
-| changes the approval flow (`gate.py`'s park/wake, `approval_cache.py`, `action_approval.py`) | `[[craft-sessions]]`'s live-stream announce path; the SIGTERM drain (`GateAddon.drain_inflight`) that must terminalize every parked approval before the proxy pod exits; the frontend's `/live` polling fallback |
+| changes the approval flow (`gate.py`'s park/wake, `approval_cache.py`, `action_approval.py`) | `[[craft-sessions]]`'s live-stream announce path; the SIGTERM drain (`GateAddon.drain_inflight`) that must terminalize every parked approval before the proxy pod exits; the frontend's approval-status polling fallback |
 | changes the request body cap (`PARSER_MAX_BODY_BYTES`) | §9's body-limit footgun; whether the new limit still matches or exceeds the relevant upstream's own limit, so the proxy is never the more restrictive failure |
-| changes `GatedApp`/`GatedActionPolicy` | both consumers: `external_apps/api.py` (admin writes) and this document's live enforcement (`request_evaluator.py`, `addons/gate.py`); MCP servers share this table with external apps |
+| changes `GatedApp`/`WorkspaceActionPolicy` | both consumers: `external_apps/api.py` (admin writes) and this document's live enforcement (`request_evaluator.py`, `addons/gate.py`); MCP servers share this table with external apps |
 
 ---
 
@@ -678,14 +827,9 @@ that arbiter without extending it.
   enabling request streaming anywhere in the chain will start blocking
   requests that previously worked, with `body_too_large`, not a clearer
   error.
-- **External-app matcher exceptions fail *open* to off-catalog, not closed.**
-  MCP classification failures on an attributed server fail closed (`DENY`).
-  A bug in `recognize_actions` or the URL/glob matching does not deny the request; it
-  makes the request look like ordinary (ungated) traffic to a host-claiming
-  resolver. This is a deliberate trade-off (the matcher is a heuristic
-  classifier, not the security boundary) but it means a matching bug is
-  silent from a security-audit standpoint: nothing 403s, the action just
-  stops being gated.
+- **Recognition errors block requests.** Database or catalog failures must not
+  be converted into unrelated traffic. Unrelated traffic and MCP setup remain
+  permitted through their existing credential and destination checks.
 - **The MCP session-tag header is a same-user attribution hint, not a
   security boundary** (`gate.py`'s own comment on
   `MCP_SESSION_TAG_HEADER`). A compromised sandbox process can forge it to

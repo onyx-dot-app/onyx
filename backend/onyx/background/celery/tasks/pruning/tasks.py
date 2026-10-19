@@ -68,7 +68,12 @@ from onyx.db.hierarchy import (
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
-from onyx.db.sync_record import insert_sync_record, update_sync_record_status
+from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
+from onyx.db.sync_record import (
+    insert_sync_record,
+    record_sync_record_error,
+    update_sync_record_status,
+)
 from onyx.db.tag import delete_orphan_tags_batched
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import (
@@ -435,7 +440,7 @@ def try_creating_prune_generator_task(
             return None
 
         # skip pruning if doc permissions sync is running
-        if redis_connector.permissions.fenced:
+        if get_open_doc_permission_sync_attempt(cc_pair.id, db_session) is not None:
             logger.info(
                 "try_creating_prune_generator_task: cc_pair=%s permissions sync running",
                 cc_pair.id,
@@ -830,10 +835,29 @@ def connector_pruning_generator_task(
         # them) and the next beat would re-enumerate and re-queue the whole set;
         # keeping the fence lets the monitor finalize the in-flight taskset, and
         # generator_failed makes it record a FAILED prune instead of a false success.
-        if redis_connector.prune.generator_complete is None:
-            redis_connector.prune.reset()
-        else:
+        fanned_out = redis_connector.prune.generator_complete is not None
+        if fanned_out:
+            # Marked first, so the monitor cannot finalize the taskset as a success meanwhile.
             redis_connector.prune.set_generator_failed()
+        # The error lands while the fence still holds, so a prune queued
+        # meanwhile cannot become the latest record and take it. A failed write
+        # must not keep the fence up.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                record_sync_record_error(
+                    db_session,
+                    entity_id=cc_pair_id,
+                    sync_type=SyncType.PRUNING,
+                    error_message=format_error_for_logging(e),
+                    finish=not fanned_out,
+                )
+        except Exception:
+            task_logger.exception(
+                f"Pruning error not recorded: cc_pair={cc_pair_id} payload_id={payload_id}"
+            )
+        if not fanned_out:
+            # Nothing finalizes a prune that never fanned out, so it ends here.
+            redis_connector.prune.reset()
 
         raise e
     finally:
@@ -885,6 +909,8 @@ def monitor_ccpair_pruning_taskset(
     # A generator that threw after fan-out still drains its tasks; record FAILED
     # so the prune retries after the backoff instead of advancing last_pruned.
     failed = redis_connector.prune.generator_failed
+    # Read before any commit, so a Redis error here leaves nothing half done.
+    failed_docs = redis_connector.prune.failed_docs
     if failed:
         task_logger.warning(
             f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
@@ -907,6 +933,7 @@ def monitor_ccpair_pruning_taskset(
         sync_type=SyncType.PRUNING,
         sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
+        num_docs_failed=failed_docs,
     )
 
     redis_connector.prune.taskset_clear()

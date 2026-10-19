@@ -8,7 +8,10 @@ export interface ConnectorBase<T> {
   connector_specific_config: T;
   refresh_freq: number | null;
   prune_freq: number | null;
-  indexing_start: Date | null;
+  /** Seconds between scheduled runs of the connector checks. Left out or `null`, they run only on request. */
+  check_freq?: number | null;
+  /** ISO timestamp, as the API sends and accepts it. */
+  indexing_start: string | null;
   access_type: string;
   groups?: number[];
   from_beginning?: boolean;
@@ -16,6 +19,7 @@ export interface ConnectorBase<T> {
 
 export interface Connector<T> extends ConnectorBase<T> {
   id: number;
+  check_freq: number | null;
   credential_ids: number[];
   time_created: string;
   time_updated: string;

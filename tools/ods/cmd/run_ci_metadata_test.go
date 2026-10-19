@@ -28,7 +28,6 @@ func TestBuildRunCIPRMetadataForEdits(t *testing.T) {
 		"## Original PR description",
 		prInfo.Body,
 		cherryPickOption,
-		linearCheckOverride,
 	}
 	for _, expected := range expectedBodyParts {
 		if !strings.Contains(metadata.Body, expected) {

@@ -5,7 +5,7 @@
  */
 
 import {
-  EndpointPolicy,
+  ActionPolicy,
   ExternalAppAdminResponse,
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
@@ -21,13 +21,14 @@ async function readErrorDetail(
 }
 
 interface CreateBuiltInExternalAppBody {
+  users_can_manage_policies?: boolean;
   name: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   // Full replace when present; omit to default every action to ASK.
-  action_policies?: Record<string, EndpointPolicy>;
+  action_policies?: Record<string, ActionPolicy>;
 }
 
 /**
@@ -50,6 +51,7 @@ export async function createBuiltInExternalApp(
 }
 
 interface CreateCustomExternalAppInput {
+  users_can_manage_policies?: boolean;
   name: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
@@ -75,6 +77,7 @@ export async function createCustomExternalApp(
 }
 
 interface UpdateExternalAppBody {
+  users_can_manage_policies?: boolean;
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;
   name?: string;
@@ -82,7 +85,7 @@ interface UpdateExternalAppBody {
   auth_template?: Record<string, string>;
   organization_credentials?: Record<string, string>;
   // Full replace when present; omit to leave stored policies untouched.
-  action_policies?: Record<string, EndpointPolicy>;
+  action_policies?: Record<string, ActionPolicy>;
   // Full replacement of the app's custom-skill associations. Provider-owned
   // built-in skills are preserved by the backend.
   associated_skill_ids?: string[];
@@ -122,10 +125,11 @@ interface OAuthStartResponse {
 }
 
 export async function startExternalAppOAuth(
-  externalAppId: number
+  externalAppId: number,
+  returnPath?: string
 ): Promise<OAuthStartResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start`
+    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start${returnPath ? `?${new URLSearchParams({ return_path: returnPath })}` : ""}`
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to start OAuth"));
@@ -136,6 +140,7 @@ export async function startExternalAppOAuth(
 interface OAuthCallbackResponse {
   success: boolean;
   external_app_id: number;
+  return_path?: string | null;
 }
 
 export async function completeExternalAppOAuthCallback(

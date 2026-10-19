@@ -12,6 +12,7 @@ import {
   adminDeleteCredential,
   deleteCredential,
   startCredentialCheckRun,
+  updateCredentialSharing,
 } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -33,12 +34,10 @@ import {
 } from "@/lib/connectors/types/source";
 import type {
   AnyCredential,
-  Credential,
   CredentialCheckReport,
+  CredentialSharing,
   SimilarCredential,
   CredentialSetup,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
   OAuthDetails,
   SavedDraftCredential,
   SourceCredentialsResult,
@@ -81,25 +80,6 @@ export function useCredentialFieldCopy(
         ? t(`hints.${field.hint.key}`, field.hint.values)
         : undefined,
     };
-  };
-}
-
-/**
- * Every credential the admin can see, across all sources. Pass
- * `enabled: false` to skip the request on pages that do not need it.
- */
-export function useAdminCredentials({
-  enabled = true,
-}: { enabled?: boolean } = {}) {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    enabled ? SWR_KEYS.adminCredentials : null,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
   };
 }
 
@@ -279,6 +259,19 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     }
   }
 
+  async function saveSharing(
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ): Promise<SimilarCredential> {
+    // The sharing route also renames: it allows group managers, and checks
+    // that the user may edit the account.
+    const response = await updateCredentialSharing(credentialId, update);
+    if (!response.ok) throw new Error(await response.text());
+    const saved: SimilarCredential = await response.json();
+    refresh();
+    return saved;
+  }
+
   async function authorize(invalidUrlMessage: string): Promise<string | null> {
     setIsAuthorizing(true);
     try {
@@ -314,6 +307,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     selectMethod,
     close,
     remove,
+    saveSharing,
     refresh,
     authorize,
     isAuthorizing,
@@ -332,44 +326,6 @@ export function refreshSourceCredentials(
   return mutate(SWR_KEYS.similarCredentials(sourceType));
 }
 
-export const useGmailCredentials = (connector: string) => {
-  // Only the Gmail setup reads the admin list; other sources skip it.
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = useAdminCredentials({ enabled: connector === ValidSources.Gmail });
-
-  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
-    credentialsData?.find(
-      (credential) =>
-        credential.credential_json?.google_tokens &&
-        credential.admin_public &&
-        credential.source === connector
-    );
-
-  const gmailServiceAccountCredential:
-    | Credential<GmailServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGmailCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
-
-  return {
-    liveGmailCredential: liveGmailCredential,
-  };
-};
-
-export const useGoogleCredentials = (
-  source: ValidSources.Gmail | ValidSources.GoogleDrive
-): SourceCredentialsResult => useSourceCredentials(source);
-
 /** How often the check reports refresh while a run is going. */
 const CREDENTIAL_CHECK_POLL_MS = 2000;
 
@@ -380,8 +336,8 @@ export interface CredentialCheckReports {
     credentialId: number,
     connectorId?: number | null
   ) => CredentialCheckReport | null;
-  /** Starts the checks on one credential; resolves once the run is queued. */
-  rerun: (credentialId: number) => Promise<void>;
+  /** Starts the credential's checks, or its pairing's with `connectorId`. Resolves once queued. */
+  rerun: (credentialId: number, connectorId?: number | null) => Promise<void>;
 }
 
 /**
@@ -415,8 +371,8 @@ export function useCredentialCheckReports(
   );
   return {
     reportFor,
-    rerun: async (credentialId) => {
-      await startCredentialCheckRun(credentialId);
+    rerun: async (credentialId, connectorId = null) => {
+      await startCredentialCheckRun(credentialId, connectorId);
       await refresh();
     },
   };

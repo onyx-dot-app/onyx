@@ -23,11 +23,14 @@ from onyx.db.tools import (
     can_manage_tool,
     create_tool__no_commit,
     delete_tool__no_commit,
+    get_default_chat_tool_ids,
     get_tool_by_id,
     get_tool_ids_connected_to_groups,
+    get_tool_user_preferences,
     get_tools,
     get_tools_by_ids,
     update_tool,
+    upsert_tool_user_preference__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -36,6 +39,7 @@ from onyx.server.features.tool.models import (
     CustomToolUpdate,
     Header,
     ToolSnapshot,
+    ToolUserPreferences,
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
@@ -397,6 +401,7 @@ def list_openapi_tools(
             )
         )
 
+    _stamp_personal_tool_preferences(openapi_tools, user, db_session)
     return openapi_tools
 
 
@@ -415,7 +420,60 @@ def get_custom_tool(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only view actions you manage, or ones an agent in your groups uses.",
         )
-    return ToolSnapshot.from_model(tool)
+    snapshot = ToolSnapshot.from_model(tool)
+    _stamp_personal_tool_preferences([snapshot], user, db_session)
+    return snapshot
+
+
+def _stamp_personal_tool_preferences(
+    tools: list[ToolSnapshot], user: User, db_session: Session
+) -> None:
+    preferences = get_tool_user_preferences(
+        [tool.id for tool in tools if tool.definition is not None], user.id, db_session
+    )
+    for tool in tools:
+        preference = preferences.get(tool.id)
+        if preference is not None:
+            tool.user_enabled_in_chat = preference.enabled_in_chat
+
+
+@router.patch("/{tool_id}/preferences", tags=PUBLIC_API_TAGS)
+def update_tool_user_preferences(
+    tool_id: int,
+    request: ToolUserPreferences,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> ToolUserPreferences:
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found") from error
+    if (
+        tool.in_code_tool_id is not None
+        or tool.mcp_server_id is not None
+        or tool.openapi_schema is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only OpenAPI plugins support these preferences",
+        )
+    if not should_expose_tool_to_fe(tool):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Plugin is not available"
+        )
+    if request.enabled_in_chat and (
+        not tool.enabled
+        or tool.id not in get_default_chat_tool_ids([tool.id], db_session)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Your admin has disabled this plugin for main Chat",
+        )
+    preference = upsert_tool_user_preference__no_commit(
+        tool_id, user.id, db_session, enabled_in_chat=request.enabled_in_chat
+    )
+    db_session.commit()
+    return ToolUserPreferences(enabled_in_chat=preference.enabled_in_chat)
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
@@ -452,5 +510,13 @@ def list_tools(
 
         # All custom tools and available built-in tools are included
         filtered_tools.append(ToolSnapshot.from_model(tool))
+
+    default_chat_tool_ids = get_default_chat_tool_ids(
+        [tool.id for tool in filtered_tools], db_session
+    )
+    for tool in filtered_tools:
+        tool.default_chat_enabled = tool.id in default_chat_tool_ids
+
+    _stamp_personal_tool_preferences(filtered_tools, user, db_session)
 
     return filtered_tools

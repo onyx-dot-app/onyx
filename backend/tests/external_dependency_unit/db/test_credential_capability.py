@@ -9,6 +9,7 @@ rows roll back when its session closes.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -20,6 +21,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
 )
 from onyx.db.credential_capability import (
+    STALE_RUN_ERROR,
     get_capability_report_row,
     get_capability_report_rows_for_source,
     get_sources_with_running_capability_runs,
@@ -29,8 +31,12 @@ from onyx.db.credential_capability import (
     upsert_completed_capability_report,
     upsert_completed_capability_report_unless_granular,
 )
-from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import Credential
+from onyx.db.enums import (
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+)
+from onyx.db.models import CapabilityCheckRun, Credential
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 
@@ -298,6 +304,13 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
     assert remarked.run_started_at > stale_started_at
     assert remarked.run_id is not None
     assert remarked.run_id != stale_run_id
+    # The replaced run's history row closes: the sweep can no longer reach it.
+    stale_run = db_session.scalar(
+        select(CapabilityCheckRun).where(CapabilityCheckRun.run_id == stale_run_id)
+    )
+    assert stale_run is not None
+    assert stale_run.status == CapabilityCheckRunStatus.FAILED_TO_RUN
+    assert stale_run.error_message == STALE_RUN_ERROR
 
 
 @pytest.mark.usefixtures("tenant_context")

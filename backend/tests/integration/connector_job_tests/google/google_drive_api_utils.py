@@ -6,8 +6,8 @@ from google.oauth2.service_account import Credentials
 from onyx.connectors.google_utils.resources import (
     GoogleDocsService,
     GoogleDriveService,
-    get_drive_service,
-    get_google_docs_service,
+    GoogleService,
+    get_google_service,
 )
 
 GOOGLE_SCOPES = {
@@ -20,7 +20,8 @@ GOOGLE_SCOPES = {
 
 
 def _create_doc_service(drive_service: GoogleDriveService) -> GoogleDocsService:
-    docs_service = get_google_docs_service(
+    docs_service = get_google_service(
+        GoogleService.DOCS,
         creds=drive_service._http.credentials,
         user_email=drive_service._http.credentials._subject,
     )
@@ -39,7 +40,9 @@ class GoogleDriveManager:
             subject=impersonated_user_email,
         )
 
-        service = get_drive_service(credentials, impersonated_user_email)
+        service = get_google_service(
+            GoogleService.DRIVE, credentials, impersonated_user_email
+        )
 
         # Verify impersonation
         about = (

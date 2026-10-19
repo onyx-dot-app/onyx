@@ -27,8 +27,8 @@ export interface EditCredentialProps {
   sourceType: ValidSources;
   onClose: () => void;
   onUpdate: (
-    selectedCredentialId: Credential<any>,
-    details: any,
+    credential: Credential<CredentialFieldValues>,
+    values: CredentialFormValues,
     onSuccess: () => void
   ) => Promise<void>;
 }

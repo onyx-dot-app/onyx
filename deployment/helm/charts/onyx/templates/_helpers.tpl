@@ -251,8 +251,21 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- end }}
 
 {{/*
-"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
+Validate the firewall switch without treating false as an absent value.
 */}}
+{{- define "onyx.sandboxNetAdminLockdown" -}}
+{{- $sandboxPod := .Values.sandboxPod | default dict -}}
+{{- if hasKey $sandboxPod "netAdminLockdown" -}}
+{{- if not (kindIs "bool" $sandboxPod.netAdminLockdown) -}}
+{{- fail "sandboxPod.netAdminLockdown must be a boolean" -}}
+{{- end -}}
+{{- $sandboxPod.netAdminLockdown -}}
+{{- else -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/* "true" when ENABLE_CRAFT is set in configMap, empty otherwise. */}}
 {{- define "onyx.craftEnabled" -}}
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}

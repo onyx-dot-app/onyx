@@ -9,9 +9,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// llmContextSkill is one skill directory of onyx-llm-context, parsed enough to
+// agentContextSkill is one skill directory of onyx-infra's agent-context/, parsed enough to
 // install it for any agent.
-type llmContextSkill struct {
+type agentContextSkill struct {
 	// Directory name, which is also the skill's invocation name.
 	Name string
 	// Absolute path of the skill directory.
@@ -26,17 +26,27 @@ type llmContextSkill struct {
 	Enforced bool
 }
 
-// discoverLLMContextSkills reads the enforced/ and skills/ tiers of an
-// onyx-llm-context checkout. A missing tier directory is not an error.
-func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
+// discoverAgentContextSkills reads the enforced/ and skills/ tiers of the
+// agent-context/ directory of an onyx-infra checkout. A source with no
+// agent-context/ directory is treated as the root of an old onyx-llm-context
+// checkout. A missing tier directory is not an error.
+func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	// The Claude installer builds symlinks and @imports from these paths, so a
 	// relative --source must not leak into them.
 	source, err := filepath.Abs(source)
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve source path: %w", err)
 	}
+	if info, err := os.Stat(filepath.Join(source, agentContextDir)); err == nil && info.IsDir() {
+		source = filepath.Join(source, agentContextDir)
+	} else if !hasSkillTier(source) {
+		return nil, fmt.Errorf(
+			"no %s/ directory found in %s\n  Update the checkout (git pull) or re-run with --clone",
+			agentContextDir, source,
+		)
+	}
 
-	var skills []llmContextSkill
+	var skills []agentContextSkill
 	// Every agent maps a skill name to one file or link, so a name used in
 	// both tiers would have the second silently shadow the first.
 	seen := make(map[string]bool)
@@ -77,7 +87,7 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 				)
 			}
 			seen[entry.Name()] = true
-			skills = append(skills, llmContextSkill{
+			skills = append(skills, agentContextSkill{
 				Name:        entry.Name(),
 				Dir:         filepath.Join(tierDir, entry.Name()),
 				File:        skillFile,
@@ -88,6 +98,16 @@ func discoverLLMContextSkills(source string) ([]llmContextSkill, error) {
 		}
 	}
 	return skills, nil
+}
+
+// hasSkillTier reports whether dir directly holds an enforced/ or skills/ tier.
+func hasSkillTier(dir string) bool {
+	for _, tier := range []string{"enforced", "skills"} {
+		if info, err := os.Stat(filepath.Join(dir, tier)); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 // parseSkillMarkdown splits a SKILL.md into its `description` frontmatter

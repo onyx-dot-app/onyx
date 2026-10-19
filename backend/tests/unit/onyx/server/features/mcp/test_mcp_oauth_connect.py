@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
+from onyx.db import mcp as mcp_db
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -19,6 +20,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPToolCreateRequest,
     MCPUserOAuthConnectRequest,
 )
@@ -36,6 +38,7 @@ def _server() -> SimpleNamespace:
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,
@@ -161,7 +164,11 @@ def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
         api, "extract_connection_data", lambda *_args, **_kwargs: stored_data
     )
     monkeypatch.setattr(api, "update_connection_config", update_connection_config)
-    monkeypatch.setattr(api, "user_can_authenticate", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        api,
+        "user_connection_status",
+        lambda *_args, **_kwargs: MCPConnectionStatus.CONNECTED,
+    )
     monkeypatch.setattr(api, "start_auto_discovery_oauth_flow", start_flow)
 
     request = _request(server.id, force_reauthentication=force_reauthentication)
@@ -262,7 +269,7 @@ def test_server_url_change_invalidates_old_credentials_without_losing_new_client
         "delete_all_user_connection_configs_for_server_no_commit",
         delete_user_configs,
     )
-    monkeypatch.setattr(api, "delete_connection_config", delete_admin_config)
+    monkeypatch.setattr(mcp_db, "delete_connection_config", delete_admin_config)
     monkeypatch.setattr(api, "update_mcp_server__no_commit", update_server)
 
     def persist_admin_config(

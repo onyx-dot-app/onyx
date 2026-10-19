@@ -51,9 +51,8 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
-import { InputSingleSelectField } from "@opal/form";
+import { InputSingleSelectField, InputSwitchField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -2181,7 +2180,7 @@ export default function IndexSettingsPage() {
                                 )}
                                 withLabel
                               >
-                                <SwitchField name="enable_contextual_rag" />
+                                <InputSwitchField name="enable_contextual_rag" />
                               </InputHorizontal>
 
                               <Disabled
@@ -2265,7 +2264,7 @@ export default function IndexSettingsPage() {
                                 withLabel
                               >
                                 <div className="flex flex-col items-end">
-                                  <SwitchField name="image_processing_enabled" />
+                                  <InputSwitchField name="image_processing_enabled" />
                                   {captioningModelMissing && (
                                     <Content
                                       icon={SvgAlertTriangle}
