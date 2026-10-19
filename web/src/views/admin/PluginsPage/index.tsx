@@ -12,7 +12,7 @@ import {
   IllustrationContent,
   SettingsLayouts,
 } from "@opal/layouts";
-import { LineLoader } from "@opal/loaders";
+import { CardLoader } from "@opal/loaders";
 import { SvgEmpty, SvgPlugBroken } from "@opal/illustrations";
 import { SvgAlertCircle, SvgPlus } from "@opal/icons";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
@@ -98,10 +98,7 @@ function PluginRowsLoading() {
       className="flex flex-col gap-2"
     >
       {[0, 1].map((index) => (
-        <div key={index} className="flex min-w-0 items-center gap-3 py-3">
-          <div className="opal-shimmer-block size-10 shrink-0 rounded-12" />
-          <LineLoader lines={2} width="2/3" />
-        </div>
+        <CardLoader key={index} padding={4} rounding={4} color="transparent" />
       ))}
     </div>
   );

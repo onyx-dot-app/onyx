@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Tabs, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
-import { LineLoader } from "@opal/loaders";
+import { CardLoader, TextLoader } from "@opal/loaders";
 import {
   SvgChevronRight,
   SvgCodeFile,
@@ -351,9 +351,9 @@ export default function MemberPluginsPage({
               )}
               {loading.apps && (
                 <div role="status" aria-label={t("state.appsLoading")}>
-                  <Text font="secondary-body" color="text-03">
+                  <TextLoader font="secondary-body">
                     {t("state.appsLoading")}
-                  </Text>
+                  </TextLoader>
                 </div>
               )}
               {isLoading && (
@@ -363,13 +363,12 @@ export default function MemberPluginsPage({
                   className={styles.grid}
                 >
                   {[0, 1].map((index) => (
-                    <div
+                    <CardLoader
                       key={index}
-                      className="flex items-center gap-4 px-3 py-4"
-                    >
-                      <div className="opal-shimmer-block size-[42px] shrink-0 rounded-12" />
-                      <LineLoader lines={2} width="2/3" />
-                    </div>
+                      padding={4}
+                      rounding={4}
+                      color="transparent"
+                    />
                   ))}
                 </div>
               )}
