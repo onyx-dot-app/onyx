@@ -1825,6 +1825,8 @@ def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
     assert ancestors == {"crawled": [7, 1], "rebuilt": [42]}
     assert from_raw.call_args.kwargs["parent_hierarchy_raw_node_id"] == "folder-abc"
     assert from_node.call_args.kwargs["node_id"] == 42
+
+
 def test_content_hash_is_blind_to_tabular_content() -> None:
     """A tabular document's hash never moves when its sheets change.
 
