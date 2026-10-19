@@ -33,12 +33,12 @@ from onyx.connectors.slack.source_operations import (
     SlackResponseMetadata,
     SlackTeamsPage,
 )
-from tests.unit.onyx.connectors.slack.test_slack_capability_checks import (
-    _coherent_gateway,
-    _gateway,
-    _pages,
-    _slack_error,
-    _tracked_pages,
+from tests.unit.onyx.connectors.slack.slack_check_helpers import (
+    autospec_gateway,
+    coherent_gateway,
+    page_side_effect,
+    slack_error,
+    tracked_pages,
 )
 
 _ALL_CHECKS: list[CapabilityCheck] = (
@@ -85,9 +85,9 @@ def _run(
 
 
 def _grid_gateway() -> MagicMock:
-    gateway = _coherent_gateway()
+    gateway = coherent_gateway()
     gateway.check_auth.return_value = SlackAuthTestResponse(ok=True, enterprise_id="E1")
-    gateway.list_teams.side_effect = _pages(
+    gateway.list_teams.side_effect = page_side_effect(
         SlackTeamsPage(
             teams=[{"id": "T1", "name": "Acme"}, {"id": "T2", "name": "Labs"}]
         )
@@ -132,7 +132,7 @@ def test_sign_in_and_grid_listing_unlock_the_form() -> None:
 
 
 def test_sign_in_names_the_bot_and_the_workspace() -> None:
-    gateway = _gateway()
+    gateway = autospec_gateway()
     gateway.check_auth.return_value = SlackAuthTestResponse(
         ok=True, user="onyx", team="Acme"
     )
@@ -144,7 +144,9 @@ def test_sign_in_names_the_bot_and_the_workspace() -> None:
 
 
 def test_a_missing_token_says_so() -> None:
-    result = _run("slack_token_auth", _gateway(), credential_json={"other": "x"})
+    result = _run(
+        "slack_token_auth", autospec_gateway(), credential_json={"other": "x"}
+    )
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Account has no bot token"
@@ -153,7 +155,7 @@ def test_a_missing_token_says_so() -> None:
 def test_a_user_token_is_not_a_bot_token() -> None:
     result = _run(
         "slack_token_auth",
-        _gateway(),
+        autospec_gateway(),
         credential_json={"slack_bot_token": "xoxp-user"},
     )
 
@@ -168,8 +170,8 @@ def test_each_rejection_has_its_line() -> None:
         "token_expired": "Bot token expired",
     }
     for error, line in lines.items():
-        gateway = _gateway()
-        gateway.check_auth.side_effect = _slack_error(error)
+        gateway = autospec_gateway()
+        gateway.check_auth.side_effect = slack_error(error)
 
         result = _run("slack_token_auth", gateway)
 
@@ -179,7 +181,7 @@ def test_each_rejection_has_its_line() -> None:
 
 
 def test_an_unreachable_slack_fails_only_a_form_run() -> None:
-    gateway = _gateway()
+    gateway = autospec_gateway()
     gateway.check_auth.side_effect = URLError("refused")
 
     form = _run("slack_token_auth", gateway, form_run=True)
@@ -191,8 +193,8 @@ def test_an_unreachable_slack_fails_only_a_form_run() -> None:
 
 
 def test_a_rate_limit_at_sign_in_is_incomplete() -> None:
-    gateway = _gateway()
-    gateway.check_auth.side_effect = _slack_error("ratelimited")
+    gateway = autospec_gateway()
+    gateway.check_auth.side_effect = slack_error("ratelimited")
 
     auth = _run("slack_token_auth", gateway)
 
@@ -202,8 +204,8 @@ def test_a_rate_limit_at_sign_in_is_incomplete() -> None:
 
 
 def test_a_rate_limit_stops_the_checks_after_it() -> None:
-    gateway = _gateway()
-    gateway.list_channels.side_effect = _slack_error("ratelimited")
+    gateway = autospec_gateway()
+    gateway.list_channels.side_effect = slack_error("ratelimited")
 
     results = _run_all(
         ["slack_public_channel_listing", "slack_channel_join_scope"], gateway
@@ -217,8 +219,8 @@ def test_a_rate_limit_stops_the_checks_after_it() -> None:
 
 
 def test_a_failed_sign_in_stops_the_checks_after_it() -> None:
-    gateway = _gateway()
-    gateway.check_auth.side_effect = _slack_error("invalid_auth")
+    gateway = autospec_gateway()
+    gateway.check_auth.side_effect = slack_error("invalid_auth")
     after_sign_in = [
         "slack_public_channel_listing",
         "slack_message_history_read",
@@ -235,7 +237,7 @@ def test_a_failed_sign_in_stops_the_checks_after_it() -> None:
 
 
 def test_a_slack_error_carries_the_request_and_body() -> None:
-    gateway = _gateway()
+    gateway = autospec_gateway()
     response = SlackResponse(
         client=None,
         http_verb="POST",
@@ -269,7 +271,7 @@ def test_grid_listing_counts_the_workspaces() -> None:
 
 def test_grid_listing_without_team_read_names_the_scope() -> None:
     gateway = _grid_gateway()
-    gateway.list_teams.side_effect = _slack_error("missing_scope", needed="team:read")
+    gateway.list_teams.side_effect = slack_error("missing_scope", needed="team:read")
 
     result = _run("slack_grid_workspace_listing", gateway)
 
@@ -281,7 +283,7 @@ def test_grid_listing_without_team_read_names_the_scope() -> None:
 
 def test_a_failed_grid_listing_stops_the_workspace_user_check() -> None:
     gateway = _grid_gateway()
-    gateway.list_teams.side_effect = _slack_error("missing_scope", needed="team:read")
+    gateway.list_teams.side_effect = slack_error("missing_scope", needed="team:read")
 
     results = _run_all(
         ["slack_grid_workspace_listing", "slack_grid_public_channel_scoping"], gateway
@@ -300,7 +302,7 @@ def test_workspace_user_listing_names_the_workspace() -> None:
 
 def test_a_grid_org_without_workspaces_is_incomplete() -> None:
     gateway = _grid_gateway()
-    gateway.list_teams.side_effect = _pages(SlackTeamsPage(teams=[]))
+    gateway.list_teams.side_effect = page_side_effect(SlackTeamsPage(teams=[]))
 
     result = _run("slack_user_profile_read", gateway)
 
@@ -312,15 +314,15 @@ def test_a_grid_org_without_workspaces_is_incomplete() -> None:
 
 
 def test_public_listing_names_the_channel_it_read() -> None:
-    result = _run("slack_public_channel_listing", _coherent_gateway())
+    result = _run("slack_public_channel_listing", coherent_gateway())
 
     assert result.summary == "Found #general and read its details"
 
 
 def test_message_sample_follows_the_cursor_past_an_empty_first_page() -> None:
-    gateway = _gateway()
+    gateway = autospec_gateway()
     consumed: list[Any] = []
-    gateway.list_channels.side_effect = _tracked_pages(
+    gateway.list_channels.side_effect = tracked_pages(
         [
             SlackChannelsPage(channels=[]),
             SlackChannelsPage(
@@ -329,7 +331,9 @@ def test_message_sample_follows_the_cursor_past_an_empty_first_page() -> None:
         ],
         consumed,
     )
-    gateway.fetch_channel_history.side_effect = _pages(SlackHistoryPage(messages=[]))
+    gateway.fetch_channel_history.side_effect = page_side_effect(
+        SlackHistoryPage(messages=[])
+    )
 
     result = _run("slack_message_history_read", gateway)
 
@@ -338,8 +342,8 @@ def test_message_sample_follows_the_cursor_past_an_empty_first_page() -> None:
 
 
 def test_no_public_channel_to_sample_is_incomplete() -> None:
-    gateway = _gateway()
-    gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
+    gateway = autospec_gateway()
+    gateway.list_channels.side_effect = page_side_effect(SlackChannelsPage(channels=[]))
 
     result = _run("slack_message_history_read", gateway)
 
@@ -348,7 +352,7 @@ def test_no_public_channel_to_sample_is_incomplete() -> None:
 
 
 def test_the_channel_picker_counts_the_channels() -> None:
-    result = _run("slack_readable_channel_listing", _coherent_gateway())
+    result = _run("slack_readable_channel_listing", coherent_gateway())
 
     assert result.summary == "1 public channel found"
     assert result.findings == [
@@ -361,7 +365,7 @@ def test_the_channel_picker_counts_the_channels() -> None:
 
 
 def test_missing_join_scope_header_is_incomplete() -> None:
-    gateway = _gateway()
+    gateway = autospec_gateway()
     gateway.check_auth.return_value = SlackAuthTestResponse(ok=True)
 
     result = _run("slack_channel_join_scope", gateway)
@@ -373,7 +377,7 @@ def test_missing_join_scope_header_is_incomplete() -> None:
 def test_a_bad_pattern_names_it() -> None:
     result = _run(
         "slack_channel_patterns",
-        _gateway(),
+        autospec_gateway(),
         {"channels": ["eng-["], "channel_regex_enabled": True},
     )
 
@@ -384,7 +388,7 @@ def test_a_bad_pattern_names_it() -> None:
 def test_patterns_count_what_compiled() -> None:
     result = _run(
         "slack_channel_patterns",
-        _gateway(),
+        autospec_gateway(),
         {
             "channels": ["eng-.*", "ops"],
             "channel_regex_enabled": True,
@@ -397,7 +401,9 @@ def test_patterns_count_what_compiled() -> None:
 
 
 def test_names_without_regex_mode_have_no_patterns_to_compile() -> None:
-    result = _run("slack_channel_patterns", _gateway(), {"channels": ["general"]})
+    result = _run(
+        "slack_channel_patterns", autospec_gateway(), {"channels": ["general"]}
+    )
 
     assert result.applicable is False
 
@@ -406,8 +412,8 @@ def test_names_without_regex_mode_have_no_patterns_to_compile() -> None:
 
 
 def test_all_selected_channels_found() -> None:
-    gateway = _gateway()
-    gateway.list_channels.side_effect = _pages(
+    gateway = autospec_gateway()
+    gateway.list_channels.side_effect = page_side_effect(
         SlackChannelsPage(
             channels=[
                 {"id": "C0GENERAL1", "name": "general"},
@@ -429,7 +435,7 @@ def test_all_selected_channels_found() -> None:
 def test_some_selected_channels_missing_is_incomplete() -> None:
     result = _run(
         "slack_configured_channels_visible",
-        _coherent_gateway(),
+        coherent_gateway(),
         {"channels": ["general", "gone", "typo"]},
     )
 
@@ -442,7 +448,7 @@ def test_some_selected_channels_missing_is_incomplete() -> None:
 
 def test_no_selected_channel_found_fails() -> None:
     result = _run(
-        "slack_configured_channels_visible", _coherent_gateway(), {"channels": ["gone"]}
+        "slack_configured_channels_visible", coherent_gateway(), {"channels": ["gone"]}
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
@@ -453,8 +459,8 @@ def test_no_selected_channel_found_fails() -> None:
 
 
 def test_private_listing_without_a_channel_passes_with_a_caveat() -> None:
-    gateway = _gateway()
-    gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
+    gateway = autospec_gateway()
+    gateway.list_channels.side_effect = page_side_effect(SlackChannelsPage(channels=[]))
 
     result = _run("slack_private_channel_listing", gateway)
 
@@ -464,8 +470,8 @@ def test_private_listing_without_a_channel_passes_with_a_caveat() -> None:
 
 
 def test_checks_after_an_empty_private_listing_have_nothing_to_test() -> None:
-    gateway = _gateway()
-    gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
+    gateway = autospec_gateway()
+    gateway.list_channels.side_effect = page_side_effect(SlackChannelsPage(channels=[]))
 
     results = _run_all(
         [
@@ -487,7 +493,7 @@ def test_checks_after_an_empty_private_listing_have_nothing_to_test() -> None:
 
 
 def test_member_listing_counts_the_members() -> None:
-    gateway = _coherent_gateway()
+    gateway = coherent_gateway()
 
     result = _run("slack_private_channel_member_listing", gateway)
 
@@ -495,8 +501,8 @@ def test_member_listing_counts_the_members() -> None:
 
 
 def test_member_listing_marks_a_cut_page() -> None:
-    gateway = _coherent_gateway()
-    gateway.list_channel_members.side_effect = _pages(
+    gateway = coherent_gateway()
+    gateway.list_channel_members.side_effect = page_side_effect(
         _members_page(["U1", "U2"], next_cursor="more")
     )
 
@@ -516,12 +522,12 @@ def _members_page(members: list[str], next_cursor: str) -> SlackChannelMembersPa
 
 
 def test_emails_count_the_users_with_one() -> None:
-    result = _run("slack_user_email_visibility", _coherent_gateway())
+    result = _run("slack_user_email_visibility", coherent_gateway())
 
     assert result.summary == "Emails visible for 1 of 1 users"
 
 
 def test_user_profiles_say_names_are_readable() -> None:
-    result = _run("slack_user_profile_read", _coherent_gateway())
+    result = _run("slack_user_profile_read", coherent_gateway())
 
     assert result.summary == "User names readable"
