@@ -1,11 +1,19 @@
-## Description
+## Summary
 
-<!--- Provide a brief description of the changes in this PR --->
-
-## How Has This Been Tested?
-
-<!--- Describe the tests you ran to verify your changes --->
-
-## Additional Options
+What changes and why, in a few sentences, for someone skimming.
 
 - [ ] [Optional] Please cherry-pick this PR to the latest release version.
+
+## Screenshots
+
+Before and after for any change that touches UX, or N/A.
+
+## Context
+
+## Decision
+
+## Alternatives
+
+## Consequences
+
+## Testing
