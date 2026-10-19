@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PostToolUse hook for Claude Code: migrate a web file to Opal when an agent edits it.
+"""PostToolUse hook: migrate a web file to Opal when an agent edits it.
 
-After an Edit, MultiEdit or Write of a `.ts`/`.tsx` file under `web/`, the hook runs
-oxlint on that file and keeps the design-system diagnostics:
+After an agent writes a `.ts`/`.tsx` file under `web/`, the hook runs oxlint on that
+file and keeps the design-system diagnostics:
 
 - `opal/no-replaced-refresh-import`: a refresh-components import that Opal replaces;
 - `react/forbid-elements`: a raw `<button>`, `<input>`, `<select>` or `<textarea>`;
@@ -10,18 +10,19 @@ oxlint on that file and keeps the design-system diagnostics:
 
 Baseline files only warn on the last two rules, so pre-commit passes them. The hook
 still reports those warnings, except legacy `@/components/*` imports, which often
-have no replacement yet. When it reports something, it exits with code 2 so the
-agent migrates the file before it continues.
+have no replacement yet. It gives the findings to the agent as context so the agent
+migrates the file before it continues. `agent_hook_io` handles each agent's payload
+and output format.
 """
 
 import json
-import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-_BLOCK = 2
+from agent_hook_io import edited_files, give_feedback, read_payload, repo_root
+
 _TIMEOUT_SECONDS = 30
 _RULES = {
     "opal(no-replaced-refresh-import)",
@@ -29,20 +30,6 @@ _RULES = {
     "eslint(no-restricted-imports)",
 }
 _BASELINE_MARKER = "Design-system baseline"
-
-
-def _repo_root() -> Path:
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
-    if project_dir:
-        return Path(project_dir)
-    return Path(
-        subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    )
 
 
 def _is_reported(diagnostic: dict[str, object]) -> bool:
@@ -68,24 +55,29 @@ def _baseline_glob(relative_path: str) -> str:
     return re.sub(r"\[([^\]/]+)\]", r"[[]\1]", relative_path)
 
 
-def main() -> int:
-    payload = json.load(sys.stdin)
-    file_path = payload.get("tool_input", {}).get("file_path")
-    if not file_path or not file_path.endswith((".ts", ".tsx")):
-        return 0
+def _web_files(web: Path, paths: list[Path]) -> list[str]:
+    files = []
+    for path in paths:
+        if path.suffix not in (".ts", ".tsx") or not path.exists():
+            continue
+        try:
+            files.append(path.relative_to(web.resolve()).as_posix())
+        except ValueError:
+            continue
+    return files
 
-    web = _repo_root() / "web"
+
+def main() -> int:
+    payload = read_payload(sys.stdin.read())
+    web = repo_root(payload) / "web"
     oxlint = web / "node_modules" / ".bin" / "oxlint"
-    try:
-        relative_path = Path(file_path).resolve().relative_to(web.resolve()).as_posix()
-    except ValueError:
-        return 0
-    if not oxlint.exists() or not (web / relative_path).exists():
+    files = _web_files(web, [path for path, _ in edited_files(payload)])
+    if not files or not oxlint.exists():
         return 0
 
     try:
         result = subprocess.run(
-            [str(oxlint), "-f", "json", relative_path],
+            [str(oxlint), "-f", "json", *files],
             cwd=web,
             capture_output=True,
             text=True,
@@ -97,26 +89,31 @@ def main() -> int:
 
     reported = [_format(d) for d in diagnostics if _is_reported(d)]
     if reported:
-        print(
-            "Migrate this file to Opal before you continue:\n"
+        give_feedback(
+            payload,
+            "PostToolUse",
+            "Migrate these files to Opal before you continue:\n"
             + "\n".join(reported)
             + "\nEach Opal component has a README.md next to it under "
             "web/lib/opal/src/. Read it for the props. Do not change behavior.",
-            file=sys.stderr,
         )
-        return _BLOCK
+        return 0
 
     rc = (web / ".oxlintrc.json").read_text()
-    glob = f'"{_baseline_glob(relative_path)}"'
-    if _BASELINE_MARKER in rc and glob in rc.split(_BASELINE_MARKER, 1)[1]:
-        remaining = [d for d in diagnostics if d.get("code") in _RULES]
-        if not remaining:
-            print(
-                f"{relative_path} is now clean of the design-system rules. Remove "
-                f"{glob} from the design-system baseline in web/.oxlintrc.json.",
-                file=sys.stderr,
-            )
-            return _BLOCK
+    baseline = rc.split(_BASELINE_MARKER, 1)[1] if _BASELINE_MARKER in rc else ""
+    dirty = {d.get("filename") for d in diagnostics if d.get("code") in _RULES}
+    clean = [
+        f'"{_baseline_glob(path)}"'
+        for path in files
+        if path not in dirty and f'"{_baseline_glob(path)}"' in baseline
+    ]
+    if clean:
+        give_feedback(
+            payload,
+            "PostToolUse",
+            "These files are now clean of the design-system rules. Remove them from "
+            "the design-system baseline in web/.oxlintrc.json: " + ", ".join(clean),
+        )
     return 0
 
 
