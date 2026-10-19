@@ -202,6 +202,32 @@ def test_token_auth_passes_for_valid_bot_token() -> None:
     _run("slack_token_auth", _context(_gateway()))
 
 
+def test_invalid_unrelated_setting_does_not_stop_sign_in() -> None:
+    """Verifies an invalid setting stops only the checks that read settings."""
+    # Precondition.
+    gateway = _gateway()
+    context = _context(
+        gateway,
+        connector_specific_config={
+            "batch_size": "not-a-number",
+            "channels": ["gen.*"],
+            "channel_regex_enabled": True,
+        },
+    )
+
+    # Under test.
+    auth, patterns = run_capability_checks(
+        [_CHECKS_BY_ID["slack_token_auth"], _CHECKS_BY_ID["slack_channel_patterns"]],
+        context,
+    )
+
+    # Postcondition.
+    assert auth.status == CapabilityCheckStatus.PASSED
+    gateway.check_auth.assert_called_once()
+    assert patterns.status == CapabilityCheckStatus.FAILED
+    assert "batch_size" in patterns.message
+
+
 def test_public_channel_listing_missing_scope() -> None:
     """Verifies the ``channels:read`` probe shape and its failure mapping."""
     # Precondition.

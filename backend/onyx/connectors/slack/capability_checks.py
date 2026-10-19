@@ -473,8 +473,6 @@ def _probe_channel_history(
 
 
 class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
-    config_class = SlackConnectorConfig
-
     def __init__(
         self,
         *,
@@ -563,6 +561,8 @@ class _TokenAuthCheck(_SlackCheck):
 class _ChannelPatternsCheck(_SlackCheck):
     """Verifies the channel include and exclude regexes compile. Indexing
     cannot filter channels with a malformed regex."""
+
+    config_class = SlackConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -1025,6 +1025,8 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
     Composes the same enumeration the connector runs (``get_channels`` /
     ``get_channels_across_teams``). Some not visible is INCOMPLETE, since
     indexing skips them and indexes the rest; none visible FAILS."""
+
+    config_class = SlackConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
