@@ -434,9 +434,11 @@ places that folder id in the file's `external_user_group_ids`, so group sync
 non-inherited permissions on every run. With a service account it lists each
 folder once, the way the connector's phased retrieval does: each shared drive
 as an organizer chosen by `drive_access.py:select_drive_organizer` from the
-members it already read for the drive group, each user's My Drive with an
-owned-only query, then each user's directly shared folders, which is where a
-folder owned outside the domain reaches it. OAuth has one identity and lists
+members it already read for the drive group, then per user: the My Drive with
+an owned-only query, the folders shared with the user directly, which is where
+a folder owned outside the domain reaches it, and the folders of any shared
+drive in the user's own drive list that the admin's inventory missed, such as
+a partner domain's drive. OAuth has one identity and lists
 every folder it can see in one pass. The listing forms are the
 `DriveFolderScope` values of
 `source_operations.py:list_folders_with_permissions`. The whole sync shares

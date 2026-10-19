@@ -59,6 +59,7 @@ def _make_connector(user_emails: list[str], service_account: bool = True) -> Mag
     connector = MagicMock()
     connector.ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector.ops.can_list_drive.return_value = True
+    connector.ops.list_drives.side_effect = lambda **_kwargs: iter([])
     connector._get_all_user_emails.return_value = user_emails
     connector.is_service_account = service_account
     connector.primary_admin_email = _ADMIN
@@ -160,10 +161,46 @@ def test_service_account_lists_each_partition_once() -> None:
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d2"),
         (DriveFolderScope.OWNED, "a@example.com", None),
-        (DriveFolderScope.OWNED, "b@example.com", None),
         (DriveFolderScope.SHARED_WITH_ME, "a@example.com", None),
+        (DriveFolderScope.OWNED, "b@example.com", None),
         (DriveFolderScope.SHARED_WITH_ME, "b@example.com", None),
     ]
+
+
+def test_drive_outside_admin_inventory_is_listed_by_a_member() -> None:
+    """A partner domain's shared drive is not in the admin's inventory, so
+    organizer selection never sees it. The first enumerated user who is a
+    member lists its folders; later members and inventoried drives are not
+    listed again."""
+    connector = _make_connector(_USERS)
+    connector.ops.list_folders_with_permissions.side_effect = _listings(
+        {(DriveFolderScope.SHARED_DRIVE, "a@example.com", "partner"): [_folder("p1")]}
+    )
+    connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1", "partner"])
+
+    folder_ids = [
+        folder.id
+        for folder in _get_all_folders(
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={"d1": [_member(_ORGANIZER)]},
+            expand_group=_no_groups,
+        )
+    ]
+
+    assert folder_ids == ["p1"]
+    drive_listings = [
+        partition
+        for partition in _partitions_listed(connector)
+        if partition[0] is DriveFolderScope.SHARED_DRIVE
+    ]
+    assert drive_listings == [
+        (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
+        (DriveFolderScope.SHARED_DRIVE, "a@example.com", "partner"),
+    ]
+    connector.ops.list_drives.assert_any_call(
+        user_email="a@example.com", use_domain_admin_access=False
+    )
 
 
 def test_organizer_comes_from_group_membership_already_synced() -> None:

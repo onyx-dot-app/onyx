@@ -14,6 +14,7 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleSharedDrive
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
+    DriveFolderScope,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
@@ -289,4 +290,98 @@ def test_list_files_requires_its_variant() -> None:
     with pytest.raises(TypeError, match="variant"):
         _gateway().list_files(  # ty: ignore[missing-argument]
             user_email=_ADMIN, fields="nextPageToken, files(id)"
+        )
+
+
+_FOLDER_QUERY = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+
+
+@pytest.mark.parametrize(
+    ("scope", "drive_id", "expected"),
+    [
+        (
+            DriveFolderScope.ALL_DRIVES,
+            None,
+            {
+                "corpora": "allDrives",
+                "supportsAllDrives": True,
+                "includeItemsFromAllDrives": True,
+                "q": _FOLDER_QUERY,
+            },
+        ),
+        (
+            DriveFolderScope.OWNED,
+            None,
+            {"corpora": "user", "q": f"{_FOLDER_QUERY} and 'me' in owners"},
+        ),
+        (
+            DriveFolderScope.SHARED_WITH_ME,
+            None,
+            {"corpora": "user", "q": f"{_FOLDER_QUERY} and sharedWithMe = true"},
+        ),
+        (
+            DriveFolderScope.SHARED_DRIVE,
+            "d1",
+            {
+                "corpora": "drive",
+                "driveId": "d1",
+                "supportsAllDrives": True,
+                "includeItemsFromAllDrives": True,
+                "q": _FOLDER_QUERY,
+            },
+        ),
+    ],
+)
+def test_list_folders_sends_the_query_of_its_scope(
+    scope: DriveFolderScope, drive_id: str | None, expected: dict[str, object]
+) -> None:
+    """Group sync relies on each scope naming a disjoint set of folders, so a
+    wrong owner filter or drive argument would silently drop folder groups."""
+    gateway = _gateway()
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "execute_paginated_retrieval", return_value=iter([])
+        ) as retrieval,
+    ):
+        list(
+            gateway.list_folders_with_permissions(
+                user_email=_ADMIN, scope=scope, drive_id=drive_id
+            )
+        )
+
+    kwargs = retrieval.call_args.kwargs
+    assert {key: kwargs[key] for key in expected} == expected
+    assert kwargs["includePermissionsForView"] == "published"
+    assert kwargs["continue_on_404_or_403"] is True
+    if expected["corpora"] == "user":
+        assert "supportsAllDrives" not in kwargs
+        assert "driveId" not in kwargs
+
+
+def test_list_folders_defaults_to_every_drive() -> None:
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "execute_paginated_retrieval", return_value=iter([])
+        ) as retrieval,
+    ):
+        list(_gateway().list_folders_with_permissions(user_email=_ADMIN))
+
+    assert retrieval.call_args.kwargs["corpora"] == "allDrives"
+
+
+@pytest.mark.parametrize(
+    ("scope", "drive_id"),
+    [(DriveFolderScope.SHARED_DRIVE, None), (DriveFolderScope.OWNED, "d1")],
+)
+def test_list_folders_pairs_a_drive_id_with_the_shared_drive_scope(
+    scope: DriveFolderScope, drive_id: str | None
+) -> None:
+    with pytest.raises(ValueError):
+        next(
+            _gateway().list_folders_with_permissions(
+                user_email=_ADMIN, scope=scope, drive_id=drive_id
+            )
         )
