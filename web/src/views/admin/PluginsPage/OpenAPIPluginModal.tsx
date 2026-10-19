@@ -764,6 +764,9 @@ function OpenAPIPluginForm({
           !loadFailed && (
             <Modal.Footer padding={4}>
               <div className="ms-auto flex items-center gap-2">
+                <Button prominence="secondary" disabled={busy} onClick={close}>
+                  {t("addOpenApiModal.cancelButton.label")}
+                </Button>
                 <Button
                   icon={busy ? IconLoader : undefined}
                   disabled={primaryDisabled}

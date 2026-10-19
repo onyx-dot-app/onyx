@@ -1163,15 +1163,9 @@
           "label": "Réessayer"
         },
         "loading": "Chargement des plugins",
-        "empty": {
-          "title": "Aucun plugin installé",
-          "description": "Ajoutez un plugin à votre espace de travail.",
-          "explore": {
-            "label": "Explorer les plugins"
-          }
-        },
         "noResults": {
-          "title": "Aucun plugin trouvé"
+          "title": "Aucun plugin trouvé",
+          "description": "Ajoutez un plugin à votre espace de travail pour continuer."
         },
         "externalAppsError": "Impossible de charger les applications"
       },

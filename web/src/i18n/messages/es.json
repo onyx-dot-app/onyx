@@ -1163,15 +1163,9 @@
           "label": "Reintentar"
         },
         "loading": "Cargando plugins",
-        "empty": {
-          "title": "No hay plugins instalados",
-          "description": "Añade un plugin a tu espacio de trabajo.",
-          "explore": {
-            "label": "Explorar plugins"
-          }
-        },
         "noResults": {
-          "title": "No se encontraron plugins"
+          "title": "No se encontraron plugins",
+          "description": "Añade un plugin a tu espacio de trabajo para continuar."
         },
         "externalAppsError": "No se pudieron cargar las apps"
       },

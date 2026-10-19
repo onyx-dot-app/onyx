@@ -1163,15 +1163,9 @@
           "label": "다시 시도"
         },
         "loading": "플러그인 불러오는 중",
-        "empty": {
-          "title": "설치된 플러그인 없음",
-          "description": "워크스페이스에 플러그인을 추가하세요.",
-          "explore": {
-            "label": "플러그인 둘러보기"
-          }
-        },
         "noResults": {
-          "title": "플러그인을 찾을 수 없음"
+          "title": "플러그인을 찾을 수 없음",
+          "description": "계속하려면 워크스페이스에 플러그인을 추가하세요."
         },
         "externalAppsError": "앱을 불러오지 못했습니다"
       },

@@ -1163,15 +1163,9 @@
           "label": "Retry"
         },
         "loading": "Loading plugins",
-        "empty": {
-          "title": "No plugins installed",
-          "description": "Add a plugin to your workspace.",
-          "explore": {
-            "label": "Explore plugins"
-          }
-        },
         "noResults": {
-          "title": "No plugins found"
+          "title": "No plugins found",
+          "description": "Add a plugin to your workspace to continue."
         },
         "externalAppsError": "Apps could not load"
       },

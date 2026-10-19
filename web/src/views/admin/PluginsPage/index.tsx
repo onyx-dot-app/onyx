@@ -327,21 +327,13 @@ export default function PluginsPage() {
                 <div className="flex flex-col items-center py-8">
                   <SearchNoResults />
                 </div>
-              ) : plugins.length > 0 ? (
+              ) : (
                 <div className="flex flex-col items-center py-8">
                   <IllustrationContent
                     illustration={SvgEmpty}
                     title={t("state.noResults.title")}
+                    description={t("state.noResults.description")}
                   />
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-3 py-8">
-                  <IllustrationContent
-                    illustration={SvgEmpty}
-                    title={t("state.empty.title")}
-                    description={t("state.empty.description")}
-                  />
-                  {canCreate && addMenu()}
                 </div>
               ))}
           </div>
@@ -406,10 +398,9 @@ export default function PluginsPage() {
         {creation?.kind === "openapi" && (
           <OpenAPIPluginModal
             onClose={() => setDialog(null)}
-            onCreated={(toolId) => {
+            onCreated={() => {
               setDialog(null);
               void openapi.refresh();
-              router.push(pluginDetailHref({ kind: "openapi", id: toolId }));
             }}
           />
         )}

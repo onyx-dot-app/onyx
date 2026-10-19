@@ -251,7 +251,7 @@ test("refreshes persisted incomplete servers when MCP setup is dismissed", async
     throw new Error(`Unexpected request: ${String(input)}`);
   });
   render(<PluginsPage />);
-  await screen.findByText(copy.state.empty.title);
+  await screen.findByText(copy.state.noResults.title);
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Close" }));
   expect(
@@ -495,7 +495,9 @@ test.each([
         network.mock.calls.filter(([url]) => url === retryUrl)
       ).toHaveLength(2)
     );
-    expect(screen.queryByText(copy.state.empty.title)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(copy.state.noResults.title)
+    ).not.toBeInTheDocument();
   }
 );
 
@@ -524,7 +526,7 @@ test("shows an available list while the other list is still loading", async () =
 test("leads an empty installation through the type dropdown to suggested MCP plugins", async () => {
   mockNetwork({ empty: true });
   render(<PluginsPage />);
-  expect(await screen.findByText(copy.state.empty.title)).toBeVisible();
+  expect(await screen.findByText(copy.state.noResults.title)).toBeVisible();
   await setupUser().click(
     screen.getAllByRole("button", { name: copy.add.label }).at(-1) ??
       screen.getByRole("button", { name: copy.add.label })

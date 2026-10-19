@@ -1163,15 +1163,9 @@
           "label": "重试"
         },
         "loading": "正在加载插件",
-        "empty": {
-          "title": "未安装插件",
-          "description": "向工作区添加插件。",
-          "explore": {
-            "label": "探索插件"
-          }
-        },
         "noResults": {
-          "title": "未找到插件"
+          "title": "未找到插件",
+          "description": "请向工作区添加插件以继续。"
         },
         "externalAppsError": "无法加载应用"
       },

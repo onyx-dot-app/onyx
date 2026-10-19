@@ -1163,15 +1163,9 @@
           "label": "Tentar novamente"
         },
         "loading": "Carregando plugins",
-        "empty": {
-          "title": "Nenhum plugin instalado",
-          "description": "Adicione um plugin ao seu espaço de trabalho.",
-          "explore": {
-            "label": "Explorar plugins"
-          }
-        },
         "noResults": {
-          "title": "Nenhum plugin encontrado"
+          "title": "Nenhum plugin encontrado",
+          "description": "Adicione um plugin ao seu espaço de trabalho para continuar."
         },
         "externalAppsError": "Não foi possível carregar os apps"
       },

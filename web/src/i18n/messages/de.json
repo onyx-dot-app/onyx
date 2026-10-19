@@ -1163,15 +1163,9 @@
           "label": "Erneut versuchen"
         },
         "loading": "Plugins werden geladen",
-        "empty": {
-          "title": "Keine Plugins installiert",
-          "description": "Füge deinem Workspace ein Plugin hinzu.",
-          "explore": {
-            "label": "Plugins entdecken"
-          }
-        },
         "noResults": {
-          "title": "Keine Plugins gefunden"
+          "title": "Keine Plugins gefunden",
+          "description": "Fügen Sie Ihrem Arbeitsbereich ein Plugin hinzu, um fortzufahren."
         },
         "externalAppsError": "Apps konnten nicht geladen werden"
       },
