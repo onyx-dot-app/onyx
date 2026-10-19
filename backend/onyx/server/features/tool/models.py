@@ -96,6 +96,7 @@ class Header(BaseModel):
 
 
 class CustomToolCreate(BaseModel):
+    default_chat_enabled: bool | None = None
     enabled: bool = True
     name: str
     description: str | None = None
@@ -116,6 +117,7 @@ class CustomToolCreate(BaseModel):
 
 
 class CustomToolUpdate(BaseModel):
+    default_chat_enabled: bool | None = None
     name: str | None = None
     description: str | None = None
     definition: dict[str, Any] | None = None

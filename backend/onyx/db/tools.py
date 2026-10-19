@@ -316,6 +316,8 @@ def update_tool(
     db_session: Session,
     passthrough_auth: bool | None,
     oauth_config_id: int | None | UnsetType = UNSET,
+    *,
+    commit: bool = True,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -354,7 +356,8 @@ def update_tool(
             if oauth_config:
                 db_session.delete(oauth_config)
 
-    db_session.commit()
+    if commit:
+        db_session.commit()
     return tool
 
 

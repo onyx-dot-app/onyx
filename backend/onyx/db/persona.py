@@ -4,7 +4,8 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy import Select, delete, func, not_, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -2111,6 +2112,39 @@ def get_default_assistant(db_session: Session) -> Persona | None:
         .filter(Persona.deleted.is_(False))
         .one_or_none()
     )
+
+
+def set_default_chat_tool__no_commit(
+    db_session: Session, tool: Tool, enabled: bool
+) -> None:
+    """Change one selection without replacing other plugins' default settings."""
+    persona = db_session.scalar(
+        select(Persona)
+        .where(
+            Persona.id == DEFAULT_PERSONA_ID,
+            Persona.builtin_persona.is_(True),
+            Persona.deleted.is_(False),
+        )
+        .with_for_update()
+    )
+    if persona is None:
+        raise ValueError("Default assistant not found")
+    if enabled:
+        db_session.execute(
+            insert(Persona__Tool)
+            .values(persona_id=persona.id, tool_id=tool.id)
+            .on_conflict_do_nothing()
+        )
+        if is_openapi_tool(tool):
+            tool.enabled = True
+    else:
+        db_session.execute(
+            delete(Persona__Tool).where(
+                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.tool_id == tool.id,
+            )
+        )
+    db_session.expire(persona, ["tools"])
 
 
 def update_default_assistant_configuration(

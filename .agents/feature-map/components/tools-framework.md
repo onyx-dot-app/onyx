@@ -55,6 +55,20 @@ scoped down when web search is excluded.
 MCP tool CRUD lives under `/admin/mcp` and is covered by `[[mcp-and-custom-tools]]`,
 not here.
 
+### Terraform custom tools
+
+`terraform-provider-onyx/internal/provider/custom_tool_resource.go` retains the
+`onyx_custom_tool.enabled` attribute as a compatibility name for default Chat selection.
+It reads `default_chat_enabled` and writes that field through custom-tool create/update.
+It does not call the global status endpoint. Upgrade the provider with this API change;
+older provider versions still use global status writes.
+
+The optional `default_chat_enabled` request field requires full admin access.
+Omitting it preserves the selection and existing scoped metadata-edit permissions.
+The API saves metadata and this selection in one transaction. The per-tool helper
+changes only that tool's default-persona attachment, preserving other selections.
+See [[mcp-and-custom-tools]] §4.5 for legacy flags and custom-agent availability.
+
 ### The per-message tool toggle
 
 `handle_send_chat_message` accepts an `allowed_tool_ids` whitelist on the request.

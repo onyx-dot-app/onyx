@@ -82,6 +82,14 @@ show the same workspace controls below access controls. Saving Chat enablement s
 Directory indicators are read-only; plugin rows no longer open availability menus.
 OpenAPI setup and Configuration expose Enable in default Chat.
 Full-admin creation defaults this switch on; turning it off creates the plugin without a default Chat attachment.
+The custom-tool create and update APIs accept optional `default_chat_enabled`.
+Providing this field requires full admin access before any data changes.
+Omitting it preserves existing selection behavior. Each write changes only that plugin's
+default Chat association and commits it with the tool metadata. Concurrent targeted writes
+preserve other plugins' selections; selecting a legacy disabled plugin normalizes only its own flag.
+Create, update, and read snapshots return the resulting `default_chat_enabled`.
+Terraform retains its `enabled` configuration name for this default Chat setting;
+it no longer changes global availability or custom-agent attachments.
 MCP copy describes default Chat as chats without a custom agent.
 Descriptions distinguish surface availability from access controls and tool permissions.
 Only full admins can change main Chat defaults. Craft controls follow deployment availability

@@ -12,12 +12,16 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.db.constants import UNSET
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.models import Tool, User
 from onyx.db.oauth_config import get_oauth_config
-from onyx.db.persona import get_tool_ids_on_editable_personas
+from onyx.db.persona import (
+    get_tool_ids_on_editable_personas,
+    set_default_chat_tool__no_commit,
+)
 from onyx.db.tools import (
     can_link_oauth_config,
     can_manage_tool,
@@ -213,6 +217,27 @@ def _assert_can_link_oauth_config(
         )
 
 
+def _validate_default_chat_permission(enabled: bool | None, user: User) -> None:
+    if enabled is not None and not has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only full admins can change default Chat availability",
+        )
+
+
+def _apply_default_chat_selection(
+    enabled: bool | None, tool: Tool, db_session: Session
+) -> None:
+    if enabled is None:
+        return
+    try:
+        set_default_chat_tool__no_commit(db_session, tool, enabled)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(error)) from error
+
+
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
@@ -221,6 +246,7 @@ def create_custom_tool(
         require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
     ),
 ) -> ToolSnapshot:
+    _validate_default_chat_permission(tool_data.default_chat_enabled, user)
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data, user)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
@@ -236,8 +262,11 @@ def create_custom_tool(
         oauth_config_id=tool_data.oauth_config_id,
         enabled=tool_data.enabled,
     )
+    _apply_default_chat_selection(tool_data.default_chat_enabled, tool, db_session)
     db_session.commit()
-    return ToolSnapshot.from_model(tool)
+    snapshot = ToolSnapshot.from_model(tool)
+    _stamp_default_chat_availability([snapshot], db_session)
+    return snapshot
 
 
 @admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
@@ -249,6 +278,7 @@ def update_custom_tool(
         require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
     ),
 ) -> ToolSnapshot:
+    _validate_default_chat_permission(tool_data.default_chat_enabled, user)
     existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
     if tool_data.definition is not None:
         _validate_tool_definition(tool_data.definition)
@@ -270,9 +300,20 @@ def update_custom_tool(
         user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
-        oauth_config_id=tool_data.oauth_config_id,
+        oauth_config_id=(
+            tool_data.oauth_config_id
+            if "oauth_config_id" in tool_data.model_fields_set
+            else UNSET
+        ),
+        commit=False,
     )
-    return ToolSnapshot.from_model(updated_tool)
+    _apply_default_chat_selection(
+        tool_data.default_chat_enabled, updated_tool, db_session
+    )
+    db_session.commit()
+    snapshot = ToolSnapshot.from_model(updated_tool)
+    _stamp_default_chat_availability([snapshot], db_session)
+    return snapshot
 
 
 @admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS)

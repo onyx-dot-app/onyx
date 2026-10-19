@@ -295,6 +295,18 @@ provider_installation {
 Then `go build` here and run `terraform plan/apply` (skip `terraform init`) in any config
 using the provider.
 
+### OpenAPI default Chat availability
+
+`onyx_custom_tool.enabled` now controls availability in default Chat, without a custom agent.
+It defaults to `true`. Custom agents retain their own tool selection; `false` does not disable
+an action globally. Delete the resource to remove the action from all agents.
+
+This provider requires an Onyx server that returns `default_chat_enabled` for custom tools.
+Upgrade the server before applying. A refresh reads default Chat selection instead of the old
+global flag. Existing resources and imports can therefore show a one-time change to `enabled`.
+Review that plan: applying `enabled = true` adds the action to default Chat. Setting it to `false`
+removes that selection. Both writes require workspace admin access.
+
 ### Acceptance tests
 
 Acceptance tests run real CRUD cycles against a live Onyx deployment (they create and

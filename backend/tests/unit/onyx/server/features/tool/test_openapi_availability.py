@@ -110,3 +110,63 @@ def test_default_configuration_omits_legacy_disabled_links_and_explicit_selectio
     assert legacy.enabled is True
     assert default.tools == [tools[1], tools[2]]
     assert db.commit.call_count == 2
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_default_chat_write_requires_full_admin_before_mutation(
+    monkeypatch: pytest.MonkeyPatch, enabled: bool
+) -> None:
+    monkeypatch.setattr(api, "has_global_permission", lambda *_: False)
+    db = MagicMock(spec=Session)
+    with pytest.raises(OnyxError, match="Only full admins"):
+        api.create_custom_tool(
+            CustomToolCreate(
+                name="API",
+                definition={},
+                passthrough_auth=False,
+                default_chat_enabled=enabled,
+            ),
+            db,
+            User(),
+        )
+    with pytest.raises(OnyxError, match="Only full admins"):
+        api.update_custom_tool(
+            1, api.CustomToolUpdate(default_chat_enabled=enabled), db, User()
+        )
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("clear_oauth", [False, True])
+def test_selection_only_update_preserves_oauth_unless_explicitly_cleared(
+    monkeypatch: pytest.MonkeyPatch, clear_oauth: bool
+) -> None:
+    from onyx.db import tools as tools_db
+
+    tool = Tool(
+        id=1,
+        name="API",
+        openapi_schema={},
+        enabled=True,
+        passthrough_auth=False,
+        oauth_config_id=17,
+    )
+    db = MagicMock(spec=Session)
+    db.scalars.return_value.all.return_value = []
+    monkeypatch.setattr(api, "has_global_permission", lambda *_: True)
+    monkeypatch.setattr(api, "_get_manageable_custom_tool", lambda *_: tool)
+    monkeypatch.setattr(tools_db, "get_tool_by_id", lambda *_: tool)
+    selection = MagicMock()
+    monkeypatch.setattr(api, "set_default_chat_tool__no_commit", selection)
+    monkeypatch.setattr(api, "get_default_chat_tool_ids", lambda *_: set())
+    payload: dict[str, bool | None] = {"default_chat_enabled": False}
+    if clear_oauth:
+        payload["oauth_config_id"] = None
+    snapshot = api.update_custom_tool(
+        tool.id, api.CustomToolUpdate.model_validate(payload), db, User()
+    )
+    assert snapshot.oauth_config_id == (None if clear_oauth else 17)
+    assert tool.oauth_config_id == (None if clear_oauth else 17)
+    assert snapshot.default_chat_enabled is False
+    selection.assert_called_once_with(db, tool, False)
+    db.commit.assert_called_once()
