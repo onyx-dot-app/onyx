@@ -270,6 +270,30 @@ def test_incomplete_drive_listing_is_unioned_with_members() -> None:
     ]
 
 
+def test_organizer_listing_does_not_swallow_a_denial() -> None:
+    """A user's listing may end quietly on a denial, as before. The organizer
+    listing may not: it decides whether a drive is covered, so a denial must
+    raise and leave the drive to its members."""
+    connector = _make_connector(["a@example.com"])
+    connector.ops.list_folders_with_permissions.side_effect = _listings({})
+
+    list(
+        _get_all_folders(
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={"d1": [_member(_ORGANIZER)]},
+            expand_group=_no_groups,
+        )
+    )
+
+    by_partition = {
+        _partition(call.kwargs): call.kwargs["continue_on_404_or_403"]
+        for call in connector.ops.list_folders_with_permissions.call_args_list
+    }
+    assert by_partition[(DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1")] is False
+    assert by_partition[(DriveFolderScope.OWNED, "a@example.com", None)] is True
+
+
 def test_organizer_comes_from_group_membership_already_synced() -> None:
     """A drive organized through a Google Group is listed as a member of that
     group, resolved through the memberships the sync read earlier rather than

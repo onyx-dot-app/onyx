@@ -317,7 +317,12 @@ _FOLDER_QUERY = "mimeType = 'application/vnd.google-apps.folder' and trashed = f
         (
             DriveFolderScope.NOT_OWNED,
             None,
-            {"corpora": "user", "q": f"{_FOLDER_QUERY} and not 'me' in owners"},
+            {
+                "corpora": "user",
+                "supportsAllDrives": True,
+                "includeItemsFromAllDrives": True,
+                "q": f"{_FOLDER_QUERY} and not 'me' in owners",
+            },
         ),
         (
             DriveFolderScope.SHARED_DRIVE,
@@ -356,8 +361,9 @@ def test_list_folders_sends_the_query_of_its_scope(
     assert kwargs["includePermissionsForView"] == "published"
     assert kwargs["continue_on_404_or_403"] is True
     if expected["corpora"] == "user":
-        assert "supportsAllDrives" not in kwargs
         assert "driveId" not in kwargs
+    if scope is DriveFolderScope.OWNED:
+        assert "supportsAllDrives" not in kwargs
 
 
 def test_list_folders_defaults_to_every_drive() -> None:

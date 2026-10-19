@@ -168,7 +168,8 @@ class DriveFolderScope(str, Enum):
     OWNED = "owned"
     # Folders in the user's view that the user does not own: folders shared
     # with the user directly, and folders the user opened inside a shared
-    # tree. Shared drive folders are not included.
+    # tree. A shared drive folder is included only on those terms, not through
+    # drive membership.
     NOT_OWNED = "not_owned"
     # Folders of one shared drive; the user must be a member.
     SHARED_DRIVE = "shared_drive"
@@ -942,7 +943,9 @@ class GoogleDriveSourceOperations(SourceOperations):
                 query += " and 'me' in owners"
             else:
                 query += " and not 'me' in owners"
-        if kwargs["corpora"] != DriveCorpus.USER.value:
+        # Without these flags Drive leaves shared drive items out of the user
+        # corpus too, such as a folder shared directly with a non-member.
+        if scope is not DriveFolderScope.OWNED:
             kwargs["supportsAllDrives"] = True
             kwargs["includeItemsFromAllDrives"] = True
         yield from execute_paginated_retrieval(

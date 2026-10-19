@@ -197,7 +197,14 @@ class _FolderCrawl:
                 drive_id,
             )
             email = admin_email
-        yield from self._folders(email, DriveFolderScope.SHARED_DRIVE, drive_id)
+        # A denial must raise here: a listing that ended quietly on a 403 or
+        # 404 would otherwise be mistaken for a complete one.
+        yield from self._folders(
+            email,
+            DriveFolderScope.SHARED_DRIVE,
+            drive_id,
+            continue_on_404_or_403=False,
+        )
         # Reached only when the listing finished without an error.
         if choice.complete:
             self._covered_drive_ids.add(drive_id)
@@ -225,12 +232,20 @@ class _FolderCrawl:
             yield from self._folders(email, DriveFolderScope.SHARED_DRIVE, drive_id)
 
     def _folders(
-        self, user_email: str, scope: DriveFolderScope, drive_id: str | None = None
+        self,
+        user_email: str,
+        scope: DriveFolderScope,
+        drive_id: str | None = None,
+        continue_on_404_or_403: bool = True,
     ) -> Generator[FolderInfo, None, None]:
         """Lists one partition as ``user_email`` and updates the shared seen set."""
         self._check_deadline()
         for folder in get_folders(
-            ops=self._ops, user_email=user_email, scope=scope, drive_id=drive_id
+            ops=self._ops,
+            user_email=user_email,
+            scope=scope,
+            drive_id=drive_id,
+            continue_on_404_or_403=continue_on_404_or_403,
         ):
             self._check_deadline()
             folder_id = folder["id"]
