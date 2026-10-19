@@ -1,12 +1,13 @@
 """Check dependencies: run order, the checks a dependency stops, the stop
 after a rate limit, and the same rule for checks that ran side by side."""
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks import draft_runs
+from onyx.connectors.capability_checks import draft_runs, runner
 from onyx.connectors.capability_checks.creation import _unfinished_results
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckState,
@@ -22,8 +23,10 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckNotRunReason,
     CredentialCapability,
+    CredentialCapabilityReport,
 )
 from onyx.connectors.capability_checks.runner import (
+    merge_capability_results,
     run_capability_checks,
     run_order,
     stop_blocked_results,
@@ -33,6 +36,7 @@ from onyx.connectors.exceptions import (
     RateLimitedValidationError,
     UnexpectedValidationError,
 )
+from onyx.db.enums import CapabilityCheckTrigger
 
 
 class _Check(CapabilityCheck):
@@ -196,6 +200,36 @@ def test_results_that_ran_side_by_side_report_their_dependency() -> None:
     assert results[0].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
     assert results[0].blocked_by == "sign_in"
     assert results[2].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+
+
+def test_a_dependency_that_ends_later_stops_a_finished_dependent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checks: list[CapabilityCheck] = [
+        _Check("sign_in"),
+        _Check("list", depends_on=("sign_in",)),
+    ]
+    monkeypatch.setattr(runner, "get_capability_checks", lambda _source: checks)
+    # The background run finished only the dependency; the dependent finished
+    # earlier, within the creation budget.
+    report = CredentialCapabilityReport(
+        credential_id=1,
+        source=DocumentSource.SLACK,
+        checked_at=datetime.now(timezone.utc),
+        trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        verdicts={},
+        check_results=[_result("sign_in", CapabilityCheckStatus.INCOMPLETE)],
+    )
+
+    merged = merge_capability_results(
+        report, [_result("list", CapabilityCheckStatus.PASSED)]
+    )
+
+    results = {result.check_id: result for result in merged.check_results}
+    assert results["sign_in"].status == CapabilityCheckStatus.INCOMPLETE
+    assert results["list"].status == CapabilityCheckStatus.SKIPPED
+    assert results["list"].not_run_reason == CheckNotRunReason.DEPENDENCY_INCOMPLETE
+    assert results["list"].blocked_by == "sign_in"
 
 
 def test_unfinished_checks_after_a_failed_dependency_report_its_cause() -> None:

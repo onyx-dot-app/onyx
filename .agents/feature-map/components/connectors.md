@@ -467,7 +467,8 @@ as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
 `INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
 `not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
 `SKIPPED` too. Creation runs its checks side by side, then applies the same rule
-(`stop_blocked_results`). In a draft run, a check waits while a dependency
+(`stop_blocked_results`). `merge_capability_results` applies it again when a
+background run adds results to earlier ones. In a draft run, a check waits while a dependency
 waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,

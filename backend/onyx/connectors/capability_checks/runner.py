@@ -853,16 +853,21 @@ def merge_capability_results(
 ) -> CredentialCapabilityReport:
     """The report of a limited run with ``prior_results`` added, for the checks
     the run left out. Results keep the registry order; the run's own result
-    wins over a prior one for the same check."""
+    wins over a prior one for the same check. A prior result whose dependency
+    this run stopped becomes the result that names that dependency."""
     by_key = {
         (result.check_id, result.capability): result
         for result in [*prior_results, *report.check_results]
     }
-    results = [
-        by_key[key]
-        for check in get_capability_checks(report.source)
-        if (key := (check.check_id, check.capability)) in by_key
-    ]
+    checks = get_capability_checks(report.source)
+    results = stop_blocked_results(
+        checks,
+        [
+            by_key[key]
+            for check in checks
+            if (key := (check.check_id, check.capability)) in by_key
+        ],
+    )
     return report.model_copy(
         update={
             "check_results": results,
