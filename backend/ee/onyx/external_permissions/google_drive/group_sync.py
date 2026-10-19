@@ -95,7 +95,9 @@ class _FolderCrawl:
         self._expand_group = expand_group
         self._deadline = deadline
         self._seen_folder_ids: set[str] = set()
-        # Shared drives whose folders a listing covered.
+        # Shared drives an organizer listed in full. Only an organizer is
+        # guaranteed to see every folder, so any other listing leaves the
+        # drive for its members' passes, as does a listing that failed.
         self._covered_drive_ids: set[str] = set()
         self.skipped_already_seen = 0
         self.skipped_no_permissions = 0
@@ -187,13 +189,16 @@ class _FolderCrawl:
                 drive_id,
             )
             email = admin_email
-        self._covered_drive_ids.add(drive_id)
         yield from self._folders(email, DriveFolderScope.SHARED_DRIVE, drive_id)
+        # Reached only when the listing finished without an error.
+        if choice.complete:
+            self._covered_drive_ids.add(drive_id)
 
     def _user_folders(self, email: str) -> Generator[FolderInfo, None, None]:
         """A user's own folders, the folders shared with the user directly,
-        and the folders of any shared drive the admin's inventory did not
-        list, such as a partner domain's drive the user is a member of."""
+        and the folders of any shared drive no organizer listed in full: one
+        the admin's inventory did not include, such as a partner domain's
+        drive, one listed by a lesser role, or one whose listing failed."""
         yield from self._folders(email, DriveFolderScope.OWNED)
         yield from self._folders(email, DriveFolderScope.SHARED_WITH_ME)
         for drive_id in self._ops.list_drives(
@@ -203,11 +208,11 @@ class _FolderCrawl:
             if drive_id in self._covered_drive_ids:
                 continue
             logger.info(
-                "Drive %s is outside the admin's inventory; listing its folders as %s.",
+                "Drive %s has no complete organizer listing; listing its folders "
+                "as member %s.",
                 drive_id,
                 email,
             )
-            self._covered_drive_ids.add(drive_id)
             yield from self._folders(email, DriveFolderScope.SHARED_DRIVE, drive_id)
 
     def _folders(

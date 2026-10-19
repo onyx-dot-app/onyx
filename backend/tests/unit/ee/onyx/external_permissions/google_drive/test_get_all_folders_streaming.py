@@ -167,14 +167,30 @@ def test_service_account_lists_each_partition_once() -> None:
     ]
 
 
-def test_drive_outside_admin_inventory_is_listed_by_a_member() -> None:
+def _drive_listings(connector: MagicMock) -> list[Partition]:
+    return [
+        partition
+        for partition in _partitions_listed(connector)
+        if partition[0] is DriveFolderScope.SHARED_DRIVE
+    ]
+
+
+def test_drive_outside_admin_inventory_is_listed_by_its_members() -> None:
     """A partner domain's shared drive is not in the admin's inventory, so
-    organizer selection never sees it. The first enumerated user who is a
-    member lists its folders; later members and inventoried drives are not
-    listed again."""
+    organizer selection never sees it. Every enumerated member lists it, since
+    no member's view is guaranteed complete; a drive an organizer already
+    listed in full is not listed again."""
     connector = _make_connector(_USERS)
     connector.ops.list_folders_with_permissions.side_effect = _listings(
-        {(DriveFolderScope.SHARED_DRIVE, "a@example.com", "partner"): [_folder("p1")]}
+        {
+            (DriveFolderScope.SHARED_DRIVE, "a@example.com", "partner"): [
+                _folder("p1")
+            ],
+            (DriveFolderScope.SHARED_DRIVE, "b@example.com", "partner"): [
+                _folder("p1"),
+                _folder("p2-limited"),
+            ],
+        }
     )
     connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1", "partner"])
 
@@ -188,19 +204,70 @@ def test_drive_outside_admin_inventory_is_listed_by_a_member() -> None:
         )
     ]
 
-    assert folder_ids == ["p1"]
-    drive_listings = [
-        partition
-        for partition in _partitions_listed(connector)
-        if partition[0] is DriveFolderScope.SHARED_DRIVE
-    ]
-    assert drive_listings == [
+    assert folder_ids == ["p1", "p2-limited"]
+    assert _drive_listings(connector) == [
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
         (DriveFolderScope.SHARED_DRIVE, "a@example.com", "partner"),
+        (DriveFolderScope.SHARED_DRIVE, "b@example.com", "partner"),
     ]
     connector.ops.list_drives.assert_any_call(
         user_email="a@example.com", use_domain_admin_access=False
     )
+
+
+def test_failed_organizer_listing_leaves_drive_to_its_members() -> None:
+    """A drive is covered only once its organizer listing finished. If that
+    listing fails, a member who sees the drive lists it later, so the sync
+    does not finish without the drive's folder groups and revoke access."""
+    connector = _make_connector(["a@example.com"])
+
+    def listing(**kwargs: Any) -> Iterator[dict[str, Any]]:
+        if kwargs["user_email"] == _ORGANIZER and kwargs["drive_id"] == "d1":
+            raise RuntimeError("drive unavailable")
+        return iter([_folder("d1-x")] if kwargs.get("drive_id") == "d1" else [])
+
+    connector.ops.list_folders_with_permissions.side_effect = listing
+    connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1", "d2"])
+
+    folder_ids = [
+        folder.id
+        for folder in _get_all_folders(
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={"d1": [_member(_ORGANIZER)], "d2": [_member(_ORGANIZER)]},
+            expand_group=_no_groups,
+        )
+    ]
+
+    assert folder_ids == ["d1-x"]
+    assert _drive_listings(connector) == [
+        (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
+        (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d2"),
+        (DriveFolderScope.SHARED_DRIVE, "a@example.com", "d1"),
+    ]
+
+
+def test_incomplete_drive_listing_is_unioned_with_members() -> None:
+    """Only an organizer sees limited-access folders. A drive listed by a
+    lesser role or by the admin is also listed by each member, as the old
+    per-user walk did, so folders only some members see are still groups."""
+    connector = _make_connector(["a@example.com"])
+    connector.ops.list_folders_with_permissions.side_effect = _listings({})
+    connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1"])
+
+    list(
+        _get_all_folders(
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={"d1": [_member("reader@example.com", DriveRole.READER)]},
+            expand_group=_no_groups,
+        )
+    )
+
+    assert _drive_listings(connector) == [
+        (DriveFolderScope.SHARED_DRIVE, "reader@example.com", "d1"),
+        (DriveFolderScope.SHARED_DRIVE, "a@example.com", "d1"),
+    ]
 
 
 def test_organizer_comes_from_group_membership_already_synced() -> None:
