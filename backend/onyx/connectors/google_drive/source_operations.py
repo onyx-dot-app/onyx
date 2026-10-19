@@ -157,17 +157,19 @@ class DriveCorpus(str, Enum):
 
 
 class DriveFolderScope(str, Enum):
-    """Which folders a folder listing covers. Each folder of a domain is in
-    exactly one of the three narrow scopes, so a caller that walks every shared
-    drive, every owner and every user's direct shares lists each folder once."""
+    """Which folders a folder listing covers. A caller that walks every shared
+    drive, then every user's owned and not-owned My Drive folders, reaches every
+    folder the all-drives listing reaches for any user, and lists each owned
+    folder once."""
 
     # Every folder the user can see, in any drive.
     ALL_DRIVES = "all_drives"
     # Folders of the user's My Drive that the user owns.
     OWNED = "owned"
-    # Folders shared with the user directly. Children of a shared folder are
-    # not included, only the folder that carries the share.
-    SHARED_WITH_ME = "shared_with_me"
+    # Folders in the user's view that the user does not own: folders shared
+    # with the user directly, and folders the user opened inside a shared
+    # tree. Shared drive folders are not included.
+    NOT_OWNED = "not_owned"
     # Folders of one shared drive; the user must be a member.
     SHARED_DRIVE = "shared_drive"
 
@@ -939,7 +941,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             if scope is DriveFolderScope.OWNED:
                 query += " and 'me' in owners"
             else:
-                query += " and sharedWithMe = true"
+                query += " and not 'me' in owners"
         if kwargs["corpora"] != DriveCorpus.USER.value:
             kwargs["supportsAllDrives"] = True
             kwargs["includeItemsFromAllDrives"] = True

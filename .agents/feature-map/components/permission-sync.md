@@ -435,8 +435,8 @@ non-inherited permissions on every run. With a service account it lists each
 folder once, the way the connector's phased retrieval does: each shared drive
 as an organizer chosen by `drive_access.py:select_drive_organizer` from the
 members it already read for the drive group, then per user: the My Drive with
-an owned-only query, the folders shared with the user directly, which is where
-a folder owned outside the domain reaches it, and the folders of any shared
+an owned-only query, the My Drive folders the user can see but does not own,
+which is where a folder owned outside the domain reaches it, and the folders of any shared
 drive in the user's own drive list that no organizer listed in full: one the
 admin's inventory missed, such as a partner domain's drive, one listed by a
 lesser role, or one whose listing failed. OAuth has one identity and lists

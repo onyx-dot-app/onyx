@@ -315,9 +315,9 @@ _FOLDER_QUERY = "mimeType = 'application/vnd.google-apps.folder' and trashed = f
             {"corpora": "user", "q": f"{_FOLDER_QUERY} and 'me' in owners"},
         ),
         (
-            DriveFolderScope.SHARED_WITH_ME,
+            DriveFolderScope.NOT_OWNED,
             None,
-            {"corpora": "user", "q": f"{_FOLDER_QUERY} and sharedWithMe = true"},
+            {"corpora": "user", "q": f"{_FOLDER_QUERY} and not 'me' in owners"},
         ),
         (
             DriveFolderScope.SHARED_DRIVE,

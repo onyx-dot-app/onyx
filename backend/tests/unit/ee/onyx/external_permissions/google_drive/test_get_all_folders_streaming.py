@@ -117,7 +117,7 @@ def test_get_all_folders_streams_without_materializing() -> None:
             ],
             (DriveFolderScope.OWNED, "a@example.com", None): [_folder("a1")],
             (DriveFolderScope.OWNED, "b@example.com", None): [_folder("b1")],
-            (DriveFolderScope.SHARED_WITH_ME, "b@example.com", None): [_folder("ext1")],
+            (DriveFolderScope.NOT_OWNED, "b@example.com", None): [_folder("ext1")],
         }
     )
 
@@ -144,7 +144,7 @@ def test_get_all_folders_streams_without_materializing() -> None:
 def test_service_account_lists_each_partition_once() -> None:
     """A service account must not list the whole domain once per user. Each
     shared drive is listed once as its organizer, each user's My Drive once
-    as its owner, and each user's direct shares once."""
+    as its owner, and each user's not-owned folders once."""
     connector = _make_connector(_USERS)
     connector.ops.list_folders_with_permissions.side_effect = _listings({})
 
@@ -161,9 +161,9 @@ def test_service_account_lists_each_partition_once() -> None:
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d2"),
         (DriveFolderScope.OWNED, "a@example.com", None),
-        (DriveFolderScope.SHARED_WITH_ME, "a@example.com", None),
+        (DriveFolderScope.NOT_OWNED, "a@example.com", None),
         (DriveFolderScope.OWNED, "b@example.com", None),
-        (DriveFolderScope.SHARED_WITH_ME, "b@example.com", None),
+        (DriveFolderScope.NOT_OWNED, "b@example.com", None),
     ]
 
 
@@ -218,23 +218,24 @@ def test_drive_outside_admin_inventory_is_listed_by_its_members() -> None:
 def test_failed_organizer_listing_leaves_drive_to_its_members() -> None:
     """A drive is covered only once its organizer listing finished. If that
     listing fails, a member who sees the drive lists it later, so the sync
-    does not finish without the drive's folder groups and revoke access."""
+    does not finish without the drive's folder groups and revoke access. The
+    failure must not end the sync either, even when it is the only drive."""
     connector = _make_connector(["a@example.com"])
 
     def listing(**kwargs: Any) -> Iterator[dict[str, Any]]:
-        if kwargs["user_email"] == _ORGANIZER and kwargs["drive_id"] == "d1":
+        if kwargs["user_email"] == _ORGANIZER:
             raise RuntimeError("drive unavailable")
         return iter([_folder("d1-x")] if kwargs.get("drive_id") == "d1" else [])
 
     connector.ops.list_folders_with_permissions.side_effect = listing
-    connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1", "d2"])
+    connector.ops.list_drives.side_effect = lambda **_kwargs: iter(["d1"])
 
     folder_ids = [
         folder.id
         for folder in _get_all_folders(
             google_drive_connector=connector,
             skip_folders_without_permissions=True,
-            drive_members={"d1": [_member(_ORGANIZER)], "d2": [_member(_ORGANIZER)]},
+            drive_members={"d1": [_member(_ORGANIZER)]},
             expand_group=_no_groups,
         )
     ]
@@ -242,7 +243,6 @@ def test_failed_organizer_listing_leaves_drive_to_its_members() -> None:
     assert folder_ids == ["d1-x"]
     assert _drive_listings(connector) == [
         (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d1"),
-        (DriveFolderScope.SHARED_DRIVE, _ORGANIZER, "d2"),
         (DriveFolderScope.SHARED_DRIVE, "a@example.com", "d1"),
     ]
 
@@ -362,16 +362,16 @@ def test_oauth_lists_everything_its_one_identity_sees() -> None:
 
 def test_get_all_folders_dedupes_across_partitions() -> None:
     """A folder shared directly with several users is listed in each of their
-    shared-with-me passes, so the shared seen-set must still collapse
+    not-owned passes, so the shared seen-set must still collapse
     duplicates now that folders are streamed rather than appended to a list."""
     connector = _make_connector(_USERS)
     connector.ops.list_folders_with_permissions.side_effect = _listings(
         {
-            (DriveFolderScope.SHARED_WITH_ME, "a@example.com", None): [
+            (DriveFolderScope.NOT_OWNED, "a@example.com", None): [
                 _folder("shared"),
                 _folder("only-a"),
             ],
-            (DriveFolderScope.SHARED_WITH_ME, "b@example.com", None): [
+            (DriveFolderScope.NOT_OWNED, "b@example.com", None): [
                 _folder("shared"),
                 _folder("only-b"),
             ],

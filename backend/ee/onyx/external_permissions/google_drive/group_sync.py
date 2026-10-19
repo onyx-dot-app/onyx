@@ -107,8 +107,13 @@ class _FolderCrawl:
         if not self._connector.is_service_account:
             yield from self._partitions(user_emails, self._all_folders_of, "user")
             return
+        # A drive whose organizer listing failed stays uncovered for the user
+        # pass to recover, so drive failures do not end the sync on their own.
         yield from self._partitions(
-            list(self._drive_members), self._shared_drive_folders, "shared drive"
+            list(self._drive_members),
+            self._shared_drive_folders,
+            "shared drive",
+            abort_on_failures=False,
         )
         yield from self._partitions(user_emails, self._user_folders, "user")
 
@@ -120,9 +125,10 @@ class _FolderCrawl:
         keys: Sequence[str],
         list_partition: Callable[[str], Generator[FolderInfo, None, None]],
         kind: str,
+        abort_on_failures: bool = True,
     ) -> Generator[FolderInfo, None, None]:
-        """Runs one listing per key. A failed key is skipped until more than
-        half of them fail, which ends the sync."""
+        """Runs one listing per key. A failed key is skipped; with
+        ``abort_on_failures``, more than half of them failing ends the sync."""
         failed_count = 0
         for key in keys:
             self._check_deadline()
@@ -147,7 +153,9 @@ class _FolderCrawl:
                     logger.exception("Error getting folders for %s %s", kind, key)
                 failed_count += 1
 
-                if failed_count > _MAX_FAILED_PERCENTAGE * len(keys):
+                if abort_on_failures and failed_count > _MAX_FAILED_PERCENTAGE * len(
+                    keys
+                ):
                     raise RuntimeError(
                         f"Too many failed folder fetches during group sync ({kind}s)"
                     )
@@ -195,12 +203,13 @@ class _FolderCrawl:
             self._covered_drive_ids.add(drive_id)
 
     def _user_folders(self, email: str) -> Generator[FolderInfo, None, None]:
-        """A user's own folders, the folders shared with the user directly,
-        and the folders of any shared drive no organizer listed in full: one
-        the admin's inventory did not include, such as a partner domain's
+        """A user's own folders, the My Drive folders the user can see but
+        does not own (which is where a folder owned outside the domain reaches
+        it), and the folders of any shared drive no organizer listed in full:
+        one the admin's inventory did not include, such as a partner domain's
         drive, one listed by a lesser role, or one whose listing failed."""
         yield from self._folders(email, DriveFolderScope.OWNED)
-        yield from self._folders(email, DriveFolderScope.SHARED_WITH_ME)
+        yield from self._folders(email, DriveFolderScope.NOT_OWNED)
         for drive_id in self._ops.list_drives(
             user_email=email, use_domain_admin_access=False
         ):
