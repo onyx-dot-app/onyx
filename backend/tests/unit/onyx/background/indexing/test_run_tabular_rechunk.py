@@ -6,6 +6,8 @@ index for every spreadsheet in the corpus, so these tests pin what must
 survive the round trip.
 """
 
+import contextlib
+from collections.abc import Generator
 from io import BytesIO
 from itertools import chain, repeat
 from types import SimpleNamespace
@@ -15,16 +17,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.background.indexing.run_tabular_rechunk import (
+    DocumentChangedError,
     _rebuild_document,
+    _RechunkAdapter,
     _tabular_file_name,
     run_tabular_rechunk,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import (
-    Document,
-    TabularSection,
-    convert_metadata_dict_to_list_of_strings,
-)
+from onyx.connectors.models import Document, TabularSection
+from onyx.context.search.models import InferenceChunk
+from onyx.db.document import TabularRechunkTarget
 from onyx.db.models import Document as DbDocument
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 
@@ -47,12 +49,10 @@ def _rebuild(semantic_id: str = "quarterly.csv") -> Document:
         secondary_owners=["Grace Hopper"],
         from_ingestion_api=False,
     )
-    head = MagicMock()
-    head.source_type = DocumentSource.FILE.value
+    head = MagicMock(spec=InferenceChunk)
+    head.source_type = DocumentSource.FILE
     head.title = "Quarterly numbers"
-    head.metadata_list = convert_metadata_dict_to_list_of_strings(
-        {"department": "finance", "year": "2026"}
-    )
+    head.metadata = {"department": "finance", "year": "2026"}
 
     file_store = MagicMock()
     file_store.read_file.return_value = BytesIO(_CSV)
@@ -163,3 +163,65 @@ def test_an_undisturbed_scan_still_runs_to_the_end() -> None:
     result, pages = _run_against(["idx-a"], pages_before_the_end=3)
     assert pages == 3
     assert result.finished
+
+
+def _document(document_id: str) -> Document:
+    """Only the id is read: the lock check works off the stored rows."""
+    return Document(
+        id=document_id,
+        source=DocumentSource.FILE,
+        semantic_identifier=document_id,
+        sections=[],
+        metadata={},
+    )
+
+
+def _lock_against(live: list[DbDocument]) -> None:
+    """Enters the adapter's lock context with `live` as the stored rows."""
+    adapter = _RechunkAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(),
+        targets=[
+            TabularRechunkTarget(
+                document=DbDocument(id="doc-1", file_id="file-abc", chunk_count=40),
+                connector_id=1,
+                credential_id=1,
+                file_type="text/csv",
+            )
+        ],
+    )
+
+    @contextlib.contextmanager
+    def lock(self: Any, documents: Any) -> Generator[Any, None, None]:  # noqa: ARG001
+        yield MagicMock()
+
+    module = "onyx.background.indexing.run_tabular_rechunk"
+    with (
+        patch(f"{module}.DocumentIndexingBatchAdapter.lock_context", lock),
+        patch(f"{module}.get_documents_by_ids", return_value=live),
+    ):
+        with adapter.lock_context([_document("doc-1")]):
+            pass
+
+
+def test_the_write_is_dropped_when_a_crawl_rewrote_the_document() -> None:
+    """`force_update` is on, so nothing else would stop the workbook the scan
+    read from replacing the chunks a later crawl wrote."""
+    for row in (
+        # The crawl re-chunked it: the count the scan selected on has moved.
+        DbDocument(id="doc-1", file_id="file-abc", chunk_count=12),
+        # The crawl stored a new workbook.
+        DbDocument(id="doc-1", file_id="file-def", chunk_count=40),
+    ):
+        with pytest.raises(DocumentChangedError, match="doc-1"):
+            _lock_against([row])
+
+    # And a document the crawl deleted has nothing left to replace.
+    with pytest.raises(DocumentChangedError, match="doc-1"):
+        _lock_against([])
+
+
+def test_an_untouched_document_still_writes() -> None:
+    _lock_against([DbDocument(id="doc-1", file_id="file-abc", chunk_count=40)])

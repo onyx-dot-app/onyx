@@ -2158,33 +2158,28 @@ class OpenSearchIndexClient(OpenSearchClient):
             getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
-    def _mget(self, chunk_ids: list[str], *, source: bool) -> Iterator[dict[str, Any]]:
-        """Yields the chunks of `chunk_ids` that exist, a page at a time.
+    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
+        """Returns the subset of `chunk_ids` that exist in the index.
 
         Uses the OpenSearch mget API, which fetches documents by _id in one request
         and, unlike a search, sees writes that have not been refreshed yet. Raises on
-        transport errors rather than returning nothing.
+        transport errors rather than returning an empty set.
         """
+        if not chunk_ids:
+            return set()
+
+        found: set[str] = set()
         for start in range(0, len(chunk_ids), _MGET_BATCH_SIZE):
+            batch = chunk_ids[start : start + _MGET_BATCH_SIZE]
             response = self._client.mget(
                 index=self._index_name,
-                body={"ids": chunk_ids[start : start + _MGET_BATCH_SIZE]},
-                _source=source,
+                body={"ids": batch},
+                _source=False,
             )
-            yield from (doc for doc in response.get("docs", []) if doc.get("found"))
-
-    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
-        """Returns the subset of `chunk_ids` that exist in the index."""
-        return {doc["_id"] for doc in self._mget(chunk_ids, source=False)}
-
-    def mget_chunks_without_vectors(
-        self, chunk_ids: list[str]
-    ) -> dict[str, DocumentChunkWithoutVectors]:
-        """Fetches the named chunks by _id, keyed by the ids that were found."""
-        return {
-            doc["_id"]: DocumentChunkWithoutVectors.model_validate(doc["_source"])
-            for doc in self._mget(chunk_ids, source=True)
-        }
+            found.update(
+                doc["_id"] for doc in response.get("docs", []) if doc.get("found")
+            )
+        return found
 
     @log_function_time(debug_only=True)
     def refresh_index(self) -> None:

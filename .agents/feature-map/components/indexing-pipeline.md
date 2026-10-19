@@ -286,7 +286,10 @@ calls `index_doc_batch`, which:
    tabular re-chunk migration (`background/indexing/run_tabular_rechunk.py`),
    which re-indexes documents nobody changed. That migration has no alternative
    - `content_hash()` walks Text and Image sections only, so a tabular
-   document's hash never moves however much the workbook changed.
+   document's hash never moves however much the workbook changed. With both
+   gates off, the migration's own adapter re-reads `file_id` and `chunk_count`
+   under the document lock and raises rather than replace the chunks a crawl
+   wrote while the batch embedded.
 4. Documents that pass the gate are upserted (`upsert_documents`, `upsert_document_tags`),
    linked to the cc-pair (`upsert_document_by_connector_credential_pair`), and
    linked to their hierarchy node.

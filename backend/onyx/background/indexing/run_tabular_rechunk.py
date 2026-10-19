@@ -8,21 +8,24 @@ normal indexing pipeline, which replaces a document's chunks in one call.
 Holding more chunks than the current chunker could produce is what marks a
 document as stale, so the scan skips its own output, skips anything an
 in-flight crawl writes, and - because a failed write no longer commits its
-chunk count - finds its own failures again on a later pass.
+chunk count - finds its own failures again on a later pass. A crawl that
+lands while a batch embeds is caught under the document lock instead.
 """
 
+import contextlib
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from typing import NamedTuple
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     LARGE_CHUNK_RATIO,
     TABULAR_MAX_CHUNKS_PER_WORKBOOK,
 )
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     experts_from_stores_representations,
 )
@@ -30,20 +33,21 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
 )
-from onyx.connectors.models import (
-    Document,
-    IndexAttemptMetadata,
-    convert_metadata_list_of_strings_to_dict,
+from onyx.connectors.models import Document, IndexAttemptMetadata
+from onyx.context.search.models import IndexFilters, InferenceChunk
+from onyx.db.document import (
+    TabularRechunkTarget,
+    get_documents_by_ids,
+    get_oversized_tabular_documents,
 )
-from onyx.db.document import TabularRechunkTarget, get_oversized_tabular_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import build_opensearch_document_index
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPES, OnyxMimeTypes
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import (
@@ -98,7 +102,7 @@ def _tabular_file_name(semantic_id: str, file_type: str | None) -> str:
 
 def _rebuild_document(
     db_doc: DbDocument,
-    head: DocumentChunkWithoutVectors,
+    head: InferenceChunk,
     stage: RawFileCallback,
     file_type: str | None,
 ) -> Document:
@@ -119,16 +123,12 @@ def _rebuild_document(
 
     return Document(
         id=db_doc.id,
-        source=DocumentSource(head.source_type),
+        source=head.source_type,
         semantic_identifier=db_doc.semantic_id,
-        # None would fall back to semantic_identifier, adding a title vector
-        # the document never had.
+        # None would fall back to semantic_identifier, giving a title to a
+        # document that was indexed without one.
         title=head.title if head.title is not None else "",
-        metadata=(
-            convert_metadata_list_of_strings_to_dict(head.metadata_list)
-            if head.metadata_list
-            else {}
-        ),
+        metadata=head.metadata,
         sections=sections,
         # post_index writes these two back.
         doc_updated_at=db_doc.doc_updated_at,
@@ -141,6 +141,87 @@ def _rebuild_document(
     )
 
 
+def _chunk_heads(
+    document_index: OpenSearchDocumentIndex, document_ids: list[str]
+) -> dict[str, InferenceChunk]:
+    """Chunk 0 of each document, which carries the title and the metadata tags
+    Postgres does not keep. A hidden document returns nothing, so the rebuild
+    treats it as "not re-chunkable" and leaves its chunks alone."""
+    chunks = document_index.id_based_retrieval(
+        chunk_requests=[
+            DocumentSectionRequest(
+                document_id=document_id, min_chunk_ind=0, max_chunk_ind=0
+            )
+            for document_id in document_ids
+        ],
+        # A migration reads for no user, so nothing is filtered out by access.
+        filters=IndexFilters(access_control_list=None),
+    )
+    return {chunk.document_id: chunk for chunk in chunks}
+
+
+class _DocumentVersion(NamedTuple):
+    """What a crawl moves when it rewrites a document."""
+
+    file_id: str | None
+    chunk_count: int | None
+
+    @classmethod
+    def from_row(cls, db_doc: DbDocument) -> "_DocumentVersion":
+        return cls(db_doc.file_id, db_doc.chunk_count)
+
+
+class DocumentChangedError(Exception):
+    """A crawl rewrote a document between the scan and the chunk write."""
+
+
+class _RechunkAdapter(DocumentIndexingBatchAdapter):
+    """The standard adapter plus the check `force_update` needs: the scan reads
+    the workbook before the batch embeds, so a crawl can write newer chunks in
+    between. The document lock is the last point at which the rows still answer
+    for the write it guards."""
+
+    def __init__(
+        self,
+        connector_id: int,
+        credential_id: int,
+        tenant_id: str,
+        index_attempt_metadata: IndexAttemptMetadata,
+        targets: list[TabularRechunkTarget],
+    ) -> None:
+        super().__init__(
+            connector_id=connector_id,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            index_attempt_metadata=index_attempt_metadata,
+        )
+        self.scanned_versions = {
+            target.document.id: _DocumentVersion.from_row(target.document)
+            for target in targets
+        }
+
+    @contextlib.contextmanager
+    def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
+        with super().lock_context(documents) as db_session:
+            live = {
+                db_doc.id: _DocumentVersion.from_row(db_doc)
+                for db_doc in get_documents_by_ids(
+                    db_session=db_session,
+                    document_ids=[document.id for document in documents],
+                )
+            }
+            rewritten = [
+                document.id
+                for document in documents
+                if live.get(document.id) != self.scanned_versions[document.id]
+            ]
+            if rewritten:
+                # The pipeline retries a raising batch one document at a time,
+                # so the rest are still re-chunked.
+                raise DocumentChangedError(f"a crawl rewrote {rewritten}")
+            yield db_session
+
+
 def _rechunk_batch(
     targets: list[TabularRechunkTarget],
     connector_id: int,
@@ -151,7 +232,7 @@ def _rechunk_batch(
     batch_num: int,
 ) -> tuple[int, list[str]]:
     """Re-chunks one cc-pair's worth of documents. Returns (indexed, failed)."""
-    heads = document_index.get_chunk_heads([t.document.id for t in targets])
+    heads = _chunk_heads(document_index, [target.document.id for target in targets])
 
     # No index attempt here for the standard staging reapers to key on.
     stage, staged_csv_ids = build_tracking_raw_file_callback(
@@ -201,11 +282,12 @@ def _rechunk_batch(
             tenant_id=tenant_id,
             document_batch=documents,
             request_id=metadata.request_id,
-            adapter=DocumentIndexingBatchAdapter(
+            adapter=_RechunkAdapter(
                 connector_id=connector_id,
                 credential_id=credential_id,
                 tenant_id=tenant_id,
                 index_attempt_metadata=metadata,
+                targets=targets,
             ),
         )
     finally:
