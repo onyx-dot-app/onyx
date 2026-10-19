@@ -236,3 +236,24 @@ func TestComposeRootStripsComposeDirectory(t *testing.T) {
 		t.Fatalf("composeRoot = %s", got)
 	}
 }
+
+func TestInventoryNextCommandStopsEachStack(t *testing.T) {
+	m := &fakeMachine{alivePIDs: map[int]bool{61: true}}
+	m.worktree("/repo/wt a", "a")
+	m.worktree("/repo", "main")
+	m.containers = onyxContainers("compose-only", "/repo", true, time.Now())
+	m.states = []stateRecord{
+		isolatedState("/repo/.git", "a", "iso-1", "/repo/wt a", PhaseReady, 61),
+		isolatedState("/repo/.git", "gone", "gone-1", "/repo/gone", PhaseReady, 61),
+	}
+	inv := buildInventory(m.input())
+	for project, want := range map[string]string{
+		"iso-1":        "cd '/repo/wt a' && ods --isolated stack down",
+		"gone-1":       "ods stack down --project gone-1",
+		"compose-only": "ods stack down --project compose-only",
+	} {
+		if got := rowFor(t, inv, project).Next; got != want {
+			t.Errorf("%s next = %q, want %q", project, got, want)
+		}
+	}
+}

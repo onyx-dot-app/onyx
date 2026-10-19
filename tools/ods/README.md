@@ -406,7 +406,8 @@ state.
 By default `ls` shows stacks with a running process or container. `--all` adds
 stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
 array with the project, root, branch, mode, profile, phase, application and
-container counts, web URL, age, status, leases and errors. The exit code is 3
+container counts, web URL, age, status, leases, errors, and `next`, the command
+that stops the stack. The text output prints the same command under the table. The exit code is 3
 when `--orphaned` finds an orphan, and 1 when no source could be read.
 
 `ods stack down --project NAME` and `ods stack stop --project NAME` work from any

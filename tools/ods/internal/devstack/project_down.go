@@ -125,7 +125,11 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		if st != nil && st.Project == row.Project {
 			if !opts.Force && liveInWorktree(st) {
-				return nil, fmt.Errorf("project %s runs in %s; run 'ods stack down' there, or pass --force", row.Project, st.Root)
+				flag := ""
+				if row.Mode == Isolated {
+					flag = "--isolated "
+				}
+				return nil, fmt.Errorf("project %s still runs in the worktree %s; run 'cd %s && ods %sstack down', or add --force to stop it from here", row.Project, st.Root, shellQuote(st.Root), flag)
 			}
 			for _, rec := range st.Services {
 				if rec.Skipped == "" && groupIsOurs(rec) {

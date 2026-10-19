@@ -38,40 +38,20 @@ func NewStackCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stack",
 		Short: "Run the local dev stack of this worktree",
-		Long: `Run the local Onyx dev stack from a source checkout: Compose infrastructure,
-migrations, and the application services from .vscode/launch.json as
-background processes.
+		Long: `Run the local Onyx dev stack of a source checkout: Compose infrastructure,
+migrations, and the application services from .vscode/launch.json.
 
-By default, worktrees share infrastructure and one active application checkout.
-Running "up" from another checkout stops the previous app before migrations.
-Use --isolated for separate infrastructure. Use "ods web dev" for a frontend
-against an existing healthy API, or "ods backend api" for an interactive API.
-All entry points share service planning and process launchers. Lifecycle locks keep
-concurrent commands safe. Port leases live in ` + filepath.Join(paths.DataDir(), "stack") + `.
-
-"ls" lists every stack on the machine from any directory and flags orphaned
-stacks whose worktree is gone. "stop" and "down" with --project NAME act on
-that project from any directory, also when its checkout no longer exists.
-
-Profiles:
-  minimal  Web Server and API Server
-  default  minimal plus the primary, light, beat, docfetching, docprocessing
-           and user_file_processing Celery workers
-  full     every service in the "Run All Onyx Services" compound
-
-The model server comes from Compose; --local-model-server runs it from the
-checkout instead, for model server changes.
-
-Examples:
-  ods stack up
-  ods stack up --profile full --json
-  ods stack status --json
-  ods stack logs api --follow
-  ods stack stop
-  ods stack down
-  ods stack ls --all
-  ods stack down --project NAME   # a stack whose worktree is gone
-  ods stack prune`,
+Start with "ods stack status" for this worktree, or "ods stack ls" for every
+stack on this machine. Each command prints the next command to run.
+Worktrees share infrastructure by default; add --isolated for separate data.
+See tools/ods/README.md for profiles, ports and ownership.`,
+		Example: `  ods stack status
+  ods stack ls
+  ods stack up --profile minimal
+  ods stack down --project NAME`,
+	}
+	for _, group := range []struct{ id, title string }{{"find", "Find stacks:"}, {"run", "Run this worktree's stack:"}, {"clean", "Clean up:"}} {
+		cmd.AddGroup(&cobra.Group{ID: group.id, Title: group.title})
 	}
 
 	cmd.AddCommand(newStackLifecycleCommand("up", "Set up the worktree, start infrastructure, migrate and start the services"))
@@ -84,6 +64,16 @@ Examples:
 	cmd.AddCommand(newStackPruneCommand())
 	cmd.AddCommand(newStackLogsCommand())
 	cmd.AddCommand(newStackPlanCommand())
+	groups := map[string]string{
+		"status": "find", "ls": "find", "logs": "find", "plan": "find",
+		"up": "run", "start": "run", "restart": "run", "stop": "run", "down": "run",
+		"prune": "clean",
+	}
+	for _, child := range cmd.Commands() {
+		child.GroupID = groups[child.Name()]
+	}
+	cmd.SetHelpCommandGroupID("find")
+	cmd.SetCompletionCommandGroupID("find")
 	return cmd
 }
 
@@ -197,7 +187,7 @@ func newStackStatusCommand() *cobra.Command {
 				if asJSON {
 					fmt.Println("null")
 				} else {
-					log.Infof("No dev stack has been started in %s", stack.Root)
+					log.Infof("No dev stack has been started in %s; run 'ods stack up' to start one, or 'ods stack ls' to find stacks on this machine", stack.Root)
 				}
 				os.Exit(1)
 			}

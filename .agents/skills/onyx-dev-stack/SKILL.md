@@ -136,31 +136,7 @@ After shutdown, inspect status to confirm the targeted stack stopped. Check that
 
 ## Find and stop old stacks
 
-List every stack on the machine. The command works from any directory, takes no locks, and changes nothing:
+Run `"$ODS" stack ls` from any directory. It lists every stack on the machine and prints the command that stops each one. Add `--all` for stopped stacks, `--json` for the same rows with a `next` field. Run `"$ODS" stack ls --help` for the statuses.
 
-```bash
-"$ODS" stack ls --all
-"$ODS" stack ls --json
-```
-
-Read the `status` of each stack:
-
-- `active`: application processes run.
-- `app-stopped`: containers run, and `stack stop` stopped the application.
-- `infra-only`: containers run, and no application process does.
-- `stopped`: nothing runs. `stale-lease`: port leases that no stack uses.
-- `orphaned`: no worktree owns the stack. Its checkout or Compose directory is gone, or the directory is no longer a git worktree.
-
-`"$ODS" stack ls --orphaned` shows only orphans. It exits 3 when it finds one.
-
-Stop an orphaned stack, and release its ports, from any directory:
-
-```bash
-"$ODS" stack down --project NAME
-```
-
-This stops the recorded processes, removes the containers, releases the leases, and keeps the volumes.
-`"$ODS" stack prune` does this for every orphaned stack after a confirmation.
-
-Stop other stacks with `stack down` in their root. Add `--isolated` for an isolated stack.
-`down --project` refuses a stack that still runs in an existing worktree. Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks. Other agents may still use those stacks.
+Stop `orphaned` stacks; no worktree owns them. Run the printed command, or confirm with the user before you stop a stack that another agent may still use.
+Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks.

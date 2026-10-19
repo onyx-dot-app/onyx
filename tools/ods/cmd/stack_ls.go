@@ -24,7 +24,7 @@ func newStackLsCommand() *cobra.Command {
 	var asJSON, all, orphaned bool
 	cmd := &cobra.Command{
 		Use:   "ls",
-		Short: "List every dev stack on this machine and flag orphaned ones (exit 3 with --orphaned when one is found)",
+		Short: "List every dev stack on this machine, with the command that stops each",
 		Long: `List every Onyx dev stack on this machine, from any directory. ls reads
 Docker, the project owner records, the stack state files and the port
 leases. It takes no locks and changes nothing.
@@ -52,10 +52,24 @@ source could be read.`,
 				return
 			}
 			rows := filterStackRows(inv.Rows, all, orphaned)
+			if len(rows) == 0 && !asJSON {
+				switch {
+				case orphaned:
+					fmt.Println("No orphaned dev stacks found")
+				case all:
+					fmt.Println("No dev stacks found on this machine; run 'ods stack up' in a worktree to start one")
+				default:
+					fmt.Println("No running dev stacks found; run 'ods stack ls --all' to include stopped stacks")
+				}
+				return
+			}
 			if asJSON {
 				printJSON(rows)
 			} else {
 				printStackRows(os.Stdout, rows, time.Now())
+				if hidden := len(filterStackRows(inv.Rows, true, orphaned)) - len(rows); hidden > 0 {
+					fmt.Printf("\n%d stopped stack(s) or stale lease(s) hidden; run 'ods stack ls --all' to show them\n", hidden)
+				}
 			}
 			if orphaned && len(rows) > 0 {
 				exitHook(3)
@@ -215,16 +229,17 @@ func composeDownProject(ctx context.Context, project string, volumes bool) error
 }
 
 func printJSON(value any) {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(value); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(string(data))
 }
 
 func printStackRows(out io.Writer, rows []devstack.StackRow, now time.Time) {
 	if len(rows) == 0 {
-		_, _ = fmt.Fprintln(out, "No dev stacks found")
+		_, _ = fmt.Fprintln(out, "No running dev stacks found")
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -251,19 +266,20 @@ func printStackRows(out io.Writer, rows []devstack.StackRow, now time.Time) {
 		}
 	}
 	_ = w.Flush()
-	hints := []struct{ status, hint string }{
-		{devstack.StatusOrphaned, "orphaned: run 'ods stack down --project NAME' for each, or 'ods stack prune' for all of them"},
-		{devstack.StatusActive, "active: run 'ods stack stop' or 'ods stack down' in the root ('ods --isolated stack down' for an isolated stack)"},
-		{devstack.StatusAppStopped, "app-stopped: run 'ods stack down' in the root to stop the infrastructure too"},
-		{devstack.StatusInfraOnly, "infra-only: run 'ods stack down' in the root, or 'ods stack down --project NAME' from anywhere"},
-		{devstack.StatusStopped, "stopped: nothing runs; 'ods stack down --project NAME' removes leftover containers"},
-		{devstack.StatusStaleLease, "stale-lease: the next 'ods stack up' reclaims leases of removed checkouts"},
-	}
-	_, _ = fmt.Fprintln(out)
-	for _, h := range hints {
-		if statuses[h.status] {
-			_, _ = fmt.Fprintln(out, h.hint)
+	var next []string
+	for _, row := range rows {
+		if row.Next != "" {
+			next = append(next, fmt.Sprintf("  %s (%s): %s", stackRowName(row), row.Status, row.Next))
 		}
+	}
+	if len(next) > 0 {
+		_, _ = fmt.Fprintln(out, "\nTo stop a stack, run:")
+		for _, line := range next {
+			_, _ = fmt.Fprintln(out, line)
+		}
+	}
+	if statuses[devstack.StatusOrphaned] {
+		_, _ = fmt.Fprintln(out, "\nOrphaned stacks have no worktree. 'ods stack prune' stops all of them; volumes are kept.")
 	}
 }
 

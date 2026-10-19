@@ -72,7 +72,9 @@ type StackRow struct {
 	LeaseRoot    string         `json:"lease_root,omitempty"`
 	Leases       map[string]int `json:"leases,omitempty"`
 	OrphanReason string         `json:"orphan_reason,omitempty"`
-	Errors       []string       `json:"errors"`
+	// Next is the command that stops the stack, or "" when nothing runs.
+	Next   string   `json:"next,omitempty"`
+	Errors []string `json:"errors"`
 
 	state      *State
 	containers int
@@ -482,6 +484,7 @@ func buildInventory(in inventoryInput) Inventory {
 		if row.Status == "" {
 			row.Status, row.OrphanReason = rowStatus(row, len(claims[row.Project]) > 0)
 		}
+		row.Next = nextCommand(row)
 		inv.Rows = append(inv.Rows, *row)
 	}
 	sort.SliceStable(inv.Rows, func(i, j int) bool {
@@ -605,6 +608,42 @@ func leaseOwner(rows []*StackRow, root string) *StackRow {
 		}
 	}
 	return nil
+}
+
+// nextCommand is the command that stops row's stack.
+func nextCommand(row *StackRow) string {
+	inRoot := func(args string) string {
+		return "cd " + shellQuote(row.Root) + " && ods " + args
+	}
+	switch row.Status {
+	case StatusOrphaned:
+		if row.Mode == Frontend || row.Project == "" {
+			return "ods stack prune"
+		}
+		return "ods stack down --project " + row.Project
+	case StatusActive, StatusAppStopped, StatusInfraOnly:
+		switch {
+		case row.state == nil:
+			return "ods stack down --project " + row.Project
+		case row.Mode == Frontend:
+			return "stop the 'ods web dev' process in " + row.Root
+		case row.Mode == Isolated:
+			return inRoot("--isolated stack down")
+		}
+		return inRoot("stack down")
+	case StatusStopped:
+		if row.containers > 0 && row.Project != "" {
+			return "ods stack down --project " + row.Project
+		}
+	}
+	return ""
+}
+
+func shellQuote(path string) string {
+	if path != "" && !strings.ContainsAny(path, " \t'\"$`\\;&|<>()*?[]{}~!#") {
+		return path
+	}
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }
 
 func rowStatus(row *StackRow, claimed bool) (string, string) {
