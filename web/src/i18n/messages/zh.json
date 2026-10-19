@@ -1013,7 +1013,7 @@
         "craftDescription": "在您的 Craft 会话和计划任务中提供此插件。您组织的工具权限仍然适用。",
         "unavailable": "管理员已在 {surface} 中禁用此插件。",
         "saveFailed": "无法保存你的插件默认设置。请重试。",
-        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。 配置了此插件的自定义智能体仍可能使用它。"
+        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。配置了此插件的自定义智能体仍可能使用它。"
       },
       "openapi": {
         "chatOnly": "仅限 Chat",

@@ -1449,3 +1449,86 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
     "/api/skills/replacement/enabled",
   ]);
 });
+
+test("skill conflicts can be confirmed without losing remaining drafts", async () => {
+  const dependency = {
+    external_app_id: 7,
+    name: "GitHub",
+    enabled: true,
+    ready: true,
+  };
+  const replacement = customFixture({
+    id: "replacement",
+    enabled: false,
+    external_app: dependency,
+  });
+  const other = customFixture({
+    id: "other",
+    name: "another-skill",
+    enabled: false,
+    external_app: dependency,
+  });
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (path.includes("/action-policies/"))
+        return jsonResponse({ ...approvalApp, actions: [] });
+      if (init?.method === "PUT") {
+        if (path.includes(replacement.id)) {
+          const body = JSON.parse(String(init.body));
+          return body.replace_conflict
+            ? jsonResponse({ ...replacement, enabled: true })
+            : jsonResponse(
+                { detail: "Name conflict", error_code: "SKILL_NAME_CONFLICT" },
+                409
+              );
+        }
+        return jsonResponse({ ...other, enabled: true });
+      }
+      return jsonResponse({ builtins: [], customs: [replacement, other] });
+    });
+  const onClose = jest.fn();
+  show(
+    {
+      kind: "external-app",
+      app: memberApp({ authenticated: true }),
+      connection: { kind: "connected", ownership: "user" },
+    },
+    jest.fn(),
+    "craft",
+    { onClose }
+  );
+  const user = setupUser();
+  await user.click(screen.getByRole("tab", { name: "Skills" }));
+  await user.click(
+    await screen.findByRole("switch", { name: "Enable report-writer" })
+  );
+  await user.click(
+    screen.getByRole("switch", { name: "Enable another-skill" })
+  );
+  const dialog = screen.getByRole("dialog");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("button", { name: "Switch skill" });
+  expect(screen.getByRole("dialog")).toBe(dialog);
+  expect(onClose).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(
+    screen.getByRole("switch", { name: "Disable another-skill" })
+  ).toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(await screen.findByRole("button", { name: "Switch skill" }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  expect(requests).toHaveBeenCalledWith(
+    "/api/skills/replacement/enabled",
+    expect.objectContaining({
+      body: JSON.stringify({ enabled: true, replace_conflict: true }),
+    })
+  );
+  expect(requests).toHaveBeenCalledWith(
+    "/api/skills/other/enabled",
+    expect.objectContaining({
+      body: JSON.stringify({ enabled: true, replace_conflict: false }),
+    })
+  );
+});

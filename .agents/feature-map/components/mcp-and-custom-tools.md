@@ -241,7 +241,7 @@ Personal Craft App details use Connection/Skills tabs with the same header
 status, scrollable modal body, and footer layout. They omit the duplicate account
 table and header subtitle. `web/src/sections/plugins/MemberCraftAppSkills.tsx`
 reads only the caller's skills, filters by external-app ID, and shows search,
-count, preview, per-user enable switches, and loading/retry feedback. Preview reuses the rendered skill instructions within the same modal and backdrop. Back or Escape returns to Skills without losing drafts. Switches remain drafts until Save and respect skill toggle permissions. Cancel discards drafts. Each successful save updates the shared skill cache; retries retain only unsaved changes. The footer links to the app-filtered skills page; no admin metadata is fetched.
+count, preview, per-user enable switches, and loading/retry feedback. Preview reuses the rendered skill instructions within the same modal and backdrop. Back or Escape returns to Skills without losing drafts. Switches remain drafts until Save and respect skill toggle permissions. Cancel discards drafts. Each successful save updates the shared skill cache; retries retain only unsaved changes. Name conflicts offer the same explicit replacement as the Skills page. The confirmation keeps the modal backdrop and remaining drafts; cancelling returns to the draft. The footer links to the app-filtered skills page; no admin metadata is fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
 `web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, workspace availability,

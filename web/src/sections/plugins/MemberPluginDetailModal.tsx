@@ -42,7 +42,8 @@ import {
 } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
-import { setSkillEnabled } from "@/lib/skills/api";
+import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -216,6 +217,11 @@ export default function MemberPluginDetailModal({
   const router = useRouter();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
+  const switchCopy = useTranslations("skills.page.switchModal");
+  const { data: skills } = useUserSkills(
+    craftEnabled && plugin.kind === "external-app"
+  );
+  const [skillConflict, setSkillConflict] = useState<Skill | null>(null);
   const craftCopy = useTranslations("craft.apps.page");
   const [preview, setPreview] = useState<Skill | null>(null);
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
@@ -339,7 +345,7 @@ export default function MemberPluginDetailModal({
     );
   }
 
-  async function saveChanges() {
+  async function saveChanges(replaceSkillId?: string) {
     if (
       saving ||
       !dirty ||
@@ -384,17 +390,37 @@ export default function MemberPluginDetailModal({
         (a, b) => Number(a[1]) - Number(b[1])
       );
       for (const [skillId, enabled] of changes) {
-        const updated = await setSkillEnabled(skillId, enabled);
+        let updated: Skill;
+        try {
+          updated = await setSkillEnabled(
+            skillId,
+            enabled,
+            skillId === replaceSkillId
+          );
+        } catch (error) {
+          const skill = [
+            ...(skills?.builtins ?? []),
+            ...(skills?.customs ?? []),
+          ].find((item) => item.id === skillId);
+          if (enabled && isSkillNameConflict(error) && skill) {
+            setSkillConflict(skill);
+            return;
+          }
+          throw error;
+        }
+        if (skillId === replaceSkillId) setSkillConflict(null);
+        const updateSkill = (skill: Skill): Skill =>
+          skill.id === updated.id
+            ? updated
+            : enabled && skill.name === updated.name
+              ? { ...skill, enabled: false }
+              : skill;
         await mutate<SkillsList>(
           SWR_KEYS.userSkills,
           (current) =>
             current && {
-              builtins: current.builtins.map((skill) =>
-                skill.id === updated.id ? updated : skill
-              ),
-              customs: current.customs.map((skill) =>
-                skill.id === updated.id ? updated : skill
-              ),
+              builtins: current.builtins.map(updateSkill),
+              customs: current.customs.map(updateSkill),
             },
           { revalidate: false }
         );
@@ -513,10 +539,49 @@ export default function MemberPluginDetailModal({
   return (
     <Modal
       open={open}
-      onOpenChange={(next) => !next && (preview ? setPreview(null) : close())}
+      onOpenChange={(next) => {
+        if (!next && !saving) {
+          if (skillConflict) setSkillConflict(null);
+          else if (preview) setPreview(null);
+          else close();
+        }
+      }}
     >
       <PluginModalContent skipOverlay={skipOverlay}>
-        {preview ? (
+        {skillConflict ? (
+          <>
+            <Modal.Header
+              title={switchCopy("title", { name: skillConflict.name })}
+              description={switchCopy("description", {
+                name: skillConflict.name,
+              })}
+              onClose={saving ? undefined : () => setSkillConflict(null)}
+            />
+            <Modal.Body>
+              <Text>{switchCopy("body")}</Text>
+              {saveError && (
+                <Text role="alert" color="status-error-05">
+                  {saveError}
+                </Text>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                prominence="secondary"
+                disabled={saving}
+                onClick={() => setSkillConflict(null)}
+              >
+                {actions("mcpSetup.back")}
+              </Button>
+              <Button
+                disabled={saving}
+                onClick={() => void saveChanges(skillConflict.id)}
+              >
+                {switchCopy(saving ? "submit.pendingLabel" : "submit.label")}
+              </Button>
+            </Modal.Footer>
+          </>
+        ) : preview ? (
           <SkillPreviewContent
             skillId={preview.id}
             fallbackTitle={preview.name}
