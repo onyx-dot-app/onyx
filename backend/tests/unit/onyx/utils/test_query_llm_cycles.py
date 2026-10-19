@@ -1,6 +1,7 @@
 """Chat queries report the answering model's chat-loop LLM calls up to its first
-answer token, so cycle counts match the work that ``first_answer_ms`` measured,
-even when the stream writer reads the answer after the next cycle starts."""
+answer token. The count is recorded when the worker queues that text, and
+``first_answer_ms`` when the stream writer reads it, so a lagging writer can
+delay the latency but cannot add later cycles to the count."""
 
 from queue import Queue
 from unittest.mock import Mock
