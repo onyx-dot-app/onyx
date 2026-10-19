@@ -16,22 +16,6 @@
       }
     }
   },
-  "zoom_ai": {
-    "models": {
-      "zoom-decisions": {
-        "name": "Zoom Decisions",
-        "mode": "decisions",
-        "supports_decisions": true,
-        "modalities": {"input": ["text", "image"], "output": ["decisions"]}
-      },
-      "zoom-decisions-pro": {
-        "name": "Zoom Decisions Pro",
-        "mode": "decisions",
-        "supports_decisions": true,
-        "modalities": {"input": ["text", "image"], "output": ["decisions"]}
-      }
-    }
-  },
   "openai": {
     "models": {
       "gpt-6-luna": {

@@ -11,13 +11,11 @@ from onyx.llm.decisions.models import (
     DecisionProvider,
     DecisionRequest,
     DecisionResponse,
-    DecisionUsage,
     PredicateAnswer,
     ScoreAnswer,
     ScoreProbability,
     ScoreQuestion,
     SystemOneResponse,
-    ZoomResponse,
 )
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
@@ -25,7 +23,6 @@ from onyx.tracing.llm_utils import traced_llm_call
 
 _ENDPOINTS = {
     DecisionProvider.TYPESAFE: ("https://api.typesafe.ai/v1", "systemone"),
-    DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
 }
@@ -183,20 +180,6 @@ class DecisionClient:
                 result.raise_for_status()
             if system_one:
                 response = _system_one_response(result.json())
-            elif self.provider == DecisionProvider.ZOOM_AI:
-                zoom = ZoomResponse.model_validate(result.json())
-                response = DecisionResponse(
-                    model=zoom.model,
-                    answers=zoom.answers,
-                    usage=(
-                        DecisionUsage(
-                            input_tokens=zoom.usage.input_units,
-                            output_tokens=zoom.usage.output_units,
-                        )
-                        if zoom.usage and zoom.usage.unit_type == "tokens"
-                        else None
-                    ),
-                )
             else:
                 response = DecisionResponse.model_validate(result.json())
             response = _validate_answers(request, response)

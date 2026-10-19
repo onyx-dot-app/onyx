@@ -180,7 +180,7 @@ def model_supports_chat(provider: str, model_name: str) -> bool:
     entry = _vendored_model_entry(provider, name)
     if entry is not None:
         return _catalog_mode(entry, name) in CHAT_MODES
-    if provider in {"typesafe", "zoom_ai"}:
+    if provider == "typesafe":
         return False
     return True
 

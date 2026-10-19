@@ -444,7 +444,7 @@ def fetch_custom_provider_names(
                 value=name,
                 label=PROVIDER_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
             )
-            for name in set(litellm.models_by_provider) | {"typesafe", "zoom_ai"}
+            for name in set(litellm.models_by_provider) | {"typesafe"}
             if name not in well_known
         ),
         key=lambda o: o.label.lower(),

@@ -60,7 +60,6 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     """
     return {
         LlmProviderNames.TYPESAFE: iter_models(LlmProviderNames.TYPESAFE),
-        LlmProviderNames.ZOOM_AI: iter_models(LlmProviderNames.ZOOM_AI),
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
         BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),

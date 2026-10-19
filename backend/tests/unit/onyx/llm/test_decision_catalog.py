@@ -11,8 +11,6 @@ from onyx.server.manage.llm.models import ModelConfigurationView, OpenRouterMode
     "provider,model,chat,decisions",
     [
         ("typesafe", "jev-latest", False, True),
-        ("zoom_ai", "zoom-decisions", False, True),
-        ("zoom_ai", "zoom-decisions-pro", False, True),
         ("openai", "gpt-6-luna", True, True),
         ("openai", "openai/gpt-6-luna", True, True),
         ("openai", "gpt-5-mini", True, False),
@@ -33,10 +31,6 @@ def test_catalog_capabilities_are_independent_and_provider_scoped(
 
 def test_direct_decision_models_are_discoverable() -> None:
     assert fetch_models_for_provider("typesafe") == ["jev-latest", "jev-preview"]
-    assert fetch_models_for_provider("zoom_ai") == [
-        "zoom-decisions",
-        "zoom-decisions-pro",
-    ]
 
 
 @pytest.mark.parametrize(

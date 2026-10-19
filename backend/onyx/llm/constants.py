@@ -15,7 +15,6 @@ class LlmProviderNames(str, Enum):
 
     OPENAI = "openai"
     TYPESAFE = "typesafe"
-    ZOOM_AI = "zoom_ai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     BEDROCK = "bedrock"
@@ -69,7 +68,6 @@ WELL_KNOWN_PROVIDER_NAMES = [
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.TYPESAFE: "TypeSafe AI",
-    LlmProviderNames.ZOOM_AI: "Zoom AI Services",
     LlmProviderNames.OPENAI: "OpenAI",
     LlmProviderNames.ANTHROPIC: "Anthropic",
     LlmProviderNames.GOOGLE: "Google",

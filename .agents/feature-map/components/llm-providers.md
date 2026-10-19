@@ -33,8 +33,8 @@ Its tooltip distinguishes decision-only models, which do not appear in chat,
 from models that support both chat and decision tasks.
 Chat Preferences also has an optional **Decision model** selection. It starts
 unset and never inherits a chat model. No product workflow consumes it yet.
-TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions
-use the separate client in `backend/onyx/llm/decisions/`.
+TypeSafe System One, OpenAI Decisions, and OpenRouter Decisions use the separate
+client in `backend/onyx/llm/decisions/`.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -301,8 +301,8 @@ Existing manual configurations require a save or provider discovery refresh.
 `decisions/client.py:DecisionClient.decide` accepts text input and typed predicate,
 choice, or score questions. It requires an operation `LLMFlow` and validates the
 provider response. It preserves probabilities, confidence, scores, and refusals.
-TypeSafe and OpenRouter use the System One request shape. OpenAI and Zoom use
-question arrays. Requests have a finite timeout and no automatic retries.
+TypeSafe and OpenRouter use the System One request shape. OpenAI uses question
+arrays. Requests have a finite timeout and no automatic retries.
 Image input and product use cases are outside this implementation.
 
 ### 4.4 The LiteLLM wrapper: `LitellmLLM`

@@ -138,10 +138,6 @@ def test_system_one_protocol(
     "provider,url",
     [
         (DecisionProvider.OPENAI, "https://api.openai.com/v1/decisions"),
-        (
-            DecisionProvider.ZOOM_AI,
-            "https://api.zoom.us/v2/aiservices/decisions/decide",
-        ),
     ],
 )
 def test_array_protocol_preserves_refusals(
@@ -184,11 +180,7 @@ def test_array_protocol_preserves_refusals(
                     {"type": "refusal", "name": "team"},
                     {"type": "refusal", "name": "severity"},
                 ],
-                "usage": (
-                    {"input_units": 42, "output_units": 0, "unit_type": "tokens"}
-                    if provider == DecisionProvider.ZOOM_AI
-                    else {"input_tokens": 42, "output_tokens": 0}
-                ),
+                "usage": {"input_tokens": 42, "output_tokens": 0},
             },
         )
 
@@ -332,9 +324,7 @@ def test_traces_respect_content_mode(mode: TraceContentMode) -> None:
         assert span.span_data.output == [response]
 
 
-@pytest.mark.parametrize(
-    "provider", [DecisionProvider.OPENAI, DecisionProvider.ZOOM_AI]
-)
+@pytest.mark.parametrize("provider", [DecisionProvider.OPENAI])
 def test_array_protocol_returns_distributions(
     provider: DecisionProvider, decision_request: DecisionRequest
 ) -> None:
