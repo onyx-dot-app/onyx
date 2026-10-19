@@ -36,6 +36,11 @@ separate "run detail" screen. If a run needs an approval the task wasn't
 configured to grant, or if it fails outright, the user gets a notification.
 Scheduled runs never clutter the normal Craft session sidebar.
 
+Deleting from the task detail page removes the task from the cached overview
+and replaces the detail URL with `/craft/v1/tasks`. Browser Back does not
+return to that deleted detail entry. A failed deletion keeps the detail page
+open for another attempt (`web/src/app/craft/v1/tasks/[id]/page.tsx`).
+
 ---
 
 ## 2. Surfaces

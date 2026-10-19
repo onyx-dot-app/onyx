@@ -27,6 +27,7 @@ import { taskStatusTag } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
+  ScheduledTaskListResponse,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/types";
 import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
@@ -105,14 +106,24 @@ export default function ScheduledTaskDetailPage() {
     try {
       await deleteScheduledTask(data.id);
       toast.success(t("toasts.deleted", { name: data.name }));
-      router.push(TASKS_PATH);
+      await globalMutate<ScheduledTaskListResponse>(
+        SWR_KEYS.scheduledTasks,
+        (current) =>
+          current && {
+            ...current,
+            items: current.items.filter((task) => task.id !== data.id),
+          },
+        { revalidate: false }
+      );
+      setConfirmDelete(false);
+      router.replace(TASKS_PATH);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("toasts.deleteFailed")
       );
       setBusy(false);
     }
-  }, [data, router, t]);
+  }, [data, globalMutate, router, t]);
 
   if (!taskId) {
     return (
