@@ -176,6 +176,55 @@ describe("InputPasswordTypeIn", () => {
       expect(screen.queryByText(EXISTING)).toBeNull();
     });
 
+    test("a read-only field keeps the existing value on Backspace", async () => {
+      const user = setupUser();
+      render(
+        <InputPasswordTypeIn
+          data-testid="pw"
+          value={EXISTING}
+          existingValue={EXISTING}
+          onChange={() => {
+            throw new Error("onChange must not run");
+          }}
+          readOnly
+        />
+      );
+
+      await user.type(screen.getByTestId("pw"), "{Backspace}");
+      expect(screen.getByText(EXISTING)).toBeInTheDocument();
+    });
+
+    test("the caller's onKeyDown can cancel the deletion", async () => {
+      const user = setupUser();
+      const onChange = jest.fn();
+      render(
+        <InputPasswordTypeIn
+          data-testid="pw"
+          value={EXISTING}
+          existingValue={EXISTING}
+          onChange={onChange}
+          onKeyDown={(event) => event.preventDefault()}
+        />
+      );
+
+      await user.type(screen.getByTestId("pw"), "{Backspace}");
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    test("an unchanged existing value does not fail a native required check", () => {
+      render(
+        <InputPasswordTypeIn
+          data-testid="pw"
+          value={EXISTING}
+          existingValue={EXISTING}
+          onChange={() => {}}
+          required
+        />
+      );
+
+      expect(screen.getByTestId("pw")).not.toBeRequired();
+    });
+
     test("a new value can be revealed and edited normally", async () => {
       const user = setupUser();
       const input = renderExisting();

@@ -145,7 +145,14 @@ function InputPasswordTypeIn({
   // the whole new value, and a deletion clears the existing one.
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (isExistingValue && (e.key === "Backspace" || e.key === "Delete")) {
+      // The caller's handler runs first, so it can cancel the deletion.
+      onKeyDown?.(e);
+      if (
+        isExistingValue &&
+        !props.readOnly &&
+        !e.defaultPrevented &&
+        (e.key === "Backspace" || e.key === "Delete")
+      ) {
         e.preventDefault();
         onChange?.({
           target: { value: "", name: props.name ?? "" },
@@ -155,9 +162,8 @@ function InputPasswordTypeIn({
           cancelable: true,
         } as React.ChangeEvent<HTMLInputElement>);
       }
-      onKeyDown?.(e);
     },
-    [isExistingValue, onChange, onKeyDown, props.name]
+    [isExistingValue, onChange, onKeyDown, props.name, props.readOnly]
   );
   // The ✱ presentation only draws while idle. Focus anywhere in the field
   // shows native dots, so the caret tracks real glyph advances while typing.
@@ -242,6 +248,9 @@ function InputPasswordTypeIn({
         }
         {...props}
         placeholder={isExistingValue ? undefined : props.placeholder}
+        // The input is empty while the tag shows, so a native required
+        // check would block a form whose stored secret is unchanged.
+        required={isExistingValue ? false : props.required}
       />
       {showAsteriskOverlay && (
         // Left inset = .opal-input border (1px) + padding (5px), and Text's
