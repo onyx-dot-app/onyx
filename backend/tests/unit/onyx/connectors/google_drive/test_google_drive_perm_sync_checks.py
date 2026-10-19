@@ -63,7 +63,9 @@ def _ops() -> MagicMock:
     ops.list_groups.side_effect = _listing("team@co.com")
     ops.list_group_members.side_effect = _listing()
     ops.list_drives.side_effect = _listing("d1")
-    ops.list_drive_members.side_effect = _listing()
+    ops.list_drive_members.side_effect = _listing(
+        {"emailAddress": "manager@co.com", "type": "user", "role": "organizer"}
+    )
     ops.list_folders_with_permissions.side_effect = _listing()
     ops.list_file_permissions.side_effect = _listing({"id": "p"})
     return ops
@@ -224,17 +226,17 @@ def test_a_denied_folder_listing_is_reported() -> None:
 
 
 def test_a_drive_nobody_can_list_is_reported() -> None:
-    """Group sync lists a shared drive's folders as a member it can act as, or
-    as the admin. A drive with neither is reported, since its folders are
-    then never synced as groups."""
+    """Group sync lists a shared drive's folders only as a member it can act
+    as. A drive whose members are all outside the domain is reported, since
+    its folders are then never synced as groups. The admin is not probed on
+    its own: if the admin were a member, selection would have found them."""
     ops = _ops()
     ops.list_drive_members.side_effect = _listing(
         {"emailAddress": "ext@partner.com", "type": "user", "role": "organizer"}
     )
-    ops.can_list_drive.return_value = False
 
     result = _run("google_drive_shared_drive_members", ops)
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "cannot list it" in result.message
-    ops.can_list_drive.assert_called_with(user_email=_ADMIN, drive_id="d1")
+    assert "Onyx can act as" in result.message
+    ops.can_list_drive.assert_not_called()

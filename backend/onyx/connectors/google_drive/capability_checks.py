@@ -1422,9 +1422,9 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
                             user_email=email, drive_id=drive_id
                         ),
                     )
-                    unlistable = choice.email is None and not ops.can_list_drive(
-                        user_email=auth.primary_admin_email, drive_id=drive_id
-                    )
+                    # Group sync lists a drive only as a member it can act as;
+                    # the admin is such a member only if selection found them.
+                    unlistable = choice.email is None
         if not is_admin:
             raise InsufficientPermissionsError(
                 f"{auth.primary_admin_email} is not a Workspace admin, so group "
@@ -1433,8 +1433,7 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
         if unlistable:
             raise ConnectorValidationError(
                 f"No member of shared drive {drive_id} is a Workspace user Onyx "
-                "can act as, and the primary admin cannot list it, so its "
-                "folders are not synced as groups."
+                "can act as, so its folders are not synced as groups."
             )
 
 
