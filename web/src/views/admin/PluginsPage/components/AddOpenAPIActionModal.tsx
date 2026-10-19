@@ -5,13 +5,14 @@ import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { Card, Divider, Modal } from "@opal/components";
 import { Text } from "@opal/components";
-import { Content, InputVertical, toast } from "@opal/layouts";
+import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
+import { OpenAPIMethodPath } from "@/sections/plugins/OpenAPIEndpointList";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { can } from "@/lib/permissions/resource-actions";
@@ -112,7 +113,6 @@ function FormContent({
   const t = useTranslations("actions");
   const {
     values,
-    errors,
     setFieldValue,
     setFieldError,
     dirty,
@@ -345,11 +345,6 @@ function FormContent({
               </div>
             </Hoverable.Root>
           </InputVertical>
-          {errors.definition && (
-            <Text font="secondary-body" color="status-error-05">
-              {errors.definition}
-            </Text>
-          )}
         </div>
         {presentation === "inline" && isEditMode ? (
           currentDefinition && (
@@ -408,10 +403,14 @@ function FormContent({
                   {methodSpecs.map((method) => (
                     <Card
                       key={`${method.method}-${method.path}-${method.name}`}
+                      padding={2}
+                      border="solid"
                     >
-                      <Content
+                      <ContentAction
                         sizePreset="main-ui"
                         variant="section"
+                        padding={0}
+                        rightChildren={<OpenAPIMethodPath method={method} />}
                         icon={SvgArrowRightDot}
                         title={method.name}
                         description={

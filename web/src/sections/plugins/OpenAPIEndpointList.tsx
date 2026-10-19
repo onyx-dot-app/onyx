@@ -4,6 +4,26 @@ import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import type { MethodSpec } from "@/lib/tools/types";
 
+interface OpenAPIMethodPathProps {
+  method: Pick<MethodSpec, "method" | "path">;
+}
+
+/** An action's HTTP method tag and its endpoint path. */
+export function OpenAPIMethodPath({ method }: OpenAPIMethodPathProps) {
+  const verb = method.method.toUpperCase();
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <Tag
+        title={verb}
+        color={verb === "GET" ? "green" : verb === "DELETE" ? "red" : "blue"}
+      />
+      <Text font="main-ui-mono" color="text-03" wordWrap="wrap-anywhere">
+        {method.path}
+      </Text>
+    </div>
+  );
+}
+
 interface OpenAPIEndpointListProps {
   methods: readonly Pick<MethodSpec, "method" | "path" | "name" | "summary">[];
 }
@@ -35,20 +55,8 @@ export default function OpenAPIEndpointList({
               {method.summary || t("noSummary")}
             </Text>
           </div>
-          <div className="flex min-w-0 items-start gap-2 sm:max-w-[50%]">
-            <Tag
-              title={method.method.toUpperCase()}
-              color={
-                method.method.toUpperCase() === "GET"
-                  ? "green"
-                  : method.method.toUpperCase() === "DELETE"
-                    ? "red"
-                    : "blue"
-              }
-            />
-            <Text font="main-ui-mono" color="text-03" wordWrap="wrap-anywhere">
-              {method.path}
-            </Text>
+          <div className="sm:max-w-[50%]">
+            <OpenAPIMethodPath method={method} />
           </div>
         </li>
       ))}
