@@ -24,8 +24,6 @@ import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
 import MCPServerDetailsPage from "@/views/admin/PluginsPage/components/mcp/MCPServerDetailsPage";
 import MCPAuthenticationPage from "@/views/admin/PluginsPage/components/mcp/MCPAuthenticationPage";
 import MCPServerToolsEditor from "@/sections/actions/MCPServerToolsEditor";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useUser } from "@/providers/UserProvider";
 import {
   clearMcpChatEnableIntent,
@@ -79,32 +77,17 @@ export default function MCPPluginDetailPage({
       : parseDetailTab(searchParams.get("tab"))
   );
   const [visited, setVisited] = useState<Set<DetailTab>>(() => new Set([tab]));
-  const [detailsDirty, setDetailsDirty] = useState(false);
-  const [authDirty, setAuthDirty] = useState(false);
-  const [toolsDirty, setToolsDirty] = useState(false);
   const [detailsBusy, setDetailsBusy] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [toolsBusy, setToolsBusy] = useState(false);
   const [discoveringTools, setDiscoveringTools] = useState(false);
-  const [revision, setRevision] = useState(0);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const handledOAuthReturn = useRef(false);
   const busy = detailsBusy || authBusy || toolsBusy || discoveringTools;
-  const guard = useUnsavedChangesGuard({
-    isDirty: detailsDirty || authDirty || toolsDirty,
-    onDiscard: () => {
-      setDetailsDirty(false);
-      setAuthDirty(false);
-      setToolsDirty(false);
-      setRevision((value) => value + 1);
-    },
-  });
   const close = () => {
     if (busy) return;
-    guard.requestLeave(() => {
-      clearMcpChatEnableIntent(enableChatIntent);
-      router.replace(ADMIN_ROUTES.PLUGINS.path);
-    });
+    clearMcpChatEnableIntent(enableChatIntent);
+    router.replace(ADMIN_ROUTES.PLUGINS.path);
   };
   const selectTab = useCallback(
     (nextTab: DetailTab) => {
@@ -303,7 +286,7 @@ export default function MCPPluginDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPServerDetailsPage
-                  key={`${server.id}:${revision}`}
+                  key={server.id}
                   variant="page"
                   readOnly={!canEdit}
                   active={tab === "server"}
@@ -311,7 +294,6 @@ export default function MCPPluginDetailPage({
                   server={server}
                   onSaved={saveDetails}
                   onBusyChange={setDetailsBusy}
-                  onDirtyChange={setDetailsDirty}
                 />
               </fieldset>
             )}
@@ -327,7 +309,7 @@ export default function MCPPluginDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPAuthenticationPage
-                  key={`${server.id}:${server.server_url}:${revision}`}
+                  key={`${server.id}:${server.server_url}`}
                   variant="page"
                   readOnly={!canEdit}
                   active={tab === "authentication"}
@@ -343,7 +325,6 @@ export default function MCPPluginDetailPage({
                   }
                   onTriggerFetchTools={fetchTools}
                   onBusyChange={setAuthBusy}
-                  onDirtyChange={setAuthDirty}
                   onSaved={refresh}
                   onComplete={() => selectTab("tools")}
                 />
@@ -358,9 +339,8 @@ export default function MCPPluginDetailPage({
                 className="w-full min-w-0"
               >
                 <MCPServerToolsEditor
-                  key={`${server.id}:${revision}`}
+                  key={server.id}
                   server={server}
-                  onDirtyChange={setToolsDirty}
                   onBusyChange={setToolsBusy}
                   onSaved={refresh}
                   active={tab === "tools"}
@@ -372,13 +352,6 @@ export default function MCPPluginDetailPage({
         </Tabs>
       )}
     </>
-  );
-  const dialogs = (
-    <UnsavedChangesModal
-      open={guard.confirmationOpen}
-      onCancel={guard.cancelLeave}
-      onDiscard={guard.discardAndLeave}
-    />
   );
   const title = server?.name ?? t("mcpDetail.configuration");
 
@@ -406,7 +379,6 @@ export default function MCPPluginDetailPage({
           </Modal.Footer>
         </PluginModalContent>
       </Modal>
-      {dialogs}
     </>
   );
 }

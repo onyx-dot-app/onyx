@@ -212,7 +212,7 @@ MCP setup. Admin detail tabs embed those same forms without headers
 or nested dialogs, and portal only the active form's save action to the footer.
 Drafts survive tab switches. Successful inline saves clear dirty state; pending
 saves block navigation. The inline Authentication Method has no divider.
-Closing saved OpenAPI details confirms unsaved edits within the same modal frame.
+Plugin add and edit modals close at once, without an unsaved-changes confirmation.
 Keeping edits preserves each mounted form. Authentication saves reject a changed
 OAuth link before writing, so stale values cannot target a replacement config.
 The inline Schema tab shows validation and a detected-tool count, not endpoints.
@@ -318,7 +318,7 @@ including hard links and OAuth returns. Closing returns to Plugins, not browser 
 
 `web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx` has three filled tabs:
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
-retain drafts, and route navigation asks before discarding any unsaved edits.
+retain drafts. Closing discards unsaved edits without a confirmation.
 The `tab` query parameter links directly to each section. Saving server details
 stays on that tab. Authentication saves configuration, then runs the existing
 connection and tool-loading flow before opening Tools. Workspace availability and
@@ -375,7 +375,7 @@ access, then saves authentication and starts the connection flow. Failed retries
 reuse the saved server ID and update its details. Back and Continue retain drafts for an
 unchanged URL. A changed URL clears credentials and checks the endpoint again.
 Existing edit pages do not probe or replace saved authentication settings.
-Creation does not register an unsaved-draft navigation guard. Existing edit pages retain their guards.
+Neither creation nor editing registers an unsaved-draft guard.
 There is one production creation flow. The removed legacy wrapper is not kept
 for tests or stories. Authentication prepares and validates its payload before
 resolving a new server. Its form owner retains explicit OAuth setup choices

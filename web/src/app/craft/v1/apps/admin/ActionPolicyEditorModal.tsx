@@ -18,8 +18,6 @@ import PolicyEditor, {
 } from "@/sections/actions/PolicyEditor";
 export type { PolicyEditorItem } from "@/sections/actions/PolicyEditor";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
@@ -71,7 +69,6 @@ interface ActionPolicyEditorModalProps {
   allowPristineSave?: boolean;
   /** Keep the modal mounted when save advances its caller to another step. */
   closeAfterSave?: boolean;
-  discardOnClose?: boolean;
 }
 
 /** The one edit dialog for everything the Craft agent can be granted.
@@ -99,7 +96,6 @@ export default function ActionPolicyEditorModal({
   autoFocusFirstField = true,
   allowPristineSave = false,
   closeAfterSave = true,
-  discardOnClose = false,
 }: ActionPolicyEditorModalProps) {
   const t = useTranslations("craft.apps.policyEditor");
   const fieldId = useId();
@@ -120,11 +116,9 @@ export default function ActionPolicyEditorModal({
   const fieldsDirty = !isEqual(fieldValues, initialFieldValues);
   const policiesDirty = !isEqual(policies, initialPolicies);
   const isDirty = fieldsDirty || policiesDirty || isAdditionalContentDirty;
-  const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: !discardOnClose && isDirty,
-  });
-  const confirmationOpen =
-    alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
+  // Closing never asks to discard edits; leaving runs at once.
+  const requestLeave = (navigate: () => void) => navigate();
+  const confirmationOpen = alternateContentConfirmationOpen;
   const canSave =
     fieldsFilled &&
     policyItems !== undefined &&
@@ -146,27 +140,15 @@ export default function ActionPolicyEditorModal({
 
   function requestClose() {
     if (isSaving) return;
-    if (alternateContent) onClose();
-    else unsavedChanges.requestLeave(onClose);
+    onClose();
   }
 
   function handleDismiss(event: Event) {
     const preventedByModal = event.defaultPrevented;
     event.preventDefault();
     if (preventedByModal || isSaving) return;
-    if (unsavedChanges.confirmationOpen) {
-      unsavedChanges.cancelLeave();
-      return;
-    }
     requestClose();
   }
-
-  const confirmationContent = unsavedChanges.confirmationOpen ? (
-    <UnsavedChangesModalContent
-      onCancel={unsavedChanges.cancelLeave}
-      onDiscard={unsavedChanges.discardAndLeave}
-    />
-  ) : null;
 
   return (
     <Modal open>
@@ -178,15 +160,10 @@ export default function ActionPolicyEditorModal({
         onEscapeKeyDown={handleDismiss}
       >
         {alternateContent ? (
-          <>
-            {alternateContent({
-              requestLeave: unsavedChanges.requestLeave,
-              hidden: confirmationOpen,
-            })}
-            {confirmationContent}
-          </>
-        ) : confirmationContent ? (
-          confirmationContent
+          alternateContent({
+            requestLeave,
+            hidden: confirmationOpen,
+          })
         ) : (
           <>
             <Modal.Header
@@ -265,7 +242,7 @@ export default function ActionPolicyEditorModal({
                       />
                     )
                   }
-                  skills={skillsContent?.(unsavedChanges.requestLeave)}
+                  skills={skillsContent?.(requestLeave)}
                 />
 
                 {error && (
@@ -281,7 +258,7 @@ export default function ActionPolicyEditorModal({
               <div className="flex justify-end gap-2 w-full">
                 <Button
                   prominence="secondary"
-                  onClick={() => unsavedChanges.requestLeave(onClose)}
+                  onClick={onClose}
                   disabled={isSaving}
                 >
                   {t("cancelButton")}

@@ -27,7 +27,6 @@ import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSki
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
 import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import {
   stageSkillCreationDraft,
   type SkillCreationDraft,
@@ -122,9 +121,6 @@ export default function CreateCustomAppModal({
         Object.keys(toRecord(headers)).length ||
         Object.keys(toRecord(orgCredentials)).length
       );
-  const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: isEdit && createdApp === null && configDirty,
-  });
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required.
@@ -185,53 +181,36 @@ export default function CreateCustomAppModal({
 
   function openSkillEditor(draft?: SkillCreationDraft) {
     if (!existingApp) return;
-    unsavedChanges.requestLeave(() =>
-      router.push(
-        skillEditorUrlForApp(
-          existingApp,
-          draft ? stageSkillCreationDraft(draft) : undefined
-        )
+    router.push(
+      skillEditorUrlForApp(
+        existingApp,
+        draft ? stageSkillCreationDraft(draft) : undefined
       )
     );
   }
 
   function openExistingSkill(skillId: string) {
     if (!existingApp) return;
-    unsavedChanges.requestLeave(() =>
-      router.push(skillEditUrlForApp(skillId, existingApp))
-    );
+    router.push(skillEditUrlForApp(skillId, existingApp));
   }
 
   function handleDismiss(event: Event) {
     const preventedByModal = event.defaultPrevented;
     event.preventDefault();
     if (preventedByModal || isSaving) return;
-    if (unsavedChanges.confirmationOpen) {
-      unsavedChanges.cancelLeave();
-      return;
-    }
-    if (upload.isOpen) {
-      upload.requestDismiss();
-    } else {
-      unsavedChanges.requestLeave(onClose);
-    }
+    if (upload.isOpen) upload.requestDismiss();
+    else onClose();
   }
 
   function requestClose() {
-    if (!isSaving) unsavedChanges.requestLeave(onClose);
+    if (!isSaving) onClose();
   }
 
-  const confirmationOpen =
-    upload.confirmationOpen || unsavedChanges.confirmationOpen;
+  const confirmationOpen = upload.confirmationOpen;
   const confirmationContent = upload.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={upload.cancelDiscard}
       onDiscard={upload.discardAndClose}
-    />
-  ) : unsavedChanges.confirmationOpen ? (
-    <UnsavedChangesModalContent
-      onCancel={unsavedChanges.cancelLeave}
-      onDiscard={unsavedChanges.discardAndLeave}
     />
   ) : null;
 
@@ -386,7 +365,7 @@ export default function CreateCustomAppModal({
               <div className="flex justify-end gap-2 w-full">
                 <Button
                   prominence="secondary"
-                  onClick={() => unsavedChanges.requestLeave(onClose)}
+                  onClick={onClose}
                   disabled={isSaving}
                 >
                   {t("cancelButton")}

@@ -12,7 +12,6 @@ import {
   skillEditorUrlForApp,
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 import {
   stageSkillCreationDraft,
@@ -47,7 +46,6 @@ export default function ExternalAppSkillsStepModal({
     new Set(selectedSkillIds),
     new Set(app.associated_skills.map((skill) => skill.id))
   );
-  const unsavedChanges = useUnsavedChangesGuard({ isDirty });
 
   function navigateToSkillEditor(draft?: SkillCreationDraft) {
     router.push(
@@ -62,13 +60,8 @@ export default function ExternalAppSkillsStepModal({
     const preventedByModal = event.defaultPrevented;
     event.preventDefault();
     if (preventedByModal || isSaving) return;
-    if (unsavedChanges.confirmationOpen) {
-      unsavedChanges.cancelLeave();
-    } else if (upload.isOpen) {
-      upload.requestDismiss();
-    } else {
-      unsavedChanges.requestLeave(onClose);
-    }
+    if (upload.isOpen) upload.requestDismiss();
+    else onClose();
   }
 
   async function save() {
@@ -89,17 +82,11 @@ export default function ExternalAppSkillsStepModal({
     }
   }
 
-  const confirmationOpen =
-    upload.confirmationOpen || unsavedChanges.confirmationOpen;
+  const confirmationOpen = upload.confirmationOpen;
   const confirmationContent = upload.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={upload.cancelDiscard}
       onDiscard={upload.discardAndClose}
-    />
-  ) : unsavedChanges.confirmationOpen ? (
-    <UnsavedChangesModalContent
-      onCancel={unsavedChanges.cancelLeave}
-      onDiscard={unsavedChanges.discardAndLeave}
     />
   ) : null;
 
@@ -127,9 +114,7 @@ export default function ExternalAppSkillsStepModal({
                     })
                   : null
               }
-              onContinue={(draft) =>
-                unsavedChanges.requestLeave(() => navigateToSkillEditor(draft))
-              }
+              onContinue={(draft) => navigateToSkillEditor(draft)}
             />
             {confirmationContent}
           </>
@@ -142,7 +127,7 @@ export default function ExternalAppSkillsStepModal({
               title={t("title", { name: app.name })}
               description={t("description")}
               onClose={() => {
-                if (!isSaving) unsavedChanges.requestLeave(onClose);
+                if (!isSaving) onClose();
               }}
             />
             <Modal.Body alignItems="stretch" padding={6}>
@@ -152,13 +137,9 @@ export default function ExternalAppSkillsStepModal({
                   selectedSkillIds={selectedSkillIds}
                   onChange={setSelectedSkillIds}
                   onOpenSkill={(skillId) =>
-                    unsavedChanges.requestLeave(() =>
-                      router.push(skillEditUrlForApp(skillId, app))
-                    )
+                    router.push(skillEditUrlForApp(skillId, app))
                   }
-                  onCreateSkill={() =>
-                    unsavedChanges.requestLeave(() => navigateToSkillEditor())
-                  }
+                  onCreateSkill={() => navigateToSkillEditor()}
                   onUploadSkill={upload.open}
                 />
                 {error && (
@@ -176,7 +157,7 @@ export default function ExternalAppSkillsStepModal({
               <div className="flex w-full justify-end gap-2">
                 <Button
                   prominence="secondary"
-                  onClick={() => unsavedChanges.requestLeave(onClose)}
+                  onClick={onClose}
                   disabled={isSaving}
                 >
                   {t("skipButton")}

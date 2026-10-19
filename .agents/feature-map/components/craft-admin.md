@@ -64,8 +64,8 @@ display; it never rewrites stored proxy URL-matching patterns. Complex host
 regexes do not produce a fabricated service URL.
 One footer saves
 the existing payload; managed-app credentials remain hidden and unchanged.
-New drafts close without a discard confirmation. Existing saved edits keep
-their confirmation in the same frame, without a width or position change.
+App modals close without a discard confirmation, for new drafts and saved edits.
+Only an unfinished skill upload asks before it is discarded.
 Creation still advances to the existing optional skills step after persistence.
 `web/src/views/admin/PluginsPage/components/CreateCustomAppModal.stories.tsx` covers built-in,
 managed, and custom configuration, permissions, and skills states.

@@ -34,7 +34,7 @@ interface MCPServerToolsEditorProps {
   active?: boolean;
   footerTarget?: HTMLDivElement | null;
   server: MCPServer;
-  onDirtyChange: (dirty: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   onSaved: () => Promise<void>;
 }
@@ -88,7 +88,7 @@ export default function MCPServerToolsEditor({
     craftAvailable && can(server, "edit") && !isEqual(policies, savedPolicies);
   const dirty = changedTools.length > 0 || policiesDirty;
   useEffect(() => {
-    onDirtyChange(dirty);
+    onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
   useEffect(() => {
     onBusyChange(busy);

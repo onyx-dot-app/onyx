@@ -248,7 +248,6 @@ export default function ConfigureProviderModal({
       allowPristineSave={existingApp === null}
       onSave={save}
       closeAfterSave={existingApp !== null}
-      discardOnClose={existingApp === null}
       skillsContent={
         existingApp
           ? (requestLeave) => (

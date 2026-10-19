@@ -50,7 +50,7 @@ interface MCPServerDetailsPageProps {
   server: MCPServer;
   onSaved: (server: MCPServer) => Promise<void>;
   onBusyChange: (busy: boolean) => void;
-  onDirtyChange: (dirty: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export default function MCPServerDetailsPage({
@@ -185,7 +185,9 @@ export default function MCPServerDetailsPage({
               id={formId}
               className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-6"
             >
-              <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
+              {onDirtyChange && (
+                <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
+              )}
               <fieldset
                 disabled={isSubmitting || readOnly}
                 className="min-w-0 w-full"
