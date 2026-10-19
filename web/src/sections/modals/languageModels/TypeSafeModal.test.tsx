@@ -16,6 +16,97 @@ jest.mock("swr", () => ({
 describe("TypeSafe provider setup", () => {
   afterEach(() => jest.restoreAllMocks());
 
+  it.each([false, true])(
+    "updates a provider with all decision models hidden (rotate key: %s)",
+    async (rotateKey) => {
+      const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ id: 42 }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+      );
+      const onSuccess = jest.fn();
+      render(
+        <TypeSafeModal
+          existingLlmProvider={{
+            id: 42,
+            name: "TypeSafe AI",
+            provider: "typesafe",
+            api_key: "********",
+            model_configurations: [
+              {
+                name: "jev-preview",
+                is_visible: false,
+                supports_chat: false,
+                supports_decisions: true,
+                supports_image_input: false,
+                supports_reasoning: false,
+                effectiveDisplayName: "Jev Preview",
+                max_input_tokens: null,
+              },
+            ],
+            is_public: true,
+            is_auto_mode: false,
+            groups: [],
+            personas: [],
+            api_base: null,
+            api_version: null,
+            custom_config: null,
+            deployment_name: null,
+          }}
+          onSuccess={onSuccess}
+        />
+      );
+      const user = setupUser({
+        pointerEventsCheck: PointerEventsCheckLevel.Never,
+      });
+      await user.clear(screen.getByLabelText(/display name/i));
+      await user.type(
+        screen.getByLabelText(/display name/i),
+        "Renamed TypeSafe"
+      );
+      if (rotateKey) {
+        await user.clear(screen.getByLabelText(/API key/i));
+        await user.type(
+          screen.getByLabelText(/API key/i),
+          "rotated-typesafe-key"
+        );
+      } else {
+        expect(screen.getByLabelText(/API key/i)).toHaveValue("********");
+      }
+      await user.click(screen.getByRole("button", { name: "Update" }));
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      const savedBody = fetchSpy.mock.calls.find(
+        ([url]) => url === SWR_KEYS.adminLlmProviders
+      )?.[1]?.body;
+      expect(typeof savedBody).toBe("string");
+      expect(JSON.parse(String(savedBody))).toMatchObject({
+        name: "Renamed TypeSafe",
+        api_key_changed: rotateKey,
+        model_configurations: [{ name: "jev-preview", is_visible: false }],
+      });
+      if (rotateKey) {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          "/api/admin/llm/test",
+          expect.objectContaining({
+            body: expect.stringContaining('"model":"jev-preview"'),
+          })
+        );
+        expect(JSON.parse(String(savedBody))).toHaveProperty(
+          "api_key",
+          "rotated-typesafe-key"
+        );
+      } else {
+        expect(fetchSpy).not.toHaveBeenCalledWith(
+          "/api/admin/llm/test",
+          expect.anything()
+        );
+        expect(JSON.parse(String(savedBody))).not.toHaveProperty("api_key");
+      }
+    }
+  );
+
   it("discovers decision models and saves credentials without assigning a chat default", async () => {
     const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(
       async (url) =>

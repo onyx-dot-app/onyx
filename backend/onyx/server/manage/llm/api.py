@@ -1221,15 +1221,18 @@ def _page_model_windows(
     db_session: Session,
     providers: list[LLMProviderModel],
     pinned_models: list[ModelConfiguration | None],
+    flow_type: LLMModelFlowType | None = None,
 ) -> dict[int, ModelConfigurationWindow]:
     """Each provider's first page of models, for listings whose client pages
     the rest in. `pinned_models` (the defaults, None where unset) ride along
     even when they sort past the page, so clients can resolve them."""
     windows = fetch_model_configurations_page(
-        db_session, [provider.id for provider in providers]
+        db_session, [provider.id for provider in providers], flow_type=flow_type
     )
     for model in pinned_models:
-        if model is None:
+        if model is None or (
+            flow_type is not None and flow_type not in model.llm_model_flow_types
+        ):
             continue
         window = windows.get(model.llm_provider_id)
         if window is None or any(
@@ -1250,15 +1253,13 @@ def _build_provider_descriptors(
         for provider in providers
         if provider.provider != LlmProviderNames.TYPESAFE
     ]
-    windows = _page_model_windows(db_session, providers, pinned_models)
+    windows = _page_model_windows(
+        db_session, providers, pinned_models, flow_type=LLMModelFlowType.CHAT
+    )
     return [
         LLMProviderDescriptor.from_model(
             provider,
-            [
-                model
-                for model in windows[provider.id].model_configurations
-                if LLMModelFlowType.CHAT in model.llm_model_flow_types
-            ],
+            windows[provider.id].model_configurations,
             windows[provider.id].next_offset,
         )
         for provider in providers
@@ -1273,6 +1274,7 @@ def list_llm_provider_models(
     offset: int = Query(0, ge=0),
     query: str | None = Query(None, max_length=200),
     persona_id: int | None = Query(None),
+    flow_type: LLMModelFlowType | None = Query(None),
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ModelConfigurationPage:
@@ -1305,15 +1307,15 @@ def list_llm_provider_models(
         )
 
     window = fetch_model_configurations_page(
-        db_session, [provider_id], offset=offset, name_query=query
+        db_session,
+        [provider_id],
+        offset=offset,
+        name_query=query,
+        flow_type=flow_type if can_manage_llms else LLMModelFlowType.CHAT,
     )[provider_id]
     return ModelConfigurationPage.from_model(
         provider,
-        [
-            model
-            for model in window.model_configurations
-            if can_manage_llms or LLMModelFlowType.CHAT in model.llm_model_flow_types
-        ],
+        window.model_configurations,
         window.next_offset,
     )
 

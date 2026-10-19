@@ -92,11 +92,13 @@ function hasUnloadedModels(provider: PageableProvider): boolean {
 function fetchModelConfigurationPage(
   providerId: number,
   agentId: number | undefined,
-  params: ModelPageParams
+  params: ModelPageParams,
+  flowType?: "chat"
 ): Promise<RawModelConfigurationPage> {
   const search = new URLSearchParams({ offset: String(params.offset) });
   if (params.query !== undefined) search.set("query", params.query);
   if (agentId !== undefined) search.set("persona_id", String(agentId));
+  if (flowType !== undefined) search.set("flow_type", flowType);
   return errorHandlingFetcher<RawModelConfigurationPage>(
     `${SWR_KEYS.llmProviderModels(providerId)}?${search}`
   );
@@ -143,7 +145,8 @@ function mergeModelConfigurationPage<P extends PageableProvider>(
 function useModelPaging<P extends PageableProvider>(
   raw: LLMProviderResponse<P> | undefined,
   mutate: KeyedMutator<LLMProviderResponse<P>>,
-  agentId?: number
+  agentId?: number,
+  flowType?: "chat"
 ): ModelPaging {
   // One page request at a time, later calls are dropped: a scroll burst or
   // keystroke storm must not fan out into parallel fetches.
@@ -161,7 +164,8 @@ function useModelPaging<P extends PageableProvider>(
         const page = await fetchModelConfigurationPage(
           providerId,
           agentId,
-          params
+          params,
+          flowType
         );
         await mutate(
           (current) =>
@@ -175,7 +179,7 @@ function useModelPaging<P extends PageableProvider>(
         setIsLoadingPage(false);
       }
     },
-    [agentId, mutate]
+    [agentId, flowType, mutate]
   );
 
   const truncatedProviders = useMemo(
@@ -315,7 +319,7 @@ function useLanguageModelsRequest(agentId?: number) {
     () => (raw ? { ...raw, providers: enrichDescriptors(raw.providers) } : raw),
     [raw]
   );
-  const modelPaging = useModelPaging(raw, mutate, agentId);
+  const modelPaging = useModelPaging(raw, mutate, agentId, "chat");
 
   return {
     llmProviders: data?.providers,

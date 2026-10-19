@@ -390,6 +390,12 @@ def _model_protocol_flows(
 ) -> set[LLMModelFlowType]:
     decision_capable = model_supports_decisions(provider, name)
     chat_capable = model_supports_chat(provider, name)
+    if (
+        not decision_capable
+        and provider not in {"typesafe", "zoom_ai"}
+        and LLMModelFlowType.CHAT in stored_flows
+    ):
+        chat_capable = True
     if provider in {"openrouter", "typesafe"}:
         if (
             discovered_decision_models is not None
@@ -733,6 +739,8 @@ def sync_model_configurations(
         # TODO(ENG-4233): durable admin flow removals.
         existing_flows = set(existing.llm_model_flow_types)
         missing_flows: list[LLMModelFlowType] = []
+        if model.supports_chat and LLMModelFlowType.CHAT not in existing_flows:
+            missing_flows.append(LLMModelFlowType.CHAT)
         if model.supports_decisions and LLMModelFlowType.DECISION not in existing_flows:
             missing_flows.append(LLMModelFlowType.DECISION)
         if (
@@ -888,6 +896,7 @@ def fetch_model_configurations_page(
     provider_ids: list[int],
     offset: int = 0,
     name_query: str | None = None,
+    flow_type: LLMModelFlowType | None = None,
 ) -> dict[int, ModelConfigurationWindow]:
     """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
     visible first (routers before other visible models, so a picker's router
@@ -913,6 +922,12 @@ def fetch_model_configurations_page(
     ranked_stmt = select(ModelConfiguration.id.label("id"), row_number).where(
         ModelConfiguration.llm_provider_id.in_(provider_ids)
     )
+    if flow_type is not None:
+        ranked_stmt = ranked_stmt.where(
+            ModelConfiguration.llm_model_flows.any(
+                LLMModelFlow.llm_model_flow_type == flow_type
+            )
+        )
     if name_query:
         ranked_stmt = ranked_stmt.where(
             or_(

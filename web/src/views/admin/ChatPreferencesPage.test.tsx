@@ -38,6 +38,12 @@ const mockUseAdminLanguageModels = jest.fn();
 
 jest.mock("@/lib/languageModels/hooks", () => ({
   useAdminLanguageModels: () => mockUseAdminLanguageModels(),
+  useDecisionModel: () => ({
+    model: null,
+    providers: [],
+    error: undefined,
+    refetch: jest.fn(),
+  }),
 }));
 
 const settings: AppSettings = {

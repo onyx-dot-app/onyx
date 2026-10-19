@@ -12,6 +12,7 @@ from onyx.db.llm import (
     clear_decision_model,
     fetch_default_model,
     fetch_existing_llm_provider_by_id,
+    fetch_model_configurations_page,
     remove_llm_provider,
     sync_model_configurations,
     update_default_contextual_model,
@@ -272,3 +273,153 @@ def test_decision_model_cannot_become_contextual_rag_default(
     with pytest.raises(OnyxError, match="requires a chat model"):
         validate_contextual_rag_model(model_id, db_session, True)
     assert fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is None
+
+
+def test_custom_chat_model_can_be_created_and_edited_as_default(
+    db_session: Session,
+) -> None:
+    provider = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            name="Local chat",
+            provider="ollama",
+            model_configurations=[
+                ModelConfigurationUpsertRequest(name="instructor-chat", is_visible=True)
+            ],
+        ),
+        db_session,
+    )
+    update_default_model(
+        db_session, provider.id, "instructor-chat", LLMModelFlowType.CHAT
+    )
+    upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            id=provider.id,
+            provider="ollama",
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name="instructor-chat",
+                    is_visible=True,
+                    custom_display_name="Team chat",
+                )
+            ],
+        ),
+        db_session,
+    )
+    db_session.expire_all()
+    selected = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    assert selected is not None
+    assert (selected.name, selected.custom_display_name) == (
+        "instructor-chat",
+        "Team chat",
+    )
+
+
+def test_discovery_can_upgrade_decision_only_model_to_dual_capability(
+    db_session: Session,
+) -> None:
+    provider = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            name="Router", provider="openrouter", model_configurations=[]
+        ),
+        db_session,
+    )
+    sync_model_configurations(
+        db_session,
+        provider.id,
+        [
+            SyncModelEntry(
+                name="vendor/dual",
+                display_name="Dual",
+                supports_chat=False,
+                supports_decisions=True,
+            )
+        ],
+    )
+    db_session.expire_all()
+    sync_model_configurations(
+        db_session,
+        provider.id,
+        [
+            SyncModelEntry(
+                name="vendor/dual",
+                display_name="Dual",
+                supports_chat=True,
+                supports_decisions=True,
+            )
+        ],
+    )
+    db_session.expire_all()
+    stored = fetch_existing_llm_provider_by_id(provider.id, db_session)
+    assert stored is not None
+    assert set(stored.model_configurations[0].llm_model_flow_types) == {
+        LLMModelFlowType.CHAT,
+        LLMModelFlowType.DECISION,
+    }
+    assert fetch_default_model(db_session, LLMModelFlowType.DECISION) is None
+
+
+def test_chat_pagination_filters_before_ranking_and_keeps_admin_catalog(
+    db_session: Session,
+) -> None:
+    from onyx.server.manage.llm.api import _page_model_windows
+
+    provider = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            name="Router", provider="openrouter", model_configurations=[]
+        ),
+        db_session,
+    )
+    sync_model_configurations(
+        db_session,
+        provider.id,
+        [
+            SyncModelEntry(
+                name=f"a-decision-{index:03}",
+                display_name=f"Decision {index}",
+                supports_chat=False,
+                supports_decisions=True,
+            )
+            for index in range(60)
+        ]
+        + [
+            SyncModelEntry(name=f"z-chat-{index:03}", display_name=f"Chat {index}")
+            for index in range(55)
+        ],
+    )
+    first = fetch_model_configurations_page(
+        db_session, [provider.id], flow_type=LLMModelFlowType.CHAT
+    )[provider.id]
+    assert [model.name for model in first.model_configurations] == [
+        f"z-chat-{index:03}" for index in range(50)
+    ]
+    assert first.next_offset == 50
+    second = fetch_model_configurations_page(
+        db_session, [provider.id], offset=50, flow_type=LLMModelFlowType.CHAT
+    )[provider.id]
+    assert [model.name for model in second.model_configurations] == [
+        f"z-chat-{index:03}" for index in range(50, 55)
+    ]
+    assert second.next_offset is None
+    admin_page = fetch_model_configurations_page(db_session, [provider.id])[provider.id]
+    assert [model.name for model in admin_page.model_configurations] == [
+        f"a-decision-{index:03}" for index in range(50)
+    ]
+    assert admin_page.next_offset == 50
+    search_page = fetch_model_configurations_page(
+        db_session, [provider.id], name_query="054", flow_type=LLMModelFlowType.CHAT
+    )[provider.id]
+    assert [model.name for model in search_page.model_configurations] == ["z-chat-054"]
+    assert search_page.next_offset is None
+    stored = fetch_existing_llm_provider_by_id(provider.id, db_session)
+    assert stored is not None
+    pinned = _page_model_windows(
+        db_session,
+        [stored],
+        [search_page.model_configurations[0], admin_page.model_configurations[0]],
+        flow_type=LLMModelFlowType.CHAT,
+    )[provider.id]
+    assert [model.name for model in pinned.model_configurations] == [
+        *[f"z-chat-{index:03}" for index in range(50)],
+        "z-chat-054",
+    ]
+    assert pinned.next_offset == 50

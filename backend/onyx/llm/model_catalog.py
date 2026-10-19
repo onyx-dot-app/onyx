@@ -182,7 +182,7 @@ def model_supports_chat(provider: str, model_name: str) -> bool:
         return _catalog_mode(entry, name) in CHAT_MODES
     if provider in {"typesafe", "zoom_ai"}:
         return False
-    return _mode_from_name(name) in CHAT_MODES
+    return True
 
 
 # Modes a catalog entry can serve a chat request under — entries in any

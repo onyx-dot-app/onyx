@@ -46,6 +46,7 @@ function TypeSafeModels({
   return (
     <ModelSelectionField
       shouldShowAutoUpdateToggle={false}
+      testModelScope="all"
       onRefetch={
         values.api_key || existingLlmProvider ? fetchModels : undefined
       }

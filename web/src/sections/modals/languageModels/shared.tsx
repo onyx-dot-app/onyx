@@ -745,6 +745,7 @@ function ModelRow({
 
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
+  testModelScope?: "visible" | "all";
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
@@ -756,6 +757,7 @@ export function ModelSelectionField({
   onRefetch,
   onAddModel,
   emptyMessage,
+  testModelScope = "visible",
 }: ModelSelectionFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
@@ -779,14 +781,14 @@ export function ModelSelectionField({
     }
   }, [models]);
 
-  // Automatically derive test_model_name from model_configurations.
-  // Any change to visibility or the model list syncs this automatically.
   useEffect(() => {
-    const firstVisible = models.find((m) => m.is_visible)?.name;
-    if (firstVisible !== formikProps.values.test_model_name) {
-      formikProps.setFieldValue("test_model_name", firstVisible);
+    const testModel = models.find(
+      (m) => testModelScope === "all" || m.is_visible
+    )?.name;
+    if (testModel !== formikProps.values.test_model_name) {
+      formikProps.setFieldValue("test_model_name", testModel);
     }
-  }, [models]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [models, testModelScope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>

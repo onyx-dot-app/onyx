@@ -20,6 +20,8 @@ from onyx.server.manage.llm.models import ModelConfigurationView, OpenRouterMode
         ("openrouter", "openai/gpt-6-luna", True, False),
         ("typesafe", "unknown", False, False),
         ("openai", "unknown", True, False),
+        ("ollama", "instructor-chat", True, False),
+        ("openai", "my-embedding-team-chat", True, False),
     ],
 )
 def test_catalog_capabilities_are_independent_and_provider_scoped(

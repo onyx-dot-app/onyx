@@ -71,7 +71,7 @@ Admin router, prefix `/admin/llm`:
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
 | POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
 | GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Explicit selection only. GET includes all eligible configured models without pagination. |
-| POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Craft has no capability check; see §9. |
+| POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Requires a chat-capable model; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
 | GET | `/admin/llm/auto-config` | `get_auto_config` | |
@@ -85,7 +85,7 @@ Non-admin router, prefix `/llm`:
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/llm/provider` | `list_llm_provider_basics` | Providers visible to the caller, credentials stripped. |
-| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id`). |
+| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id` and `flow_type`). Chat pickers filter CHAT before pagination; admin configuration lists all models. Non-admin requests always filter CHAT. |
 | GET | `/llm/persona/{persona_id}/providers` | `list_llm_providers_for_persona` | The providers/models a given assistant may use, group- and persona-filtered. |
 
 Every provider view returned by any of the above masks `api_key` and sensitive
@@ -255,7 +255,7 @@ the same transaction, so the partial unique index is never violated mid-write.
 Chat callers pass `LLMModelFlowType.CHAT` directly. `update_default_vision_provider`
 checks `model_supports_image_input` before updating the default.
 Naming, selection, and Craft callers use `update_default_pointer_model` with
-an explicit flow type. This function validates the selected model and creates its pointer mapping through
+an explicit flow type. This function requires a chat-capable model and creates its pointer mapping through
 `create_new_flow_mapping__no_commit`. `fetch_existing_models(db_session, flow_types)`
 returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
 flow type in the list.
@@ -596,7 +596,7 @@ See `backend/AGENTS.md` for authoritative commands and required env
   populated. Craft in particular is what `db/llm.py:update_default_pointer_model`
   calls a "pointer flow, not a capability": nothing populates a CRAFT
   `LLMModelFlow` row automatically, so it must be created explicitly before it
-  can be defaulted.
+  can be defaulted. The selected model must also have a CHAT flow.
 - **Retry semantics are asymmetric before and after the first chunk.** Before
   any content streams, a transient error retries transparently. After even
   one chunk has reached the caller, the same error propagates as a hard
