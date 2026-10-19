@@ -36,6 +36,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckErrorKind,
+    CredentialCapability,
     CredentialCapabilityReport,
     NamedCheckRun,
     PendingCheck,
@@ -45,6 +46,7 @@ from onyx.connectors.capability_checks.runner import (
     dependency_not_run_result,
     generate_capability_report,
     merge_capability_results,
+    run_order,
     stop_blocked_results,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
@@ -320,12 +322,17 @@ def _unfinished_results(
     message: str,
 ) -> list[CapabilityCheckResult]:
     """Rows for checks with no result, for a report that is stored without a
-    background run: not run when a finished dependency stops the check, else
+    background run: not run when a dependency stops the check, else
     INCOMPLETE: their result never arrives, so they time out."""
     result_by_check_id = {result.check_id: result for result in finished}
-    return [
-        dependency_not_run_result(check, result_by_check_id)
-        or CapabilityCheckResult(
+    result_by_key: dict[tuple[str, CredentialCapability], CapabilityCheckResult] = {}
+    # In run order, so a row built here stops the unfinished checks after it.
+    for check in run_order(checks):
+        if check.check_id not in unfinished:
+            continue
+        result = dependency_not_run_result(
+            check, result_by_check_id
+        ) or CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
             display_name=check.display_name,
@@ -338,6 +345,10 @@ def _unfinished_results(
             docs_link=check.docs_link,
             validates_binding=check.validates_binding,
         )
+        result_by_key[(check.check_id, check.capability)] = result
+        result_by_check_id[check.check_id] = result
+    return [
+        result_by_key[(check.check_id, check.capability)]
         for check in checks
         if check.check_id in unfinished
     ]

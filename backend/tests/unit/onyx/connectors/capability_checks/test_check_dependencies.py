@@ -4,6 +4,7 @@ after a rate limit, and the same rule for checks that ran side by side."""
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.creation import _unfinished_results
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckState,
     DraftCheckStateKind,
@@ -191,6 +192,30 @@ def test_results_that_ran_side_by_side_report_their_dependency() -> None:
     assert results[0].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
     assert results[0].blocked_by == "sign_in"
     assert results[2].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+
+
+def test_unfinished_checks_after_a_failed_dependency_report_its_cause() -> None:
+    checks: list[CapabilityCheck] = [
+        _Check("content", depends_on=("list",)),
+        _Check("sign_in"),
+        _Check("list", depends_on=("sign_in",)),
+        _Check("other"),
+    ]
+    results = _unfinished_results(
+        checks,
+        frozenset({"content", "list", "other"}),
+        [_result("sign_in", CapabilityCheckStatus.FAILED)],
+        "Pairing refused",
+    )
+
+    assert [(result.check_id, result.status) for result in results] == [
+        ("content", CapabilityCheckStatus.SKIPPED),
+        ("list", CapabilityCheckStatus.SKIPPED),
+        ("other", CapabilityCheckStatus.INCOMPLETE),
+    ]
+    for result in results[:2]:
+        assert result.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+        assert result.blocked_by == "sign_in"
 
 
 def test_a_check_waits_while_its_dependency_waits() -> None:
