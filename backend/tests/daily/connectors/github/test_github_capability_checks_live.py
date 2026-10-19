@@ -12,6 +12,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckErrorKind,
+    CheckNotRunReason,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -75,6 +77,36 @@ def _results(
     return {result.check_id: result for result in results}
 
 
+# `onyx-dot-app/documentation` can have no issue or pull request to read, so
+# these probes can end INCOMPLETE as inconclusive.
+_INCONCLUSIVE_PROBE_CHECK_IDS: frozenset[str] = frozenset(
+    {"github_issues", "github_pull_requests"}
+)
+
+
+def _inconclusive_probe(check_id: str, result: CapabilityCheckResult) -> bool:
+    return (
+        check_id in _INCONCLUSIVE_PROBE_CHECK_IDS
+        and result.status == CapabilityCheckStatus.INCOMPLETE
+        and result.error_kind == CheckErrorKind.INCONCLUSIVE
+    )
+
+
+def _skipped_for_nothing_in_scope(
+    result: CapabilityCheckResult, by_id: dict[str, CapabilityCheckResult]
+) -> bool:
+    """True for a skip with nothing in scope, or a skip that such a skip caused."""
+    if result.status != CapabilityCheckStatus.SKIPPED:
+        return False
+    if result.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
+        return True
+    return (
+        result.not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+        and result.blocked_by is not None
+        and _skipped_for_nothing_in_scope(by_id[result.blocked_by], by_id)
+    )
+
+
 @pytest.mark.parametrize(
     "overrides,mode_check_id",
     [
@@ -92,14 +124,19 @@ def test_indexing_checks_pass_on_the_test_organization(
         _credential(test_secrets), _form(**overrides)
     )
 
-    failures: dict[str, str] = {
-        check_id: result.message
+    not_passed: dict[str, CapabilityCheckResult] = {
+        check_id: result
         for check_id, result in by_id.items()
         if result.applicable
         and result.required
+        and result.status != CapabilityCheckStatus.PASSED
+    }
+    failures: dict[str, str] = {
+        check_id: f"{result.status}: {result.message}"
+        for check_id, result in not_passed.items()
         # SKIPPED: the organization has nothing for the check to test.
-        and result.status
-        not in (CapabilityCheckStatus.PASSED, CapabilityCheckStatus.SKIPPED)
+        if result.status != CapabilityCheckStatus.SKIPPED
+        and not _inconclusive_probe(check_id, result)
     }
     assert not failures, failures
     assert by_id[mode_check_id].status == CapabilityCheckStatus.PASSED
@@ -108,10 +145,16 @@ def test_indexing_checks_pass_on_the_test_organization(
             {CredentialCapability.INDEXING}, list(by_id.values())
         )
     )
-    assert verdicts[CredentialCapability.INDEXING] in (
-        CapabilityVerdict.PASSED,
-        CapabilityVerdict.PASSED_WITH_WARNINGS,
+    # A required inconclusive probe leaves the verdict INDETERMINATE.
+    expected: set[CapabilityVerdict] = (
+        {CapabilityVerdict.INDETERMINATE}
+        if any(
+            result.status == CapabilityCheckStatus.INCOMPLETE
+            for result in not_passed.values()
+        )
+        else {CapabilityVerdict.PASSED, CapabilityVerdict.PASSED_WITH_WARNINGS}
     )
+    assert verdicts[CredentialCapability.INDEXING] in expected, verdicts
 
 
 @pytest.mark.parametrize(
@@ -192,14 +235,18 @@ def test_perm_sync_checks_pass_on_the_test_organization(
         _credential(test_secrets), _form(**overrides), perm_sync=True
     )
 
-    failures: dict[str, str] = {
-        check_id: result.message
+    not_passed: dict[str, CapabilityCheckResult] = {
+        check_id: result
         for check_id, result in by_id.items()
         if result.applicable
         and result.required
-        # SKIPPED: the organization has nothing for the check to test.
-        and result.status
-        not in (CapabilityCheckStatus.PASSED, CapabilityCheckStatus.SKIPPED)
+        and result.status != CapabilityCheckStatus.PASSED
+    }
+    # A public repository has no collaborator or member to read.
+    failures: dict[str, str] = {
+        check_id: f"{result.status}: {result.message}"
+        for check_id, result in not_passed.items()
+        if not _skipped_for_nothing_in_scope(result, by_id)
     }
     assert not failures, failures
     verdicts: dict[CredentialCapability, CapabilityVerdict] = (
@@ -211,10 +258,16 @@ def test_perm_sync_checks_pass_on_the_test_organization(
             list(by_id.values()),
         )
     )
-    assert verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == (
-        CapabilityVerdict.PASSED
-    )
-    assert verdicts[CredentialCapability.EXTERNAL_GROUP_SYNC] in (
-        CapabilityVerdict.PASSED,
-        CapabilityVerdict.PASSED_WITH_WARNINGS,
-    )
+    for capability, passing in (
+        (CredentialCapability.DOC_PERMISSION_SYNC, {CapabilityVerdict.PASSED}),
+        (
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+            {CapabilityVerdict.PASSED, CapabilityVerdict.PASSED_WITH_WARNINGS},
+        ),
+    ):
+        expected: set[CapabilityVerdict] = (
+            {CapabilityVerdict.SKIPPED}
+            if any(result.capability == capability for result in not_passed.values())
+            else passing
+        )
+        assert verdicts[capability] in expected, (capability, verdicts[capability])
