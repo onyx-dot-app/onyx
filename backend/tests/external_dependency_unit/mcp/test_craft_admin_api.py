@@ -195,6 +195,54 @@ def test_action_policies_patch_round_trip(
         )
 
 
+def test_user_policy_management_patch_round_trip(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    admin = create_test_user(db_session, "mcp_policy_admin", is_admin=True)
+    server = _make_server(db_session, tool_names=["send_email"])
+    assert mcp_api._db_mcp_server_to_api_mcp_server(
+        server, db_session, request_user=admin
+    ).users_can_manage_policies
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(
+            users_can_manage_policies=False,
+            action_policies={"send_email": ActionPolicy.DENY},
+        ),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is False
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
+    db_session.expire_all()
+    assert (
+        mcp_api._db_mcp_server_to_api_mcp_server(
+            server, db_session, request_user=admin
+        ).users_can_manage_policies
+        is False
+    )
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(name="Renamed MCP"),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is False
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(users_can_manage_policies=True),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is True
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
+
+
 def test_disconnect_removes_only_callers_credentials(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

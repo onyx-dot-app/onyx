@@ -32,6 +32,7 @@ from onyx.db.action_policy import (
     get_or_create_gated_app_id,
     get_workspace_action_policies,
     replace_workspace_action_policies,
+    users_can_manage_policies,
 )
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -1374,6 +1375,9 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
+        users_can_manage_policies=users_can_manage_policies(
+            db, GatedAppKind.MCP_SERVER, db_server.id
+        ),
         action_policies=(
             get_workspace_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
             if can_view_server_details
@@ -2804,12 +2808,18 @@ def update_mcp_server_simple(
             db_session=db_session,
         )
 
-    if request.action_policies is not None:
+    if (
+        request.action_policies is not None
+        or request.users_can_manage_policies is not None
+    ):
         gated_app_id = get_or_create_gated_app_id(
             db_session, GatedAppKind.MCP_SERVER, server_id
         )
         replace_workspace_action_policies(
-            db_session, gated_app_id, request.action_policies
+            db_session,
+            gated_app_id,
+            request.action_policies,
+            users_can_manage=request.users_can_manage_policies,
         )
 
     db_session.commit()

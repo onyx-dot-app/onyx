@@ -456,6 +456,10 @@ class MCPServerSimpleCreateRequest(BaseModel):
 
 
 class MCPServerSimpleUpdateRequest(BaseModel):
+    users_can_manage_policies: bool | None = Field(
+        default=None,
+        description="Whether users may manage Craft action policies. None leaves this unchanged.",
+    )
     name: Optional[str] = Field(None, description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
@@ -796,6 +800,7 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    users_can_manage_policies: bool = True
     user_enabled_in_chat: bool = True
     user_enabled_in_craft: bool = True
     default_chat_enabled: bool | None = Field(
