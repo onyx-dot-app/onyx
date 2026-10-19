@@ -96,6 +96,7 @@ def test_only_rejected_user_headers_mark_reauth(
             auth_type=auth_type,
             auth_performer=performer,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+            oauth_cimd_enabled=True,
         ),
         tool_name="test",
         tool_description="test",

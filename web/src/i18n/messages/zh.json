@@ -441,6 +441,10 @@
           "description": "输入提供商提供的客户端 ID。仅在需要时添加密钥。"
         }
       },
+      "cimd": {
+        "label": "使用客户端元数据文档",
+        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。"
+      },
       "discovery": {
         "checking": "正在检查自动设置…",
         "supported": "可以使用自动设置",

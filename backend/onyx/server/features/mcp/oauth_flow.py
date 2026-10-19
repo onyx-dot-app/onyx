@@ -117,6 +117,7 @@ def _snapshot_server_configuration(
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
         provider_mode=mcp_server.oauth_provider_mode,
+        cimd_enabled=mcp_server.oauth_cimd_enabled,
         transport=mcp_server.transport,
         authorization_endpoint=mcp_server.oauth_authorization_endpoint,
         token_endpoint=mcp_server.oauth_token_endpoint,

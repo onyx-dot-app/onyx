@@ -37,6 +37,7 @@ Env (all optional):
   MOCK_OIDC_SCOPE           scope granted into the token (default: mcp:use)
   MOCK_OIDC_SUBJECT         sub claim for the fake user (default: mock-user@example.com)
   MOCK_OIDC_CIMD_ONLY       advertise CIMD and reject DCR when true
+  MOCK_OIDC_ADVERTISE_CIMD  advertise CIMD next to DCR when true
   MOCK_OIDC_EXPECTED_CLIENT_ID
                             exact CIMD URL accepted by the authorization endpoint
   MOCK_OIDC_CLIENT_METADATA_CA_FILE
@@ -71,6 +72,7 @@ from pydantic import AnyUrl, BaseModel
 
 KEY_ID = "mock-oidc-key-1"
 CIMD_ONLY_ENV_VAR = "MOCK_OIDC_CIMD_ONLY"
+ADVERTISE_CIMD_ENV_VAR = "MOCK_OIDC_ADVERTISE_CIMD"
 EXPECTED_CLIENT_ID_ENV_VAR = "MOCK_OIDC_EXPECTED_CLIENT_ID"
 CLIENT_METADATA_CA_FILE_ENV_VAR = "MOCK_OIDC_CLIENT_METADATA_CA_FILE"
 TRUE_VALUES = frozenset({"1", "true", "yes"})
@@ -115,6 +117,7 @@ class MockOidc:
         scope: str,
         subject: str,
         cimd_only: bool = False,
+        advertise_cimd: bool = False,
         expected_client_id: str | None = None,
         client_metadata_ca_file: str | None = None,
     ) -> None:
@@ -123,6 +126,7 @@ class MockOidc:
         self.scope = scope
         self.subject = subject
         self.cimd_only = cimd_only
+        self.advertise_cimd = advertise_cimd
         self.expected_client_id = expected_client_id
         self.client_metadata_ca_file = client_metadata_ca_file
         self.client_metadata_fetch_count = 0
@@ -160,7 +164,6 @@ class MockOidc:
             raise ValueError("redirect_uri is not registered in the CIMD document")
 
         self.client_metadata_fetch_count += 1
-        self.last_client_id = client_id
 
     # -- JWKS -----------------------------------------------------------------
     def jwks(self) -> dict[str, Any]:
@@ -247,9 +250,9 @@ def build_app(oidc: MockOidc) -> FastAPI:
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
     }
-    if oidc.cimd_only:
+    if oidc.cimd_only or oidc.advertise_cimd:
         metadata["client_id_metadata_document_supported"] = True
-    else:
+    if not oidc.cimd_only:
         metadata["registration_endpoint"] = f"{oidc.issuer}/register"
 
     @app.get("/.well-known/oauth-authorization-server")
@@ -312,6 +315,7 @@ def build_app(oidc: MockOidc) -> FastAPI:
         client_id: str = "",
     ) -> Response:
         """No login page: immediately issue a code and redirect back."""
+        oidc.last_client_id = client_id
         try:
             oidc.validate_client_metadata(client_id, redirect_uri)
         except (OSError, ValueError) as exc:
@@ -377,6 +381,7 @@ def main() -> None:
     scope = os.getenv("MOCK_OIDC_SCOPE", "mcp:use")
     subject = os.getenv("MOCK_OIDC_SUBJECT", "mock-user@example.com")
     cimd_only = os.getenv(CIMD_ONLY_ENV_VAR, "").lower() in TRUE_VALUES
+    advertise_cimd = os.getenv(ADVERTISE_CIMD_ENV_VAR, "").lower() in TRUE_VALUES
     expected_client_id = os.getenv(EXPECTED_CLIENT_ID_ENV_VAR)
     client_metadata_ca_file = os.getenv(CLIENT_METADATA_CA_FILE_ENV_VAR)
 
@@ -386,6 +391,7 @@ def main() -> None:
         scope=scope,
         subject=subject,
         cimd_only=cimd_only,
+        advertise_cimd=advertise_cimd,
         expected_client_id=expected_client_id,
         client_metadata_ca_file=client_metadata_ca_file,
     )
@@ -393,7 +399,7 @@ def main() -> None:
 
     print(
         f"[mock-oidc] issuer={issuer} audience={audience} "
-        f"scope={scope} cimd_only={cimd_only}"
+        f"scope={scope} cimd_only={cimd_only} advertise_cimd={advertise_cimd}"
     )
     print(f"[mock-oidc] discovery: {issuer}/.well-known/oauth-authorization-server")
     print(f"[mock-oidc] jwks: {issuer}/jwks")

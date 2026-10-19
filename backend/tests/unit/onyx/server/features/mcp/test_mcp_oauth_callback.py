@@ -56,6 +56,7 @@ def _server(
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=provider_mode,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=(
             "https://accounts.example.com/authorize" if known_provider else None
         ),
