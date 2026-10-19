@@ -291,6 +291,18 @@ def _site_not_found_row(site_url: str) -> MicrosoftRowText:
     )
 
 
+def _site_missing_row(error: MicrosoftGraphError, site_url: str) -> MicrosoftRowText:
+    """The row of a site Graph does not serve: locked or archived on a 423,
+    otherwise not found."""
+    if error.status != _LOCKED_STATUS:
+        return _site_not_found_row(site_url)
+    return _row(
+        _line("Site is locked: ", _site_name(site_url)),
+        f"Microsoft refused {site_url}: it is locked or archived.\nUnlock or "
+        "restore the site, or remove it from Sites.",
+    )
+
+
 def _site_invalid_row(site_url: str) -> MicrosoftRowText:
     return _row(
         _line("Site URL not valid: ", _site_name(site_url)),
@@ -430,7 +442,7 @@ def _raise_for_site_error(error: MicrosoftGraphError, site_url: str) -> NoReturn
         f"The app cannot read the site {site_url}",
         f"Graph has no site at {site_url}. Check the URL.",
         denied_row=_site_denied_row(site_url),
-        not_found_row=_site_not_found_row(site_url),
+        not_found_row=_site_missing_row(error, site_url),
         invalid_row=_site_invalid_row(site_url),
         request="the site read",
     )
@@ -536,7 +548,7 @@ def _site_drives(
             f"The app cannot list the libraries of {site.url}",
             f"Graph has no site at {site.url}. Check the URL.",
             denied_row=_site_denied_row(site.url),
-            not_found_row=_site_not_found_row(site.url),
+            not_found_row=_site_missing_row(error, site.url),
             invalid_row=_site_invalid_row(site.url),
             request="the library listing",
         )
@@ -729,7 +741,7 @@ def _site_assignments(
             f"The app cannot read the permissions of {site.url}",
             f"SharePoint has no site at {site.url}. Check the URL.",
             denied_row=_site_permissions_denied_row(site.url),
-            not_found_row=_site_not_found_row(site.url),
+            not_found_row=_site_missing_row(error, site.url),
             request="the site permission read",
         )
 
@@ -962,7 +974,7 @@ def _site_problem(error: MicrosoftGraphError, site_url: str) -> _SiteProblem:
     elif error.status == 400:
         row = _site_invalid_row(site_url)
     else:
-        row = _site_not_found_row(site_url)
+        row = _site_missing_row(error, site_url)
     return _SiteProblem(
         site_url=site_url,
         row=row,

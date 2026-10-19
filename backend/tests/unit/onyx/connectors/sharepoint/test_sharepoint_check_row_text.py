@@ -251,6 +251,28 @@ def test_some_missing_sites_are_a_partial_find() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("status", "code", "summary"),
+    [
+        (404, "itemNotFound", "Site not found: ops"),
+        (423, "resourceLocked", "Site is locked: ops"),
+    ],
+)
+def test_a_locked_site_has_its_own_row(status: int, code: str, summary: str) -> None:
+    gateway = _healthy()
+    gateway.get_site_id.side_effect = lambda site_url: (
+        "site-id" if site_url == SITE_URL else _raise(_refusal(status, code))
+    )
+
+    result = _run(
+        "sharepoint_configured_sites",
+        gateway,
+        _config(sites=[SITE_URL, OTHER_SITE_URL]),
+    )
+
+    assert result.summary == summary
+
+
 def _raise(error: Exception) -> str:
     raise error
 
