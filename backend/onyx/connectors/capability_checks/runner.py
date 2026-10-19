@@ -452,7 +452,7 @@ def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[
     """``check_id`` and every check of ``checks`` it depends on, directly or
     through other checks."""
     depends_on_by_id: dict[str, tuple[str, ...]] = {
-        check.check_id: check.depends_on for check in checks
+        check.check_id: check.dependency_ids for check in checks
     }
     found: set[str] = set()
     stack: list[str] = [check_id]
@@ -497,7 +497,7 @@ def run_order(
             for check in remaining
             if all(
                 dependency in ordered_ids or dependency not in present_ids
-                for dependency in check.depends_on
+                for dependency in check.dependency_ids
             )
         ]
         if not ready:
@@ -532,6 +532,69 @@ _DEPENDENCY_NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
 }
 
 
+def _stop_outcome(dependency: CapabilityCheckResult) -> _CheckOutcome | None:
+    """The outcome of a check that ``dependency`` stops, or None when it lets
+    the check run. A dependency that a gate stopped passes its cause on, so a
+    whole chain names the check that failed."""
+    if (dependency_reason := dependency.not_run_reason) is not None:
+        own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
+        if own_line is not None:
+            line = own_line.format(name=dependency.display_name)
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=line,
+                summary=line,
+                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
+                blocked_by=dependency.check_id,
+            )
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=dependency.message,
+            summary=dependency.summary,
+            not_run_reason=dependency.not_run_reason,
+            blocked_by=dependency.blocked_by,
+        )
+    reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
+    # A partial result lets its dependents run on what it found.
+    if reason is None or dependency.partial:
+        return None
+    line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
+    return _CheckOutcome(
+        status=CapabilityCheckStatus.SKIPPED,
+        message=line,
+        summary=line,
+        not_run_reason=reason,
+        blocked_by=dependency.check_id,
+    )
+
+
+def _lacks_own_inputs(result: CapabilityCheckResult) -> bool:
+    """True for a check SKIPPED because its own config or instance is
+    missing, not because of a gate of the run."""
+    return (
+        result.status == CapabilityCheckStatus.SKIPPED and result.not_run_reason is None
+    )
+
+
+def _any_of_not_run_outcome(
+    check: CapabilityCheck,
+    results_by_check_id: Mapping[str, CapabilityCheckResult],
+) -> _CheckOutcome | None:
+    """The outcome of a check that its ``depends_on_any`` group stops: no
+    member passed and at least one stopped it. The first such member, in the
+    order the check lists them, names the cause."""
+    first_stop: _CheckOutcome | None = None
+    for member_id in check.depends_on_any:
+        member = results_by_check_id.get(member_id)
+        if member is None or not member.applicable or _lacks_own_inputs(member):
+            continue
+        stop = _stop_outcome(member)
+        if stop is None:
+            return None
+        first_stop = first_stop or stop
+    return first_stop
+
+
 def _dependency_not_run_outcome(
     check: CapabilityCheck,
     results_by_check_id: Mapping[str, CapabilityCheckResult],
@@ -539,43 +602,15 @@ def _dependency_not_run_outcome(
     """The outcome of a check that a dependency stops, or None when its
     dependencies let it run. A dependency without a result, or one that does
     not apply, does not stop it. The first stopping dependency, in the order
-    the check lists them, names the cause. A dependency that a gate stopped
-    passes its cause on, so a whole chain names the check that failed."""
+    the check lists them, names the cause; ``depends_on`` before the any-of
+    group."""
     for dependency_id in check.depends_on:
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
-        if (dependency_reason := dependency.not_run_reason) is not None:
-            own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
-            if own_line is not None:
-                line = own_line.format(name=dependency.display_name)
-                return _CheckOutcome(
-                    status=CapabilityCheckStatus.SKIPPED,
-                    message=line,
-                    summary=line,
-                    not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
-                    blocked_by=dependency_id,
-                )
-            return _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=dependency.message,
-                summary=dependency.summary,
-                not_run_reason=dependency.not_run_reason,
-                blocked_by=dependency.blocked_by,
-            )
-        reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
-        # A partial result lets its dependents run on what it found.
-        if reason is None or dependency.partial:
-            continue
-        line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
-        return _CheckOutcome(
-            status=CapabilityCheckStatus.SKIPPED,
-            message=line,
-            summary=line,
-            not_run_reason=reason,
-            blocked_by=dependency_id,
-        )
-    return None
+        if (stop := _stop_outcome(dependency)) is not None:
+            return stop
+    return _any_of_not_run_outcome(check, results_by_check_id)
 
 
 def dependency_not_run_result(

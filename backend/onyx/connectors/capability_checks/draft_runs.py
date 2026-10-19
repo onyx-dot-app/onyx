@@ -411,7 +411,8 @@ def wait_for_dependencies(
 ) -> None:
     """Makes a PENDING check wait while a check it depends on waits, for the
     same fields, so a chain of checks waits on the field its first check
-    needs."""
+    needs. Its any-of group makes it wait only while no member that applies
+    can run."""
     state_by_check_id: dict[str, DraftCheckState] = {}
     for check, state in planned:
         state_by_check_id.setdefault(check.check_id, state)
@@ -428,6 +429,16 @@ def wait_for_dependencies(
             if (dependency := state_by_check_id.get(dependency_id)) is not None
             and dependency.state == DraftCheckStateKind.WAITING
         ]
+        members: list[DraftCheckState] = [
+            member
+            for member_id in check.depends_on_any
+            if (member := state_by_check_id.get(member_id)) is not None
+            and member.state != DraftCheckStateKind.NOT_APPLICABLE
+        ]
+        if members and all(
+            member.state == DraftCheckStateKind.WAITING for member in members
+        ):
+            waiting.extend(members)
         if not waiting:
             continue
         state.state = DraftCheckStateKind.WAITING

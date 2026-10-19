@@ -517,7 +517,12 @@ source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
 as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
 `run_order` runs dependencies first. A dependency that `FAILED`, is
 `INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
-`not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
+`not_run_reason` and `blocked_by`. A check can also list alternatives in
+`depends_on_any`: it runs when one of them passed (or is partial), and stops
+only when every one that ran did not pass; the first one names the cause. An
+alternative that does not apply, or that lacked its own config or instance, is
+left out (HubSpot's sample checks after the read checks, Notion's page content
+after shared pages or the root page). After a rate limit, the rest of the run is
 `SKIPPED` too. A probe whose sample cannot decide raises
 `InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
 proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
@@ -526,7 +531,8 @@ first check that reads it. A Find that found only some selected items returns
 `CheckOutput(partial=True)`: `INCOMPLETE`, and the checks after it still run. Creation runs its checks side by side, then applies the same rule
 (`stop_blocked_results`). `merge_capability_results` applies it again when a
 background run adds results to earlier ones. In a draft run, a check waits while a dependency
-waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
+waits, or while every alternative that applies waits
+(`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`

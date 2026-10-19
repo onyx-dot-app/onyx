@@ -582,6 +582,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         discovery: bool = False,
         fails_when_unreachable: bool = False,
         depends_on: tuple[str, ...] = (),
+        depends_on_any: tuple[str, ...] = (),
         row_id: str | None = None,
         step: CheckStep | None = None,
         timeout_text: CheckRowText | None = None,
@@ -631,6 +632,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         # left out, so a check can list alternatives (e.g. both token types'
         # sign-in checks).
         self.depends_on = depends_on
+        # Alternatives: the check runs after all of them and needs only one
+        # to pass (or be partial). It stops only when every member that ran
+        # failed, is INCOMPLETE or was stopped. A member that does not apply,
+        # or that lacked its own config or instance, is left out.
+        self.depends_on_any = depends_on_any
         # The row the check shows on. Checks that share one are one row: the
         # variants of a probe (token types, deployments) and a probe's
         # discovery step. Defaults to the parent's check_id for a step, else
@@ -660,6 +666,12 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         passing check may return a ``CheckOutput``: findings (what the
         credential and config reach) and advisories (what it could not
         verify)."""
+
+    @property
+    def dependency_ids(self) -> tuple[str, ...]:
+        """Every check this check runs after: ``depends_on``, then the
+        any-of group."""
+        return self.depends_on + self.depends_on_any
 
     @property
     def reads_connector_config(self) -> bool:

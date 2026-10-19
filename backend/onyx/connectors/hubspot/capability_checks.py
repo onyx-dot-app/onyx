@@ -78,6 +78,8 @@ _INDEXED_TYPES_REMEDIATION = (
 )
 _TOKEN_CHECK_ID = "hubspot_token"
 _USERS_CHECK_ID = "hubspot_users"
+_ASSOCIATIONS_CHECK_ID = "hubspot_associations"
+_NOTES_CHECK_ID = "hubspot_notes"
 # What the gateway raises for a call HubSpot refused or never answered.
 _GATEWAY_ERRORS = (
     HubSpotApiError,
@@ -90,19 +92,22 @@ def _read_check_id(object_type: HubSpotObjectType) -> str:
     return f"hubspot_{object_type.value}_readable"
 
 
-# check_id to the checks it runs after. The linked-record and notes checks run
-# after the sign-in only: they sample any readable type, so an empty or denied
-# type does not stop them.
+_READ_CHECK_IDS: tuple[str, ...] = tuple(
+    _read_check_id(object_type) for object_type in HubSpotObjectType
+)
+_SAMPLE_CHECK_IDS: tuple[str, ...] = (_ASSOCIATIONS_CHECK_ID, _NOTES_CHECK_ID)
+# check_id to the checks it runs after.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    **{
-        _read_check_id(object_type): (_TOKEN_CHECK_ID,)
-        for object_type in HubSpotObjectType
-    },
-    "hubspot_associations": (_TOKEN_CHECK_ID,),
-    "hubspot_notes": (_TOKEN_CHECK_ID,),
+    **dict.fromkeys(_READ_CHECK_IDS, (_TOKEN_CHECK_ID,)),
+    **dict.fromkeys(_SAMPLE_CHECK_IDS, (_TOKEN_CHECK_ID,)),
     _USERS_CHECK_ID: (_TOKEN_CHECK_ID,),
     "hubspot_record_viewers": (_USERS_CHECK_ID,),
 }
+# The linked-record and notes checks sample any readable type, so one selected
+# type that reads is enough for them to run.
+_DEPENDS_ON_ANY: dict[str, tuple[str, ...]] = dict.fromkeys(
+    _SAMPLE_CHECK_IDS, _READ_CHECK_IDS
+)
 
 
 def _gateway(context: CapabilityCheckContext) -> HubSpotSourceOperations:
@@ -307,6 +312,7 @@ class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
             check_id=check_id,
             display_name=display_name,
             depends_on=_DEPENDS_ON.get(check_id, ()),
+            depends_on_any=_DEPENDS_ON_ANY.get(check_id, ()),
             required=required,
             requires_connector_instance=False,
             remediation=remediation,
@@ -486,7 +492,7 @@ class _AssociationsCheck(_HubSpotCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="hubspot_associations",
+            check_id=_ASSOCIATIONS_CHECK_ID,
             display_name="List linked records",
             required=False,
             remediation=_INDEXED_TYPES_REMEDIATION,
@@ -527,7 +533,7 @@ class _NotesCheck(_HubSpotCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="hubspot_notes",
+            check_id=_NOTES_CHECK_ID,
             display_name="Sample notes",
             required=False,
             remediation=_INDEXED_TYPES_REMEDIATION,
