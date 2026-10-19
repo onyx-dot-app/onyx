@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgTypeSafe,
   SvgVercel,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
@@ -44,7 +45,7 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 
 export const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.TYPESAFE]: {
-    icon: SvgCpu,
+    icon: SvgTypeSafe,
     productName: "System One",
     companyName: "TypeSafe AI",
     Modal: TypeSafeModal,
