@@ -1078,13 +1078,13 @@
         "readOnly": "Puedes ver este plugin. Tu cuenta no puede cambiar su configuración.",
         "deleteDescription": "Esto elimina permanentemente el plugin OpenAPI y su configuración.",
         "displayNameTitle": "Nombre visible",
-        "displayNameDescription": "Se usa para identificar este plugin en la aplicación. Si no se indica, se usa el nombre del esquema.",
+        "displayNameDescription": "Se usa para identificar este plugin en la aplicación. De forma predeterminada, el campo `title` del esquema.",
         "descriptionPlaceholder": "¿Qué hace este plugin?",
         "tabs": {
           "details": "Detalles del plugin",
           "schema": "Esquema OpenAPI"
         },
-        "descriptionDescription": "Si no se indica, se usa la descripción del esquema."
+        "descriptionDescription": "De forma predeterminada, el campo `description` del esquema."
       },
       "title": "Plugins",
       "description": "Conecta herramientas y aplicaciones a tu espacio de trabajo.",

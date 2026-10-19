@@ -1078,13 +1078,13 @@
         "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
         "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。",
         "displayNameTitle": "表示名",
-        "displayNameDescription": "アプリ内でこのプラグインを識別するために使われます。指定しない場合はスキーマの名前が使われます。",
+        "displayNameDescription": "アプリ内でこのプラグインを識別するために使われます。既定ではスキーマの `title` フィールドです。",
         "descriptionPlaceholder": "このプラグインは何をしますか？",
         "tabs": {
           "details": "プラグインの詳細",
           "schema": "OpenAPI スキーマ"
         },
-        "descriptionDescription": "指定しない場合はスキーマの説明が使われます。"
+        "descriptionDescription": "既定ではスキーマの `description` フィールドです。"
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",

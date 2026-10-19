@@ -1078,13 +1078,13 @@
         "readOnly": "يمكنك عرض هذه الإضافة، لكن حسابك لا يستطيع تغيير إعداداتها.",
         "deleteDescription": "سيؤدي ذلك إلى حذف إضافة OpenAPI وإعداداتها نهائيًا.",
         "displayNameTitle": "اسم العرض",
-        "displayNameDescription": "يُستخدم لتمييز هذه الإضافة في التطبيق. يُستخدم اسم المخطط افتراضيًا إذا لم يُحدَّد.",
+        "displayNameDescription": "يُستخدم لتمييز هذه الإضافة في التطبيق. يُستخدم حقل `title` في المخطط افتراضيًا.",
         "descriptionPlaceholder": "ماذا تفعل هذه الإضافة؟",
         "tabs": {
           "details": "تفاصيل الإضافة",
           "schema": "مخطط OpenAPI"
         },
-        "descriptionDescription": "يُستخدم وصف المخطط افتراضيًا إذا لم يُحدَّد."
+        "descriptionDescription": "يُستخدم حقل `description` في المخطط افتراضيًا."
       },
       "title": "الإضافات",
       "description": "اربط الأدوات والتطبيقات بمساحة عملك.",

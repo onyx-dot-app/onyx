@@ -1078,13 +1078,13 @@
         "readOnly": "Sie können dieses Plugin anzeigen. Ihr Konto kann seine Einstellungen nicht ändern.",
         "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht.",
         "displayNameTitle": "Anzeigename",
-        "displayNameDescription": "Dient zur Identifizierung dieses Plugins in der App. Standardmäßig wird der Name aus dem Schema verwendet, wenn keiner angegeben ist.",
+        "displayNameDescription": "Dient zur Identifizierung dieses Plugins in der App. Standardmäßig das Feld `title` aus dem Schema.",
         "descriptionPlaceholder": "Was macht dieses Plugin?",
         "tabs": {
           "details": "Plugin-Details",
           "schema": "OpenAPI-Schema"
         },
-        "descriptionDescription": "Standardmäßig wird die Beschreibung aus dem Schema verwendet, wenn keine angegeben ist."
+        "descriptionDescription": "Standardmäßig das Feld `description` aus dem Schema."
       },
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",

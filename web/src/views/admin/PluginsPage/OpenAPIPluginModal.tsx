@@ -586,8 +586,8 @@ function OpenAPIPluginForm({
                       <InputPadder>
                         <InputVertical
                           title={t("plugins.openapi.displayNameTitle")}
-                          subDescription={t(
-                            "plugins.openapi.displayNameDescription"
+                          subDescription={markdown(
+                            t("plugins.openapi.displayNameDescription")
                           )}
                           withLabel="name"
                           suffix="optional"
@@ -602,8 +602,8 @@ function OpenAPIPluginForm({
                       <InputPadder>
                         <InputVertical
                           title={t("addMcpModal.description.title")}
-                          subDescription={t(
-                            "plugins.openapi.descriptionDescription"
+                          subDescription={markdown(
+                            t("plugins.openapi.descriptionDescription")
                           )}
                           withLabel="description"
                           suffix="optional"
