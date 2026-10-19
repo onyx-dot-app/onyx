@@ -128,6 +128,7 @@ export default function AgentsTable() {
       },
       {
         kind: "data",
+        truncate: true,
         field: "name",
         title: t("table.nameColumn.header"),
         weight: 25,
@@ -139,6 +140,7 @@ export default function AgentsTable() {
       },
       {
         kind: "data",
+        truncate: true,
         field: "description",
         title: t("table.descriptionColumn.header"),
         weight: 35,
@@ -150,6 +152,7 @@ export default function AgentsTable() {
       },
       {
         kind: "data",
+        truncate: true,
         field: "owner",
         title: t("table.createdByColumn.header"),
         weight: 20,
@@ -157,6 +160,7 @@ export default function AgentsTable() {
       },
       {
         kind: "data",
+        truncate: true,
         field: "is_public",
         title: t("table.accessColumn.header"),
         weight: 12,

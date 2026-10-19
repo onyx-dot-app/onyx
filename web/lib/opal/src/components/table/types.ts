@@ -83,6 +83,8 @@ interface TableDataColumnOptions<TData, TValue> {
   /** Share of the free width. @default 20 */
   weight?: number;
   alignment?: ColumnAlignment;
+  /** Content never widens the column; long content is cut off instead. */
+  truncate?: boolean;
 }
 
 /**
@@ -184,6 +186,7 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
 export interface OnyxDataColumn<TData> extends OnyxColumnBase<TData> {
   kind: "data";
   alignment?: ColumnAlignment;
+  truncate?: boolean;
   /** Override the sort icon for this column. */
   icon?: (sorted: SortDirection) => IconFunctionComponent;
 }

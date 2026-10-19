@@ -39,9 +39,7 @@ function renderNameColumn(email: string, row: UserRow) {
       sizePreset="main-ui"
       variant="section"
       title={row.personal_name ?? email}
-      titleMaxLines={1}
       description={row.personal_name ? email : undefined}
-      descriptionMaxLines={1}
     />
   );
 }

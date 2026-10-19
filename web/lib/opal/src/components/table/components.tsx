@@ -632,6 +632,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                           alignment={
                             columnKindMap.get(cell.column.id)?.alignment
                           }
+                          truncate={
+                            cellColDef?.kind === "data" && cellColDef.truncate
+                          }
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
