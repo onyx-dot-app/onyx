@@ -2422,6 +2422,7 @@
           "title": "Coding Agent"
         },
         "description": "Tools and capabilities available for chat to use. This does not apply to agents.",
+        "pluginsNote": "Configure MCP servers and OpenAPI actions for default Chat in [Plugins]({url}).",
         "imageGeneration": {
           "description": "Generate and manipulate images using AI-powered tools.",
           "disabledTooltip": "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin.",

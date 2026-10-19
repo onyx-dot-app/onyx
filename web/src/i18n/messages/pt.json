@@ -2422,6 +2422,7 @@
           "title": "Agente de código"
         },
         "description": "Ferramentas e recursos disponíveis para o chat usar. Isso não se aplica aos agentes.",
+        "pluginsNote": "Configure servidores MCP e ações OpenAPI para o chat padrão em [Plugins]({url}).",
         "imageGeneration": {
           "description": "Gera e manipula imagens com ferramentas de IA.",
           "disabledTooltip": "A geração de imagens requer um modelo configurado. Configure um em Configuração > Geração de imagens ou peça a um administrador.",

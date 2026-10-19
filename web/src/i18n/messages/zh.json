@@ -2422,6 +2422,7 @@
           "title": "编程智能体"
         },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
+        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 操作。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",

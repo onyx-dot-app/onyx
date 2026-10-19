@@ -2422,6 +2422,7 @@
           "title": "Coding-Agent"
         },
         "description": "Tools und Funktionen, die der Chat verwenden kann. Dies gilt nicht für Agenten.",
+        "pluginsNote": "Konfigurieren Sie MCP-Server und OpenAPI-Aktionen für den Standard-Chat unter [Plugins]({url}).",
         "imageGeneration": {
           "description": "Bilder mit KI-gestützten Tools erzeugen und bearbeiten.",
           "disabledTooltip": "Die Bilderzeugung erfordert ein konfiguriertes Modell. Richten Sie eines unter Konfiguration > Bilderzeugung ein oder fragen Sie einen Administrator.",
