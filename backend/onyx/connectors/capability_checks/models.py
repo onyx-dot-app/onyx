@@ -282,9 +282,12 @@ def _scrubbed(text: str, secrets: Iterable[str]) -> str:
 
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:
     """The HTTP response of the first error in the chain that has one, with
-    the whole body: ``check_error_detail`` redacts it, then cuts it."""
+    the whole body: ``check_error_detail`` redacts it, then cuts it. The
+    chain follows the cause, else the context the traceback would show."""
+    seen: set[int] = set()
     current: BaseException | None = error
-    while current is not None:
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
         if isinstance(current, SourceApiError):
             return CheckErrorDetail(
                 status_code=current.status_code,
@@ -301,7 +304,9 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
                 ),
                 response_excerpt=response.text or None,
             )
-        current = current.__cause__
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
     return None
 
 

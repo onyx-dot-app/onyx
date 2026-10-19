@@ -70,6 +70,44 @@ def test_a_source_api_error_gives_its_response() -> None:
     assert detail.stack_trace is None
 
 
+def test_an_error_raised_while_handling_one_keeps_its_response() -> None:
+    http_error = _http_error(401, "https://jira.acme.com/rest/api/2/myself", "No.")
+    try:
+        try:
+            raise http_error
+        except requests.HTTPError:
+            raise InsufficientPermissionsError("Jira rejected the token.")
+    except InsufficientPermissionsError as error:
+        detail = check_error_detail(error, CheckErrorKind.PERMISSION, [])
+
+    assert detail == CheckErrorDetail(
+        status_code=401,
+        request="GET jira.acme.com/rest/api/2/myself",
+        response_excerpt="No.",
+    )
+
+
+def test_a_suppressed_context_gives_no_response() -> None:
+    try:
+        try:
+            raise _http_error(401, "https://jira.acme.com/rest/api/2/myself", "No.")
+        except requests.HTTPError:
+            raise InsufficientPermissionsError("Jira rejected the token.") from None
+    except InsufficientPermissionsError as error:
+        detail = check_error_detail(error, CheckErrorKind.PERMISSION, [])
+
+    assert detail is None
+
+
+def test_an_error_chain_with_a_cycle_ends() -> None:
+    first = InsufficientPermissionsError("First.")
+    second = InsufficientPermissionsError("Second.")
+    first.__context__ = second
+    second.__context__ = first
+
+    assert check_error_detail(first, CheckErrorKind.PERMISSION, []) is None
+
+
 def test_an_unknown_cause_keeps_a_stack_trace() -> None:
     detail = _detail(RuntimeError("Boom."))
 
