@@ -2165,6 +2165,7 @@
     "chatPreferences": {
       "decisionModel": {
         "title": "Modèle de décision",
+        "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
         "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
         "clear": "Effacer",
         "notConfigured": "Non configuré",

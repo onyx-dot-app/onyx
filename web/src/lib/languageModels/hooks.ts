@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -25,13 +26,18 @@ import type {
 } from "@/lib/languageModels/types";
 
 export function useDecisionModel() {
+  const t = useTranslations("admin.chatPreferences.decisionModel");
   const { data, error, mutate } = useSWR<
     { model: DefaultModel | null; providers: RawLLMProviderView[] },
     Error
   >(SWR_KEYS.decisionModel, errorHandlingFetcher);
+  const openAiDecisionName = t("openAiDecisionsModelName");
   const providers = useMemo(
-    () => (data ? enrichDecisionViews(data.providers) : undefined),
-    [data]
+    () =>
+      data
+        ? enrichDecisionViews(data.providers, openAiDecisionName)
+        : undefined,
+    [data, openAiDecisionName]
   );
   return { model: data?.model ?? null, providers, error, refetch: mutate };
 }
@@ -273,17 +279,19 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
 }
 
 function enrichDecisionViews(
-  providers: RawLLMProviderView[]
+  providers: RawLLMProviderView[],
+  openAiDecisionName: string
 ): LLMProviderView[] {
   return providers.map((provider) => ({
     ...provider,
     model_configurations: provider.model_configurations.map((model) => {
       const enriched = enrichModelConfiguration(model);
       return provider.provider === LLMProviderName.OPENAI &&
-        model.name === "gpt-6-luna"
+        model.name === "gpt-6-luna" &&
+        !model.custom_display_name
         ? {
             ...enriched,
-            effectiveDisplayName: "OpenAI Decisions (GPT-6 Luna)",
+            effectiveDisplayName: openAiDecisionName,
           }
         : enriched;
     }),
