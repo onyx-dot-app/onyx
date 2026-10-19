@@ -27,6 +27,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -114,13 +115,6 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
 }
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 def _gateway(context: CapabilityCheckContext) -> GitHubSourceOperations:
     gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, GitHubSourceOperations):
@@ -190,9 +184,9 @@ def _raise_for_api_error(
     error: GitHubApiError,
     *,
     denied: str,
-    denied_row: _RowText | None = None,
+    denied_row: CheckRowText | None = None,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
 ) -> NoReturn:
     """Maps a GitHub API error onto the validation-exception family.
     ``denied`` explains a 403 for this probe, ``not_found`` a 404; the rows
@@ -344,7 +338,7 @@ class _AuthCheck(_GitHubCheck):
             _raise_for_api_error(
                 e,
                 denied="GitHub refused to identify the token's user",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="GitHub refused to identify the token",
                     description=(
                         "GitHub is blocking this token or its user. (HTTP 403)\n"
@@ -357,7 +351,7 @@ class _AuthCheck(_GitHubCheck):
                     "Enterprise Server, enter the server URL "
                     "(https://github.example.com)"
                 ),
-                not_found_row=_RowText(
+                not_found_row=CheckRowText(
                     summary="No GitHub API at this URL",
                     description=(
                         "The GitHub Enterprise Server URL does not lead to a "
@@ -466,8 +460,8 @@ def _owner_is_organization(gateway: GitHubSourceOperations, owner: str) -> bool:
         return False
 
 
-def _no_owner_row(owner: str) -> _RowText:
-    return _RowText(
+def _no_owner_row(owner: str) -> CheckRowText:
+    return CheckRowText(
         summary=f"No owner named {owner}",
         description=(
             "GitHub has no organization or user with this name that the token "
@@ -498,7 +492,7 @@ class _OwnerCheck(_GitHubCheck):
             _raise_for_api_error(
                 e,
                 denied=f"GitHub refused to read the owner `{owner}`",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary=f"Token cannot read owner {owner}",
                     description=(
                         "GitHub refused to show this owner to the token. (HTTP "
@@ -523,8 +517,8 @@ def _list_owner_repositories(
     return False, gateway.list_user_repositories(login=owner, limit=limit)
 
 
-def _list_repositories_denied_row(context: CapabilityCheckContext) -> _RowText:
-    return _RowText(
+def _list_repositories_denied_row(context: CapabilityCheckContext) -> CheckRowText:
+    return CheckRowText(
         summary="Token cannot list the repositories",
         description=(
             "GitHub refused to list this owner's repositories. (HTTP 403)\n"
@@ -772,7 +766,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
         failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
         if failure_kinds > 1:
             # One line for each kind of failure, so the row names every repository.
-            row: _RowText = _RowText(
+            row: CheckRowText = CheckRowText(
                 summary=f"Cannot read {len(messages)} of {len(names)} repositories",
                 description="\n".join(
                     line
@@ -788,7 +782,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                 ),
             )
         elif missing:
-            row = _RowText(
+            row = CheckRowText(
                 summary=f"{len(missing)} of {len(names)} repositories not found",
                 description=(
                     'GitHub answers "not found" for a misspelled name and for a '
@@ -797,7 +791,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                 ),
             )
         elif denied:
-            row = _RowText(
+            row = CheckRowText(
                 summary=f"Token denied {len(denied)} of {len(names)} repositories",
                 description=(
                     "GitHub refused the token access to these repositories.\n"
@@ -805,7 +799,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                 ),
             )
         else:
-            row = _RowText(
+            row = CheckRowText(
                 summary=(
                     f"Cannot read files of {unreadable[0]}"
                     if len(unreadable) == 1
@@ -935,7 +929,7 @@ class _BranchCheck(_GitHubCheck):
                             f"The token cannot read the branches of "
                             f"`{repository.full_name}`"
                         ),
-                        denied_row=_RowText(
+                        denied_row=CheckRowText(
                             summary="Token cannot read branches",
                             description=(
                                 "GitHub refused to show this repository's "
@@ -1031,7 +1025,7 @@ class _PullRequestsCheck(_GitHubCheck):
                     "The token cannot read the pull requests of "
                     f"`{repository.full_name}`"
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot read pull requests",
                     description=(
                         "GitHub refused the token access to pull requests. (HTTP "
@@ -1107,7 +1101,7 @@ class _IssuesCheck(_GitHubCheck):
             _raise_for_api_error(
                 e,
                 denied=f"The token cannot read the issues of `{repository.full_name}`",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Token cannot read issues",
                     description=(
                         "GitHub refused the token access to issues. (HTTP 403)\n"
@@ -1151,7 +1145,7 @@ class _FilesCheck(_GitHubCheck):
         gateway: GitHubSourceOperations = _gateway(context)
         ref: str = _branch(config) or repository.default_branch or ""
         denied: str = f"The token cannot read the files of `{repository.full_name}`"
-        denied_row: _RowText = _RowText(
+        denied_row: CheckRowText = CheckRowText(
             summary="Token cannot read files",
             description=(
                 "GitHub refused the token access to file contents. (HTTP 403)\n"
@@ -1371,7 +1365,7 @@ def _read_collaborators(
         hint: str = _scope_hint(
             _token_info(gateway), _PRIVATE_REPOSITORY_SCOPE, _ORG_READ_SCOPE
         )
-        row: _RowText = _RowText(
+        row: CheckRowText = CheckRowText(
             summary="Token cannot list collaborators",
             description=(
                 "GitHub lists collaborators only to users with write access. "
@@ -1407,7 +1401,7 @@ def _read_members(
                 f"The token cannot list the members of the organization "
                 f"`{org_login}`. {_MEMBERS_HINT}"
             ),
-            denied_row=_RowText(
+            denied_row=CheckRowText(
                 summary=f"Token cannot list members of {org_login}",
                 description=(
                     "GitHub refused the member list. (HTTP 403)\n"
@@ -1648,7 +1642,7 @@ class _UserEmailsCheck(_GitHubCheck):
                 _raise_for_api_error(
                     e,
                     denied=f"The token cannot read the profile of `{login}`",
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary="Token cannot read user profiles",
                         description=(
                             "GitHub refused to show user profiles. (HTTP 403)\n"
