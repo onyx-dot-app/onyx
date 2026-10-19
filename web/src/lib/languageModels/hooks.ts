@@ -30,7 +30,7 @@ export function useDecisionModel() {
     Error
   >(SWR_KEYS.decisionModel, errorHandlingFetcher);
   const providers = useMemo(
-    () => (data ? enrichViews(data.providers) : undefined),
+    () => (data ? enrichDecisionViews(data.providers) : undefined),
     [data]
   );
   return { model: data?.model ?? null, providers, error, refetch: mutate };
@@ -269,6 +269,24 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
   return providers.map((p) => ({
     ...p,
     model_configurations: p.model_configurations.map(enrichModelConfiguration),
+  }));
+}
+
+function enrichDecisionViews(
+  providers: RawLLMProviderView[]
+): LLMProviderView[] {
+  return providers.map((provider) => ({
+    ...provider,
+    model_configurations: provider.model_configurations.map((model) => {
+      const enriched = enrichModelConfiguration(model);
+      return provider.provider === LLMProviderName.OPENAI &&
+        model.name === "gpt-6-luna"
+        ? {
+            ...enriched,
+            effectiveDisplayName: "OpenAI Decisions (GPT-6 Luna)",
+          }
+        : enriched;
+    }),
   }));
 }
 
