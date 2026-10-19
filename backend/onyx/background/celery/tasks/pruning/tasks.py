@@ -104,6 +104,44 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
+# A prune diff above this share of the connector-owned documents almost always
+# means the source listing came back incomplete (a transient failure, lost
+# permissions, a misconfigured path) rather than the source shrinking. Deleting
+# that much is not recoverable until a full re-index, so the prune aborts and
+# records a failure instead. See #16221.
+MAX_PRUNE_REMOVAL_RATIO = 0.5
+
+
+def _prune_safety_violation(
+    indexed_count: int, listing_count: int, removal_count: int
+) -> str | None:
+    """Return an abort reason when a prune diff cannot be trusted, else None.
+
+    An empty listing, or a diff that would drop most of the connector's
+    documents, points at a broken enumeration rather than an emptied source;
+    pruning on that signal would wipe the index with nothing to regenerate it
+    until the connector re-indexes. See #16221.
+    """
+    if indexed_count == 0:
+        return None
+
+    if listing_count == 0:
+        return (
+            f"prune listing returned 0 documents while {indexed_count} are indexed; "
+            "treating the listing as incomplete and aborting instead of deleting the whole index"
+        )
+
+    ratio = removal_count / indexed_count
+
+    if ratio > MAX_PRUNE_REMOVAL_RATIO:
+        return (
+            f"prune diff would remove {removal_count} of {indexed_count} indexed documents "
+            f"({ratio:.0%}, above the {MAX_PRUNE_REMOVAL_RATIO:.0%} safety threshold); "
+            "treating the listing as incomplete and aborting the prune"
+        )
+
+    return None
+
 
 def _get_pruning_block_expiration() -> int:
     """
@@ -759,6 +797,18 @@ def connector_pruning_generator_task(
                 doc_ids_to_remove = list(
                     all_indexed_document_ids - all_connector_doc_ids.keys()
                 )
+
+                safety_violation = _prune_safety_violation(
+                    indexed_count=len(all_indexed_document_ids),
+                    listing_count=len(all_connector_doc_ids),
+                    removal_count=len(doc_ids_to_remove),
+                )
+
+                if safety_violation:
+                    task_logger.error(
+                        f"Pruning aborted: cc_pair={cc_pair_id} {safety_violation}"
+                    )
+                    raise ValueError(safety_violation)
 
                 task_logger.info(
                     "Pruning set collected: "
