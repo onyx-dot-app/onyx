@@ -1,19 +1,4 @@
-"""Outbound-request → policy-verdict matching for connected external apps.
-
-Exercises the real provider catalogs + a real DB (no structural mocking).
-
-Three layers are tested here:
-- ``recognize_actions`` — pure recognition: which catalog action(s) a request invokes,
-  each carrying its ``effective_policy`` (stored override else catalog default).
-- ``app_is_available`` — the credential predicate: active + injectable (a
-  credentialless allowlist-only app can be served; a missing required credential
-  cannot).
-- ``ExternalAppRequestEvaluator.evaluate`` — the end-to-end result: recognition +
-  availability + the ``apply_credential_gate`` fork (synthesize / DENY-only / bare).
-
-The pure ``apply_credential_gate`` fork itself is unit-tested in
-``tests/unit/external_apps/matching/test_engine.py``.
-"""
+"""Provider recognition and credential availability remain independent of saved policies."""
 
 from __future__ import annotations
 
@@ -26,9 +11,9 @@ import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
-from onyx.db.gated_app import get_or_create_gated_app_id
-from onyx.db.models import ExternalApp, GatedActionPolicy, User
+from onyx.db.models import ExternalApp, User, WorkspaceActionPolicy
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching import engine as matching_engine
 from onyx.external_apps.matching.engine import (
@@ -79,7 +64,7 @@ def _set_policy(
         db_session, GatedAppKind.EXTERNAL_APP, app.id
     )
     db_session.add(
-        GatedActionPolicy(
+        WorkspaceActionPolicy(
             gated_app_id=gated_app_id,
             action_id=action_id,
             policy=policy,
@@ -91,7 +76,7 @@ def _set_policy(
 # ── recognize_actions: pure recognition (no credentials) ────────────────
 
 
-def test_match_stored_override_wins(
+def test_recognition_is_independent_of_stored_override(
     db_session: Session,
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
@@ -99,13 +84,13 @@ def test_match_stored_override_wins(
     _set_policy(db_session, app, "slack.messages.write", ActionPolicy.ALWAYS)
 
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
-    assert recognize_actions(db_session, app, request) == AllMatchedActions(
+    assert recognize_actions(app, request) == AllMatchedActions(
         actions=(
             MatchedAction(
                 action_type="slack.messages.write",
                 display_name="Post a message",
                 description="Post a message to a channel or conversation.",
-                policy=ActionPolicy.ALWAYS,
+                policy=ActionPolicy.ASK,
             ),
         ),
         target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name="Slack"),
@@ -119,7 +104,7 @@ def test_unset_read_action_uses_catalog_default_always(
     # Slack is all-POST, so the catalog default (not HTTP method) classifies reads.
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/conversations.list")
-    matched_actions = recognize_actions(db_session, app, request)
+    matched_actions = recognize_actions(app, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.channels.read"]
     assert matched_actions.actions[0].policy == ActionPolicy.ALWAYS
@@ -131,7 +116,7 @@ def test_unset_write_action_uses_catalog_default_ask(
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/chat.postMessage")
-    matched_actions = recognize_actions(db_session, app, request)
+    matched_actions = recognize_actions(app, request)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.messages.write"]
     assert matched_actions.actions[0].policy == ActionPolicy.ASK
@@ -146,14 +131,14 @@ def test_match_google_calendar_method_distinguishes_actions(
     item_path = "/calendar/v3/calendars/primary/events/evt123"
 
     delete_req = ProxiedRequest(method="DELETE", path=item_path)
-    matched_actions = recognize_actions(db_session, app, delete_req)
+    matched_actions = recognize_actions(app, delete_req)
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["gcal.events.delete"]
-    assert matched_actions.actions[0].policy == ActionPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
 
     # Same path, GET → the read action; no stored row → catalog default ALWAYS.
     read_req = ProxiedRequest(method="GET", path=item_path)
-    read_matched_actions = recognize_actions(db_session, app, read_req)
+    read_matched_actions = recognize_actions(app, read_req)
     assert read_matched_actions is not None
     assert [a.action_type for a in read_matched_actions.actions] == ["gcal.events.read"]
     assert read_matched_actions.actions[0].policy == ActionPolicy.ALWAYS
@@ -170,19 +155,19 @@ def test_match_linear_graphql_body(
         {"query": "mutation { issueCreate(input: $i) { issue { id } } }"}
     ).encode()
     matched_actions = recognize_actions(
-        db_session, app, ProxiedRequest(method="POST", path="/graphql", body=body)
+        app, ProxiedRequest(method="POST", path="/graphql", body=body)
     )
     assert matched_actions is not None
     assert matched_actions.app_name == "Linear"
     assert [a.action_type for a in matched_actions.actions] == ["linear.issues.create"]
-    assert matched_actions.actions[0].policy == ActionPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
 
 
 def test_graphql_batched_sorts_strictest_first(
     db_session: Session,
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
-    """A batched request matching two actions (ALWAYS + DENY) returns both on
+    """A batched request matching two actions (ALWAYS + ASK) returns both on
     ``AllMatchedActions.actions``, sorted strictest-first so ``actions[0]`` drives
     the verdict regardless of catalog order."""
     app = _connect_app(db_session, ExternalAppType.LINEAR)
@@ -196,7 +181,7 @@ def test_graphql_batched_sorts_strictest_first(
         ]
     ).encode()
     matched_actions = recognize_actions(
-        db_session, app, ProxiedRequest(method="POST", path="/graphql", body=body)
+        app, ProxiedRequest(method="POST", path="/graphql", body=body)
     )
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == [
@@ -204,20 +189,22 @@ def test_graphql_batched_sorts_strictest_first(
         "linear.viewer.read",
     ]
     assert [a.policy for a in matched_actions.actions] == [
-        ActionPolicy.DENY,
+        ActionPolicy.ASK,
         ActionPolicy.ALWAYS,
     ]
 
 
-def test_match_action_off_catalog_returns_none(
+def test_match_action_off_catalog_requires_approval(
     db_session: Session,
     test_user: User,  # noqa: ARG001 — for tenant context
 ) -> None:
-    # Pure recognition: a request matching no catalog action returns None. The
-    # whole-domain synthesize is the caller's job (apply_credential_gate), tested separately.
+    # Unknown managed actions still require approval.
     app = _connect_app(db_session, ExternalAppType.SLACK)
     request = ProxiedRequest(method="POST", path="/api/some.unknownMethod")
-    assert recognize_actions(db_session, app, request) is None
+    assert (
+        recognize_actions(app, request).governing_action.action_type
+        == WHOLE_DOMAIN_ACTION_TYPE
+    )
 
 
 def test_match_action_app_name_falls_back_when_provider_unregistered(
@@ -233,7 +220,7 @@ def test_match_action_app_name_falls_back_when_provider_unregistered(
     monkeypatch.setattr(matching_engine, "get_provider_for_app", lambda _app: None)
 
     matched_actions = recognize_actions(
-        db_session, app, ProxiedRequest(method="POST", path="/api/chat.postMessage")
+        app, ProxiedRequest(method="POST", path="/api/chat.postMessage")
     )
     assert matched_actions is not None
     assert matched_actions.app_name == ExternalAppType.SLACK.value
@@ -311,7 +298,7 @@ def test_external_app_matcher_resolves_app_and_verdict(
 
     assert matched_actions is not None
     assert [a.action_type for a in matched_actions.actions] == ["slack.messages.write"]
-    assert matched_actions.actions[0].policy == ActionPolicy.DENY
+    assert matched_actions.actions[0].policy == ActionPolicy.ASK
     assert matched_actions.app_name == "Slack"
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
     assert matched_actions.payload == {"channel": "C1", "text": "hi"}
@@ -330,7 +317,7 @@ def test_external_app_matcher_unconnected_host_returns_none(
     assert matcher.evaluate(request, "public", test_user.id) is None
 
 
-def test_external_app_matcher_no_credential_forwards_bare(
+def test_external_app_matcher_preserves_recognition_without_credentials(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
@@ -345,10 +332,11 @@ def test_external_app_matcher_no_credential_forwards_bare(
         request_evaluator_mod, "get_session_with_tenant", _session_factory(db_session)
     )
     matcher = ExternalAppRequestEvaluator()
-    # conversations.list is a read (catalog default ALWAYS), but with no usable
-    # credential the request forwards bare instead of being gated.
+    # A missing credential cannot remove an action from permission enforcement.
     request = _slack_request(url="https://slack.com/api/conversations.list")
-    assert matcher.evaluate(request, "public", test_user.id) is None
+    matched = matcher.evaluate(request, "public", test_user.id)
+    assert matched is not None
+    assert matched.governing_action.action_type == "slack.channels.read"
 
 
 def test_external_app_matcher_off_catalog_synthesizes_whole_domain(

@@ -6,6 +6,7 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import type { AppActionPoliciesView } from "@/app/craft/v1/apps/action-policies/types";
 import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
@@ -26,9 +27,8 @@ export class ScheduledTasksPage {
   readonly intervalEveryInput: Locator;
   readonly intervalUnitTrigger: Locator;
   readonly saveAndRunNowButton: Locator;
-  readonly preApprovalPicker: Locator;
-  readonly appsGroup: Locator;
-  readonly mcpServersGroup: Locator;
+  readonly appPolicies: Locator;
+  readonly appCards: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -43,9 +43,10 @@ export class ScheduledTasksPage {
     // on the new-task form.
     this.intervalUnitTrigger = page.getByRole("combobox").first();
     this.saveAndRunNowButton = page.getByTestId("save-and-run-now");
-    this.preApprovalPicker = page.getByTestId("pre-approval-picker");
-    this.appsGroup = page.getByRole("region", { name: "Apps" });
-    this.mcpServersGroup = page.getByRole("region", { name: "MCP servers" });
+    this.appPolicies = page.locator("section").filter({
+      has: page.getByRole("switch", { name: "Enable Acme CRM for this task" }),
+    });
+    this.appCards = this.appPolicies.locator(".opal-card");
   }
 
   // ---------------------------------------------------------------------------
@@ -134,7 +135,34 @@ export class ScheduledTasksPage {
     await this.saveAndRunNowButton.click();
   }
 
-  async mockPreApprovalOptions(): Promise<void> {
+  async mockActionPolicyOptions(): Promise<void> {
+    const policies: AppActionPoliciesView[] = [
+      { id: 11, name: "Acme CRM", kind: "external_app" as const },
+      { id: 12, name: "Acme Support", kind: "external_app" as const },
+      { id: 22, name: "Acme MCP", kind: "mcp_server" as const },
+    ].map(({ id, name, kind }) => ({
+      gated_app_id: id,
+      target_id: id,
+      name,
+      kind,
+      enabled: null,
+      users_can_manage_policies: true,
+      actions: [
+        {
+          action_id: "send",
+          normalised_name: "Send message",
+          description: "Send a message.",
+          effective_policy: "ASK",
+          workspace_policy: "ASK",
+          stored_policy: null,
+          editable: true,
+          lock_reason: null,
+        },
+      ],
+    }));
+    await this.page.route("**/api/build/action-policies", async (route) => {
+      await route.fulfill({ json: policies });
+    });
     await this.page.route("**/api/build/apps", async (route) => {
       await route.fulfill({
         json: [
@@ -166,19 +194,24 @@ export class ScheduledTasksPage {
     });
   }
 
-  async expectResponsivePreApprovalLayout(): Promise<void> {
-    await expect(this.preApprovalPicker).toBeVisible();
-    await expect(this.appsGroup).toBeVisible();
-    await expect(this.mcpServersGroup).toBeVisible();
-    await this.expectPreApprovalGroupsFillContainer();
-
-    const appOptions = this.appsGroup.getByTestId(/^pre-approval-app-/);
-    await expect(appOptions).toHaveCount(2);
+  async expectResponsiveActionPolicyLayout(): Promise<void> {
+    await expect(this.appCards).toHaveCount(3);
+    for (const name of ["Acme CRM", "Acme Support", "Acme MCP"]) {
+      await expect(
+        this.appPolicies.getByRole("switch", {
+          name: `Enable ${name} for this task`,
+        })
+      ).not.toBeChecked();
+    }
+    await expect(
+      this.appPolicies.getByRole("button", { name: "Manage actions" })
+    ).toHaveCount(0);
+    await this.expectActionPolicyCardsFillForm();
     await expect
       .poll(async () => {
         const [first, second] = await Promise.all([
-          appOptions.nth(0).boundingBox(),
-          appOptions.nth(1).boundingBox(),
+          this.appCards.nth(0).boundingBox(),
+          this.appCards.nth(1).boundingBox(),
         ]);
         return Boolean(
           first &&
@@ -189,13 +222,25 @@ export class ScheduledTasksPage {
       })
       .toBe(true);
 
+    await this.appPolicies
+      .getByRole("switch", { name: "Enable Acme CRM for this task" })
+      .click();
+    await this.appPolicies
+      .getByRole("button", { name: "Manage actions" })
+      .click();
+    const modal = this.page.getByRole("dialog");
+    await expect(
+      modal.getByRole("group", { name: "Send message" })
+    ).toBeVisible();
+    await modal.getByRole("button", { name: "Cancel", exact: true }).click();
+
     await this.page.setViewportSize({ width: 390, height: 844 });
-    await this.expectPreApprovalGroupsFillContainer();
+    await this.expectActionPolicyCardsFillForm();
     await expect
       .poll(async () => {
         const [first, second] = await Promise.all([
-          appOptions.nth(0).boundingBox(),
-          appOptions.nth(1).boundingBox(),
+          this.appCards.nth(0).boundingBox(),
+          this.appCards.nth(1).boundingBox(),
         ]);
         return Boolean(
           first &&
@@ -207,22 +252,21 @@ export class ScheduledTasksPage {
       .toBe(true);
   }
 
-  private async expectPreApprovalGroupsFillContainer(): Promise<void> {
-    const container = this.preApprovalPicker.locator("..");
+  private async expectActionPolicyCardsFillForm(): Promise<void> {
     await expect
       .poll(async () => {
-        const [containerBox, pickerBox, appsBox, mcpBox] = await Promise.all([
-          container.boundingBox(),
-          this.preApprovalPicker.boundingBox(),
-          this.appsGroup.boundingBox(),
-          this.mcpServersGroup.boundingBox(),
+        const [container, section, first, second] = await Promise.all([
+          this.appPolicies.locator("..").boundingBox(),
+          this.appPolicies.boundingBox(),
+          this.appCards.nth(0).boundingBox(),
+          this.appCards.nth(1).boundingBox(),
         ]);
-        if (!containerBox || !pickerBox || !appsBox || !mcpBox) return false;
-
+        if (!container || !section || !first || !second) return false;
+        const right = Math.max(first.x + first.width, second.x + second.width);
         return (
-          Math.abs(containerBox.width - pickerBox.width) <= 1 &&
-          Math.abs(pickerBox.width - appsBox.width) <= 1 &&
-          Math.abs(pickerBox.width - mcpBox.width) <= 1
+          Math.abs(container.width - section.width) <= 1 &&
+          Math.abs(section.x - first.x) <= 1 &&
+          Math.abs(section.x + section.width - right) <= 1
         );
       })
       .toBe(true);

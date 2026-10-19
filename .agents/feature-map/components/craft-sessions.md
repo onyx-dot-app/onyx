@@ -208,7 +208,7 @@ receipt), `status` (`PENDING` → `CONFIRMED`/`FAILED`, swept to `UNKNOWN` after
 One agent-initiated gated request: `actions` (a non-empty JSONB list,
 sorted strictest-policy-first so `actions[0]` drove the gating decision),
 `payload`, `decision` (`NULL` = pending), `decided_via`
-(`ApprovalDecidedVia.USER`, `SESSION_GRANT`, or `PRE_APPROVAL`; the last is written by the proxy for scheduled-task grants, see `[[craft-scheduled-tasks]]`), `gated_app_id` (the shared
+(`ApprovalDecidedVia.USER`, `SESSION_GRANT`, or `PRE_APPROVAL`; the last remains on historical scheduled-task approvals, see `[[craft-scheduled-tasks]]`), `gated_app_id` (the shared
 `GatedApp` identity row from `[[craft-admin]]`, `SET NULL` on delete so the
 row survives as an audit record).
 
@@ -819,7 +819,7 @@ cd backend && uv run pytest tests/external_dependency_unit/craft/test_turn_heart
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_session_lifecycle.py
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_action_approval_db.py
 cd backend && uv run pytest tests/external_dependency_unit/craft/test_approvals_api.py
-cd backend && uv run pytest tests/external_dependency_unit/craft/test_scheduled_task_pre_approvals.py
+cd backend && uv run pytest tests/external_dependency_unit/permissions/test_action_policies.py
 
 # Integration
 cd backend && uv run pytest tests/integration/tests/craft/test_sessions_api.py

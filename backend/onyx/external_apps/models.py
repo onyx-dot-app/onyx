@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ActionPolicy, ExternalAppType
 
@@ -49,3 +51,42 @@ class BuiltInExternalAppDescriptor(BaseModel):
     # The catalog of actions an admin can govern (empty for providers without
     # a catalog).
     actions: list[EndpointDescriptor]
+
+
+class AppActionPolicies(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    gated_app_id: int
+    action_policies: dict[str, ActionPolicy]
+
+
+class TaskAppActionPolicies(AppActionPolicies):
+    enabled: bool
+
+
+class ActionPolicySettingView(BaseModel):
+    """One editor row: the current result, workspace rule, and saved owner choice."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    effective_policy: ActionPolicy
+    workspace_policy: ActionPolicy
+    stored_policy: ActionPolicy | None
+    editable: bool
+    lock_reason: Literal["workspace_disabled", "workspace_managed"] | None
+
+
+class AppActionPoliciesView(BaseModel):
+    enabled: bool | None = None
+    app_type: ExternalAppType | None = None
+    gated_app_id: int
+    kind: Literal["external_app", "mcp_server"]
+    target_id: int
+    name: str
+    users_can_manage_policies: bool
+    actions: list[ActionPolicySettingView]
+
+
+class SaveActionPolicies(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action_policies: dict[str, ActionPolicy]

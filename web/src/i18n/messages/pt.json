@@ -666,7 +666,7 @@
         "label": "Perguntar"
       },
       "deny": {
-        "label": "Negar"
+        "label": "Desativada"
       }
     },
     "switchList": {
@@ -13963,7 +13963,8 @@
       },
       "status": {
         "approved": "Aprovado",
-        "rejected": "Rejeitado"
+        "rejected": "Rejeitado",
+        "expired": "Expirada"
       },
       "submit": {
         "errorFallback": "Falha ao enviar a decisão"
@@ -14835,10 +14836,6 @@
             "label": "Nome",
             "placeholder": "ex.: Resumo semanal de escalonamentos de clientes"
           },
-          "preApproval": {
-            "description": "O Craft pode usar os apps e servidores MCP selecionados sem pausar quando esta tarefa é executada sem supervisão. Outras solicitações de aprovação pausam a execução e podem fazê-la falhar.",
-            "label": "Apps e servidores MCP pré-aprovados"
-          },
           "prompt": {
             "description": "Esta mensagem é enviada ao Craft cada vez que a tarefa dispara.",
             "label": "Prompt",
@@ -14897,31 +14894,6 @@
       "newPage": {
         "description": "Salve um prompt + agendamento. O Craft o executará em um cronograma.",
         "title": "Nova tarefa agendada"
-      },
-      "preApproval": {
-        "appFallbackName": "App nº {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "Nenhum app ou servidor MCP disponível no Craft ainda."
-        },
-        "errors": {
-          "loadFailed": "Não foi possível carregar os apps e servidores MCP. Atualize para tentar novamente.",
-          "partialLoadFailed": "Algumas opções de pré-aprovação não puderam ser carregadas. Atualize para tentar novamente."
-        },
-        "loading": {
-          "label": "Carregando apps e servidores MCP…"
-        },
-        "mcpGroupTitle": "Servidores MCP",
-        "mcpServerFallbackName": "Servidor MCP nº {id}",
-        "status": {
-          "connected": "Conectado",
-          "connectionRequired": "Conexão necessária",
-          "unavailable": "Não está mais disponível"
-        },
-        "summary": {
-          "partialLoadFailed": "Alguns detalhes de pré-aprovação não puderam ser carregados. Atualize para tentar novamente.",
-          "title": "Apps e servidores MCP pré-aprovados"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15297,6 +15269,50 @@
       "viewPlans": {
         "label": "Ver planos"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "Configurações de aprovação de {name}",
+      "title": "Configurações de aprovação",
+      "personalDescription": "Estas configurações se aplicam às suas conversas e novas tarefas. Tarefas existentes mantêm suas configurações.",
+      "taskDescription": "Somente aplicativos ativados estão disponíveis para esta tarefa. As alterações se aplicam apenas a esta tarefa.",
+      "newTaskDescription": "Ative os aplicativos que esta tarefa pode usar. Cada aplicativo começa com suas configurações de ações atuais.",
+      "workspace_disabled": "Desativada para o espaço de trabalho",
+      "workspace_managed": "Gerenciado pelo espaço de trabalho",
+      "userManagement": "Permitir que usuários gerenciem configurações de aprovação",
+      "userManagementDescription": "Usuários podem alterar a aprovação de ações disponíveis.",
+      "loading": "Carregando configurações de aprovação…",
+      "loadError": "Não foi possível carregar as configurações de aprovação.",
+      "retry": "Tentar novamente",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "cancel": "Cancelar",
+      "saveError": "Não foi possível salvar as configurações de aprovação.",
+      "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
+      "emptyApps": "Nenhum aplicativo disponível.",
+      "expired": "A aprovação expirou. Esta solicitação não foi executada.",
+      "rejected": "Solicitação rejeitada. Esta solicitação não foi executada.",
+      "deadline": "Aprovar até {time}",
+      "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
+      "enableForTask": "Ativar para esta tarefa",
+      "enableAppForTask": "Ativar {app} para esta tarefa",
+      "enabledForTask": "Ativado para esta tarefa",
+      "disabledForTask": "Desativado para esta tarefa",
+      "externalApp": "Aplicativo",
+      "mcpServer": "Servidor MCP",
+      "taskAppsTitle": "Aplicativos e servidores MCP",
+      "actionPolicies": "Configurações de aprovação",
+      "policyCounts": "{auto} automáticas · {ask} perguntar · {disabled} desativadas",
+      "manageActions": "Gerenciar ações",
+      "viewActions": "Ver ações",
+      "taskModalDescription": "As alterações se aplicam ao salvar a tarefa. As restrições do espaço de trabalho sempre se aplicam.",
+      "searchActions": "Buscar ações",
+      "applyMatching": "Definir {count} ações editáveis correspondentes:",
+      "noMatchingActions": "Nenhuma ação corresponde à busca.",
+      "close": "Fechar",
+      "saveChanges": "Salvar alterações",
+      "resetDefaults": "Redefinir tudo para os padrões",
+      "resetAll": "Redefinir tudo para os padrões do espaço de trabalho",
+      "workspaceDisabledTooltip": "Um administrador desativou esta ação para o espaço de trabalho."
     }
   },
   "knowledge": {

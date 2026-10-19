@@ -30,10 +30,13 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     # Map full-replaces stored overrides (empty clears); None defaults every
     # action. Keyed by catalog action id; validated on create.
     action_policies: dict[str, ActionPolicy] | None = None
+    users_can_manage_policies: bool | None = None
 
 
 class CreateCustomExternalAppRequest(BaseModel):
     """Create a custom external-app gateway without creating skill content."""
+
+    users_can_manage_policies: bool = True
 
     name: str
     upstream_url_patterns: list[str]
@@ -62,6 +65,7 @@ class UpdateExternalAppRequest(BaseModel):
     associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, ActionPolicy] | None = None
+    users_can_manage_policies: bool | None = None
 
 
 class ExternalAppAssociatedSkill(BaseModel):
@@ -82,8 +86,9 @@ class ExternalAppAdminResponse(BaseModel):
     # Sorted `{placeholder}` names in the auth-template values.
     credential_placeholder_keys: list[str]
     enabled: bool
-    # The merged per-action policy view (built-in apps; empty for custom).
+    # The merged approval policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
+    users_can_manage_policies: bool = True
     associated_skills: list[ExternalAppAssociatedSkill]
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only set availability and policies. UI hides the rest.

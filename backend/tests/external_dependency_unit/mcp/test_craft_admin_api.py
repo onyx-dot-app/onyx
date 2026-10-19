@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.action_policy import get_workspace_action_policies
 from onyx.db.enums import (
     ActionPolicy,
     GatedAppKind,
@@ -16,7 +17,6 @@ from onyx.db.enums import (
     MCPTransport,
     SandboxStatus,
 )
-from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import (
     add_user_to_mcp_server,
     affected_user_ids_for_mcp_server,
@@ -135,7 +135,7 @@ def _make_server(db_session: Session, *, tool_names: list[str]) -> MCPServer:
     return server
 
 
-def test_tool_policies_patch_round_trip(
+def test_action_policies_patch_round_trip(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
@@ -150,9 +150,9 @@ def test_tool_policies_patch_round_trip(
     )
     assert resp.action_policies == {"send_email": ActionPolicy.DENY}
     # Sparse: the unlisted tool has no stored override (effective default ASK).
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "send_email": ActionPolicy.DENY
-    }
+    assert get_workspace_action_policies(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    ) == {"send_email": ActionPolicy.DENY}
 
     # Default (ASK) entries are canonicalized away at the boundary, so a client
     # may send a full map without persisting redundant rows.
@@ -167,9 +167,9 @@ def test_tool_policies_patch_round_trip(
         db_session,
         admin,
     )
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
-        "send_email": ActionPolicy.DENY
-    }
+    assert get_workspace_action_policies(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    ) == {"send_email": ActionPolicy.DENY}
 
     # Full replace: an empty map clears every override.
     mcp_api.update_mcp_server_simple(
@@ -178,7 +178,10 @@ def test_tool_policies_patch_round_trip(
         db_session,
         admin,
     )
-    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {}
+    assert (
+        get_workspace_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id)
+        == {}
+    )
 
     # Unknown tool names are rejected.
     with pytest.raises(OnyxError):
@@ -190,6 +193,54 @@ def test_tool_policies_patch_round_trip(
             db_session,
             admin,
         )
+
+
+def test_user_policy_management_patch_round_trip(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    admin = create_test_user(db_session, "mcp_policy_admin", is_admin=True)
+    server = _make_server(db_session, tool_names=["send_email"])
+    assert mcp_api._db_mcp_server_to_api_mcp_server(
+        server, db_session, request_user=admin
+    ).users_can_manage_policies
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(
+            users_can_manage_policies=False,
+            action_policies={"send_email": ActionPolicy.DENY},
+        ),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is False
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
+    db_session.expire_all()
+    assert (
+        mcp_api._db_mcp_server_to_api_mcp_server(
+            server, db_session, request_user=admin
+        ).users_can_manage_policies
+        is False
+    )
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(name="Renamed MCP"),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is False
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
+
+    response = mcp_api.update_mcp_server_simple(
+        server.id,
+        MCPServerSimpleUpdateRequest(users_can_manage_policies=True),
+        db_session,
+        admin,
+    )
+    assert response.users_can_manage_policies is True
+    assert response.action_policies == {"send_email": ActionPolicy.DENY}
 
 
 def test_disconnect_removes_only_callers_credentials(

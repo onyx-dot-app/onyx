@@ -28,6 +28,12 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import assert_within_scope, get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    get_workspace_action_policies,
+    replace_workspace_action_policies,
+    users_can_manage_policies,
+)
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     ActionPolicy,
@@ -40,11 +46,6 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
 )
-from onyx.db.gated_app import (
-    get_action_policies,
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
-)
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
     clear_mcp_admin_connection_config__no_commit,
@@ -55,7 +56,6 @@ from onyx.db.mcp import (
     delete_mcp_server,
     delete_user_connection_configs_for_server,
     get_all_mcp_servers,
-    get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
     get_default_chat_mcp_server_ids,
     get_mcp_server_by_id,
@@ -1375,8 +1375,11 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
+        users_can_manage_policies=users_can_manage_policies(
+            db, GatedAppKind.MCP_SERVER, db_server.id
+        ),
         action_policies=(
-            get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
+            get_workspace_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
             if can_view_server_details
             else None
         ),
@@ -2805,26 +2808,19 @@ def update_mcp_server_simple(
             db_session=db_session,
         )
 
-    if request.action_policies is not None:
-        known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
-        unknown = sorted(set(request.action_policies) - known)
-        if unknown:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"unknown tool names for this server: {unknown}",
-            )
-        # Canonicalize at the input boundary so the stored set stays sparse
-        # regardless of which client wrote it: a default (ASK) choice is
-        # equivalent to leaving the tool unlisted.
-        sparse_policies = {
-            tool: policy
-            for tool, policy in request.action_policies.items()
-            if policy != MCP_TOOL_DEFAULT_POLICY
-        }
+    if (
+        request.action_policies is not None
+        or request.users_can_manage_policies is not None
+    ):
         gated_app_id = get_or_create_gated_app_id(
             db_session, GatedAppKind.MCP_SERVER, server_id
         )
-        replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
+        replace_workspace_action_policies(
+            db_session,
+            gated_app_id,
+            request.action_policies,
+            users_can_manage=request.users_can_manage_policies,
+        )
 
     db_session.commit()
 
