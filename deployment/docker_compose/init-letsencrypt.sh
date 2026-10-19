@@ -46,8 +46,17 @@ fi
 if [ ! -e "$data_path/conf/options-ssl-nginx.conf" ] || [ ! -e "$data_path/conf/ssl-dhparams.pem" ]; then
   echo "### Downloading recommended TLS parameters ..."
   mkdir -p "$data_path/conf"
-  curl -s https://raw.githubusercontent.com/certbot/certbot/master/certbot/src/certbot/_internal/plugins/nginx/tls_configs/options-ssl-nginx.conf > "$data_path/conf/options-ssl-nginx.conf"
-  curl -s https://raw.githubusercontent.com/certbot/certbot/master/certbot/src/certbot/ssl-dhparams.pem > "$data_path/conf/ssl-dhparams.pem"
+  # Download to temporary files and fail on HTTP errors, so a failed download
+  # never leaves an empty or error-page file that the existence check above
+  # would then skip on the next run.
+  if ! curl -fsS https://raw.githubusercontent.com/certbot/certbot/master/certbot/src/certbot/_internal/plugins/nginx/tls_configs/options-ssl-nginx.conf -o "$data_path/conf/options-ssl-nginx.conf.tmp" ||
+    ! curl -fsS https://raw.githubusercontent.com/certbot/certbot/master/certbot/src/certbot/ssl-dhparams.pem -o "$data_path/conf/ssl-dhparams.pem.tmp"; then
+    echo "Error: Failed to download the recommended TLS parameters." >&2
+    rm -f "$data_path/conf/options-ssl-nginx.conf.tmp" "$data_path/conf/ssl-dhparams.pem.tmp"
+    exit 1
+  fi
+  mv "$data_path/conf/options-ssl-nginx.conf.tmp" "$data_path/conf/options-ssl-nginx.conf"
+  mv "$data_path/conf/ssl-dhparams.pem.tmp" "$data_path/conf/ssl-dhparams.pem"
   echo
 fi
 
