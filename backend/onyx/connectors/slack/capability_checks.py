@@ -46,6 +46,7 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckNotApplicableError,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     OptionsFinding,
 )
@@ -68,6 +69,12 @@ from onyx.connectors.slack.connector import (
     list_grid_team_ids,
     normalize_channel_entries,
     validate_channel_regexes,
+)
+from onyx.connectors.slack.models import (
+    ChannelPattern,
+    GridTeam,
+    HistoryRows,
+    Rejection,
 )
 from onyx.connectors.slack.source_operations import (
     SlackApiError,
@@ -148,13 +155,6 @@ _ROW_IDS: dict[str, str] = {
 }
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 def _need(scope: str) -> str:
     """The line that says what the bot token needs."""
     return f"Add the `{scope}` bot scope, then reinstall the app."
@@ -183,12 +183,7 @@ def _slack_client(context: CapabilityCheckContext) -> SlackSourceOperations:
     return gateway
 
 
-class _Rejection(BaseModel):
-    message: str
-    row: _RowText
-
-
-_TOKEN_REJECTED_ROW = _RowText(
+_TOKEN_REJECTED_ROW = CheckRowText(
     summary="Slack rejected the bot token",
     description=(
         "Slack does not accept this token.\nIn Slack, open the app's OAuth & "
@@ -196,18 +191,18 @@ _TOKEN_REJECTED_ROW = _RowText(
     ),
 )
 # Slack's error for a token it does not accept, to the row it shows.
-_REJECTIONS: dict[str, _Rejection] = {
-    "invalid_auth": _Rejection(
+_REJECTIONS: dict[str, Rejection] = {
+    "invalid_auth": Rejection(
         message="Invalid or expired Slack bot token (invalid_auth).",
         row=_TOKEN_REJECTED_ROW,
     ),
-    "not_authed": _Rejection(
+    "not_authed": Rejection(
         message="Invalid or expired Slack bot token (not_authed).",
         row=_TOKEN_REJECTED_ROW,
     ),
-    "account_inactive": _Rejection(
+    "account_inactive": Rejection(
         message="Slack workspace or bot user is deactivated (account_inactive).",
-        row=_RowText(
+        row=CheckRowText(
             summary="Workspace or bot user is deactivated",
             description=(
                 "Slack deactivated the workspace or the bot user.\nInstall the "
@@ -215,9 +210,9 @@ _REJECTIONS: dict[str, _Rejection] = {
             ),
         ),
     ),
-    "token_revoked": _Rejection(
+    "token_revoked": Rejection(
         message="Slack bot token has been revoked (token_revoked).",
-        row=_RowText(
+        row=CheckRowText(
             summary="Bot token was revoked",
             description=(
                 "Someone revoked the token or uninstalled the app.\nReinstall the "
@@ -225,9 +220,9 @@ _REJECTIONS: dict[str, _Rejection] = {
             ),
         ),
     ),
-    "token_expired": _Rejection(
+    "token_expired": Rejection(
         message="Slack bot token has expired (token_expired).",
-        row=_RowText(
+        row=CheckRowText(
             summary="Bot token expired",
             description=(
                 "The token expired.\nReinstall the Slack app and copy the new Bot "
@@ -243,7 +238,7 @@ def _error_slug(e: SlackApiError) -> str:
 
 
 def _raise_for_slack_api_error(
-    e: SlackApiError, *, denied: str, denied_row: _RowText | None = None
+    e: SlackApiError, *, denied: str, denied_row: CheckRowText | None = None
 ) -> NoReturn:
     """Maps a Slack API error onto the validation-exception family.
     ``denied`` explains a ``missing_scope`` for this probe; ``denied_row`` is
@@ -297,7 +292,7 @@ _GRID_DENIED = (
     "On Enterprise Grid, listing users requires enumerating workspaces "
     "first (`auth.teams.list`), which needs the `team:read` scope."
 )
-_GRID_DENIED_ROW = _RowText(
+_GRID_DENIED_ROW = CheckRowText(
     summary="Bot cannot list Grid workspaces",
     description=(
         "On Enterprise Grid, users are listed per workspace, and the bot cannot "
@@ -317,12 +312,7 @@ def _no_grid_workspaces_error() -> InconclusiveValidationError:
     )
 
 
-class _GridTeam(BaseModel):
-    id: str
-    name: str | None
-
-
-def _first_grid_team(slack_client: SlackSourceOperations) -> _GridTeam | None:
+def _first_grid_team(slack_client: SlackSourceOperations) -> GridTeam | None:
     """The first workspace of an Enterprise Grid org, None off-Grid.
 
     On Grid org installs ``users.list`` requires a ``team_id``, so user-facing
@@ -337,7 +327,7 @@ def _first_grid_team(slack_client: SlackSourceOperations) -> _GridTeam | None:
     if not teams_page.teams:
         raise _no_grid_workspaces_error()
     team = teams_page.teams[0]
-    return _GridTeam(id=str(team["id"]), name=team.get("name"))
+    return GridTeam(id=str(team["id"]), name=team.get("name"))
 
 
 def _find_channel(
@@ -364,14 +354,14 @@ _PUBLIC_LISTING_DENIED = (
     "The bot token cannot list public channels (`conversations.list`), which "
     "indexing requires to enumerate what to index."
 )
-_PUBLIC_LISTING_DENIED_ROW = _RowText(
+_PUBLIC_LISTING_DENIED_ROW = CheckRowText(
     summary="Bot cannot list public channels",
     description=(
         "Indexing cannot find any channel to index without listing public "
         f"channels.\n{_need('channels:read')}"
     ),
 )
-_PRIVATE_LISTING_DENIED_ROW = _RowText(
+_PRIVATE_LISTING_DENIED_ROW = CheckRowText(
     summary="Bot cannot list private channels",
     description=(f"Private messages would stay out of search.\n{_need('groups:read')}"),
 )
@@ -415,18 +405,11 @@ def _no_private_channel_output() -> CheckOutput:
     )
 
 
-class _HistoryRows(BaseModel):
-    history_denied: str
-    history_denied_row: _RowText
-    replies_denied: str
-    replies_denied_row: _RowText
-
-
 def _probe_channel_history(
     slack_client: SlackSourceOperations,
     variant: SlackChannelVariant,
     channel: dict[str, Any],
-    rows: _HistoryRows,
+    rows: HistoryRows,
 ) -> CheckOutput:
     """Reads one message page, then one thread, from the channel.
 
@@ -594,19 +577,12 @@ class _ChannelPatternsCheck(_SlackCheck):
         return CheckOutput(summary=f"All {len(patterns)} patterns are valid")
 
 
-class _ChannelPattern(BaseModel):
-    pattern: str
-    # How the message and the row name the pattern's field.
-    label: str
-    line: str
-
-
-def _patterns(config: SlackConnectorConfig) -> list[_ChannelPattern]:
+def _patterns(config: SlackConnectorConfig) -> list[ChannelPattern]:
     """The regex-mode patterns: the channels, then the excluded channels."""
-    patterns: list[_ChannelPattern] = []
+    patterns: list[ChannelPattern] = []
     if config.channel_regex_enabled:
         patterns += [
-            _ChannelPattern(
+            ChannelPattern(
                 pattern=pattern,
                 label="channel",
                 line=f"Invalid channel pattern: {pattern}",
@@ -615,7 +591,7 @@ def _patterns(config: SlackConnectorConfig) -> list[_ChannelPattern]:
         ]
     if config.exclude_channel_regex_enabled:
         patterns += [
-            _ChannelPattern(
+            ChannelPattern(
                 pattern=pattern,
                 label="excluded channel",
                 line=f"Invalid exclude pattern: {pattern}",
@@ -655,7 +631,7 @@ class _GridWorkspaceListingCheck(_SlackCheck):
                     "per-workspace on Grid, so indexing coverage would be "
                     "incomplete."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list Grid workspaces",
                     description=(
                         "Indexing would miss channels in other workspaces.\n"
@@ -712,7 +688,7 @@ class _PublicChannelListingCheck(_SlackCheck):
                     "(`conversations.info`), which indexing uses to resolve "
                     "channels when resuming from a checkpoint."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot read channel details",
                     description=(
                         f"Resumed indexing runs would fail.\n{_need('channels:read')}"
@@ -816,14 +792,14 @@ class _MessageHistoryReadCheck(_SlackCheck):
             slack_client,
             SlackChannelVariant.PUBLIC,
             _public_channel_to_sample(slack_client),
-            _HistoryRows(
+            HistoryRows(
                 history_denied=(
                     "The bot token cannot read channel messages "
                     "(`conversations.history`), which is the core indexing "
                     "operation. Grant `channels:history` (and `groups:history` if "
                     "private channels should be indexed)."
                 ),
-                history_denied_row=_RowText(
+                history_denied_row=CheckRowText(
                     summary="Bot cannot read channel messages",
                     description=(
                         "Reading messages is the core of indexing.\n"
@@ -836,7 +812,7 @@ class _MessageHistoryReadCheck(_SlackCheck):
                     "threads. Grant `channels:history` (and `groups:history` if "
                     "private channels should be indexed)."
                 ),
-                replies_denied_row=_RowText(
+                replies_denied_row=CheckRowText(
                     summary="Bot cannot read thread replies",
                     description=(
                         "Indexing would miss every reply in a thread.\n"
@@ -871,14 +847,14 @@ class _PrivateMessageHistoryReadCheck(_SlackCheck):
                 slack_client,
                 "Invite the bot to a private channel to index its messages.",
             ),
-            _HistoryRows(
+            HistoryRows(
                 history_denied=(
                     "The bot token cannot read private-channel messages "
                     "(`conversations.history`). Private channels ARE visible to "
                     "the bot, so indexing will attempt them and fail. Grant "
                     "`groups:history`."
                 ),
-                history_denied_row=_RowText(
+                history_denied_row=CheckRowText(
                     summary="Bot cannot read private messages",
                     description=(
                         "Indexing would try these channels and fail.\n"
@@ -890,7 +866,7 @@ class _PrivateMessageHistoryReadCheck(_SlackCheck):
                     "(`conversations.replies`), which indexing needs to capture "
                     "threads. Grant `groups:history`."
                 ),
-                replies_denied_row=_RowText(
+                replies_denied_row=CheckRowText(
                     summary="Bot cannot read private replies",
                     description=(
                         "Indexing would miss every reply in a thread.\n"
@@ -982,7 +958,7 @@ class _UserProfileReadCheck(_SlackCheck):
                     "Indexing still works, but message authors appear as raw Slack "
                     "ids instead of names."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot read user profiles",
                     description=(
                         "Indexing still works, but message authors show as Slack "
@@ -1009,7 +985,7 @@ class _UserProfileReadCheck(_SlackCheck):
                     "authors. Authors would appear as raw Slack ids instead of "
                     "names."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot read a user profile",
                     description=(
                         "Message authors would show as Slack IDs.\n"
@@ -1063,7 +1039,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
                         "workspaces first (`auth.teams.list`), which needs the "
                         "`team:read` scope."
                     ),
-                    denied_row=_RowText(
+                    denied_row=CheckRowText(
                         summary="Bot cannot list Grid workspaces",
                         description=(
                             "On Enterprise Grid, channels are listed per workspace, "
@@ -1085,7 +1061,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
                     "(`conversations.list`), so the configured channels could not "
                     "be verified."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list channels",
                     description=(
                         "The check cannot list the workspace's channels.\n"
@@ -1256,7 +1232,7 @@ class _PermSyncChannelListingCheck(_SlackCheck):
                     "which permission sync requires to enumerate channels and "
                     "build per-channel access lists."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list public channels",
                     description=(
                         "Permission sync cannot build channel access without "
@@ -1307,7 +1283,7 @@ class _PermSyncPrivateChannelListingCheck(_SlackCheck):
                     "access lists, so users removed from a private channel keep "
                     "access in Onyx."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list private channels",
                     description=(
                         "Private channel access would not sync, and old access "
@@ -1354,7 +1330,7 @@ class _UserEmailVisibilityCheck(_SlackCheck):
                     "permission sync requires to map Slack members to Onyx users "
                     "by email."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list users",
                     description=(
                         "Permission sync cannot map Slack members to users.\n"
@@ -1437,7 +1413,7 @@ class _PrivateChannelMemberListingCheck(_SlackCheck):
                     "(`conversations.members`), which permission sync requires to "
                     "build per-channel member ACLs."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list channel members",
                     description=(
                         "Permission sync cannot tell who is in a private channel.\n"
@@ -1464,7 +1440,7 @@ class _PrivateChannelMemberListingCheck(_SlackCheck):
                     "profiles (`users.info`), which permission sync uses for "
                     "members missing from the workspace user list."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot read member profiles",
                     description=(
                         "Permission sync cannot resolve members missing from the "
@@ -1519,7 +1495,7 @@ class _GridPublicChannelScopingCheck(_SlackCheck):
                     "Without it, permission sync silently marks every public "
                     "channel visible org-wide in Onyx (over-sharing)."
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Bot cannot list users per workspace",
                     description=(
                         "Permission sync then shows every public channel to the "
