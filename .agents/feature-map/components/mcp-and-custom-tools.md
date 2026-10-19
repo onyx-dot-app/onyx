@@ -207,14 +207,15 @@ the fallback. Rejected saves remain visible through errors and toasts.
 Schema editing remains on one step.
 The Tools tab renders `web/src/sections/plugins/OpenAPIEndpointList.tsx`: one divided list of actions,
 with method badges and endpoint paths beside each summary.
-Creation schema and authentication modals use the same centered surface as
-MCP setup. Admin detail tabs embed those same forms without headers
-or nested dialogs, and portal only the active form's save action to the footer.
-Drafts survive tab switches. Successful inline saves clear dirty state; pending
-saves block navigation. The inline Authentication Method has no divider.
+`OpenAPIPluginModal` holds one Formik form (`OpenAPIPluginFormValues`: name,
+description, schema text, auth) across its tabs. The Schema and Authentication tabs
+render `OpenAPISchemaFields` and `OpenAPIAuthFields`, which have no form of their own.
+One footer button acts: Continue and Add Action in add mode, and Save in edit mode,
+which writes only the parts that changed. The header reads "Add OpenAPI action" or
+"Edit *name*". Drafts survive tab switches.
 Plugin add and edit modals close at once, without an unsaved-changes confirmation.
-Keeping edits preserves each mounted form. Authentication saves reject a changed
-OAuth link before writing, so stale values cannot target a replacement config.
+Authentication saves reject a changed OAuth link before writing, so stale values
+cannot target a replacement config.
 The inline Schema tab shows validation and a detected-tool count, not endpoints.
 View tools selects the Tools tab; unsaved schemas must be saved first. Creation
 retains its endpoint preview because it has no separate Tools tab.

@@ -196,7 +196,8 @@
         "disabledTooltip": "Nur der Ersteller der Aktion oder ein Administrator kann die Authentifizierung verwalten"
       },
       "editHeader": {
-        "title": "OpenAPI-Aktion bearbeiten"
+        "title": "*{name}* bearbeiten",
+        "description": "Bearbeiten Sie das OpenAPI-Schema, um benutzerdefinierte Aktionen zu bearbeiten."
       },
       "empty": {
         "description": "Geben Sie ein OpenAPI-Schema an, um hier eine Vorschau der Aktionen zu sehen.",
@@ -1071,7 +1072,8 @@
         "loadFailed": "Dieses Plugin konnte nicht geladen werden",
         "unavailable": "Dieses Plugin wurde möglicherweise gelöscht oder Sie haben keinen Zugriff.",
         "readOnly": "Sie können dieses Plugin anzeigen. Ihr Konto kann seine Einstellungen nicht ändern.",
-        "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht."
+        "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht.",
+        "nameRequired": "Name ist erforderlich"
       },
       "title": "Plugins",
       "description": "Verbinde Tools und Apps mit deinem Workspace.",

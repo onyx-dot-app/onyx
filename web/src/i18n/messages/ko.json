@@ -196,7 +196,8 @@
         "disabledTooltip": "액션을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
       },
       "editHeader": {
-        "title": "OpenAPI 액션 편집"
+        "title": "*{name}* 편집",
+        "description": "OpenAPI 스키마를 편집하여 사용자 지정 작업을 편집하세요."
       },
       "empty": {
         "description": "OpenAPI 스키마를 입력하면 여기에서 액션을 미리 볼 수 있습니다.",
@@ -1071,7 +1072,8 @@
         "loadFailed": "이 플러그인을 불러올 수 없습니다",
         "unavailable": "이 플러그인이 삭제되었거나 접근 권한이 없을 수 있습니다.",
         "readOnly": "이 플러그인을 볼 수 있지만 계정에 설정 변경 권한이 없습니다.",
-        "deleteDescription": "OpenAPI 플러그인과 해당 설정을 영구적으로 삭제합니다."
+        "deleteDescription": "OpenAPI 플러그인과 해당 설정을 영구적으로 삭제합니다.",
+        "nameRequired": "이름은 필수입니다"
       },
       "title": "플러그인",
       "description": "도구와 앱을 워크스페이스에 연결하세요.",

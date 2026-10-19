@@ -24,7 +24,7 @@ export class AdminOpenApiPluginPage {
     await this.plugins.goto();
     await this.plugins.openAddOpenApi();
     const dialog = this.page.getByRole("dialog", {
-      name: "Add an OpenAPI plugin",
+      name: "Add OpenAPI action",
       exact: true,
     });
     await expect(dialog).toBeVisible();

@@ -196,7 +196,8 @@
         "disabledTooltip": "Solo el creador de la acción o un administrador pueden gestionar la autenticación"
       },
       "editHeader": {
-        "title": "Editar la acción de OpenAPI"
+        "title": "Editar *{name}*",
+        "description": "Edita el esquema de OpenAPI para editar acciones personalizadas."
       },
       "empty": {
         "description": "Proporciona un esquema de OpenAPI para ver aquí una vista previa de las acciones.",
@@ -1071,7 +1072,8 @@
         "loadFailed": "No se pudo cargar este plugin",
         "unavailable": "Este plugin puede haberse eliminado o puede que no tengas acceso.",
         "readOnly": "Puedes ver este plugin. Tu cuenta no puede cambiar su configuración.",
-        "deleteDescription": "Esto elimina permanentemente el plugin OpenAPI y su configuración."
+        "deleteDescription": "Esto elimina permanentemente el plugin OpenAPI y su configuración.",
+        "nameRequired": "El nombre es obligatorio"
       },
       "title": "Plugins",
       "description": "Conecta herramientas y aplicaciones a tu espacio de trabajo.",

@@ -8,3 +8,12 @@ export interface OpenAPIAuthFormValues extends OAuthConfigFields {
   authMethod: AuthMethod;
   headers: KeyValue[];
 }
+
+/** The one form behind the OpenAPI plugin modal, for add and edit. */
+export interface OpenAPIPluginFormValues {
+  name: string;
+  description: string;
+  /** The schema as the admin typed it. */
+  definition: string;
+  auth: OpenAPIAuthFormValues;
+}

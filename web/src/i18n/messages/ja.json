@@ -196,7 +196,8 @@
         "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
       },
       "editHeader": {
-        "title": "OpenAPI アクションを編集"
+        "title": "*{name}* を編集",
+        "description": "OpenAPI スキーマを編集してカスタムアクションを編集します。"
       },
       "empty": {
         "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
@@ -1071,7 +1072,8 @@
         "loadFailed": "このプラグインを読み込めませんでした",
         "unavailable": "このプラグインは削除されたか、アクセス権がない可能性があります。",
         "readOnly": "このプラグインは表示できますが、設定を変更する権限はありません。",
-        "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。"
+        "deleteDescription": "OpenAPI プラグインとその設定が完全に削除されます。",
+        "nameRequired": "名前は必須です"
       },
       "title": "プラグイン",
       "description": "ツールやアプリをワークスペースに接続します。",

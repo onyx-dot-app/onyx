@@ -196,7 +196,8 @@
         "disabledTooltip": "Only the action's creator or an admin can manage authentication"
       },
       "editHeader": {
-        "title": "Edit OpenAPI action"
+        "title": "Edit *{name}*",
+        "description": "Edit OpenAPI schema to edit custom actions."
       },
       "empty": {
         "description": "Provide OpenAPI schema to preview actions here.",
@@ -1071,7 +1072,8 @@
         "loadFailed": "Could not load this plugin",
         "unavailable": "This plugin may have been deleted, or you may not have access.",
         "readOnly": "You can view this plugin. Your account cannot change its settings.",
-        "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration."
+        "deleteDescription": "This permanently deletes the OpenAPI plugin and its configuration.",
+        "nameRequired": "Name is required"
       },
       "title": "Plugins",
       "description": "Connect tools and apps to your workspace.",
