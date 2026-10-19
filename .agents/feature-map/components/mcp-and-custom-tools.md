@@ -178,10 +178,13 @@ list's `default_chat_enabled` summary, not credential connection status.
 Missing summaries use a neutral dot with a Chat unknown tooltip.
 
 Add opens the type dropdown and then its native catalog or creation flow.
-OpenAPI creation combines schema entry and live action review on the first step, then authorization.
+`OpenAPIPluginModal` (`web/src/views/admin/PluginsPage/OpenAPIPluginModal.tsx`) is the one OpenAPI modal for
+add and edit. Without a `toolId` it adds: it opens on Schema, with Server and Tools disabled until the tool exists.
+Schema combines schema entry and live action review; Continue checks it and unlocks Authentication.
+Editing the schema again locks Authentication until the next Continue.
 The validated schema preview groups its service logo, name, server URL, and
 description in one compact identity row, shared by creation and schema editing.
-Back preserves schema and credential drafts.
+Switching tabs preserves schema and credential drafts.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
 Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
 Failed retries reuse the created tool ID and any newly created OAuth configuration ID.
@@ -235,9 +238,8 @@ count, enabled state, and loading/retry feedback. Review skills opens the
 existing app-filtered skills page; no admin metadata or policies are fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
-`web/src/views/admin/PluginsPage/components/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, review,
-Back navigation, authorization choices and draft retention, invalid JSON, validation failure/pending, saving, creation failure/success,
-and closing/reopening a discarded draft. Network fixtures remain local to each story.
+`web/src/views/admin/PluginsPage/OpenAPIPluginModal.stories.tsx` covers the OpenAPI modal.
+Network fixtures remain local to each story.
 Explore offers official remote endpoints for Slack, HubSpot, Asana, Linear, Notion,
 Sentry, and Atlassian. Compact rows show a logo, regular-weight title, short summary,
 and centered action. The setup modal shows registration requirements and provider setup guides.
@@ -561,7 +563,7 @@ inline, not a broken turn.
 | `/admin/plugins` | `web/src/app/admin/plugins/page.tsx` | `PluginsPage` (`web/src/views/admin/PluginsPage/index.tsx`) |
 | `/admin/plugins?add=mcp` | Plugins directory | `MCPPluginSetupModal` (`web/src/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal.tsx`) |
 | `/admin/plugins/mcp/[serverId]` | `web/src/app/admin/plugins/mcp/[serverId]/page.tsx` | `MCPPluginDetailPage` (`web/src/views/admin/PluginsPage/MCPPluginDetailPage.tsx`) |
-| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginDetailPage` (`web/src/views/admin/PluginsPage/OpenAPIPluginDetailPage.tsx`) |
+| `/admin/plugins/openapi/[toolId]` | `web/src/app/admin/plugins/openapi/[toolId]/page.tsx` | `OpenAPIPluginModal` (`web/src/views/admin/PluginsPage/OpenAPIPluginModal.tsx`) |
 | `/admin/mcp-actions`, `/admin/mcp-actions/new`, `/admin/mcp-actions/[serverId]`, `/admin/openapi-actions` | Existing route files | Query-preserving redirects through `web/src/lib/plugins/routes.ts` |
 
 ### HTTP endpoints, MCP (`backend/onyx/server/features/mcp/api.py`, prefixes `/mcp` and `/admin/mcp`)

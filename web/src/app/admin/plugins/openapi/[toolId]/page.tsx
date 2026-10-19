@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { parsePluginId } from "@/lib/plugins/routes";
-import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
+import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 
 export default async function Page({
   params,
@@ -10,5 +10,5 @@ export default async function Page({
   const { toolId: value } = await params;
   const toolId = parsePluginId(value);
   if (toolId === null) notFound();
-  return <OpenAPIPluginDetailPage key={toolId} toolId={toolId} />;
+  return <OpenAPIPluginModal key={toolId} toolId={toolId} />;
 }

@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "Adicione um esquema OpenAPI para criar ações personalizadas.",
         "title": "Adicionar ação OpenAPI"
       },
       "cancelButton": {

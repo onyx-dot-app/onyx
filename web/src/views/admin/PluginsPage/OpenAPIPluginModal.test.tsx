@@ -12,7 +12,7 @@ import type { ToolSnapshot } from "@/lib/tools/types";
 import { ToastProvider, toast } from "@opal/layouts";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
+import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -200,7 +200,7 @@ describe("detail modal", () => {
     "guards %s drafts in the same frame and retains them when staying",
     async (editor) => {
       const user = setupUser();
-      render(<OpenAPIPluginDetailPage toolId={42} />);
+      render(<OpenAPIPluginModal toolId={42} />);
       await user.click(
         await findEditorTab(
           editor === "metadata"
@@ -249,7 +249,7 @@ describe("detail modal", () => {
 
   test("rejects an OAuth draft when its saved configuration link changes before save", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit authentication"));
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "Token URL" })).toHaveValue(
@@ -291,7 +291,7 @@ describe("detail modal", () => {
 
   test("backdrop dismiss protects a draft retained in an inactive tab", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), {
       target: { value: "Draft name" },
     });
@@ -309,7 +309,7 @@ describe("detail modal", () => {
 
   test("shows plugin details in a dialog and closes to the directory", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     const dialog = await screen.findByRole("dialog", { name: /Release API/ });
     expect(screen.getByRole("tab", { name: "Plugin details" })).toHaveAttribute(
       "aria-selected",
@@ -340,7 +340,7 @@ describe("detail modal", () => {
 
   test("edits inline in one dialog and preserves drafts while switching tabs", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit"));
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
@@ -371,7 +371,7 @@ describe("detail modal", () => {
 
   test("opens legacy authentication configuration without stacking dialogs", async () => {
     mockQuery = new URLSearchParams("configure=authentication");
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await screen.findByRole("dialog", { name: /Release API/ });
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("tab", { name: "Authentication" })).toHaveAttribute(
@@ -384,7 +384,7 @@ describe("detail modal", () => {
     const user = setupUser();
     render(
       <>
-        <OpenAPIPluginDetailPage toolId={42} />
+        <OpenAPIPluginModal toolId={42} />
         <BackgroundRefresh />
       </>
     );
@@ -427,7 +427,7 @@ describe("background detail reads", () => {
       const user = setupUser();
       render(
         <>
-          <OpenAPIPluginDetailPage toolId={42} />
+          <OpenAPIPluginModal toolId={42} />
           <BackgroundRefresh />
         </>,
         { swrConfig: { onError } }
@@ -481,7 +481,7 @@ describe("background detail reads", () => {
     const onError = jest.fn();
     render(
       <>
-        <OpenAPIPluginDetailPage toolId={42} />
+        <OpenAPIPluginModal toolId={42} />
         <BackgroundRefresh />
       </>,
       { swrConfig: { onError } }
@@ -498,7 +498,7 @@ describe("background detail reads", () => {
 describe("permission-bearing detail reads", () => {
   test("shows tools and hides all write controls for unstamped records", async () => {
     tool = { ...tool, permissions: undefined };
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     expect(await findToolsPreview()).toBeInTheDocument();
     expect(screen.getByText("/releases")).toBeInTheDocument();
     expect(
@@ -526,7 +526,7 @@ describe("permission-bearing detail reads", () => {
 
   test("opens requested authentication once after the stamped tool loads and preserves other query parameters", async () => {
     mockQuery = new URLSearchParams("configure=authentication&source=create");
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await screen.findByRole("dialog");
     expect(screen.getByRole("tab", { name: "Authentication" })).toHaveAttribute(
       "aria-selected",
@@ -542,7 +542,7 @@ describe("permission-bearing detail reads", () => {
   test("does not open authentication from a query without the authenticate capability", async () => {
     tool = { ...tool, permissions: { edit: true, authenticate: false } };
     mockQuery = new URLSearchParams("configure=authentication");
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await findToolsPreview();
     expect(screen.getByRole("dialog", { name: /Release API/ })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Authentication" })).toHaveAttribute(
@@ -554,7 +554,7 @@ describe("permission-bearing detail reads", () => {
   });
 
   test("shows a missing-plugin state instead of requesting an unstamped detail", async () => {
-    render(<OpenAPIPluginDetailPage toolId={99} />);
+    render(<OpenAPIPluginModal toolId={99} />);
     expect(await screen.findByText("Plugin not found")).toBeInTheDocument();
     expect(writes).toEqual([]);
   });
@@ -571,7 +571,7 @@ describe.each(["metadata", "schema", "authentication"] as const)(
         listResponse = initialRead;
         render(
           <ToastProvider>
-            <OpenAPIPluginDetailPage toolId={42} />
+            <OpenAPIPluginModal toolId={42} />
           </ToastProvider>
         );
         await user.click(
@@ -668,7 +668,7 @@ describe("focused edit workflows", () => {
       listResponse = async () =>
         json([{ ...tool, custom_headers: customHeaders }]);
       const user = setupUser();
-      render(<OpenAPIPluginDetailPage toolId={42} />);
+      render(<OpenAPIPluginModal toolId={42} />);
       await user.click(
         await screen.findByRole("tab", { name: "Authentication" })
       );
@@ -684,7 +684,7 @@ describe("focused edit workflows", () => {
 
   test("can clear saved OAuth with None", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit authentication"));
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: "Token URL" })).toHaveValue(
@@ -721,7 +721,7 @@ describe("focused edit workflows", () => {
     tool = { ...tool, oauth_config_id: null };
     failNextLink = true;
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit authentication"));
     if (!screen.queryByRole("textbox", { name: "Authorization URL" })) {
       await user.click(await screen.findByRole("combobox"));
@@ -773,7 +773,7 @@ describe("focused edit workflows", () => {
     "a successful switch to headers followed by refresh failure never reuses the deleted OAuth ID with %s",
     async (credentials) => {
       const user = setupUser();
-      render(<OpenAPIPluginDetailPage toolId={42} />);
+      render(<OpenAPIPluginModal toolId={42} />);
       await user.click(await findEditorTab("Edit authentication"));
       await waitFor(() =>
         expect(screen.getByRole("textbox", { name: "Token URL" })).toHaveValue(
@@ -851,7 +851,7 @@ describe("focused edit workflows", () => {
     };
     failNextLink = true;
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit authentication"));
     await user.click(await screen.findByRole("combobox"));
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
@@ -910,7 +910,7 @@ describe("focused edit workflows", () => {
 
   test("preserves OAuth on metadata saves and waits for stamped list revalidation", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit"));
     const dialog = screen.getByRole("dialog");
     await user.clear(within(dialog).getByRole("textbox", { name: "Name" }));
@@ -967,7 +967,7 @@ describe("focused edit workflows", () => {
     tool = { ...tool, oauth_config_id: 99 };
     configs = new Set([99, 100]);
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit"));
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Deployment API" },
@@ -1008,7 +1008,7 @@ describe("focused edit workflows", () => {
 
   test("does not write metadata when the fresh tool no longer permits editing", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit"));
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Deployment API" },
@@ -1025,7 +1025,7 @@ describe("focused edit workflows", () => {
 
   test("preserves authentication when editing the reused schema form", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit schema"));
     const dialog = await screen.findByRole("dialog");
     const updatedDefinition = {
@@ -1061,7 +1061,7 @@ describe("focused edit workflows", () => {
 
   test("keeps masked OAuth credentials unchanged on authentication saves", async () => {
     const user = setupUser();
-    render(<OpenAPIPluginDetailPage toolId={42} />);
+    render(<OpenAPIPluginModal toolId={42} />);
     await user.click(await findEditorTab("Edit authentication"));
     const dialog = await screen.findByRole("dialog");
     await waitFor(() =>
@@ -1108,7 +1108,7 @@ describe("focused edit workflows", () => {
 });
 
 test("keeps lifecycle controls on the Plugins directory, not detail", async () => {
-  render(<OpenAPIPluginDetailPage toolId={42} />);
+  render(<OpenAPIPluginModal toolId={42} />);
   await findEditorTab("Edit schema");
   expect(
     screen.queryByRole("button", {

@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "أضف مخطط OpenAPI لإضافة إجراءات مخصصة.",
         "title": "إضافة إجراء OpenAPI"
       },
       "cancelButton": {

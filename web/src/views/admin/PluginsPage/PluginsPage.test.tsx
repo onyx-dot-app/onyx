@@ -11,7 +11,7 @@ import {
 } from "@tests/setup/test-utils";
 import PluginsPage from "@/views/admin/PluginsPage";
 import type MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
-import type OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
+import type OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { SUGGESTED_MCP_PLUGINS } from "@/lib/plugins/catalog";
@@ -67,21 +67,18 @@ jest.mock(
     },
   })
 );
-jest.mock(
-  "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal",
-  () => ({
-    __esModule: true,
-    default: function MockOpenAPIModal(
-      props: ComponentProps<typeof OpenAPIPluginCreateModal>
-    ) {
-      return props.open ? (
-        <div role="dialog" aria-label="OpenAPI setup">
-          <button onClick={() => props.onCreated(7)}>Create action</button>
-        </div>
-      ) : null;
-    },
-  })
-);
+jest.mock("@/views/admin/PluginsPage/OpenAPIPluginModal", () => ({
+  __esModule: true,
+  default: function MockOpenAPIModal(
+    props: ComponentProps<typeof OpenAPIPluginModal>
+  ) {
+    return (
+      <div role="dialog" aria-label="OpenAPI setup">
+        <button onClick={() => props.onCreated?.(7)}>Create action</button>
+      </div>
+    );
+  },
+}));
 
 const mockServer: MCPServer = {
   connection_status: null,

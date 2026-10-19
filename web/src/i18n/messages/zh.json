@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "添加 OpenAPI 架构以添加自定义操作。",
         "title": "添加 OpenAPI 操作"
       },
       "cancelButton": {

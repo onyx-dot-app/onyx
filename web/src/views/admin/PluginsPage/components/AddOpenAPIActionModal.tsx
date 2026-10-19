@@ -44,6 +44,8 @@ interface AddOpenAPIActionModalProps {
   onConfigureAuthentication?: (
     draft: Parameters<typeof createCustomTool>[0]
   ) => void;
+  /** Runs when the schema text changes, so a checked draft can go stale. */
+  onDefinitionChange?: () => void;
   skipOverlay?: boolean;
   onSuccess?: (tool: ToolSnapshot) => Promise<void> | void;
   onUpdate?: (tool: ToolSnapshot) => Promise<void> | void;
@@ -89,6 +91,7 @@ interface FormContentProps {
   onBusyChange?: (busy: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
   configureAuthentication?: boolean;
+  onDefinitionChange?: () => void;
   handleClose: () => void;
   existingTool: ToolSnapshot | null;
   title?: string | RichStr;
@@ -105,6 +108,7 @@ function FormContent({
   existingTool,
   title,
   configureAuthentication = false,
+  onDefinitionChange,
 }: FormContentProps) {
   const t = useTranslations("actions");
   const {
@@ -218,6 +222,7 @@ function FormContent({
       : t("addOpenApiModal.submitButton.addLabel");
 
   useEffect(() => {
+    onDefinitionChange?.();
     if (!values.definition.trim()) {
       setCheckedDefinition(null);
       setFieldError("definition", "");
@@ -229,9 +234,37 @@ function FormContent({
       debouncedValidateDefinition.cancel();
       validationRequest.current += 1;
     };
-  }, [values.definition, debouncedValidateDefinition, setFieldError]);
+  }, [
+    values.definition,
+    debouncedValidateDefinition,
+    setFieldError,
+    onDefinitionChange,
+  ]);
 
-  const inlineSave = (
+  // Add mode checks the schema, then hands the draft on for authentication.
+  const continueButton = (
+    <Button
+      type="button"
+      disabled={!values.definition.trim() || checking || isSubmitting}
+      onClick={async () => {
+        setChecking(true);
+        debouncedValidateDefinition.cancel();
+        const validation = validateDefinition(values.definition, setFieldError);
+        const request = validationRequest.current;
+        try {
+          if (await validation) await submitForm();
+        } finally {
+          if (request === validationRequest.current) setChecking(false);
+        }
+      }}
+    >
+      {checking ? t("mcpSetup.checking") : t("mcpSetup.continue")}
+    </Button>
+  );
+
+  const inlineSave = !isEditMode ? (
+    continueButton
+  ) : (
     <Button
       disabled={
         isSubmitting ||
@@ -254,6 +287,7 @@ function FormContent({
           padding={4}
           icon={PLUGIN_KIND_ICONS.openapi}
           title={title ?? modalTitle}
+          description={t("addOpenApiModal.addHeader.description")}
           onClose={handleClose}
         />
       )}
@@ -318,7 +352,7 @@ function FormContent({
             </Text>
           )}
         </div>
-        {presentation === "inline" ? (
+        {presentation === "inline" && isEditMode ? (
           currentDefinition && (
             <div className="flex items-center justify-between gap-3">
               <Text font="secondary-body" color="text-03">
@@ -406,27 +440,7 @@ function FormContent({
               {t("addOpenApiModal.cancelButton.label")}
             </Button>
             {!isEditMode ? (
-              <Button
-                type="button"
-                disabled={!values.definition.trim() || checking}
-                onClick={async () => {
-                  setChecking(true);
-                  debouncedValidateDefinition.cancel();
-                  const validation = validateDefinition(
-                    values.definition,
-                    setFieldError
-                  );
-                  const request = validationRequest.current;
-                  try {
-                    if (await validation) await submitForm();
-                  } finally {
-                    if (request === validationRequest.current)
-                      setChecking(false);
-                  }
-                }}
-              >
-                {checking ? t("mcpSetup.checking") : t("mcpSetup.continue")}
-              </Button>
+              continueButton
             ) : (
               <Button
                 disabled={
@@ -463,6 +477,7 @@ function OpenAPIActionEditor({
   title,
   initialDefinition,
   onConfigureAuthentication,
+  onDefinitionChange,
   modalOpen = false,
   onModalOpenChange,
 }: AddOpenAPIActionModalProps & {
@@ -612,6 +627,7 @@ function OpenAPIActionEditor({
         existingTool={existingTool}
         title={title}
         configureAuthentication={!!onConfigureAuthentication}
+        onDefinitionChange={onDefinitionChange}
       />
     </Formik>
   );

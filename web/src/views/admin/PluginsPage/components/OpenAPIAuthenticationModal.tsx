@@ -58,6 +58,8 @@ interface OpenAPIAuthenticationModalProps {
   draftValues?: OpenAPIAuthFormValues;
   onBack?: (values: OpenAPIAuthFormValues) => void;
   submitLabel?: string;
+  /** Lets the form submit without changes, such as an add that keeps no auth. */
+  allowPristineSubmit?: boolean;
   isOpen: boolean;
   onClose: () => void;
   title: string;
@@ -110,6 +112,7 @@ export default function OpenAPIAuthenticationModal({
   draftValues,
   onBack,
   submitLabel,
+  allowPristineSubmit = false,
 }: OpenAPIAuthenticationModalProps) {
   const t = useTranslations("actions");
   const { appName } = useSettings();
@@ -410,7 +413,7 @@ export default function OpenAPIAuthenticationModal({
               !isValid ||
               isSubmitting ||
               shouldDisableForm ||
-              (!onBack && !dirty)
+              (!onBack && !allowPristineSubmit && !dirty)
             }
             type="submit"
             form={formId}

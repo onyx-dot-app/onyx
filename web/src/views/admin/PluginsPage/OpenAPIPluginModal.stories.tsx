@@ -5,7 +5,7 @@ import { SWRConfig, type State } from "swr";
 import { ToastProvider } from "@opal/layouts";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
-import OpenAPIPluginDetailPage from "@/views/admin/PluginsPage/OpenAPIPluginDetailPage";
+import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 import messages from "@/i18n/messages/en.json";
 
 const tool: ToolSnapshot = {
@@ -119,7 +119,7 @@ function OpenAPIPluginStory({ scenario = "ready" }: OpenAPIPluginStoryProps) {
     >
       <ToastProvider>
         <div className="h-screen bg-background-tint-01">
-          <OpenAPIPluginDetailPage toolId={42} />
+          <OpenAPIPluginModal toolId={42} />
         </div>
       </ToastProvider>
     </SWRConfig>

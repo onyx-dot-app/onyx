@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "Add OpenAPI schema to add custom actions.",
         "title": "Add OpenAPI action"
       },
       "cancelButton": {

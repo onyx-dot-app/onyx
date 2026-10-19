@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "OpenAPI スキーマを追加して、カスタムアクションを追加します。",
         "title": "OpenAPI アクションを追加"
       },
       "cancelButton": {

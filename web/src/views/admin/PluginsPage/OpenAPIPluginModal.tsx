@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
 import {
   Button,
   InputTextArea,
@@ -16,7 +17,9 @@ import { IconLoader } from "@opal/loaders";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
-import { updateCustomTool } from "@/lib/plugins/openapi/svc";
+import { createCustomTool, updateCustomTool } from "@/lib/plugins/openapi/svc";
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
+import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import AddOpenAPIActionModal from "@/views/admin/PluginsPage/components/AddOpenAPIActionModal";
@@ -30,8 +33,15 @@ import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 
-interface OpenAPIPluginDetailPageProps {
-  toolId: number;
+type SchemaDraft = Parameters<typeof createCustomTool>[0];
+
+interface OpenAPIPluginModalProps {
+  /** The tool to edit. Without it, the modal adds a new tool. */
+  toolId?: number;
+  /** Add mode only: closes the modal. Edit mode routes back to the list. */
+  onClose?: () => void;
+  /** Add mode only: runs with the new tool's id once it is saved. */
+  onCreated?: (toolId: number) => void;
 }
 
 interface MetadataEditorProps {
@@ -143,10 +153,20 @@ function MetadataEditor({
   );
 }
 
-export default function OpenAPIPluginDetailPage({
+/**
+ * The one modal for an OpenAPI plugin, for both add and edit. Add mode opens
+ * on Schema; Continue checks the schema and unlocks Authentication, where Add
+ * saves the tool. Server and Tools need a saved tool, so add mode disables them.
+ */
+export default function OpenAPIPluginModal({
   toolId,
-}: OpenAPIPluginDetailPageProps) {
+  onClose,
+  onCreated,
+}: OpenAPIPluginModalProps) {
+  const isAdd = toolId === undefined;
   const t = useTranslations("actions");
+  const { mutate } = useSWRConfig();
+  const defaultChat = useDefaultAssistantConfiguration();
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
@@ -156,9 +176,16 @@ export default function OpenAPIPluginDetailPage({
     mutateOpenApiTools,
     refreshOpenApiTools,
   } = useOpenApiTools();
-  const tool = openApiTools?.find((candidate) => candidate.id === toolId);
-  const [tab, setTab] = useState("server");
-  const [visited, setVisited] = useState(() => new Set(["server"]));
+  const tool = isAdd
+    ? undefined
+    : openApiTools?.find((candidate) => candidate.id === toolId);
+  const initialTab = isAdd ? "schema" : "server";
+  const [tab, setTab] = useState(initialTab);
+  const [visited, setVisited] = useState(() => new Set([initialTab]));
+  const [draft, setDraft] = useState<SchemaDraft | null>(null);
+  const savedId = useRef<number | null>(null);
+  const pendingOAuthConfigId = useRef<number | null>(null);
+  const clearDraft = useCallback(() => setDraft(null), []);
   const [busy, setBusy] = useState(false);
   const [metadataDirty, setMetadataDirty] = useState(false);
   const [schemaDirty, setSchemaDirty] = useState(false);
@@ -170,7 +197,7 @@ export default function OpenAPIPluginDetailPage({
   const [toolSearch, setToolSearch] = useState("");
   const consumedConfigure = useRef(new Set<number>());
   const authenticationSession = useRef<{
-    toolId: number;
+    toolId: number | undefined;
     pendingOAuthConfigId: number | null;
     savedAuthentication?: { oauthConfigId: number | null; formKey: string };
   }>({ toolId, pendingOAuthConfigId: null });
@@ -218,8 +245,66 @@ export default function OpenAPIPluginDetailPage({
   function closeDetail() {
     if (busy) return;
     guard.requestLeave(() =>
-      router.replace("/admin/plugins", { scroll: false })
+      isAdd ? onClose?.() : router.replace("/admin/plugins", { scroll: false })
     );
+  }
+
+  async function create(values: OpenAPIAuthFormValues) {
+    if (!draft) return;
+    if (defaultChat.canEdit && (!defaultChat.data || defaultChat.error))
+      throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
+    // A retry after a failed authentication save updates the saved tool.
+    const existing =
+      savedId.current === null
+        ? null
+        : (await refreshOpenApiTools())?.find(
+            (candidate) => candidate.id === savedId.current
+          );
+    if (savedId.current !== null && !existing)
+      throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
+    const response = existing
+      ? await updateCustomTool(existing.id, {
+          name: draft.name,
+          description: draft.description,
+          definition: draft.definition,
+          oauth_config_id: existing.oauth_config_id ?? null,
+        })
+      : await createCustomTool(draft);
+    if (response.error || !response.data)
+      throw new Error(
+        response.error ?? t("addOpenApiModal.toasts.createFailed")
+      );
+    savedId.current = response.data.id;
+    const created = (await refreshOpenApiTools())?.find(
+      (candidate) => candidate.id === savedId.current
+    );
+    if (!created)
+      throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
+    if (
+      values.authMethod !== "none" ||
+      created.oauth_config_id ||
+      created.passthrough_auth ||
+      created.custom_headers?.length
+    ) {
+      if (!can(created, "authenticate"))
+        throw new Error(t("addOpenApiModal.editConfigsButton.disabledTooltip"));
+      await saveOpenApiAuthentication({
+        tool: created,
+        values,
+        pendingOAuthConfigId: pendingOAuthConfigId.current,
+        onOAuthConfigCreated: (id) => {
+          pendingOAuthConfigId.current = id;
+        },
+      });
+      if (values.authMethod === "oauth") pendingOAuthConfigId.current = null;
+      await refreshOpenApiTools();
+    }
+    if (defaultChat.canEdit) {
+      await defaultChat.updateTools([created.id], true);
+      await refreshOpenApiTools();
+    }
+    await refreshMemberPluginCaches(mutate);
+    if (active.current) onCreated?.(created.id);
   }
 
   async function saveMetadata(
@@ -312,10 +397,13 @@ export default function OpenAPIPluginDetailPage({
     none: t("mcpAuthModal.authType.none.label"),
   }[authMethod];
 
-  function selectTab(value: string) {
-    if (busy) return;
+  function showTab(value: string) {
     setTab(value);
     setVisited((current) => new Set([...current, value]));
+  }
+
+  function selectTab(value: string) {
+    if (!busy) showTab(value);
   }
 
   return (
@@ -328,21 +416,27 @@ export default function OpenAPIPluginDetailPage({
       <PluginModalContent>
         {!guard.confirmationOpen && (
           <Modal.Header
-            title={tool?.name ?? t("plugins.openapi.detailsTitle")}
+            title={
+              isAdd
+                ? t("plugins.openapi.createTitle")
+                : (tool?.name ?? t("plugins.openapi.detailsTitle"))
+            }
             icon={PLUGIN_KIND_ICONS.openapi}
             description={
-              serverUrl ||
-              tool?.description ||
-              t("plugins.openapi.detailDescription")
+              isAdd
+                ? t("addOpenApiModal.addHeader.description")
+                : serverUrl ||
+                  tool?.description ||
+                  t("plugins.openapi.detailDescription")
             }
             onClose={closeDetail}
           />
         )}
         <div className={guard.confirmationOpen ? "hidden" : "contents"}>
           <Modal.Body alignItems="stretch">
-            {!tool && isLoading ? (
+            {!isAdd && !tool && isLoading ? (
               <IconLoader />
-            ) : !tool ? (
+            ) : !isAdd && !tool ? (
               <div className="flex flex-col items-start gap-4">
                 <Content
                   sizePreset="section"
@@ -371,16 +465,19 @@ export default function OpenAPIPluginDetailPage({
                 gap={6}
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="server" disabled={busy}>
+                  <Tabs.Trigger value="server" disabled={busy || isAdd}>
                     {t("plugins.openapi.detailsTitle")}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="schema" disabled={busy}>
                     {t("plugins.openapi.schemaTitle")}
                   </Tabs.Trigger>
-                  <Tabs.Trigger value="authentication" disabled={busy}>
+                  <Tabs.Trigger
+                    value="authentication"
+                    disabled={busy || (isAdd && !draft)}
+                  >
                     {t("mcpDetail.authentication")}
                   </Tabs.Trigger>
-                  <Tabs.Trigger value="tools" disabled={busy}>
+                  <Tabs.Trigger value="tools" disabled={busy || isAdd}>
                     {t("mcpTools.title")}
                   </Tabs.Trigger>
                 </Tabs.List>
@@ -390,7 +487,7 @@ export default function OpenAPIPluginDetailPage({
                   hidden={tab !== "server"}
                 >
                   <div className="h-[min(24rem,45dvh)] overflow-y-auto">
-                    {canEdit ? (
+                    {!tool ? null : canEdit ? (
                       <MetadataEditor
                         key={tool.id}
                         tool={tool}
@@ -419,7 +516,20 @@ export default function OpenAPIPluginDetailPage({
                 >
                   <div className="h-[min(24rem,45dvh)] overflow-y-auto">
                     {visited.has("schema") &&
-                      (canEdit ? (
+                      (!tool ? (
+                        <AddOpenAPIActionModal
+                          presentation="inline"
+                          active={tab === "schema"}
+                          footerTarget={footerTarget}
+                          onBusyChange={setBusy}
+                          onDirtyChange={setSchemaDirty}
+                          onDefinitionChange={clearDraft}
+                          onConfigureAuthentication={(next) => {
+                            setDraft(next);
+                            showTab("authentication");
+                          }}
+                        />
+                      ) : canEdit ? (
                         <AddOpenAPIActionModal
                           presentation="inline"
                           active={tab === "schema"}
@@ -449,7 +559,26 @@ export default function OpenAPIPluginDetailPage({
                 >
                   <div className="h-[min(24rem,45dvh)] overflow-y-auto">
                     {visited.has("authentication") &&
-                      (canAuthenticate ? (
+                      (!tool ? (
+                        <OpenAPIAuthenticationModal
+                          presentation="inline"
+                          active={tab === "authentication"}
+                          footerTarget={footerTarget}
+                          onBusyChange={setBusy}
+                          onDirtyChange={setAuthDirty}
+                          isOpen
+                          title={t("mcpDetail.authentication")}
+                          entityName={draft?.name}
+                          allowNoAuthentication
+                          allowPristineSubmit
+                          defaultMethod="none"
+                          onClose={closeDetail}
+                          submitLabel={t(
+                            "addOpenApiModal.submitButton.addLabel"
+                          )}
+                          onConnect={create}
+                        />
+                      ) : canAuthenticate ? (
                         <OpenAPIAuthenticationModal
                           key={authenticationFormKey}
                           presentation="inline"

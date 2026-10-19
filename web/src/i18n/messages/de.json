@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "Fügen Sie ein OpenAPI-Schema hinzu, um benutzerdefinierte Aktionen zu ergänzen.",
         "title": "OpenAPI-Aktion hinzufügen"
       },
       "cancelButton": {

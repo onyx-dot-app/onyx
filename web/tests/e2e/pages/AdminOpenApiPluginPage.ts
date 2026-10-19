@@ -32,8 +32,8 @@ export class AdminOpenApiPluginPage {
       .getByPlaceholder("Enter your OpenAPI schema here")
       .fill(schema);
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-    await this.page
-      .getByRole("dialog", { name: `Connect to ${name}`, exact: true })
+    // Continue moves the same dialog to its Authentication tab.
+    await dialog
       .getByRole("button", { name: "Add Action", exact: true })
       .click();
     await this.expectDetail(name);

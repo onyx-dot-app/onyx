@@ -176,6 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
+        "description": "OpenAPI 스키마를 추가하여 사용자 지정 액션을 추가하세요.",
         "title": "OpenAPI 액션 추가"
       },
       "cancelButton": {

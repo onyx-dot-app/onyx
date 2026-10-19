@@ -33,7 +33,7 @@ import PluginAddCatalogModal, {
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/views/admin/PluginsPage/components/CreateCustomAppModal";
 import MCPPluginSetupModal from "@/views/admin/PluginsPage/components/mcp/MCPPluginSetupModal";
-import OpenAPIPluginCreateModal from "@/views/admin/PluginsPage/components/OpenAPIPluginCreateModal";
+import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useSettings } from "@/lib/settings/hooks";
@@ -403,8 +403,7 @@ export default function PluginsPage() {
           />
         )}
         {creation?.kind === "openapi" && (
-          <OpenAPIPluginCreateModal
-            open
+          <OpenAPIPluginModal
             onClose={() => setDialog(null)}
             onCreated={(toolId) => {
               setDialog(null);
