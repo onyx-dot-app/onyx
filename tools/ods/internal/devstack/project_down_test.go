@@ -115,3 +115,19 @@ func TestFindProjectRejectsUnknownProject(t *testing.T) {
 		t.Fatal("found a stack that does not exist")
 	}
 }
+
+func TestCleanupRowKeepsContainersOfAnotherOwner(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "shared-data")
+	secondary := StackRow{Project: stack.Project, Mode: Isolated, StateDir: t.TempDir(), Status: StatusOrphaned}
+	compose := &fakeCompose{}
+	result, err := CleanupRow(context.Background(), stack.Registry, secondary, compose.down, ProjectOptions{LockWait: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compose.projects) != 0 || result.ComposeDown {
+		t.Fatal("a secondary state stopped the owner's containers")
+	}
+	if _, err := os.Stat(ownerPath(stack.Registry, stack.Project)); err != nil {
+		t.Fatalf("a secondary state removed the owner record: %v", err)
+	}
+}

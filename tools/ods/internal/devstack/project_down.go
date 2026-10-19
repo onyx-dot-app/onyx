@@ -144,7 +144,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	if compose == nil {
 		return result, nil
 	}
-	if infra {
+	if infra && !ownedElsewhere(registry, row) {
 		if err := compose(ctx, row.Project, opts.Volumes); err != nil {
 			return result, err
 		}
@@ -196,4 +196,14 @@ func removeOrphanOwner(registry *Registry, row StackRow) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// ownedElsewhere reports whether the project's owner record names another
+// state that still exists, so row must not stop the project's containers.
+func ownedElsewhere(registry *Registry, row StackRow) bool {
+	if registry == nil {
+		return false
+	}
+	owner := readOwner(ownerPath(registry, row.Project))
+	return owner.Err == nil && owner.StateDir != row.StateDir && pathExists(filepath.Join(owner.StateDir, stateFileName))
 }
