@@ -82,7 +82,7 @@ Repeat the profile and local-model flag with `start` or `restart`. Use `up` to c
 - Legacy datasets are preserved. If several exist at first shared startup, select the intended one with `--project`; never choose by timestamps. Stop its legacy stack with `--isolated` before adoption.
 - Legacy discovery reads saved `ods stack` state. Compose-only setups need their previous `--project NAME` explicitly. Use `ods --project NAME stack up` to save that shared selection before using the default commands.
 - Project ownership is durable. An explicit project collision fails, including in isolated mode. Select a different project for independent infrastructure.
-- ODS keeps a stack's ports while it runs. `stop` and `down` release them, and a stopped stack's leases can go to another stack. Read status again after a restart or start.
+- ODS keeps a stack's ports while it runs. `stop` releases the application ports (web, API, MCP, model, metrics) and keeps the infrastructure ports. `down` releases all of them. Another stack can reclaim the ports of a stopped stack, and a stopped stack moves back to the lowest free port. Read status again after a restart or start.
 - The selected stack lock coordinates lifecycle changes. Shared handoffs serialize; isolated stacks can start independently.
 - Foreground services and full stacks use the same service specifications and process launchers. A full stack replaces a same-checkout preview and retains its port.
 - Database operations target exact project containers and use state/project locks. Do not work around a target conflict or another checkout's ownership guard.
@@ -101,6 +101,8 @@ Use shared mode for sequential development and frontend previews. Use isolated m
 ```
 
 Inspect the reported phase, failed services, and logs when startup is incomplete. Re-run `up` to recover a partial start. Preserve healthy services and report optional integrations that remain unavailable.
+
+If the stack starts on unexpected ports, or Docker resources run low, run `"$ODS" stack ls --all` to see the other stacks on the machine.
 
 Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs in a background terminal when continued observation is needed.
 
@@ -134,17 +136,31 @@ After shutdown, inspect status to confirm the targeted stack stopped. Check that
 
 ## Find and stop old stacks
 
-List every stack on the machine from any directory:
+List every stack on the machine. The command works from any directory, takes no locks, and changes nothing:
 
 ```bash
 "$ODS" stack ls --all
+"$ODS" stack ls --json
 ```
 
-An `orphaned` stack has no worktree any more. Stop it, and release its ports, with:
+Read the `status` of each stack:
+
+- `active`: application processes run.
+- `app-stopped`: containers run, and `stack stop` stopped the application.
+- `infra-only`: containers run, and no application process does.
+- `stopped`: nothing runs. `stale-lease`: port leases that no stack uses.
+- `orphaned`: no worktree owns the stack. Its checkout or Compose directory is gone, or the directory is no longer a git worktree.
+
+`"$ODS" stack ls --orphaned` shows only orphans. It exits 3 when it finds one.
+
+Stop an orphaned stack, and release its ports, from any directory:
 
 ```bash
 "$ODS" stack down --project NAME
 ```
 
+This stops the recorded processes, removes the containers, releases the leases, and keeps the volumes.
+`"$ODS" stack prune` does this for every orphaned stack after a confirmation.
+
 Stop other stacks with `stack down` in their root. Add `--isolated` for an isolated stack.
-Do not use `--force` or `stack prune` on stacks that other agents may still use, unless the user asks.
+`down --project` refuses a stack that still runs in an existing worktree. Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks. Other agents may still use those stacks.
