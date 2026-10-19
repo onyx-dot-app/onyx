@@ -1067,6 +1067,7 @@
         "disableCraft": "Craftで無効にする",
         "enableCraft": "Craftで有効にする",
         "chatDescription": "カスタムエージェントを使わないチャットでこのプラグインを利用可能にします。アクセス制御は引き続き適用されます。",
+        "defaultChatAdminOnly": "デフォルトのチャットでの利用可否を変更できるのは、ワークスペースの管理者のみです。",
         "mcpCraftDescription": "Craft でこのプラグインを利用可能にします。アクセス制御とツールの権限は引き続き適用されます。",
         "craftAppDescription": "Craft でこのアプリを利用可能にします。接続と承認の要件は引き続き適用されます。",
         "workspaceDescription": "このプラグインをChatとカスタムエージェントで利用可能にします。アクセス制御と認証要件は引き続き適用されます。"

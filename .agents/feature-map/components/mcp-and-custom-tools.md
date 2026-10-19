@@ -74,16 +74,14 @@ member's Craft entitlement. MCP setup and admin tools retain their deployment ga
 Admin row actions sit beside the detail link in normal flex flow.
 The detail link covers the card, including blank space above and below row actions.
 Action buttons remain separate click targets above that link.
-Availability controls use workspace enable/disable wording. Configuration switches are form drafts.
-Save applies availability changes; closing uses the form unsaved-changes guard.
-Disabling an OpenAPI plugin preserves its settings and credentials.
-OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
-independently of default Chat attachments.
+Configuration switches remain form drafts until Save; closing uses the unsaved-changes guard.
+OpenAPI controls and indicators follow default Chat selection, independently of custom-agent attachments.
+Turning off default Chat preserves plugin settings, credentials, and custom-agent availability.
 MCP setup places main Chat and Craft availability switches below access controls. Configuration editors
 show the same workspace controls below access controls. Saving Chat enablement starts authentication when required.
 Directory indicators are read-only; plugin rows no longer open availability menus.
-OpenAPI setup and Configuration expose workspace availability as a switch.
-New actions default on; disabling during setup creates them disabled without attaching them to default Chat.
+OpenAPI setup and Configuration expose Enable in default Chat.
+Full-admin creation defaults this switch on; turning it off creates the plugin without a default Chat attachment.
 MCP copy describes default Chat as chats without a custom agent.
 Descriptions distinguish surface availability from access controls and tool permissions.
 Only full admins can change main Chat defaults. Craft controls follow deployment availability
@@ -164,12 +162,18 @@ At send time, default Chat suppresses forced MCP/OpenAPI choices when personal
 preferences disable them or member metadata is unavailable. Stored per-chat
 choices remain unchanged. Custom agents and built-in forced Search retain their
 existing behavior.
-Enabled full-admin OpenAPI creation and the editor Enable switch attach the action to default
-Chat through `useDefaultAssistantConfiguration`, preserving other tool selections.
-An already-enabled action does not change its default Chat attachment when other configuration fields save.
-Scoped action managers retain status-only controls and cannot change default Chat attachments.
-Successful lifecycle writes refresh member catalogs and agent rosters. Disconnect
-disables the action globally but retains its agent attachments for later re-enabling.
+OpenAPI creation and Configuration use an Enable in default Chat switch. Changes
+remain drafts until Save and update default-persona attachments through
+`useDefaultAssistantConfiguration`, preserving other tool selections. Metadata-only
+saves do not change those attachments. Only full workspace admins can change this
+setting; other action managers can still edit authorized metadata and authentication.
+New full-admin actions default to selected for Chat. Creation by other managers
+does not attach the action to default Chat.
+An OpenAPI action exists independently of its default Chat selection. Existing
+actions remain available to authorized custom agents, subject to authentication.
+Legacy disabled actions remain off in default Chat until explicitly enabled; see §4.5.
+Deleting the action removes it from the workspace. Successful writes refresh
+member catalogs and agent rosters.
 Return-intent readiness waits for the selected resource's roster and connection
 state. Non-OAuth OpenAPI tools do not wait for unrelated OAuth status requests.
 
@@ -183,18 +187,18 @@ Installed rows show a status indicator beside the delete action.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
 neutral gray when disabled.
-Admin indicators show workspace availability only; individual authentication
+Admin indicators show configured surface availability only; individual authentication
 never changes their color or tooltip. Personal pages retain orange needs-auth
 indicators. Tooltips show both workspace states when Craft is available.
-OpenAPI dots follow the action's enabled flag.
+OpenAPI dots follow the action's `default_chat_enabled` summary.
 The status control uses a compact borderless circle and a neutral two-column tooltip.
 MCP Chat state comes from the admin
 list's `default_chat_enabled` summary, not credential connection status.
 Missing summaries use a neutral dot with a Chat unknown tooltip.
 
 Add opens the type dropdown and then its native catalog or creation flow.
-OpenAPI creation shows schema entry, descriptions, and workspace availability on the first step, then authorization.
-A divider separates workspace availability from the schema fields. Creation omits the server and endpoint preview.
+OpenAPI creation shows schema entry, descriptions, and default Chat selection on the first step, then authorization.
+A divider separates default Chat selection from the schema fields. Creation omits the server and endpoint preview.
 Back preserves schema and credential drafts. Creation keeps one dialog and backdrop mounted across schema and authentication steps.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
 Existing Craft App edits omit unchanged availability, so unrelated saves preserve concurrent admin changes.
@@ -225,14 +229,14 @@ saves block navigation. The inline Authentication Method has no divider.
 Closing saved OpenAPI details confirms unsaved edits within the same modal frame.
 Keeping edits preserves each mounted form. Authentication saves reject a changed
 OAuth link before writing, so stale values cannot target a replacement config.
-Configuration combines name, description, schema, and workspace availability in one saved form.
+Configuration combines name, description, schema, and default Chat selection in one saved form.
 Description for Humans is optional display text; creation leaves it blank unless entered.
 Creation shows the schema first, then Description for Humans, then Description for Agents.
 Description for Agents edits schema info.description directly; raw schema edits update the same input.
 Schema edits preserve the display name and human description unless those fields are also edited.
-A divider precedes workspace availability. Tools lists endpoints; Configuration has no detected-tool row.
-Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
-header. Tools use the shared endpoint list, search, count, and empty feedback.
+A divider precedes default Chat selection. Tools lists endpoints without enablement controls; Configuration has no detected-tool row.
+Personal OpenAPI details reuse the MCP Connection/Tools tabs, description header,
+and connection-status cards. Tools use the shared endpoint list, search, count, and empty feedback.
 Plugin input descriptions sit below labels and above controls; optional fields have a label suffix.
 Plugin dialogs use the shared large width (50rem) and fit their content.
 Height is capped at 80dvh and the available viewport space, reserving the top offset and bottom gap.
@@ -252,7 +256,7 @@ reads only the caller's skills, filters by external-app ID, and shows search,
 count, preview, per-user enable switches, and loading/retry feedback. Preview reuses the rendered skill instructions within the same modal and backdrop. Back or Escape returns to Skills without losing drafts. Switches remain drafts until Save and respect skill toggle permissions. Cancel discards drafts. Each successful save updates the shared skill cache; retries retain only unsaved changes. Name conflicts offer the same explicit replacement as the Skills page. The confirmation keeps the modal backdrop and remaining drafts; cancelling returns to the draft. The footer links to the app-filtered skills page; no admin metadata is fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
-`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, workspace availability,
+`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, default Chat selection,
 Back navigation, authorization choices and draft retention, invalid JSON, validation failure/pending, saving, creation failure/success,
 and closing/reopening a discarded draft. Network fixtures remain local to each story.
 Explore offers official remote endpoints for Slack, HubSpot, Asana, Linear, Notion,
@@ -264,8 +268,8 @@ Selecting a suggestion fills the MCP setup URL and name. It does not create cred
 or probe every catalog entry on directory load. Skills and external apps remain separate.
 The directory does not install portable plugin packages or claim a complete plugin SDK host.
 
-**MCP server.** The admin enters a URL, reviews detected authentication, then
-sets the name and access. OAuth uses individual accounts; API tokens can be
+**MCP server.** The admin enters a URL, sets the name, access, and surface defaults,
+then configures the detected authentication. OAuth uses individual accounts; API tokens can be
 individual or shared. Servers can also use no authentication or OAuth
 pass-through. Onyx connects, lists the
 server's tools, and shows them as one row per tool. The admin can restrict the
@@ -489,7 +493,7 @@ agent attachments remain unchanged.
 The active MCP editor's Save Changes button appears on the right of the sticky modal footer.
 Authentication Save stays disabled for an unchanged, connected server. Initial setup, reconnection, and failed connection retries remain available.
 Admin detail modals contain editing controls only, with no Delete or Disconnect buttons.
-OpenAPI Configuration saves workspace availability. Delete opens a confirmation
+OpenAPI Configuration saves default Chat selection. Delete opens a confirmation
 over the Plugins directory.
 
 When deployment settings enable Craft, MCP setup and Configuration include a Craft availability switch.
@@ -684,7 +688,7 @@ documented there. This component only ever writes the latter two shapes.
 | `passthrough_auth` | not used | `bool`, forwards the caller's login token |
 | `oauth_config_id` | null (MCP OAuth lives on `MCPServer`, not `Tool`) | optional FK to `OAuthConfig` |
 | `user_id` | null (ownership lives on the server, see §5) | the creating admin's id |
-| `enabled` | per-tool row, toggled via `/admin/tool/status` or `/admin/mcp` server status | same |
+| `enabled` | per-tool row, toggled via `/admin/tool/status` or `/admin/mcp` server status | true for new records; legacy false keeps default Chat off but does not block custom agents (§4.5) |
 
 ### `MCPServer` (`db/models.py:MCPServer`)
 
@@ -904,6 +908,19 @@ authentication; it is separate from OAuth discovery.
    opening the stream (§4.2).
 
 ### 4.5 Custom OpenAPI tools: one schema, many tools
+
+New OpenAPI records have `enabled=true`. Creation rejects `enabled=false`, and
+`/admin/tool/status` rejects global status edits for OpenAPI actions. Default Chat
+selection uses `Persona__Tool` independently of custom-agent attachments.
+
+Legacy records can retain `enabled=false`; no migration rewrites them. Tool snapshots
+report these plugins as enabled for custom-agent selection, but `default_chat_enabled`
+remains false. Default-assistant reads exclude them, so unrelated configuration saves
+cannot turn them on. Runtime construction ignores the legacy flag for custom agents
+and preserves it for default Chat. Access grants and authentication still apply.
+Explicitly selecting a legacy plugin for default Chat sets its stored flag to true
+with the attachment write. Turning off default Chat removes that attachment without
+disabling the plugin. These controls do not disable individual schema operations.
 
 1. Admin submits the schema via `POST /admin/tool/custom`
    (`tool/api.py:create_custom_tool`). `_validate_tool_definition` runs
@@ -1192,10 +1209,11 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   not re-discover the server's tool list until an explicit sync action runs
   `_sync_mcp_server_tools`. Assuming the two behave the same way is a common
   mistake when reasoning about "does my change take effect immediately".
-- **A `Tool.enabled = False` MCP or custom tool stays attached to its
-  personas**, exactly as documented for built-in tools in
+- **A `Tool.enabled = False` MCP or built-in tool stays attached to its
+  personas**, as documented in
   `[[tools-framework]]` contract 9; `Persona__Tool` is availability, not
-  usability.
+  usability. Legacy disabled OpenAPI rows also retain attachments, but only
+  default Chat honors their stored flag; see §4.5.
 - **The disambiguated MCP tool name is only assigned once, at the top of
   `_construct_tools_impl`'s post-loop pass, and is never un-set.** If the
   same `MCPTool` Python object were somehow reused across a name-colliding

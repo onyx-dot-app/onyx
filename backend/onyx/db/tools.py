@@ -2,9 +2,10 @@ from collections.abc import Collection
 from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -81,6 +82,14 @@ def capture_persona_tool_configuration(persona: Persona) -> PersonaToolConfigura
     )
 
 
+def _openapi_tool_clause() -> ColumnElement[bool]:
+    return and_(
+        func.jsonb_typeof(Tool.openapi_schema) == "object",
+        Tool.in_code_tool_id.is_(None),
+        Tool.mcp_server_id.is_(None),
+    )
+
+
 def get_tools(
     db_session: Session,
     *,
@@ -102,17 +111,10 @@ def get_tools(
         )
 
     if only_enabled:
-        query = query.where(Tool.enabled.is_(True))
+        query = query.where(or_(Tool.enabled.is_(True), _openapi_tool_clause()))
 
     if only_openapi:
-        query = query.where(
-            Tool.openapi_schema.is_not(None),
-            # To avoid showing rows that have JSON literal `null` stored in the column to the user.
-            # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
-            func.jsonb_typeof(Tool.openapi_schema) == "object",
-            # Exclude built-in tools that happen to have an openapi_schema
-            Tool.in_code_tool_id.is_(None),
-        )
+        query = query.where(_openapi_tool_clause())
 
     return list(db_session.scalars(query).all())
 
@@ -151,6 +153,7 @@ def get_default_chat_tool_ids(tool_ids: list[int], db_session: Session) -> set[i
             Persona.builtin_persona.is_(True),
             Persona.deleted.is_(False),
             Tool.id.in_(tool_ids),
+            or_(Tool.enabled.is_(True), _openapi_tool_clause().is_not(True)),
         )
         .distinct()
     )

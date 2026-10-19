@@ -1067,6 +1067,7 @@
         "disableCraft": "Craft에서 비활성화",
         "enableCraft": "Craft에서 활성화",
         "chatDescription": "사용자 지정 에이전트가 없는 채팅에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어는 계속 적용됩니다.",
+        "defaultChatAdminOnly": "워크스페이스 관리자만 기본 채팅에서의 사용 가능 여부를 변경할 수 있습니다.",
         "mcpCraftDescription": "Craft에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어와 도구 권한은 계속 적용됩니다.",
         "craftAppDescription": "Craft에서 이 앱을 사용할 수 있게 합니다. 연결 및 승인 요구 사항은 계속 적용됩니다.",
         "workspaceDescription": "Chat 및 사용자 지정 에이전트에서 이 플러그인을 사용할 수 있도록 합니다. 액세스 제어 및 인증 요구 사항은 계속 적용됩니다."

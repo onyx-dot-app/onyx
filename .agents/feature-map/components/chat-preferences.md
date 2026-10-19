@@ -169,7 +169,8 @@ Every row is one setting, traced from its UI control through storage to where
 | Reminder text (persona task prompt) | **Not settable on this page.** Owned by [[agents-personas]] (`Persona.task_prompt`), edited per-agent | `Persona.task_prompt` | `prompt_utils.py:build_reminder_message`, placed last by [[context-assembly]] §4.5 |
 
 Chat Preferences shows built-in tool cards and a link to Plugins. MCP and OpenAPI
-availability is configured in Plugins, not on Chat Preferences.
+default Chat selection is configured in Plugins, not on Chat Preferences.
+OpenAPI selection does not disable custom-agent use; deleting the action removes it from the workspace.
 
 The Plugins configuration forms and Chat Preferences share `useDefaultAssistantConfiguration`
 in `web/src/lib/agents/hooks.ts`. Both use the existing default-assistant API

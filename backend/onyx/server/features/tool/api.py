@@ -41,7 +41,10 @@ from onyx.server.features.tool.models import (
     ToolSnapshot,
     ToolUserPreferences,
 )
-from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import (
+    is_openapi_tool,
+    should_expose_tool_to_fe,
+)
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.tool_implementations.custom.custom_tool import validate_custom_tool_url
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -320,33 +323,36 @@ def update_tools_status(
     tools = get_tools_by_ids(update_data.tool_ids, db_session)
     tools_by_id = {tool.id: tool for tool in tools}
 
-    updated_tools = []
-    missing_tools = []
-
-    for tool_id in update_data.tool_ids:
-        tool = tools_by_id.get(tool_id)
-        if tool:
-            if not can_manage_tool(user, tool):
-                raise OnyxError(
-                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                    "You can only enable or disable actions you created, or ones "
-                    "belonging to an MCP server you own.",
-                )
-            tool.enabled = update_data.enabled
-            updated_tools.append(tool_id)
-        else:
-            missing_tools.append(tool_id)
-
+    missing_tools = [
+        tool_id for tool_id in update_data.tool_ids if tool_id not in tools_by_id
+    ]
     if missing_tools:
         raise HTTPException(
             status_code=404, detail=f"Tools with IDs {missing_tools} not found"
         )
+    for tool_id in update_data.tool_ids:
+        tool = tools_by_id[tool_id]
+        if not can_manage_tool(user, tool):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "You can only enable or disable actions you created, or ones "
+                "belonging to an MCP server you own.",
+            )
+        if is_openapi_tool(tool):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "OpenAPI plugins remain available to custom agents. "
+                "Use the default Chat configuration to control main Chat availability.",
+            )
+
+    for tool_id in update_data.tool_ids:
+        tools_by_id[tool_id].enabled = update_data.enabled
 
     db_session.commit()
 
     return ToolStatusUpdateResponse(
-        updated_count=len(updated_tools),
-        tool_ids=updated_tools,
+        updated_count=len(update_data.tool_ids),
+        tool_ids=update_data.tool_ids,
     )
 
 
@@ -412,6 +418,7 @@ def list_openapi_tools(
             )
         )
 
+    _stamp_default_chat_availability(openapi_tools, db_session)
     _stamp_personal_tool_preferences(openapi_tools, user, db_session)
     return openapi_tools
 
@@ -432,8 +439,17 @@ def get_custom_tool(
             "You can only view actions you manage, or ones an agent in your groups uses.",
         )
     snapshot = ToolSnapshot.from_model(tool)
+    _stamp_default_chat_availability([snapshot], db_session)
     _stamp_personal_tool_preferences([snapshot], user, db_session)
     return snapshot
+
+
+def _stamp_default_chat_availability(
+    tools: list[ToolSnapshot], db_session: Session
+) -> None:
+    selected = get_default_chat_tool_ids([tool.id for tool in tools], db_session)
+    for tool in tools:
+        tool.default_chat_enabled = tool.id in selected
 
 
 def _stamp_personal_tool_preferences(
@@ -522,12 +538,7 @@ def list_tools(
         # All custom tools and available built-in tools are included
         filtered_tools.append(ToolSnapshot.from_model(tool))
 
-    default_chat_tool_ids = get_default_chat_tool_ids(
-        [tool.id for tool in filtered_tools], db_session
-    )
-    for tool in filtered_tools:
-        tool.default_chat_enabled = tool.id in default_chat_tool_ids
-
+    _stamp_default_chat_availability(filtered_tools, db_session)
     _stamp_personal_tool_preferences(filtered_tools, user, db_session)
 
     return filtered_tools

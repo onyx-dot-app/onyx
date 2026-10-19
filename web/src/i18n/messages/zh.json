@@ -1067,6 +1067,7 @@
         "disableCraft": "在 Craft 中禁用",
         "enableCraft": "在 Craft 中启用",
         "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
+        "defaultChatAdminOnly": "只有工作区管理员可以更改默认聊天中的可用性。",
         "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
         "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
         "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"

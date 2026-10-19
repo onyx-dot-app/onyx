@@ -1067,6 +1067,7 @@
         "disableCraft": "Für Craft deaktivieren",
         "enableCraft": "Für Craft aktivieren",
         "chatDescription": "Dieses Plugin in Chats ohne benutzerdefinierten Agenten verfügbar machen. Die Zugriffskontrollen gelten weiterhin.",
+        "defaultChatAdminOnly": "Nur Workspace-Administratoren können die Verfügbarkeit im Standard-Chat ändern.",
         "mcpCraftDescription": "Dieses Plugin in Craft verfügbar machen. Zugriffskontrollen und Tool-Berechtigungen gelten weiterhin.",
         "craftAppDescription": "Diese App in Craft verfügbar machen. Verbindungs- und Genehmigungsanforderungen gelten weiterhin.",
         "workspaceDescription": "Dieses Plugin in Chat und benutzerdefinierten Agenten verfügbar machen. Zugriffsregeln und Authentifizierungsanforderungen gelten weiterhin."

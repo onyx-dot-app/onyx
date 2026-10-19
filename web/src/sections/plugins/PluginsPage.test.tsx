@@ -106,6 +106,7 @@ const tool: ToolSnapshot = {
   chat_selectable: true,
   agent_creation_selectable: true,
   default_enabled: false,
+  default_chat_enabled: true,
   permissions: {},
 };
 const externalApp: ExternalAppAdminResponse = {
@@ -282,9 +283,15 @@ test("lists native records with colliding IDs and permission-aware detail links"
     "/api/settings",
     "/api/tool/openapi",
   ]);
-  const status = screen.getByRole("button", { name: "Chat on" });
+  const status = within(
+    screen.getByRole("group", { name: mockServer.name })
+  ).getByRole("button", { name: "Chat on" });
   expect(status).toBeVisible();
-  expect(screen.getByRole("button", { name: "Enabled" })).toBeVisible();
+  expect(
+    within(screen.getByRole("group", { name: tool.name })).getByRole("button", {
+      name: "Chat on",
+    })
+  ).toBeVisible();
   await setupUser().hover(status);
   const tooltip = await screen.findByRole("tooltip");
   expect(within(tooltip).getByText("Main Chat")).toBeVisible();
@@ -381,7 +388,9 @@ test("the status circle has no availability menu", async () => {
     ],
   });
   render(<PluginsPage />);
-  const status = await screen.findByRole("button", { name: "Chat on" });
+  const status = within(
+    await screen.findByRole("group", { name: mockServer.name })
+  ).getByRole("button", { name: "Chat on" });
   expect(status).not.toHaveAttribute("aria-haspopup");
   await setupUser().click(status);
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -408,7 +417,9 @@ test.each([true, false])(
       ],
     });
     render(<PluginsPage />);
-    const status = await screen.findByRole("button", {
+    const status = within(
+      await screen.findByRole("group", { name: mockServer.name })
+    ).getByRole("button", {
       name: enabled ? "Chat on" : "Chat off",
     });
     expect(
@@ -673,7 +684,7 @@ test("orders cards by availability, then type, then name", async () => {
       { ...mockServer, id: 3, name: "MCP Chat active" },
     ],
     tools: [
-      { ...tool, id: 1, name: "OpenAPI disabled", enabled: false },
+      { ...tool, id: 1, name: "OpenAPI disabled", default_chat_enabled: false },
       { ...tool, id: 2, name: "OpenAPI active" },
     ],
     apps: [
@@ -698,3 +709,28 @@ test("orders cards by availability, then type, then name", async () => {
     ])
   );
 });
+
+test.each([true, false])(
+  "OpenAPI indicator reflects default Chat selection=%s",
+  async (defaultChatEnabled) => {
+    mockNetwork({
+      servers: [],
+      apps: [],
+      tools: [
+        { ...tool, enabled: true, default_chat_enabled: defaultChatEnabled },
+      ],
+    });
+    render(<PluginsPage />);
+    const status = await screen.findByRole("button", {
+      name: defaultChatEnabled ? "Chat on" : "Chat off",
+    });
+    await setupUser().hover(status);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Main Chat");
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      defaultChatEnabled ? "On" : "Off"
+    );
+    expect(
+      screen.getByRole("link", { name: "View Reports API" })
+    ).toBeVisible();
+  }
+);

@@ -92,29 +92,23 @@ test.each([
       }
     );
     const availability = await screen.findByRole("switch", {
-      name: "Enable for workspace",
+      name: "Enable in default Chat",
     });
     expect(availability).toBeChecked();
     if (!enabled) await user.click(availability);
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(
-      screen.queryByRole("switch", { name: "Enable for workspace" })
+      screen.queryByRole("switch", { name: "Enable in default Chat" })
     ).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Add Action" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
     expect(writes).toContainEqual({
       path: "/api/admin/tool/custom",
-      body: expect.objectContaining({ enabled }),
+      body: expect.objectContaining({ enabled: true }),
     });
-    if (!enabled) {
-      expect(
-        writes.some((write) => write.path === "/api/admin/default-assistant")
-      ).toBe(false);
-      return;
-    }
     expect(writes).toContainEqual({
       path: "/api/admin/default-assistant",
-      body: { tool_ids: [99, 42] },
+      body: { tool_ids: enabled ? [99, 42] : [99] },
     });
     expect(
       writes.findIndex((write) => write.path === "/api/admin/tool/custom")

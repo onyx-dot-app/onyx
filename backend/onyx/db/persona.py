@@ -58,7 +58,10 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
-from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import (
+    is_openapi_tool,
+    should_expose_tool_to_fe,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -2153,10 +2156,12 @@ def update_default_assistant_configuration(
             if not should_expose_tool_to_fe(tool):
                 raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
 
-            # A disabled tool stays attached, because disabling one does not detach
-            # it. Callers resend the whole list, so rejecting a disabled id here
-            # failed every update rather than just the tool being toggled.
-            # construct_tools keeps a disabled tool out of chat.
+            # Inclusion explicitly enables default Chat for a legacy disabled plugin.
+            if is_openapi_tool(tool):
+                tool.enabled = True
+
+            # Disabled MCP and built-in tools stay attached when callers resend
+            # the full selection. Tool construction still excludes them.
             persona.tools.append(tool)
 
     db_session.commit()

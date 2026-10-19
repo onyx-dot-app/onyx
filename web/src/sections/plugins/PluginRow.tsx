@@ -35,20 +35,18 @@ function PluginAvailability({
     plugin.kind === "external-app"
       ? plugin.app.enabled
       : plugin.kind === "openapi"
-        ? plugin.tool.enabled
+        ? plugin.tool.default_chat_enabled
         : plugin.server.default_chat_enabled;
   const label =
     plugin.kind === "external-app"
       ? t(enabled ? "craftEnabled" : "craftDisabled")
-      : plugin.kind === "openapi"
-        ? t(enabled ? "enabled" : "disabled")
-        : t(
-            enabled == null
-              ? "chatUnknown"
-              : enabled
-                ? "chatEnabled"
-                : "chatDisabled"
-          );
+      : t(
+          enabled == null
+            ? "chatUnknown"
+            : enabled
+              ? "chatEnabled"
+              : "chatDisabled"
+        );
   const craftLabel =
     craftAvailable &&
     plugin.kind === "mcp" &&

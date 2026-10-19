@@ -1,11 +1,4 @@
-"""Regression coverage for `update_default_assistant_configuration`.
-
-Chat Preferences resends the default assistant's whole tool list on every toggle, and
-`GET /admin/default-assistant/configuration` includes attached tools that are disabled.
-Disabling a tool also leaves its `Persona__Tool` row in place, so rejecting a disabled
-id here blocked every toggle on the page with "Enable tool X before assigning it" — and
-the page renders no switch for a disabled tool, so the admin could not clear the block.
-"""
+"""Default Chat selection preserves disabled tools and enables legacy OpenAPI."""
 
 from collections.abc import Callable, Generator
 from uuid import uuid4
@@ -24,19 +17,19 @@ ToolFactory = Callable[..., Tool]
 
 @pytest.fixture
 def make_tool(db_session: Session) -> Generator[ToolFactory, None, None]:
-    """Build throwaway custom actions, and leave neither them nor their effect on the
+    """Build throwaway tools, and leave neither them nor their effect on the
     tenant-wide default assistant behind for the next test."""
     persona = get_default_assistant(db_session)
     assert persona is not None, "default assistant is seeded by migrations"
     original_tool_ids = [tool.id for tool in persona.tools]
     created_tool_ids: list[int] = []
 
-    def _make_tool(*, enabled: bool) -> Tool:
+    def _make_tool(*, enabled: bool, openapi: bool = False) -> Tool:
         tool = Tool(
             name=f"default-assistant-toggle-{uuid4().hex[:8]}",
             description="default assistant toggle test action",
             in_code_tool_id=None,
-            openapi_schema={"openapi": "3.0.0"},
+            openapi_schema={"openapi": "3.0.0"} if openapi else None,
             custom_headers=[],
             user_id=None,
             passthrough_auth=False,
@@ -79,7 +72,9 @@ def test_toggle_succeeds_while_a_disabled_tool_is_attached(
         db_session=db_session, tool_ids=[disabled_tool.id, attached_tool.id]
     )
 
-    # What GET /configuration hands the frontend still includes the disabled tool.
+    assert disabled_tool.enabled is False
+
+    # Disabled non-OpenAPI tools remain in the default selection.
     persona = get_default_assistant(db_session)
     assert persona is not None
     assert disabled_tool.id in [tool.id for tool in persona.tools]
@@ -105,3 +100,15 @@ def test_unknown_tool_id_is_still_rejected(
         update_default_assistant_configuration(
             db_session=db_session, tool_ids=[2_000_000_000]
         )
+
+
+def test_explicit_legacy_openapi_selection_enables_default_chat(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    tool = make_tool(enabled=False, openapi=True)
+    update_default_assistant_configuration(db_session=db_session, tool_ids=[tool.id])
+    db_session.refresh(tool)
+    assert tool.enabled is True
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    assert tool.id in [selected.id for selected in persona.tools]

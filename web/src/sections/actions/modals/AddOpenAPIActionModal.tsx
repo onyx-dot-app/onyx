@@ -30,8 +30,16 @@ import { SvgBracketCurly } from "@opal/icons";
 import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
 
 export type OpenAPIConfigurationValues = Partial<
-  Pick<ToolSnapshot, "name" | "description" | "enabled">
-> & { definition?: NonNullable<ToolSnapshot["definition"]> };
+  Pick<ToolSnapshot, "name" | "description">
+> & {
+  definition?: NonNullable<ToolSnapshot["definition"]>;
+  defaultChatEnabled?: boolean;
+};
+
+export type OpenAPICreationDraft = Omit<
+  Parameters<typeof createCustomTool>[0],
+  "enabled"
+> & { defaultChatEnabled: boolean };
 
 interface SharedFormProps {
   footerTarget?: HTMLElement | null;
@@ -40,7 +48,9 @@ interface SharedFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   initialDefinition?: ToolSnapshot["definition"];
   initialDescription?: string;
-  initialEnabled?: boolean;
+  defaultChatEnabled?: boolean;
+  canManageDefaultChat?: boolean;
+  defaultChatReady?: boolean;
   title?: string | RichStr;
   onClose?: () => void;
 }
@@ -59,16 +69,14 @@ type AddOpenAPIActionModalProps = SharedFormProps &
         presentation: "content";
         existingTool?: never;
         onSaveConfiguration?: never;
-        onConfigureAuthentication: (
-          draft: Parameters<typeof createCustomTool>[0]
-        ) => void;
+        onConfigureAuthentication: (draft: OpenAPICreationDraft) => void;
       }
   );
 
 interface OpenAPIActionFormValues {
   name: string;
   description: string;
-  enabled: boolean;
+  defaultChatEnabled: boolean | null;
   definition: string;
 }
 
@@ -92,6 +100,9 @@ function parseJsonWithTrailingCommas(jsonString: string) {
 }
 
 interface FormContentProps {
+  defaultChatEnabled: boolean;
+  canManageDefaultChat: boolean;
+  defaultChatReady: boolean;
   presentation: "inline" | "content";
   footerTarget?: HTMLElement | null;
   active: boolean;
@@ -103,6 +114,9 @@ interface FormContentProps {
 }
 
 function FormContent({
+  defaultChatEnabled,
+  canManageDefaultChat,
+  defaultChatReady,
   presentation,
   footerTarget,
   active,
@@ -250,7 +264,7 @@ function FormContent({
         checking ||
         !dirty ||
         (isEditMode && !values.name.trim()) ||
-        (existingTool !== null && !canEdit && !can(existingTool, "toggle"))
+        !canEdit
       }
       type="button"
       onClick={() => void submitForm()}
@@ -410,17 +424,30 @@ function FormContent({
           </Tooltip>
         </InputVertical>
         {isEditMode && definitionField}
-        {(!existingTool || can(existingTool, "toggle")) && (
-          <>
-            <Divider paddingParallel={0} />
+        <Divider paddingParallel={0} />
+        <Tooltip
+          tooltip={
+            !canManageDefaultChat
+              ? t("plugins.controls.defaultChatAdminOnly")
+              : undefined
+          }
+        >
+          <div className="w-full">
             <PluginAvailabilitySwitch
-              surface="workspace"
-              enabled={values.enabled}
-              onChange={(enabled) => setFieldValue("enabled", enabled)}
-              disabled={isSubmitting}
+              surface="chat"
+              enabled={values.defaultChatEnabled ?? defaultChatEnabled}
+              onChange={(enabled) =>
+                setFieldValue(
+                  "defaultChatEnabled",
+                  enabled === defaultChatEnabled ? null : enabled
+                )
+              }
+              disabled={
+                isSubmitting || !canManageDefaultChat || !defaultChatReady
+              }
             />
-          </>
-        )}
+          </div>
+        </Tooltip>
       </Modal.Body>
 
       {presentation === "inline" ? (
@@ -476,7 +503,9 @@ export default function AddOpenAPIActionModal({
   title,
   initialDefinition,
   initialDescription,
-  initialEnabled,
+  defaultChatEnabled = false,
+  canManageDefaultChat = false,
+  defaultChatReady = true,
   onConfigureAuthentication,
 }: AddOpenAPIActionModalProps) {
   const t = useTranslations("actions");
@@ -489,7 +518,7 @@ export default function AddOpenAPIActionModal({
     () => ({
       name: existingTool?.name ?? "",
       description: existingTool?.description ?? initialDescription ?? "",
-      enabled: existingTool?.enabled ?? initialEnabled ?? true,
+      defaultChatEnabled: null,
       definition:
         existingTool?.definition || initialDefinition
           ? JSON.stringify(
@@ -499,7 +528,7 @@ export default function AddOpenAPIActionModal({
             )
           : "",
     }),
-    [existingTool, initialDefinition, initialDescription, initialEnabled]
+    [existingTool, initialDefinition, initialDescription]
   );
 
   const configurationBaseline = useRef(initialValues);
@@ -516,8 +545,8 @@ export default function AddOpenAPIActionModal({
           changes.name = values.name.trim();
         if (values.description !== configurationBaseline.current.description)
           changes.description = values.description.trim();
-        if (values.enabled !== configurationBaseline.current.enabled)
-          changes.enabled = values.enabled;
+        if (values.defaultChatEnabled !== null)
+          changes.defaultChatEnabled = values.defaultChatEnabled;
         if (values.definition !== configurationBaseline.current.definition) {
           const definition = parseJsonWithTrailingCommas(values.definition);
           const validation = await validateToolDefinition({ definition });
@@ -525,8 +554,9 @@ export default function AddOpenAPIActionModal({
           changes.definition = definition;
         }
         await onSaveConfiguration(changes);
-        configurationBaseline.current = values;
-        resetForm({ values });
+        const savedValues = { ...values, defaultChatEnabled: null };
+        configurationBaseline.current = savedValues;
+        resetForm({ values: savedValues });
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -544,7 +574,7 @@ export default function AddOpenAPIActionModal({
         definition,
         custom_headers: [],
         passthrough_auth: false,
-        enabled: values.enabled,
+        defaultChatEnabled: values.defaultChatEnabled ?? defaultChatEnabled,
       });
     } catch {
       toast.error(t("addOpenApiModal.toasts.invalidJson"));
@@ -558,6 +588,9 @@ export default function AddOpenAPIActionModal({
       onSubmit={handleSubmit}
     >
       <FormContent
+        defaultChatEnabled={defaultChatEnabled}
+        canManageDefaultChat={canManageDefaultChat}
+        defaultChatReady={defaultChatReady}
         presentation={presentation}
         footerTarget={footerTarget}
         active={active}

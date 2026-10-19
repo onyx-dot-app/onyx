@@ -21,6 +21,8 @@ function SchemaModal(props: SchemaModalProps) {
       <PluginModalContent>
         {props.existingTool ? (
           <AddOpenAPIActionModal
+            canManageDefaultChat
+            defaultChatEnabled
             {...props}
             presentation="inline"
             existingTool={props.existingTool}
@@ -29,6 +31,8 @@ function SchemaModal(props: SchemaModalProps) {
           />
         ) : (
           <AddOpenAPIActionModal
+            canManageDefaultChat
+            defaultChatEnabled
             {...props}
             presentation="content"
             existingTool={undefined}
@@ -119,6 +123,8 @@ describe("inline schema editing", () => {
     document.body.appendChild(footer);
     const view = render(
       <AddOpenAPIActionModal
+        canManageDefaultChat
+        defaultChatEnabled
         presentation="inline"
         footerTarget={footer}
         existingTool={tool}
@@ -165,6 +171,8 @@ describe("inline schema editing", () => {
     expect(editor).toBeEnabled();
     view.rerender(
       <AddOpenAPIActionModal
+        canManageDefaultChat
+        defaultChatEnabled
         presentation="inline"
         footerTarget={footer}
         existingTool={tool}
@@ -195,7 +203,7 @@ describe("schema validation request ownership", () => {
       screen.queryByText("https://github.example.com")
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("switch", { name: "Enable for workspace" })
+      screen.getByRole("switch", { name: "Enable in default Chat" })
     ).toBeChecked();
     expect(
       screen.getByRole("textbox", { name: /Description for Humans/ })
@@ -247,7 +255,7 @@ describe("schema validation request ownership", () => {
         definition: schema,
         custom_headers: [],
         passthrough_auth: false,
-        enabled: true,
+        defaultChatEnabled: true,
       })
     );
   });
@@ -378,7 +386,7 @@ describe("explicit schema validation", () => {
         definition: definition("Checking"),
         custom_headers: [],
         passthrough_auth: false,
-        enabled: true,
+        defaultChatEnabled: true,
       })
     );
     expect(
@@ -404,7 +412,7 @@ describe("explicit schema validation", () => {
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("preview")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("switch", { name: "Enable for workspace" })
+      screen.getByRole("switch", { name: "Enable in default Chat" })
     ).toBeChecked();
     const rawDefinition = JSON.stringify(definition("Draft")).replace(
       /}$/,
@@ -442,7 +450,7 @@ describe("explicit schema validation", () => {
         definition: definition("Draft"),
         custom_headers: [],
         passthrough_auth: false,
-        enabled: true,
+        defaultChatEnabled: true,
       })
     );
     expect(

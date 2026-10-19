@@ -14,6 +14,11 @@ import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
 
+let mockFullAdmin = true;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({ isGlobalHolder: mockFullAdmin }),
+}));
+
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockRouter = { push: mockPush, replace: mockReplace };
@@ -60,6 +65,7 @@ const configuredTool: ToolSnapshot = {
 };
 
 let tool: ToolSnapshot;
+let defaultChatToolIds: number[];
 let writes: { path: string; body: unknown; method?: string }[];
 let listResponse: (() => Promise<Response>) | undefined;
 let oauthResponse: ((id: number) => Promise<Response>) | undefined;
@@ -74,10 +80,12 @@ const json = (body: unknown, status = 200) =>
 
 beforeEach(() => {
   toast.clearAll();
+  mockFullAdmin = true;
   mockQuery = new URLSearchParams();
   mockPush.mockClear();
   mockReplace.mockClear();
   tool = { ...configuredTool };
+  defaultChatToolIds = [99, 42];
   writes = [];
   listResponse = undefined;
   oauthResponse = undefined;
@@ -96,6 +104,8 @@ beforeEach(() => {
       }
       return listResponse ? listResponse() : json([tool]);
     }
+    if (path === "/api/admin/default-assistant/configuration")
+      return json({ tool_ids: defaultChatToolIds });
     if (path === "/api/settings") return json({});
     if (path === "/api/enterprise-settings") return json({});
     if (path === "/api/auth/type") return json({ oauth_enabled: true });
@@ -128,8 +138,7 @@ beforeEach(() => {
       writes.push({ path, body, method: init.method });
       if (failWrite) return json({ detail: failWrite }, 400);
       if (init.method === "DELETE") return json(true);
-      if (path === "/api/admin/tool/status")
-        return json({ updated_count: 1, tool_ids: [42] });
+      if (path === "/api/admin/default-assistant") return json(body);
       if (path === "/api/admin/oauth-config/7") return json({ id: 7 });
       if (path === "/api/admin/oauth-config/create") {
         configCreates += 1;
@@ -202,7 +211,7 @@ describe("detail modal", () => {
     const name = await screen.findByRole("textbox", { name: "Name" });
     await user.clear(name);
     await user.type(name, "Updated API");
-    tool = { ...tool, enabled: false };
+    defaultChatToolIds = [99];
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual(
@@ -211,7 +220,43 @@ describe("detail modal", () => {
         body: expect.objectContaining({ name: "Updated API" }),
       })
     );
-    expect(tool.enabled).toBe(false);
+    expect(defaultChatToolIds).toEqual([99]);
+  });
+
+  test("scoped editors save metadata without loading default Chat settings", async () => {
+    mockFullAdmin = false;
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    expect(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    ).toHaveAttribute("aria-disabled", "true");
+    fireEvent.change(name, { target: { value: "Scoped edit" } });
+    await setupUser().click(
+      screen.getByRole("button", { name: "Save Changes" })
+    );
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.path).toBe("/api/admin/tool/custom/42");
+    expect(
+      jest
+        .mocked(global.fetch)
+        .mock.calls.some(([path]) => String(path).includes("default-assistant"))
+    ).toBe(false);
+  });
+
+  test("returning default Chat to its saved value clears the draft without writing", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const toggle = await screen.findByRole("switch", {
+      name: "Enable in default Chat",
+    });
+    await waitFor(() =>
+      expect(toggle).not.toHaveAttribute("aria-disabled", "true")
+    );
+    const user = setupUser();
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    expect(writes).toEqual([]);
   });
 
   test("does not overwrite concurrent metadata after reverting a draft", async () => {
@@ -220,7 +265,7 @@ describe("detail modal", () => {
     fireEvent.change(name, { target: { value: "Temporary name" } });
     fireEvent.change(name, { target: { value: configuredTool.name } });
     fireEvent.click(
-      screen.getByRole("switch", { name: "Enable for workspace" })
+      screen.getByRole("switch", { name: "Enable in default Chat" })
     );
     tool = { ...tool, name: "Another administrator's name" };
     await setupUser().click(
@@ -228,9 +273,9 @@ describe("detail modal", () => {
     );
     await waitFor(() =>
       expect(writes).toContainEqual({
-        path: "/api/admin/tool/status",
+        path: "/api/admin/default-assistant",
         method: "PATCH",
-        body: { tool_ids: [42], enabled: false },
+        body: { tool_ids: [99] },
       })
     );
     expect(
@@ -243,7 +288,7 @@ describe("detail modal", () => {
     render(<OpenAPIPluginDetailPage toolId={42} />);
     const user = setupUser();
     const availability = await screen.findByRole("switch", {
-      name: "Enable for workspace",
+      name: "Enable in default Chat",
     });
     const updatedDefinition = {
       ...definition,
@@ -273,9 +318,9 @@ describe("detail modal", () => {
     );
     await waitFor(() =>
       expect(writes).toContainEqual({
-        path: "/api/admin/tool/status",
+        path: "/api/admin/default-assistant",
         method: "PATCH",
-        body: { tool_ids: [42], enabled: false },
+        body: { tool_ids: [99] },
       })
     );
   });
@@ -591,7 +636,7 @@ describe("permission-bearing detail reads", () => {
     tool = { ...tool, permissions: undefined };
     render(<OpenAPIPluginDetailPage toolId={42} />);
     expect(await findToolsPreview()).toBeInTheDocument();
-    expect(screen.getByText("/releases")).toBeInTheDocument();
+    expect(screen.getByText("List releases")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Edit" })
     ).not.toBeInTheDocument();
