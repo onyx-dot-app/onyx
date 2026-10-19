@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
-import { TextFormField } from "@/components/Field";
+import { FieldLabel, TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useTranslations } from "next-intl";
@@ -77,12 +78,20 @@ export default function ImpersonatePage() {
                 placeholder={t("impersonate.emailField.placeholder")}
               />
 
-              <TextFormField
-                name="apiKey"
-                type="password"
-                label={t("impersonate.apiKeyField.label")}
-                placeholder={t("impersonate.apiKeyField.placeholder")}
-              />
+              <div className="w-full">
+                <FieldLabel
+                  name="apiKey"
+                  label={t("impersonate.apiKeyField.label")}
+                />
+                <div className="mt-1">
+                  <PasswordInputTypeInField
+                    name="apiKey"
+                    autoComplete="new-password"
+                    mask="native"
+                    placeholder={t("impersonate.apiKeyField.placeholder")}
+                  />
+                </div>
+              </div>
 
               <Button disabled={isSubmitting} type="submit" width="full">
                 {t("impersonate.submitButton.label")}

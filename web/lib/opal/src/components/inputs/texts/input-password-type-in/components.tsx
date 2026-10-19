@@ -200,13 +200,7 @@ function InputPasswordTypeIn({
           isExistingValue ? (
             <>
               {leftChildren}
-              <Tag
-                icon={SvgKey}
-                title={realValue}
-                color="blue"
-                size="md"
-                truncate
-              />
+              <Tag icon={SvgKey} title={realValue} color="blue" size="md" />
             </>
           ) : (
             leftChildren

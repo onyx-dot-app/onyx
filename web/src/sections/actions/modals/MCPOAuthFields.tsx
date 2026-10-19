@@ -5,7 +5,7 @@ import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputSwitchField } from "@opal/form";
 import { Content, InputHorizontal, Section } from "@opal/layouts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
   CopyButton,
@@ -49,8 +49,20 @@ export function MCPOAuthFields({
           : undefined
       : undefined;
   const { appName } = useSettings();
-  const { values, setValues, setFieldValue, errors, touched, handleChange } =
-    useFormikContext<MCPAuthFormValues>();
+  const {
+    values,
+    initialValues,
+    setValues,
+    setFieldValue,
+    errors,
+    touched,
+    handleChange,
+  } = useFormikContext<MCPAuthFormValues>();
+  // The server's masked secret, captured before a save can reset the form to
+  // the typed plaintext.
+  const [storedClientSecret] = useState(
+    () => initialValues.oauth_client_secret
+  );
   const automaticRef = useRef<HTMLDivElement>(null);
   const ownClientRef = useRef<HTMLDivElement>(null);
   function chooseSetup(value: MCPAuthFormValues["oauth_setup_mode"]) {
@@ -216,6 +228,7 @@ export function MCPOAuthFields({
                     name="oauth_client_secret"
                     value={values.oauth_client_secret}
                     onChange={handleChange}
+                    existingValue={storedClientSecret}
                     placeholder=" "
                   />
                 </FormField.Control>

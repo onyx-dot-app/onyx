@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputTypeIn, Modal, Text } from "@opal/components";
+import { Button, InputPasswordTypeIn, Modal, Text } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import { SvgExternalLink, SvgPlug } from "@opal/icons";
 import {
@@ -136,13 +136,11 @@ function ConnectionForm({
                 title={field}
                 withLabel={`${formId}-${index}`}
               >
-                <InputTypeIn
+                <InputPasswordTypeIn
                   id={`${formId}-${index}`}
-                  type="password"
                   name={field}
-                  autoComplete="off"
                   required
-                  variant={pending ? "disabled" : "primary"}
+                  disabled={pending}
                   value={credentials[field] ?? ""}
                   onChange={(event) => {
                     setCredentials((current) => ({

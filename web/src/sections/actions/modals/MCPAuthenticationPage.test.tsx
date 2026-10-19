@@ -520,9 +520,11 @@ test("preserves a masked shared token while editing its custom header name", asy
     <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
+  // The stored token shows as a tag; the input itself stays empty.
   expect(
     await screen.findByLabelText(copy.sharedApiKey.label, { selector: "input" })
-  ).toHaveValue("********");
+  ).toHaveValue("");
+  expect(screen.getByText("********")).toBeInTheDocument();
   expect(
     screen.getAllByLabelText("API Key", { selector: "input" })
   ).toHaveLength(1);
@@ -632,9 +634,11 @@ test("requires new credentials when switching between shared and personal token 
     <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
+  // The stored token shows as a tag; the input itself stays empty.
   expect(
     await screen.findByLabelText(copy.sharedApiKey.label, { selector: "input" })
-  ).toHaveValue("********");
+  ).toHaveValue("");
+  expect(screen.getByText("********")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Credentials" }));
   await user.click(
     screen.getByRole("option", { name: copy.apiKeyTabs.perUser.label })

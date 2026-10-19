@@ -4,7 +4,12 @@ import { useTranslations } from "next-intl";
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@opal/layouts";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
-import { Button, InputTextArea, Text } from "@opal/components";
+import {
+  Button,
+  InputPasswordTypeIn,
+  InputTextArea,
+  Text,
+} from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";
 import { Spacer } from "@opal/components";
@@ -70,19 +75,12 @@ export default function CustomAnalyticsUpdateForm() {
             })}
           </>
         </SubLabel>
-        <input
-          className={`
-            border
-            border-border
-            rounded
-            w-full
-            py-2
-            px-3
-            mt-1`}
-          type="password"
-          value={secretKey}
-          onChange={(e) => setSecretKey(e.target.value)}
-        />
+        <div className="mt-1">
+          <InputPasswordTypeIn
+            value={secretKey}
+            onChange={(e) => setSecretKey(e.target.value)}
+          />
+        </div>
         <Spacer rem={1} />
         <Button type="submit">{t("updateButton.label")}</Button>
       </form>
