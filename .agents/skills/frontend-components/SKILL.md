@@ -20,9 +20,13 @@ every refresh-component, with its import and a one-line purpose.
    3. Feature composites in `web/src/sections/` and `web/src/layouts/`. Search them with `rg`.
 4. Read the README.md of each Opal component you use. The Docs column gives its path. Do not
    guess props.
-5. For design work, write the map from piece to component before you write code. Put it in the
+5. Lay pieces out with `Section` from `@opal/layouts`, never a flex or grid `<div>`/`<span>`. Set
+   spacing and size with its props (`gap`, `padding`, `width`, `height`), not classes: Section
+   ignores `p-*` and `gap-*` classes. Section defaults to a centered, full-size column with
+   `gap={4}`, so set `justifyContent`, `alignItems`, `width`/`height` and `gap` to match the design.
+6. For design work, write the map from piece to component before you write code. Put it in the
    plan or in your reply.
-6. Build a new component only when nothing matches. Say which pieces had no match and why. Put a
+7. Build a new component only when nothing matches. Say which pieces had no match and why. Put a
    reusable new component in Opal, not in the feature folder.
 
 ## Migrate on touch
