@@ -182,7 +182,7 @@ Member UI does not display read/write policy badges or promise approval before w
 Installed rows show a status indicator beside the delete action.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
-neutral gray when disabled, matching member directory indicators.
+neutral gray when disabled.
 Admin indicators show workspace availability only; individual authentication
 never changes their color or tooltip. Personal pages retain orange needs-auth
 indicators. Tooltips show both workspace states when Craft is available.
