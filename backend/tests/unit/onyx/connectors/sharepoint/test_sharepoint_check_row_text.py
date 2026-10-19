@@ -33,13 +33,13 @@ from onyx.connectors.sharepoint.capability_checks import (
 )
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.models import SitePagesPage, SiteUrlListing
-from tests.unit.onyx.connectors.sharepoint.test_sharepoint_perm_sync_checks import (
+from tests.unit.onyx.connectors.sharepoint.sharepoint_check_helpers import (
     ITEM_JSON,
     OTHER_SITE_URL,
     SITE_URL,
-    _delta_page,
-    _gateway,
-    _refusal,
+    api_refusal,
+    delta_result,
+    healthy_gateway,
 )
 
 _ALL_CHECKS: dict[str, CapabilityCheck] = {
@@ -58,7 +58,7 @@ def _no_dns(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _healthy() -> MagicMock:
-    gateway: MagicMock = _gateway()
+    gateway: MagicMock = healthy_gateway()
     gateway.check_token.return_value = MicrosoftTokenInfo(app_name="Onyx")
     gateway.get_certificate_not_after.return_value = datetime(
         2027, 5, 1, tzinfo=timezone.utc
@@ -227,7 +227,7 @@ def test_every_site_excluded_fails_the_find() -> None:
 def test_some_missing_sites_are_a_partial_find() -> None:
     gateway = _healthy()
     gateway.get_site_id.side_effect = lambda site_url: (
-        "site-id" if site_url == SITE_URL else _raise(_refusal(404, "itemNotFound"))
+        "site-id" if site_url == SITE_URL else _raise(api_refusal(404, "itemNotFound"))
     )
 
     results = _run_all(
@@ -261,7 +261,7 @@ def test_some_missing_sites_are_a_partial_find() -> None:
 def test_a_locked_site_has_its_own_row(status: int, code: str, summary: str) -> None:
     gateway = _healthy()
     gateway.get_site_id.side_effect = lambda site_url: (
-        "site-id" if site_url == SITE_URL else _raise(_refusal(status, code))
+        "site-id" if site_url == SITE_URL else _raise(api_refusal(status, code))
     )
 
     result = _run(
@@ -279,7 +279,7 @@ def _raise(error: Exception) -> str:
 
 def test_no_selected_site_found_fails() -> None:
     gateway = _healthy()
-    gateway.get_site_id.side_effect = _refusal(404, "itemNotFound")
+    gateway.get_site_id.side_effect = api_refusal(404, "itemNotFound")
 
     result = _run(
         "sharepoint_configured_sites",
@@ -306,7 +306,7 @@ def test_more_than_five_sites_pass_with_a_caveat() -> None:
 
 def test_no_file_in_scope_is_incomplete() -> None:
     gateway = _healthy()
-    gateway.get_delta_page.return_value = _delta_page()
+    gateway.get_delta_page.return_value = delta_result()
 
     result = _run("sharepoint_documents_read", gateway)
 
@@ -331,7 +331,7 @@ def _connector(gateway: MagicMock) -> MagicMock:
 
 def test_no_file_to_sample_keeps_its_row_but_lets_indexing_run() -> None:
     gateway = _healthy()
-    gateway.get_delta_page.return_value = _delta_page()
+    gateway.get_delta_page.return_value = delta_result()
 
     result = _run(
         "sharepoint_document_permissions_read",
@@ -378,7 +378,7 @@ def test_no_page_in_scope_is_skipped() -> None:
 
 def test_a_file_that_went_away_passes_with_a_caveat() -> None:
     gateway = _healthy()
-    gateway.get_list_item_id.side_effect = _refusal(404, "itemNotFound")
+    gateway.get_list_item_id.side_effect = api_refusal(404, "itemNotFound")
 
     result = _run("sharepoint_document_permissions_read", gateway)
 
@@ -392,7 +392,7 @@ def test_a_file_that_went_away_passes_with_a_caveat() -> None:
 
 def test_a_refused_file_listing_names_the_library_and_grant() -> None:
     gateway = _healthy()
-    gateway.get_delta_page.side_effect = _refusal(403)
+    gateway.get_delta_page.side_effect = api_refusal(403)
 
     result = _run("sharepoint_documents_read", gateway)
 
@@ -404,7 +404,7 @@ def test_a_refused_file_listing_names_the_library_and_grant() -> None:
 
 def test_a_refused_site_permission_read_names_the_rest_grant() -> None:
     gateway = _healthy()
-    gateway.list_role_assignments.side_effect = _refusal(403)
+    gateway.list_role_assignments.side_effect = api_refusal(403)
 
     result = _run("sharepoint_site_permissions_read", gateway)
 
@@ -417,7 +417,7 @@ def test_a_refused_site_permission_read_names_the_rest_grant() -> None:
 
 def test_a_rest_401_is_no_token_for_the_host() -> None:
     gateway = _healthy()
-    gateway.list_role_assignments.side_effect = _refusal(401, "Unauthorized")
+    gateway.list_role_assignments.side_effect = api_refusal(401, "Unauthorized")
 
     result = _run("sharepoint_site_permissions_read", gateway)
 
@@ -452,7 +452,7 @@ def test_a_client_secret_stops_the_permission_checks() -> None:
 
 def test_a_throttled_listing_stops_the_run() -> None:
     gateway = _healthy()
-    gateway.list_site_urls.side_effect = _refusal(429, "tooManyRequests")
+    gateway.list_site_urls.side_effect = api_refusal(429, "tooManyRequests")
 
     results = _run_all(
         [
