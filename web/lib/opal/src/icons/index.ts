@@ -70,7 +70,6 @@ export { default as SvgEyeClosed } from "@opal/icons/eye-closed";
 export { default as SvgEyeOff } from "@opal/icons/eye-off";
 export { default as SvgFile } from "@opal/icons/file";
 export { default as SvgFileBraces } from "@opal/icons/file-braces";
-export { default as SvgFileBroadcast } from "@opal/icons/file-broadcast";
 export { default as SvgFileMinus } from "@opal/icons/file-minus";
 export { default as SvgFilePlus } from "@opal/icons/file-plus";
 export { default as SvgFileRefresh } from "@opal/icons/file-refresh";
