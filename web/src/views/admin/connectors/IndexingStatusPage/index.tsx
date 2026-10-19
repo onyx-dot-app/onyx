@@ -34,15 +34,15 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
     buildCCPairInfoUrl(row.cc_pair_id),
     errorHandlingFetcher
   );
+  // Both flags wait for the details, so a supported connector never reads as unsupported while they load.
+  const loaded = ccPair !== undefined;
   return (
     <ActivityPanel
       scope={{
         ccPairId: row.cc_pair_id,
         canResolve:
-          ccPair !== undefined &&
-          can(ccPair, "operate") &&
-          ccPair.supports_targeted_reindex,
-        canResolveRuns: can(row, "operate"),
+          loaded && can(ccPair, "operate") && ccPair.supports_targeted_reindex,
+        canResolveRuns: loaded && can(row, "operate"),
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}

@@ -150,7 +150,7 @@ export interface ActivityCardProps {
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
-  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise, unless `canResolveRuns` says only the connector stands in the way. */
+  /** Whether the viewer may re-fetch single documents of this pair. Otherwise the resolve actions hide, except a disabled Resolve All when `canResolveRuns` holds. */
   canResolve: boolean;
   /** Whether the viewer may mark the run resolved. */
   canResolveRuns: boolean;
