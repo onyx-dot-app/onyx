@@ -242,7 +242,8 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     "jira_permission_scheme_read": _SCOPE_CHECK_IDS,
     "jira_project_access_mappable": ("jira_permission_scheme_read",),
     "jira_project_roles_read": ("jira_permission_scheme_read",),
-    "jira_permission_user_emails": ("jira_project_roles_read",),
+    # Not the roles check: a project with no role grants can still grant users.
+    "jira_permission_user_emails": ("jira_permission_scheme_read",),
     "jira_group_listing": _SIGN_IN_CHECK_IDS,
     "jira_group_listing_complete": ("jira_group_listing",),
     "jira_group_membership": ("jira_group_listing",),
@@ -1435,6 +1436,7 @@ def _sample_group_members(
     group_names: list[str] = _list_groups_for_dependent_check(context, config)
     members: list[dict[str, Any]] = []
     complete: bool = len(group_names) <= _SAMPLE_GROUPS
+    groups_read: int = 0
     for group_name in group_names[:_SAMPLE_GROUPS]:
         try:
             page: dict[str, Any] = gateway.get_group_members_page(
@@ -1479,6 +1481,7 @@ def _sample_group_members(
                     ),
                 ),
             )
+        groups_read += 1
         page_members: Any = page.get("values")
         if isinstance(page_members, list):
             members.extend(m for m in page_members if isinstance(m, dict))
@@ -1487,7 +1490,7 @@ def _sample_group_members(
     return JiraGroupMemberSample(
         members=members,
         complete=complete,
-        groups_read=min(len(group_names), _SAMPLE_GROUPS),
+        groups_read=groups_read,
     )
 
 

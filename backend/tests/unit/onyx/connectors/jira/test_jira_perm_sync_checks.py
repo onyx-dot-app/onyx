@@ -13,6 +13,7 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.jira.capability_checks import (
     build_jira_doc_permission_sync_checks,
     build_jira_group_sync_checks,
+    build_jira_indexing_checks,
 )
 from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
@@ -399,6 +400,48 @@ def test_permission_user_emails_reads_direct_user_grants() -> None:
     gateway.get_user.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "email,status",
+    [
+        ("", CapabilityCheckStatus.FAILED),
+        ("dev@example.com", CapabilityCheckStatus.PASSED),
+    ],
+    ids=["hidden", "visible"],
+)
+def test_full_run_checks_direct_user_emails_without_role_grants(
+    email: str, status: CapabilityCheckStatus
+) -> None:
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {
+        "permissions": [
+            _browse({"type": "user", "value": "acc-2", "user": {"emailAddress": email}})
+        ]
+    }
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1"], next_page_token=None
+    )
+    gateway.bulk_fetch_issues.return_value = [{"id": "1", "key": "AS-1", "fields": {}}]
+    context = CapabilityCheckContext(
+        source=DocumentSource.JIRA,
+        credential_json={"jira_user_email": "bot@example.com", "jira_api_token": "t"},
+        connector_specific_config=_CONFIG,
+        access_type=AccessType.SYNC,
+        source_operations=gateway,
+    )
+
+    checks = (
+        build_jira_indexing_checks()
+        + build_jira_doc_permission_sync_checks()
+        + build_jira_group_sync_checks()
+    )
+
+    results = run_capability_checks(checks, context)
+
+    by_id = {result.check_id: result for result in results}
+    assert by_id["jira_project_roles_read"].status == CapabilityCheckStatus.SKIPPED
+    assert by_id["jira_permission_user_emails"].status == status
+
+
 def test_permission_user_emails_is_incomplete_for_a_partial_sample() -> None:
     """Sync reads every role user; hidden emails in a sample prove nothing."""
     gateway = _gateway()
@@ -494,6 +537,7 @@ def test_group_membership_skips_a_deleted_group() -> None:
     result = _run("jira_group_membership", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Read 1 members in 1 groups"
 
 
 def test_group_membership_is_incomplete_for_empty_groups() -> None:
