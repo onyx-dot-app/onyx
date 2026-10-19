@@ -10,28 +10,6 @@
   --enter-offset: -8px;
 }
 
-.detection {
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  margin-block: 0;
-  transition:
-    grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    margin-block 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 150ms ease-out;
-}
-
-.detection[data-open="false"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  margin-block: -0.75rem;
-}
-
-.detectionContent {
-  min-height: 0;
-  overflow: hidden;
-}
-
 .statusIcon {
   position: relative;
   display: inline-grid;
@@ -54,8 +32,7 @@
 
 .stage[data-state="pending"] [data-icon="pending"],
 .stage[data-state="success"] [data-icon="success"],
-.stage[data-state="error"] [data-icon="error"],
-.stage[data-state="waiting"] [data-icon="waiting"] {
+.stage[data-state="error"] [data-icon="error"] {
   opacity: 1;
   visibility: visible;
 }
@@ -78,10 +55,6 @@
 
   .panel:not([hidden]) {
     animation-duration: 80ms;
-  }
-
-  .detection {
-    transition: opacity 80ms ease-out;
   }
 
   .statusIcon > span {

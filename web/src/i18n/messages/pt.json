@@ -219,6 +219,15 @@
         "createFailed": "Falha ao criar a ação OpenAPI",
         "invalidJson": "Formato JSON inválido na definição do esquema OpenAPI",
         "updateFailed": "Falha ao atualizar a ação OpenAPI"
+      },
+      "humanDescription": {
+        "title": "Descrição para pessoas",
+        "hint": "Exibida no cartão do plugin e em seus detalhes."
+      },
+      "agentDescription": {
+        "title": "Descrição para agentes",
+        "hint": "Edita info.description no esquema OpenAPI.",
+        "disabled": "Insira um esquema válido para editar este campo."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Use sua conta no Craft.",
         "craftOnly": "Somente Craft",
-        "craftOnlyDescription": "Este app está disponível no Craft. O chat principal não oferece suporte a ele."
+        "craftOnlyDescription": "Este app está disponível no Craft. O chat principal não oferece suporte a ele.",
+        "craftDisabledDescription": "Este aplicativo está desativado no Craft. O Chat principal não oferece suporte a ele."
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "Disponibilize este plugin em conversas sem um agente personalizado. Os controles de acesso continuam em vigor.",
         "mcpCraftDescription": "Disponibilize este plugin no Craft. Os controles de acesso e as permissões das ferramentas continuam em vigor.",
         "craftAppDescription": "Disponibilize este aplicativo no Craft. Os requisitos de conexão e aprovação continuam em vigor.",
-        "workspaceDescription": "Permita a execução deste plugin no Chat e em agentes personalizados. Os requisitos existentes de acesso e autenticação continuam em vigor."
+        "workspaceDescription": "Disponibilize este plugin no Chat e em agentes personalizados. Os controles de acesso e os requisitos de autenticação continuam em vigor."
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "Adicionar um plugin OpenAPI",
         "detailDescription": "Gerencie esta API e as ferramentas disponíveis para seus agentes.",
-        "detailsTitle": "Detalhes do plugin",
+        "detailsTitle": "Configuração",
         "schemaTitle": "Esquema OpenAPI",
         "notFound": "Plugin não encontrado",
         "loadFailed": "Não foi possível carregar este plugin",

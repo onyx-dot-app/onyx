@@ -111,6 +111,54 @@ describe("CreateCustomAppModal", () => {
     );
   });
 
+  it("preserves availability changes made by another administrator", async () => {
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue({ ...CUSTOM_APP, enabled: false });
+    const view = render(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "New name" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalled()
+    );
+    expect(
+      jest.mocked(externalAppsService.updateExternalApp).mock.calls[0]?.[1]
+    ).not.toHaveProperty("enabled");
+  });
+
+  it("describes a disabled app accurately", () => {
+    render(
+      <CreateCustomAppModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(
+      screen.getAllByText(
+        "This app is disabled in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+  });
+
   it("labels the name and discards a new draft from the close button", () => {
     const onClose = jest.fn();
     render(
@@ -284,7 +332,6 @@ describe("CreateCustomAppModal", () => {
         name: "Updated CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
-        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
       })
@@ -402,7 +449,6 @@ describe("CreateCustomAppModal", () => {
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: { Authorization: "Bearer {api_key}" },
         organization_credentials: { api_key: "sk-original-secret+/=" },
-        enabled: true,
         users_can_manage_policies: true,
       })
     );
@@ -517,7 +563,6 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
-        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
         associated_skill_ids: ["skill-a"],

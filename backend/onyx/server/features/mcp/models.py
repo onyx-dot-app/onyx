@@ -131,6 +131,7 @@ class MCPConnectionData(TypedDict):
     # Note: Update MCPOAuthKeys if necessary when modifying these
     # Unfortunately we can't use the actual models here because basemodels aren't compatible
     # with SQLAlchemy
+    oauth_setup_mode: NotRequired[Literal["automatic", "own_client"]]
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
@@ -228,6 +229,7 @@ class MCPToolCreateRequest(BaseModel):
             "the stored token is reused instead of the masked request value."
         ),
     )
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
     oauth_provider_mode: MCPOAuthProviderMode = Field(
@@ -788,6 +790,7 @@ class MCPServer(BaseModel):
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
     oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None

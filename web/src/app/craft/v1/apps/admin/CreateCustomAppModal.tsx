@@ -84,7 +84,9 @@ export default function CreateCustomAppModal({
   );
   const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
-  const [enabled, setEnabled] = useState(existingApp?.enabled ?? true);
+  const [initialEnabled] = useState(existingApp?.enabled ?? true);
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const availabilityChanged = enabled !== initialEnabled;
   const nameId = useId();
   const router = useRouter();
   // Focus the name field for new apps only; edits keep the natural tab order.
@@ -121,7 +123,7 @@ export default function CreateCustomAppModal({
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
   const configDirty = existingApp
-    ? enabled !== existingApp.enabled ||
+    ? availabilityChanged ||
       usersCanManagePolicies !== existingApp.users_can_manage_policies ||
       name !== existingApp.name ||
       associationDirty ||
@@ -168,15 +170,16 @@ export default function CreateCustomAppModal({
     setError(null);
     try {
       if (existingApp) {
-        await updateExternalApp(existingApp.id, {
-          enabled,
+        const payload: Parameters<typeof updateExternalApp>[1] = {
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
           associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
-        });
+        };
+        if (availabilityChanged) payload.enabled = enabled;
+        await updateExternalApp(existingApp.id, payload);
         onSaved();
         onClose();
       } else {
@@ -299,7 +302,9 @@ export default function CreateCustomAppModal({
             <Modal.Header
               icon={getAppTypeLogo("CUSTOM")}
               title={existingApp?.name ?? t("createTitle")}
-              description={pluginCopy("craftOnlyDescription")}
+              description={pluginCopy(
+                enabled ? "craftOnlyDescription" : "craftDisabledDescription"
+              )}
               onClose={requestClose}
             />
             <Modal.Body twoTone={false} alignItems="stretch">
@@ -357,13 +362,11 @@ export default function CreateCustomAppModal({
                 }
                 authentication={
                   <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-1">
-                      <Text font="main-ui-action">
-                        {t("fields.headers.label")}
-                      </Text>
-                      <Text font="secondary-body" color="text-03">
-                        {t("fields.headers.description")}
-                      </Text>
+                    <InputVertical
+                      title={t("fields.headers.label")}
+                      description={t("fields.headers.description")}
+                      suffix="optional"
+                    >
                       <InputKeyValue
                         keyTitle={t("fields.headers.keyTitle")}
                         valueTitle={t("fields.headers.valueTitle")}
@@ -374,15 +377,13 @@ export default function CreateCustomAppModal({
                         mode="line"
                         addButtonLabel={t("fields.headers.addButton")}
                       />
-                    </div>
+                    </InputVertical>
 
-                    <div className="flex flex-col gap-1">
-                      <Text font="main-ui-action">
-                        {t("fields.orgCredentials.label")}
-                      </Text>
-                      <Text font="secondary-body" color="text-03">
-                        {t("fields.orgCredentials.description")}
-                      </Text>
+                    <InputVertical
+                      title={t("fields.orgCredentials.label")}
+                      description={t("fields.orgCredentials.description")}
+                      suffix="optional"
+                    >
                       <InputKeyValue
                         keyTitle={t("fields.orgCredentials.keyTitle")}
                         valueTitle={t("fields.orgCredentials.valueTitle")}
@@ -394,7 +395,7 @@ export default function CreateCustomAppModal({
                         mode="line"
                         addButtonLabel={t("fields.orgCredentials.addButton")}
                       />
-                    </div>
+                    </InputVertical>
                   </div>
                 }
                 skills={

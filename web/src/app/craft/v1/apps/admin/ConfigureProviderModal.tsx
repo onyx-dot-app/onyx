@@ -56,7 +56,9 @@ export default function ConfigureProviderModal({
   const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
-  const [enabled, setEnabled] = useState(existingApp?.enabled ?? true);
+  const [initialEnabled] = useState(existingApp?.enabled ?? true);
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const availabilityChanged = enabled !== initialEnabled;
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
@@ -128,12 +130,13 @@ export default function ConfigureProviderModal({
   ) {
     if (managed && existingApp) {
       // Keep Onyx-managed credentials unchanged.
-      await updateExternalApp(existingApp.id, {
+      const payload: Parameters<typeof updateExternalApp>[1] = {
         action_policies: policies,
-        enabled,
         users_can_manage_policies: usersCanManagePolicies,
         ...associationPatch,
-      });
+      };
+      if (availabilityChanged) payload.enabled = enabled;
+      await updateExternalApp(existingApp.id, payload);
     } else {
       const credentialValues = Object.fromEntries(
         descriptor.required_org_credential_fields.map((field) => [
@@ -146,22 +149,24 @@ export default function ConfigureProviderModal({
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,
-        enabled,
         users_can_manage_policies: usersCanManagePolicies,
       };
       if (existingApp) {
         // Merge creds so non-credential metadata survives a credential edit.
-        await updateExternalApp(existingApp.id, {
+        const payload: Parameters<typeof updateExternalApp>[1] = {
           ...shared,
           organization_credentials: {
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
           ...associationPatch,
-        });
+        };
+        if (availabilityChanged) payload.enabled = enabled;
+        await updateExternalApp(existingApp.id, payload);
       } else {
         const created = await createBuiltInExternalApp({
           ...shared,
+          enabled,
           app_type: descriptor.app_type,
           organization_credentials: credentialValues,
         });
@@ -237,14 +242,16 @@ export default function ConfigureProviderModal({
       usersCanManagePolicies={usersCanManagePolicies}
       onUsersCanManagePoliciesChange={setUsersCanManagePolicies}
       isAdditionalContentDirty={
-        enabled !== (existingApp?.enabled ?? true) ||
+        availabilityChanged ||
         existingAssociationDirty ||
         usersCanManagePolicies !==
           (existingApp?.users_can_manage_policies ?? true)
       }
       onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={existingApp?.name ?? descriptor.name}
-      description={pluginCopy("craftOnlyDescription")}
+      description={pluginCopy(
+        enabled ? "craftOnlyDescription" : "craftDisabledDescription"
+      )}
       icon={getAppTypeLogo(descriptor.app_type)}
       authenticationInstructions={
         managed ? undefined : descriptor.setup_instructions

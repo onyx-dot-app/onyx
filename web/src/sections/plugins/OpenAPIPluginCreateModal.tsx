@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useCreateModal } from "@opal/components";
-import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
+import { Modal } from "@opal/components";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { useSWRConfig } from "swr";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
@@ -50,12 +50,10 @@ function OpenAPIPluginCreateSession({
   const actions = useTranslations("actions");
   const { refreshOpenApiTools } = useOpenApiTools();
   const defaultChat = useDefaultAssistantConfiguration();
-  const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
   const { mutate } = useSWRConfig();
-  const modal = useCreateModal();
-  const { toggle } = modal;
   const [step, setStep] = useState<CreationStep>({ kind: "schema" });
+  const enabled = step.draft?.enabled ?? true;
   const savedId = useRef<number | null>(null);
   const pendingOAuthConfigId = useRef<number | null>(null);
   const completed = useRef(false);
@@ -67,10 +65,6 @@ function OpenAPIPluginCreateSession({
       active.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    toggle(step.kind === "schema");
-  }, [step.kind, toggle]);
 
   async function create(values: OpenAPIAuthFormValues) {
     if (step.kind !== "authentication") return;
@@ -145,47 +139,45 @@ function OpenAPIPluginCreateSession({
   }
 
   function close() {
-    if (!completed.current) onClose();
+    if (!busy && !completed.current) onClose();
   }
 
   return (
-    <>
-      <modal.Provider>
-        <AddOpenAPIActionModal
-          title={t("createTitle")}
-          onClose={onClose}
-          initialDefinition={step.draft?.definition}
-          onConfigureAuthentication={(draft) =>
-            setStep({ kind: "authentication", draft, auth: step.auth })
-          }
-        />
-      </modal.Provider>
-      {step.kind === "authentication" && (
-        <OpenAPIAuthenticationModal
-          isOpen
-          title={actions("mcpSetup.connectTo", { name: step.draft.name })}
-          description=""
-          entityName={step.draft.name}
-          onBusyChange={setBusy}
-          beforeFields={
-            <PluginAvailabilitySwitch
-              surface="workspace"
-              enabled={enabled}
-              onChange={setEnabled}
-              disabled={busy}
-            />
-          }
-          allowNoAuthentication
-          defaultMethod="none"
-          draftValues={step.auth}
-          submitLabel={actions("addOpenApiModal.submitButton.addLabel")}
-          onBack={(auth) =>
-            setStep({ kind: "schema", draft: step.draft, auth })
-          }
-          onConnect={create}
-          onClose={close}
-        />
-      )}
-    </>
+    <Modal open onOpenChange={(next) => !next && close()}>
+      <PluginModalContent>
+        {step.kind === "schema" ? (
+          <AddOpenAPIActionModal
+            presentation="content"
+            onBusyChange={setBusy}
+            title={t("createTitle")}
+            onClose={close}
+            initialDefinition={step.draft?.definition}
+            initialDescription={step.draft?.description}
+            initialEnabled={enabled}
+            onConfigureAuthentication={(draft) =>
+              setStep({ kind: "authentication", draft, auth: step.auth })
+            }
+          />
+        ) : (
+          <OpenAPIAuthenticationModal
+            presentation="content"
+            isOpen
+            title={actions("mcpSetup.connectTo", { name: step.draft.name })}
+            description=""
+            entityName={step.draft.name}
+            onBusyChange={setBusy}
+            allowNoAuthentication
+            defaultMethod="none"
+            draftValues={step.auth}
+            submitLabel={actions("addOpenApiModal.submitButton.addLabel")}
+            onBack={(auth) =>
+              setStep({ kind: "schema", draft: step.draft, auth })
+            }
+            onConnect={create}
+            onClose={close}
+          />
+        )}
+      </PluginModalContent>
+    </Modal>
   );
 }

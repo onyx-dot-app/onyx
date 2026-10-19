@@ -219,6 +219,15 @@
         "createFailed": "创建 OpenAPI 操作失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
         "updateFailed": "更新 OpenAPI 操作失败"
+      },
+      "humanDescription": {
+        "title": "面向用户的描述",
+        "hint": "显示在插件卡片和插件详情中。"
+      },
+      "agentDescription": {
+        "title": "面向智能体的描述",
+        "hint": "编辑 OpenAPI 架构中的 info.description。",
+        "disabled": "请输入有效的架构以编辑此字段。"
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "在 Craft 中使用你的账号。",
         "craftOnly": "仅限 Craft",
-        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。"
+        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。",
+        "craftDisabledDescription": "此应用在 Craft 中已禁用。主聊天不支持此应用。"
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
         "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
         "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
-        "workspaceDescription": "允许此插件在聊天和自定义智能体中运行。现有访问和身份验证要求仍然适用。"
+        "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "添加 OpenAPI 插件",
         "detailDescription": "管理此 API 和智能体可用的工具。",
-        "detailsTitle": "插件详情",
+        "detailsTitle": "配置",
         "schemaTitle": "OpenAPI 架构",
         "notFound": "未找到插件",
         "loadFailed": "无法加载此插件",

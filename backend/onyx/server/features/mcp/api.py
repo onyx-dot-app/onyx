@@ -56,6 +56,7 @@ from onyx.db.mcp import (
     delete_mcp_server,
     delete_user_connection_configs_for_server,
     get_all_mcp_servers,
+    get_connection_config_by_id,
     get_craft_enabled_mcp_servers,
     get_default_chat_mcp_server_ids,
     get_mcp_server_by_id,
@@ -96,6 +97,7 @@ from onyx.server.features.mcp.credentials import (
     extract_connection_data,
     get_mcp_auth_template,
     mcp_oauth_client_information_fingerprint,
+    mcp_oauth_setup_mode,
     mcp_token_expired,
     requires_user_authentication,
     resolve_mcp_credentials,
@@ -465,6 +467,7 @@ def _build_oauth_admin_config_data(
         scope=REQUESTED_SCOPE,  # TODO(evan): allow specifying scopes?
         token_endpoint_auth_method=token_endpoint_auth_method,
     )
+    config_data["oauth_setup_mode"] = "own_client"
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
     return config_data
 
@@ -474,6 +477,7 @@ def _build_oauth_admin_config_data_for_update(
     client_id: str | None,
     client_secret: str | None,
     existing_client: OAuthClientInformationFull,
+    setup_mode: Literal["automatic", "own_client"] = "own_client",
     auth_template: MCPAuthTemplate | None = None,
 ) -> MCPConnectionData:
     """Construct the admin connection config payload for an OAuth client
@@ -526,6 +530,7 @@ def _build_oauth_admin_config_data_for_update(
     if auth_template is not None:
         config_data["header_template"] = auth_template.headers
         config_data["required_fields"] = auth_template.required_fields
+    config_data["oauth_setup_mode"] = setup_mode
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
     return config_data
 
@@ -739,6 +744,7 @@ async def _connect_oauth(
     # values for any field the frontend marked as unchanged. This protects
     # against the resubmit case where the form replays masked placeholders.
     existing_client: OAuthClientInformationFull | None = None
+    existing_data = MCPConnectionData(headers={})
     if mcp_server.admin_connection_config:
         existing_data = extract_connection_data(
             mcp_server.admin_connection_config, apply_mask=False
@@ -766,6 +772,12 @@ async def _connect_oauth(
             client_id=oauth_client_id,
             client_secret=oauth_client_secret,
             existing_client=existing_client,
+            setup_mode=(
+                "own_client"
+                if request.oauth_client_id_changed
+                or request.oauth_client_secret_changed
+                else mcp_oauth_setup_mode(existing_data)
+            ),
             auth_template=get_mcp_auth_template(mcp_server),
         )
         if existing_client is not None
@@ -1276,6 +1288,7 @@ def _db_mcp_server_to_api_mcp_server(
     connection_status: MCPConnectionStatus | None = None
     user_credentials = None
     admin_credentials = None
+    oauth_setup_mode = None
     is_owner_or_admin = request_user is not None and (
         Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(request_user)
         or (request_user.email and request_user.email == db_server.owner)
@@ -1320,6 +1333,11 @@ def _db_mcp_server_to_api_mcp_server(
                 {"api_key": mask_string(_extract_shared_api_token(admin_config_dict))}
             )
         elif db_server.auth_type == MCPAuthenticationType.OAUTH:
+            oauth_setup_mode = (
+                "own_client"
+                if db_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER
+                else mcp_oauth_setup_mode(admin_config_dict)
+            )
             client_info_raw = admin_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
             client_info = (
                 OAuthClientInformationFull.model_validate(client_info_raw)
@@ -1365,6 +1383,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_performer=auth_performer,
         oauth_provider_mode=db_server.oauth_provider_mode,
         oauth_cimd_enabled=db_server.oauth_cimd_enabled,
+        oauth_setup_mode=oauth_setup_mode,
         oauth_authorization_endpoint=db_server.oauth_authorization_endpoint,
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
@@ -1905,6 +1924,8 @@ def _upsert_mcp_server(
     changing_connection_config = True
     users_to_reload: set[UUID] = set()
 
+    existing_admin_config_dict = MCPConnectionData(headers={})
+
     # Handle existing server update
     if request.existing_server_id:
         try:
@@ -1915,7 +1936,6 @@ def _upsert_mcp_server(
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
-        existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
             existing_admin_config_dict = extract_connection_data(
                 mcp_server.admin_connection_config, apply_mask=False
@@ -2240,6 +2260,20 @@ def _upsert_mcp_server(
         users_to_reload.add(user.id)
 
     if not changing_connection_config:
+        if (
+            request.auth_type == MCPAuthenticationType.OAUTH
+            and request.oauth_setup_mode is not None
+            and mcp_server.admin_connection_config_id is not None
+            and existing_admin_config_dict.get("oauth_setup_mode")
+            != request.oauth_setup_mode
+        ):
+            # Preserve tokens or registration data refreshed since the initial read.
+            current_config = get_connection_config_by_id(
+                mcp_server.admin_connection_config_id, db_session, for_update=True
+            )
+            current_data = extract_connection_data(current_config, apply_mask=False)
+            current_data["oauth_setup_mode"] = request.oauth_setup_mode
+            _persist_admin_connection_config(mcp_server, current_data, db_session)
         db_session.commit()
         _hot_reload_craft_sessions(users_to_reload, db_session)
         return mcp_server
@@ -2280,6 +2314,12 @@ def _upsert_mcp_server(
                 client_id=oauth_client_id,
                 client_secret=oauth_client_secret,
                 existing_client=client_info,
+                setup_mode=(
+                    "own_client"
+                    if request.oauth_client_id_changed
+                    or request.oauth_client_secret_changed
+                    else mcp_oauth_setup_mode(existing_admin_config_dict)
+                ),
                 auth_template=auth_template,
             )
             if client_info is not None
@@ -2289,6 +2329,8 @@ def _upsert_mcp_server(
                 auth_template=auth_template,
             )
         )
+        if request.oauth_setup_mode is not None:
+            config_data["oauth_setup_mode"] = request.oauth_setup_mode
         admin_connection_config_id = _persist_admin_connection_config(
             mcp_server, config_data, db_session
         )

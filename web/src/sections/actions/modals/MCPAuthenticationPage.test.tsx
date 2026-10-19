@@ -1530,3 +1530,64 @@ describe("inline authentication", () => {
     ).toBeDisabled();
   });
 });
+
+test("restores automatic OAuth setup after registration without a dirty form", async () => {
+  const configuredServer: MCPServer = {
+    ...server,
+    oauth_setup_mode: "automatic",
+    status: MCPServerStatus.CONNECTED,
+    admin_credentials: { client_id: "********", client_secret: "********" },
+  };
+  mockNetwork(configuredServer);
+  const dirty = jest.fn();
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={configuredServer}
+      onTriggerFetchTools={async () => {}}
+      onBusyChange={() => {}}
+      onDirtyChange={dirty}
+      onSaved={async () => {}}
+      onComplete={() => {}}
+    />
+  );
+  const automatic = await screen.findByRole("radio", {
+    name: new RegExp(`^${copy.oauthSetup.automatic.label}`),
+  });
+  expect(automatic).toHaveAttribute("aria-checked", "true");
+  expect(
+    screen.queryByLabelText(copy.clientId.label, { exact: false })
+  ).not.toBeInTheDocument();
+  await setupUser().click(automatic);
+  expect(dirty).toHaveBeenLastCalledWith(false);
+});
+
+test("discovers tools for a Chat-enable intent without changing connected authentication", async () => {
+  const configuredServer: MCPServer = {
+    ...server,
+    auth_type: MCPAuthenticationType.NONE,
+    status: MCPServerStatus.CONNECTED,
+    tool_count: 0,
+  };
+  mockNetwork(configuredServer);
+  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={configuredServer}
+      chatEnableIntent="pending-chat-intent"
+      onTriggerFetchTools={fetchTools}
+      onBusyChange={() => {}}
+      onSaved={async () => {}}
+      onComplete={() => {}}
+    />
+  );
+  const save = await screen.findByTestId("mcp-auth-connect-button");
+  expect(save).toBeEnabled();
+  await setupUser().click(save);
+  await waitFor(() =>
+    expect(fetchTools).toHaveBeenCalledWith(7, "pending-chat-intent")
+  );
+});

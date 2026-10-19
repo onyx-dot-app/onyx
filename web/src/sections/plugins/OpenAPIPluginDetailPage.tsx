@@ -11,7 +11,7 @@ import {
   Tabs,
   Text,
 } from "@opal/components";
-import { Content, InputVertical, toast } from "@opal/layouts";
+import { Content, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgActions } from "@opal/icons";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -25,153 +25,20 @@ import {
   extractMethodSpecsFromDefinition,
   getActionIcon,
 } from "@/lib/tools/utils";
-import type { ToolSnapshot } from "@/lib/tools/types";
-import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
+import AddOpenAPIActionModal, {
+  type OpenAPIConfigurationValues,
+} from "@/sections/actions/modals/AddOpenAPIActionModal";
 import OpenAPIAuthenticationModal, {
   type OpenAPIAuthFormValues,
 } from "@/sections/actions/modals/OpenAPIAuthenticationModal";
 import { saveOpenApiAuthentication } from "@/sections/plugins/openApiWorkflow";
 import OpenAPIEndpointList from "@/sections/plugins/OpenAPIEndpointList";
-import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
-import MCPFormActions from "@/sections/actions/modals/MCPFormActions";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 
 interface OpenAPIPluginDetailPageProps {
   toolId: number;
-}
-
-type MetadataValues = Partial<
-  Pick<ToolSnapshot, "name" | "description" | "enabled">
->;
-
-interface MetadataEditorProps {
-  tool: ToolSnapshot;
-  active: boolean;
-  footerTarget: HTMLDivElement | null;
-  onBusyChange: (busy: boolean) => void;
-  onDirtyChange: (dirty: boolean) => void;
-  onSave: (values: MetadataValues) => Promise<void>;
-}
-
-function MetadataEditor({
-  tool,
-  active,
-  footerTarget,
-  onBusyChange,
-  onDirtyChange,
-  onSave,
-}: MetadataEditorProps) {
-  const t = useTranslations("actions");
-  const fields = useTranslations("agents.editor.general");
-  const [draft, setDraft] = useState<MetadataValues | null>(null);
-  const name = draft?.name ?? tool.name;
-  const description = draft?.description ?? tool.description;
-  const enabled = draft?.enabled ?? tool.enabled;
-  const canEdit = can(tool, "edit");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const dirty =
-    name !== tool.name ||
-    description !== tool.description ||
-    enabled !== tool.enabled;
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-  useEffect(() => {
-    onBusyChange(pending);
-    return () => onBusyChange(false);
-  }, [pending, onBusyChange]);
-
-  async function save() {
-    setPending(true);
-    setError(null);
-    try {
-      const values = { ...draft };
-      if (values.name !== undefined) values.name = values.name.trim();
-      if (values.description !== undefined)
-        values.description = values.description.trim();
-      await onSave(values);
-      setDraft(null);
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error
-          ? cause.message
-          : t("addOpenApiModal.toasts.updateFailed")
-      );
-      setError(
-        cause instanceof Error && cause.message
-          ? cause.message
-          : t("addOpenApiModal.toasts.updateFailed")
-      );
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <InputVertical title={fields("name.title")} withLabel="plugin-name">
-        <InputTypeIn
-          id="plugin-name"
-          value={name}
-          onChange={(event) =>
-            setDraft((current) => ({ ...current, name: event.target.value }))
-          }
-          variant={pending || !canEdit ? "disabled" : "primary"}
-        />
-      </InputVertical>
-      <InputVertical
-        title={t("addMcpModal.description.title")}
-        withLabel="plugin-description"
-      >
-        <InputTextArea
-          id="plugin-description"
-          value={description}
-          onChange={(event) =>
-            setDraft((current) => ({
-              ...current,
-              description: event.target.value,
-            }))
-          }
-          variant={pending || !canEdit ? "disabled" : "primary"}
-          rows={3}
-        />
-      </InputVertical>
-      {can(tool, "toggle") && (
-        <PluginAvailabilitySwitch
-          surface="workspace"
-          enabled={enabled}
-          onChange={(value) =>
-            setDraft((current) => ({ ...current, enabled: value }))
-          }
-          disabled={pending}
-        />
-      )}
-      {error && (
-        <Text as="p" color="status-error-05">
-          {error}
-        </Text>
-      )}
-      <MCPFormActions
-        variant="page"
-        active={active}
-        footerTarget={footerTarget}
-        submit={
-          <Button
-            onClick={() => void save()}
-            disabled={pending || !name.trim() || !dirty}
-          >
-            {t(
-              pending
-                ? "addOpenApiModal.submitButton.savingLabel"
-                : "addOpenApiModal.submitButton.saveLabel"
-            )}
-          </Button>
-        }
-      />
-    </div>
-  );
 }
 
 export default function OpenAPIPluginDetailPage({
@@ -193,11 +60,10 @@ export default function OpenAPIPluginDetailPage({
   const [tab, setTab] = useState("server");
   const [visited, setVisited] = useState(() => new Set(["server"]));
   const [busy, setBusy] = useState(false);
-  const [metadataDirty, setMetadataDirty] = useState(false);
-  const [schemaDirty, setSchemaDirty] = useState(false);
+  const [configurationDirty, setConfigurationDirty] = useState(false);
   const [authDirty, setAuthDirty] = useState(false);
   const guard = useUnsavedChangesGuard({
-    isDirty: metadataDirty || schemaDirty || authDirty,
+    isDirty: configurationDirty || authDirty,
   });
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const [toolSearch, setToolSearch] = useState("");
@@ -255,12 +121,13 @@ export default function OpenAPIPluginDetailPage({
     );
   }
 
-  async function saveMetadata(values: MetadataValues) {
+  async function saveConfiguration(values: OpenAPIConfigurationValues) {
     if (!tool) return;
     const tools = await refreshOpenApiTools();
     const currentTool = tools?.find((candidate) => candidate.id === tool.id);
     if (!currentTool) throw new Error(t("addOpenApiModal.toasts.updateFailed"));
     const metadataChanged =
+      values.definition !== undefined ||
       (values.name !== undefined && values.name !== currentTool.name) ||
       (values.description !== undefined &&
         values.description !== currentTool.description);
@@ -281,11 +148,14 @@ export default function OpenAPIPluginDetailPage({
       throw new Error(t("addOpenApiModal.toasts.updateFailed"));
     }
     if (metadataChanged) {
-      const response = await updateCustomTool(currentTool.id, {
+      const payload: Parameters<typeof updateCustomTool>[1] = {
         name: values.name ?? currentTool.name,
         description: values.description ?? currentTool.description,
         oauth_config_id: currentTool.oauth_config_id ?? null,
-      });
+      };
+      if (values.definition !== undefined)
+        payload.definition = values.definition;
+      const response = await updateCustomTool(currentTool.id, payload);
       if (response.error || !response.data)
         throw new Error(
           response.error ?? t("addOpenApiModal.toasts.updateFailed")
@@ -431,9 +301,6 @@ export default function OpenAPIPluginDetailPage({
                   <Tabs.Trigger value="server" disabled={busy}>
                     {t("plugins.openapi.detailsTitle")}
                   </Tabs.Trigger>
-                  <Tabs.Trigger value="schema" disabled={busy}>
-                    {t("plugins.openapi.schemaTitle")}
-                  </Tabs.Trigger>
                   <Tabs.Trigger value="authentication" disabled={busy}>
                     {t("mcpDetail.authentication")}
                   </Tabs.Trigger>
@@ -446,58 +313,43 @@ export default function OpenAPIPluginDetailPage({
                   keepMounted
                   hidden={tab !== "server"}
                 >
-                  <div className="flex min-w-0 flex-col gap-6">
+                  <Section
+                    gap={6}
+                    height="auto"
+                    justifyContent="start"
+                    alignItems="stretch"
+                    className="min-w-0"
+                  >
                     {canEdit || can(tool, "toggle") ? (
-                      <MetadataEditor
+                      <AddOpenAPIActionModal
                         key={tool.id}
-                        tool={tool}
+                        presentation="inline"
+                        existingTool={tool}
                         active={tab === "server"}
                         footerTarget={footerTarget}
                         onBusyChange={setBusy}
-                        onDirtyChange={setMetadataDirty}
-                        onSave={saveMetadata}
+                        onDirtyChange={setConfigurationDirty}
+                        onSaveConfiguration={saveConfiguration}
                       />
                     ) : (
-                      <Content
-                        sizePreset="main-ui"
-                        variant="section"
-                        title={tool.name}
-                        description={
-                          tool.description || t("plugins.openapi.readOnly")
-                        }
-                      />
-                    )}
-                  </div>
-                </Tabs.Content>
-                <Tabs.Content
-                  value="schema"
-                  keepMounted
-                  hidden={tab !== "schema"}
-                >
-                  <div className="min-w-0">
-                    {visited.has("schema") &&
-                      (canEdit ? (
-                        <AddOpenAPIActionModal
-                          presentation="inline"
-                          active={tab === "schema"}
-                          footerTarget={footerTarget}
-                          onBusyChange={setBusy}
-                          onDirtyChange={setSchemaDirty}
-                          existingTool={tool}
-                          onViewTools={() => selectTab("tools")}
-                          onUpdate={async () => {
-                            await mutateOpenApiTools();
-                          }}
+                      <>
+                        <Content
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={tool.name}
+                          description={
+                            tool.description || t("plugins.openapi.readOnly")
+                          }
                         />
-                      ) : (
                         <InputTextArea
                           value={JSON.stringify(tool.definition, null, 2)}
                           variant="disabled"
-                          rows={12}
-                          aria-label={t("plugins.openapi.schemaTitle")}
+                          rows={8}
+                          aria-label={t("addOpenApiModal.definition.title")}
                         />
-                      ))}
-                  </div>
+                      </>
+                    )}
+                  </Section>
                 </Tabs.Content>
                 <Tabs.Content
                   value="authentication"

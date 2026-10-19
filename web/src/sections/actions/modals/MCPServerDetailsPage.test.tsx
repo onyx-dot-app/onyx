@@ -1,3 +1,4 @@
+import { SWR_KEYS } from "@/lib/swr-keys";
 const mockPush = jest.fn();
 
 jest.mock("next/navigation", () => ({
@@ -99,14 +100,10 @@ function RefreshSettings() {
   const { mutate } = useSWRConfig();
   return (
     <>
-      <Button onClick={() => void mutate("/api/settings")}>
+      <Button onClick={() => void mutate(SWR_KEYS.settings)}>
         Refresh settings
       </Button>
-      <Button
-        onClick={() =>
-          void mutate("/api/admin/default-assistant/configuration")
-        }
-      >
+      <Button onClick={() => void mutate(SWR_KEYS.defaultAssistantConfig)}>
         Refresh Chat
       </Button>
     </>

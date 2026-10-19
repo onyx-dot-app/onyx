@@ -144,7 +144,9 @@ export default function MCPAuthenticationPage({
       recommendation?.kind === "auth_unknown" ? null : initialValues.auth_type
     );
   const persistedValues = useRef(initialValues);
-  const [hasChosenSetup, setHasChosenSetup] = useState(false);
+  const [hasChosenSetup, setHasChosenSetup] = useState(
+    "oauth_setup_mode" in mcpServer && mcpServer.oauth_setup_mode != null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => onBusyChange(isSubmitting), [isSubmitting, onBusyChange]);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
@@ -650,6 +652,7 @@ export default function MCPAuthenticationPage({
                       !canSubmit ||
                       (!dirty &&
                         savedConnectionReady &&
+                        !chatEnableIntent &&
                         !recommendation &&
                         !connectionError) ||
                       !isValid ||

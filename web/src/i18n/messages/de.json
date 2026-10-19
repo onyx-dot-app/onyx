@@ -219,6 +219,15 @@
         "createFailed": "Die OpenAPI-Aktion konnte nicht erstellt werden",
         "invalidJson": "Ungültiges JSON-Format in der Definition des OpenAPI-Schemas",
         "updateFailed": "Die OpenAPI-Aktion konnte nicht aktualisiert werden"
+      },
+      "humanDescription": {
+        "title": "Beschreibung für Menschen",
+        "hint": "Wird auf der Plugin-Karte und in den Plugin-Details angezeigt."
+      },
+      "agentDescription": {
+        "title": "Beschreibung für Agenten",
+        "hint": "Bearbeitet info.description im OpenAPI-Schema.",
+        "disabled": "Gib ein gültiges Schema ein, um dieses Feld zu bearbeiten."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Verwende dein Konto in Craft.",
         "craftOnly": "Nur Craft",
-        "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht."
+        "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht.",
+        "craftDisabledDescription": "Diese App ist in Craft deaktiviert. Der Hauptchat unterstützt sie nicht."
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "Dieses Plugin in Chats ohne benutzerdefinierten Agenten verfügbar machen. Die Zugriffskontrollen gelten weiterhin.",
         "mcpCraftDescription": "Dieses Plugin in Craft verfügbar machen. Zugriffskontrollen und Tool-Berechtigungen gelten weiterhin.",
         "craftAppDescription": "Diese App in Craft verfügbar machen. Verbindungs- und Genehmigungsanforderungen gelten weiterhin.",
-        "workspaceDescription": "Dieses Plugin in Chat und benutzerdefinierten Agenten ausführen lassen. Bestehende Zugriffs- und Authentifizierungsanforderungen gelten weiterhin."
+        "workspaceDescription": "Dieses Plugin in Chat und benutzerdefinierten Agenten verfügbar machen. Zugriffsregeln und Authentifizierungsanforderungen gelten weiterhin."
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "OpenAPI-Plugin hinzufügen",
         "detailDescription": "Verwalten Sie diese API und die Tools für Ihre Agenten.",
-        "detailsTitle": "Plugin-Details",
+        "detailsTitle": "Konfiguration",
         "schemaTitle": "OpenAPI-Schema",
         "notFound": "Plugin nicht gefunden",
         "loadFailed": "Dieses Plugin konnte nicht geladen werden",

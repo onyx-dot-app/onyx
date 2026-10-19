@@ -21,6 +21,7 @@ export interface MCPServer {
   auth_type?: MCPAuthenticationType;
   auth_performer?: MCPAuthenticationPerformer;
   oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_setup_mode?: "automatic" | "own_client" | null;
   oauth_cimd_enabled?: boolean;
   oauth_authorization_endpoint?: string;
   oauth_token_endpoint?: string;

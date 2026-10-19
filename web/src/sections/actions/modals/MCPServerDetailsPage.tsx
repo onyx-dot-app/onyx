@@ -317,7 +317,7 @@ export default function MCPServerDetailsPage({
                   <InputVertical
                     withLabel="description"
                     title={t("addMcpModal.description.title")}
-                    suffix={t("addMcpModal.description.suffix")}
+                    suffix="optional"
                   >
                     <InputTextArea
                       id="description"

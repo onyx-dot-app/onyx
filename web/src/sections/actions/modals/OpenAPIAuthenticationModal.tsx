@@ -51,8 +51,7 @@ export interface OpenAPIAuthFormValues extends OAuthConfigFields {
 }
 
 interface OpenAPIAuthenticationModalProps {
-  beforeFields?: React.ReactNode;
-  presentation?: "modal" | "inline";
+  presentation?: "modal" | "inline" | "content";
   active?: boolean;
   footerTarget?: HTMLDivElement | null;
   onBusyChange?: (busy: boolean) => void;
@@ -92,7 +91,6 @@ const defaultValues: OpenAPIAuthFormValues = {
 };
 
 export default function OpenAPIAuthenticationModal({
-  beforeFields,
   presentation = "modal",
   active: visible = true,
   footerTarget = null,
@@ -363,7 +361,7 @@ export default function OpenAPIAuthenticationModal({
           }
           formikHelpers.resetForm({ values });
         }
-        if (active.current && presentation === "modal") onClose();
+        if (active.current && presentation !== "inline") onClose();
       } catch (error) {
         if (active.current)
           setSubmissionError(
@@ -434,7 +432,6 @@ export default function OpenAPIAuthenticationModal({
               padding={presentation === "inline" ? 0 : 6}
               alignItems="stretch"
             >
-              {beforeFields}
               {submissionError && (
                 <Text as="p" mainUiBody className="text-action-text-danger-05">
                   {submissionError}
@@ -460,7 +457,7 @@ export default function OpenAPIAuthenticationModal({
                 </div>
               ) : (
                 <fieldset disabled={isSubmitting} className="contents">
-                  <div className="flex flex-col gap-4 px-2 pt-2">
+                  <div className="flex flex-col gap-4">
                     <FormField
                       name="authMethod"
                       state={
@@ -471,7 +468,7 @@ export default function OpenAPIAuthenticationModal({
                             : "idle"
                       }
                     >
-                      <FormField.Label>
+                      <FormField.Label className="ms-0">
                         {t("openApiAuthModal.authMethod.label")}
                       </FormField.Label>
                       <FormField.Control asChild>
@@ -538,12 +535,13 @@ export default function OpenAPIAuthenticationModal({
                     </FormField>
                   </div>
 
-                  {presentation === "modal" && (
-                    <Divider paddingPerpendicular={0} />
-                  )}
+                  {presentation !== "inline" &&
+                    values.authMethod !== "none" && (
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    )}
 
                   {values.authMethod === "oauth" && (
-                    <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
+                    <section className="flex flex-col gap-4">
                       <FormField
                         name="authorizationUrl"
                         state={
@@ -554,7 +552,7 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>
+                        <FormField.Label className="ms-0">
                           {t("openApiAuthModal.authorizationUrl.label")}
                         </FormField.Label>
                         <FormField.Control asChild>
@@ -584,7 +582,7 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>
+                        <FormField.Label className="ms-0">
                           {t("openApiAuthModal.tokenUrl.label")}
                         </FormField.Label>
                         <FormField.Control asChild>
@@ -617,9 +615,17 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>
+                        <FormField.Label
+                          className="ms-0"
+                          optional={isEditingOAuthConfig}
+                        >
                           {t("openApiAuthModal.clientId.label")}
                         </FormField.Label>
+                        {isEditingOAuthConfig && (
+                          <FormField.Description className="ms-0">
+                            {t("openApiAuthModal.clientId.description")}
+                          </FormField.Description>
+                        )}
                         <FormField.Control asChild>
                           <InputTypeIn
                             name="clientId"
@@ -628,11 +634,6 @@ export default function OpenAPIAuthenticationModal({
                             placeholder=" "
                           />
                         </FormField.Control>
-                        {isEditingOAuthConfig && (
-                          <FormField.Description>
-                            {t("openApiAuthModal.clientId.description")}
-                          </FormField.Description>
-                        )}
                         <FormField.Message
                           messages={{
                             error: errors.clientId,
@@ -650,9 +651,17 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>
+                        <FormField.Label
+                          className="ms-0"
+                          optional={isEditingOAuthConfig}
+                        >
                           {t("openApiAuthModal.clientSecret.label")}
                         </FormField.Label>
+                        {isEditingOAuthConfig && (
+                          <FormField.Description className="ms-0">
+                            {t("openApiAuthModal.clientSecret.description")}
+                          </FormField.Description>
+                        )}
                         <FormField.Control asChild>
                           <InputPasswordTypeIn
                             name="clientSecret"
@@ -666,11 +675,6 @@ export default function OpenAPIAuthenticationModal({
                             placeholder=" "
                           />
                         </FormField.Control>
-                        {isEditingOAuthConfig && (
-                          <FormField.Description>
-                            {t("openApiAuthModal.clientSecret.description")}
-                          </FormField.Description>
-                        )}
                         <FormField.Message
                           messages={{
                             error: errors.clientSecret,
@@ -688,13 +692,16 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>
+                        <FormField.Label className="ms-0">
                           {t.rich("openApiAuthModal.scopes.label", {
                             optional: (chunks) => (
                               <span className="text-text-03">{chunks}</span>
                             ),
                           })}
                         </FormField.Label>
+                        <FormField.Description className="ms-0">
+                          {t("openApiAuthModal.scopes.description")}
+                        </FormField.Description>
                         <FormField.Control asChild>
                           <InputTypeIn
                             name="scopes"
@@ -705,9 +712,6 @@ export default function OpenAPIAuthenticationModal({
                             )}
                           />
                         </FormField.Control>
-                        <FormField.Description>
-                          {t("openApiAuthModal.scopes.description")}
-                        </FormField.Description>
                         <FormField.Message
                           messages={{
                             error: errors.scopes,
@@ -718,10 +722,10 @@ export default function OpenAPIAuthenticationModal({
                       <FormField name="supportsPkce">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex flex-col gap-1">
-                            <FormField.Label>
+                            <FormField.Label className="ms-0">
                               {t("openApiAuthModal.pkce.label")}
                             </FormField.Label>
-                            <FormField.Description>
+                            <FormField.Description className="ms-0">
                               {t("openApiAuthModal.pkce.description")}
                             </FormField.Description>
                           </div>
@@ -742,7 +746,7 @@ export default function OpenAPIAuthenticationModal({
                         disabled={!isValid || isSubmitting}
                       />
 
-                      <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
+                      <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-2 w-full">
                           <Text
                             as="p"
@@ -780,7 +784,7 @@ export default function OpenAPIAuthenticationModal({
                     </section>
                   )}
                   {values.authMethod === "custom-header" && (
-                    <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
+                    <section className="flex flex-col gap-4">
                       <div className="flex flex-col gap-2">
                         <Text as="p" mainUiAction text04>
                           {t("openApiAuthModal.headers.title")}
@@ -879,6 +883,19 @@ export default function OpenAPIAuthenticationModal({
 
   if (presentation === "inline") return isOpen ? form : null;
 
+  const content = (
+    <>
+      <Modal.Header
+        padding={4}
+        title={title}
+        description={description ?? t("openApiAuthModal.header.description")}
+        onClose={saving ? undefined : onClose}
+      />
+      {form}
+    </>
+  );
+  if (presentation === "content") return isOpen ? content : null;
+
   return (
     <Modal
       open={isOpen}
@@ -887,13 +904,7 @@ export default function OpenAPIAuthenticationModal({
       }}
     >
       <PluginModalContent skipOverlay={skipOverlay}>
-        <Modal.Header
-          padding={4}
-          title={title}
-          description={description ?? t("openApiAuthModal.header.description")}
-          onClose={saving ? undefined : onClose}
-        />
-        {form}
+        {content}
       </PluginModalContent>
     </Modal>
   );

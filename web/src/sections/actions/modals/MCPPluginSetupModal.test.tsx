@@ -285,12 +285,15 @@ test.each([false, true])(
     if (oauth) probeResponse = async () => oauthResult;
     toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
     render(<SetupModal />);
-    await openConnection();
     const user = setupUser();
     await user.click(
-      screen.getByRole("switch", { name: "Enable in default Chat" })
+      await screen.findByRole("switch", { name: "Enable in default Chat" })
     );
     await user.click(screen.getByRole("switch", { name: "Enable for Craft" }));
+    await openConnection();
+    expect(
+      screen.queryByRole("switch", { name: "Enable for Craft" })
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: copy.connect }));
     await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
     expect(
@@ -494,19 +497,38 @@ test("starts with name and URL fields and shows detection before Continue withou
   const pending = deferred<MCPSetupProbeResult>();
   probeResponse = () => pending.promise;
   render(<SetupModal />);
+  for (const label of [
+    messages.actions.mcpAuthModal.authType.label,
+    messages.actions.mcpAuthModal.transport.label,
+  ]) {
+    const row = (await screen.findByText(label)).closest("[data-stage]");
+    expect(row).toBeVisible();
+    expect(row).toHaveAttribute("data-state", "pending");
+  }
+  expect(probeUrls).toEqual([]);
   await enterUrl();
   expect(screen.getAllByRole("textbox")).toHaveLength(2);
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", {
+      name: messages.actions.mcpAuthModal.authType.label,
+    })
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   await screen.findByRole("status", {}, { timeout: 3000 });
-  expect(screen.getByText(copy.contactingServer)).toBeVisible();
+  expect(
+    screen.getByText(messages.actions.mcpAuthModal.transport.label)
+  ).toBeVisible();
   expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
   expect(
-    screen.getByText(copy.contactingServer).closest("[data-stage]")
+    screen
+      .getByText(messages.actions.mcpAuthModal.transport.label)
+      .closest("[data-stage]")
   ).toHaveAttribute("data-state", "pending");
   expect(
-    screen.getByText(copy.detectingAuthentication).closest("[data-stage]")
-  ).toHaveAttribute("data-state", "waiting");
+    screen
+      .getByText(messages.actions.mcpAuthModal.authType.label)
+      .closest("[data-stage]")
+  ).toHaveAttribute("data-state", "pending");
   await act(async () => pending.resolve(publicResult));
   expect(await screen.findByText(copy.publicDetected)).toBeVisible();
   expect(
@@ -620,8 +642,7 @@ test("closing the session aborts its pending probe", async () => {
   probeResponse = () => pending.promise;
   const view = render(<SetupModal />);
   await enterUrl();
-  await screen.findByRole("status", {}, { timeout: 3000 });
-  expect(probeSignals).toHaveLength(1);
+  await waitFor(() => expect(probeSignals).toHaveLength(1), { timeout: 3000 });
   view.rerender(
     <MCPPluginSetupModal
       open={false}
@@ -718,7 +739,10 @@ test("debounces URL edits and discards a stale probe", async () => {
     url.includes("first") ? stale.promise : Promise.resolve(oauthResult);
   render(<SetupModal />);
   const input = await enterUrl("https://first.example.com/mcp");
-  await screen.findByRole("status", {}, { timeout: 3000 });
+  await waitFor(
+    () => expect(probeUrls).toEqual(["https://first.example.com/mcp"]),
+    { timeout: 3000 }
+  );
   fireEvent.change(input, {
     target: { value: "https://second.example.com/mcp" },
   });
@@ -848,18 +872,20 @@ test("Connect creates a scoped server once and a failed tool retry updates the s
   toolsFail = true;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
   render(<SetupModal />);
-  await openDetails();
+  await enterUrl();
+  await screen.findByText(copy.publicDetected, {}, { timeout: 3000 });
   const user = setupUser();
   expect(
     screen.queryByRole("option", { name: /^Public/ })
   ).not.toBeInTheDocument();
-  const connect = screen.getByRole("button", { name: copy.connect });
-  expect(connect).toBeDisabled();
+  expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
   const groups = screen.getByPlaceholderText("Add user groups");
   await user.click(groups);
   expect(groups).toHaveFocus();
   await screen.findByRole("option", { name: /^Engineering/ });
   await user.keyboard("{ArrowDown}{Enter}");
+  await openConnection();
+  const connect = screen.getByRole("button", { name: copy.connect });
   await waitFor(() => expect(connect).toBeEnabled());
   await user.click(connect);
   expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -902,6 +928,15 @@ test.each(["blocked", "connection_failed"] as const)(
     render(<SetupModal />);
     await enterUrl();
     await screen.findByRole("alert", {}, { timeout: 3000 });
+    for (const label of [
+      messages.actions.mcpAuthModal.authType.label,
+      messages.actions.mcpAuthModal.transport.label,
+    ]) {
+      expect(screen.getByText(label).closest("[data-stage]")).toHaveAttribute(
+        "data-state",
+        "error"
+      );
+    }
     expect(screen.getByRole("button", { name: copy.continue })).toBeDisabled();
     if (reason === "blocked")
       expect(
@@ -924,6 +959,34 @@ test.each(["blocked", "connection_failed"] as const)(
     expect(writes).toEqual([]);
   }
 );
+
+test("manual setup waits for a scoped manager to select access groups", async () => {
+  authority(true);
+  probeResponse = async () => ({
+    kind: "unreachable",
+    reason: "connection_failed",
+  });
+  render(<SetupModal />);
+  await enterUrl();
+  const manual = await screen.findByRole(
+    "button",
+    { name: copy.configureManually },
+    { timeout: 3000 }
+  );
+  expect(manual).toBeDisabled();
+  const user = setupUser();
+  await user.click(screen.getByPlaceholderText("Add user groups"));
+  await screen.findByRole("option", { name: /^Engineering/ });
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(manual).toBeEnabled();
+  await user.click(manual);
+  expect(
+    screen.getByRole("combobox", {
+      name: messages.actions.mcpAuthModal.authType.label,
+    })
+  ).toBeVisible();
+  expect(writes).toEqual([]);
+});
 
 test("denied users cannot probe or configure a server", async () => {
   authority(false, true);

@@ -219,6 +219,15 @@
         "createFailed": "فشل إنشاء إجراء OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
         "updateFailed": "فشل تحديث إجراء OpenAPI"
+      },
+      "humanDescription": {
+        "title": "وصف للبشر",
+        "hint": "يظهر في بطاقة الإضافة وتفاصيلها."
+      },
+      "agentDescription": {
+        "title": "وصف للوكلاء",
+        "hint": "يحرر info.description في مخطط OpenAPI.",
+        "disabled": "أدخل مخططًا صالحًا لتحرير هذا الحقل."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "استخدم حسابك في Craft.",
         "craftOnly": "Craft فقط",
-        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية."
+        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية.",
+        "craftDisabledDescription": "هذا التطبيق معطّل في Craft. الدردشة الرئيسية لا تدعمه."
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "إتاحة هذه الإضافة في المحادثات التي لا تستخدم وكيلًا مخصصًا. تظل ضوابط الوصول سارية.",
         "mcpCraftDescription": "إتاحة هذه الإضافة في Craft. تظل ضوابط الوصول وأذونات الأدوات سارية.",
         "craftAppDescription": "إتاحة هذا التطبيق في Craft. تظل متطلبات الاتصال والموافقة سارية.",
-        "workspaceDescription": "السماح بتشغيل هذه الإضافة في الدردشة والوكلاء المخصصين. تظل متطلبات الوصول والمصادقة الحالية سارية."
+        "workspaceDescription": "اجعل هذه الإضافة متاحة في الدردشة والوكلاء المخصصين. تظل ضوابط الوصول ومتطلبات المصادقة سارية."
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "إضافة إضافة OpenAPI",
         "detailDescription": "إدارة واجهة API هذه والأدوات المتاحة لوكلائك.",
-        "detailsTitle": "تفاصيل الإضافة",
+        "detailsTitle": "الإعدادات",
         "schemaTitle": "مخطط OpenAPI",
         "notFound": "لم يتم العثور على الإضافة",
         "loadFailed": "تعذر تحميل هذه الإضافة",

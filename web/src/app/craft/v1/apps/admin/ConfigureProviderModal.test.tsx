@@ -135,6 +135,63 @@ describe("ConfigureProviderModal", () => {
     );
   });
 
+  it.each([false, true])(
+    "preserves concurrent availability changes for managed=%s",
+    async (managed) => {
+      const initial = { ...APP, is_onyx_managed: managed };
+      const onClose = jest.fn();
+      const onSaved = jest.fn();
+      jest
+        .mocked(externalAppsService.updateExternalApp)
+        .mockResolvedValue({ ...initial, enabled: false });
+      const view = render(
+        <ConfigureProviderModal
+          onClose={onClose}
+          onSaved={onSaved}
+          descriptor={DESCRIPTOR}
+          existingApp={initial}
+        />
+      );
+      view.rerender(
+        <ConfigureProviderModal
+          onClose={onClose}
+          onSaved={onSaved}
+          descriptor={DESCRIPTOR}
+          existingApp={{ ...initial, enabled: false }}
+        />
+      );
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      fireEvent.click(
+        screen.getByRole("switch", {
+          name: "Let users manage approval settings",
+        })
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(externalAppsService.updateExternalApp).toHaveBeenCalled()
+      );
+      expect(
+        jest.mocked(externalAppsService.updateExternalApp).mock.calls[0]?.[1]
+      ).not.toHaveProperty("enabled");
+    }
+  );
+
+  it("describes a disabled app accurately", () => {
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={DESCRIPTOR}
+        existingApp={{ ...APP, enabled: false }}
+      />
+    );
+    expect(
+      screen.getAllByText(
+        "This app is disabled in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+  });
+
   it("shows an app description instead of the saved service URL", () => {
     render(
       <ConfigureProviderModal
@@ -271,7 +328,6 @@ describe("ConfigureProviderModal", () => {
         upstream_url_patterns: ["https://slack.com/api/.*"],
         auth_template: { Authorization: "Bearer {token}" },
         action_policies: {},
-        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: { token: "updated-token" },
       })

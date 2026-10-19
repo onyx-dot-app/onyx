@@ -219,6 +219,15 @@
         "createFailed": "Failed to create OpenAPI action",
         "invalidJson": "Invalid JSON format in OpenAPI schema definition",
         "updateFailed": "Failed to update OpenAPI action"
+      },
+      "humanDescription": {
+        "title": "Description for Humans",
+        "hint": "Displayed on the plugin card and in plugin details."
+      },
+      "agentDescription": {
+        "title": "Description for Agents",
+        "hint": "Edits info.description in the OpenAPI schema.",
+        "disabled": "Enter a valid schema to edit this field."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Use your account in Craft.",
         "craftOnly": "Craft only",
-        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it."
+        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it.",
+        "craftDisabledDescription": "This app is disabled in Craft. Main Chat does not support it."
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "Make this plugin available in chats without a custom agent. Access controls still apply.",
         "mcpCraftDescription": "Make this plugin available in Craft. Access controls and tool permissions still apply.",
         "craftAppDescription": "Make this app available in Craft. Connection and approval requirements still apply.",
-        "workspaceDescription": "Allow this plugin to run in Chat and custom agents. Existing access and authentication requirements still apply."
+        "workspaceDescription": "Make this plugin available in Chat and custom agents. Access controls and authentication requirements still apply."
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "Add an OpenAPI plugin",
         "detailDescription": "Manage this API and the tools available to your agents.",
-        "detailsTitle": "Plugin details",
+        "detailsTitle": "Configuration",
         "schemaTitle": "OpenAPI schema",
         "notFound": "Plugin not found",
         "loadFailed": "Could not load this plugin",

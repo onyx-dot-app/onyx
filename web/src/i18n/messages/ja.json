@@ -219,6 +219,15 @@
         "createFailed": "OpenAPI アクションの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
         "updateFailed": "OpenAPI アクションの更新に失敗しました"
+      },
+      "humanDescription": {
+        "title": "ユーザー向けの説明",
+        "hint": "プラグインのカードと詳細に表示されます。"
+      },
+      "agentDescription": {
+        "title": "エージェント向けの説明",
+        "hint": "OpenAPIスキーマのinfo.descriptionを編集します。",
+        "disabled": "このフィールドを編集するには、有効なスキーマを入力してください。"
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Craftでアカウントを使用します。",
         "craftOnly": "Craftのみ",
-        "craftOnlyDescription": "このアプリはCraftで利用できます。メインチャットには対応していません。"
+        "craftOnlyDescription": "このアプリはCraftで利用できます。メインチャットには対応していません。",
+        "craftDisabledDescription": "このアプリはCraftで無効になっています。メインチャットではサポートされていません。"
       }
     },
     "plugins": {
@@ -1051,7 +1061,7 @@
         "chatDescription": "カスタムエージェントを使わないチャットでこのプラグインを利用可能にします。アクセス制御は引き続き適用されます。",
         "mcpCraftDescription": "Craft でこのプラグインを利用可能にします。アクセス制御とツールの権限は引き続き適用されます。",
         "craftAppDescription": "Craft でこのアプリを利用可能にします。接続と承認の要件は引き続き適用されます。",
-        "workspaceDescription": "チャットとカスタムエージェントでこのプラグインの実行を許可します。既存のアクセスと認証の要件は引き続き適用されます。"
+        "workspaceDescription": "このプラグインをChatとカスタムエージェントで利用可能にします。アクセス制御と認証要件は引き続き適用されます。"
       },
       "craftApp": {
         "tabs": {
@@ -1077,7 +1087,7 @@
         },
         "createTitle": "OpenAPI プラグインを追加",
         "detailDescription": "この API とエージェントが使用できるツールを管理します。",
-        "detailsTitle": "プラグインの詳細",
+        "detailsTitle": "設定",
         "schemaTitle": "OpenAPI スキーマ",
         "notFound": "プラグインが見つかりません",
         "loadFailed": "このプラグインを読み込めませんでした",

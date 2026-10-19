@@ -183,11 +183,11 @@ list's `default_chat_enabled` summary, not credential connection status.
 Missing summaries use a neutral dot with a Chat unknown tooltip.
 
 Add opens the type dropdown and then its native catalog or creation flow.
-OpenAPI creation combines schema entry and live action review on the first step, then authorization.
-The validated schema preview groups its service logo, name, server URL, and
-description in one compact identity row, shared by creation and schema editing.
-Back preserves schema and credential drafts.
+OpenAPI creation shows schema entry, descriptions, and workspace availability on the first step, then authorization.
+A divider separates workspace availability from the schema fields. Creation omits the server and endpoint preview.
+Back preserves schema and credential drafts. Creation keeps one dialog and backdrop mounted across schema and authentication steps.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
+Existing Craft App edits omit unchanged availability, so unrelated saves preserve concurrent admin changes.
 Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
 Failed retries reuse the created tool ID and any newly created OAuth configuration ID.
 Retry writes require a successful authoritative refresh, not SWR's cached
@@ -217,11 +217,16 @@ saves block navigation. The inline Authentication Method has no divider.
 Closing saved OpenAPI details confirms unsaved edits within the same modal frame.
 Keeping edits preserves each mounted form. Authentication saves reject a changed
 OAuth link before writing, so stale values cannot target a replacement config.
-The inline Schema tab shows validation and a detected-tool count, not endpoints.
-View tools selects the Tools tab; unsaved schemas must be saved first. Creation
+Configuration combines name, description, schema, and workspace availability in one saved form.
+Description for Humans is optional display text; creation leaves it blank unless entered.
+Creation shows the schema first, then Description for Humans, then Description for Agents.
+Description for Agents edits schema info.description directly; raw schema edits update the same input.
+Schema edits preserve the display name and human description unless those fields are also edited.
+A divider precedes workspace availability. Tools lists endpoints; Configuration has no detected-tool row. Creation
 retains its endpoint preview because it has no separate Tools tab.
 Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
 header. Tools use the shared endpoint list, search, count, and empty feedback.
+Plugin input descriptions sit below labels and above controls; optional fields have a label suffix.
 Plugin dialogs use the shared large width (50rem) and fit their content.
 Height is capped at 80dvh and the available viewport space, reserving the top offset and bottom gap.
 Long content scrolls in the modal body; tab panels do not impose fixed heights. OpenAPI description and personal default Chat settings use
@@ -241,7 +246,7 @@ count, enabled state, and loading/retry feedback. Review skills opens the
 existing app-filtered skills page; no admin metadata or policies are fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
-`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, review,
+`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, workspace availability,
 Back navigation, authorization choices and draft retention, invalid JSON, validation failure/pending, saving, creation failure/success,
 and closing/reopening a discarded draft. Network fixtures remain local to each story.
 Explore offers official remote endpoints for Slack, HubSpot, Asana, Linear, Notion,
@@ -348,7 +353,7 @@ and manual OAuth endpoints remain under Advanced settings.
 New servers open a modal from Plugins, rendered by
 `web/src/sections/actions/modals/MCPPluginSetupModal.tsx`. The modal has one continuous surface without a timeline. Footer buttons own navigation.
 Server contains name and URL inputs. Description remains editable on the server detail page.
-Connection combines authentication and access.
+The Server step contains access and availability; Connection contains authentication.
 Both steps use the same content insets. The footer uses an explicit Back button.
 Closing MCP or OpenAPI creation discards the local draft immediately, without confirmation.
 Directory and catalog rows share horizontal padding. Suggested rows are keyboard-accessible cards.
@@ -357,8 +362,9 @@ starts `POST /admin/mcp/probe` after 700 milliseconds without another URL edit.
 The NDJSON stream reports Contacting server, then Detecting authentication.
 A real MCP initialization or authentication challenge completes contact. Authentication
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
-fails that row. Unreachable servers fail contact and leave authentication waiting.
-Closing the stream cancels its probe task. Detection rows remain visible before Continue. The modal discards
+fails that row. Unreachable servers fail contact and leave authentication pending.
+Closing the stream cancels its probe task. The first setup page places access controls and Chat/Craft availability below a divider, before authentication.
+Authentication method and connection transport rows render immediately with pending spinners. They stay visible during URL entry, debounce, and detection before Continue. Failed probes stop pending spinners. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
 then tries compatible SSE. It uses the shared SSRF guard, bounded timeouts, and
@@ -372,8 +378,8 @@ Connection failures keep the first form open without creating a server. Retry
 checks the URL again. Configure manually lets an admin supply headers or transport
 settings when the connection check fails. Blocked destinations have no bypass.
 Continue opens Connection without database writes. Connection contains authentication,
-client setup, custom headers, and advanced transport settings. Continue validates
-authentication and access on the Connection step. The name remains editable on the Server step.
+client setup, custom headers, and advanced transport settings. Continue requires valid access settings on the Server step.
+Connect validates authentication and rechecks access. The name remains editable on the Server step.
 Public server metadata supplies
 the suggested name. Other servers use the URL hostname. Connect saves details and
 access, then saves authentication and starts the connection flow. Failed retries
@@ -543,8 +549,8 @@ without another browser redirect.
 **OpenAPI (custom) action.** Each schema has a detail modal at
 `/admin/plugins/openapi/[toolId]`. It reads the permission-stamped OpenAPI list,
 not the single-tool or mutation response. Metadata saves preserve `oauth_config_id`.
-Plugin details, OpenAPI schema, Authentication, and Tools use one tab row with
-directly editable fields. Schema and authentication reuse the existing forms
+Configuration, Authentication, and Tools use one tab row with
+directly editable fields. Configuration and authentication reuse the existing forms
 in inline mode. A `configure=authentication` return selects authentication once,
 after the authorized record loads. Lifecycle controls stay on the directory.
 The admin pastes an OpenAPI 3.x schema and,
@@ -828,6 +834,10 @@ choice at server-creation time is what decides this, and it is visible on the
 `MCPServer` row, not implicit.
 
 ### 4.4 The MCP OAuth flow
+
+OAuth connection config records the automatic or own-client setup choice separately from registered credentials.
+Admin authentication forms restore this choice after OAuth. Older records use registration metadata when available.
+Saving only this choice locks and reloads the connection config before merging it, preserving concurrent credential refreshes.
 
 Automatic discovery finds OAuth settings after the admin selects OAuth. It
 does not detect the authentication method. Client setup can use supplied
