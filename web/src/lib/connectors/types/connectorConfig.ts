@@ -85,6 +85,13 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key: string;
+  scoped_token?: boolean;
+  comment_email_blacklist?: string[];
+}
+
 export interface SalesforceConfig {
   requested_objects?: string[];
 }
