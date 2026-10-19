@@ -518,8 +518,9 @@ class JiraServiceManagementConnector(
                 req = self.client.get_customer_request(issue_key, expand=["requestType"])
                 if isinstance(req.get("requestType"), dict) and req["requestType"].get("name"):
                     return str(req["requestType"]["name"])
-            except JiraServiceManagementClientError:
-                pass
+            except JiraServiceManagementClientError as exc:
+                if exc.status_code != 404:
+                    raise
         return None
 
     def _build_hierarchy_node(
@@ -1252,6 +1253,7 @@ class JiraServiceManagementConnector(
                 )
 
         next_checkpoint = checkpoint.model_copy(deep=True)
+        next_checkpoint.seen_issue_keys = list(seen_keys)
 
         if is_last_page or not issues:
             next_checkpoint.current_queue_idx += 1
@@ -1331,7 +1333,6 @@ class JiraServiceManagementConnector(
                 )
 
         next_checkpoint = checkpoint.model_copy(deep=True)
-        next_checkpoint.seen_issue_keys = list(seen_keys)
 
         if next_cursor and issues:
             if next_cursor.isdigit():
