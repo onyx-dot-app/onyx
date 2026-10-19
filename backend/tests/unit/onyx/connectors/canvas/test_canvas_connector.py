@@ -429,6 +429,19 @@ class TestGet:
         assert result == expected
 
     @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_error_reads_top_level_message(self, mock_requests: MagicMock) -> None:
+        """Canvas answers 404 for a disabled tool with a bare top-level
+        message and no error/errors key."""
+        mock_requests.get.return_value = _mock_response(
+            404, {"message": "That page has been disabled for this course"}
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            self.client.get("courses/1/pages")
+
+        assert exc_info.value.detail == "That page has been disabled for this course"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
     def test_error_falls_back_to_reason_when_no_json_message(
         self, mock_requests: MagicMock
     ) -> None:
@@ -1327,10 +1340,11 @@ class TestLoadFromCheckpoint:
         assert new_cp.next_url is None
         assert new_cp.has_more is True
 
-    def test_course_404_advances_course_and_yields_failure(self) -> None:
-        """A 404 on a stage fetch means the whole course is inaccessible —
-        yield a course-level ConnectorFailure and skip to the next course
-        instead of burning API calls on every stage of a missing course."""
+    def test_disabled_tool_404_skips_stage_without_failure(self) -> None:
+        """A 404 on a stage means that tool is disabled for the course
+        (e.g. Pages turned off). Skip only that stage and record no failure:
+        the other stages still work, and failures would trip the framework's
+        abort threshold."""
         connector = _build_connector()
         cp = CanvasConnectorCheckpoint(
             has_more=True,
@@ -1344,22 +1358,65 @@ class TestLoadFromCheckpoint:
             "_fetch_stage_page",
             side_effect=OnyxError(
                 OnyxErrorCode.NOT_FOUND,
-                "course gone",
+                "That page has been disabled for this course",
                 status_code_override=404,
             ),
         ):
             items, new_cp = _run_checkpoint(connector, cp)
 
-        expected_entity_id = "canvas-course-1"
-        expected_next_course_index = 1
-        assert len(items) == 1
-        assert isinstance(items[0], ConnectorFailure)
-        assert items[0].failed_entity is not None
-        assert items[0].failed_entity.entity_id == expected_entity_id
-        assert new_cp.current_course_index == expected_next_course_index
-        assert new_cp.stage == CanvasStage.PAGES
+        assert items == []
+        assert new_cp.current_course_index == 0
+        assert new_cp.stage == CanvasStage.ASSIGNMENTS
         assert new_cp.next_url is None
         assert new_cp.has_more is True
+
+    def test_disabled_tool_404_on_last_stage_advances_to_next_course(self) -> None:
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1, 2],
+            current_course_index=0,
+            stage=CanvasStage.ANNOUNCEMENTS,
+        )
+
+        with patch.object(
+            connector,
+            "_fetch_stage_page",
+            side_effect=OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "disabled",
+                status_code_override=404,
+            ),
+        ):
+            items, new_cp = _run_checkpoint(connector, cp)
+
+        assert items == []
+        assert new_cp.current_course_index == 1
+        assert new_cp.stage == CanvasStage.PAGES
+        assert new_cp.has_more is True
+
+    def test_forbidden_during_stage_fetch_still_fails_the_run(self) -> None:
+        """Only the tool-disabled 404 is skipped. A 403 is a permission
+        problem and must not be swallowed."""
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True,
+            course_ids=[1],
+            current_course_index=0,
+            stage=CanvasStage.PAGES,
+        )
+
+        with patch.object(
+            connector,
+            "_fetch_stage_page",
+            side_effect=OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "forbidden",
+                status_code_override=403,
+            ),
+        ):
+            with pytest.raises(InsufficientPermissionsError):
+                _run_checkpoint(connector, cp)
 
     def test_fatal_auth_failure_during_stage_fetch_propagates(self) -> None:
         connector = _build_connector()
@@ -1868,6 +1925,67 @@ class TestRetrieveAllSlimDocsPermSync:
             side_effect=RuntimeError("permission lookup failed"),
         ):
             with pytest.raises(RuntimeError, match="permission lookup failed"):
+                list(connector.retrieve_all_slim_docs_perm_sync())
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_disabled_tool_does_not_fail_sync(self, mock_requests: MagicMock) -> None:
+        dispatcher = _make_url_dispatcher(
+            courses=[_mock_course()],
+            assignments=[_mock_assignment(20, "Assignment", 1, "2025-06-01T12:00:00Z")],
+        )
+
+        def _respond(url: str, **kwargs: Any) -> MagicMock:
+            if url.endswith("/pages"):
+                return _mock_response(
+                    404, {"message": "That page has been disabled for this course"}
+                )
+            return dispatcher(url, **kwargs)
+
+        mock_requests.get.side_effect = _respond
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with patch.object(
+            connector, "_get_item_permissions", return_value=ExternalAccess.empty()
+        ):
+            batches = list(connector.retrieve_all_slim_docs_perm_sync())
+
+        doc_ids = {
+            item.id
+            for batch in batches
+            for item in batch
+            if not isinstance(item, HierarchyNode)
+        }
+        assert doc_ids == {"canvas-assignment-1-20"}
+        pages_calls = [
+            c for c in mock_requests.get.call_args_list if c.args[0].endswith("/pages")
+        ]
+        assert len(pages_calls) == 1  # a disabled tool is not retried
+
+    @pytest.mark.parametrize("status_code", [401, 403, 500])
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_other_errors_still_fail_sync(
+        self, mock_requests: MagicMock, status_code: int
+    ) -> None:
+        """Only a disabled tool may yield an empty listing. Any other error
+        must fail the sync, or pruning would delete documents that still
+        exist in Canvas."""
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course()],
+        )
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with patch.object(
+            connector,
+            "_list_pages",
+            side_effect=OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "boom",
+                status_code_override=status_code,
+            ),
+        ):
+            with pytest.raises(OnyxError):
                 list(connector.retrieve_all_slim_docs_perm_sync())
 
 
