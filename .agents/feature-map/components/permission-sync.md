@@ -418,6 +418,22 @@ by `upsert_external_groups` (group write path) and by
 `external_access.external_user_group_ids` the same way). This symmetry is what
 makes a domain-wide share resolvable at read time; see §5.2 and §9.
 
+**Drive folder groups are enumerated by partition, not per user.** A Drive
+file's inherited permission names the folder it comes from, and doc sync
+places that folder id in the file's `external_user_group_ids`, so group sync
+(`group_sync.py:_get_all_folders`) must emit every folder that carries its own
+non-inherited permissions on every run. With a service account it lists each
+folder once, the way the connector's phased retrieval does: each shared drive
+as an organizer chosen by `drive_access.py:select_drive_organizer` from the
+members it already read for the drive group, each user's My Drive with an
+owned-only query, then each user's directly shared folders, which is where a
+folder owned outside the domain reaches it. OAuth has one identity and lists
+every folder it can see in one pass. The listing forms are the
+`DriveFolderScope` values of
+`source_operations.py:list_folders_with_permissions`. The whole sync shares
+one `JOB_TIMEOUT` deadline that every enumeration loop checks, since Celery
+time limits do not fire on thread-pool workers.
+
 ### 4.5 Salesforce: censoring instead of doc sync
 
 Salesforce has `doc_sync_config=None` and `censoring_config` set

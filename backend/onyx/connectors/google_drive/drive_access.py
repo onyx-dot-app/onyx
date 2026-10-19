@@ -79,7 +79,7 @@ class OrganizerChoice(BaseModel):
     reason: str
 
 
-def _parse_member(raw: dict[str, object]) -> DriveMember | None:
+def parse_drive_member(raw: dict[str, object]) -> DriveMember | None:
     """Skip principals with a role or type Google added after this was written."""
     raw_type = raw.get("type")
     raw_role = raw.get("role")
@@ -116,7 +116,7 @@ def list_drive_members(
         for raw in ops.list_drive_members(
             drive_id=drive_id, use_domain_admin_access=True
         ):
-            member = _parse_member(raw)
+            member = parse_drive_member(raw)
             if member is not None:
                 members.append(member)
     except GoogleDriveHttpError as error:

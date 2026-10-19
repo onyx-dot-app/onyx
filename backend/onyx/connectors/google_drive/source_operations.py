@@ -156,6 +156,22 @@ class DriveCorpus(str, Enum):
     ALL_DRIVES = "allDrives"
 
 
+class DriveFolderScope(str, Enum):
+    """Which folders a folder listing covers. Each folder of a domain is in
+    exactly one of the three narrow scopes, so a caller that walks every shared
+    drive, every owner and every user's direct shares lists each folder once."""
+
+    # Every folder the user can see, in any drive.
+    ALL_DRIVES = "all_drives"
+    # Folders of the user's My Drive that the user owns.
+    OWNED = "owned"
+    # Folders shared with the user directly. Children of a shared folder are
+    # not included, only the folder that carries the share.
+    SHARED_WITH_ME = "shared_with_me"
+    # Folders of one shared drive; the user must be a member.
+    SHARED_DRIVE = "shared_drive"
+
+
 def _error_reasons(error_details: object) -> tuple[str, ...]:
     if not isinstance(error_details, list):
         return ()
@@ -648,7 +664,10 @@ class GoogleDriveSourceOperations(SourceOperations):
         return drive.get("name")
 
     @source_operation(
-        capabilities={CredentialCapability.INDEXING},
+        capabilities={
+            CredentialCapability.INDEXING,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
         consumes=OperationConsumes.CREDENTIAL,
     )
     @_translated
@@ -892,18 +911,40 @@ class GoogleDriveSourceOperations(SourceOperations):
     )
     @_translated
     def list_folders_with_permissions(
-        self, *, user_email: str, continue_on_404_or_403: bool = True
+        self,
+        *,
+        user_email: str,
+        scope: DriveFolderScope = DriveFolderScope.ALL_DRIVES,
+        drive_id: str | None = None,
+        continue_on_404_or_403: bool = True,
     ) -> Iterator[GoogleDriveFileType]:
-        """Every folder the user can see, with its published permissions. By
-        default a 403 or 404 ends the listing without an error."""
+        """The folders in ``scope`` that the user can see, with their published
+        permissions. By default a 403 or 404 ends the listing without an
+        error."""
+        if (scope is DriveFolderScope.SHARED_DRIVE) != (drive_id is not None):
+            raise ValueError("A shared drive listing needs drive_id, and only it.")
+        query = f"mimeType = '{DRIVE_FOLDER_TYPE}' and trashed = false"
+        kwargs: dict[str, Any] = {}
+        if scope is DriveFolderScope.SHARED_DRIVE:
+            kwargs["corpora"] = DriveCorpus.DRIVE.value
+            kwargs["driveId"] = drive_id
+        elif scope is DriveFolderScope.ALL_DRIVES:
+            kwargs["corpora"] = DriveCorpus.ALL_DRIVES.value
+        else:
+            kwargs["corpora"] = DriveCorpus.USER.value
+            if scope is DriveFolderScope.OWNED:
+                query += " and 'me' in owners"
+            else:
+                query += " and sharedWithMe = true"
+        if kwargs["corpora"] != DriveCorpus.USER.value:
+            kwargs["supportsAllDrives"] = True
+            kwargs["includeItemsFromAllDrives"] = True
         yield from execute_paginated_retrieval(
             retrieval_function=self._drive(user_email).files().list,
             list_key="files",
             continue_on_404_or_403=continue_on_404_or_403,
-            corpora=DriveCorpus.ALL_DRIVES.value,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
             includePermissionsForView="published",
             fields=_FOLDER_PERMISSION_FIELDS,
-            q=f"mimeType = '{DRIVE_FOLDER_TYPE}' and trashed = false",
+            q=query,
+            **kwargs,
         )

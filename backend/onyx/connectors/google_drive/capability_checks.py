@@ -59,9 +59,11 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.doc_conversion import GOOGLE_MIME_TYPES_TO_EXPORT
 from onyx.connectors.google_drive.drive_access import (
+    DriveMember,
     OrganizerChoice,
     list_drive_members,
     list_group_member_emails,
+    parse_drive_member,
     select_drive_organizer,
 )
 from onyx.connectors.google_drive.models import (
@@ -1367,8 +1369,9 @@ class _GroupsCheck(_GoogleDriveCheck):
 
 class _DriveMembershipCheck(_GoogleDriveCheck):
     """Reads the members of the first shared drive, as group sync reads every
-    drive. A primary admin who is not a Workspace admin reads only the drives
-    it is a member of."""
+    drive, and finds a member group sync can act as to list the drive's
+    folders. A primary admin who is not a Workspace admin reads only the
+    drives it is a member of."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -1400,23 +1403,44 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
                 ),
                 None,
             )
+            unlistable: bool = False
             if drive_id is not None:
-                next(
-                    ops.list_drive_members(
-                        drive_id=drive_id, use_domain_admin_access=is_admin
-                    ),
-                    None,
-                )
+                members: list[DriveMember] = []
+                for raw in ops.list_drive_members(
+                    drive_id=drive_id, use_domain_admin_access=is_admin
+                ):
+                    member: DriveMember | None = parse_drive_member(raw)
+                    if member is not None:
+                        members.append(member)
+                if _is_service_account(auth):
+                    choice: OrganizerChoice = select_drive_organizer(
+                        drive_id=drive_id,
+                        members=members,
+                        google_domain=auth.primary_admin_email.split("@")[-1],
+                        expand_group=lambda group: list_group_member_emails(ops, group),
+                        can_list_drive=lambda email: ops.can_list_drive(
+                            user_email=email, drive_id=drive_id
+                        ),
+                    )
+                    unlistable = choice.email is None and not ops.can_list_drive(
+                        user_email=auth.primary_admin_email, drive_id=drive_id
+                    )
         if not is_admin:
             raise InsufficientPermissionsError(
                 f"{auth.primary_admin_email} is not a Workspace admin, so group "
                 "sync reads only the shared drives it is a member of."
             )
+        if unlistable:
+            raise ConnectorValidationError(
+                f"No member of shared drive {drive_id} is a Workspace user Onyx "
+                "can act as, and the primary admin cannot list it, so its "
+                "folders are not synced as groups."
+            )
 
 
 class _FolderPermissionsCheck(_GoogleDriveCheck):
     """Lists folders with their permissions as the primary admin, as group
-    sync does for each user, and reads the permissions of a folder that has
+    sync does for each partition, and reads the permissions of a folder that has
     them only by id."""
 
     def __init__(self) -> None:

@@ -221,3 +221,20 @@ def test_a_denied_folder_listing_is_reported() -> None:
         ops.list_folders_with_permissions.call_args.kwargs["continue_on_404_or_403"]
         is False
     )
+
+
+def test_a_drive_nobody_can_list_is_reported() -> None:
+    """Group sync lists a shared drive's folders as a member it can act as, or
+    as the admin. A drive with neither is reported, since its folders are
+    then never synced as groups."""
+    ops = _ops()
+    ops.list_drive_members.side_effect = _listing(
+        {"emailAddress": "ext@partner.com", "type": "user", "role": "organizer"}
+    )
+    ops.can_list_drive.return_value = False
+
+    result = _run("google_drive_shared_drive_members", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "cannot list it" in result.message
+    ops.can_list_drive.assert_called_with(user_email=_ADMIN, drive_id="d1")
