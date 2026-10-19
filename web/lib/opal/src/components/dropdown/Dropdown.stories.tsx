@@ -306,3 +306,35 @@ function ViewsDemo() {
 }
 
 export const Views: Story = { render: () => <ViewsDemo /> };
+
+/** Exercises viewport bounds with a pinned search field and a long list. */
+export const ViewportBounds: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => (
+    <div
+      style={{
+        padding: 16,
+        height: "100vh",
+        display: "flex",
+        alignItems: "end",
+      }}
+    >
+      <Dropdown>
+        <Dropdown.Trigger asChild>
+          <Button>Choose an option</Button>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label="Options"
+          search={{ placeholder: "Search options" }}
+          items={Array.from({ length: 50 }, (_, index) => ({
+            kind: "option" as const,
+            value: String(index + 1),
+            title: `Option ${index + 1}`,
+          }))}
+          value=""
+          onSelect={() => undefined}
+        />
+      </Dropdown>
+    </div>
+  ),
+};
