@@ -17,8 +17,6 @@ returns.
 
 from typing import Any, NoReturn
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -26,6 +24,7 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckNotApplicableError,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -78,13 +77,6 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     "notion_database_rows": (_AUTH_CHECK_ID,),
     "notion_user_info": (_AUTH_CHECK_ID,),
 }
-
-
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
 
 
 def _gateway(context: CapabilityCheckContext) -> NotionSourceOperations:
@@ -141,9 +133,9 @@ def _raise_for_api_error(
     error: NotionApiError,
     *,
     denied: str,
-    denied_row: _RowText,
+    denied_row: CheckRowText,
     not_found: str | None = None,
-    not_found_row: _RowText | None = None,
+    not_found_row: CheckRowText | None = None,
     not_found_denies: bool = False,
 ) -> NoReturn:
     """Maps a Notion API error onto the validation-exception family.
@@ -234,8 +226,8 @@ def _content_denied(what: str) -> str:
     )
 
 
-def _read_content_denied_row(effect: str) -> _RowText:
-    return _RowText(
+def _read_content_denied_row(effect: str) -> CheckRowText:
+    return CheckRowText(
         summary="Integration cannot read content",
         description=(
             f"Without the Read content capability, the integration {effect}. "
@@ -245,7 +237,7 @@ def _read_content_denied_row(effect: str) -> _RowText:
 
 
 _SEARCH_DENIED_ROW = _read_content_denied_row("finds no page to index")
-_PAGE_CONTENT_DENIED_ROW = _RowText(
+_PAGE_CONTENT_DENIED_ROW = CheckRowText(
     summary="Integration cannot read page content",
     description=f"Indexed pages would have no text. (HTTP 403)\n{_need(_READ_CONTENT)}",
 )
@@ -324,7 +316,7 @@ class _AuthCheck(_NotionCheck):
             _raise_for_api_error(
                 e,
                 denied="Notion does not let the integration read its bot user",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Integration cannot read its bot user",
                     description=(
                         "Notion refused to describe the integration. (HTTP 403)\n"
@@ -445,7 +437,7 @@ class _RootPageCheck(_NotionCheck):
                 "with the integration. Check the ID, and share the page with the "
                 "integration (••• menu > Connections)"
             ),
-            not_found_row=_RowText(
+            not_found_row=CheckRowText(
                 summary="Root page not found or not shared",
                 description=(
                     "Notion answers the same for a missing page and an unshared "
@@ -522,7 +514,7 @@ class _PageContentCheck(_NotionCheck):
                     f"Search returned the page `{page_id}`, but Notion does not let "
                     "the integration read its content"
                 ),
-                not_found_row=_RowText(
+                not_found_row=CheckRowText(
                     summary="Page found but content unreadable",
                     description=(
                         "Indexed pages would have no text. (HTTP 404)\nSelect Read "
@@ -600,7 +592,7 @@ class _DatabaseRowsCheck(_NotionCheck):
                 e,
                 denied=_content_denied("read database rows")
                 + ". Indexing skips the rows of databases it cannot read",
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Integration cannot read database rows",
                     description=(
                         "Indexing skips the rows of databases it cannot read. (HTTP "
@@ -612,7 +604,7 @@ class _DatabaseRowsCheck(_NotionCheck):
                     "integration read it. Share the database with the integration "
                     "(••• menu > Connections)"
                 ),
-                not_found_row=_RowText(
+                not_found_row=CheckRowText(
                     summary="Database found but not readable",
                     description=(
                         "Indexing would skip the database's rows. (HTTP 404)\nAdd "
@@ -666,7 +658,7 @@ class _UserInfoCheck(_NotionCheck):
                     f"{_CAPABILITIES_HINT} and select 'Read user information "
                     "without email addresses'"
                 ),
-                denied_row=_RowText(
+                denied_row=CheckRowText(
                     summary="Integration cannot read user names",
                     description=(
                         "People properties, such as Assignee, index without names. "
