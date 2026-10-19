@@ -1804,6 +1804,28 @@ class _FilePermissionsCheck(_GoogleDriveCheck):
         )
 
 
+@contextmanager
+def _admin_user_errors(context: CapabilityCheckContext) -> Iterator[None]:
+    """For the read of the primary admin's directory entry."""
+    admin: str | None = context.credential_json.get(DB_CREDENTIALS_PRIMARY_ADMIN_KEY)
+    with _google_errors(
+        context,
+        api=_ADMIN_API,
+        denied=(
+            f"Primary admin {admin or ''} is not authorized on the Google "
+            "Workspace directory API. Reconnect the connector with an "
+            "account that has admin directory access"
+        ),
+        denied_row=CheckRowText(
+            summary=f"{_admin(context)} cannot read the directory",
+            description=(
+                "The primary admin cannot read the Workspace directory. (HTTP 403)"
+            ),
+        ),
+    ):
+        yield
+
+
 class _DirectoryAdminCheck(_GoogleDriveCheck):
     """Reads the primary admin's directory entry, as group sync does first."""
 
@@ -1817,24 +1839,7 @@ class _DirectoryAdminCheck(_GoogleDriveCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
-        admin: str | None = context.credential_json.get(
-            DB_CREDENTIALS_PRIMARY_ADMIN_KEY
-        )
-        with _google_errors(
-            context,
-            api=_ADMIN_API,
-            denied=(
-                f"Primary admin {admin or ''} is not authorized on the Google "
-                "Workspace directory API. Reconnect the connector with an "
-                "account that has admin directory access"
-            ),
-            denied_row=CheckRowText(
-                summary=f"{_admin(context)} cannot read the directory",
-                description=(
-                    "The primary admin cannot read the Workspace directory. (HTTP 403)"
-                ),
-            ),
-        ):
+        with _admin_user_errors(context):
             auth: GoogleDriveAuth = ops.authenticate()
             admin_user: GoogleDirectoryUser = ops.get_admin_user()
         return CheckOutput(
@@ -1957,7 +1962,7 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
-        with _admin_sdk_errors(context):
+        with _admin_user_errors(context):
             auth: GoogleDriveAuth = ops.authenticate()
             admin_user: GoogleDirectoryUser = ops.get_admin_user()
         is_admin: bool = admin_user.is_admin or admin_user.is_delegated_admin
