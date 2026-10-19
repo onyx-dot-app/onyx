@@ -4,7 +4,6 @@ import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
-import { IconType } from "react-icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { CitationMap } from "../../interfaces";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
@@ -40,7 +39,7 @@ export interface FullChatState {
 }
 
 export interface RendererResult {
-  icon: IconType | IconFunctionComponent | null;
+  icon: IconFunctionComponent | null;
   status: string | JSX.Element | null;
   content: JSX.Element;
 
