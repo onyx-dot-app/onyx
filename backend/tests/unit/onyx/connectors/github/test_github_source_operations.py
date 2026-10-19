@@ -1,4 +1,5 @@
 import base64
+import threading
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
@@ -38,7 +39,7 @@ def _gateway(
         )
     )
     client = MagicMock()
-    gateway._cached_client = client
+    gateway._thread_clients().client = client
     return gateway, client.requester.requestJsonAndCheck
 
 
@@ -94,7 +95,7 @@ def test_api_errors_carry_the_request_and_body() -> None:
     client.requester.requestJsonAndCheck.side_effect = GithubException(
         500, {"message": "Server Error"}, {}
     )
-    gateway._cached_client = client
+    gateway._thread_clients().client = client
 
     with pytest.raises(GitHubApiError) as excinfo:
         gateway.get_repository(owner="o", name="r")
@@ -404,6 +405,40 @@ def test_the_client_is_built_once_with_the_bounded_retry() -> None:
         github_cls.call_args.kwargs["retry"], github_ops.BoundedGithubRetry
     )
     assert "base_url" not in github_cls.call_args.kwargs
+
+
+def test_threads_do_not_share_a_client() -> None:
+    """PyGithub's connection object holds one request at a time, so parallel
+    calls on one gateway use one client per thread."""
+    gateway = GitHubSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "github", {"github_access_token": _CLASSIC_TOKEN}
+        )
+    )
+    both_started = threading.Barrier(2, timeout=10)
+    clients_by_thread: dict[str, list[Any]] = {}
+
+    def use_gateway(name: str) -> None:
+        both_started.wait()
+        clients_by_thread[name] = [gateway._client(), gateway._client()]
+
+    with (
+        patch.object(github_ops, "Github", side_effect=lambda **_: MagicMock()),
+        patch("onyx.connectors.github.utils.GITHUB_CONNECTOR_BASE_URL", None),
+    ):
+        threads = [
+            threading.Thread(target=use_gateway, args=(name,)) for name in ("a", "b")
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    first_a, second_a = clients_by_thread["a"]
+    first_b, second_b = clients_by_thread["b"]
+    assert first_a is second_a
+    assert first_b is second_b
+    assert first_a is not first_b
 
 
 def test_an_unsafe_credential_url_fails_on_the_first_call() -> None:

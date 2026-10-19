@@ -7,6 +7,7 @@ the permission reads from ``sharepoint_rest``. This is the only file under
 ``connectors/sharepoint`` and its EE permission package that imports the SDKs.
 """
 
+import threading
 import time
 from collections.abc import Generator
 from datetime import datetime
@@ -160,9 +161,6 @@ class SharepointSourceOperations(SourceOperations):
     _graph_gateway: MicrosoftGraphGateway | None = None
     _sdk_client: GraphClient | None = None
     _tenant_domain_cache: str | None = None
-    _cached_rest_ctx: ClientContext | None = None
-    _cached_rest_ctx_url: str | None = None
-    _cached_rest_ctx_created_at: float = 0.0
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -254,39 +252,43 @@ class SharepointSourceOperations(SourceOperations):
         self._tenant_domain_cache = tenant_domain
         return tenant_domain
 
+    def _rest_contexts(self) -> threading.local:
+        """This thread's cached REST context. Threads must not share one: an
+        office365 context queues its queries on itself. ``dict.setdefault`` is
+        atomic under the GIL, so no guard lock is needed."""
+        return vars(self).setdefault("_rest_ctx_local", threading.local())
+
     def _rest_context(self, site_url: str) -> ClientContext:
-        """A SharePoint REST context for one site, kept until it changes site
-        or ages out. A rebuild also rebuilds the MSAL app, so its empty token
-        cache guarantees a fresh token from Azure AD."""
+        """A SharePoint REST context for one site, kept per thread until it
+        changes site or ages out. A rebuild also rebuilds the MSAL app, so its
+        empty token cache guarantees a fresh token from Azure AD."""
         suffix: str = self._env().sharepoint_domain_suffix
         # Re-checked here because group sync and discovered sites reach this
         # without validation.
         validate_site_url_host(site_url, suffix, self._tenant_domain())
 
-        elapsed: float = time.monotonic() - self._cached_rest_ctx_created_at
-        if (
-            self._cached_rest_ctx is not None
-            and self._cached_rest_ctx_url == site_url
-            and elapsed <= REST_CTX_MAX_AGE_S
-        ):
-            return self._cached_rest_ctx
-
-        if self._cached_rest_ctx is not None:
+        local: threading.local = self._rest_contexts()
+        # The context, its site URL, and when it was built.
+        cached: tuple[ClientContext, str, float] | None = vars(local).get("entry")
+        if cached is not None:
+            context, cached_url, created_at = cached
+            elapsed: float = time.monotonic() - created_at
+            if cached_url == site_url and elapsed <= REST_CTX_MAX_AGE_S:
+                return context
             logger.info(
                 "Rebuilding SharePoint REST client context (elapsed=%.0fs, site_changed=%s)",
                 elapsed,
-                self._cached_rest_ctx_url != site_url,
+                cached_url != site_url,
             )
             self._graph_gateway = None
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
-        self._cached_rest_ctx = ClientContext(site_url).with_access_token(
+        context = ClientContext(site_url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
         )
-        self._cached_rest_ctx_url = site_url
-        self._cached_rest_ctx_created_at = time.monotonic()
-        return self._cached_rest_ctx
+        local.entry = (context, site_url, time.monotonic())
+        return context
 
     def _reads(self) -> SharepointRestReads:
         return SharepointRestReads(

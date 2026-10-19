@@ -1,6 +1,7 @@
 """The HubSpot gateway turns SDK and REST answers into plain models, builds the
 requests HubSpot expects, and reports refusals as HubSpotApiError."""
 
+import threading
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -601,3 +602,40 @@ def test_a_cursor_walk_stops_at_the_end_and_refuses_to_spin() -> None:
                 max_pages=3,
             )
         )
+
+
+def test_threads_share_one_rate_limiter() -> None:
+    """Parallel first calls build one limiter, so it counts every thread's
+    calls. A second build would meet the first at the barrier."""
+    gateway = HubSpotSourceOperations(credentials_provider=MagicMock())
+    builds_meet = threading.Barrier(2, timeout=0.5)
+    builds: list[MagicMock] = []
+
+    def build_limiter() -> MagicMock:
+        limiter = MagicMock()
+        builds.append(limiter)
+        try:
+            builds_meet.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return limiter
+
+    both_started = threading.Barrier(2, timeout=10)
+    limiters: list[Any] = []
+
+    def first_call() -> None:
+        both_started.wait()
+        limiters.append(gateway._limiter())
+
+    with patch(
+        "onyx.connectors.hubspot.source_operations.HubSpotRateLimiter",
+        side_effect=build_limiter,
+    ):
+        threads = [threading.Thread(target=first_call) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    assert len(builds) == 1
+    assert limiters == [builds[0], builds[0]]
