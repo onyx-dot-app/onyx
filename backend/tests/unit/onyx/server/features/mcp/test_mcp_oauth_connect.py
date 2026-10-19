@@ -38,6 +38,7 @@ def _server() -> SimpleNamespace:
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=MCPTransport.STREAMABLE_HTTP,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,

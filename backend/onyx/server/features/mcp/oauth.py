@@ -41,6 +41,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.oauth.authorization_attempt import generate_authorization_state
 from onyx.oauth.protocol import ensure_offline_access_auth_params
 from onyx.server.features.mcp.client_metadata import (
+    is_mcp_oauth_cimd_client_id,
     mcp_oauth_redirect_uri,
     validated_mcp_oauth_client_metadata_url,
 )
@@ -51,6 +52,7 @@ from onyx.server.features.mcp.credentials import (
     mcp_token_expired,
 )
 from onyx.server.features.mcp.models import (
+    MCPConnectionData,
     MCPOAuthFlowState,
     MCPOAuthKeys,
     MCPPendingOAuthAuthorization,
@@ -101,6 +103,7 @@ class MCPRefreshLogContext(TypedDict):
     connection_config_id: int
     transport: str
     oauth_provider_mode: str
+    oauth_cimd_enabled: bool
 
 
 class MCPClientRegistrationConflict(Exception):
@@ -127,6 +130,7 @@ def _refresh_log_context(
         "connection_config_id": connection_config_id,
         "transport": mcp_server.transport.value if mcp_server.transport else "UNKNOWN",
         "oauth_provider_mode": mcp_server.oauth_provider_mode.value,
+        "oauth_cimd_enabled": mcp_server.oauth_cimd_enabled,
     }
 
 
@@ -291,6 +295,7 @@ class OnyxTokenStorage(TokenStorage):
         refresh_log_context: MCPRefreshLogContext | None = None,
         *,
         load_stored_tokens: bool = True,
+        cimd_enabled: bool = True,
         expected_connection_headers_fingerprint: str | None = None,
         expected_client_information_fingerprint: str | None = None,
     ):
@@ -298,6 +303,7 @@ class OnyxTokenStorage(TokenStorage):
         self.connection_config_id = connection_config_id
         self.refresh_log_context = refresh_log_context
         self.load_stored_tokens = load_stored_tokens
+        self.cimd_enabled = cimd_enabled
         self.expected_connection_headers_fingerprint = (
             expected_connection_headers_fingerprint
         )
@@ -531,26 +537,36 @@ class OnyxTokenStorage(TokenStorage):
             update_connection_config(config.id, db_session, config_data)
             return True
 
+    def _stored_client_information(
+        self, config_data: MCPConnectionData
+    ) -> OAuthClientInformationFull | None:
+        """Stored registration for the SDK to reuse. A CIMD registration is
+        ignored once CIMD is off, otherwise the SDK keeps sending the metadata
+        URL as client_id and never falls back to DCR."""
+        client_info_raw = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if not client_info_raw:
+            return None
+        client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+        if not self.cimd_enabled and is_mcp_oauth_cimd_client_id(client_info.client_id):
+            return None
+        return client_info
+
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config_data = extract_connection_data(config)
-            client_info_raw = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
-            if client_info_raw:
-                return OAuthClientInformationFull.model_validate(client_info_raw)
+            client_info = self._stored_client_information(
+                extract_connection_data(config)
+            )
+            if client_info is not None:
+                return client_info
             if self.shared_client_config_id:
                 shared_config = get_connection_config_by_id(
                     self.shared_client_config_id, db_session
                 )
                 if shared_config:
-                    shared_config_data = extract_connection_data(shared_config)
-                    shared_client_info = shared_config_data.get(
-                        MCPOAuthKeys.CLIENT_INFO.value
+                    return self._stored_client_information(
+                        extract_connection_data(shared_config)
                     )
-                    if shared_client_info:
-                        return OAuthClientInformationFull.model_validate(
-                            shared_client_info
-                        )
             return None
 
     async def set_client_info(  # ty: ignore[invalid-method-override]
@@ -567,15 +583,9 @@ class OnyxTokenStorage(TokenStorage):
                 )
                 if shared_config is not None:
                     shared_config_data = extract_connection_data(shared_config)
-                    existing_shared_client_information_raw = shared_config_data.get(
-                        MCPOAuthKeys.CLIENT_INFO.value
+                    existing_shared_client_information = (
+                        self._stored_client_information(shared_config_data)
                     )
-                    if existing_shared_client_information_raw:
-                        existing_shared_client_information = (
-                            OAuthClientInformationFull.model_validate(
-                                existing_shared_client_information_raw
-                            )
-                        )
 
             config = self._ensure_connection_config(db_session, for_update=True)
             config_data = extract_connection_data(config)
@@ -1059,6 +1069,7 @@ def make_oauth_provider(
         shared_client_config_id,
         refresh_log_context,
         load_stored_tokens=load_stored_tokens,
+        cimd_enabled=mcp_server.oauth_cimd_enabled,
         expected_connection_headers_fingerprint=(
             expected_connection_headers_fingerprint
         ),
@@ -1069,6 +1080,7 @@ def make_oauth_provider(
     client_metadata_url = (
         validated_mcp_oauth_client_metadata_url()
         if mcp_server.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
+        and mcp_server.oauth_cimd_enabled
         else None
     )
     provider = OnyxOAuthClientProvider(

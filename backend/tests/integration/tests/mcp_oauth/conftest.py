@@ -251,11 +251,17 @@ def cimd_https_endpoint(
         web_domain_patch.undo()
 
 
-@pytest.fixture(scope="module")
-def cimd_oauth_services(
+@contextmanager
+def _oauth_services(
     cimd_https_endpoint: OAuthHttpsEndpoint,
     tmp_path_factory: pytest.TempPathFactory,
+    *,
+    cimd_only: bool,
 ) -> Generator[CimdOAuthTestServices, None, None]:
+    """Run a mock identity provider and a protected MCP server. `cimd_only`
+    advertises CIMD alone and rejects DCR. Otherwise the provider advertises
+    both and skips document validation, so a test picks the registration path
+    with `oauth_cimd_enabled`."""
     oidc_port = _available_port()
     mcp_port = _available_port()
     oidc_issuer = f"http://127.0.0.1:{oidc_port}"
@@ -270,7 +276,8 @@ def cimd_oauth_services(
         "MOCK_OIDC_PORT": str(oidc_port),
         "MOCK_OIDC_BIND_HOST": "0.0.0.0",
         "MOCK_OIDC_ISSUER": oidc_issuer,
-        "MOCK_OIDC_CIMD_ONLY": "true",
+        "MOCK_OIDC_CIMD_ONLY": str(cimd_only).lower(),
+        "MOCK_OIDC_ADVERTISE_CIMD": str(not cimd_only).lower(),
         "MOCK_OIDC_EXPECTED_CLIENT_ID": client_metadata_url,
         "MOCK_OIDC_CLIENT_METADATA_CA_FILE": str(cimd_https_endpoint.ca_file),
     }
@@ -314,6 +321,28 @@ def cimd_oauth_services(
         _stop_process(oidc_process)
         mcp_log.close()
         oidc_log.close()
+
+
+@pytest.fixture(scope="module")
+def cimd_oauth_services(
+    cimd_https_endpoint: OAuthHttpsEndpoint,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[CimdOAuthTestServices, None, None]:
+    with _oauth_services(
+        cimd_https_endpoint, tmp_path_factory, cimd_only=True
+    ) as services:
+        yield services
+
+
+@pytest.fixture(scope="module")
+def cimd_dcr_oauth_services(
+    cimd_https_endpoint: OAuthHttpsEndpoint,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[CimdOAuthTestServices, None, None]:
+    with _oauth_services(
+        cimd_https_endpoint, tmp_path_factory, cimd_only=False
+    ) as services:
+        yield services
 
 
 @pytest.fixture(scope="module")
