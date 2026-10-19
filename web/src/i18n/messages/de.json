@@ -441,6 +441,10 @@
           "description": "Geben Sie eine Client-ID Ihres Anbieters ein. Fügen Sie nur bei Bedarf ein Geheimnis hinzu."
         }
       },
+      "cimd": {
+        "label": "Client-Metadatendokument verwenden",
+        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung."
+      },
       "discovery": {
         "checking": "Automatische Einrichtung wird geprüft…",
         "supported": "Automatische Einrichtung ist verfügbar",

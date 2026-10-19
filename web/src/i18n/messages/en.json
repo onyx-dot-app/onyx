@@ -441,6 +441,10 @@
           "description": "Enter a client ID from your provider. Add a secret only if required."
         }
       },
+      "cimd": {
+        "label": "Use client metadata document",
+        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
+      },
       "discovery": {
         "checking": "Checking automatic setup…",
         "supported": "Automatic setup is available",

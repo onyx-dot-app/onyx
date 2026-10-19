@@ -16,7 +16,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
-from onyx.secondary_llm_flows.search_prompt_budget import SearchPromptBudget
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -158,7 +157,6 @@ def _parse_time_decision(
 def decide_time_filter(
     history: list[ChatMinimalTextMessage],
     llm: LLM,
-    enforce_llm_input_budget: bool = False,
 ) -> TimeFilter | None:
     """Detect, in one LLM call, the time scope the conversation restricts this
     turn's internal search to: which document date it is about (created vs
@@ -189,22 +187,13 @@ def decide_time_filter(
         last_user_query=last_user_query,
     )
     messages: list[Message] = [UserMessage(content=prompt)]
-    budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
-    request = GenerationRequest(
-        messages=messages,
-        options=(
-            budget.options()
-            if budget
-            else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
-        ),
-    )
-    if budget and not budget.fits(request):
-        logger.warning("Search time-scope prompt exceeds its input budget")
-        return None
 
     try:
         response = llm.invoke(
-            request,
+            GenerationRequest(
+                messages=messages,
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
             context=GenerationContext(flow=LLMFlow.TIME_FILTER_EXTRACTION),
         )
         content = response.text
