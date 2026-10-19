@@ -7,12 +7,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
+from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
-from onyx.db.enums import CCPairRunKind
+from onyx.db.enums import CCPairRunErrors, CCPairRunKind, CCPairRunStatusGroup
 from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
     get_open_doc_error_counts_for_index_attempts,
@@ -24,6 +25,8 @@ from onyx.server.documents.models import (
     CCPairIndexRun,
     CCPairPruneRun,
     CCPairRun,
+    CCPairRunLevel,
+    CCPairRunsResolveMatchingRequest,
     CheckRunSnapshot,
     DocPermissionSyncAttemptSnapshot,
     ExternalGroupSyncAttemptSnapshot,
@@ -111,12 +114,15 @@ def fetch_run_feed(
     open_counts = get_open_doc_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
+    resolved_at = get_resolution_times(db_session, page.order)
     status_counts = count_cc_pair_runs_by_status_group(db_session, kinds, run_filter)
     groups = run_filter.status_groups
     return RunFeed(
         page=page,
         items=[
-            run_item(kind, run_id, page, error_counts, open_counts)
+            run_item(kind, run_id, page, error_counts, open_counts).model_copy(
+                update={"resolved_at": resolved_at.get((kind, run_id))}
+            )
             for kind, run_id in page.order
         ],
         total_items=sum(
@@ -125,4 +131,55 @@ def fetch_run_feed(
             if groups is None or group in groups
         ),
         status_counts=status_counts,
+    )
+
+
+def open_level_filters(
+    request: CCPairRunsResolveMatchingRequest,
+    cc_pair_ids: list[int],
+    source: DocumentSource | None,
+    shared_sources: set[DocumentSource],
+) -> list[CCPairRunFilter]:
+    """The filters the activity panel lists the open runs of the requested
+    level with, one per level. A request without a level covers them all; a
+    run belongs to one level, so the filters never overlap."""
+    levels = list(CCPairRunLevel) if request.level is None else [request.level]
+    return [
+        _open_level_filter(level, request, cc_pair_ids, source, shared_sources)
+        for level in levels
+    ]
+
+
+def _open_level_filter(
+    level: CCPairRunLevel,
+    request: CCPairRunsResolveMatchingRequest,
+    cc_pair_ids: list[int],
+    source: DocumentSource | None,
+    shared_sources: set[DocumentSource],
+) -> CCPairRunFilter:
+    query = (request.q or "").strip() or None
+    if level is CCPairRunLevel.FAILURES:
+        status_groups = {CCPairRunStatusGroup.FAILED}
+        errors = None
+        # A search lists superseded failures too, so they resolve with the rest.
+        superseded = None if query else False
+    else:
+        status_groups = {
+            CCPairRunStatusGroup.RUNNING,
+            CCPairRunStatusGroup.SUCCEEDED,
+            CCPairRunStatusGroup.CANCELED,
+        }
+        errors = CCPairRunErrors.UNRESOLVED
+        superseded = None
+    return CCPairRunFilter(
+        cc_pair_ids=cc_pair_ids,
+        source=source,
+        shared_sources=shared_sources,
+        since=request.since,
+        until=request.until,
+        error_query=query,
+        status_groups=status_groups,
+        errors=errors,
+        superseded=superseded,
+        resolved=False,
     )

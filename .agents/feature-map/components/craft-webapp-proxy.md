@@ -306,6 +306,11 @@ Installation does not replace agent-managed skills or enter session snapshots.
 
 ## 5. Contracts and invariants
 
+MCP host attribution remains workspace-wide when resolving targets without a
+user. A personal Craft opt-out must not make a configured host look off-catalog.
+The live resolver checks the current user's saved MCP preference before injecting
+credentials, including no-auth servers. Disabling a personal default keeps credentials.
+
 1. **A preview must only be reachable by someone entitled to that session.**
    `_check_webapp_access` must run before every proxied HTTP request and
    before the HMR websocket is accepted. A new route added to this router

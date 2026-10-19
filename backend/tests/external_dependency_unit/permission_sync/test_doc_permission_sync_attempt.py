@@ -12,6 +12,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.permission_sync_attempt import (
+    PermissionSyncAttemptLostError,
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
     get_doc_permission_sync_attempt,
@@ -274,40 +275,28 @@ class TestDocPermissionSyncAttempt:
         assert completed_attempt.docs_with_permission_errors == 15
         assert completed_attempt.time_finished is not None
 
-    def test_complete_doc_permission_sync_attempt_can_be_called_multiple_times(
+    def test_complete_doc_permission_sync_attempt_rejects_second_call(
         self, db_session: Session
     ) -> None:
-        """Test that complete can be called multiple times if needed (accumulates correctly)."""
+        """A finished attempt is no longer IN_PROGRESS, so a second complete
+        (e.g. from a worker that lost the attempt) is rejected."""
         cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
-
-        # Mark as in progress
         mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
-        # Complete once
         first_complete = complete_doc_permission_sync_attempt(
             db_session=db_session,
             attempt_id=attempt_id,
             total_docs_synced=50,
             docs_with_permission_errors=5,
         )
-
-        # Verify first completion
         assert first_complete.status == PermissionSyncStatus.COMPLETED_WITH_ERRORS
         assert first_complete.total_docs_synced == 50
-        assert first_complete.docs_with_permission_errors == 5
-        assert first_complete.time_finished is not None
 
-        # Call complete again (simulating additional batch processing)
-        second_complete = complete_doc_permission_sync_attempt(
-            db_session=db_session,
-            attempt_id=attempt_id,
-            total_docs_synced=50,
-            docs_with_permission_errors=10,
-        )
-
-        # Should accumulate progress from both calls
-        assert second_complete.status == PermissionSyncStatus.COMPLETED_WITH_ERRORS
-        assert second_complete.total_docs_synced == 100
-        assert second_complete.docs_with_permission_errors == 15
-        assert second_complete.time_finished is not None
+        with pytest.raises(PermissionSyncAttemptLostError):
+            complete_doc_permission_sync_attempt(
+                db_session=db_session,
+                attempt_id=attempt_id,
+                total_docs_synced=50,
+                docs_with_permission_errors=10,
+            )

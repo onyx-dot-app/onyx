@@ -111,7 +111,7 @@ describe("buildEditProposal", () => {
     const ccPair = githubPair(config, {
       connector: {
         ...githubPair(config).connector,
-        indexing_start: new Date("2025-03-04T05:06:07Z"),
+        indexing_start: "2025-03-04T05:06:07.000Z",
       },
     });
 

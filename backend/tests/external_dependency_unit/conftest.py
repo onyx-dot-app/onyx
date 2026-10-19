@@ -4,8 +4,10 @@ from uuid import uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete
+from sqlalchemy import create_engine, delete
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType
@@ -15,6 +17,9 @@ from onyx.file_store.file_store import get_default_file_store
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
+from tests.external_dependency_unit.session_state_guard import (
+    reset_leaked_session_settings,
+)
 
 # Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
 from tests.utils.pytest_secrets import (
@@ -38,6 +43,20 @@ def audit_stream(caplog: pytest.LogCaptureFixture) -> Generator[None, None, None
         audit_logger.removeHandler(caplog.handler)
 
 
+@pytest.fixture(autouse=True)
+def no_leaked_db_session_settings() -> Generator[None, None, None]:
+    """Fail the test that returns a pooled connection with session settings on
+    it, instead of a later test that happens to check that connection out."""
+    yield
+    leaks = reset_leaked_session_settings()
+    if leaks:
+        pytest.fail(
+            "This test left Postgres session settings on pooled connections: "
+            f"{leaks}. Use SET LOCAL, reset the setting, or run on the "
+            "`isolated_engine` fixture."
+        )
+
+
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     """Create a database session for testing using the actual PostgreSQL database"""
@@ -48,6 +67,20 @@ def db_session() -> Generator[Session, None, None]:
     )
     with get_session_with_current_tenant() as session:
         yield session
+
+
+@pytest.fixture
+def isolated_engine(
+    db_session: Session,  # noqa: ARG001 - initializes SqlEngine
+) -> Generator[Engine, None, None]:
+    """An engine with no pool, for tests that change session state (search_path,
+    lock_timeout) or hand a connection to migration code. Each connection closes
+    when the test returns it, so none of that state reaches the shared app pool."""
+    engine = create_engine(SqlEngine.get_engine().url, poolclass=NullPool)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture(scope="session")

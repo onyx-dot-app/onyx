@@ -1,0 +1,416 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Dropdown, Text } from "@opal/components";
+import type { RichStr } from "@opal/types";
+import {
+  ContentAction,
+  IllustrationContent,
+  SettingsLayouts,
+} from "@opal/layouts";
+import { LineLoader } from "@opal/loaders";
+import { SvgPlugBroken, SvgUnPlugged } from "@opal/illustrations";
+import {
+  SvgAlertCircle,
+  SvgChevronDown,
+  SvgServer,
+  SvgFileBraces,
+  SvgPlug,
+} from "@opal/icons";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
+import { useInstalledPlugins } from "@/lib/plugins/hooks";
+import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { PluginRow } from "@/sections/plugins/PluginRow";
+import PluginAddCatalogModal, {
+  type PluginCreation,
+} from "@/sections/plugins/PluginAddCatalogModal";
+import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
+import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import MCPPluginSetupModal from "@/sections/actions/modals/MCPPluginSetupModal";
+import OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import styles from "@/sections/plugins/PluginsPage.module.css";
+import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
+import { useSettings } from "@/lib/settings/hooks";
+
+function PluginListError({
+  title,
+  onRetry,
+  compact,
+}: {
+  title: string | RichStr;
+  onRetry: () => void;
+  compact: boolean;
+}) {
+  const t = useTranslations("actions.plugins");
+  if (compact)
+    return (
+      <div
+        role="alert"
+        className="rounded-12 border border-border-01 bg-background-neutral-00 px-4 py-3"
+      >
+        <ContentAction
+          icon={SvgAlertCircle}
+          title={title}
+          sizePreset="main-ui"
+          variant="section"
+          padding={0}
+          rightChildren={
+            <Button prominence="secondary" size="sm" onClick={onRetry}>
+              {t("state.retry.label")}
+            </Button>
+          }
+        />
+      </div>
+    );
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-2 rounded-16 border border-border-01 bg-background-neutral-00 px-4 py-6"
+    >
+      <IllustrationContent
+        illustration={SvgPlugBroken}
+        title={title}
+        description={t("state.listErrorDescription")}
+      />
+      <Button prominence="secondary" onClick={onRetry}>
+        {t("state.retry.label")}
+      </Button>
+    </div>
+  );
+}
+
+function PluginRowsLoading() {
+  const t = useTranslations("actions.plugins");
+  return (
+    <div
+      role="status"
+      aria-label={t("state.loading")}
+      className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2"
+    >
+      {[0, 1].map((index) => (
+        <div key={index} className="flex min-w-0 items-center gap-3 py-3">
+          <div className="opal-shimmer-block size-10 shrink-0 rounded-12" />
+          <LineLoader lines={2} width="2/3" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type PluginDialog =
+  | { kind: "catalog"; catalogKind: "mcp" | "external-app" }
+  | { kind: "create"; creation: PluginCreation }
+  | null;
+
+export default function PluginsPage() {
+  const t = useTranslations("actions.plugins");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_ACTIONS
+  );
+  const { isGlobalHolder: fullAdmin } = usePermissionAuthority(
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  );
+  const canManageActions = isGlobalHolder || isScopedManager;
+  const settings = useSettings();
+  const canManageApps = fullAdmin && settings.onyx_craft_available === true;
+  const canCreate = canManageActions || canManageApps;
+  const { plugins, mcp, openapi, externalApps } = useInstalledPlugins();
+  const [dialog, setDialog] = useState<PluginDialog>(null);
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<"all" | "mcp" | "openapi" | "external-app">(
+    "all"
+  );
+  const creation = dialog?.kind === "create" ? dialog.creation : null;
+  const handledCreateQuery = useRef<string | null>(null);
+
+  useEffect(() => {
+    const add = searchParams.get("add");
+    if (!add) {
+      handledCreateQuery.current = null;
+      return;
+    }
+    const currentQuery = searchParams.toString();
+    if (
+      !canCreate ||
+      (add !== "mcp" && add !== "openapi" && add !== "external-app") ||
+      (add === "external-app" ? !canManageApps : !canManageActions) ||
+      handledCreateQuery.current === currentQuery
+    )
+      return;
+    handledCreateQuery.current = currentQuery;
+    setDialog({ kind: "create", creation: { kind: add } });
+    const nextQuery = new URLSearchParams(currentQuery);
+    nextQuery.delete("add");
+    router.replace(
+      withPluginSearchParams(ADMIN_ROUTES.PLUGINS.path, nextQuery)
+    );
+  }, [canCreate, canManageActions, canManageApps, router, searchParams]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPlugins = plugins.filter((plugin) => {
+    if (kind !== "all" && plugin.kind !== kind) return false;
+    const text =
+      plugin.kind === "mcp"
+        ? `${plugin.server.name} ${plugin.server.description ?? ""} ${plugin.server.server_url}`
+        : plugin.kind === "openapi"
+          ? `${plugin.tool.name} ${plugin.tool.description}`
+          : `${plugin.app.name} ${plugin.app.app_type} ${plugin.app.upstream_url_patterns.join(" ")}`;
+    return text.toLowerCase().includes(normalizedQuery);
+  });
+  const installedEndpoints = new Set(
+    plugins.flatMap((plugin) =>
+      plugin.kind === "mcp"
+        ? [plugin.server.server_url.replace(/\/+$/, "")]
+        : []
+    )
+  );
+  const isLoading =
+    mcp.isLoading || openapi.isLoading || externalApps.isLoading;
+  const hasError = mcp.hasError || openapi.hasError || externalApps.hasError;
+
+  function addMenu() {
+    return (
+      <Dropdown align="end">
+        <Dropdown.Trigger asChild>
+          <Button rightIcon={SvgChevronDown}>{t("add.label")}</Button>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("add.label")}
+          items={[
+            ...(canManageActions
+              ? [
+                  {
+                    kind: "action" as const,
+                    id: "mcp",
+                    icon: SvgServer,
+                    title: t("kind.mcp"),
+                    onSelect: () =>
+                      setDialog({ kind: "catalog", catalogKind: "mcp" }),
+                  },
+                  {
+                    kind: "action" as const,
+                    id: "openapi",
+                    icon: SvgFileBraces,
+                    title: t("kind.openapi"),
+                    onSelect: () =>
+                      setDialog({
+                        kind: "create",
+                        creation: { kind: "openapi" },
+                      }),
+                  },
+                ]
+              : []),
+            ...(canManageApps
+              ? [
+                  {
+                    kind: "action" as const,
+                    id: "external-app",
+                    icon: SvgPlug,
+                    title: t("kind.external-app"),
+                    onSelect: () =>
+                      setDialog({
+                        kind: "catalog",
+                        catalogKind: "external-app",
+                      }),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      </Dropdown>
+    );
+  }
+
+  function noResults() {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <IllustrationContent
+          illustration={SvgUnPlugged}
+          title={t("state.noResults.title")}
+          description={t("state.noResults.description")}
+        />
+        <Button
+          prominence="secondary"
+          onClick={() => {
+            setQuery("");
+            setKind("all");
+          }}
+        >
+          {t("state.noResults.clear.label")}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.directory}>
+      <SettingsLayouts.Root width="lg">
+        <SettingsLayouts.Header
+          title={t("title")}
+          description={t("description")}
+          stackActionsOnMobile
+          actions={canCreate ? [<div key="add">{addMenu()}</div>] : []}
+        />
+        <SettingsLayouts.Body>
+          <div className="flex flex-col gap-4">
+            <PluginDirectoryToolbar
+              searchLabel={t("search.placeholder")}
+              query={query}
+              onQueryChange={setQuery}
+              filters={
+                <div
+                  role="group"
+                  aria-label={t("filters.label")}
+                  className="flex flex-wrap gap-2"
+                >
+                  {(
+                    [
+                      "all",
+                      "mcp",
+                      "openapi",
+                      ...(canManageApps ? ["external-app" as const] : []),
+                    ] as const
+                  ).map((value) => (
+                    <Button
+                      key={value}
+                      size="sm"
+                      prominence={kind === value ? "primary" : "tertiary"}
+                      aria-pressed={kind === value}
+                      onClick={() => setKind(value)}
+                    >
+                      {value === "all"
+                        ? t("filters.all")
+                        : value === "external-app"
+                          ? t("filters.apps")
+                          : t(`kind.${value}`)}
+                    </Button>
+                  ))}
+                </div>
+              }
+            />
+            {mcp.hasError && (
+              <PluginListError
+                compact={plugins.length > 0 || isLoading}
+                title={t("state.mcpError")}
+                onRetry={() => void mcp.refresh()}
+              />
+            )}
+            {openapi.hasError && (
+              <PluginListError
+                compact={plugins.length > 0 || isLoading}
+                title={t("state.openapiError")}
+                onRetry={() => void openapi.refresh()}
+              />
+            )}
+            {externalApps.hasError && (
+              <PluginListError
+                compact={plugins.length > 0 || isLoading}
+                title={t("state.externalAppsError")}
+                onRetry={() => void externalApps.refresh()}
+              />
+            )}
+            {filteredPlugins.length > 0 && (
+              <div className={styles.grid}>
+                {filteredPlugins.map((plugin) => (
+                  <PluginRow
+                    key={`${plugin.kind}:${plugin.kind === "mcp" ? plugin.server.id : plugin.kind === "openapi" ? plugin.tool.id : plugin.app.id}`}
+                    plugin={plugin}
+                  />
+                ))}
+              </div>
+            )}
+            {isLoading && <PluginRowsLoading />}
+            {!isLoading &&
+              !hasError &&
+              filteredPlugins.length === 0 &&
+              (plugins.length > 0 || normalizedQuery ? (
+                noResults()
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-8">
+                  <IllustrationContent
+                    title={t("state.empty.title")}
+                    description={t("state.empty.description")}
+                  />
+                  {canCreate && addMenu()}
+                </div>
+              ))}
+          </div>
+        </SettingsLayouts.Body>
+        {dialog?.kind === "catalog" && (
+          <PluginAddCatalogModal
+            catalogKind={dialog.catalogKind}
+            onClose={() => setDialog(null)}
+            onPick={(next) => {
+              setDialog({ kind: "create", creation: next });
+            }}
+            canManageActions={canManageActions}
+            installedEndpoints={installedEndpoints}
+          />
+        )}
+        {creation?.kind === "external-app" &&
+          canManageApps &&
+          (creation.descriptor ? (
+            <ConfigureProviderModal
+              descriptor={creation.descriptor}
+              existingApp={null}
+              onClose={() => setDialog(null)}
+              onSaved={() => void externalApps.refresh()}
+            />
+          ) : (
+            <CreateCustomAppModal
+              existingApp={null}
+              onClose={() => setDialog(null)}
+              onSaved={() => void externalApps.refresh()}
+            />
+          ))}
+        {creation?.kind === "mcp" && (
+          <MCPPluginSetupModal
+            open
+            onClose={() => {
+              setDialog(null);
+              void mcp.refresh();
+            }}
+            initialUrl={creation.suggestion?.serverUrl}
+            initialName={creation.suggestion?.name}
+            setupGuide={
+              creation.suggestion
+                ? {
+                    url: creation.suggestion.docsUrl,
+                    description: t(
+                      `catalog.${creation.suggestion.id}.description`
+                    ),
+                    note:
+                      creation.suggestion.id === "atlassian"
+                        ? t("catalog.atlassian.approvalNote")
+                        : undefined,
+                  }
+                : undefined
+            }
+            onCompleted={(server) => {
+              setDialog(null);
+              void mcp.refresh();
+              router.push(pluginDetailHref({ kind: "mcp", id: server.id }));
+            }}
+          />
+        )}
+        {creation?.kind === "openapi" && (
+          <OpenAPIPluginCreateModal
+            open
+            onClose={() => setDialog(null)}
+            onCreated={(toolId) => {
+              setDialog(null);
+              void openapi.refresh();
+              router.push(pluginDetailHref({ kind: "openapi", id: toolId }));
+            }}
+          />
+        )}
+      </SettingsLayouts.Root>
+    </div>
+  );
+}

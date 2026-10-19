@@ -405,6 +405,26 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  youtrack: {
+    description: "connectors.youtrack.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.youtrack.fields.base_url.label",
+        name: "base_url",
+        optional: false,
+        description: "connectors.youtrack.fields.base_url.description",
+      },
+      {
+        type: "list",
+        label: "connectors.youtrack.fields.projects.label",
+        name: "projects",
+        optional: true,
+        description: "connectors.youtrack.fields.projects.description",
+      },
+    ],
+    advanced_values: [],
+  },
   github: {
     description: "connectors.github.description",
     values: [

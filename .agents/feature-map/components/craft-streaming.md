@@ -347,6 +347,11 @@ Tabs and layout remain independent of stream rendering. Inventory responses requ
 Passive reads also require the captured turn; active reads can update metadata after a queued turn starts.
 Tab creation and selection always check the requesting turn. Recreated sessions reject responses from retired instances.
 
+The first accepted interactive turn starts automatic naming through the session store.
+This happens after message persistence and before view ownership checks.
+Naming survives navigation and unmount; failed submissions do not start naming.
+It does not delay stream attachment. See [[craft-sessions]] for name persistence and fallback rules.
+
 ## 5. Contracts and invariants
 
 1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own packet

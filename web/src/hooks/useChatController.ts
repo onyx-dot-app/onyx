@@ -87,6 +87,11 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import {
+  effectiveChatForcedToolId,
+  enabledChatToolIds,
+} from "@/lib/plugins/chat";
+import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -126,6 +131,7 @@ interface UseChatControllerProps {
   /** Owned by the surface, so the input bar and this read the same one. */
   toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
+  memberPlugins?: readonly MemberPlugin[];
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
@@ -158,6 +164,7 @@ export default function useChatController({
   toolConfiguration,
   availableAgents,
   activeAgent,
+  memberPlugins,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
@@ -1069,19 +1076,14 @@ export default function useChatController({
         // The tool this message is made to use: the search tool when the
         // caller asked for a search, otherwise whatever the chat has forced.
         //
-        // Only if the agent still has it. A configuration outlives the agent
-        // being edited, and a chat can be handed one that named a tool this
-        // agent does not have; the backend raises on a forced tool it cannot
-        // find, so an id nobody can act on would fail the whole message rather
-        // than the model simply choosing for itself.
         const requestedForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
           : toolConfiguration.forcedToolId;
-        const effectiveForcedToolId =
-          requestedForcedToolId !== null &&
-          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
-            ? requestedForcedToolId
-            : null;
+        const effectiveForcedToolId = effectiveChatForcedToolId({
+          requestedToolId: requestedForcedToolId,
+          agent: activeAgent,
+          plugins: memberPlugins ?? [],
+        });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
@@ -1136,15 +1138,9 @@ export default function useChatController({
           // the frontend can see — which excludes those marked
           // `expose_to_frontend=False`. Sending it always would quietly
           // withhold tools nobody chose to disable.
-          enabledToolIds:
-            activeAgent && toolConfiguration.disabledToolIds.length > 0
-              ? activeAgent.tools
-                  .filter(
-                    (tool) =>
-                      !toolConfiguration.disabledToolIds.includes(tool.id)
-                  )
-                  .map((tool) => tool.id)
-              : undefined,
+          enabledToolIds: activeAgent
+            ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
+            : undefined,
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
@@ -1545,6 +1541,7 @@ export default function useChatController({
       llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
+      memberPlugins,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,

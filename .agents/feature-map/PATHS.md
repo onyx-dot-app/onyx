@@ -173,6 +173,11 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/app/` | chat-frontend |
+| `web/src/lib/tools/components/ToolsPopover.tsx` | mcp-and-custom-tools, chat-frontend |
+| `web/src/sections/input/AppInputBar.tsx` | chat-frontend |
+| `web/src/app/app/plugins/` | mcp-and-custom-tools, chat-frontend |
+| `web/src/app/craft/v1/plugins/` | craft-external-apps, mcp-and-custom-tools |
+| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
@@ -184,9 +189,14 @@ so verify the callers rather than a single component.
 | `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
-| `web/src/app/admin/agents/` | agents-personas |
+| `web/src/app/admin/agents/`, `web/src/lib/agents/` | agents-personas |
+| `web/src/views/admin/ChatPreferencesPage.tsx` | chat-preferences |
 | `web/src/app/admin/language-models/` | llm-providers |
-| `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
+| `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | mcp-and-custom-tools |
+| `web/src/sections/actions/`, `web/src/lib/mcp/` | mcp-and-custom-tools |
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
 | `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
@@ -196,7 +206,8 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |
 | `web/src/app/admin/web-search/` | web-search |
 | `web/src/app/admin/voice/`, `admin/image-generation/`, `admin/code-interpreter/` | voice, image-generation, code-execution |
-| `web/src/app/auth/`, `web/src/app/oauth-config/` | auth-and-identity |
+| `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/` | auth-and-identity |
+| `web/src/sections/actions/` | mcp-and-custom-tools |
 | `web/src/app/api/` | the component owning the proxied endpoint |
 | `web/src/refresh-components/`, `web/src/components/` | the calling component. Also see the Opal migration rule in `web/AGENTS.md`. |
 | `web/tests/e2e/` | the component the test covers |

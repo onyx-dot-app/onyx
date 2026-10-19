@@ -1,14 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Text } from "@opal/components";
+import { Collapsible, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDown, SvgSparkle, SvgLoader } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import CometEdge from "@/app/craft/components/CometEdge";
 import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import BashBody from "@/app/craft/components/tool-cards/BashBody";
@@ -260,12 +255,12 @@ export default function CraftToolCard({
       )}
     >
       {expandable ? (
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Collapsible.Trigger asChild>
             <button className={triggerClass}>{headerRow}</button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>{renderBody(toolCall)}</CollapsibleContent>
-        </Collapsible>
+          </Collapsible.Trigger>
+          <Collapsible.Content>{renderBody(toolCall)}</Collapsible.Content>
+        </Collapsible.Root>
       ) : (
         <div className={triggerClass}>{headerRow}</div>
       )}

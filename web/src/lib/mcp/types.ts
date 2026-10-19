@@ -25,13 +25,10 @@ export interface MCPServer {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  // Whether this user's credentials resolve for the server right now (or the
-  // server needs no per-user auth). Absent when there is no user context.
-  user_can_authenticate?: boolean;
-  // Whether Craft will actually emit this server into the user's sessions, i.e.
-  // whether the sandbox proxy can authenticate them against it. Unlike the flag
-  // above it asks whether stored credentials yield auth headers, not whether a
-  // config row exists. Only the Craft listing computes it.
+  // Null when there is no user context.
+  connection_status: MCPConnectionStatus | null;
+  // Whether Craft can produce auth headers for the user's sandbox sessions.
+  // Only the Craft listing computes it.
   craft_connected?: boolean;
   auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;
@@ -41,6 +38,9 @@ export interface MCPServer {
   groups: number[];
   users: string[];
   available_in_craft?: boolean;
+  default_chat_enabled?: boolean | null;
+  user_enabled_in_chat?: boolean;
+  user_enabled_in_craft?: boolean;
   // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
   // Present on owner/admin views only.
   tool_policies?: Record<string, EndpointPolicy> | null;
@@ -64,7 +64,17 @@ export interface MCPServersResponse {
   mcp_servers: MCPServer[];
 }
 
+export interface MCPUserPreferences {
+  enabled_in_chat: boolean;
+  enabled_in_craft: boolean;
+}
+
+export type MCPUserPreferencesRequest =
+  | { enabled_in_chat: boolean; enabled_in_craft?: boolean }
+  | { enabled_in_chat?: boolean; enabled_in_craft: boolean };
+
 export interface MCPServerCreateRequest {
+  available_in_craft?: boolean;
   name: string;
   description?: string;
   server_url: string;
@@ -94,6 +104,12 @@ export interface MCPTool {
   isAvailable: boolean;
   isEnabled: boolean;
   permissions?: PermissionsOf<"Action">;
+}
+
+export enum MCPConnectionStatus {
+  NOT_CONNECTED = "not_connected",
+  CONNECTED = "connected",
+  REAUTH_REQUIRED = "reauth_required",
 }
 
 export enum MCPAuthenticationType {
@@ -130,3 +146,54 @@ export type MCPServersFormValues = Record<
   `mcp_server_${number}`,
   MCPServerFormValues | undefined
 >;
+
+export type MCPAuthenticationServer = Pick<
+  MCPServer,
+  | "id"
+  | "name"
+  | "auth_type"
+  | "auth_performer"
+  | "auth_template"
+  | "connection_status"
+  | "user_credentials"
+  | "transport"
+>;
+export interface MCPOAuthDiscovery {
+  status: "metadata_found" | "metadata_missing" | "unreachable";
+  supports_automatic_registration: boolean | null;
+  authorization_endpoint: string | null;
+  token_endpoint: string | null;
+}
+
+export type MCPSetupProbeResult =
+  | {
+      kind: "public";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE;
+      tool_count: number;
+      server_name: string;
+    }
+  | {
+      kind: "oauth";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE | null;
+      discovery: MCPOAuthDiscovery;
+    }
+  | {
+      kind: "auth_unknown";
+      transport: MCPTransportType.STREAMABLE_HTTP | MCPTransportType.SSE | null;
+    }
+  | { kind: "unreachable"; reason: "blocked" | "connection_failed" };
+
+export type MCPSetupRecommendation = Exclude<
+  MCPSetupProbeResult,
+  { kind: "unreachable" }
+>;
+
+export interface MCPProbeProgress {
+  type: "progress";
+  stage: "contacting_server" | "authentication";
+  state: "pending" | "success" | "error";
+}
+
+export interface MCPServerConfigurationValues extends MCPServerCreateRequest {
+  access_mode: "public" | "groups";
+}

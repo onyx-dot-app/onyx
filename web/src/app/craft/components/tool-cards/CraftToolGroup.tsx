@@ -2,14 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Tag, Text } from "@opal/components";
+import { Collapsible, Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CometEdge from "@/app/craft/components/CometEdge";
 import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
@@ -79,8 +74,8 @@ export default function CraftToolGroup({
           skillGroup && "border-[0.5px] border-border-01"
         )}
       >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Collapsible.Trigger asChild>
             <button
               className={cn(
                 "w-full text-start px-3 py-2 rounded-md",
@@ -111,8 +106,8 @@ export default function CraftToolGroup({
                 />
               </div>
             </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
             <div className="flex flex-col border-t-[0.5px] border-border-01">
               {toolCalls.map((toolCall) => (
                 <CraftToolCard
@@ -123,8 +118,8 @@ export default function CraftToolGroup({
                 />
               ))}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </Collapsible.Content>
+        </Collapsible.Root>
       </div>
     </CometEdge>
   );

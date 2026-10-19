@@ -10,6 +10,10 @@ export {
   type InputCheckboxFieldProps,
 } from "@opal/form/InputCheckboxField";
 export {
+  InputSwitchField,
+  type InputSwitchFieldProps,
+} from "@opal/form/InputSwitchField";
+export {
   InputSingleUploadField,
   type InputSingleUploadFieldProps,
 } from "@opal/form/InputSingleUploadField";

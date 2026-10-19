@@ -68,6 +68,7 @@ export enum ValidSources {
   TestRail = "testrail",
   Braintrust = "braintrust",
   Lumapps = "lumapps",
+  YouTrack = "youtrack",
   Canvas = "canvas",
   Zoom = "zoom",
 
@@ -104,6 +105,7 @@ export const validAutoSyncSources = [
   ValidSources.Zoom,
   ValidSources.Linear,
   ValidSources.Hubspot,
+  ValidSources.YouTrack,
 ] as const;
 
 // Create a type from the array elements

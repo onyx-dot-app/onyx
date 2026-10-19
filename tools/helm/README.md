@@ -15,7 +15,8 @@ Changes to `deployment/helm/README.md` or `deployment/helm/dev/` alone do not re
 
 Run `git fetch origin main` to refresh the local release baseline, then run
 `pre-commit run helm-release --all-files`. One update covers all commits in a branch.
-Release branches and application release tag builds do not publish charts and are exempt.
+Release branches (including their merge queue runs) and application release tag builds do not
+publish charts and are exempt.
 
 Run the regression tests from the repository root:
 

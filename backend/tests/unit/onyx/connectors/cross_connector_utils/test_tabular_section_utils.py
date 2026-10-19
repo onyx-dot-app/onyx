@@ -7,9 +7,12 @@ import pytest
 from openpyxl.worksheet.worksheet import Worksheet
 
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    CONTENT_SKIPPED_PLACEHOLDER,
+    extract_and_stage_tabular_file,
     is_tabular_file,
     tabular_file_to_sections,
 )
+from onyx.connectors.models import TabularSection, TextSection
 
 
 def _make_stage_callback() -> tuple[
@@ -76,8 +79,10 @@ class TestTabularFileToSections:
             stage=fake_stage,
         )
         assert len(sections) == 1
-        assert "Alice" in staged[sections[0].csv_file_id][0].decode("utf-8")
-        assert sections[0].heading == "budget.xlsm :: Sheet1"
+        section = sections[0]
+        assert isinstance(section, TabularSection)
+        assert "Alice" in staged[section.csv_file_id][0].decode("utf-8")
+        assert section.heading == "budget.xlsm :: Sheet1"
 
     def test_unknown_extension_raises(self) -> None:
         with pytest.raises(ValueError):
@@ -98,6 +103,41 @@ class TestTabularFileToSections:
 
         assert sections == []
 
+    def test_skip_content_returns_placeholder_without_parsing(self) -> None:
+        """The bytes are not a valid workbook, so any parse would raise."""
+        staged, fake_stage = _make_stage_callback()
+
+        sections = tabular_file_to_sections(
+            io.BytesIO(b"not a workbook"),
+            file_name="budget.xlsx",
+            stage=fake_stage,
+            skip_content=True,
+        )
+
+        assert sections == [
+            TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link="budget.xlsx")
+        ]
+        assert staged == {}
+
+    def test_skip_content_still_stages_the_raw_file(self) -> None:
+        staged, fake_stage = _make_stage_callback()
+
+        result = extract_and_stage_tabular_file(
+            io.BytesIO(b"a,b\n1,2"),
+            file_name="data.csv",
+            content_type="text/csv",
+            raw_file_callback=fake_stage,
+            link="https://example.com/data.csv",
+            skip_content=True,
+        )
+
+        assert result.sections == [
+            TextSection(
+                text=CONTENT_SKIPPED_PLACEHOLDER, link="https://example.com/data.csv"
+            )
+        ]
+        assert staged == {result.staged_file_id: (b"a,b\n1,2", "text/csv")}
+
 
 class TestFileBackedXlsx:
     """Every non-empty workbook sheet is staged as CSV and referenced by
@@ -114,7 +154,7 @@ class TestFileBackedXlsx:
 
         assert len(sections) == 1
         section = sections[0]
-        assert section.csv_file_id is not None
+        assert isinstance(section, TabularSection)
         assert section.heading == "big.xlsx :: Sheet1"
 
         csv_bytes, content_type = staged[section.csv_file_id]
@@ -134,5 +174,6 @@ class TestFileBackedXlsx:
             xlsx, file_name="small.xlsx", stage=fake_stage
         )
         assert len(sections) == 1
-        assert sections[0].csv_file_id is not None
-        assert staged[sections[0].csv_file_id][0].decode("utf-8") == "a,b\n1,2\n"
+        section = sections[0]
+        assert isinstance(section, TabularSection)
+        assert staged[section.csv_file_id][0].decode("utf-8") == "a,b\n1,2\n"

@@ -1,4 +1,8 @@
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type {
+  ContextualMenuWidth,
+  IconFunctionComponent,
+  RichStr,
+} from "@opal/types";
 import type { TagProps } from "@opal/components/tag/components";
 import type { InputTypeInProps } from "@opal/components/inputs/texts/input-type-in/components";
 
@@ -143,12 +147,8 @@ export type DropdownMenuItem = DropdownMenuRow | DropdownGroup<DropdownMenuRow>;
 /** Picker (`listbox`, something is selected) or menu (`menu`, commands). */
 export type DropdownMode = "picker" | "menu";
 
-/**
- * A fixed list width on the Tailwind scale (units of 0.25rem), one of the
- * `--block-width-contextual-menu-*` steps in sizes.css: 30 is 7.5rem, 90 is
- * 22.5rem. `DROPDOWN_WIDTH_TOKENS` in model.ts maps each to its token.
- */
-export type DropdownWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90;
+/** A fixed list width: a contextual-menu step, shared with Popover. */
+export type DropdownWidth = ContextualMenuWidth;
 /** Which edge of the anchor the list lines up with. */
 export type DropdownAlign = "start" | "end";
 /** Below the anchor, above it, or a flyout beside it. */

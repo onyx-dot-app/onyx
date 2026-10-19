@@ -57,6 +57,9 @@ from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.capability_checks.stored_run_progress import (
+    StoredRunProgressRecorder,
+)
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
@@ -217,6 +220,29 @@ def run_capability_checks_task(
                 access_type=parsed_access_type,
                 connector_specific_config=config,
             )
+        merged_prior: list[CapabilityCheckResult] = [
+            *awaited_results,
+            *(
+                CapabilityCheckResult.model_validate(result)
+                for result in prior_results or []
+            ),
+        ]
+        run_check_id_set = (
+            frozenset(run_check_ids) if run_check_ids is not None else None
+        )
+        progress: StoredRunProgressRecorder | None = None
+        if parsed_run_id is not None:
+            progress = StoredRunProgressRecorder(
+                parsed_run_id,
+                [
+                    check
+                    for check in get_capability_checks(source)
+                    if run_check_id_set is None or check.check_id in run_check_id_set
+                ],
+                merged_prior,
+                capability_check_run_stale_after(source),
+            )
+            progress.start()
         report = generate_capability_report(
             credential,
             source=source,
@@ -225,15 +251,9 @@ def run_capability_checks_task(
             input_type=input_type,
             trigger=parsed_trigger,
             access_type=parsed_access_type,
-            check_ids=frozenset(run_check_ids) if run_check_ids is not None else None,
+            on_result=progress.on_result if progress is not None else None,
+            check_ids=run_check_id_set,
         )
-        merged_prior: list[CapabilityCheckResult] = [
-            *awaited_results,
-            *(
-                CapabilityCheckResult.model_validate(result)
-                for result in prior_results or []
-            ),
-        ]
         if merged_prior:
             report = merge_capability_results(report, merged_prior)
         with get_session_with_current_tenant() as db_session:

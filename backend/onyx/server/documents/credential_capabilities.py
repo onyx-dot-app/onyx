@@ -29,6 +29,10 @@ from onyx.connectors.capability_checks.findings_setting import (
     hide_findings_if_disabled,
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.stored_run_progress import (
+    StoredRunProgress,
+    load_stored_run_progress,
+)
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
@@ -93,6 +97,8 @@ class CapabilityReportSnapshot(BaseModel):
     run_started_at: datetime | None
     connector_config_hash: str | None
     report: CredentialCapabilityReport | None
+    # The per-check progress of the run in flight; None unless RUNNING.
+    progress: StoredRunProgress | None = None
     time_updated: datetime
 
     @classmethod
@@ -104,6 +110,14 @@ class CapabilityReportSnapshot(BaseModel):
         )
         if report is not None:
             hide_findings_if_disabled(report.check_results)
+        progress: StoredRunProgress | None = (
+            load_stored_run_progress(row.run_id)
+            if row.run_status == CapabilityReportRunStatus.RUNNING
+            and row.run_id is not None
+            else None
+        )
+        if progress is not None:
+            hide_findings_if_disabled(progress.check_results)
         return cls(
             credential_id=row.credential_id,
             connector_id=row.connector_id,
@@ -113,6 +127,7 @@ class CapabilityReportSnapshot(BaseModel):
             run_started_at=row.run_started_at,
             connector_config_hash=row.connector_config_hash,
             report=report,
+            progress=progress,
             time_updated=row.time_updated,
         )
 

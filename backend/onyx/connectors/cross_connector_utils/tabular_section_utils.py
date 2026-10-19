@@ -4,17 +4,20 @@ from typing import IO
 
 from pydantic import BaseModel
 
-from onyx.connectors.models import TabularSection
+from onyx.connectors.models import TabularSection, TextSection
 from onyx.file_processing.extract_file_text import file_io_to_text, stage_xlsx_sheets
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.csv_utils import csv_reader
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+CONTENT_SKIPPED_PLACEHOLDER = "<content-skipped>"
+
 
 class TabularExtractionResult(BaseModel):
-    sections: list[TabularSection]
+    sections: list[TabularSection | TextSection]
     staged_file_id: str
 
 
@@ -28,7 +31,7 @@ def _tsv_to_csv(tsv_text: str) -> str:
     assume the default Excel dialect read the columns correctly."""
     out = io.StringIO()
     csv.writer(out, lineterminator="\n").writerows(
-        csv.reader(io.StringIO(tsv_text), dialect="excel-tab")
+        csv_reader(io.StringIO(tsv_text), dialect="excel-tab")
     )
     return out.getvalue().rstrip("\n")
 
@@ -38,17 +41,23 @@ def tabular_file_to_sections(
     file_name: str,
     stage: RawFileCallback,
     link: str = "",
-) -> list[TabularSection]:
+    skip_content: bool = False,
+) -> list[TabularSection | TextSection]:
     """Convert a tabular file into one or more TabularSections.
 
     - .xlsx → one staged TabularSection per non-empty sheet.
     - .csv / .tsv → one staged TabularSection for the whole file.
     - empty input → `[]`.
+    - skip_content → one placeholder TextSection, so the file indexes as its
+      title only. Nothing is parsed or staged.
     """
     lowered = file_name.lower()
 
     if not lowered.endswith(tuple(OnyxFileExtensions.TABULAR_EXTENSIONS)):
         raise ValueError(f"{file_name!r} is not a tabular file")
+
+    if skip_content:
+        return [TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link=link or file_name)]
 
     if lowered.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
         return [
@@ -84,13 +93,16 @@ def extract_and_stage_tabular_file(
     content_type: str,
     raw_file_callback: RawFileCallback,
     link: str = "",
+    skip_content: bool = False,
 ) -> TabularExtractionResult:
-    """Extract tabular sections AND stage the raw bytes via the callback."""
+    """Extract tabular sections AND stage the raw bytes via the callback. The
+    raw bytes are staged even with skip_content, so the file stays readable."""
     sections = tabular_file_to_sections(
         file=file,
         file_name=file_name,
         stage=raw_file_callback,
         link=link,
+        skip_content=skip_content,
     )
     # rewind so the callback can re-read what extraction consumed
     file.seek(0)

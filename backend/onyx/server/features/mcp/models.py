@@ -1,7 +1,7 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any, List, Literal, NotRequired, Optional, TypedDict
+from typing import Annotated, Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.shared.auth import (
@@ -19,21 +19,17 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
 )
+from onyx.oauth.models import (
+    OAuthConfigurationFingerprint,
+    PKCECodeVerifier,
+    SafeOAuthReturnPath,
+)
+from onyx.oauth.protocol import validate_authorization_params
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
 # RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
 _HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
-RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS = {
-    "client_id",
-    "code_challenge",
-    "code_challenge_method",
-    "redirect_uri",
-    "resource",
-    "response_type",
-    "scope",
-    "state",
-}
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -104,6 +100,12 @@ class MCPOAuthKeys(str, Enum):
     TOKEN_EXPIRES_AT = "token_expires_at"
 
 
+class MCPConnectionStatus(str, Enum):
+    NOT_CONNECTED = "not_connected"
+    CONNECTED = "connected"
+    REAUTH_REQUIRED = "reauth_required"
+
+
 class MCPConnectionData(TypedDict):
     """TypedDict to allow use as a type hint for a JSONB column
     in Postgres"""
@@ -121,6 +123,9 @@ class MCPConnectionData(TypedDict):
     # serves as the template); empty/absent on regular per-user configs and on
     # admin-credential configs.
     required_fields: NotRequired[list[str]]
+
+    # Confirmed credential rejection persists until credentials are replaced.
+    reauth_required: NotRequired[bool]
 
     # For OAuth only
     # Note: Update MCPOAuthKeys if necessary when modifying these
@@ -389,14 +394,11 @@ class MCPToolCreateRequest(BaseModel):
                 raise ValueError(
                     "oauth_token_endpoint is required for known-provider OAuth mode"
                 )
-            reserved_params = RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS.intersection(
-                self.oauth_additional_auth_params or {}
+            validate_authorization_params(
+                self.oauth_authorization_endpoint,
+                self.oauth_additional_auth_params,
+                owns_resource=True,
             )
-            if reserved_params:
-                raise ValueError(
-                    "oauth_additional_auth_params cannot override reserved OAuth "
-                    f"parameters: {', '.join(sorted(reserved_params))}"
-                )
         else:
             # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
             self.oauth_authorization_endpoint = None
@@ -419,6 +421,9 @@ class MCPToolUpdateRequest(BaseModel):
 
 
 class MCPServerSimpleCreateRequest(BaseModel):
+    available_in_craft: bool = Field(
+        default=False, description="Whether the Craft agent may use this server"
+    )
     name: str = Field(..., description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
@@ -490,7 +495,7 @@ class MCPToolResponse(BaseModel):
     server_url: str
     auth_type: str
     auth_performer: Optional[str] = None
-    user_can_authenticate: bool
+    connection_status: MCPConnectionStatus
 
 
 class MCPOAuthConnectRequest(BaseModel):
@@ -511,9 +516,58 @@ class MCPOAuthConnectResponse(BaseModel):
     pending_tool: dict = Field(..., description="Pending tool configuration")
 
 
+class MCPOAuthDiscoveryRequest(BaseModel):
+    server_id: int
+
+
+class MCPOAuthDiscoveryResponse(BaseModel):
+    status: Literal["metadata_found", "metadata_missing", "unreachable"]
+    supports_automatic_registration: bool | None = None
+    authorization_endpoint: str | None = None
+    token_endpoint: str | None = None
+
+
+class MCPSetupProbeRequest(BaseModel):
+    server_url: str
+
+
+class MCPPublicProbeResult(BaseModel):
+    kind: Literal["public"] = "public"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE]
+    tool_count: int
+    server_name: str
+
+
+class MCPOAuthProbeResult(BaseModel):
+    kind: Literal["oauth"] = "oauth"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+    discovery: MCPOAuthDiscoveryResponse
+
+
+class MCPUnknownAuthProbeResult(BaseModel):
+    kind: Literal["auth_unknown"] = "auth_unknown"
+    transport: Literal[MCPTransport.STREAMABLE_HTTP, MCPTransport.SSE] | None = None
+
+
+class MCPUnreachableProbeResult(BaseModel):
+    kind: Literal["unreachable"] = "unreachable"
+    reason: Literal["blocked", "connection_failed"] = "connection_failed"
+
+
+MCPSetupProbeResult = Annotated[
+    MCPPublicProbeResult
+    | MCPOAuthProbeResult
+    | MCPUnknownAuthProbeResult
+    | MCPUnreachableProbeResult,
+    Field(discriminator="kind"),
+]
+
+
 class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
-    return_path: str = Field(..., description="Path to redirect to after callback")
+    return_path: SafeOAuthReturnPath = Field(
+        ..., description="Path to redirect to after callback"
+    )
     include_resource_param: bool = Field(..., description="Include resource parameter")
     force_reauthentication: bool = Field(
         default=False,
@@ -541,17 +595,6 @@ class MCPUserOAuthConnectRequest(BaseModel):
         ),
     )
 
-    @model_validator(mode="after")
-    def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
-        if (
-            not self.return_path.startswith("/")
-            or self.return_path.startswith("//")
-            or "\\" in self.return_path
-            or any(not character.isprintable() for character in self.return_path)
-        ):
-            raise ValueError("return_path must be a safe internal path")
-        return self
-
 
 class MCPUserOAuthConnectResponse(BaseModel):
     server_id: int
@@ -576,7 +619,7 @@ class MCPUserOAuthConnectResponse(BaseModel):
 class MCPPendingOAuthAuthorization(BaseModel):
     authorization_url: str
     state: str
-    code_verifier: str
+    code_verifier: PKCECodeVerifier
 
 
 class MCPServerConnection(BaseModel):
@@ -609,12 +652,12 @@ class MCPOAuthServerSnapshot(BaseModel):
 class MCPOAuthFlowState(BaseModel):
     server_id: int
     connection_config_id: int
-    return_path: str
-    code_verifier: str
+    return_path: SafeOAuthReturnPath
+    code_verifier: PKCECodeVerifier
     redirect_uri: AnyUrl
     server_snapshot: MCPOAuthServerSnapshot
-    connection_headers_fingerprint: str
-    client_information_fingerprint: str
+    connection_headers_fingerprint: OAuthConfigurationFingerprint
+    client_information_fingerprint: OAuthConfigurationFingerprint
     protected_resource_metadata: ProtectedResourceMetadata | None = None
     oauth_metadata: OAuthMetadata | None = None
     authorization_server_url: str | None = None
@@ -701,6 +744,24 @@ class MCPApiKeyResponse(BaseModel):
     )
 
 
+class MCPUserPreferencesUpdateRequest(BaseModel):
+    enabled_in_chat: bool | None = None
+    enabled_in_craft: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_preferences(self) -> "MCPUserPreferencesUpdateRequest":
+        if self.enabled_in_chat is None and self.enabled_in_craft is None:
+            raise ValueError("At least one preference is required")
+        if any(value is None for value in self.model_dump(exclude_unset=True).values()):
+            raise ValueError("Preferences must be booleans")
+        return self
+
+
+class MCPUserPreferencesResponse(BaseModel):
+    enabled_in_chat: bool
+    enabled_in_craft: bool
+
+
 class MCPServer(BaseModel):
     id: int
     name: str
@@ -715,14 +776,22 @@ class MCPServer(BaseModel):
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
     oauth_additional_auth_params: Optional[dict[str, str]] = None
-    # Whether this user's credentials resolve for the server right now (or the
-    # server needs no per-user auth). None when there is no user context.
-    user_can_authenticate: Optional[bool] = None
+    # Local credential state. None when there is no user context.
+    connection_status: MCPConnectionStatus | None
     status: MCPServerStatus
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    user_enabled_in_chat: bool = True
+    user_enabled_in_craft: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description=(
+            "Whether any server tool is selected for the default assistant. "
+            "Computed by member and admin listings, independently of credentials and tool enablement."
+        ),
+    )
     tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
         None,
         description=(

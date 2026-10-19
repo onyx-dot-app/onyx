@@ -28,6 +28,7 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    Document,
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
@@ -65,7 +66,11 @@ def get_recent_completed_attempts_for_cc_pair(
     ignore_targeted_reindex: bool = True,
 ) -> list[IndexAttempt]:
     """Most recent to least recent. Backfills are left out: their window and
-    checkpoint never carry over to or from a normal attempt."""
+    checkpoint never carry over to or from a normal attempt.
+
+    Attempts that ended before docfetching set their window (e.g. cancelled by
+    a pause right after being scheduled) are left out too. They have no window,
+    checkpoint or batches, so a resuming attempt must look past them."""
     query = db_session.query(IndexAttempt).filter(
         IndexAttempt.connector_credential_pair_id == cc_pair_id,
         IndexAttempt.search_settings_id == search_settings_id,
@@ -73,6 +78,7 @@ def get_recent_completed_attempts_for_cc_pair(
             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
         ),
         IndexAttempt.is_backfill.is_(False),
+        IndexAttempt.poll_range_end.is_not(None),
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
@@ -1306,6 +1312,34 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
+
+
+def get_index_attempt_errors_with_document_names_for_cc_pair(
+    cc_pair_id: int,
+    unresolved_only: bool,
+    db_session: Session,
+    page: int,
+    page_size: int,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
+) -> list[tuple[IndexAttemptError, str | None]]:
+    """One page of the pair's errors, newest first, each with the title of its
+    document. A document that never landed has no row, so its title is None."""
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError, Document.semantic_id).outerjoin(
+            Document, Document.id == IndexAttemptError.document_id
+        ),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
+    )
+    stmt = (
+        stmt.order_by(desc(IndexAttemptError.time_created))
+        .offset(page * page_size)
+        .limit(page_size)
+    )
+    return list(db_session.execute(stmt).tuples())
 
 
 def get_index_attempt_errors_across_connectors(

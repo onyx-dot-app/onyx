@@ -39,6 +39,7 @@ import {
   SvgLinear,
   SvgLoopio,
   SvgLumApps,
+  SvgYouTrack,
   SvgMediaWiki,
   SvgNotion,
   SvgOneDrive,
@@ -145,6 +146,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.TestRail]: "sources.testrail.description",
   [ValidSources.Braintrust]: "sources.braintrust.description",
   [ValidSources.Lumapps]: "sources.lumapps.description",
+  [ValidSources.YouTrack]: "sources.youtrack.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
@@ -385,6 +387,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Linear",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/linear`,
+  },
+  youtrack: {
+    icon: SvgYouTrack,
+    displayName: "YouTrack",
+    category: SourceCategory.TicketingAndTaskManagement,
   },
   freshdesk: {
     icon: SvgFreshdesk,

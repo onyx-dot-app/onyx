@@ -1554,6 +1554,17 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Docprocessing applies
+# the same replacement to tabular sections that still reach it, e.g. in batches
+# staged before this was set. Bounds the embedding cost of large spreadsheets.
+# User uploads keep their content. Set it on docfetching and docprocessing.
+SKIP_SPREADSHEET_CONTENT = (
+    os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
+)
+
 # Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
 # docfetching watchdog terminates the worker and fails the attempt with a clear
 # error, pre-empting a kernel OOM kill of the whole pod — which would also kill
@@ -1626,6 +1637,21 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
 # Peak Memory ~= 100 B * MAX_CELLS
 MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
+
+# A sheet whose rows fit in this many chunks keeps all its rows verbatim;
+# bigger sheets get a profile instead.
+TABULAR_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_FULL_ROWS_MAX_CHUNKS") or 3)
+)
+# Chunks of frequent text values added for each large sheet.
+TABULAR_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_VALUE_CHUNKS_PER_SHEET") or 2)
+)
+# Upper bound on the chunks of one workbook or CSV file.
+TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
@@ -1708,6 +1734,10 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
+# A full permission or group sync of a large source can take longer than other jobs
+PERMISSION_SYNC_TIMEOUT = int(
+    os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
+)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"

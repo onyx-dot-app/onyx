@@ -109,7 +109,7 @@ describe("SkillCard", () => {
     const preferenceSwitch = screen.getByRole("switch", {
       name: "Disable Report Writer",
     });
-    expect(preferenceSwitch).toBeDisabled();
+    expect(preferenceSwitch).toHaveAttribute("aria-disabled", "true");
 
     await user.click(preferenceSwitch);
     expect(onEnabledChange).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe("SkillCard", () => {
       name: "Disable Report Writer for Acme CRM",
     });
     expect(preferenceSwitch).toBeChecked();
-    expect(preferenceSwitch).toBeEnabled();
+    expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
     expect(
       container.querySelector(".card[data-variant='secondary']")
     ).toBeInTheDocument();
@@ -251,6 +251,6 @@ describe("SkillCard", () => {
       name: "Enable Report Writer for Acme CRM",
     });
     expect(preferenceSwitch).not.toBeChecked();
-    expect(preferenceSwitch).toBeEnabled();
+    expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
   });
 });

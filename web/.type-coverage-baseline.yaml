@@ -8,7 +8,7 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.9
+total: 99
 packages:
   .: 100
   src: 99.4
@@ -28,10 +28,10 @@ packages:
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/app/oauth-provider: 100
-  src/components: 97.6
+  src/components: 98.4
   src/components/admin: 95.8
   src/components/auth: 89.3
-  src/components/chat: 97.2
+  src/components/chat: 96.1
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
@@ -52,7 +52,7 @@ packages:
   src/ee/sections: 100
   src/ee/views: 99.7
   src/hooks: 98.5
-  src/i18n: 99
+  src/i18n: 99.1
   src/i18n/messages: 100
   src/interfaces: 100
   src/layouts: 100
@@ -67,32 +67,33 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 99
+  src/lib/connectors: 99.1
   src/lib/constants: 100
-  src/lib/credentials: 98.4
+  src/lib/credentials: 98.9
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
-  src/lib/languageModels: 99
-  src/lib/mcp: 97.9
+  src/lib/languageModels: 99.1
+  src/lib/mcp: 99.3
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
   src/lib/oauth-provider: 100
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
+  src/lib/plugins: 99.6
   src/lib/position: 100
   src/lib/projects: 99.7
   src/lib/search: 99.2
   src/lib/searchFilters: 98.1
   src/lib/searchSettings: 99.5
-  src/lib/settings: 96.6
+  src/lib/settings: 96.7
   src/lib/sidebar: 100
   src/lib/skills: 97.4
   src/lib/sso: 99.3
   src/lib/tiers: 100
-  src/lib/tools: 98.1
+  src/lib/tools: 99.1
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
@@ -104,7 +105,7 @@ packages:
   src/refresh-components/buttons: 99.7
   src/refresh-components/cards: 98.4
   src/refresh-components/commandmenu: 99.7
-  src/refresh-components/form: 98.9
+  src/refresh-components/form: 98.8
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
   src/refresh-components/modals: 100
@@ -113,7 +114,7 @@ packages:
   src/refresh-components/texts: 99.4
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.1
+  src/sections/actions: 99.3
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/banners: 99.1
@@ -126,10 +127,11 @@ packages:
   src/sections/model-selector: 99.6
   src/sections/oauth-provider: 100
   src/sections/onboarding: 99.8
+  src/sections/plugins: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.5
+  src/views/admin: 98.6
   types: 100

@@ -13,7 +13,11 @@ from onyx.auth.permissions import (
     require_permission,
 )
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
-from onyx.db.cc_pair_runs import count_pairs_indexing
+from onyx.db.cc_pair_runs import (
+    count_matching_runs,
+    count_pairs_indexing,
+    resolve_matching_runs__no_commit,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -43,10 +47,15 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
+    open_level_filters,
 )
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
     CCPairRef,
+    CCPairRunLevel,
+    CCPairRunsResolvableCountResponse,
+    CCPairRunsResolveMatchingRequest,
+    CCPairRunsResolveMatchingResponse,
     CCPairThroughputWindow,
     ConnectorCredentialPairIdentifier,
     IndexAttemptSnapshot,
@@ -58,6 +67,12 @@ from onyx.server.documents.models import (
     IndexingRunsResponse,
 )
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 router = APIRouter(prefix="/manage/admin/index-monitoring")
@@ -242,7 +257,8 @@ def get_indexing_connectors(
     ),
     db_session: Session = Depends(get_session),
 ) -> IndexingConnectorsResponse:
-    """The readable pairs page, sorted by status then name. ``q`` matches the name."""
+    """The readable pairs page, sorted by status, then source, then name, so a
+    status's connectors of one source sit together. ``q`` matches the name."""
     pairs = _readable_cc_pairs(db_session, user)
     latest = _latest_index_attempts(db_session)
     query = (q or "").strip().lower() or None
@@ -267,6 +283,7 @@ def get_indexing_connectors(
         # The id breaks name ties, so a page boundary splits same-named pairs the same way every request.
         key=lambda cc_pair: (
             _STATUS_ORDER[statuses[cc_pair.id]],
+            cc_pair.connector.source.value,
             cc_pair.name.lower(),
             cc_pair.id,
         ),
@@ -299,6 +316,7 @@ def get_indexing_connectors(
             cc_pair_status=cc_pair.status,
             status=statuses[cc_pair.id],
             creator_email=cc_pair.creator.email if cc_pair.creator else None,
+            creator_name=cc_pair.creator.personal_name if cc_pair.creator else None,
             docs_indexed=docs_indexed[cc_pair.id],
             last_success=cc_pair.last_successful_index_time,
             latest_index_attempt=(
@@ -397,15 +415,104 @@ def _pair_of_run(
     return sibling
 
 
+def _operated_open_levels(
+    db_session: Session, user: User, request: CCPairRunsResolveMatchingRequest
+) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]] | None:
+    """The run kinds and the per-level filters of the open runs the request
+    names on the pairs the caller operates, or None when they operate none."""
+    pairs = _readable_cc_pairs(db_session, user)
+    operate_ids = _managed_ids(
+        db_session,
+        user,
+        set(pairs),
+        CCPairAccessLevel.OPERATE,
+        has_global_permission(user, Permission.MANAGE_CONNECTORS),
+    )
+    if not operate_ids:
+        return None
+    operated_sources = {
+        pairs[cc_pair_id].connector.source for cc_pair_id in operate_ids
+    }
+    run_filters = open_level_filters(
+        request,
+        sorted(operate_ids),
+        None,
+        _shared_group_sync_sources() & operated_sources,
+    )
+    kinds = [
+        kind for kind in CCPairRunKind if request.kinds is None or kind in request.kinds
+    ]
+    return kinds, run_filters
+
+
+@router.get("/runs/resolvable-count")
+def get_resolvable_indexing_runs_count(
+    level: CCPairRunLevel | None = Query(None),
+    q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
+    since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolvableCountResponse:
+    """How many runs ``POST /runs/resolve`` would mark for the same filter."""
+    request = CCPairRunsResolveMatchingRequest(
+        level=level, q=q, since=since, until=until, kinds=kinds
+    )
+    scoped = _operated_open_levels(db_session, user, request)
+    if scoped is None:
+        return CCPairRunsResolvableCountResponse(count=0)
+    kinds_wanted, run_filters = scoped
+    return CCPairRunsResolvableCountResponse(
+        count=count_matching_runs(db_session, kinds_wanted, run_filters)
+    )
+
+
+@router.post("/runs/resolve")
+def resolve_indexing_runs(
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveMatchingResponse:
+    """Marks every open run of the requested level, or of every level, that
+    the fleet feed lists for the filter resolved, on the pairs the caller
+    operates, and returns how many."""
+    scoped = _operated_open_levels(db_session, user, request)
+    if scoped is None:
+        return CCPairRunsResolveMatchingResponse(resolved_count=0, cc_pair_ids=[])
+    kinds, run_filters = scoped
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filters, user.id)
+    db_session.commit()
+    for cc_pair_id, count in resolved.items():
+        emit_audit_event(
+            AuditAction.CC_PAIR_UPDATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=cc_pair_id,
+            extra={"resolved_matching_runs": count},
+        )
+    return CCPairRunsResolveMatchingResponse(
+        resolved_count=sum(resolved.values()), cc_pair_ids=sorted(resolved)
+    )
+
+
 @router.get("/runs")
 def get_indexing_runs(
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
     since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     kinds: list[CCPairRunKind] | None = Query(None),
     status_groups: list[CCPairRunStatusGroup] | None = Query(None),
     q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
     errors: CCPairRunErrors | None = Query(None),
+    superseded: bool | None = Query(None),
+    resolved: bool | None = Query(None),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -426,9 +533,12 @@ def get_indexing_runs(
         source=None,
         shared_sources=shared_sources,
         since=since,
+        until=until,
         error_query=(q or "").strip() or None,
         status_groups=groups,
         errors=errors,
+        superseded=superseded,
+        resolved=resolved,
     )
     feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
     page = feed.page
@@ -461,6 +571,7 @@ def get_indexing_runs(
             and connector_supports_targeted_reindex(
                 cc_pair.connector.source, cc_pair.connector.input_type
             ),
+            can_resolve_runs=may_submit and cc_pair.id in operate_ids,
         )
 
     return IndexingRunsResponse(

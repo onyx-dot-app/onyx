@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.14
+version: 0.9.17
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,11 +21,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Configure the Craft sandbox runtime class and optional NET_ADMIN
-        firewall lockdown. Disabling lockdown requires cluster network enforcement.
-    - kind: security
-      description: Keep direct DNS access closed for firewall-free sandboxes when
-        lockdown settings change. Preserve iptables enforcement by default.
+      description: Add YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY and
+        YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY for YouTrack permission sync.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
