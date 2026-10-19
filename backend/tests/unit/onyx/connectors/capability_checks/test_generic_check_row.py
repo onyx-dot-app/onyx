@@ -180,6 +180,49 @@ def test_error_with_its_own_row_keeps_it() -> None:
     assert result.description == "Try later."
 
 
+def _wrapped(error: Exception, cause: Exception) -> Exception:
+    error.__cause__ = cause
+    return error
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "error_type", "summary"),
+    [
+        # A settings probe that wraps a 429 still rejects the settings, as
+        # blocking validation does with the same error.
+        (
+            _wrapped(ConnectorValidationError("bad settings"), _http_error(429)),
+            CapabilityCheckStatus.FAILED,
+            "ConnectorValidationError",
+            "Settings not accepted",
+        ),
+        # A status narrows a typed error to a subclass of its own class.
+        (
+            _wrapped(ConnectorValidationError("bad token"), _http_error(401)),
+            CapabilityCheckStatus.FAILED,
+            "CredentialInvalidError",
+            "Sign-in rejected",
+        ),
+        (
+            _wrapped(UnexpectedValidationError("busy"), _http_error(429)),
+            CapabilityCheckStatus.INCOMPLETE,
+            "RateLimitedValidationError",
+            "Rate limited by the source",
+        ),
+    ],
+)
+def test_typed_error_keeps_its_class_over_its_http_status(
+    error: Exception, status: CapabilityCheckStatus, error_type: str, summary: str
+) -> None:
+    # Under test.
+    result = _run(error)
+
+    # Postcondition.
+    assert result.status == status
+    assert result.error_type == error_type
+    assert result.summary == summary
+
+
 def test_unreachable_source_fails_on_a_form_run_only() -> None:
     # Under test and postcondition.
     error = requests.ConnectionError("connection refused")

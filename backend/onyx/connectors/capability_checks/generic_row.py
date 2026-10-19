@@ -111,29 +111,47 @@ def _with_status(row: CheckRowText, status: int | None) -> CheckRowText:
     )
 
 
+_ROW_BY_TYPED_CLASS: tuple[tuple[type[ValidationError], CheckRowText], ...] = (
+    (RateLimitedValidationError, _RATE_LIMITED_ROW),
+    (UnreachableValidationError, _UNREACHABLE_ROW),
+    (CredentialExpiredError, _REJECTED_ROW),
+    (CredentialInvalidError, _REJECTED_ROW),
+    (InsufficientPermissionsError, _DENIED_ROW),
+)
+
+
+# The class and row an HTTP status maps to, as the named checks map them.
+_TYPED_BY_STATUS: dict[int, tuple[type[ValidationError], CheckRowText]] = {
+    _TOO_MANY_REQUESTS: (RateLimitedValidationError, _RATE_LIMITED_ROW),
+    _UNAUTHORIZED: (CredentialInvalidError, _REJECTED_ROW),
+    _FORBIDDEN: (InsufficientPermissionsError, _DENIED_ROW),
+    _NOT_FOUND: (ConnectorValidationError, _NOT_FOUND_ROW),
+}
+
+
 def _typed(
     error: Exception, status: int | None
 ) -> tuple[type[ValidationError], CheckRowText]:
-    """The error's class and row. A typed error keeps its class; an untyped
-    one gets its class from its HTTP status, as the named checks map them."""
-    if isinstance(error, RateLimitedValidationError) or status == _TOO_MANY_REQUESTS:
+    """The error's class and row. A typed error keeps its class: its HTTP
+    status can only narrow it to a subclass, so the blocking validation that
+    raises it reaches the same outcome. An untyped error gets its class from
+    its HTTP status."""
+    if isinstance(error, ValidationError):
+        for typed_class, row in _ROW_BY_TYPED_CLASS:
+            if isinstance(error, typed_class):
+                return typed_class, row
+        narrowed = _TYPED_BY_STATUS.get(status) if status is not None else None
+        if narrowed is not None and issubclass(narrowed[0], type(error)):
+            return narrowed
+        if isinstance(error, ConnectorValidationError):
+            return ConnectorValidationError, _SETTINGS_ROW
+        return UnexpectedValidationError, _UNEXPECTED_ROW
+    if status == _TOO_MANY_REQUESTS:
         return RateLimitedValidationError, _RATE_LIMITED_ROW
-    if isinstance(error, (UnreachableValidationError, *_UNREACHABLE_ERRORS)):
+    if isinstance(error, _UNREACHABLE_ERRORS):
         return UnreachableValidationError, _UNREACHABLE_ROW
-    if isinstance(error, CredentialExpiredError):
-        return CredentialExpiredError, _REJECTED_ROW
-    if isinstance(error, CredentialInvalidError):
-        return CredentialInvalidError, _REJECTED_ROW
-    if isinstance(error, InsufficientPermissionsError):
-        return InsufficientPermissionsError, _DENIED_ROW
-    if status == _UNAUTHORIZED:
-        return CredentialInvalidError, _REJECTED_ROW
-    if status == _FORBIDDEN:
-        return InsufficientPermissionsError, _DENIED_ROW
-    if status == _NOT_FOUND:
-        return ConnectorValidationError, _NOT_FOUND_ROW
-    if isinstance(error, ConnectorValidationError):
-        return ConnectorValidationError, _SETTINGS_ROW
+    if status is not None and status in _TYPED_BY_STATUS:
+        return _TYPED_BY_STATUS[status]
     return UnexpectedValidationError, _UNEXPECTED_ROW
 
 
