@@ -56,9 +56,13 @@ export default function ConfigureProviderModal({
   const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const tApps = useTranslations("craft.apps");
   const router = useRouter();
-  const [initialEnabled] = useState(existingApp?.enabled ?? true);
-  const [enabled, setEnabled] = useState(initialEnabled);
-  const availabilityChanged = enabled !== initialEnabled;
+  const savedEnabled = existingApp?.enabled ?? true;
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const enabled = enabledDraft ?? savedEnabled;
+  const availabilityChanged = enabled !== savedEnabled;
+  function setEnabled(value: boolean) {
+    setEnabledDraft(value === savedEnabled ? null : value);
+  }
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );

@@ -84,9 +84,13 @@ export default function CreateCustomAppModal({
   );
   const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
-  const [initialEnabled] = useState(existingApp?.enabled ?? true);
-  const [enabled, setEnabled] = useState(initialEnabled);
-  const availabilityChanged = enabled !== initialEnabled;
+  const savedEnabled = existingApp?.enabled ?? true;
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const enabled = enabledDraft ?? savedEnabled;
+  const availabilityChanged = enabled !== savedEnabled;
+  function setEnabled(value: boolean) {
+    setEnabledDraft(value === savedEnabled ? null : value);
+  }
   const nameId = useId();
   const router = useRouter();
   // Focus the name field for new apps only; edits keep the natural tab order.

@@ -161,6 +161,9 @@ describe("ConfigureProviderModal", () => {
         />
       );
       expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      expect(
+        screen.getByRole("switch", { name: "Enable for Craft" })
+      ).not.toBeChecked();
       fireEvent.click(
         screen.getByRole("switch", {
           name: "Let users manage approval settings",
@@ -175,6 +178,49 @@ describe("ConfigureProviderModal", () => {
       ).not.toHaveProperty("enabled");
     }
   );
+
+  it("keeps an availability draft through saved-value refreshes", async () => {
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
+    const view = render(
+      <ConfigureProviderModal
+        onClose={onClose}
+        onSaved={onSaved}
+        descriptor={DESCRIPTOR}
+        existingApp={APP}
+      />
+    );
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    fireEvent.click(availability);
+    view.rerender(
+      <ConfigureProviderModal
+        onClose={onClose}
+        onSaved={onSaved}
+        descriptor={DESCRIPTOR}
+        existingApp={{ ...APP, enabled: false }}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    view.rerender(
+      <ConfigureProviderModal
+        onClose={onClose}
+        onSaved={onSaved}
+        descriptor={DESCRIPTOR}
+        existingApp={APP}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
+  });
 
   it("describes a disabled app accurately", () => {
     render(

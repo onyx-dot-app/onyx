@@ -196,8 +196,7 @@ ID without sending cached header or pass-through settings. Forms
 retain only unlinked OAuth IDs and reuse them after failed linking. Saved
 editors support No authentication. Hidden OAuth fields do not invalidate other
 methods. New OAuth configurations reject blank or masked credentials.
-Schema checks retain one result keyed to the current text. Request identity
-blocks old responses from replacing current previews or errors, and blocks
+Schema validation uses request identity to ignore outdated responses and blocks
 Continue completion after unmount.
 Format is disabled during submission. Lenient JSON normalization leaves quoted
 text unchanged. Failed background refreshes retain cached editors and drafts;
@@ -206,9 +205,8 @@ Schema drafts remain fixed for each open editor, even when saved definitions
 refresh. Fresh capability loss removes write fields; a missing record restores
 the fallback. Rejected saves remain visible through errors and toasts.
 Schema editing remains on one step.
-Review shows one divided list of actions, with method badges and endpoint paths beside each summary.
-Creation and details render `web/src/sections/plugins/OpenAPIEndpointList.tsx`, keeping endpoint typography,
-method badges, spacing, and responsive behavior identical.
+Admin and personal OpenAPI Tools tabs render `web/src/sections/plugins/OpenAPIEndpointList.tsx`.
+The shared list keeps endpoint typography, method badges, spacing, and responsive behavior identical.
 Creation schema and authentication modals use the same top-anchored, single-tone
 surface as MCP setup. Admin detail tabs embed those same forms without headers
 or nested dialogs, and portal only the active form's save action to the footer.
@@ -222,8 +220,7 @@ Description for Humans is optional display text; creation leaves it blank unless
 Creation shows the schema first, then Description for Humans, then Description for Agents.
 Description for Agents edits schema info.description directly; raw schema edits update the same input.
 Schema edits preserve the display name and human description unless those fields are also edited.
-A divider precedes workspace availability. Tools lists endpoints; Configuration has no detected-tool row. Creation
-retains its endpoint preview because it has no separate Tools tab.
+A divider precedes workspace availability. Tools lists endpoints; Configuration has no detected-tool row.
 Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
 header. Tools use the shared endpoint list, search, count, and empty feedback.
 Plugin input descriptions sit below labels and above controls; optional fields have a label suffix.

@@ -132,6 +132,9 @@ describe("CreateCustomAppModal", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: "Enable for Craft" })
+    ).not.toBeChecked();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "New name" },
     });
@@ -142,6 +145,48 @@ describe("CreateCustomAppModal", () => {
     expect(
       jest.mocked(externalAppsService.updateExternalApp).mock.calls[0]?.[1]
     ).not.toHaveProperty("enabled");
+  });
+
+  it("keeps an availability draft through saved-value refreshes", async () => {
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    const view = render(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    fireEvent.click(availability);
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
   });
 
   it("describes a disabled app accurately", () => {
