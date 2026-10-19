@@ -35,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
     CredentialCapabilityReport,
     NamedCheckRun,
     PendingCheck,
@@ -314,7 +315,7 @@ def _unfinished_results(
     checks: list[CapabilityCheck[Any]], unfinished: frozenset[str], message: str
 ) -> list[CapabilityCheckResult]:
     """INCOMPLETE rows for checks with no result, for a report that is stored
-    without a background run."""
+    without a background run. Their result never arrives, so they time out."""
     return [
         CapabilityCheckResult(
             capability=check.capability,
@@ -323,6 +324,7 @@ def _unfinished_results(
             required=check.required,
             status=CapabilityCheckStatus.INCOMPLETE,
             message=message,
+            error_kind=CheckErrorKind.TIMEOUT,
             is_fallback=check.is_fallback,
             remediation=check.remediation,
             docs_link=check.docs_link,

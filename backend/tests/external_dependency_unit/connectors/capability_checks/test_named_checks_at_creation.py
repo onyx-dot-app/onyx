@@ -35,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CapabilityVerdict,
     CheckAdvisory,
+    CheckErrorKind,
     CheckFinding,
     CheckFindingKey,
     CheckOutput,
@@ -626,6 +627,16 @@ def test_fast_required_failure_blocks_while_another_check_is_slow(
     assert statuses[_CHANNELS] == "failed"
     assert statuses[_TOKEN] == "incomplete"
     harness.send_task.assert_not_called()
+    # The unfinished check's result never arrives, so it is stored as timed out.
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    error_kinds = {
+        result["check_id"]: result["error_kind"]
+        for result in row.report["check_results"]
+    }
+    assert error_kinds[_TOKEN] == CheckErrorKind.TIMEOUT.value
 
 
 @pytest.mark.usefixtures("tenant_context")
