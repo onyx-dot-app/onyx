@@ -1208,24 +1208,17 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
 }
 
 export async function saveAppActionPolicies(
-  scope: "personal" | "workspace",
   appId: number,
   actionPolicies: Record<string, ActionPolicy>,
-  errorMessage: string,
-  usersCanManagePolicies?: boolean
+  errorMessage: string
 ): Promise<void> {
-  const admin = scope === "workspace";
-  const response = await fetch(
-    `/api/build/${admin ? "admin/" : ""}action-policies/${appId}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        users_can_manage_policies: usersCanManagePolicies,
-        action_policies: actionPolicies,
-      }),
-    }
-  );
+  const response = await fetch(`/api/build/action-policies/${appId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action_policies: actionPolicies,
+    }),
+  });
   if (!response.ok)
     throw new Error(await parseErrorDetail(response, errorMessage));
 }

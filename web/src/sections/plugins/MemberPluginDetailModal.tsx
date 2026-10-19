@@ -244,7 +244,6 @@ export default function MemberPluginDetailModal({
     setPolicySaveError(null);
     try {
       await saveAppActionPolicies(
-        "personal",
         policyApp.gated_app_id,
         policies,
         approvalCopy("saveError")
