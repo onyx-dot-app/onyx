@@ -441,6 +441,10 @@
           "description": "Saisissez un identifiant client de votre fournisseur. Ajoutez un secret uniquement si nécessaire."
         }
       },
+      "cimd": {
+        "label": "Utiliser le document de métadonnées client",
+        "description": "Lorsque cette option est activée, le fournisseur récupère le document de métadonnées client de {appName} via l'Internet public. Désactivez-la si cette instance de {appName} est privée. {appName} utilise alors l'enregistrement automatique du client."
+      },
       "discovery": {
         "checking": "Vérification de la configuration automatique…",
         "supported": "La configuration automatique est disponible",

@@ -3,7 +3,8 @@ import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/types";
 import { FormField } from "@/refresh-components/form/FormField";
-import { Content, Section } from "@opal/layouts";
+import { InputSwitchField } from "@opal/form";
+import { Content, InputHorizontal, Section } from "@opal/layouts";
 import { useEffect, useRef } from "react";
 import {
   Button,
@@ -154,6 +155,19 @@ export function MCPOAuthFields({
           failed={failed}
           onRetry={onRetry}
         />
+        {values.oauth_setup_mode === "automatic" && (
+          <InputHorizontal
+            withLabel="oauth_cimd_enabled"
+            title={t("mcpAuthModal.cimd.label")}
+            description={t("mcpAuthModal.cimd.description", { appName })}
+          >
+            <InputSwitchField
+              name="oauth_cimd_enabled"
+              disabled={disabled}
+              onCheckedChange={onSettingsChange}
+            />
+          </InputHorizontal>
+        )}
         {values.oauth_setup_mode === "own_client" && (
           <>
             <Section alignItems="stretch" height="auto" gap={4}>

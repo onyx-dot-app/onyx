@@ -889,6 +889,39 @@ test("new OAuth setup starts automatically and own-client setup requires a clien
   await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
 });
 
+test("automatic setup can turn off the client metadata document", async () => {
+  const configuredServer = { ...server, admin_credentials: {} };
+  const fetchSpy = mockNetwork(configuredServer);
+  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const user = setupUser();
+  render(
+    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+  );
+  await user.click(screen.getByRole("button", { name: "Open setup" }));
+  await screen.findByRole("radiogroup", { name: copy.oauthSetup.label });
+  const cimdSwitch = screen.getByRole("switch", {
+    name: new RegExp(`^${copy.cimd.label}`),
+  });
+  expect(cimdSwitch).toBeChecked();
+  await user.click(cimdSwitch);
+  expect(cimdSwitch).not.toBeChecked();
+  await user.click(
+    screen.getByRole("button", {
+      name: copy.submitButton.label,
+    })
+  );
+  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  const submission = fetchSpy.mock.calls.find(
+    ([url]) => url === "/api/admin/mcp/servers/create"
+  );
+  expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
+    expect.objectContaining({
+      oauth_provider_mode: MCPOAuthProviderMode.AUTO_DISCOVERY,
+      oauth_cimd_enabled: false,
+    })
+  );
+});
+
 test("switching an existing client to automatic setup clears its credentials and manual endpoints", async () => {
   const configuredServer: MCPServer = {
     ...server,

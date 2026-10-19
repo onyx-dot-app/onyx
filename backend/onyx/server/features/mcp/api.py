@@ -1364,6 +1364,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
         oauth_provider_mode=db_server.oauth_provider_mode,
+        oauth_cimd_enabled=db_server.oauth_cimd_enabled,
         oauth_authorization_endpoint=db_server.oauth_authorization_endpoint,
         oauth_token_endpoint=db_server.oauth_token_endpoint,
         oauth_scopes_override=db_server.oauth_scopes_override,
@@ -2056,7 +2057,7 @@ def _upsert_mcp_server(
             or request.auth_performer != mcp_server.auth_performer
         )
         server_url_changed = request.server_url != mcp_server.server_url
-        # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
+        # OAuth provider settings (mode, CIMD, endpoints, scopes, extra params)
         # determine where and with what scope user tokens are minted. A change
         # to any of them invalidates existing user tokens, so it must trigger
         # the same re-handshake wipe as a client_id/secret change.
@@ -2064,6 +2065,7 @@ def _upsert_mcp_server(
             request.auth_type == MCPAuthenticationType.OAUTH
             and (
                 request.oauth_provider_mode != mcp_server.oauth_provider_mode
+                or request.oauth_cimd_enabled != mcp_server.oauth_cimd_enabled
                 or request.oauth_authorization_endpoint
                 != mcp_server.oauth_authorization_endpoint
                 or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
@@ -2151,6 +2153,7 @@ def _upsert_mcp_server(
             oauth_token_endpoint=request.oauth_token_endpoint,
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
+            oauth_cimd_enabled=request.oauth_cimd_enabled,
             transport=request.transport,
         )
 
@@ -2189,6 +2192,7 @@ def _upsert_mcp_server(
             oauth_token_endpoint=request.oauth_token_endpoint,
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
+            oauth_cimd_enabled=request.oauth_cimd_enabled,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
         )
@@ -2590,6 +2594,7 @@ def upsert_mcp_server(
                 request.auth_performer.value if request.auth_performer else None
             ),
             oauth_provider_mode=mcp_server.oauth_provider_mode,
+            oauth_cimd_enabled=mcp_server.oauth_cimd_enabled,
             oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
             oauth_token_endpoint=mcp_server.oauth_token_endpoint,
             oauth_scopes_override=mcp_server.oauth_scopes_override,
@@ -2716,6 +2721,7 @@ def create_mcp_server_simple(
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
         oauth_provider_mode=mcp_server.oauth_provider_mode,
+        oauth_cimd_enabled=mcp_server.oauth_cimd_enabled,
         oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
         oauth_token_endpoint=mcp_server.oauth_token_endpoint,
         oauth_scopes_override=mcp_server.oauth_scopes_override,

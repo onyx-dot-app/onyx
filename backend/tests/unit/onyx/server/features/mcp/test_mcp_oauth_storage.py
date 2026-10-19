@@ -42,6 +42,7 @@ def _server(provider_mode: MCPOAuthProviderMode) -> MCPServer:
             server_url="https://mcp.example.com/mcp",
             transport=MCPTransport.STREAMABLE_HTTP,
             oauth_provider_mode=provider_mode,
+            oauth_cimd_enabled=True,
             oauth_authorization_endpoint=(
                 "https://accounts.example.com/authorize" if known_provider else None
             ),
@@ -253,6 +254,77 @@ def test_shared_client_lookup_does_not_write_stale_user_configuration(
 
     assert asyncio.run(storage.get_client_info()) == registration
     update_config.assert_not_called()
+
+
+@pytest.mark.parametrize("cimd_enabled", [True, False])
+def test_stored_cimd_registration_is_only_reused_while_cimd_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    cimd_enabled: bool,
+) -> None:
+    metadata_url = "https://onyx.example.com/api/mcp/oauth/client-metadata"
+    monkeypatch.setattr(
+        oauth,
+        "is_mcp_oauth_cimd_client_id",
+        lambda client_id: client_id == metadata_url,
+    )
+    registration = _client_information(metadata_url)
+    _patch_config_read(
+        monkeypatch,
+        {MCPOAuthKeys.CLIENT_INFO.value: registration.model_dump(mode="json")},
+    )
+    storage = oauth.OnyxTokenStorage(101, cimd_enabled=cimd_enabled)
+
+    stored = asyncio.run(storage.get_client_info())
+
+    assert stored == (registration if cimd_enabled else None)
+
+
+def test_cimd_off_replaces_shared_cimd_registration_with_dcr_without_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metadata_url = "https://onyx.example.com/api/mcp/oauth/client-metadata"
+    monkeypatch.setattr(
+        oauth,
+        "is_mcp_oauth_cimd_client_id",
+        lambda client_id: client_id == metadata_url,
+    )
+    session = MagicMock()
+    configs = {101: SimpleNamespace(id=101), 100: SimpleNamespace(id=100)}
+    cimd_registration = _client_information(metadata_url)
+    config_data: dict[int, dict[str, Any]] = {
+        101: {},
+        100: {
+            MCPOAuthKeys.CLIENT_INFO.value: cimd_registration.model_dump(mode="json")
+        },
+    }
+
+    @contextmanager
+    def fake_session() -> Iterator[object]:
+        yield session
+
+    monkeypatch.setattr(oauth, "get_session_with_current_tenant", fake_session)
+    monkeypatch.setattr(
+        oauth,
+        "get_connection_config_by_id",
+        lambda config_id, *_args, **_kwargs: configs[config_id],
+    )
+    monkeypatch.setattr(
+        oauth, "extract_connection_data", lambda config: config_data[config.id]
+    )
+    monkeypatch.setattr(oauth, "update_connection_config__no_commit", MagicMock())
+    storage = oauth.OnyxTokenStorage(
+        101, shared_client_config_id=100, cimd_enabled=False
+    )
+
+    assert asyncio.run(storage.get_client_info()) is None
+
+    dcr_registration = _client_information("mock-client-dcr")
+    asyncio.run(storage.set_client_info(dcr_registration))
+
+    expected_registration = dcr_registration.model_dump(mode="json")
+    assert config_data[101][MCPOAuthKeys.CLIENT_INFO.value] == expected_registration
+    assert config_data[100][MCPOAuthKeys.CLIENT_INFO.value] == expected_registration
+    assert asyncio.run(storage.get_client_info()) == dcr_registration
 
 
 def test_client_registration_isolated_to_each_locked_configuration_row(

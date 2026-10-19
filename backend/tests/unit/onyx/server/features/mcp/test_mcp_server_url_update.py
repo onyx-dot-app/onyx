@@ -51,6 +51,7 @@ def test_details_url_change_invalidates_credentials_before_returning_fresh_setti
         auth_type=auth_type,
         auth_performer=performer,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         transport=MCPTransport.STREAMABLE_HTTP,
         status=MCPServerStatus.CONNECTED,
         is_public=True,
