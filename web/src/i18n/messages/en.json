@@ -3150,6 +3150,7 @@
           },
           "resolveAll": "Resolve All",
           "resolveAllTooltip": "Re-index every failed document of this run",
+          "resolveAllUnsupported": "This connector can't re-index single documents. Re-index the connector to retry them.",
           "resolveOne": "Resolve this document",
           "more": "More",
           "less": "Less",

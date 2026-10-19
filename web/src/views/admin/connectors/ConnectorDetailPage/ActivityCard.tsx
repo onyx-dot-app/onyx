@@ -150,7 +150,7 @@ export interface ActivityCardProps {
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
-  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
+  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise, unless `canResolveRuns` says only the connector stands in the way. */
   canResolve: boolean;
   /** Whether the viewer may mark the run resolved. */
   canResolveRuns: boolean;
@@ -215,6 +215,8 @@ export default function ActivityCard({
     run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
   const listsDocs = openDocs > 0;
   const resolvable = canResolve && listsDocs;
+  // The viewer could resolve, but the connector cannot re-fetch single documents. The button stays, disabled, to say so.
+  const resolveUnsupported = listsDocs && canResolveRuns && !canResolve;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
   const state = cardState(run, group, closed);
@@ -426,13 +428,17 @@ export default function ActivityCard({
                       />
                     </Popover>
                     {/* One click re-indexes every open failed document, without opening the list. */}
-                    {resolvable && !closed && (
+                    {(resolvable || resolveUnsupported) && !closed && (
                       <Button
                         rightIcon={SvgCheckAll}
                         prominence="tertiary"
                         size="xs"
-                        disabled={resolving}
-                        tooltip={t("docs.resolveAllTooltip")}
+                        disabled={resolving || resolveUnsupported}
+                        tooltip={t(
+                          resolveUnsupported
+                            ? "docs.resolveAllUnsupported"
+                            : "docs.resolveAllTooltip"
+                        )}
                         onClick={() => onResolve(null)}
                       >
                         {t("docs.resolveAll")}

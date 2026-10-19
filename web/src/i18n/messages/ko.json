@@ -3150,6 +3150,7 @@
           },
           "resolveAll": "모두 해결",
           "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
+          "resolveAllUnsupported": "이 커넥터는 개별 문서를 다시 색인할 수 없습니다. 다시 시도하려면 커넥터를 다시 색인하세요.",
           "resolveOne": "이 문서 해결",
           "more": "더 보기",
           "less": "접기",

@@ -3150,6 +3150,7 @@
           },
           "resolveAll": "Resolver tudo",
           "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
+          "resolveAllUnsupported": "Este conector não pode reindexar documentos individuais. Reindexe o conector para tentar novamente.",
           "resolveOne": "Resolver este documento",
           "more": "Mais",
           "less": "Menos",

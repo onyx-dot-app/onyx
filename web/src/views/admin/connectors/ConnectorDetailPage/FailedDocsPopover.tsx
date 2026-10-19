@@ -69,8 +69,9 @@ function FailedDocRow({
       height="fit"
       className="group/row rounded-08 hover:bg-background-tint-02"
     >
+      {/* Stretched so the one-line title truncates at the column's edge instead of sizing to its content. */}
       <Section
-        alignItems="start"
+        alignItems="stretch"
         gap={0}
         width={14.25}
         height="fit"
