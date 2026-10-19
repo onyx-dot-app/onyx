@@ -386,6 +386,18 @@ def test_jql_query_fails_when_it_matches_nothing(
     assert result.summary == "Query matches no issues"
 
 
+def test_jql_query_fails_when_the_matched_issue_is_not_returned() -> None:
+    gateway: MagicMock = _gateway(is_cloud=True)
+    gateway.bulk_fetch_issues.return_value = []
+
+    result: CapabilityCheckResult = _run(
+        "jira_jql_query", gateway, _config(jql_query="project = X")
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Query matches no issues"
+
+
 def test_jql_query_has_no_advisory_when_it_matches_an_issue() -> None:
     result: CapabilityCheckResult = _run(
         "jira_jql_query", _gateway(is_cloud=True), _config(jql_query="project = X")
