@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ee.onyx.connectors import perm_sync_valid
+from ee.onyx.connectors.perm_sync_valid import validate_sharepoint_perm_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -16,8 +18,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckErrorKind,
     CheckNotRunReason,
+    CredentialCapability,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
@@ -27,6 +31,7 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_group_sync_checks,
     build_sharepoint_indexing_checks,
 )
+from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.models import SitePagesPage
 from tests.unit.onyx.connectors.sharepoint.test_sharepoint_perm_sync_checks import (
     ITEM_JSON,
@@ -262,6 +267,57 @@ def test_no_file_in_scope_is_incomplete() -> None:
 
     assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert result.summary == "No files found to test"
+
+
+def _connector(gateway: MagicMock) -> MagicMock:
+    connector: MagicMock = MagicMock(spec=SharepointConnector)
+    connector.sites = [SITE_URL]
+    connector.excluded_sites = []
+    connector.excluded_paths = []
+    connector.include_site_pages = False
+    connector.include_site_documents = True
+    connector.treat_sharing_link_as_public = False
+    connector.exhaustive_ad_enumeration = False
+    connector.authority_host = "https://login.microsoftonline.com"
+    connector.graph_api_host = "https://graph.microsoft.com"
+    connector.ops = gateway
+    return connector
+
+
+def test_no_file_to_sample_keeps_its_row_but_lets_indexing_run() -> None:
+    gateway = _healthy()
+    gateway.get_delta_page.return_value = _delta_page()
+
+    result = _run(
+        "sharepoint_document_permissions_read",
+        gateway,
+        _config(include_site_pages=False),
+    )
+    validate_sharepoint_perm_sync(_connector(gateway))
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.error_kind == CheckErrorKind.INCONCLUSIVE
+    assert result.summary == "No files found to test"
+
+
+def test_a_timed_out_permission_check_stops_indexing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timed_out = CapabilityCheckResult(
+        capability=CredentialCapability.DOC_PERMISSION_SYNC,
+        check_id="sharepoint_site_permissions_read",
+        display_name="Read site permissions",
+        required=True,
+        status=CapabilityCheckStatus.INCOMPLETE,
+        error_kind=CheckErrorKind.TIMEOUT,
+        message="timed out",
+    )
+    monkeypatch.setattr(
+        perm_sync_valid, "run_capability_checks", lambda *_, **__: [timed_out]
+    )
+
+    with pytest.raises(UnexpectedValidationError):
+        validate_sharepoint_perm_sync(_connector(_healthy()))
 
 
 def test_no_page_in_scope_is_skipped() -> None:

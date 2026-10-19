@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
@@ -94,8 +95,9 @@ def validate_box_perm_sync(connector: BoxConnector) -> None:
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
     """Runs the named checks the way the runner does, so a check whose
-    setting is off stays skipped. A failed or inconclusive required check
-    raises, the way the old probes did."""
+    setting is off stays skipped. A failed or incomplete required check
+    raises. An inconclusive sample does not: it keeps its report row, but
+    proves nothing wrong with the credential."""
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.SHAREPOINT,
         credential_json={},
@@ -123,8 +125,17 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
             continue
         if result.status is CapabilityCheckStatus.FAILED:
             raise ConnectorValidationError(result.message)
-        if result.status is CapabilityCheckStatus.INCOMPLETE:
-            raise UnexpectedValidationError(result.message)
+        if result.status is not CapabilityCheckStatus.INCOMPLETE:
+            continue
+        if result.error_kind is CheckErrorKind.INCONCLUSIVE:
+            # A sample with no file to read, or one that went away.
+            logger.info(
+                "SharePoint check %s found nothing to test: %s",
+                result.check_id,
+                result.message,
+            )
+            continue
+        raise UnexpectedValidationError(result.message)
 
 
 def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
