@@ -72,13 +72,11 @@ jest.mock(
     __esModule: true,
     default: function MockDetails({
       server,
-      onDirtyChange,
       onSaved,
       readOnly,
     }: {
       server: MCPServer;
       readOnly?: boolean;
-      onDirtyChange: (dirty: boolean) => void;
       onSaved: (server: MCPServer) => Promise<void>;
     }) {
       return (
@@ -87,15 +85,8 @@ jest.mock(
             disabled={readOnly}
             aria-label="Server draft"
             defaultValue={server.name}
-            onChange={() => onDirtyChange(true)}
           />
-          <button
-            disabled={readOnly}
-            onClick={() => {
-              onDirtyChange(false);
-              void onSaved(server);
-            }}
-          >
+          <button disabled={readOnly} onClick={() => void onSaved(server)}>
             Save server draft
           </button>
         </div>
@@ -108,20 +99,15 @@ jest.mock(
   () => ({
     __esModule: true,
     default: function MockAuth({
-      onDirtyChange,
       onTriggerFetchTools,
       onComplete,
     }: {
-      onDirtyChange: (dirty: boolean) => void;
       onTriggerFetchTools: (serverId: number) => Promise<void>;
       onComplete: () => void;
     }) {
       return (
         <div>
-          <input
-            aria-label="Authentication draft"
-            onChange={() => onDirtyChange(true)}
-          />
+          <input aria-label="Authentication draft" />
           <button
             onClick={async () => {
               try {
@@ -139,14 +125,8 @@ jest.mock(
 );
 jest.mock("@/sections/actions/MCPServerToolsEditor", () => ({
   __esModule: true,
-  default: function MockTools({
-    onDirtyChange,
-  }: {
-    onDirtyChange: (dirty: boolean) => void;
-  }) {
-    return (
-      <button onClick={() => onDirtyChange(true)}>Draft tool change</button>
-    );
+  default: function MockTools() {
+    return <button>Draft tool change</button>;
   },
 }));
 const server: MCPServer = {
@@ -277,7 +257,7 @@ test("closes the detail modal to the directory without adding a history entry", 
   expect(mockPush).not.toHaveBeenCalled();
 });
 
-test("guards modal close when server settings contain a draft", async () => {
+test("closes without a discard prompt when server settings contain a draft", async () => {
   render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   await user.type(
@@ -285,41 +265,12 @@ test("guards modal close when server settings contain a draft", async () => {
     " edited"
   );
   await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(mockReplace).not.toHaveBeenCalled();
-  await user.click(
-    screen.getByRole("button", {
-      name: messages.chat.modals.unsavedChanges.cancelButton.label,
-    })
-  );
-  expect(screen.getByRole("textbox", { name: "Server draft" })).toHaveValue(
-    "Example MCP edited"
-  );
-});
-
-test("guards modal close for tool drafts and allows canceling discard", async () => {
-  render(<MCPPluginDetailPage serverId={7} />);
-  const user = setupUser();
-  await user.click(
-    await screen.findByRole("tab", {
-      name: messages.actions.mcpTools.title,
-    })
-  );
-  await user.click(
-    await screen.findByRole("button", { name: "Draft tool change" })
-  );
-  await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(await screen.findByRole("dialog")).toBeVisible();
-  await user.click(
-    screen.getByRole("button", {
-      name: messages.chat.modals.unsavedChanges.cancelButton.label,
-    })
-  );
+  expect(mockReplace).toHaveBeenCalledWith("/admin/plugins");
   expect(
     screen.queryByRole("dialog", {
       name: messages.chat.modals.unsavedChanges.header.title,
     })
   ).not.toBeInTheDocument();
-  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test("loads tools once after OAuth return and preserves other query values", async () => {
@@ -619,16 +570,9 @@ test("retains server and authentication drafts across inline tabs", async () => 
   expect(
     screen.getByRole("textbox", { name: "Authentication draft" })
   ).toHaveValue("secret draft");
-  expect(
-    screen.queryByRole("dialog", {
-      name: messages.chat.modals.unsavedChanges.header.title,
-    })
-  ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Close" }));
-  expect(await screen.findByRole("dialog")).toBeVisible();
 });
 
-test("saving server configuration keeps the editor open and clears its draft guard", async () => {
+test("saving server configuration keeps the editor open", async () => {
   render(<MCPPluginDetailPage serverId={7} />);
   const user = setupUser();
   await user.type(

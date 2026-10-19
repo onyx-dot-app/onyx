@@ -33,6 +33,13 @@ function SetupModal() {
     <MCPPluginSetupModal open onClose={mockClose} onCompleted={mockCompleted} />
   );
 }
+// The OAuth redirect URI label renders as Opal markdown. Under Jest,
+// react-markdown's default export loads as a module object, so render the
+// source text as is.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
   useRouter: () => mockRouter,
@@ -822,6 +829,11 @@ test("Connect creates a scoped server once and a failed tool retry updates the s
   ).not.toBeInTheDocument();
   const connect = screen.getByRole("button", { name: copy.connect });
   expect(connect).toBeDisabled();
+  // The connection step focuses its first combobox on the next frame; let
+  // that settle so it does not steal focus from the groups input.
+  await waitFor(() =>
+    expect(document.activeElement).toHaveAttribute("role", "combobox")
+  );
   const groups = screen.getByPlaceholderText("Add user groups");
   await user.click(groups);
   expect(groups).toHaveFocus();

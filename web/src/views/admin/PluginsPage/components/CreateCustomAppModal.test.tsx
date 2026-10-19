@@ -105,18 +105,17 @@ describe("CreateCustomAppModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the editor shell stable during discard confirmation", () => {
-    renderExistingApp();
+  it("closes an edited app from the close button without a discard prompt", () => {
+    const { onClose } = renderExistingApp();
     expect(screen.getAllByText("https://api.acme.test")[0]).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Draft" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    const confirmation = screen.getByRole("dialog", {
-      name: "Discard unsaved changes?",
-    });
-    expect(confirmation).toHaveAttribute("data-width", "md");
-    expect(confirmation).toHaveAttribute("data-position", "center");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
   });
 
   beforeEach(() => {
@@ -460,7 +459,7 @@ describe("CreateCustomAppModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("guards unsaved edits before skill creation without persisting them", () => {
+  it("opens skill creation without persisting unsaved edits", () => {
     const { onClose, onSaved } = renderExistingApp();
 
     fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
@@ -474,11 +473,9 @@ describe("CreateCustomAppModal", () => {
       screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
     expect(mockRouterPush).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=17&externalAppName=Acme+CRM"
     );
@@ -487,7 +484,7 @@ describe("CreateCustomAppModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("warns before discarding dirty app settings", () => {
+  it("discards dirty app settings on Cancel and Escape without a prompt", () => {
     const { onClose } = renderExistingApp();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
@@ -495,41 +492,12 @@ describe("CreateCustomAppModal", () => {
     });
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(onClose).not.toHaveBeenCalled();
-    let confirmation = screen.getByRole("dialog", {
-      name: "Discard unsaved changes?",
-    });
-    fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" })
-    );
-    expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    confirmation = screen.getByRole("dialog", {
-      name: "Discard unsaved changes?",
-    });
-    fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Close" })
-    );
-    expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
-    ).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
   });
 
@@ -610,7 +578,7 @@ describe("CreateCustomAppModal", () => {
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
 
-  it("returns to the uploaded draft when navigation is canceled", async () => {
+  it("continues an uploaded draft without persisting unsaved app edits", async () => {
     mockInspectSkillBundle.mockResolvedValue({
       name: "new-skill",
       description: "Uses Acme",
@@ -629,19 +597,11 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
-    const confirmation = await screen.findByRole("dialog", {
-      name: "Discard unsaved changes?",
-    });
-    expect(mockRouterPush).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" })
-    );
-
-    expect(screen.getByText("Upload skill")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled()
-    );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockRouterPush).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
   });
 
   it("rejects an uploaded skill whose name is already associated", async () => {

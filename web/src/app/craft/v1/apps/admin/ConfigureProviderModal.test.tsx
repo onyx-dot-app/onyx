@@ -320,7 +320,7 @@ describe("ConfigureProviderModal", () => {
     );
   });
 
-  it("guards unsaved provider edits before skill creation", () => {
+  it("opens skill creation without persisting unsaved provider edits", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "unsaved-token" },
@@ -333,11 +333,9 @@ describe("ConfigureProviderModal", () => {
       screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
     expect(mockRouterPush).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack"
     );
@@ -420,7 +418,7 @@ describe("ConfigureProviderModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("guards unsaved provider settings before reviewing an upload", () => {
+  it("reviews an upload without a prompt for unsaved provider settings", () => {
     renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "unsaved-token" },
@@ -432,12 +430,9 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-    ).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
     expect(mockRouterPush).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
     );
@@ -506,7 +501,7 @@ describe("ConfigureProviderModal", () => {
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
 
-  it("guards pending post-create associations before reviewing an upload", async () => {
+  it("reviews an upload without a prompt for pending post-create associations", async () => {
     mockUseUserSkills.mockReturnValue({
       data: {
         builtins: [],
@@ -551,11 +546,9 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-    ).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+    ).not.toBeInTheDocument();
     expect(mockRouterPush).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
     );

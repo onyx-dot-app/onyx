@@ -1,3 +1,10 @@
+// The OAuth redirect URI label renders as Opal markdown. Under Jest,
+// react-markdown's default export loads as a module object, so render the
+// source text as is.
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
   useRouter: () => ({ push: jest.fn() }),
