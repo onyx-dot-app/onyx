@@ -5,7 +5,7 @@ Deploy the workspace model rename with this migration; older application
 versions still query gated_action_policy. Existing policy values are preserved.
 
 Revision ID: 131ed5e307a4
-Revises: c7e1a2f4b9d3
+Revises: 8f4f81f43494
 Create Date: 2026-10-16 13:22:48.760872
 
 """
@@ -17,7 +17,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "131ed5e307a4"
-down_revision = "c7e1a2f4b9d3"
+down_revision = "8f4f81f43494"
 branch_labels = None
 depends_on = None
 
