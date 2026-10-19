@@ -588,10 +588,9 @@ def run_capability_checks(
     timeout_cap_seconds: float | None = None,
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
-    first_check_id: str | None = None,
 ) -> list[CapabilityCheckResult]:
-    """Runs checks sequentially, in ``run_order`` (with ``first_check_id``),
-    and maps their outcomes to statuses.
+    """Runs checks sequentially, in ``run_order``, and maps their outcomes to
+    statuses.
 
     Sequential on purpose: source APIs can rate limit aggressively, so
     concurrent probes against the same credential are counterproductive. Check
@@ -657,7 +656,7 @@ def run_capability_checks(
 
     # Discovery checks run after validation, and only when it found the
     # credential usable: they exist to show what a working credential reaches.
-    for check in run_order(checks, first_check_id):
+    for check in run_order(checks):
         if check.discovery:
             discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
                 [*prior_results, *results], check_findings_enabled()
@@ -872,11 +871,15 @@ def generate_capability_report(
     connector only when a selected check needs the instance.
 
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
-    the connector instantiation's. ``prior_results``, ``form_run`` and
-    ``first_check_id`` are forwarded to ``run_capability_checks``.
+    the connector instantiation's. ``prior_results`` and ``form_run`` are
+    forwarded to ``run_capability_checks``.
+
+    ``first_check_id`` (Start Now) orders the source's checks before
+    ``check_ids`` limits them, as a draft run's progress does
+    (``pending_in_run_order``).
     """
     source = source or credential.source
-    checks = get_capability_checks(source)
+    checks = run_order(get_capability_checks(source), first_check_id)
     if check_ids is not None:
         checks = [check for check in checks if check.check_id in check_ids]
     # Fail loudly for programmer errors (a source with no connector class)
@@ -975,7 +978,6 @@ def generate_capability_report(
         timeout_cap_seconds=timeout_cap_seconds,
         prior_results=prior_results,
         form_run=form_run,
-        first_check_id=first_check_id,
     )
     return CredentialCapabilityReport(
         credential_id=credential.id,

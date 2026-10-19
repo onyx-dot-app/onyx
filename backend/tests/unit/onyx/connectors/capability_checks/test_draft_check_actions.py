@@ -293,6 +293,58 @@ def test_start_now_on_a_check_after_a_skip_does_not_run_it(
     assert _state(snapshot, _READ).blocked_by == _LIST
 
 
+def test_start_now_orders_through_a_cached_dependency(harness: _Harness) -> None:
+    """The run orders all checks before it drops the cached ones, as its
+    progress does: the cached list check still pulls sign-in first."""
+    harness.run()
+
+    snapshot = harness.run(
+        DraftCheckActions(check_ids=[_SIGN_IN, _READ], start_check_id=_READ)
+    )
+
+    assert harness.runs == [_SIGN_IN, _READ]
+    assert _state(snapshot, _LIST).from_cache is True
+
+
+def test_stopping_a_required_check_drops_its_earlier_pass(harness: _Harness) -> None:
+    first = harness.run()
+    run = load_draft_run(first.run_id)
+    assert run is not None
+    key = run.result_cache_keys[_LIST]
+    assert get_cached_draft_result(key) is not None
+
+    harness.run(DraftCheckActions(skip_check_ids=[_LIST]))
+
+    assert get_cached_draft_result(key) is None
+
+
+@pytest.mark.parametrize("skipped_id", [_EXTRA, _LIST])
+def test_an_older_run_keeps_off_a_newer_skip(
+    harness: _Harness, monkeypatch: pytest.MonkeyPatch, skipped_id: str
+) -> None:
+    """A newer run skips (optional) or stops (required) a check while the
+    older run is executing it. The older result does not replace the skip."""
+
+    def start_newer_run(_context: CapabilityCheckContext) -> CheckOutput | None:
+        harness.start(DraftCheckActions(skip_check_ids=[skipped_id]))
+        return None
+
+    monkeypatch.setattr(harness.check(skipped_id), "run", start_newer_run)
+
+    older = harness.run()
+
+    assert older.status == DraftRunStatus.SUPERSEDED
+    run = load_draft_run(older.run_id)
+    assert run is not None
+    cached = get_cached_draft_result(run.result_cache_keys[skipped_id])
+    if skipped_id == _EXTRA:
+        assert cached is not None and cached.skipped_by_user
+    else:
+        assert cached is None
+    # A check the newer run does not skip keeps the older run's result.
+    assert get_cached_draft_result(run.result_cache_keys[_SIGN_IN]) is not None
+
+
 @pytest.mark.parametrize(
     "actions,rerun",
     [

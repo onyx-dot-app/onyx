@@ -534,8 +534,10 @@ when it has none, for example after a dependency that now runs.
 (`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
 (`stopped_by_user`), which is no pass and holds Create. Their dependents are
 "Not run" (`dependency_skipped`). Creation reuses a cached optional skip and
-always runs a stopped required check. `start_check_id` runs that check and the
-checks it needs first. An unknown check id, or a check to run and to skip, is
+always runs a stopped required check: a stop drops the check's cached result.
+A result of an older run does not replace a skip or stop of the latest run
+(`draft_runs.py:cache_run_result`). `start_check_id` runs that check and the
+checks it needs first, also through a dependency that keeps a cached result. An unknown check id, or a check to run and to skip, is
 `INVALID_INPUT`. Stored runs take no actions.
 
 A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):

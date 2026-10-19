@@ -87,6 +87,9 @@ _CONFIG_INDEPENDENT_HASH = "config_independent"
 
 _NEEDS_CONFIG_MESSAGE = "Needs connector settings."
 _NEEDS_COMPLETE_CONFIG_MESSAGE = "Needs complete connector settings."
+_USER_SKIP_REASONS = frozenset(
+    {CheckNotRunReason.SKIPPED_BY_USER, CheckNotRunReason.STOPPED_BY_USER}
+)
 _SKIPPED_BY_USER_LINE = "Skipped by you"
 _STOPPED_BY_USER_LINE = "Not run: stopped by user"
 
@@ -651,9 +654,10 @@ def skip_draft_check(check_state: DraftCheckState) -> None:
 
 def cache_user_skip(key: str, check_state: DraftCheckState) -> None:
     """Caches the admin's skip of an optional check, so creation on the same
-    form does not run it. A stopped required check is never cached: creation
-    always runs it."""
+    form does not run it. A stopped required check is never cached, and its
+    earlier result is dropped: creation always runs it."""
     if check_state.required:
+        get_cache_backend().delete(key)
         return
     cached = CachedDraftResult(
         state=check_state.state,
@@ -796,6 +800,30 @@ def is_superseded(run: StoredDraftRun) -> bool:
         _latest_run_key(run.user_id, run.snapshot.draft_key)
     )
     return latest is None or latest.decode() != str(run.snapshot.run_id)
+
+
+def _latest_run_skips(run: StoredDraftRun, check_id: str) -> bool:
+    """True when the latest run of ``run``'s draft key skipped or stopped the
+    check on the same result cache key."""
+    latest = load_latest_draft_run(run.user_id, run.snapshot.draft_key)
+    if latest is None or latest.result_cache_keys.get(
+        check_id
+    ) != run.result_cache_keys.get(check_id):
+        return False
+    return any(
+        state.check_id == check_id and state.not_run_reason in _USER_SKIP_REASONS
+        for state in latest.snapshot.checks
+    )
+
+
+def cache_run_result(run: StoredDraftRun, result: CapabilityCheckResult) -> None:
+    """Caches a result of ``run``. A superseded run keeps off the result of a
+    check that the latest run skipped or stopped, so the admin's skip holds.
+    Holds the start lock, under which a new run saves its skips."""
+    with draft_run_start_lock(run.user_id, run.snapshot.draft_key):
+        if is_superseded(run) and _latest_run_skips(run, result.check_id):
+            return
+        cache_draft_result(run.result_cache_keys[result.check_id], result)
 
 
 def clear_latest_draft_run(run: StoredDraftRun) -> None:

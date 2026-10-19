@@ -433,6 +433,8 @@ def start_draft_capability_check_run(
     prior = load_latest_draft_run(user_id, draft_key) if run_ids is not None else None
     checks: list[DraftCheckState] = []
     result_cache_keys: dict[str, str] = {}
+    # Cached once this run is the latest, see ``cache_run_result``.
+    user_skips: list[tuple[str, DraftCheckState]] = []
     for check, check_state in plan.checks:
         checks.append(check_state)
         if check_state.state != DraftCheckStateKind.PENDING:
@@ -451,7 +453,7 @@ def start_draft_capability_check_run(
         result_cache_keys[check.check_id] = cache_key
         if check.check_id in skip_ids:
             skip_draft_check(check_state)
-            cache_user_skip(cache_key, check_state)
+            user_skips.append((cache_key, check_state))
             continue
         if run_ids is not None and check.check_id in run_ids:
             continue
@@ -503,6 +505,8 @@ def start_draft_capability_check_run(
     try:
         save_draft_run(run)
         set_latest_draft_run(run)
+        for cache_key, check_state in user_skips:
+            cache_user_skip(cache_key, check_state)
     finally:
         start_lock.release()
     if not has_pending:
