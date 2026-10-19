@@ -317,6 +317,7 @@ def test_edit_validations_read_the_pairs_dry_run_results(
         source=DocumentSource.SLACK,
         access_type=AccessType.PUBLIC,
         connector_specific_config=_PROPOSED_CONFIG,
+        user_id=admin.id,
     )
     assert {result.check_id: result.status for result in results} == {
         _TOKEN: CapabilityCheckStatus.PASSED,
@@ -335,6 +336,7 @@ def test_edit_validations_read_the_pairs_dry_run_results(
         connector_specific_config=_PROPOSED_CONFIG,
         credential=slack_pair.credential,
         access_type=AccessType.PUBLIC,
+        user_id=admin.id,
     )
     assert harness.runs == [_CHANNELS]
     assert {result.check_id: result.status for result in validation.check_results} == {
@@ -357,6 +359,7 @@ def _validate_proposed_for_edit(
         access_type=AccessType.PUBLIC,
         enforce_creation=True,
         trigger=CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE,
+        user_id=None,
     )
 
 

@@ -8,7 +8,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -24,6 +24,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRerunMode,
     DraftRunStatus,
     get_cached_draft_result,
+    get_user_skip,
     load_draft_run,
 )
 from onyx.connectors.capability_checks.models import (
@@ -36,6 +37,7 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     DraftCheckActions,
+    NamedCheckRun,
     aggregate_capability_verdict,
 )
 from onyx.connectors.capability_checks.runner import run_order
@@ -186,6 +188,38 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> _Harness:
     return _Harness(monkeypatch)
 
 
+def _create(
+    harness: _Harness, monkeypatch: pytest.MonkeyPatch, user_id: UUID | None
+) -> tuple[list[str], NamedCheckRun]:
+    """Creation's checks for the harness form, by ``user_id``. Returns the
+    ids of the checks it ran, each of which passes, and the run."""
+    ran: list[str] = []
+
+    def run_within_budget(
+        check_ids: list[str], **_kwargs: Any
+    ) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
+        ran.extend(check_ids)
+        return [
+            _result(CapabilityCheckStatus.PASSED, required=True).model_copy(
+                update={"check_id": check_id}
+            )
+            for check_id in check_ids
+        ], frozenset()
+
+    monkeypatch.setattr(creation, "_run_checks_within_budget", run_within_budget)
+    named_run = creation.run_named_checks_within_budget(
+        connector_id=None,
+        cc_pair_id=None,
+        source=DocumentSource.SLACK,
+        input_type=None,
+        connector_specific_config={},
+        credential=harness.credential,
+        access_type=AccessType.PUBLIC,
+        user_id=user_id,
+    )
+    return ran, named_run
+
+
 def test_plain_run_runs_every_check_in_run_order(harness: _Harness) -> None:
     snapshot = harness.run()
 
@@ -209,10 +243,14 @@ def test_skipped_required_check_is_stopped_and_its_dependents_do_not_run(
     assert dependent.blocked_by == _LIST
     assert dependent.summary == f"Not run: Run {_LIST} stopped"
     assert harness.runs == [_SIGN_IN, _EXTRA, _FIND]
-    # A stopped required check is never cached, so creation runs it.
+    # The stop is the admin's own; the shared cache holds no result for it.
     run = load_draft_run(snapshot.run_id)
     assert run is not None
-    assert get_cached_draft_result(run.result_cache_keys[_LIST]) is None
+    key = run.result_cache_keys[_LIST]
+    assert get_cached_draft_result(key) is None
+    user_stop = get_user_skip(harness.user.id, key)
+    assert user_stop is not None
+    assert user_stop.not_run_reason == CheckNotRunReason.STOPPED_BY_USER
 
 
 def test_skipped_optional_check_is_skipped_by_user_and_cached(
@@ -227,8 +265,12 @@ def test_skipped_optional_check_is_skipped_by_user_and_cached(
     assert _EXTRA not in harness.runs
     run = load_draft_run(snapshot.run_id)
     assert run is not None
-    cached = get_cached_draft_result(run.result_cache_keys[_EXTRA])
-    assert cached is not None and cached.skipped_by_user
+    key = run.result_cache_keys[_EXTRA]
+    # The skip is cached for the admin only, apart from the shared results.
+    assert get_cached_draft_result(key) is None
+    user_skip = get_user_skip(harness.user.id, key)
+    assert user_skip is not None and user_skip.skipped_by_user
+    assert get_user_skip(uuid4(), key) is None
 
 
 def test_a_cached_skip_holds_only_while_the_request_skips_the_check(
@@ -240,6 +282,9 @@ def test_a_cached_skip_holds_only_while_the_request_skips_the_check(
 
     assert _EXTRA in harness.runs
     assert _state(snapshot, _EXTRA).state == DraftCheckStateKind.PASSED
+    run = load_draft_run(snapshot.run_id)
+    assert run is not None
+    assert get_user_skip(harness.user.id, run.result_cache_keys[_EXTRA]) is None
 
 
 def test_check_ids_reruns_only_the_chosen_checks(harness: _Harness) -> None:
@@ -306,16 +351,22 @@ def test_start_now_orders_through_a_cached_dependency(harness: _Harness) -> None
     assert _state(snapshot, _LIST).from_cache is True
 
 
-def test_stopping_a_required_check_drops_its_earlier_pass(harness: _Harness) -> None:
+def test_stopping_a_required_check_hides_its_pass_from_that_admin_only(
+    harness: _Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
     first = harness.run()
     run = load_draft_run(first.run_id)
     assert run is not None
     key = run.result_cache_keys[_LIST]
-    assert get_cached_draft_result(key) is not None
 
     harness.run(DraftCheckActions(skip_check_ids=[_LIST]))
 
-    assert get_cached_draft_result(key) is None
+    # The shared pass stays for other forms; creation by this admin runs it.
+    assert get_cached_draft_result(key) is not None
+    ran, _ = _create(harness, monkeypatch, harness.user.id)
+    assert ran == [_LIST]
+    ran, _ = _create(harness, monkeypatch, uuid4())
+    assert ran == []
 
 
 @pytest.mark.parametrize("skipped_id", [_EXTRA, _LIST])
@@ -336,11 +387,9 @@ def test_an_older_run_keeps_off_a_newer_skip(
     assert older.status == DraftRunStatus.SUPERSEDED
     run = load_draft_run(older.run_id)
     assert run is not None
-    cached = get_cached_draft_result(run.result_cache_keys[skipped_id])
-    if skipped_id == _EXTRA:
-        assert cached is not None and cached.skipped_by_user
-    else:
-        assert cached is None
+    key = run.result_cache_keys[skipped_id]
+    assert get_cached_draft_result(key) is None
+    assert get_user_skip(harness.user.id, key) is not None
     # A check the newer run does not skip keeps the older run's result.
     assert get_cached_draft_result(run.result_cache_keys[_SIGN_IN]) is not None
 
@@ -444,33 +493,12 @@ def test_creation_reuses_an_optional_skip_and_runs_a_required_one(
     assert run is not None
     # A skip cached before the check became required must not let it pass.
     draft_runs.cache_user_skip(
+        harness.user.id,
         run.result_cache_keys[_READ],
         _state(snapshot, _EXTRA).model_copy(update={"check_id": _READ}),
     )
-    ran: list[str] = []
 
-    def run_within_budget(
-        check_ids: list[str], **_kwargs: Any
-    ) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
-        ran.extend(check_ids)
-        return [
-            _result(CapabilityCheckStatus.PASSED, required=True).model_copy(
-                update={"check_id": check_id}
-            )
-            for check_id in check_ids
-        ], frozenset()
-
-    monkeypatch.setattr(creation, "_run_checks_within_budget", run_within_budget)
-
-    named_run = creation.run_named_checks_within_budget(
-        connector_id=None,
-        cc_pair_id=None,
-        source=DocumentSource.SLACK,
-        input_type=None,
-        connector_specific_config={},
-        credential=harness.credential,
-        access_type=AccessType.PUBLIC,
-    )
+    ran, named_run = _create(harness, monkeypatch, harness.user.id)
 
     assert _EXTRA not in ran
     assert _LIST in ran and _READ in ran
@@ -507,3 +535,43 @@ def test_a_chain_after_a_skipped_check_names_the_skipped_check() -> None:
     assert {result.not_run_reason for result in results} == {
         CheckNotRunReason.DEPENDENCY_SKIPPED
     }
+
+
+@pytest.mark.parametrize("user_id", [uuid4(), None])
+def test_creation_by_another_user_runs_a_skipped_check(
+    harness: _Harness, monkeypatch: pytest.MonkeyPatch, user_id: UUID | None
+) -> None:
+    harness.run(DraftCheckActions(skip_check_ids=[_EXTRA]))
+
+    ran, named_run = _create(harness, monkeypatch, user_id)
+
+    assert _EXTRA in ran
+    extra = next(r for r in named_run.finished_results if r.check_id == _EXTRA)
+    assert extra.not_run_reason is None
+
+
+@pytest.mark.parametrize(
+    "actions,rerun",
+    [
+        (None, DraftRerunMode.NONE),
+        (DraftCheckActions(check_ids=[_EXTRA]), DraftRerunMode.NONE),
+        (DraftCheckActions(check_ids=[_SIGN_IN]), DraftRerunMode.NONE),
+        (None, DraftRerunMode.ALL),
+    ],
+)
+def test_a_run_that_does_not_skip_a_check_clears_its_old_skip(
+    harness: _Harness,
+    monkeypatch: pytest.MonkeyPatch,
+    actions: DraftCheckActions | None,
+    rerun: DraftRerunMode,
+) -> None:
+    """The later run's result for the check is INCOMPLETE, which is not
+    cached, so only a cleared skip lets creation run the check again."""
+    harness.run(DraftCheckActions(skip_check_ids=[_EXTRA]))
+    harness.check(_EXTRA).error = UnexpectedValidationError("flaky")
+
+    snapshot = harness.run(actions, rerun)
+
+    assert _state(snapshot, _EXTRA).state == DraftCheckStateKind.INCOMPLETE
+    ran, _ = _create(harness, monkeypatch, harness.user.id)
+    assert _EXTRA in ran

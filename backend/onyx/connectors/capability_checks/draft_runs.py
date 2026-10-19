@@ -76,6 +76,7 @@ DRAFT_RESULT_CACHE_TTL_SECONDS = 10 * 60
 _DRAFT_RUN_KEY_PREFIX = "capability_check_draft_run"
 _DRAFT_LATEST_RUN_KEY_PREFIX = "capability_check_draft_latest_run"
 _DRAFT_RESULT_KEY_PREFIX = "capability_check_draft_result"
+_DRAFT_USER_CHOICE_KEY_PREFIX = "capability_check_draft_user_choice"
 # Set on a result key while a draft run is still to write it.
 _IN_FLIGHT_SUFFIX = ":in_flight"
 _DRAFT_RESULT_POLL_SECONDS = 0.2
@@ -309,7 +310,7 @@ class CachedDraftResult(BaseModel):
     error_detail: CheckErrorDetail | None = None
     summary: str | None = None
     description: str | None = None
-    # Set only for an optional check the admin skipped, so creation honors it.
+    # Set only on the admin's own skip or stop (``cache_user_skip``).
     not_run_reason: CheckNotRunReason | None = None
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = []
@@ -637,13 +638,16 @@ def skip_draft_check(check_state: DraftCheckState) -> None:
     check_state.summary = line
 
 
-def cache_user_skip(key: str, check_state: DraftCheckState) -> None:
-    """Caches the admin's skip of an optional check, so creation on the same
-    form does not run it. A stopped required check is never cached, and its
-    earlier result is dropped: creation always runs it."""
-    if check_state.required:
-        get_cache_backend().delete(key)
-        return
+def _user_choice_key(user_id: UUID, result_key: str) -> str:
+    return f"{_DRAFT_USER_CHOICE_KEY_PREFIX}:{user_id}:{result_key}"
+
+
+def cache_user_skip(
+    user_id: UUID, result_key: str, check_state: DraftCheckState
+) -> None:
+    """Caches the admin's skip or stop of a check for that admin only, apart
+    from the shared result under ``result_key``: creation by the same admin on
+    the same form reuses a skip, and runs a stopped check."""
     cached = CachedDraftResult(
         state=check_state.state,
         message=check_state.message,
@@ -652,8 +656,20 @@ def cache_user_skip(key: str, check_state: DraftCheckState) -> None:
         not_run_reason=check_state.not_run_reason,
     )
     get_cache_backend().set(
-        key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
+        _user_choice_key(user_id, result_key),
+        cached.model_dump_json(),
+        ex=DRAFT_RESULT_CACHE_TTL_SECONDS,
     )
+
+
+def clear_user_skip(user_id: UUID, result_key: str) -> None:
+    get_cache_backend().delete(_user_choice_key(user_id, result_key))
+
+
+def get_user_skip(user_id: UUID, result_key: str) -> CachedDraftResult | None:
+    """The admin's cached skip or stop of the check under ``result_key``."""
+    raw = get_cache_backend().get(_user_choice_key(user_id, result_key))
+    return CachedDraftResult.model_validate_json(raw) if raw is not None else None
 
 
 # Results a run keeps from the latest run of its draft key. A check that a

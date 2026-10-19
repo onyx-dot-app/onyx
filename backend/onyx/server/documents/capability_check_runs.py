@@ -31,6 +31,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     cache_user_skip,
     cc_pair_draft_key,
     clear_latest_draft_run,
+    clear_user_skip,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
@@ -386,8 +387,10 @@ def start_draft_capability_check_run(
     with ALL, every check runs again. Fresh results still go to the cache.
 
     ``actions`` are the admin's per-check actions (``DraftCheckActions``);
-    None runs every check. A skip applies to a check that could run. The skip of an optional check is
-    cached, so creation on the same form honors it.
+    None runs every check. A skip applies to a check that could run. The
+    user's skips are cached apart from the shared results, so creation by the
+    same user on the same form honors them; a check the run does not skip
+    drops its earlier skip.
 
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
@@ -433,8 +436,10 @@ def start_draft_capability_check_run(
     prior = load_latest_draft_run(user_id, draft_key) if run_ids is not None else None
     checks: list[DraftCheckState] = []
     result_cache_keys: dict[str, str] = {}
-    # Cached once this run is the latest, see ``cache_run_result``.
+    # Saved once this run is the latest, see ``cache_run_result``.
     user_skips: list[tuple[str, DraftCheckState]] = []
+    # Checks this run does not skip: their earlier skip no longer holds.
+    unskipped_keys: list[str] = []
     for check, check_state in plan.checks:
         checks.append(check_state)
         if check_state.state != DraftCheckStateKind.PENDING:
@@ -455,14 +460,12 @@ def start_draft_capability_check_run(
             skip_draft_check(check_state)
             user_skips.append((cache_key, check_state))
             continue
+        unskipped_keys.append(cache_key)
         if run_ids is not None and check.check_id in run_ids:
             continue
         cached = (
             None if rerun == DraftRerunMode.ALL else get_cached_draft_result(cache_key)
         )
-        # A cached skip holds only while the request still skips the check.
-        if cached is not None and cached.skipped_by_user:
-            cached = None
         if cached is not None and not (
             rerun == DraftRerunMode.FAILED
             and cached.state == DraftCheckStateKind.FAILED
@@ -506,7 +509,9 @@ def start_draft_capability_check_run(
         save_draft_run(run)
         set_latest_draft_run(run)
         for cache_key, check_state in user_skips:
-            cache_user_skip(cache_key, check_state)
+            cache_user_skip(user_id, cache_key, check_state)
+        for cache_key in unskipped_keys:
+            clear_user_skip(user_id, cache_key)
     finally:
         start_lock.release()
     if not has_pending:

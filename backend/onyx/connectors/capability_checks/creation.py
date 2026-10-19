@@ -6,7 +6,7 @@ For a source with named checks, this replaces the legacy blocking validation
 source's checks for the pairing's access type and stores the full report. A
 fresh result of a draft run on the same form (for an edit, of a dry run on the
 same pair and proposed state) is reused, so the check does not run again. An
-optional check the admin skipped on that form is reused as skipped; a required
+optional check the same admin skipped on that form is reused as skipped; a required
 check always runs, also when the admin stopped it. Only a required check that
 failed within the blocking budget blocks the pairing: INCOMPLETE is transient,
 and skipped checks do not apply. A check that is
@@ -29,6 +29,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     cached_check_result,
     form_draft_result_keys,
     get_cached_draft_result,
+    get_user_skip,
     is_draft_result_in_flight,
     wait_for_draft_result,
 )
@@ -38,6 +39,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckErrorKind,
+    CheckNotRunReason,
     CredentialCapability,
     CredentialCapabilityReport,
     NamedCheckRun,
@@ -108,10 +110,12 @@ def _cached_draft_results(
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
     cc_pair_id: int | None,
+    user_id: UUID | None,
 ) -> dict[str, CachedDraftResult]:
     """check_id to its cached draft result, for the checks a draft run already
     ran with this credential, access type and form values. With ``cc_pair_id``,
-    only that pair's dry runs count; without it, only create-form runs."""
+    only that pair's dry runs count; without it, only create-form runs.
+    ``user_id``'s own skip replaces the shared result, and their stop hides it."""
     keys = _draft_result_keys(
         checks,
         credential=credential,
@@ -122,7 +126,13 @@ def _cached_draft_results(
     )
     cached_by_check_id: dict[str, CachedDraftResult] = {}
     for check_id, key in keys.items():
-        cached = get_cached_draft_result(key)
+        user_skip = get_user_skip(user_id, key) if user_id is not None else None
+        if (
+            user_skip is not None
+            and user_skip.not_run_reason == CheckNotRunReason.STOPPED_BY_USER
+        ):
+            continue
+        cached = user_skip or get_cached_draft_result(key)
         if cached is not None:
             cached_by_check_id[check_id] = cached
     return cached_by_check_id
@@ -136,6 +146,7 @@ def _fresh_draft_results(
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
     cc_pair_id: int | None,
+    user_id: UUID | None,
 ) -> dict[str, CachedDraftResult]:
     """The cached draft results that a validation reuses. A cached FAILED
     result is left out, so the check runs again: the source may have been
@@ -152,6 +163,7 @@ def _fresh_draft_results(
             access_type=access_type,
             connector_specific_config=connector_specific_config,
             cc_pair_id=cc_pair_id,
+            user_id=user_id,
         ).items()
         if cached.state != DraftCheckStateKind.FAILED
         and not (cached.skipped_by_user and check_id in required_ids)
@@ -165,10 +177,12 @@ def get_cc_pair_dry_run_results(
     source: DocumentSource,
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
+    user_id: UUID,
 ) -> list[CapabilityCheckResult]:
     """The cached results of the pair's dry runs for this proposed state, as
-    report rows, failures included. Reads the cache only: a check with no
-    terminal result for exactly this state is left out."""
+    report rows, failures included, with ``user_id``'s own skips. Reads the
+    cache only: a check with no terminal result for exactly this state is
+    left out."""
     checks = get_capability_checks(source)
     cached_by_check_id = _cached_draft_results(
         checks,
@@ -177,6 +191,7 @@ def get_cc_pair_dry_run_results(
         access_type=access_type,
         connector_specific_config=connector_specific_config,
         cc_pair_id=cc_pair_id,
+        user_id=user_id,
     )
     return [
         cached_check_result(check, cached)
@@ -484,11 +499,13 @@ def run_named_checks_within_budget(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     access_type: AccessType,
+    user_id: UUID | None,
 ) -> NamedCheckRun:
     """Runs the source's named checks for a pairing, with no writes.
 
     Fresh draft results for the same form are reused and count as finished at
-    once: with ``cc_pair_id``, those of the pair's dry runs. The other checks
+    once: with ``cc_pair_id``, those of the pair's dry runs. ``user_id`` is who
+    asks for the pairing; only their own skips are reused. The other checks
     run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``. A discovery check
     with no reused result does not run: creation and the first index attempt
     never wait on it. Does not claim or store a report row and does not start a
@@ -502,6 +519,7 @@ def run_named_checks_within_budget(
         access_type=access_type,
         connector_specific_config=connector_specific_config,
         cc_pair_id=cc_pair_id,
+        user_id=user_id,
     )
     # Discovery checks are not run at creation, so they are not awaited either.
     to_check: list[str] = list(
@@ -592,10 +610,12 @@ def validate_pairing_with_named_checks(
     credential: Credential,
     access_type: AccessType,
     enforce_creation: bool,
+    user_id: UUID | None,
 ) -> bool:
     """Runs the source's named checks for a pairing and stores the report
     under ``trigger``. ``cc_pair_id`` is the edited pair whose dry-run results
-    are reused; None for a new pairing.
+    are reused; None for a new pairing. ``user_id`` as for
+    ``run_named_checks_within_budget``.
 
     Waits at most ``CREATION_BLOCKING_BUDGET_SECONDS``. Reused draft results
     count as finished at once. When checks are still running at the end of the
@@ -627,6 +647,7 @@ def validate_pairing_with_named_checks(
             connector_specific_config=connector_specific_config,
             credential=credential,
             access_type=access_type,
+            user_id=user_id,
         )
         finished = run.finished_results
         unfinished = run.unfinished_check_ids

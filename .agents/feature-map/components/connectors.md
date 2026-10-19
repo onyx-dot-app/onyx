@@ -533,8 +533,10 @@ when it has none, for example after a dependency that now runs.
 `skip_check_ids` do not run: an optional check is `SKIPPED`
 (`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
 (`stopped_by_user`), which is no pass and holds Create. Their dependents are
-"Not run" (`dependency_skipped`). Creation reuses a cached optional skip and
-always runs a stopped required check: a stop drops the check's cached result.
+"Not run" (`dependency_skipped`). A skip or stop is cached for its user only,
+apart from the shared results (`draft_runs.py:cache_user_skip`). Creation by
+the same user reuses an optional skip and always runs a stopped required
+check. A later run that does not skip the check clears the skip.
 A result of an older run does not replace a skip or stop of the latest run
 (`draft_runs.py:cache_run_result`). `start_check_id` runs that check and the
 checks it needs first, also through a dependency that keeps a cached result. An unknown check id, or a check to run and to skip, is
