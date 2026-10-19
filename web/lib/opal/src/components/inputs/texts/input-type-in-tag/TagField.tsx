@@ -374,6 +374,8 @@ function TagField({
           />
         )}
       </div>
+      {children}
+      {/* The clear action is always the field's last control. */}
       {onClear !== undefined && !disabled && (
         <Button
           prominence="tertiary"
@@ -386,7 +388,6 @@ function TagField({
           }}
         />
       )}
-      {children}
     </div>
   );
 }

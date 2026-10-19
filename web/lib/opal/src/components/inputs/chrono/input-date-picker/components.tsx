@@ -251,15 +251,6 @@ function InputDatePicker({
           </div>
 
           <div className="opal-input-segmented-actions">
-            {clearable && value && !disabled && (
-              <Button
-                icon={SvgX}
-                prominence="tertiary"
-                size="sm"
-                tooltip={strings.clear}
-                onClick={() => onChange(null)}
-              />
-            )}
             <Popover.Trigger asChild>
               <Button
                 icon={SvgCalendar}
@@ -269,6 +260,16 @@ function InputDatePicker({
                 disabled={disabled}
               />
             </Popover.Trigger>
+            {/* The clear action is always the field's last control. */}
+            {clearable && value && !disabled && (
+              <Button
+                icon={SvgX}
+                prominence="tertiary"
+                size="sm"
+                tooltip={strings.clear}
+                onClick={() => onChange(null)}
+              />
+            )}
           </div>
         </div>
 
