@@ -11,16 +11,10 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { Content, SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import {
-  useCallback,
-  useDeferredValue,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { Text } from "@opal/components";
-import { SearchField, type SearchFieldHandle } from "@/lib/common/components";
-import { useGridNavigation } from "@opal/hooks";
+import { SearchField } from "@/lib/common/components";
+import { useSearchResultsNavigation } from "@/lib/common/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -90,8 +84,6 @@ export default function ConnectorsPage() {
   const settings = useSettings();
   const { appName } = settings;
 
-  const searchRef = useRef<SearchFieldHandle>(null);
-
   const filterSources = useCallback(
     (sources: SourceMetadata[]) => {
       if (!searchTerm) return sources;
@@ -157,27 +149,9 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  // Arrows move between cards; leaving the top row, Escape, or typing
-  // returns to search. "/" is left to the search field's hotkey.
-  const { ref: catalogRef, focusFirst } = useGridNavigation({
-    itemSelector: "[data-source-card]",
-    onExit: (direction) => {
-      if (direction === "up") searchRef.current?.focus();
-    },
-    onEscape: () => searchRef.current?.focus(),
-    onTypeAhead: (character) => {
-      if (character === "/") return false;
-      searchRef.current?.focus(rawSearchTerm + character);
-    },
-  });
-
-  // Enter or ArrowDown moves to the first card.
-  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.nativeEvent.isComposing) return;
-    if ((e.key === "Enter" || e.key === "ArrowDown") && focusFirst()) {
-      e.preventDefault();
-    }
-  }
+  const { searchRef, onSearchKeyDown, resultsRef } = useSearchResultsNavigation(
+    { query: rawSearchTerm, itemSelector: "[data-source-card]" }
+  );
 
   return (
     <SettingsLayouts.Root width="lg">
@@ -187,12 +161,12 @@ export default function ConnectorsPage() {
           placeholder={t("search.placeholder")}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={setSearchTerm}
-          onKeyDown={handleSearchKeyDown}
+          onKeyDown={onSearchKeyDown}
         />
       </SettingsLayouts.Header>
       <SettingsLayouts.Body>
         <div
-          ref={catalogRef}
+          ref={resultsRef}
           className="@container/sourcecards flex flex-col gap-8"
         >
           <GeneralLayouts.Section

@@ -154,9 +154,15 @@ export default function InputTypeIn({
             onClick={(event) => {
               event.stopPropagation();
               handleClear();
+              // The button hides once the field is empty; keep focus in the
+              // field rather than losing it to the page.
+              event.currentTarget
+                .closest(".opal-input")
+                ?.querySelector("input")
+                ?.focus();
             }}
             type="button"
-            prominence="internal"
+            prominence="tertiary"
             size="sm"
           />
         </div>

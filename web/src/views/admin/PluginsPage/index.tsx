@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, Tabs, Text } from "@opal/components";
 import { SearchNoResults } from "@/lib/common/components";
+import { useSearchResultsNavigation } from "@/lib/common/hooks";
 import type { RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import {
@@ -126,6 +127,8 @@ export default function PluginsPage() {
   const { plugins, mcp, openapi, externalApps } = useInstalledPlugins();
   const [dialog, setDialog] = useState<PluginDialog>(null);
   const [query, setQuery] = useState("");
+  const { searchRef, onSearchKeyDown, onEntryKeyDown, resultsRef } =
+    useSearchResultsNavigation({ query, itemSelector: "[data-plugin-card]" });
   const [kind, setKind] = useState<"all" | "mcp" | "openapi" | "external-app">(
     "all"
   );
@@ -293,6 +296,8 @@ export default function PluginsPage() {
               searchLabel={t("search.placeholder")}
               query={query}
               onQueryChange={setQuery}
+              searchRef={searchRef}
+              onSearchKeyDown={onSearchKeyDown}
               filters={
                 <Tabs
                   value={kind}
@@ -301,7 +306,10 @@ export default function PluginsPage() {
                     if (next) setKind(next);
                   }}
                 >
-                  <Tabs.List aria-label={t("filters.label")}>
+                  <Tabs.List
+                    aria-label={t("filters.label")}
+                    onKeyDown={onEntryKeyDown}
+                  >
                     {kindOptions.map((value) => (
                       <Tabs.Trigger
                         key={value}
@@ -352,7 +360,7 @@ export default function PluginsPage() {
               />
             )}
             {filteredPlugins.length > 0 && (
-              <div className="flex flex-col gap-2">
+              <div ref={resultsRef} className="flex flex-col gap-2">
                 {filteredPlugins.map((plugin) => (
                   <PluginCard
                     onOpen={(params = new URLSearchParams()) =>

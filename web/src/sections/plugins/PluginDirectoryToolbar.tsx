@@ -1,13 +1,16 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useTranslations } from "next-intl";
-import { SearchField } from "@/lib/common/components";
+import { SearchField, type SearchFieldHandle } from "@/lib/common/components";
 
 interface PluginDirectoryToolbarProps {
   searchLabel: string;
   query: string;
   onQueryChange: (query: string) => void;
+  /** The search field's handle and key handler, e.g. from `useSearchResultsNavigation`. */
+  searchRef?: Ref<SearchFieldHandle>;
+  onSearchKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
   filters?: ReactNode;
 }
 
@@ -20,6 +23,8 @@ export default function PluginDirectoryToolbar({
   searchLabel,
   query,
   onQueryChange,
+  searchRef,
+  onSearchKeyDown,
   filters,
 }: PluginDirectoryToolbarProps) {
   const t = useTranslations("actions.plugins");
@@ -29,8 +34,10 @@ export default function PluginDirectoryToolbar({
     <div className="flex flex-row items-center gap-2">
       <div className="min-w-0 flex-1">
         <SearchField
+          ref={searchRef}
           value={query}
           onChange={onQueryChange}
+          onKeyDown={onSearchKeyDown}
           // The placeholder names the hotkey; the field's name stays short.
           placeholder={t("search.hotkeyPlaceholder")}
           aria-label={searchLabel}

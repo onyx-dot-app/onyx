@@ -558,6 +558,35 @@ test("the card's settings button opens the availability menu without opening the
   expect(mockPush).not.toHaveBeenCalled();
 });
 
+test("arrows move between search and the cards, and typing on a card returns to search", async () => {
+  mockNetwork();
+  render(<PluginsPage />);
+  await findCard("Manage Workspace MCP");
+  const user = setupUser();
+  const search = screen.getByRole("textbox", { name: copy.search.placeholder });
+  await user.click(search);
+  await user.keyboard("{ArrowDown}");
+  const first = screen.getAllByLabelText(/./, {
+    selector: "[data-plugin-card]",
+  })[0];
+  expect(first).toHaveFocus();
+  // jsdom lays nothing out, so every card is on the top row.
+  await user.keyboard("{ArrowUp}");
+  expect(search).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  await user.keyboard("w");
+  expect(search).toHaveFocus();
+  expect(search).toHaveValue("w");
+  await user.keyboard("{ArrowDown}");
+  await user.keyboard("{Escape}");
+  expect(search).toHaveFocus(); // ArrowDown on the filter tabs also moves to the cards.
+  screen.getByRole("tab", { name: copy.filters.all }).focus();
+  await user.keyboard("{ArrowDown}");
+  expect(
+    screen.getAllByLabelText(/./, { selector: "[data-plugin-card]" })[0]
+  ).toHaveFocus();
+});
+
 test("filters by description and URL and clears a search without losing either resource", async () => {
   mockNetwork();
   render(<PluginsPage />);

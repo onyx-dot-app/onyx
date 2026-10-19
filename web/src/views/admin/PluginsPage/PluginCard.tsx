@@ -91,6 +91,8 @@ export default function PluginCard({ plugin, onOpen }: PluginCardProps) {
         state="filled"
         padding={2}
         rounding={4}
+        // An item of the page's arrow-key navigation.
+        data-plugin-card=""
         aria-label={t(canManage ? "row.manage.label" : "row.view.label", {
           name: resource.name,
         })}
