@@ -28,8 +28,8 @@ every refresh-component, with its import and a one-line purpose.
 ## Migrate on touch
 
 When you edit a file, migrate its refresh-components imports that Opal replaces. oxlint rule
-`opal/no-replaced-refresh-import` names them, and the Claude Code edit hook reports them after
-each edit. Keep the behavior the same.
+`opal/no-replaced-refresh-import` names them, and the `opal_migrate_on_edit.py` hook reports them to
+the agent after each edit. Keep the behavior the same.
 
 ## Keep the catalog current
 
