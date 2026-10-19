@@ -1,9 +1,23 @@
 package postgres
 
 import (
+	"os"
 	"slices"
 	"testing"
 )
+
+func TestIsLoopbackHost(t *testing.T) {
+	for _, host := range []string{"localhost", "LOCALHOST", "localhost.", "  localhost. ", "127.0.0.1", "127.0.0.2", "127.255.255.254", "127.0.0.2.", "::1", "[::1]", "::ffff:127.0.0.2", "[::ffff:127.0.0.2]"} {
+		if !IsLoopbackHost(host) {
+			t.Errorf("loopback %q classified as remote", host)
+		}
+	}
+	for _, host := range []string{"", "remote.example", "localhost.example", "192.168.0.1", "128.0.0.1", "0.0.0.0", "::", "[::2]", "[::1", "127.0.0.1:5432"} {
+		if IsLoopbackHost(host) {
+			t.Errorf("remote or invalid host %q classified as loopback", host)
+		}
+	}
+}
 
 // postgresEnvKeys lists every variable NewConfigFromEnv reads.
 var postgresEnvKeys = []string{
@@ -15,8 +29,7 @@ var postgresEnvKeys = []string{
 }
 
 // clearPostgresEnv empties every POSTGRES_* variable for one test, so the dev
-// container environment cannot change the result. getEnvOrDefault treats an
-// empty value as unset.
+// container environment cannot change the result. Empty values count as unset.
 func clearPostgresEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range postgresEnvKeys {
@@ -117,5 +130,19 @@ func TestEnv_carriesThePassword(t *testing.T) {
 
 	if len(env) != 1 || env["PGPASSWORD"] != "secret" {
 		t.Fatalf("expected a single PGPASSWORD entry, got %v", env)
+	}
+}
+
+func TestNewConfigFromEnvironmentKeepsPrivateFileDefaultsAndShellOverrides(t *testing.T) {
+	clearPostgresEnv(t)
+	config := NewConfigFromEnvironment([]string{
+		"POSTGRES_USER=file-user", "POSTGRES_PASSWORD=file-secret", "POSTGRES_PORT=25432",
+		"POSTGRES_PASSWORD=", "POSTGRES_USER=shell-user",
+	})
+	if config.User != "shell-user" || config.Password != "file-secret" || config.Port != "25432" {
+		t.Fatal("private environment precedence was lost")
+	}
+	if os.Getenv("POSTGRES_USER") != "" || os.Getenv("POSTGRES_PASSWORD") != "" {
+		t.Fatal("private configuration changed the parent process")
 	}
 }

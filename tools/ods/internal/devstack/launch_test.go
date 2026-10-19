@@ -108,6 +108,21 @@ func TestLaunchPlan_profiles(t *testing.T) {
 	}
 }
 
+func TestResolveServiceUsesLaunchConfiguration(t *testing.T) {
+	root, launch := writeLaunchFixture(t)
+	sp, err := ResolveService(root, launch, "api", map[string]int{"api": 8181}, Env{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{PythonExecutable(root), "-m", "uvicorn", "onyx.main:app", "--reload-exclude", filepath.Join(root, "backend", "x"), "--port", "8181"}
+	if !reflect.DeepEqual(sp.Command, want) || sp.Dir != filepath.Join(root, "backend") || EnvValue(sp.Env, "LOG_LEVEL") != "DEBUG" {
+		t.Fatalf("resolved service = %+v", sp)
+	}
+	if _, err := ResolveService(root, launch, "missing", nil, Env{}); err == nil || !strings.Contains(err.Error(), `no service "missing"`) {
+		t.Fatalf("missing service error = %v", err)
+	}
+}
+
 func TestTranslate_portsAndEnv(t *testing.T) {
 	root, launch := writeLaunchFixture(t)
 	ports := map[string]int{"web": 3100, "api": 8180, "mcp": 8190, "model": 9100}

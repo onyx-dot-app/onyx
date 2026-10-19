@@ -1,21 +1,53 @@
 package alembic
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 )
 
-// Schema represents an Alembic schema configuration.
+func MigrationsPending(ctx context.Context, root string, env []string) (bool, error) {
+	const probe = `from types import SimpleNamespace
+from alembic import command
+from alembic.config import Config
+from alembic.util import DatabaseNotAtHead
+config = Config("alembic.ini")
+config.cmd_opts = SimpleNamespace(x=["create_schema=false"])
+try:
+    command.current(config, check_heads=True)
+except DatabaseNotAtHead:
+    raise SystemExit(10)
+`
+	cmd := exec.CommandContext(ctx, devstack.PythonExecutable(root), "-c", probe)
+	cmd.Dir, cmd.Env = filepath.Join(root, "backend"), env
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if err == nil {
+		return false, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 10 {
+		return true, nil
+	}
+	return false, fmt.Errorf("alembic revision check: %w\n%s", err, output)
+}
+
 type Schema string
 
 const (
@@ -23,245 +55,140 @@ const (
 	SchemaPrivate Schema = "private"
 )
 
-// FindAlembicBinary locates the alembic binary, preferring the venv version.
 func FindAlembicBinary() (string, error) {
-	// Try to find venv alembic first.
-	root, err := paths.GitRoot()
-	if err == nil {
-		var venvAlembic string
-		if runtime.GOOS == "windows" {
-			venvAlembic = filepath.Join(root, ".venv", "Scripts", "alembic.exe")
-		} else {
-			venvAlembic = filepath.Join(root, ".venv", "bin", "alembic")
-		}
+	root, _ := paths.GitRoot()
+	return findAlembicBinary(root)
+}
 
-		if _, err := os.Stat(venvAlembic); err == nil {
-			return venvAlembic, nil
+func findAlembicBinary(root string) (string, error) {
+	if root != "" {
+		binary := filepath.Join(root, ".venv", "bin", "alembic")
+		if runtime.GOOS == "windows" {
+			binary = filepath.Join(root, ".venv", "Scripts", "alembic.exe")
+		}
+		if _, err := os.Stat(binary); err == nil {
+			return binary, nil
 		}
 	}
-
-	// Fall back to system alembic.
-	alembic, err := exec.LookPath("alembic")
+	binary, err := exec.LookPath("alembic")
 	if err != nil {
 		return "", fmt.Errorf("alembic not found. Ensure you have activated the venv or installed alembic globally")
 	}
-	return alembic, nil
+	return binary, nil
 }
 
-// Run executes an alembic command with the given arguments. It will try to run
-// alembic locally if the database is accessible, otherwise it will attempt to
-// run via docker exec on a container that has alembic installed (e.g.,
-// api_server).
-func Run(args []string, schema Schema) error {
-	// Check if we need to run via docker exec.
-	if shouldUseDockerExec() {
-		return runViaDockerExec(args, schema)
+// Run uses only the selected stack or an explicitly configured network database.
+func Run(target devstack.Target, args []string, schema Schema) error {
+	fileEnv, err := devstack.LoadEnvFile(filepath.Join(target.Root, ".vscode", ".env"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
 	}
-
-	return runLocally(args, schema)
+	env := devstack.MergeEnv(fileEnv, os.Environ())
+	config := postgres.NewConfigFromEnvironment(append(fileEnv, os.Environ()...))
+	explicitHost := os.Getenv("POSTGRES_HOST") != ""
+	fileNetwork := !target.Managed && !postgres.IsLoopbackHost(config.Host)
+	if !explicitHost && !fileNetwork {
+		container, err := docker.FindPostgresContainer(target.Project)
+		if err != nil {
+			return err
+		}
+		port, err := docker.GetHostPort(container, 5432)
+		if err != nil {
+			return runViaDockerExec(target, args, schema, config)
+		}
+		// The actual mapping wins over both stale files and a saved lease.
+		target.Ports = maps.Clone(target.Ports)
+		if target.Ports == nil {
+			target.Ports = map[string]int{}
+		}
+		target.Ports["POSTGRES_HOST_PORT"] = port
+		env, err = target.Environment()
+		if err != nil {
+			return err
+		}
+		env = devstack.MergeEnv(env, []string{"POSTGRES_HOST=localhost", "POSTGRES_PORT=" + strconv.Itoa(port)})
+		config.Host, config.Port = "localhost", strconv.Itoa(port)
+	}
+	env = devstack.MergeEnv(env, []string{
+		"POSTGRES_HOST=" + config.Host, "POSTGRES_PORT=" + config.Port,
+		"POSTGRES_USER=" + config.User, "POSTGRES_PASSWORD=" + config.Password, "POSTGRES_DB=" + config.Database,
+	})
+	log.Infof("Running alembic for project %s against %s:%s", target.Project, config.Host, config.Port)
+	return runLocally(target, args, schema, env)
 }
 
-// shouldUseDockerExec determines if we should run alembic via docker exec.
-// Returns true if POSTGRES_HOST is not set and the port isn't exposed.
-func shouldUseDockerExec() bool {
-	// If POSTGRES_HOST is explicitly set, respect it.
-	if os.Getenv("POSTGRES_HOST") != "" {
-		return false
+func commandArgs(args []string, schema Schema) []string {
+	result := []string{}
+	if schema == SchemaPrivate {
+		result = append(result, "-n", "schema_private")
 	}
-
-	// Check if we can find a postgres container with exposed port.
-	container, err := docker.FindPostgresContainer(docker.ProjectName())
-	if err != nil {
-		return false
-	}
-
-	return !docker.IsPortExposed(container, "5432")
+	return append(result, args...)
 }
 
-// runLocally runs alembic on the local machine.
-func runLocally(args []string, schema Schema) error {
-	backendDir, err := paths.BackendDir()
-	if err != nil {
-		return fmt.Errorf("failed to find backend directory: %w", err)
+func runLocally(target devstack.Target, args []string, schema Schema, env []string) error {
+	backend := filepath.Join(target.Root, "backend")
+	if info, err := os.Stat(backend); err != nil || !info.IsDir() {
+		return fmt.Errorf("failed to find backend directory for selected checkout")
 	}
-
-	alembic, err := FindAlembicBinary()
+	binary, err := findAlembicBinary(target.Root)
 	if err != nil {
 		return err
 	}
-
-	// Build the full command.
-	var cmdArgs []string
-	if schema == SchemaPrivate {
-		cmdArgs = append(cmdArgs, "-n", "schema_private")
-	}
-	cmdArgs = append(cmdArgs, args...)
-
-	cmd := exec.Command(alembic, cmdArgs...)
-	cmd.Dir = backendDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	// Pass through POSTGRES_* environment variables.
-	cmd.Env = buildAlembicEnv()
-
+	cmd := exec.Command(binary, commandArgs(args, schema)...)
+	cmd.Dir, cmd.Env = backend, env
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
 
-// runViaDockerExec runs alembic inside a Docker container that has network
-// access.
-func runViaDockerExec(args []string, schema Schema) error {
-	// Find a container with alembic installed (api_server).
-	container, err := findAlembicContainer()
+func runViaDockerExec(target devstack.Target, args []string, schema Schema, config *postgres.Config) error {
+	container, err := findAlembicContainer(target.Project)
 	if err != nil {
-		// No suitable container found; give helpful error.
-		log.Errorf("PostgreSQL port 5432 is not exposed and no container with alembic found.")
-		log.Errorf("")
-		log.Errorf("Either expose the port by restarting with the dev compose file:")
-		log.Errorf("  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d")
-		log.Errorf("")
-		log.Errorf("Or start the api_server container:")
-		log.Errorf("  docker compose up -d api_server")
-		return fmt.Errorf("cannot connect to database")
+		return fmt.Errorf("PostgreSQL for project %q has no exposed port and no selected api_server container: %w", target.Project, err)
 	}
-
-	log.Infof("Running alembic via docker exec on container: %s", container)
-
-	// Build the alembic command.
-	var alembicArgs []string
-	if schema == SchemaPrivate {
-		alembicArgs = append(alembicArgs, "-n", "schema_private")
+	log.Infof("Running alembic for project %s in container %s", target.Project, container)
+	dockerArgs := []string{"exec", "-i",
+		"-e", "POSTGRES_HOST=" + docker.ContainerName(docker.NormalizeProjectName(target.Project), "relational_db"),
+		"-e", "POSTGRES_PORT=5432",
+		"-e", "POSTGRES_USER=" + config.User,
+		"-e", "POSTGRES_PASSWORD=" + config.Password,
+		"-e", "POSTGRES_DB=" + config.Database,
+		container, "alembic",
 	}
-	alembicArgs = append(alembicArgs, args...)
-
-	// Run alembic inside the container.
-	// The container should have the correct env vars and network access.
-	dockerArgs := []string{"exec", "-i", container, "alembic"}
-	dockerArgs = append(dockerArgs, alembicArgs...)
-
+	dockerArgs = append(dockerArgs, commandArgs(args, schema)...)
 	cmd := exec.Command("docker", dockerArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
 
-// legacyAlembicContainerNames are fallback names tried after the
-// project-specific name.
-var legacyAlembicContainerNames = []string{
-	"onyx-api_server-1",
-	"onyx-stack-api_server-1",
-	"api_server",
-}
-
-// buildAlembicEnv builds the environment for running alembic.
-// It inherits the current environment and ensures POSTGRES_* variables are set.
-// If POSTGRES_HOST is not explicitly set, it attempts to detect the PostgreSQL
-// container IP address automatically.
-func buildAlembicEnv() []string {
-	env := os.Environ()
-
-	// Get postgres config (which reads from env with defaults)
-	config := postgres.NewConfigFromEnv()
-
-	// If POSTGRES_HOST is not explicitly set, try to detect the host
-	host := config.Host
-	if os.Getenv("POSTGRES_HOST") == "" {
-		if detectedHost := detectPostgresHost(); detectedHost != "" {
-			host = detectedHost
-		}
+func findAlembicContainer(project string) (string, error) {
+	if strings.TrimSpace(project) == "" {
+		return "", fmt.Errorf("an Alembic project must be selected")
 	}
-
-	// Ensure POSTGRES_* variables are set (use existing or defaults)
-	envVars := map[string]string{
-		"POSTGRES_HOST":     host,
-		"POSTGRES_PORT":     config.Port,
-		"POSTGRES_USER":     config.User,
-		"POSTGRES_PASSWORD": config.Password,
-		"POSTGRES_DB":       config.Database,
-	}
-
-	// Only add if not already set in environment (except HOST which we may have
-	// detected).
-	for key, value := range envVars {
-		if key == "POSTGRES_HOST" || os.Getenv(key) == "" {
-			env = append(env, fmt.Sprintf("%s=%s", key, value))
-		}
-	}
-
-	return env
-}
-
-// findAlembicContainer finds a running container that has alembic installed. It
-// tries the project-specific name first, then legacy names.
-func findAlembicContainer() (string, error) {
-	projectContainer := fmt.Sprintf("%s-api_server-1", docker.ProjectName())
-	if isContainerRunning(projectContainer) {
-		return projectContainer, nil
-	}
-
-	for _, name := range legacyAlembicContainerNames {
-		if isContainerRunning(name) {
-			return name, nil
-		}
-	}
-	return "", fmt.Errorf("no container with alembic found")
-}
-
-// isContainerRunning checks if a container is running.
-func isContainerRunning(name string) bool {
-	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", name)
+	container := docker.ContainerName(docker.NormalizeProjectName(project), "api_server")
+	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", container)
 	output, err := cmd.Output()
-	if err != nil {
-		return false
+	if err == nil && strings.TrimSpace(string(output)) == "true" {
+		return container, nil
 	}
-	return strings.TrimSpace(string(output)) == "true"
+	return "", fmt.Errorf("no running api_server container found for project %q", project)
 }
 
-// detectPostgresHost attempts to find a running PostgreSQL container
-// and return the host to connect to (for local execution).
-func detectPostgresHost() string {
-	container, err := docker.FindPostgresContainer(docker.ProjectName())
-	if err != nil {
-		log.Debugf("Could not find PostgreSQL container: %v", err)
-		return ""
-	}
-
-	// Check if port 5432 is exposed to the host
-	if docker.IsPortExposed(container, "5432") {
-		log.Infof("Using PostgreSQL container: %s (localhost:5432)", container)
-		return "localhost"
-	}
-
-	// Port not exposed - this shouldn't happen if shouldUseDockerExec() works correctly
-	return ""
-}
-
-// Upgrade runs alembic upgrade to the specified revision.
-func Upgrade(revision string, schema Schema) error {
+func Upgrade(target devstack.Target, revision string, schema Schema) error {
 	if revision == "" {
 		revision = "head"
 	}
-	return Run([]string{"upgrade", revision}, schema)
+	return Run(target, []string{"upgrade", revision}, schema)
 }
-
-// Downgrade runs alembic downgrade to the specified revision.
-func Downgrade(revision string, schema Schema) error {
-	return Run([]string{"downgrade", revision}, schema)
+func Downgrade(target devstack.Target, revision string, schema Schema) error {
+	return Run(target, []string{"downgrade", revision}, schema)
 }
-
-// Current shows the current alembic revision.
-func Current(schema Schema) error {
-	return Run([]string{"current"}, schema)
+func Current(target devstack.Target, schema Schema) error {
+	return Run(target, []string{"current"}, schema)
 }
-
-// History shows the alembic migration history.
-func History(schema Schema, verbose bool) error {
+func History(target devstack.Target, schema Schema, verbose bool) error {
 	args := []string{"history"}
 	if verbose {
 		args = append(args, "-v")
 	}
-	return Run(args, schema)
+	return Run(target, args, schema)
 }

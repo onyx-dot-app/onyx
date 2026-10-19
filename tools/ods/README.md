@@ -66,6 +66,30 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 
 ## Commands
 
+### Choose a development command
+
+| Task | Command | Lifetime |
+|------|---------|----------|
+| Frontend-only change with a healthy API already running | `ods web dev` | Foreground, stop with Ctrl-C |
+| Run the API or model server from source | `ods backend api` or `ods backend model-server` | Foreground, stop with Ctrl-C |
+| Run the application and its infrastructure | `ods stack up` | Background, inspect with `ods stack status` |
+| Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
+| Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
+| Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+
+Source commands use the selected project's ports and environment. Shared
+infrastructure is the default. `--project NAME` selects an existing project;
+`--isolated` selects separate worktree infrastructure. Neither option copies data.
+Keep container commands separate from source-process commands when troubleshooting.
+
+Managed stacks and frontend attachment require macOS or Linux. On Windows,
+`ods web dev` and `ods backend` use portable foreground launchers with configured
+connection variables. They do not provide managed-stack ownership or attachment.
+
+`ods env` updates connection variables from the selected project's running
+containers. It fails without changing `.vscode/.env` if that project's Postgres
+container has no published port.
+
 ### `compose` - Launch Docker Containers
 
 Launch Onyx docker containers using docker compose.
@@ -175,7 +199,7 @@ ods pull --tag edge
 
 ### `backend` - Run Backend Services
 
-Run backend services (API server, model server) with environment loaded from
+Run backend services in the foreground with environment loaded from
 `.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
 if the `.env` file does not already exist.
 
@@ -193,13 +217,13 @@ ods backend <subcommand>
 **Subcommands:**
 
 - `api` - Start the FastAPI backend server (`uvicorn onyx.main:app --reload`)
-- `model_server` - Start the model server (`uvicorn model_server.main:app --reload`)
+- `model-server` - Start the model server (`uvicorn model_server.main:app --reload`). `model_server` remains an alias.
 
 **Flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port` | `8080` (api) / `9000` (model_server) | Port to listen on |
+| `--port` | Selected project's service port | Override the port to listen on |
 
 Shell environment takes precedence over `.env` file values, so inline overrides
 work as expected (e.g. `S3_ENDPOINT_URL=foo ods backend api`).
@@ -214,10 +238,10 @@ ods backend api
 ods backend api --port 9090
 
 # Start the model server
-ods backend model_server
+ods backend model-server
 
 # Start the model server on a custom port
-ods backend model_server --port 9001
+ods backend model-server --port 9001
 ```
 
 ### `stack` - Run the Local Dev Stack of a Worktree
@@ -227,20 +251,46 @@ Compose infrastructure, migrations, and the application services from
 `.vscode/launch.json` as background processes. It is built for several agents
 and worktrees on one machine.
 
+The stack uses the same service specifications and process launchers as
+`ods web dev` and `ods backend`. It does not invoke those commands through a shell.
+
 ```shell
 ods stack <up|start|restart|stop|down|status|logs|plan> [flags]
 ```
 
-Every worktree gets its own Compose project (the directory name plus a hash of
-the path; `--project` overrides it), its own host ports, and its own state in
-its git metadata (`git rev-parse --git-path ods-stack`): `state.json`, the
-lifecycle lock, and `logs/<service>.log`. Port leases are shared across
-worktrees in `~/.local/share/onyx-dev/stack/ports.json` under a short lock, so
-a worktree keeps its ports across restarts and two worktrees never pick the
-same port. A leased port that something else took is replaced on the next
-start.
+By default, worktrees of one repository share Postgres, Redis, search, object
+storage, model servers, and one active application checkout. Shared state and
+the lifecycle lock live under `git rev-parse --git-common-dir`, in
+`ods-stack-shared`. Running `up` from another checkout stops the previous
+managed application processes before migrations, then starts the new code.
+`status` reports the active checkout. Other lifecycle commands require that checkout.
 
-`up` takes the worktree's lifecycle lock, so two agents running `up` at the
+Use `ods --isolated stack up` for separate data, ports, and per-worktree state under
+`git rev-parse --git-path ods-stack`. Repeat this flag with status and shutdown
+commands. Existing isolated datasets remain intact. On first shared startup,
+ODS reuses a single existing legacy project. If several exist, choose one
+with `ods --project NAME stack up`. Stop that legacy stack with `--isolated`
+first. ODS remembers the selected project and never guesses between datasets.
+Project ownership is durable. An explicit `--project` that conflicts with another
+managed stack fails, including in isolated mode. Select a different project for
+independent infrastructure.
+
+For frontend-only diffs on macOS or Linux, prefer `ods web dev`. It starts the
+frontend against a healthy managed API. It does not start containers, install
+Python dependencies, run migrations, or start workers. Ctrl-C stops a preview
+started by this command. If a matching frontend already runs in this checkout,
+the command attaches to it, and Ctrl-C only detaches. The API keeps running.
+Ctrl-C also cancels dependency installation or library builds during startup.
+Restarting the API's stack can interrupt the
+preview. OAuth callbacks retain the API's original web origin. Use the full stack
+for backend changes and OAuth callback tests. `stack status` does not include
+standalone frontend previews. Starting the full stack in the same checkout
+replaces its preview with the managed frontend and retains its port.
+
+Durable port leases live in `~/.local/share/onyx-dev/stack/ports.json`.
+A leased port that something else took is replaced on the next start.
+
+`up` takes the selected stack's lifecycle lock, so two agents running `up` at the
 same time converge on one stack: the second waits and then finds everything
 running. It then:
 
@@ -252,8 +302,10 @@ running. It then:
 3. Leases the infrastructure and application ports, writes the Compose port
    variables, and runs `ods compose dev --infra` for this project.
 4. Writes the infrastructure port variables to `.vscode/.env` (as `ods env`
-   does) and runs `alembic upgrade head` with `POSTGRES_HOST=localhost` and
-   the leased port set explicitly.
+   does) and checks migration state. Pending migrations stop managed application
+   services before `alembic upgrade head`. If the database is already at head,
+   unchanged healthy services keep running. Migrations use `POSTGRES_HOST=localhost`
+   and the actual published Postgres port.
 5. Reconciles the services: a service whose process is still the one started
    earlier and whose command and environment are unchanged keeps running;
    everything else is stopped and started. An interrupted `up` is finished
@@ -294,6 +346,9 @@ the stack never leases 8000 and skips the bot when the port is taken.
 | `--stop-timeout` | `20s` | Grace period before a stale service is killed |
 | `--skip-prepare` | `false` | Skip `uv sync` and `bun install` |
 | `--json` | `false` | Print the status as JSON |
+
+`--isolated` is a global option. Use it with status and shutdown commands too,
+for example `ods --isolated stack down`. Without it, commands use shared mode.
 
 `status --json` reports the project, profile, phase (`preparing`, `infra`,
 `migrating`, `starting`, `ready`, `degraded`, `stopped`, `failed`), the leased
@@ -365,7 +420,18 @@ and `.vscode/.env` untouched, so fix the cause and rerun; `ods compose dev
 
 ### `web` - Run Frontend Scripts
 
-Run bun scripts from `web/package.json` without manually changing directories.
+On macOS or Linux, use `ods web dev` for a frontend-only change with a healthy API already running.
+It resolves the selected project's managed API and starts Next.js in the foreground.
+It fails if the API is unavailable. Start a full stack first in that case.
+Keep the terminal open while testing. Ctrl-C stops a newly launched preview.
+With a matching frontend already running in this checkout, the command attaches
+instead. Ctrl-C then only detaches. The reused API keeps running in either case.
+`stack status` reports stack services, excluding standalone previews.
+On Windows, this command uses the portable foreground launcher and configured
+API connection variables instead of managed API discovery and attachment.
+
+Other scripts run from `web/package.json` without changing directories.
+Build and test commands keep their package-script behavior.
 
 ```shell
 ods web <script> [args...]
@@ -387,10 +453,10 @@ ods web lint
 ods web test --watch
 ```
 
-### `test` - Run Tests
+### `test` - Run Go tests
 
-Run the repo's test suites without changing directories or remembering which
-suite owns a file.
+Run the ODS, CLI, or Terraform-provider Go tests without changing directories.
+For frontend tests, use `ods web test`. Run backend tests with pytest.
 
 ```shell
 ods test <suite|path> [args...]
@@ -658,6 +724,25 @@ ods dc into
 ### `db` - Database Administration
 
 Manage PostgreSQL database dumps, restores, and migrations.
+
+ODS targets the selected project's exact Postgres or API container. It does not
+fall back to a legacy container or another project's image. Local migrations use
+the container's actual published Postgres port, overriding stale saved values.
+An explicit `POSTGRES_HOST` stays an explicit network target. Dump, restore, and
+drop reject network targets because these commands do not implement host clients.
+An explicit project that conflicts with the host target also fails.
+For migrations, an explicit loopback host and port are matched to their actual
+managed database owner. Another checkout cannot bypass ownership checks by
+specifying that owner's localhost port.
+
+Database operations use the shared state and project locks. Mutating commands
+refuse a project owned by another managed checkout. Drop and restore prompts
+identify the selected project and container before changing data.
+Stop managed services before running `ods db upgrade` or `ods db downgrade`.
+Use `ods stack up` to check revisions and stop services only when an upgrade is pending.
+Restore errors return failure. SQL restores stop at the first SQL error.
+Dump and restore remove their temporary container files on success or failure.
+Dump output names ending in `.sql` or `.dump` must match `--format`.
 
 ```shell
 ods db <subcommand>

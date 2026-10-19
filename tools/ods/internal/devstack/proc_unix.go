@@ -5,8 +5,10 @@ package devstack
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,21 +16,38 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // startService launches sp in its own process group with its output in
 // logPath, and returns the record that identifies the process.
 func startService(sp Spec, logPath string) (ServiceRecord, error) {
+	record, _, err := launchProcess(sp, logPath, ServiceIO{}, false)
+	return record, err
+}
+
+func launchService(sp Spec, logPath string, streams ServiceIO) (ServiceRecord, <-chan error, error) {
+	return launchProcess(sp, logPath, streams, true)
+}
+
+type serviceOutputCopy struct {
+	reader *os.File
+	writer *os.File
+	output io.Writer
+	done   chan error
+}
+
+func launchProcess(sp Spec, logPath string, streams ServiceIO, foreground bool) (ServiceRecord, <-chan error, error) {
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
-		return ServiceRecord{}, err
+		return ServiceRecord{}, nil, err
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return ServiceRecord{}, err
+		return ServiceRecord{}, nil, err
 	}
-	defer func() { _ = logFile.Close() }()
 	if _, err := fmt.Fprintf(logFile, "cwd: %s\ncommand: %s\n\n", sp.Dir, strings.Join(sp.Command, " ")); err != nil {
-		return ServiceRecord{}, err
+		_ = logFile.Close()
+		return ServiceRecord{}, nil, err
 	}
 
 	startedAt := time.Now().UTC().Truncate(time.Second)
@@ -37,17 +56,62 @@ func startService(sp Spec, logPath string) (ServiceRecord, error) {
 	cmd.Env = sp.Env
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	cmd.Stdin = nil
+	var copies []serviceOutputCopy
+	defer func() {
+		for _, copy := range copies {
+			_ = copy.writer.Close()
+		}
+	}()
+	if streams.Stdout != nil {
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			_ = logFile.Close()
+			return ServiceRecord{}, nil, err
+		}
+		copies = append(copies, serviceOutputCopy{reader, writer, io.MultiWriter(logFile, streams.Stdout), make(chan error, 1)})
+		cmd.Stdout = writer
+	}
+	if streams.Stderr != nil {
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			for _, copy := range copies {
+				_ = copy.reader.Close()
+			}
+			_ = logFile.Close()
+			return ServiceRecord{}, nil, err
+		}
+		copies = append(copies, serviceOutputCopy{reader, writer, io.MultiWriter(logFile, streams.Stderr), make(chan error, 1)})
+		cmd.Stderr = writer
+	}
+	cmd.Stdin = streams.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	restoreTerminal := func() error { return nil }
+	if input, ok := streams.Stdin.(*os.File); ok {
+		fd := int(input.Fd())
+		foreground, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
+		if err == nil && foreground == syscall.Getpgrp() {
+			cmd.SysProcAttr.Foreground = true
+			cmd.SysProcAttr.Ctty = fd
+			restoreTerminal = func() error {
+				// The caller is in the background while reclaiming the terminal.
+				ignored := signal.Ignored(syscall.SIGTTOU)
+				signal.Ignore(syscall.SIGTTOU)
+				if !ignored {
+					defer signal.Reset(syscall.SIGTTOU)
+				}
+				return unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, foreground)
+			}
+		}
+	}
 	if err := cmd.Start(); err != nil {
-		return ServiceRecord{}, fmt.Errorf("start %s: %w", sp.Name, err)
+		for _, copy := range copies {
+			_ = copy.reader.Close()
+		}
+		_ = logFile.Close()
+		return ServiceRecord{}, nil, errors.Join(fmt.Errorf("start %s: %w", sp.Name, err), restoreTerminal())
 	}
 	pid := cmd.Process.Pid
-	// Reap the child if it exits while this process is still around, so it
-	// never lingers as a zombie that looks alive. When ods exits first, init
-	// reaps it.
-	go func() { _ = cmd.Wait() }()
-	return ServiceRecord{
+	record := ServiceRecord{
 		Name:        sp.Name,
 		Slug:        sp.Slug,
 		Command:     sp.Command,
@@ -61,7 +125,73 @@ func startService(sp Spec, logPath string) (ServiceRecord, error) {
 		StartMarker: startMarker(pid),
 		StartedAt:   startedAt,
 		Log:         logPath,
-	}, nil
+	}
+	for _, copy := range copies {
+		go func() {
+			_, err := io.Copy(copy.output, copy.reader)
+			_ = copy.reader.Close()
+			copy.done <- err
+		}()
+	}
+	if foreground {
+		rememberGroupMembers(&record)
+	}
+	supervised := record
+	supervised.Members = make(map[int]string, len(record.Members))
+	for pid, marker := range record.Members {
+		supervised.Members[pid] = marker
+	}
+	done := make(chan error, 1)
+	go func() {
+		var err error
+		if foreground {
+			err = waitForegroundProcess(cmd, supervised, copies)
+		} else {
+			err = cmd.Wait()
+		}
+		err = errors.Join(err, restoreTerminal())
+		_ = logFile.Close()
+		done <- err
+		close(done)
+	}()
+	return record, done, nil
+}
+
+func waitForegroundProcess(cmd *exec.Cmd, record ServiceRecord, copies []serviceOutputCopy) error {
+	for pidAlive(record.PID) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Our unreaped child reserves its PID and PGID until this final capture.
+	rememberGroupMembers(&record)
+	err := cmd.Wait()
+	if left := stopRecordsWithKillWait([]ServiceRecord{record}, 250*time.Millisecond, time.Second); len(left) > 0 {
+		err = errors.Join(err, &serviceCleanupError{record: record})
+	}
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for _, copy := range copies {
+		select {
+		case copyErr := <-copy.done:
+			err = errors.Join(err, copyErr)
+		case <-deadline.C:
+			for _, pending := range copies {
+				_ = pending.reader.Close()
+			}
+			return errors.Join(err, fmt.Errorf("service output did not drain before timeout"))
+		}
+	}
+	return err
+}
+
+func signalService(rec ServiceRecord, signal os.Signal) error {
+	if !groupIsOurs(rec) {
+		return nil
+	}
+	err := syscall.Kill(-rec.PGID, signal.(syscall.Signal))
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
 }
 
 // isCurrent reports whether the recorded leader process is still the one
@@ -136,6 +266,10 @@ func rememberGroup(rec *ServiceRecord) {
 	if !isCurrent(*rec) {
 		return
 	}
+	rememberGroupMembers(rec)
+}
+
+func rememberGroupMembers(rec *ServiceRecord) {
 	if rec.Members == nil {
 		rec.Members = map[int]string{}
 	}
@@ -171,6 +305,14 @@ func groupMembers(pgid int) []int {
 // for every member to exit, escalating to SIGKILL after timeout. It returns
 // the records that still have members alive.
 func stopRecords(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
+	postKill := 5 * time.Second
+	if timeout == 0 {
+		postKill = 0
+	}
+	return stopRecordsWithKillWait(recs, timeout, postKill)
+}
+
+func stopRecordsWithKillWait(recs []ServiceRecord, timeout, postKill time.Duration) []ServiceRecord {
 	var active []ServiceRecord
 	var unresolved []ServiceRecord
 	for _, rec := range recs {
@@ -198,11 +340,6 @@ func stopRecords(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
 		log.Warnf("%s did not stop in %s, killing its process group", rec.Name, timeout)
 		_ = syscall.Kill(-rec.PGID, syscall.SIGKILL)
 		killed = append(killed, rec)
-	}
-	// A zero timeout means no waiting, after the kill as well.
-	postKill := 5 * time.Second
-	if timeout == 0 {
-		postKill = 0
 	}
 	return append(waitGroups(killed, postKill), unresolved...)
 }
