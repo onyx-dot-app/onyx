@@ -16913,7 +16913,7 @@
           "title": "Instructions"
         },
         "loadError": {
-          "description": "Try closing and opening the preview again.",
+          "description": "This skill’s instructions could not be loaded.",
           "title": "Failed to load skill"
         },
         "metadata": {

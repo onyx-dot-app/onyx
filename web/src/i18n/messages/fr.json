@@ -16913,7 +16913,7 @@
           "title": "Instructions"
         },
         "loadError": {
-          "description": "Essayez de fermer puis de rouvrir l'aperçu.",
+          "description": "Les instructions de cette compétence n’ont pas pu être chargées.",
           "title": "Échec du chargement de la compétence"
         },
         "metadata": {

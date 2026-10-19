@@ -10,12 +10,20 @@ import SkillsPage from "@/views/SkillsPage";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
+const mockDeleteUserSkill = jest.fn();
 const mockRefresh = jest.fn();
+const mockMutate = jest.fn();
 const mockToastError = jest.fn();
 const mockRouterPush = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockStageSkillCreationDraft = jest.fn();
 const mockSearchParamsGet = jest.fn();
+
+jest.mock("swr", () => ({
+  __esModule: true,
+  ...jest.requireActual("swr"),
+  useSWRConfig: () => ({ mutate: mockMutate }),
+}));
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -31,11 +39,13 @@ jest.mock("@/hooks/useUserSkills", () => ({
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   setSkillEnabled: (...args: unknown[]) => mockSetSkillEnabled(...args),
+  deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
 }));
 
 jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
+    success: jest.fn(),
   },
 }));
 
@@ -44,22 +54,27 @@ jest.mock("@/sections/cards/SkillCard", () => ({
   default: ({
     item,
     onEnabledChange,
+    onDelete,
     enablementPending,
   }: {
     item: CustomSkill;
     onEnabledChange: (item: CustomSkill, enabled: boolean) => void;
+    onDelete: (item: CustomSkill) => void;
     enablementPending: boolean;
   }) => (
-    <button
-      type="button"
-      role="switch"
-      aria-label={item.name}
-      aria-checked={item.enabled}
-      disabled={enablementPending}
-      onClick={() => onEnabledChange(item, !item.enabled)}
-    >
-      {item.name}
-    </button>
+    <>
+      <button
+        type="button"
+        role="switch"
+        aria-label={item.name}
+        aria-checked={item.enabled}
+        disabled={enablementPending}
+        onClick={() => onEnabledChange(item, !item.enabled)}
+      >
+        {item.name}
+      </button>
+      <button onClick={() => onDelete(item)}>Delete {item.name}</button>
+    </>
   ),
 }));
 
@@ -156,11 +171,95 @@ describe("SkillsPage preference toggles", () => {
       }
       return skillsData;
     });
+    mockMutate.mockReset();
     mockRouterPush.mockReset();
     mockSearchParamsGet.mockReset();
     mockSearchParamsGet.mockReturnValue(null);
     mockStageSkillCreationDraft.mockReset();
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
+  });
+
+  it("deletes an invalid skill only after confirmation and removes it from the list", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("invalid-id", "invalid-skill"),
+        is_valid: false,
+        user_permission: "OWNER",
+      },
+    ];
+    mockDeleteUserSkill.mockResolvedValue(undefined);
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("button", { name: "Delete invalid-skill" })
+    );
+    expect(mockDeleteUserSkill).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent("invalid-skill");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(mockDeleteUserSkill).toHaveBeenCalledWith("invalid-id")
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("switch", { name: "invalid-skill" })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("associated-id", "associated-skill"),
+        user_permission: "OWNER",
+        external_app: {
+          external_app_id: 7,
+          name: "CRM",
+          enabled: true,
+          ready: true,
+        },
+      },
+    ];
+    mockDeleteUserSkill.mockResolvedValue(undefined);
+    mockMutate.mockRejectedValue(new Error("Refresh failed"));
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<SkillsPage />);
+      const user = setupUser();
+      await user.click(
+        screen.getByRole("button", { name: "Delete associated-skill" })
+      );
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      );
+      expect(mockMutate).toHaveBeenCalledWith("/api/build/admin/apps");
+      expect(skillsData.customs).toHaveLength(0);
+      expect(log).toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("keeps an invalid skill and reports a failed delete", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("invalid-id", "invalid-skill"),
+        is_valid: false,
+        user_permission: "OWNER",
+      },
+    ];
+    mockDeleteUserSkill.mockRejectedValue(new Error("Delete failed"));
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("button", { name: "Delete invalid-skill" })
+    );
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Delete failed")
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(skillsData.customs).toHaveLength(1);
   });
 
   it("routes an uploaded skill draft to the editor without creating it", async () => {

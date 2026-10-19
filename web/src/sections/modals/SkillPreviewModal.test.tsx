@@ -24,6 +24,22 @@ function preview(overrides: Partial<SkillPreview> = {}): SkillPreview {
 }
 
 describe("SkillPreviewModal", () => {
+  it("loads the preview only while the modal is open", () => {
+    mockUseSWR.mockClear();
+    mockUseSWR.mockReturnValue({
+      data: preview(),
+      error: undefined,
+      isLoading: false,
+    });
+    const { rerender } = render(
+      <SkillPreviewModal open={false} skillId="skill-id" onClose={jest.fn()} />
+    );
+    expect(mockUseSWR).not.toHaveBeenCalled();
+    rerender(<SkillPreviewModal open skillId="skill-id" onClose={jest.fn()} />);
+    expect(mockUseSWR).toHaveBeenCalled();
+    expect(screen.getByText("CRM lookup")).toBeVisible();
+  });
+
   it("explains when the associated external app must be connected", () => {
     mockUseSWR.mockReturnValue({
       data: preview({
