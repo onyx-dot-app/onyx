@@ -4,6 +4,7 @@ origin/main or is stale (merge base more than 3 days old) and is silent otherwis
 fetches at most once an hour on prompts, never changes the working tree, and always
 exits 0."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -429,3 +430,106 @@ def test_prompt_offline_tries_once_and_stays_silent(checkout: Path) -> None:
     assert _run(checkout, "UserPromptSubmit").stdout == ""
     # The failed attempt still counts, so the next prompt does not retry.
     assert time.time() - _stamp(checkout).stat().st_mtime < 60
+
+
+def test_single_branch_clone_still_gets_origin_main(
+    stale_remote: Path, tmp_path: Path
+) -> None:
+    _git(stale_remote, "checkout", "-q", "-b", "feat")
+    _commit(stale_remote, "feat.txt")
+    _git(stale_remote, "push", "-q", "origin", "feat")
+    _git(stale_remote, "checkout", "-q", "main")
+    single = tmp_path / "single"
+    _git(
+        tmp_path,
+        "clone",
+        "-q",
+        "--single-branch",
+        "--branch",
+        "feat",
+        str(tmp_path / "origin.git"),
+        str(single),
+    )
+    _push_new_commit(stale_remote, "c.txt")
+    # A plain `git fetch origin main` would not create origin/main here.
+    out = _run(single, "SessionStart").stdout
+    assert "`feat` is 1 commit behind origin/main" in out
+    assert "it is stale" in out
+
+
+def _start_conflicting_merge(checkout: Path, remote: Path) -> None:
+    _make_conflict(checkout, remote)
+    _git(checkout, "fetch", "-q", "origin", "main")
+    merge = subprocess.run(
+        ["git", "merge", "origin/main"],
+        cwd=checkout,
+        env=_GIT_ENV,
+        capture_output=True,
+        text=True,
+    )
+    assert merge.returncode == 1
+    assert (
+        Path(_git(checkout, "rev-parse", "--absolute-git-dir")) / "MERGE_HEAD"
+    ).exists()
+
+
+def test_unfinished_merge_says_to_finish_or_abort_it(
+    checkout: Path, remote: Path
+) -> None:
+    _start_conflicting_merge(checkout, remote)
+    out = _run(checkout, "SessionStart").stdout
+    assert "A merge is already in progress" in out
+    assert "git merge --continue" in out
+    assert "git merge --abort" in out
+    assert "commit or stash" not in out
+    assert "git rebase origin/main" not in out
+
+
+def test_unfinished_rebase_is_not_told_to_start_another_update(
+    checkout: Path, remote: Path
+) -> None:
+    _make_conflict(checkout, remote)
+    _git(checkout, "fetch", "-q", "origin", "main")
+    rebase = subprocess.run(
+        ["git", "rebase", "origin/main"],
+        cwd=checkout,
+        env=_GIT_ENV,
+        capture_output=True,
+        text=True,
+    )
+    assert rebase.returncode != 0
+    out = _run(checkout, "SessionStart").stdout
+    assert "git rebase origin/main" not in out
+    assert "commit or stash" not in out
+
+
+def _load_hook() -> object:
+    spec = importlib.util.spec_from_file_location("ensure_latest_main", _HOOK)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_ssh_command_extends_the_configured_one(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook = _load_hook()
+    monkeypatch.delenv("GIT_SSH_COMMAND", raising=False)
+    monkeypatch.delenv("GIT_SSH", raising=False)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    ssh_env = hook._ssh_env  # type: ignore[attr-defined]
+    batch = "-o BatchMode=yes -o ConnectTimeout=10"
+
+    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"ssh {batch}"}
+
+    _git(checkout, "config", "core.sshCommand", "ssh -i /keys/work")
+    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"ssh -i /keys/work {batch}"}
+
+    monkeypatch.setenv("GIT_SSH_COMMAND", "wrapper --flag")
+    assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"wrapper --flag {batch}"}
+
+    monkeypatch.delenv("GIT_SSH_COMMAND")
+    monkeypatch.setenv("GIT_SSH", "/usr/local/bin/my-ssh")
+    assert ssh_env(checkout) == {}

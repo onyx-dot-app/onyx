@@ -87,16 +87,39 @@ def _would_conflict(repo: Path) -> bool:
     return result.returncode == 1
 
 
+def _ssh_env(repo: Path) -> dict[str, str]:
+    """`GIT_SSH_COMMAND` with batch options added to the ssh command git would use.
+
+    Git prefers `GIT_SSH_COMMAND`, then `core.sshCommand`, then `GIT_SSH`. The first
+    two are extended, so a configured identity file or wrapper still applies. With
+    only `GIT_SSH` set there is nothing safe to extend, so it is left alone.
+    """
+    base = os.environ.get("GIT_SSH_COMMAND")
+    if base is None:
+        if os.environ.get("GIT_SSH"):
+            return {}
+        base = _git(repo, "config", "--get", "core.sshCommand") or "ssh"
+    return {"GIT_SSH_COMMAND": f"{base} -o BatchMode=yes -o ConnectTimeout=10"}
+
+
+def _operation_in_progress(repo: Path) -> str | None:
+    """`merge` or `rebase` when one is stopped half way (conflicts to resolve)."""
+    git_dir = _git(repo, "rev-parse", "--absolute-git-dir")
+    if not git_dir:
+        return None
+    path = Path(git_dir)
+    if (path / "MERGE_HEAD").exists():
+        return "merge"
+    if (path / "rebase-merge").exists() or (path / "rebase-apply").exists():
+        return "rebase"
+    return None
+
+
 def _fetch(repo: Path) -> bool:
     """Refresh origin/main; False when the fetch fails or exceeds its time limit."""
     # Never prompt for credentials, and fail fast on a dead connection rather
     # than hang session start.
-    env = {
-        **os.environ,
-        "GIT_TERMINAL_PROMPT": "0",
-        "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh")
-        + " -o BatchMode=yes -o ConnectTimeout=10",
-    }
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **_ssh_env(repo)}
     try:
         # A new session lets a timeout stop the helpers git started (ssh,
         # git-remote-https), not only git itself. DEVNULL keeps a surviving helper
@@ -109,7 +132,9 @@ def _fetch(repo: Path) -> bool:
                 "--no-tags",
                 "--no-recurse-submodules",
                 _REMOTE,
-                _BRANCH,
+                # An explicit destination, so a `--single-branch` clone, whose
+                # configured refspec covers only its own branch, gets origin/main.
+                f"+refs/heads/{_BRANCH}:refs/remotes/{_REMOTE}/{_BRANCH}",
             ],
             cwd=repo,
             env=env,
@@ -233,22 +258,34 @@ def _report(repo: Path, fetched: bool | None) -> str | None:
             + "."
         )
 
-    if dirty:
+    in_progress = _operation_in_progress(repo)
+    if in_progress:
+        # The branch is mid-update: committing, stashing or starting another
+        # merge or rebase would fail or lose the resolution.
         lines.append(
-            "The working tree has uncommitted changes: commit or stash them first, "
-            "and do not discard them."
-        )
-    if on_main:
-        lines.append(
-            f"Update with `git pull --ff-only {_REMOTE} {_BRANCH}`. If that refuses "
-            "because local main has commits of its own, do not force it; tell the user."
+            f"A {in_progress} is already in progress. Do not stash or start another "
+            "update. Resolve the conflicts, `git add` the files, and run "
+            f"`git {in_progress} --continue`, or run `git {in_progress} --abort` and "
+            "ask the user."
         )
     else:
-        lines.append(
-            f"Update with `git fetch {_REMOTE} {_BRANCH} && git rebase {_REF}`, or "
-            f"`git merge {_REF}` if the branch is shared or already pushed. If it "
-            "conflicts, resolve the conflicts, or abort and ask the user."
-        )
+        if dirty:
+            lines.append(
+                "The working tree has uncommitted changes: commit or stash them "
+                "first, and do not discard them."
+            )
+        if on_main:
+            lines.append(
+                f"Update with `git pull --ff-only {_REMOTE} {_BRANCH}`. If that "
+                "refuses because local main has commits of its own, do not force "
+                "it; tell the user."
+            )
+        else:
+            lines.append(
+                f"Update with `git fetch {_REMOTE} {_BRANCH} && git rebase {_REF}`, "
+                f"or `git merge {_REF}` if the branch is shared or already pushed. "
+                "If it conflicts, resolve the conflicts, or abort and ask the user."
+            )
     lines.append(
         "This hook changed nothing in your working tree. Skip the update only if the "
         "user told you to stay on this base."
