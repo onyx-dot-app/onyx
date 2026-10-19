@@ -44,7 +44,8 @@ exit 0
 `
 }
 
-// runStackCLI runs ods with args and returns the exit code and stdout.
+// runStackCLI runs ods with args and returns the exit code with stdout and
+// the log output.
 func runStackCLI(t *testing.T, args ...string) (code int, stdout string) {
 	t.Helper()
 	output, err := os.CreateTemp(t.TempDir(), "stdout")
@@ -54,18 +55,21 @@ func runStackCLI(t *testing.T, args ...string) (code int, stdout string) {
 	original := os.Stdout
 	os.Stdout = output
 	logger := log.StandardLogger()
-	originalExit, originalHook := logger.ExitFunc, exitHook
+	originalExit, originalHook, originalOutput := logger.ExitFunc, exitHook, logger.Out
+	var logs strings.Builder
+	logger.SetOutput(&logs)
 	type exitCode int
 	logger.ExitFunc = func(c int) { panic(exitCode(c)) }
 	exitHook = func(c int) { panic(exitCode(c)) }
 	defer func() {
 		os.Stdout = original
 		logger.ExitFunc, exitHook = originalExit, originalHook
+		logger.SetOutput(originalOutput)
 		data, err := os.ReadFile(output.Name())
 		if err != nil {
 			t.Fatal(err)
 		}
-		stdout = string(data)
+		stdout = string(data) + logs.String()
 	}()
 	func() {
 		defer func() {
@@ -92,7 +96,7 @@ func TestStackLsFlagsOrphansAndPrintsTheNextCommand(t *testing.T) {
 	}
 	code, out = runStackCLI(t, "stack", "ls", "--orphaned", "--json")
 	var rows []devstack.StackRow
-	if err := json.Unmarshal([]byte(out), &rows); err != nil || code != 3 || len(rows) != 1 || rows[0].Next != "ods stack down --project gone-1" {
+	if err := json.Unmarshal([]byte(out[:strings.LastIndex(out, "]")+1]), &rows); err != nil || code != 3 || len(rows) != 1 || rows[0].Next != "ods stack down --project gone-1" {
 		t.Fatalf("ls --orphaned exit %d rows %+v err %v", code, rows, err)
 	}
 }
@@ -213,7 +217,7 @@ func TestPrintStackRowsShowsEachRowState(t *testing.T) {
 	}
 	var out strings.Builder
 	printStackRows(&out, rows, now)
-	for _, want := range []string{"~/…/.worktrees/a [feat]", "2/2", "http://localhost:3004", "2h", "2d", "b-1 (frontend)", "(not a worktree)", "error: parse state.json", "/…/to/c", "To stop a stack, run:"} {
+	for _, want := range []string{"~/…/.worktrees/a [feat]", "2/2", "http://localhost:3004", "2h", "2d", "b-1 (frontend)", "(not a worktree)", "error: parse state.json", "/…/to/c"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}

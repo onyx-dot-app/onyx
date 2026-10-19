@@ -46,23 +46,6 @@ func TestListComposeContainersWithoutContainers(t *testing.T) {
 	}
 }
 
-func TestListComposeContainersSkipsContainerRemovedDuringInspect(t *testing.T) {
-	fakeDocker(t, `case "$1" in
-ps) echo abc; echo gone ;;
-inspect)
-  [ "$#" -gt 4 ] && exit 1
-  [ "$4" = gone ] && exit 1
-  cat <<'JSON'
-`+inspectJSON+`
-JSON
-;;
-esac`)
-	containers, err := ListComposeContainers()
-	if err != nil || len(containers) != 1 || containers[0].ID != "abc" {
-		t.Fatalf("containers = %+v, err = %v", containers, err)
-	}
-}
-
 func TestListComposeContainersReportsDockerErrors(t *testing.T) {
 	fakeDocker(t, `echo "Cannot connect to the Docker daemon" >&2; exit 1`)
 	if _, err := ListComposeContainers(); err == nil || !strings.Contains(err.Error(), "Cannot connect") {
@@ -75,9 +58,9 @@ func TestListComposeContainersRejectsInvalidInspectOutput(t *testing.T) {
 	if _, err := ListComposeContainers(); err == nil || !strings.Contains(err.Error(), "parse docker inspect") {
 		t.Fatalf("err = %v", err)
 	}
-	fakeDocker(t, `case "$1" in ps) echo abc; echo def ;; inspect) [ "$#" -gt 4 ] && exit 1; echo not-json ;; esac`)
-	if _, err := ListComposeContainers(); err == nil {
-		t.Fatal("invalid single inspect output was accepted")
+	fakeDocker(t, `case "$1" in ps) echo abc ;; inspect) exit 1 ;; esac`)
+	if _, err := ListComposeContainers(); err == nil || !strings.Contains(err.Error(), "docker inspect") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

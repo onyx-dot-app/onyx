@@ -55,11 +55,11 @@ source could be read.`,
 			if len(rows) == 0 && !asJSON {
 				switch {
 				case orphaned:
-					fmt.Println("No orphaned dev stacks found")
+					log.Info("No orphaned dev stacks found")
 				case all:
-					fmt.Println("No dev stacks found on this machine; run 'ods stack up' in a worktree to start one")
+					log.Info("No dev stacks found on this machine; run 'ods stack up' in a worktree to start one")
 				default:
-					fmt.Println("No running dev stacks found; run 'ods stack ls --all' to include stopped stacks")
+					log.Info("No running dev stacks found; run 'ods stack ls --all' to include stopped stacks")
 				}
 				return
 			}
@@ -68,7 +68,7 @@ source could be read.`,
 			} else {
 				printStackRows(os.Stdout, rows, time.Now())
 				if hidden := len(filterStackRows(inv.Rows, true, orphaned)) - len(rows); hidden > 0 {
-					fmt.Printf("\n%d stopped stack(s) or stale lease(s) hidden; run 'ods stack ls --all' to show them\n", hidden)
+					log.Infof("%d stopped stack(s) or stale lease(s) hidden; run 'ods stack ls --all' to show them", hidden)
 				}
 			}
 			if orphaned && len(rows) > 0 {
@@ -229,17 +229,15 @@ func composeDownProject(ctx context.Context, project string, volumes bool) error
 }
 
 func printJSON(value any) {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(value); err != nil {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(string(data))
 }
 
 func printStackRows(out io.Writer, rows []devstack.StackRow, now time.Time) {
 	if len(rows) == 0 {
-		_, _ = fmt.Fprintln(out, "No running dev stacks found")
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -266,20 +264,13 @@ func printStackRows(out io.Writer, rows []devstack.StackRow, now time.Time) {
 		}
 	}
 	_ = w.Flush()
-	var next []string
 	for _, row := range rows {
 		if row.Next != "" {
-			next = append(next, fmt.Sprintf("  %s (%s): %s", stackRowName(row), row.Status, row.Next))
-		}
-	}
-	if len(next) > 0 {
-		_, _ = fmt.Fprintln(out, "\nTo stop a stack, run:")
-		for _, line := range next {
-			_, _ = fmt.Fprintln(out, line)
+			log.Infof("To stop %s (%s), run: %s", stackRowName(row), row.Status, row.Next)
 		}
 	}
 	if statuses[devstack.StatusOrphaned] {
-		_, _ = fmt.Fprintln(out, "\nOrphaned stacks have no worktree. 'ods stack prune' stops all of them; volumes are kept.")
+		log.Info("Orphaned stacks have no worktree; 'ods stack prune' stops all of them and keeps their volumes")
 	}
 }
 

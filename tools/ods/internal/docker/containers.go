@@ -62,21 +62,7 @@ func ListComposeContainers() ([]ComposeContainer, error) {
 	}
 	out, err = exec.Command("docker", append([]string{"inspect", "--type", "container"}, ids...)...).Output()
 	if err != nil {
-		// A container removed between ps and inspect fails the batch;
-		// inspect the remaining ones one at a time.
-		var containers []ComposeContainer
-		for _, id := range ids {
-			one, oneErr := exec.Command("docker", "inspect", "--type", "container", id).Output()
-			if oneErr != nil {
-				continue
-			}
-			parsed, parseErr := parseInspect(one)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-			containers = append(containers, parsed...)
-		}
-		return containers, nil
+		return nil, fmt.Errorf("docker inspect: %w", commandError(err))
 	}
 	return parseInspect(out)
 }

@@ -153,82 +153,49 @@ func readInventoryInput(registry *Registry, opts DiscoverOptions) inventoryInput
 	in.Owners, in.OwnersErr = readOwners(registry)
 	in.Leases, in.LeasesErr = registry.Leases()
 
-	var queue []string
+	// Roots lead to Git common directories, whose state directories are
+	// read; each state's root can lead to another repository.
+	var roots, dirs []string
 	for _, owner := range in.Owners {
-		if owner.StateDir != "" {
-			queue = append(queue, owner.StateDir)
-		}
+		roots = append(roots, owner.StateDir)
+		dirs = append(dirs, owner.StateDir)
 	}
 	for _, lease := range in.Leases {
-		queue = append(queue, lease.Root)
+		roots = append(roots, lease.Root)
 	}
 	for _, c := range in.Containers {
-		if c.WorkingDir != "" {
-			queue = append(queue, composeRoot(c.WorkingDir))
-		}
+		roots = append(roots, composeRoot(c.WorkingDir))
 	}
-	queue = append(queue, opts.Dirs...)
-
-	visitedPaths := map[string]bool{}
-	visitedCommon := map[string]bool{}
-	stateDirs := map[string]bool{}
-	for _, owner := range in.Owners {
-		if owner.StateDir != "" {
-			stateDirs[owner.StateDir] = true
-		}
-	}
-	for len(queue) > 0 {
-		path := queue[0]
-		queue = queue[1:]
-		if path == "" || visitedPaths[path] {
+	roots = append(roots, opts.Dirs...)
+	commons, read := map[string]bool{}, map[string]bool{}
+	for len(roots) > 0 || len(dirs) > 0 {
+		if len(dirs) == 0 {
+			root := roots[0]
+			roots = roots[1:]
+			if common := commonDirOf(root); root != "" && common != "" && !commons[common] {
+				commons[common] = true
+				dirs = append(dirs, stateDirCandidates(common)...)
+			}
 			continue
 		}
-		visitedPaths[path] = true
-		common := commonDirOf(path)
-		if common == "" || visitedCommon[common] {
+		dir := dirs[0]
+		dirs = dirs[1:]
+		if dir == "" || read[dir] {
 			continue
 		}
-		visitedCommon[common] = true
-		for _, dir := range stateDirCandidates(common) {
-			stateDirs[dir] = true
+		read[dir] = true
+		info, err := os.Stat(filepath.Join(dir, stateFileName))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
 		}
-	}
-
-	read := map[string]bool{}
-	for len(stateDirs) > 0 {
-		var dirs []string
-		for dir := range stateDirs {
-			dirs = append(dirs, dir)
+		record := stateRecord{Dir: dir, Err: err}
+		if err == nil {
+			record.ModTime = info.ModTime()
+			record.State, record.Err = (&Stack{StateDir: dir}).ReadState()
 		}
-		sort.Strings(dirs)
-		stateDirs = map[string]bool{}
-		for _, dir := range dirs {
-			if read[dir] {
-				continue
-			}
-			read[dir] = true
-			info, err := os.Stat(filepath.Join(dir, stateFileName))
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			record := stateRecord{Dir: dir}
-			if err == nil {
-				record.ModTime = info.ModTime()
-				record.State, record.Err = (&Stack{StateDir: dir}).ReadState()
-			} else {
-				record.Err = err
-			}
-			in.States = append(in.States, record)
-			if record.State == nil || record.State.Root == "" || visitedPaths[record.State.Root] {
-				continue
-			}
-			visitedPaths[record.State.Root] = true
-			if common := commonDirOf(record.State.Root); common != "" && !visitedCommon[common] {
-				visitedCommon[common] = true
-				for _, next := range stateDirCandidates(common) {
-					stateDirs[next] = true
-				}
-			}
+		in.States = append(in.States, record)
+		if record.State != nil {
+			roots = append(roots, record.State.Root)
 		}
 	}
 	return in
@@ -404,7 +371,7 @@ func buildInventory(in inventoryInput) Inventory {
 
 	primary := map[string]string{}
 	for project, records := range claims {
-		primary[project] = choosePrimary(project, records, ownersByKey, in.Alive)
+		primary[project] = choosePrimary(project, records, ownersByKey)
 	}
 
 	var rows []*StackRow
@@ -501,22 +468,17 @@ func buildInventory(in inventoryInput) Inventory {
 }
 
 // choosePrimary picks the state that owns a project's infrastructure: the
-// owner record's state, else one with live services, else the newest.
-func choosePrimary(project string, records []stateRecord, owners map[string][]ownerRecord, alive func(ServiceRecord) bool) string {
-	for _, owner := range owners[ProjectName(project)] {
-		for _, record := range records {
+// owner record's state, else the newest.
+func choosePrimary(project string, records []stateRecord, owners map[string][]ownerRecord) string {
+	best := records[0]
+	for _, record := range records {
+		for _, owner := range owners[ProjectName(project)] {
 			if record.Dir == owner.StateDir {
 				return record.Dir
 			}
 		}
-	}
-	best := records[0]
-	bestAlive := false
-	for _, record := range records {
-		app, _ := appCount(record.State, alive)
-		live := app != nil && app.Running > 0
-		if (live && !bestAlive) || (live == bestAlive && record.State.UpdatedAt.After(best.State.UpdatedAt)) {
-			best, bestAlive = record, live
+		if record.State.UpdatedAt.After(best.State.UpdatedAt) {
+			best = record
 		}
 	}
 	return best.Dir

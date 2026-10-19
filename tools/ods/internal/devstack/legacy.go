@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -170,19 +169,8 @@ func (s *Stack) releaseLegacyLeases() error {
 		if st.Phase != PhaseStopped || st.Root == "" || anyGroupAlive(st.Services) {
 			continue
 		}
-		running, err := projectContainersRunning(st.Project)
-		if err != nil || running {
-			names := appLeaseNames(st)
-			leases, err := s.Registry.Leases()
-			if err != nil {
-				return err
-			}
-			for _, l := range leases {
-				if l.Root == st.Root && !isInfraLease(l.Name) && !slices.Contains(names, l.Name) {
-					names = append(names, l.Name)
-				}
-			}
-			if err := s.Registry.ReleaseNames(st.Root, names); err != nil {
+		if running, err := projectContainersRunning(st.Project); err != nil || running {
+			if err := s.Registry.ReleaseNames(st.Root, appLeaseNames(st)); err != nil {
 				return err
 			}
 			continue
