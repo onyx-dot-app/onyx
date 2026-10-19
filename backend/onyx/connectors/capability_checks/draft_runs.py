@@ -162,21 +162,6 @@ class DraftRerunMode(str, Enum):
     ALL = "all"
 
 
-class DraftCheckActions(BaseModel):
-    """The per-check actions of a draft run request: Run Check and Re-run
-    Check (``check_ids``), Skip (``skip_check_ids``) and Start Now
-    (``start_check_id``)."""
-
-    # Only these checks run, ignoring their cached results. Every other check
-    # keeps its result from the cache or from the latest run of the draft key,
-    # and runs only when it has none.
-    check_ids: list[str] | None = None
-    # These do not run: an optional check is SKIPPED, a required one STOPPED.
-    skip_check_ids: list[str] = []
-    # Runs next: this check and the checks it depends on go first.
-    start_check_id: str | None = None
-
-
 class DraftCheckState(BaseModel):
     check_id: str
     # The row the check shows on (``CapabilityCheck.row_id``). None in runs

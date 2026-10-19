@@ -18,7 +18,6 @@ from onyx.background.celery.tasks.capability_checks import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks import creation, draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckActions,
     DraftCheckRunSnapshot,
     DraftCheckState,
     DraftCheckStateKind,
@@ -36,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
     CheckNotRunReason,
     CheckOutput,
     CredentialCapability,
+    DraftCheckActions,
     aggregate_capability_verdict,
 )
 from onyx.connectors.capability_checks.runner import run_order

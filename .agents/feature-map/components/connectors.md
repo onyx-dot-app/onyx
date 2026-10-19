@@ -526,7 +526,7 @@ without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 A draft run or a pair dry run (`/admin/cc-pair/{cc_pair_id}/edit/checks`) also
-takes per-check actions (`draft_runs.py:DraftCheckActions`). `check_ids` runs
+takes per-check actions (`capability_checks/models.py:DraftCheckActions`). `check_ids` runs
 only those checks, without their cached results. Every other check keeps its
 cached result or its result in the latest run of the draft key, and runs only
 when it has none, for example after a dependency that now runs.

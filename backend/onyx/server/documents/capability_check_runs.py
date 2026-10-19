@@ -19,7 +19,6 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_RUN_QUEUE_EXPIRY_SECONDS,
-    DraftCheckActions,
     DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftCheckState,
@@ -52,6 +51,7 @@ from onyx.connectors.capability_checks.form_state import (
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    DraftCheckActions,
 )
 from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
