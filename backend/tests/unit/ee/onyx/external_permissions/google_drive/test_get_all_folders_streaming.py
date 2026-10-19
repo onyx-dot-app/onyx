@@ -249,7 +249,7 @@ def test_failed_organizer_listing_leaves_drive_to_its_members() -> None:
 
 def test_incomplete_drive_listing_is_unioned_with_members() -> None:
     """Only an organizer sees limited-access folders. A drive listed by a
-    lesser role or by the admin is also listed by each member, as the old
+    lesser role is also listed by each member, as the old
     per-user walk did, so folders only some members see are still groups."""
     connector = _make_connector(["a@example.com"])
     connector.ops.list_folders_with_permissions.side_effect = _listings({})
@@ -319,30 +319,17 @@ def test_organizer_comes_from_group_membership_already_synced() -> None:
     connector.ops.list_group_members.assert_not_called()
 
 
-def test_drive_without_impersonable_member_falls_back_to_admin() -> None:
-    connector = _make_connector(["a@example.com"])
-    connector.ops.list_folders_with_permissions.side_effect = _listings({})
-
-    list(
-        _get_all_folders(
-            google_drive_connector=connector,
-            skip_folders_without_permissions=True,
-            drive_members={"d1": []},
-            expand_group=_no_groups,
-        )
-    )
-
-    assert _partitions_listed(connector)[0] == (
-        DriveFolderScope.SHARED_DRIVE,
-        _ADMIN,
-        "d1",
-    )
-
-
-def test_drive_nobody_can_list_is_skipped() -> None:
-    connector = _make_connector(["a@example.com"])
+def test_drive_without_impersonable_organizer_is_left_to_its_members() -> None:
+    """An admin has no file-level access to a shared drive beyond their own
+    membership, so a drive with no usable organizer is not probed or listed
+    as the admin. Its members list it in the user pass; the admin is one of
+    them when the admin is a member."""
+    connector = _make_connector([_ADMIN, "a@example.com"])
     connector.ops.can_list_drive.return_value = False
     connector.ops.list_folders_with_permissions.side_effect = _listings({})
+    connector.ops.list_drives.side_effect = lambda user_email, **_kwargs: iter(
+        ["d1"] if user_email == "a@example.com" else []
+    )
 
     list(
         _get_all_folders(
@@ -353,10 +340,14 @@ def test_drive_nobody_can_list_is_skipped() -> None:
         )
     )
 
-    assert all(
-        scope is not DriveFolderScope.SHARED_DRIVE
-        for scope, _, _ in _partitions_listed(connector)
-    )
+    drive_listings = [
+        partition
+        for partition in _partitions_listed(connector)
+        if partition[0] is DriveFolderScope.SHARED_DRIVE
+    ]
+    assert drive_listings == [(DriveFolderScope.SHARED_DRIVE, "a@example.com", "d1")]
+    for call in connector.ops.can_list_drive.call_args_list:
+        assert call.kwargs["user_email"] != _ADMIN
 
 
 def test_oauth_lists_everything_its_one_identity_sees() -> None:

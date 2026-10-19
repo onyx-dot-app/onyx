@@ -165,7 +165,9 @@ class _FolderCrawl:
 
     def _shared_drive_folders(self, drive_id: str) -> Generator[FolderInfo, None, None]:
         """Lists a shared drive as its organizer, the one role that sees every
-        folder in it. Falls back to the admin, as the per-user pass did."""
+        folder in it. A drive without one is left to its members' passes: an
+        admin has no file-level access beyond their own membership, and the
+        admin is one of the enumerated users."""
 
         def _can_list(email: str) -> bool:
             # Each probe is two API calls; a drive with many unusable
@@ -181,26 +183,17 @@ class _FolderCrawl:
             expand_group=self._expand_group,
             can_list_drive=_can_list,
         )
-        email = choice.email
-        if email is None:
-            admin_email = self._connector.primary_admin_email
-            if not _can_list(admin_email):
-                logger.warning(
-                    "Drive %s: no principal can list it; its folders are not "
-                    "synced as groups unless a user's own drive list reaches it.",
-                    drive_id,
-                )
-                return
+        if choice.email is None:
             logger.warning(
-                "Drive %s: no impersonable member; listing folders as the admin. "
-                "Limited-access folders may be missed.",
+                "Drive %s: no impersonable member can list it; its folders are "
+                "synced only through the members found in the user pass.",
                 drive_id,
             )
-            email = admin_email
+            return
         # A denial must raise here: a listing that ended quietly on a 403 or
         # 404 would otherwise be mistaken for a complete one.
         yield from self._folders(
-            email,
+            choice.email,
             DriveFolderScope.SHARED_DRIVE,
             drive_id,
             continue_on_404_or_403=False,
