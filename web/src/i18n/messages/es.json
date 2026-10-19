@@ -1102,7 +1102,8 @@
         "label": "Nuevo plugin",
         "mcp": "Añadir servidor MCP personalizado",
         "openapi": "Añadir acción OpenAPI",
-        "mcpDescription": "Conecta un servidor MCP para añadir acciones personalizadas."
+        "mcpDescription": "Conecta un servidor MCP para añadir acciones personalizadas.",
+        "craftAppsDescription": "Conecta una app para usar sus acciones en Craft."
       },
       "catalog": {
         "slack": {

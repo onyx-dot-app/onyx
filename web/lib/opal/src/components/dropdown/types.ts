@@ -51,6 +51,8 @@ export type DropdownAction = DropdownRowBase & {
   icon?: IconFunctionComponent;
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
+  /** Tag beside the title, like a plan badge. */
+  tag?: TagProps;
   /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
   tooltip?: string | RichStr;
   keepOpen?: boolean;

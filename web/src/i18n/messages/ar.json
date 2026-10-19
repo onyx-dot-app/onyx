@@ -1102,7 +1102,8 @@
         "label": "إضافة جديدة",
         "mcp": "إضافة خادم MCP مخصص",
         "openapi": "إضافة إجراء OpenAPI",
-        "mcpDescription": "اربط خادم MCP لإضافة إجراءات مخصصة."
+        "mcpDescription": "اربط خادم MCP لإضافة إجراءات مخصصة.",
+        "craftAppsDescription": "اربط تطبيقًا لاستخدام إجراءاته في Craft."
       },
       "catalog": {
         "slack": {

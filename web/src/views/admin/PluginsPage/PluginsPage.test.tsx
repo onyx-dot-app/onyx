@@ -267,9 +267,10 @@ test("Craft-disabled admins see only Chat plugins and never request Craft apps",
   expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
   expect(queryCard("Manage Workspace service")).not.toBeInTheDocument();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
-  expect(
-    screen.queryByRole("menuitem", { name: /^Craft Apps/ })
-  ).not.toBeInTheDocument();
+  expect(addMenuItem(copy.kind["external-app"])).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
   expect(
     network.mock.calls.some(([url]) => String(url).startsWith("/api/build/"))
   ).toBe(false);
@@ -518,9 +519,10 @@ test("never requests external admin records or provider options for scoped actio
   await findCard("Manage Workspace MCP");
   expect(screen.getByRole("tab", { name: "Craft Apps" })).toBeDisabled();
   await setupUser().click(screen.getByRole("button", { name: copy.add.label }));
-  expect(
-    screen.queryByRole("menuitem", { name: /^Craft Apps/ })
-  ).not.toBeInTheDocument();
+  expect(addMenuItem(copy.kind["external-app"])).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
   await setupUser().click(addMenuItem(copy.kind.mcp));
   expect(screen.getByRole("button", { name: "Add Sentry" })).toBeVisible();
   expect(

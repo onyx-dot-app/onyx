@@ -39,6 +39,8 @@ import OpenAPIPluginModal from "@/views/admin/PluginsPage/OpenAPIPluginModal";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePlans } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 
 const route = ADMIN_ROUTES.PLUGINS;
 
@@ -117,7 +119,9 @@ export default function PluginsPage() {
   );
   const canManageActions = isGlobalHolder || isScopedManager;
   const settings = useSettings();
-  const canManageApps = fullAdmin && settings.onyx_craft_available === true;
+  const craftAvailable = settings.onyx_craft_available === true;
+  const canManageApps = fullAdmin && craftAvailable;
+  const plans = usePlans();
   const canCreate = canManageActions || canManageApps;
   const { plugins, mcp, openapi, externalApps } = useInstalledPlugins();
   const [dialog, setDialog] = useState<PluginDialog>(null);
@@ -247,21 +251,24 @@ export default function PluginsPage() {
                   },
                 ]
               : []),
-            ...(canManageApps
-              ? [
-                  {
-                    kind: "action" as const,
-                    id: "external-app",
-                    icon: PLUGIN_KIND_ICONS["external-app"],
-                    title: t("kind.external-app"),
-                    onSelect: () =>
-                      setDialog({
-                        kind: "catalog",
-                        catalogKind: "external-app",
-                      }),
-                  },
-                ]
-              : []),
+            {
+              kind: "action",
+              id: "external-app",
+              icon: PLUGIN_KIND_ICONS["external-app"],
+              title: t("kind.external-app"),
+              description: t("add.craftAppsDescription"),
+              disabled: !canManageApps,
+              ...(!craftAvailable && {
+                tag: plans[Tier.BUSINESS].tag,
+                tooltip: markdown(
+                  tSidebar("adminSidebar.businessOrEnterpriseOnly.tooltip")
+                ),
+              }),
+              onSelect: () => {
+                if (!canManageApps) return;
+                setDialog({ kind: "catalog", catalogKind: "external-app" });
+              },
+            },
           ]}
         />
       </Dropdown>

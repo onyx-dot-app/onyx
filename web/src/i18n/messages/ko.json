@@ -1102,7 +1102,8 @@
         "label": "새 플러그인",
         "mcp": "사용자 지정 MCP 서버 추가",
         "openapi": "OpenAPI 작업 추가",
-        "mcpDescription": "MCP 서버를 연결해 사용자 지정 작업 추가."
+        "mcpDescription": "MCP 서버를 연결해 사용자 지정 작업 추가.",
+        "craftAppsDescription": "앱을 연결해 Craft에서 해당 작업 사용."
       },
       "catalog": {
         "slack": {

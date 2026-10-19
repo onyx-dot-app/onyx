@@ -1102,7 +1102,8 @@
         "label": "新しいプラグイン",
         "mcp": "カスタム MCP サーバーを追加",
         "openapi": "OpenAPI アクションを追加",
-        "mcpDescription": "MCP サーバーを接続してカスタムアクションを追加。"
+        "mcpDescription": "MCP サーバーを接続してカスタムアクションを追加。",
+        "craftAppsDescription": "アプリを接続して Craft でそのアクションを使用。"
       },
       "catalog": {
         "slack": {

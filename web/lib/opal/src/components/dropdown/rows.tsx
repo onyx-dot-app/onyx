@@ -124,7 +124,7 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
-    tag: row.kind === "option" ? row.tag : undefined,
+    tag: row.kind === "action" || row.kind === "option" ? row.tag : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
@@ -137,7 +137,9 @@ export const Row = React.memo(function Row({
     // `body` resolves to `ContentSm`, which has no description, suffix or
     // tag slot; a row with any of them takes the `heading` layout.
     variant:
-      row.description || (row.kind === "option" && (row.suffix || row.tag))
+      row.description ||
+      (row.kind === "option" && row.suffix) ||
+      ((row.kind === "action" || row.kind === "option") && row.tag)
         ? "heading"
         : "body",
     id,
