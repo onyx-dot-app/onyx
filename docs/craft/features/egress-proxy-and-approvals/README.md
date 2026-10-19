@@ -373,7 +373,7 @@ PostgreSQL is authoritative. Redis provides fast cross-process coordination:
   acceleration cache for approve-for-session grants. The DB rows are still the
   durable source. TTL: 1 hour, sliding on use.
 
-Missed Redis announce: the frontend can still refetch `/live`.
+Missed Redis announce: the frontend finds the request on its next status poll.
 
 Missed Redis wake: the proxy waits until timeout, then reads the winning
 decision from Postgres. If the API decision won, the proxy honors it.
@@ -401,8 +401,7 @@ decision IS NULL
 AND created_at >= now - SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 ```
 
-Older undecided rows are treated as proxy-crash orphans and excluded from
-`/live`.
+Older undecided rows are treated as proxy-crash orphans and are not live.
 
 ### Approve Once
 

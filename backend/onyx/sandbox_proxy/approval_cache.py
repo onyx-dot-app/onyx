@@ -5,7 +5,7 @@ here is best-effort over `CacheBackend`. Two lists:
 
 * `approval:announce:{session_id}` — proxy RPUSHes after committing the
   row; the chat-stream merger BLPOPs to emit the card on the live SSE
-  stream. A miss degrades to the FE's next `/live` refetch.
+  stream. A miss degrades to the FE's next approval status poll.
 * `approval:wake:{approval_id}` — api-server RPUSHes when a decision is
   recorded; the parked proxy BLPOPs to wake before the wait timeout.
 """

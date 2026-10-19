@@ -128,7 +128,6 @@ protects.
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
 | GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/output-thumbnail/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
 | GET | `/build/approvals/sessions/{id}` | `list_session_approvals` (`approvals/api.py`) | All live requests and the 50 most recent outcomes. |
-| GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | |
 | GET/POST | `/build/user-library/tree`, `/build/user-library/upload`, `/build/user-library/upload-zip`, `/build/user-library/directories` | `user_library/api.py` | User library CRUD. |
 | DELETE | `/build/user-library/files/{document_id}` | `delete_file` (`user_library/api.py`) | |
@@ -148,7 +147,7 @@ protects.
 | `PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS` | 10 | How long a fresh turn waits for the slot before failing. |
 | `PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS` | lease + 10 | How long a *reclaimed* turn waits (longer, to outlast an orphaned holder). |
 | `OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS` | env-configured | A single opencode step going silent this long aborts that step; the executor re-prompts (see §4.2). |
-| `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | env-configured | How long the sandbox proxy parks on an `ASK` request before treating it as expired; also the "live" window `list_live_approvals` uses. |
+| `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | env-configured | How long the sandbox proxy parks on an `ASK` request before treating it as expired; also the "live" window the approval list and status endpoints use. |
 | `SESSION_FLOW_LOCK_LEASE_SECONDS` | derived from provisioning deadlines | Lease on the per-user session-creation lock. |
 | `ENABLE_OPENCODE_DEBUGGING` | false | Gates `debug.py`'s pod-log-stream endpoint; 404s (not 403) when off. |
 
@@ -545,11 +544,11 @@ component; that would be the app's static policy (`ALWAYS`/`DENY`) owned by
 **An approval genuinely blocks, it does not merely warn.** The proxy holds
 the outbound request open until a decision lands or the wait times out
 (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`); nothing in this pipeline lets the
-sandbox proceed on an undecided or expired row. `list_live_approvals`
-explicitly filters to rows created within that same wait window, treating
-anything older as orphaned (the proxy that was waiting on it is gone), so
-the frontend never offers to decide a request that can no longer have any
-effect.
+sandbox proceed on an undecided or expired row. The approval list and status
+endpoints mark a row live only when it was created within that same wait
+window, treating anything older as orphaned (the proxy that was waiting on
+it is gone), so the frontend never offers to decide a request that can no
+longer have any effect.
 
 The session approvals endpoint returns all live requests and the 50 most recent outcomes.
 Expired undecided requests count as outcomes. The frontend uses one query for cards and refreshes it after decisions.
@@ -795,7 +794,7 @@ A directory scan reports current files, not exact per-turn provenance.
 | changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
 | changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` remaining best-effort, with a short HTTP timeout under the admission lock |
-| adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_decision` can actually cover |
+| adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; the `is_live` time-window check in `approvals/api.py`; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_decision` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
 | changes user library sync | both trigger sets (upload/delete synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |

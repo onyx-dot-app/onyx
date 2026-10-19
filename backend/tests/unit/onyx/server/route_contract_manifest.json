@@ -160,7 +160,6 @@
   "GET /build/admin/apps/built-in/options": "admin",
   "GET /build/admin/base-instructions": "admin",
   "GET /build/approvals/sessions/{session_id}": "basic",
-  "GET /build/approvals/sessions/{session_id}/live": "basic",
   "GET /build/approvals/sessions/{session_id}/status": "basic",
   "GET /build/apps": "basic",
   "GET /build/apps/{external_app_id}/oauth/start": "basic",

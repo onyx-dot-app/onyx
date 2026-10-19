@@ -20,9 +20,9 @@ class BuildApprovalsManager:
     """Static wrapper around the build-mode approval HTTP API."""
 
     @staticmethod
-    def list_live(user: DATestUser, session_id: UUID) -> list[ApprovalView]:
+    def list_approvals(user: DATestUser, session_id: UUID) -> list[ApprovalView]:
         response = client.get(
-            f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live",
+            f"{API_SERVER_URL}/build/approvals/sessions/{session_id}",
             headers=user.headers,
             cookies=user.cookies,
         )
@@ -35,7 +35,11 @@ class BuildApprovalsManager:
     ) -> ApprovalView:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
-            items = BuildApprovalsManager.list_live(user, session_id)
+            items = [
+                item
+                for item in BuildApprovalsManager.list_approvals(user, session_id)
+                if item.is_live
+            ]
             if items:
                 return items[0]
             time.sleep(0.5)
