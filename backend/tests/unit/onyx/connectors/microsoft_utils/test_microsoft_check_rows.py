@@ -18,6 +18,11 @@ from cryptography.hazmat.primitives.serialization import BestAvailableEncryption
 from cryptography.x509.oid import NameOID
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks import microsoft_check_text
+from onyx.connectors.capability_checks.microsoft_check_text import (
+    raise_for_sign_in_error,
+    sign_in_text,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -39,9 +44,6 @@ from onyx.connectors.exceptions import (
     ValidationError,
 )
 from onyx.connectors.microsoft_utils import check_text
-from onyx.connectors.microsoft_utils.check_text import (
-    sign_in_text,
-)
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
     MicrosoftAuthMethod,
@@ -58,13 +60,12 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     microsoft_error_from_exception,
     raise_for_auth_error,
     raise_for_graph_error,
-    raise_for_sign_in_error,
 )
 from onyx.connectors.microsoft_utils.models import (
     MicrosoftAccountLabels,
-    MicrosoftRowText,
     MicrosoftTokenInfo,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.onedrive.source_operations import OneDriveSourceOperations
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
@@ -97,10 +98,11 @@ def _transport_error() -> MicrosoftGraphError:
 
 
 def test_every_shared_line_is_short_enough() -> None:
-    rows: list[MicrosoftRowText] = [
+    rows: list[CheckRowText] = [
         value
-        for value in vars(check_text).values()
-        if isinstance(value, MicrosoftRowText)
+        for module in (check_text, microsoft_check_text)
+        for value in vars(module).values()
+        if isinstance(value, CheckRowText)
     ] + [
         check_text.missing_field_row(_LABELS, certificate=True),
         check_text.certificate_unreadable_row(_LABELS),
@@ -284,7 +286,7 @@ def test_a_rejected_token_is_rejected() -> None:
 
 
 def test_a_denial_takes_the_caller_row() -> None:
-    row = MicrosoftRowText(summary="No permission to list sites", description="d")
+    row = CheckRowText(summary="No permission to list sites", description="d")
 
     raised = _raised(
         raise_for_graph_error,

@@ -37,11 +37,13 @@ from onyx.connectors.exceptions import (
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import CheckRowText
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
+from onyx.utils.text_processing import shorten
 
 logger = setup_logger()
 
@@ -139,9 +141,7 @@ class CheckAdvisory(BaseModel):
     @field_validator("message")
     @classmethod
     def _bounded(cls, message: str) -> str:
-        if len(message) <= MAX_ADVISORY_LENGTH:
-            return message
-        return message[: MAX_ADVISORY_LENGTH - 1] + "…"
+        return shorten(message, MAX_ADVISORY_LENGTH)
 
 
 class CheckOutput(BaseModel):
@@ -377,17 +377,8 @@ def check_error_detail(
     return detail if detail != CheckErrorDetail() else None
 
 
-class CheckRowText(BaseModel):
-    """A row's line and description. In a hang-guard text,
-    ``TIME_LIMIT_PLACEHOLDER`` in the description gives the guard's time
-    limit, e.g. "10 minutes"."""
-
-    model_config = ConfigDict(frozen=True)
-
-    summary: str
-    description: str
-
-
+# In a hang-guard text's description, gives the guard's time limit, e.g.
+# "10 minutes".
 TIME_LIMIT_PLACEHOLDER = "{time_limit}"
 
 
@@ -400,6 +391,14 @@ def sign_in_timeout_text(source_name: str) -> CheckRowText:
             f"check that {source_name} is reachable from Onyx."
         ),
     )
+
+
+class MicrosoftSignIn(BaseModel):
+    """What a passing Microsoft sign-in check shows: its line, and caveats."""
+
+    summary: str
+    description: str | None = None
+    caveats: list[str] = []
 
 
 class CheckNotRunReason(str, Enum):

@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.connectors.microsoft_utils.models import MicrosoftRowText
+from onyx.connectors.models import CheckRowText
 
 
 class SharepointCredentials(BaseModel):
@@ -53,12 +53,12 @@ class EntraGroupRef(BaseModel):
 
 class SiteProblem(BaseModel):
     site_url: str
-    row: MicrosoftRowText
+    row: CheckRowText
     message: str
     denied: bool
 
 
 class LibraryProblem(BaseModel):
-    row: MicrosoftRowText
+    row: CheckRowText
     message: str
     name: str

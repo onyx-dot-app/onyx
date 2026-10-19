@@ -13,7 +13,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckErrorKind,
-    CheckRowText,
     CredentialCapability,
     check_error_detail,
     sign_in_timeout_text,
@@ -28,6 +27,7 @@ from onyx.connectors.exceptions import (
     TimedOutValidationError,
     UnreachableValidationError,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 _TIMEOUT_SECONDS = 0.2

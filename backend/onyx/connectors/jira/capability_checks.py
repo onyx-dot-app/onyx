@@ -31,7 +31,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CredentialCapability,
     sign_in_timeout_text,
@@ -70,6 +69,7 @@ from onyx.connectors.jira.utils import (
     SUPPORTED_STATIC_HOLDER_TYPES,
     get_issue_field,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"

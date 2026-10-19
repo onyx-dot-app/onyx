@@ -17,7 +17,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     form_config,
     sign_in_timeout_text,
@@ -56,7 +55,11 @@ from onyx.connectors.linear.source_operations import (
     LinearTokenRefreshError,
     LinearUnreachableError,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    MAX_ROW_SUMMARY_LENGTH,
+    CheckRowText,
+    ConnectorMissingCredentialError,
+)
 
 T = TypeVar("T")
 
@@ -73,7 +76,6 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _PROJECTS_CHECK_ID: (SIGN_IN_CHECK_ID,),
     ISSUES_CHECK_ID: (SIGN_IN_CHECK_ID, _TEAMS_CHECK_ID, _PROJECTS_CHECK_ID),
 }
-_MAX_SUMMARY_CHARS: int = 40
 # A refused renewal: the refresh token is spent, revoked or expired.
 _REFRESH_REFUSED_STATUSES: frozenset[int] = frozenset({400, 401})
 
@@ -244,7 +246,7 @@ def probe(
 
 
 def _fit(line: str, fallback: str) -> str:
-    return line if len(line) <= _MAX_SUMMARY_CHARS else fallback
+    return line if len(line) <= MAX_ROW_SUMMARY_LENGTH else fallback
 
 
 def _find_result(

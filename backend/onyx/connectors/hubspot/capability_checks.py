@@ -21,7 +21,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     form_config,
     sign_in_timeout_text,
@@ -54,7 +53,7 @@ from onyx.connectors.hubspot.source_operations import (
     HubSpotConnectionError,
     HubSpotSourceOperations,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 from onyx.utils.logger import setup_logger
 

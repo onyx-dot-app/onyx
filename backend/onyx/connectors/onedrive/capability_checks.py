@@ -14,6 +14,11 @@ from typing import NoReturn, TypeVar
 
 from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.microsoft_check_text import (
+    ENTRA_GROUPS_DENIED_ROW,
+    grant_line,
+    sign_in,
+)
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -21,10 +26,10 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
+    MicrosoftSignIn,
     form_config,
     sign_in_timeout_text,
 )
@@ -32,10 +37,6 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     InconclusiveValidationError,
     UnexpectedValidationError,
-)
-from onyx.connectors.microsoft_utils.check_text import (
-    ENTRA_GROUPS_DENIED_ROW,
-    grant_line,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
@@ -47,12 +48,8 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
 from onyx.connectors.microsoft_utils.graph_errors import raise_for_graph_error
-from onyx.connectors.microsoft_utils.models import (
-    MicrosoftAccountLabels,
-    MicrosoftRowText,
-    MicrosoftSignIn,
-)
-from onyx.connectors.microsoft_utils.sign_in import sign_in
+from onyx.connectors.microsoft_utils.models import MicrosoftAccountLabels
+from onyx.connectors.models import CheckRowText, fit_summary
 from onyx.connectors.onedrive.config import OneDriveConnectorConfig
 from onyx.connectors.onedrive.models import (
     OneDriveDrive,
@@ -77,8 +74,6 @@ _CANDIDATE_PAGES = 20
 # A bound on the pages the drive count reads. Pages hold up to 999 users, so
 # the count reaches its cap long before this unless Graph sends empty pages.
 _COUNT_PAGES = 20
-# The longest row line the card shows.
-_MAX_LINE = 40
 _LOCKED_STATUS = 423
 
 T = TypeVar("T")
@@ -108,15 +103,8 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
 }
 
 
-def _line(prefix: str, name: str, suffix: str = "") -> str:
-    """``prefix``, ``name`` and ``suffix``, with the name cut to fit the row."""
-    room: int = _MAX_LINE - len(prefix) - len(suffix)
-    cut: str = name if len(name) <= room else name[: room - 1] + "…"
-    return f"{prefix}{cut}{suffix}"
-
-
-def _row(summary: str, description: str) -> MicrosoftRowText:
-    return MicrosoftRowText(summary=summary, description=description)
+def _row(summary: str, description: str) -> CheckRowText:
+    return CheckRowText(summary=summary, description=description)
 
 
 _USERS_DENIED_ROW = _row(
@@ -164,7 +152,7 @@ def _config(context: CapabilityCheckContext) -> OneDriveConnectorConfig:
     return form_config(context, OneDriveConnectorConfig)
 
 
-def _raise_row(message: str, row: MicrosoftRowText) -> NoReturn:
+def _raise_row(message: str, row: CheckRowText) -> NoReturn:
     raise ConnectorValidationError(
         message, summary=row.summary, description=row.description
     )
@@ -219,7 +207,7 @@ def _first_drive_that(
     context: CapabilityCheckContext,
     opens: Callable[[OneDriveDrive], T | None],
     denied_message: str,
-    nothing_to_probe: MicrosoftRowText,
+    nothing_to_probe: CheckRowText,
 ) -> tuple[Opened, T]:
     """The first candidate's OneDrive on which ``opens`` returns something.
     A 403 is remembered: when nothing opens it is the likelier cause."""
@@ -481,14 +469,14 @@ class _DriveCountCheck(_ConfigReadingCheck):
         )
 
 
-def _user_problem_row(problem: UserProblem) -> MicrosoftRowText:
+def _user_problem_row(problem: UserProblem) -> CheckRowText:
     if problem.locked:
         return _row(
-            _line("User is locked: ", problem.identifier),
+            fit_summary("User is locked: ", problem.identifier),
             f"Microsoft refused this user's lookup.\n{_RETRY_LINE}",
         )
     return _row(
-        _line("User not found: ", problem.identifier),
+        fit_summary("User not found: ", problem.identifier),
         "No enabled member user has this address.\nCorrect or remove "
         f"{problem.identifier} in Users.",
     )
@@ -504,7 +492,7 @@ def _users_output(identifiers: list[str], problems: list[UserProblem]) -> CheckO
             )
         )
     message: str = " ".join(problem.message for problem in problems)
-    first: MicrosoftRowText = _user_problem_row(problems[0])
+    first: CheckRowText = _user_problem_row(problems[0])
     names: str = ", ".join(problem.identifier for problem in problems)
     if len(problems) == len(identifiers):
         if all(problem.locked for problem in problems):
@@ -607,7 +595,7 @@ class _DriveCheck(_ConfigReadingCheck):
                 request="the OneDrive read",
             )
         return CheckOutput(
-            summary=_line("Opened the OneDrive of ", _user_name(opened.user))
+            summary=fit_summary("Opened the OneDrive of ", _user_name(opened.user))
         )
 
 
@@ -652,7 +640,9 @@ class _DeltaCheck(_ConfigReadingCheck):
                 request="the change feed read",
             )
         return CheckOutput(
-            summary=_line("Read changes in ", _user_name(opened.user), "'s OneDrive")
+            summary=fit_summary(
+                "Read changes in ", _user_name(opened.user), "'s OneDrive"
+            )
         )
 
 
@@ -756,7 +746,7 @@ class _GroupMembershipCheck(_OneDriveCheck):
                 request="the group member read",
             )
         return CheckOutput(
-            summary=_line("Read members of ", group.display_name or group.id)
+            summary=fit_summary("Read members of ", group.display_name or group.id)
         )
 
 

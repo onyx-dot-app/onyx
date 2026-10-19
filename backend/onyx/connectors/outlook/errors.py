@@ -11,7 +11,7 @@ from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.graph_errors import (
     raise_for_graph_error as raise_for_microsoft_graph_error,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftRowText
+from onyx.connectors.models import CheckRowText
 
 
 # Exchange caches app permission changes, so a freshly scoped mailbox can keep
@@ -64,15 +64,15 @@ def raise_for_graph_error(
     denied_message: str,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
     *,
-    denied_row: MicrosoftRowText | None = None,
-    not_found_row: MicrosoftRowText | None = None,
-    empty_pages_row: MicrosoftRowText | None = None,
+    denied_row: CheckRowText | None = None,
+    not_found_row: CheckRowText | None = None,
+    empty_pages_row: CheckRowText | None = None,
     request: str = "the request",
 ) -> NoReturn:
     """``empty_pages_row`` is the row when Graph kept answering empty pages,
     which proves nothing about the grant."""
     if error.code == EMPTY_PAGES_CODE:
-        row: MicrosoftRowText = empty_pages_row or MicrosoftRowText(
+        row: CheckRowText = empty_pages_row or CheckRowText(
             summary="Mailbox lookup did not finish",
             description="Microsoft kept returning empty pages.\nRe-run the checks later.",
         )

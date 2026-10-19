@@ -24,7 +24,6 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckNotRunReason,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     CredentialCapabilityReport,
     check_error_detail,
@@ -45,7 +44,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.models import InputType
+from onyx.connectors.models import CheckRowText, InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import (
     SourceOperations,

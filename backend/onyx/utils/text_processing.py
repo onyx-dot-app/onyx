@@ -359,3 +359,8 @@ def normalize_char(c: str) -> str:
         return " "
     else:
         return c.lower()
+
+
+def shorten(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` characters, ending in "…" when cut."""
+    return text if len(text) <= limit else text[: limit - 1] + "…"

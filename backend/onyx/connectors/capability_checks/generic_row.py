@@ -8,7 +8,6 @@ Import-light, like the recorder: no registry, runner or factory imports.
 
 import requests
 
-from onyx.connectors.capability_checks.models import CheckRowText
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -20,6 +19,7 @@ from onyx.connectors.exceptions import (
     UnreachableValidationError,
     ValidationError,
 )
+from onyx.connectors.models import CheckRowText
 
 GENERIC_CHECK_NAME = "Test connection"
 GENERIC_PASS_LINE = "Connected"

@@ -6,12 +6,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
 from onyx.db.enums import HierarchyNodeType, IndexModelStatus
-from onyx.utils.text_processing import make_url_compatible
+from onyx.utils.text_processing import make_url_compatible, shorten
 
 
 class InputType(str, Enum):
@@ -589,3 +589,24 @@ class DocIndexingContext(BaseModel):
     total_failures: int
     net_doc_change: int
     total_chunks: int
+
+
+# A check row's summary is this many characters or fewer.
+MAX_ROW_SUMMARY_LENGTH: int = 40
+
+
+class CheckRowText(BaseModel):
+    """The text a capability check's row shows, as on ``ValidationError``: a
+    ``summary`` line and up to three lines of ``description``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
+def fit_summary(prefix: str, name: str, suffix: str = "") -> str:
+    """``prefix``, ``name`` and ``suffix``, with the name cut to fit a row's
+    summary."""
+    room: int = MAX_ROW_SUMMARY_LENGTH - len(prefix) - len(suffix)
+    return f"{prefix}{shorten(name, room)}{suffix}"

@@ -38,7 +38,6 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CredentialCapability,
     OptionsFinding,
@@ -91,6 +90,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     UnreachableValidationError,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
