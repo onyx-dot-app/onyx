@@ -694,6 +694,18 @@ def test_attachments_too_large_are_incomplete() -> None:
     gateway.download_attachment.assert_not_called()
 
 
+def test_attachments_continue_past_a_page_with_only_large_ones() -> None:
+    gateway = _gateway()
+    gateway.search_pages.side_effect = lambda **_: iter(
+        [dict(_PAGE), {**_PAGE, "id": "43"}]
+    )
+    gateway.search_attachments.side_effect = [_attachments(10**9), _attachments(10)]
+
+    _run("confluence_attachments_read", _context(gateway, _form()))
+
+    assert gateway.download_attachment.call_args.kwargs["parent_content_id"] == "43"
+
+
 def test_attachments_without_a_known_size_are_incomplete() -> None:
     gateway = _gateway()
     gateway.search_attachments.side_effect = lambda **_: iter(

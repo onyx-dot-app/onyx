@@ -1074,6 +1074,7 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
             oauth_scope="readonly:content.attachment:confluence",
             user_permission="view permission on the page attachments",
         )
+        found_unsuitable = False
         try:
             pages = _sample_pages(context, config, "version")
             for _ in range(_SAMPLE_PAGES):
@@ -1093,15 +1094,8 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
                     continue
                 attachment = _probe_attachment(attachments)
                 if attachment is None:
-                    raise InconclusiveValidationError(
-                        "No sampled attachment has a known size small enough to "
-                        "download, so Onyx listed attachments but did not read one.",
-                        summary="No attachment small enough to test",
-                        description=(
-                            "No attachment on the sample pages is small enough to "
-                            "download."
-                        ),
-                    )
+                    found_unsuitable = True
+                    continue
                 content = gateway.download_attachment(
                     attachment=attachment, parent_content_id=page_id
                 )
@@ -1126,6 +1120,15 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
                 summary=_REFUSED_ROW.summary,
                 description=_REFUSED_ROW.description,
             ) from e
+        if found_unsuitable:
+            raise InconclusiveValidationError(
+                "No sampled attachment has a known size small enough to "
+                "download, so Onyx listed attachments but did not read one.",
+                summary="No attachment small enough to test",
+                description=(
+                    "No attachment on the sample pages is small enough to download."
+                ),
+            )
         raise InconclusiveValidationError(
             f"The first {_SAMPLE_PAGES} pages in scope have no attachments, so "
             "Onyx cannot verify that attachments are readable.",
@@ -2079,11 +2082,16 @@ class _GroupUserEmailsCheck(_GroupSyncCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
-        people = [
-            user
-            for user in _sample_users(context, config, self._is_cloud)
-            if user.type != _APP_USER_TYPE
-        ]
+        users = _sample_users(context, config, self._is_cloud)
+        people = [user for user in users if user.type != _APP_USER_TYPE]
+        if not people and len(users) >= _SAMPLE_USERS:
+            # The sample stopped at its cap, so people can come later.
+            raise InconclusiveValidationError(
+                f"The first {len(users)} listed users are apps, so Onyx found no "
+                "person whose email it can check.",
+                summary=f"First {len(users)} users are apps",
+                description="The sampled users are all apps, so no email was checked.",
+            )
         if not people:
             raise NothingToCheckError(
                 "Confluence listed no people, only apps, so there is no email "

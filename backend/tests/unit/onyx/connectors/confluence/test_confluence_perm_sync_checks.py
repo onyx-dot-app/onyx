@@ -42,7 +42,9 @@ from onyx.connectors.confluence.source_operations import (
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.db.enums import AccessType
@@ -718,6 +720,22 @@ def test_cloud_group_users_without_emails_fail() -> None:
     gateway.list_users.side_effect = lambda **_: iter([_APP, hidden])
 
     with pytest.raises(InsufficientPermissionsError, match="has an email"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_capped_app_sample_is_inconclusive() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 100)
+
+    with pytest.raises(InconclusiveValidationError, match="are apps"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_full_app_listing_has_nothing_to_check() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 3)
+
+    with pytest.raises(NothingToCheckError, match="only apps"):
         _run("confluence_group_user_emails", _context(gateway))
 
 
