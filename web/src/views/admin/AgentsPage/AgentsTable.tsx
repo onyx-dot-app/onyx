@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Table, type TableColumn } from "@opal/components";
+import { OverflowText, Table, type TableColumn } from "@opal/components";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import Text from "@/refresh-components/texts/Text";
 import { PageLoader } from "@opal/loaders";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
@@ -47,6 +46,7 @@ export default function AgentsTable() {
           sizePreset="main-ui"
           variant="section"
           icon={SvgUser}
+          titleMaxLines={1}
           title={
             row.builtin_persona
               ? t("table.createdBy.system.label")
@@ -71,6 +71,8 @@ export default function AgentsTable() {
           sizePreset="main-ui"
           variant="section"
           title={getAccessTitle(row)}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
           description={
             !row.is_listed
               ? t("table.access.unlisted.label")
@@ -95,9 +97,9 @@ export default function AgentsTable() {
         title: t("table.nameColumn.header"),
         weight: 25,
         cell: (value) => (
-          <Text as="span" mainUiBody text05>
+          <OverflowText font="main-ui-body" color="text-05">
             {value}
-          </Text>
+          </OverflowText>
         ),
       },
       {
@@ -106,9 +108,9 @@ export default function AgentsTable() {
         title: t("table.descriptionColumn.header"),
         weight: 35,
         cell: (value) => (
-          <Text as="span" mainUiBody text03>
+          <OverflowText font="main-ui-body" color="text-03">
             {value || BLANK_CELL}
-          </Text>
+          </OverflowText>
         ),
       },
       {
