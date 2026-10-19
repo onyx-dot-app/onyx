@@ -7,6 +7,8 @@ on a timeout instead of passing by chance."""
 
 import threading
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future, wait
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -173,6 +175,47 @@ def test_a_rate_limit_stops_new_checks_and_running_checks_finish(
 
     assert results["limited"].status == CapabilityCheckStatus.INCOMPLETE
     assert results["running"].status == CapabilityCheckStatus.PASSED
+    assert later.calls == 0
+    assert results["later"].not_run_reason == CheckNotRunReason.RATE_LIMITED
+
+
+def test_a_rate_limit_during_another_checks_callback_stops_new_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rate limit arrives while ``on_result`` records another check, so
+    the runner has not read it when the freed slot could start a check."""
+    monkeypatch.setattr(runner, "MAX_PARALLEL_CHECKS", 2)
+    futures: dict[str, Future[Any]] = {}
+    start_thread_future = runner.start_thread_future
+
+    def capture(func: Callable[[], Any], name: str) -> Future[Any]:
+        future = start_thread_future(func, name=name)
+        futures[name] = future
+        return future
+
+    monkeypatch.setattr(runner, "start_thread_future", capture)
+    release = threading.Event()
+
+    def limited() -> None:
+        if not release.wait(_WAIT_SECONDS):
+            raise RuntimeError("never released")
+        raise RateLimitedValidationError("Slow down.")
+
+    def on_result(results: Sequence[CapabilityCheckResult]) -> None:
+        if results[-1].check_id != "fast":
+            return
+        release.set()
+        limited_future = futures["capability-check-limited"]
+        done, _ = wait([limited_future], timeout=_WAIT_SECONDS)
+        if limited_future not in done:
+            raise RuntimeError("limited never finished")
+
+    later = _Check("later")
+    results = _by_id(
+        _run([_Check("fast"), _Check("limited", limited), later], on_result)
+    )
+
+    assert results["limited"].status == CapabilityCheckStatus.INCOMPLETE
     assert later.calls == 0
     assert results["later"].not_run_reason == CheckNotRunReason.RATE_LIMITED
 

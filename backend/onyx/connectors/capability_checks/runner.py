@@ -808,6 +808,8 @@ class _CheckRun:
                 to_execute.append(check)
             else:
                 recorded.append((check, outcome))
+        if to_execute:
+            self._read_finished_rate_limits()
         if to_execute and (
             run_outcome := _run_gate_outcome(
                 to_execute[0], self._result_by_check_id, self._rate_limited
@@ -842,6 +844,16 @@ class _CheckRun:
         )
         self._running[future] = to_execute
         return True
+
+    def _read_finished_rate_limits(self) -> None:
+        """Reads a rate limit from checks that finished but are not recorded
+        yet: a check can finish while ``on_result`` runs for another one."""
+        self._rate_limited = self._rate_limited or any(
+            future.done()
+            and future.exception() is None
+            and future.result().error_kind == CheckErrorKind.RATE_LIMITED
+            for future in self._running
+        )
 
     def _connector_check_running(self) -> bool:
         return any(
