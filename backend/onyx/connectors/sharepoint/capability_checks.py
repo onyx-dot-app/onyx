@@ -17,8 +17,6 @@ sites and libraries they found.
 from datetime import datetime
 from typing import NoReturn
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -104,8 +102,11 @@ from onyx.connectors.sharepoint.connector_utils import (
     validate_content_types,
 )
 from onyx.connectors.sharepoint.models import (
+    EntraGroupRef,
+    LibraryProblem,
     SharepointDrive,
     SitePagesPage,
+    SiteProblem,
     SiteUrlListing,
 )
 from onyx.connectors.sharepoint.source_operations import (
@@ -825,16 +826,11 @@ def _entra_group_principal(
     return None
 
 
-class _EntraGroupRef(BaseModel):
-    id: str
-    name: str
-
-
 def _entra_group(
     gateway: SharepointSourceOperations,
     site: SiteDescriptor,
     assignments: list[SharepointRoleAssignment],
-) -> _EntraGroupRef | None:
+) -> EntraGroupRef | None:
     """The first Entra group the site names, with its Graph id resolved the
     way the sync resolves it. None when it names none."""
     principal: SharepointPrincipal | None = _entra_group_principal(
@@ -864,7 +860,7 @@ def _entra_group(
             principal.login_name,
         )
         return None
-    return _EntraGroupRef(id=group_id, name=principal.title or group_id)
+    return EntraGroupRef(id=group_id, name=principal.title or group_id)
 
 
 class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
@@ -961,21 +957,14 @@ class _ContentTypesCheck(_SharepointCheck):
         return CheckOutput(summary=f"Indexing {', '.join(selected)}")
 
 
-class _SiteProblem(BaseModel):
-    site_url: str
-    row: MicrosoftRowText
-    message: str
-    denied: bool
-
-
-def _site_problem(error: MicrosoftGraphError, site_url: str) -> _SiteProblem:
+def _site_problem(error: MicrosoftGraphError, site_url: str) -> SiteProblem:
     if error.status == 403:
         row: MicrosoftRowText = _site_denied_row(site_url)
     elif error.status == 400:
         row = _site_invalid_row(site_url)
     else:
         row = _site_missing_row(error, site_url)
-    return _SiteProblem(
+    return SiteProblem(
         site_url=site_url,
         row=row,
         message=(
@@ -1089,7 +1078,7 @@ class _ConfiguredSitesCheck(_SharepointCheck):
             )
         gateway: SharepointSourceOperations = _gateway(context)
         probed: list[SiteDescriptor] = in_scope[:_PROBE_SITES]
-        problems: list[_SiteProblem] = [
+        problems: list[SiteProblem] = [
             problem for site in probed if (problem := _probe_site(gateway, site))
         ]
         return _sites_output(in_scope, probed, problems)
@@ -1097,7 +1086,7 @@ class _ConfiguredSitesCheck(_SharepointCheck):
 
 def _probe_site(
     gateway: SharepointSourceOperations, site: SiteDescriptor
-) -> _SiteProblem | None:
+) -> SiteProblem | None:
     """Why Graph refuses the site, None when it finds it."""
     try:
         gateway.get_site_id(site_url=site.url)
@@ -1113,7 +1102,7 @@ def _probe_site(
 def _sites_output(
     in_scope: list[SiteDescriptor],
     probed: list[SiteDescriptor],
-    problems: list[_SiteProblem],
+    problems: list[SiteProblem],
 ) -> CheckOutput:
     if not problems:
         if len(in_scope) > len(probed):
@@ -1132,7 +1121,7 @@ def _sites_output(
             summary=f"{_counted(len(probed), 'selected site', 'selected sites')} found"
         )
     message: str = "; ".join(problem.message for problem in problems)
-    first: _SiteProblem = problems[0]
+    first: SiteProblem = problems[0]
     names: str = ", ".join(_site_name(problem.site_url) for problem in problems)
     if len(problems) == len(probed):
         error_class: type[ConnectorValidationError] = (
@@ -1226,18 +1215,12 @@ class _SitesVisibleCheck(_SharepointCheck):
         )
 
 
-class _LibraryProblem(BaseModel):
-    row: MicrosoftRowText
-    message: str
-    name: str
-
-
 def _folder_problem(
     error: MicrosoftGraphError, site: SiteDescriptor, folder_url: str
-) -> _LibraryProblem:
+) -> LibraryProblem:
     folder: str = (site.folder_path or "").rstrip("/").rsplit("/", 1)[-1]
     missing: bool = error.status == 404
-    return _LibraryProblem(
+    return LibraryProblem(
         row=_row(
             _line(
                 "Folder not found: " if missing else "Folder path not valid: ", folder
@@ -1294,7 +1277,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
                     "No site that names a library was found.\nSee Find selected sites.",
                 ),
             )
-        problems: list[_LibraryProblem] = [
+        problems: list[LibraryProblem] = [
             problem for site in scoped if (problem := self._probe(context, site))
         ]
         if not problems:
@@ -1317,7 +1300,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
                 )
             )
         message: str = "; ".join(problem.message for problem in problems)
-        first: _LibraryProblem = problems[0]
+        first: LibraryProblem = problems[0]
         names: str = ", ".join(problem.name for problem in problems)
         if len(problems) == len(scoped):
             _raise_row(
@@ -1348,13 +1331,13 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
 
     def _probe(
         self, context: CapabilityCheckContext, site: SiteDescriptor
-    ) -> _LibraryProblem | None:
+    ) -> LibraryProblem | None:
         """Why the site's library or folder is missing, None when it is
         found. A refusal that a grant or a setting fixes raises."""
         try:
             drives: list[SiteDrive] = _site_drives(context, site)
         except _LibraryNotFound as error:
-            return _LibraryProblem(
+            return LibraryProblem(
                 row=_library_not_found_row(site.drive_name or ""),
                 message=error.message,
                 name=site.drive_name or "",
@@ -1663,7 +1646,7 @@ class _EntraNestedGroupsCheck(_SharepointCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: SharepointSourceOperations = _gateway(context)
         for site in _perm_probe_sites(context):
-            group: _EntraGroupRef | None = _entra_group(
+            group: EntraGroupRef | None = _entra_group(
                 gateway, site, _site_assignments(gateway, site)
             )
             if group is None:
@@ -1760,7 +1743,7 @@ class _EntraGroupMembersCheck(_SharepointCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: SharepointSourceOperations = _gateway(context)
         for site in _perm_probe_sites(context):
-            group: _EntraGroupRef | None = _entra_group(
+            group: EntraGroupRef | None = _entra_group(
                 gateway, site, _site_assignments(gateway, site)
             )
             if group is not None and _read_member_page(gateway, group.id, group.name):
