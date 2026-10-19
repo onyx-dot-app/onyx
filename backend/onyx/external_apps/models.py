@@ -90,9 +90,3 @@ class AppActionPoliciesView(BaseModel):
 class SaveActionPolicies(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action_policies: dict[str, ActionPolicy]
-
-
-class WorkspaceActionPoliciesUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    users_can_manage_policies: bool | None = None
-    action_policies: dict[str, ActionPolicy] | None = None

@@ -716,7 +716,6 @@
   "PUT /admin/token-rate-limits/user-group/{group_id}/rate-limit/{rate_limit_id}": "manage:user_groups +scope",
   "PUT /admin/tool/custom/{tool_id}": "manage:actions +scope",
   "PUT /build/action-policies/{gated_app_id}": "basic",
-  "PUT /build/admin/action-policies/{gated_app_id}": "admin",
   "PUT /build/sessions/{session_id}/name": "basic",
   "PUT /chat/rename-chat-session": "basic",
   "PUT /chat/set-message-as-latest": "basic",

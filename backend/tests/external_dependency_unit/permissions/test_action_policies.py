@@ -635,42 +635,6 @@ def test_task_can_enable_app_without_catalog_actions(
     assert not task_app_enabled(db_session, task.id, app_id)
 
 
-def test_workspace_policy_api_refreshes_affected_sandbox_skills(
-    db_session: Session,
-    owner_and_app: tuple[User, int],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from unittest.mock import Mock
-
-    from onyx.server.features.build import action_policies as api
-
-    user, app_id = owner_and_app
-    skill = Mock()
-    monkeypatch.setattr(api, "get_skills_for_external_app", lambda *_: [skill])
-    monkeypatch.setattr(api, "affected_user_ids_for_skill", lambda *_: {user.id})
-    push = Mock()
-    monkeypatch.setattr(api, "push_skills_for_users", push)
-    result = api.update_workspace_action_policies(
-        app_id,
-        api.WorkspaceActionPoliciesUpdate(action_policies={WRITE: DENY}),
-        user,
-        db_session,
-    )
-    assert (
-        next(a for a in result.actions if a.action_id == WRITE).effective_policy == DENY
-    )
-    push.assert_called_once_with({user.id}, db_session)
-
-    push.reset_mock()
-    api.update_workspace_action_policies(
-        app_id,
-        api.WorkspaceActionPoliciesUpdate(users_can_manage_policies=False),
-        user,
-        db_session,
-    )
-    push.assert_not_called()
-
-
 def test_empty_task_choices_do_not_copy_personal_settings(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:

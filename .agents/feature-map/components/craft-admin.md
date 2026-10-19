@@ -159,9 +159,8 @@ Workspace DENY blocks every user and task. With user management off, workspace s
 apply directly; with it on, personal or task settings can override ASK and ALWAYS.
 `GET /api/build/admin/action-policies` lists workspace settings.
 `GET /api/build/admin/action-policies/{kind}/{target_id}` loads one app.
-`PUT /api/build/admin/action-policies/{gated_app_id}` saves one app through the shared permission service.
-For external-app policy changes, this route refreshes affected sandbox skills after committing the policy.
-It uses `push_skills_for_users`, as the existing app update route does.
+Admin editors save policies through the existing external-app and MCP update endpoints.
+The external-app update route refreshes affected sandbox skills after committing policy changes.
 Personal settings use `/api/build/action-policies` and its per-app PUT route.
 Workspace saves replace submitted action settings rather than merging old choices.
 The same migration renames `gated_action_policy` to `workspace_action_policy`.
