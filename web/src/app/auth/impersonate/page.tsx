@@ -87,7 +87,6 @@ export default function ImpersonatePage() {
                   <PasswordInputTypeInField
                     name="apiKey"
                     autoComplete="new-password"
-                    mask="native"
                     placeholder={t("impersonate.apiKeyField.placeholder")}
                   />
                 </div>

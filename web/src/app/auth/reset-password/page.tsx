@@ -91,7 +91,6 @@ const ResetPasswordPage: React.FC = () => {
                   <PasswordInputTypeInField
                     name="password"
                     autoComplete="new-password"
-                    mask="native"
                     placeholder={t(
                       "resetPassword.newPasswordField.placeholder"
                     )}
@@ -107,7 +106,6 @@ const ResetPasswordPage: React.FC = () => {
                   <PasswordInputTypeInField
                     name="confirmPassword"
                     autoComplete="new-password"
-                    mask="native"
                     placeholder={t(
                       "resetPassword.confirmPasswordField.placeholder"
                     )}

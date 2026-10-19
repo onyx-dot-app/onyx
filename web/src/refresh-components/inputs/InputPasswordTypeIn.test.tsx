@@ -4,8 +4,7 @@
  * The field renders a native <input type="password"> (toggled to "text" when
  * revealed) so browsers / password managers recognize it for autofill. These
  * tests lock in that native behavior, the reveal toggle, the constant text
- * size across mask states, and the asterisk overlay's idle, focused, and
- * revealed lifecycle under the default mask.
+ * size across mask states, and the existing-value tag.
  */
 import React from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
@@ -16,7 +15,6 @@ interface ControlledPasswordProps {
   isNonRevealable?: boolean;
   existingValue?: string;
   placeholder?: string;
-  mask?: "asterisk" | "native";
 }
 
 function ControlledPassword({
@@ -35,8 +33,6 @@ function ControlledPassword({
     />
   );
 }
-
-const MASKED_SECRET = "✱".repeat(6);
 
 describe("InputPasswordTypeIn", () => {
   test("renders a native password input by default", () => {
@@ -82,7 +78,7 @@ describe("InputPasswordTypeIn", () => {
 
   test("keeps the text size constant between hidden and revealed", async () => {
     const user = setupUser();
-    render(<ControlledPassword initialValue="secret" mask="native" />);
+    render(<ControlledPassword initialValue="secret" />);
 
     // The caret and mask dots track the input's font-size, so no state may
     // override it: reveal-toggling must not resize the field's text.
@@ -93,29 +89,11 @@ describe("InputPasswordTypeIn", () => {
     expect(wrapper?.className).not.toContain("text-[");
   });
 
-  test("asterisk mask overlays one asterisk per character while idle", () => {
+  test("never draws an asterisk overlay", () => {
     render(<ControlledPassword initialValue="secret" />);
 
-    expect(screen.getByText(MASKED_SECRET)).toBeInTheDocument();
-    // The real value stays natively masked underneath.
+    expect(screen.queryByText(/✱/)).not.toBeInTheDocument();
     expect(screen.getByTestId("pw")).toHaveAttribute("type", "password");
-  });
-
-  test("asterisk mask yields to native dots while focused", async () => {
-    const user = setupUser();
-    render(<ControlledPassword initialValue="secret" />);
-
-    await user.click(screen.getByTestId("pw"));
-    expect(screen.queryByText(MASKED_SECRET)).not.toBeInTheDocument();
-  });
-
-  test("asterisk mask clears when revealed", async () => {
-    const user = setupUser();
-    render(<ControlledPassword initialValue="secret" />);
-
-    await user.click(screen.getByRole("button", { name: "Show password" }));
-    expect(screen.queryByText(MASKED_SECRET)).not.toBeInTheDocument();
-    expect(screen.getByTestId("pw")).toHaveAttribute("type", "text");
   });
 
   describe("existingValue", () => {
@@ -164,7 +142,7 @@ describe("InputPasswordTypeIn", () => {
       expect(
         screen.getByRole("button", { name: "Value cannot be revealed" })
       ).toBeDisabled();
-      expect(screen.queryByText("✱".repeat(EXISTING.length))).toBeNull();
+      expect(screen.queryByText(/✱/)).toBeNull();
     });
 
     test("delete clears the whole existing value", async () => {

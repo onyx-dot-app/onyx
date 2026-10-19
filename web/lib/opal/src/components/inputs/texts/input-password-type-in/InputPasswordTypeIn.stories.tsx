@@ -18,7 +18,6 @@ function Harness(props: {
   placeholder?: string;
   error?: boolean;
   disabled?: boolean;
-  mask?: "asterisk" | "native";
 }) {
   const { initialValue = "", ...rest } = props;
   const [value, setValue] = useState(initialValue);
@@ -39,10 +38,6 @@ export const Empty: Story = {
 
 export const Filled: Story = {
   render: () => <Harness initialValue="hunter2-hunter2" />,
-};
-
-export const NativeMask: Story = {
-  render: () => <Harness initialValue="hunter2-hunter2" mask="native" />,
 };
 
 export const NonRevealable: Story = {

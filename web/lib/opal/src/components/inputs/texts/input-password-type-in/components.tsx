@@ -6,7 +6,6 @@ import {
   InputTypeIn,
   type InputTypeInProps,
   Tag,
-  Text,
 } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed, SvgKey } from "@opal/icons";
@@ -49,20 +48,6 @@ type InputPasswordTypeInProps = Omit<
    * it with the new text. Once edited, the field behaves as usual.
    */
   existingValue?: string;
-  /**
-   * Masked-state presentation (Figma Input/Type-In masked value).
-   * - `"asterisk"` (default): full-size ✱ glyphs while the field is hidden
-   *   and idle, drawn by an overlay (native masking can only render browser
-   *   dots). Focus anywhere in the field shows full-size native dots so the
-   *   caret tracks real glyph advances while typing.
-   * - `"native"`: the browser's own dots (Chromium masks via
-   *   -webkit-text-security: disc) at the field's normal text size, so the
-   *   caret and dots never change size on reveal. For the login flow.
-   *
-   * A field with `leftChildren` or `rightChildren` always uses `"native"`:
-   * the ✱ overlay is laid out for the bare field and would cover the slots.
-   */
-  mask?: "asterisk" | "native";
 };
 
 /**
@@ -74,8 +59,8 @@ type InputPasswordTypeInProps = Omit<
  *
  * Using the native type (rather than a custom-masked `type="text"` field) is
  * what lets browsers and password managers recognize the field for autofill /
- * save-password. The masked presentation is gated by the `mask` prop (see its
- * docs): an idle ✱ overlay by default, or the browser's own dots.
+ * save-password. The hidden value shows as the browser's own dots, at the
+ * field's normal text size, so the caret and dots never change size on reveal.
  *
  * Features:
  * - Show/hide toggle button, always visible
@@ -89,7 +74,6 @@ function InputPasswordTypeIn({
   ref,
   isNonRevealable = false,
   existingValue,
-  mask = "asterisk",
   value,
   onChange,
   onKeyDown,
@@ -102,8 +86,6 @@ function InputPasswordTypeIn({
   ...props
 }: InputPasswordTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
-  const [isFocused, setIsFocused] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
   const strings = useOpalStrings();
 
   const realValue = String(value || "");
@@ -114,32 +96,12 @@ function InputPasswordTypeIn({
     isNonRevealable || isExistingValue || isBackendPlaceholder(realValue);
   const isHidden = !isPasswordVisible || effectiveNonRevealable;
 
-  const handleContainerFocus = React.useCallback(() => {
-    setIsFocused(true);
-  }, []);
-
-  const handleContainerBlur = React.useCallback(
-    (e: React.FocusEvent<HTMLDivElement>) => {
-      if (containerRef.current?.contains(e.relatedTarget as Node)) {
-        return;
-      }
-      setIsFocused(false);
-    },
-    []
-  );
-
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const toggleLabel = effectiveNonRevealable
     ? strings.valueCannotBeRevealed
     : isPasswordVisible
       ? strings.hidePassword
       : strings.showPassword;
-
-  const isNativeMask =
-    mask === "native" ||
-    isExistingValue ||
-    leftChildren != null ||
-    rightChildren != null;
 
   // While the tag shows, the input itself is empty: what the user types is
   // the whole new value, and a deletion clears the existing one.
@@ -165,27 +127,12 @@ function InputPasswordTypeIn({
     },
     [isExistingValue, onChange, onKeyDown, props.name, props.readOnly]
   );
-  // The ✱ presentation only draws while idle. Focus anywhere in the field
-  // shows native dots, so the caret tracks real glyph advances while typing.
-  const showAsteriskOverlay =
-    !isNativeMask && isHidden && hasValue && !isFocused;
 
   return (
     <div
-      ref={containerRef}
-      // Asterisk mask: the wrapper takes a real box (not `contents`) so the
-      // ✱ overlay can anchor over the input, whose text hides underneath.
-      // Native mask leaves the input's text size alone, so the caret and
-      // dots stay the same size whether hidden or revealed.
       // ph-no-capture is posthog-js's native replay blockClass, so revealed
       // secrets stay out of session replay without server-side config.
-      className={cn(
-        isNativeMask ? "contents" : "relative w-full",
-        "ph-no-capture",
-        showAsteriskOverlay && "[&_input]:opacity-0"
-      )}
-      onFocus={handleContainerFocus}
-      onBlur={handleContainerBlur}
+      className="contents ph-no-capture"
     >
       <InputTypeIn
         ref={ref}
@@ -252,23 +199,6 @@ function InputPasswordTypeIn({
         // check would block a form whose stored secret is unchanged.
         required={isExistingValue ? false : props.required}
       />
-      {showAsteriskOverlay && (
-        // Left inset = .opal-input border (1px) + padding (5px), and Text's
-        // px-[2px] mirrors .opal-input-field's p-0.5, so the glyphs line up
-        // with the hidden input text. The end inset clears the toggle.
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
-        >
-          <Text
-            font="main-ui-body"
-            color="text-04"
-            wordWrap="whitespace-nowrap"
-          >
-            {"✱".repeat(realValue.length)}
-          </Text>
-        </div>
-      )}
     </div>
   );
 }
