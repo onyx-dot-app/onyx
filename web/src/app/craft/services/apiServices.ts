@@ -1,3 +1,5 @@
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import { parseErrorDetail } from "@/lib/fetcher";
 import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
@@ -1203,4 +1205,20 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
       errorData
     );
   }
+}
+
+export async function saveAppActionPolicies(
+  appId: number,
+  actionPolicies: Record<string, ActionPolicy>,
+  errorMessage: string
+): Promise<void> {
+  const response = await fetch(`/api/build/action-policies/${appId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action_policies: actionPolicies,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(await parseErrorDetail(response, errorMessage));
 }

@@ -40,13 +40,13 @@ The App catalog reads installed apps through the same native SWR key. Failed
 installed-app reads show retry rather than an endless loader. Custom app
 editing does not request provider options. Loading and error routes retain
 the modal shell and close control.
-Plugin setup and editors share `PluginModalContent` for medium, top-anchored
+Plugin setup and editors share `PluginModalContent` for large, top-anchored
 forms. MCP and Craft App catalogs use standard top-anchored Opal `Modal.Content`
 with its two-tone body. Both use `PluginCatalogCard` for suggested/provider
 and custom choices. There is no separate custom-app footer.
-Craft App setup editors share a combined Configuration/credentials pane, with
-Permissions and Skills tabs only where supported. Their logo/name headers,
-fixed-height scroll panes, and bottom save rows match plugin editor patterns.
+Craft App editors use Configuration, Authentication, and Tools tabs, like MCP.
+Skills remains a fourth tab where supported. Their logo/name headers,
+scrollable modal bodies, and bottom save rows match plugin editor patterns.
 Each row retains its native resource and a kind-qualified identity. Search matches names,
 descriptions, and MCP server URLs. Independent loading and retry states keep one source's
 failure from hiding the other sources. The unified list uses compact two-column
@@ -98,19 +98,18 @@ Expired OpenAPI grants require sign-in when `can_refresh !== true`.
 Authoritative refresh capability keeps the connection available despite expiry.
 Main-app MCP details use the shared modal shell with Connection and Tools tabs.
 The Tools tab uses a searchable read-only list. Tool names and descriptions are
-searchable; compact rows match the admin list's main-ui typography, padding, and
-border treatment. Descriptions expand through the shared Fold without truncation.
+searchable. Admin and member rows show descriptions directly below tool names,
+matching external-app action rows without cards or disclosure controls.
 The server URL appears once in the modal header, not in a second metadata row.
 Craft App details use that row for safe service origins from the member `service_urls` response.
 Missing origins omit the URL. Member details never fetch admin app records or show URL patterns.
 MCP connection status appears beside that URL: green when connected, orange when
 sign-in is needed, and gray for unavailable states. The Connection tab has no
 duplicate status row; personal account disconnect remains a separate action.
-Expanded tool descriptions reuse the compact Opal Code block, preserving raw
-text and line breaks in a height-capped scroll region with copy support.
+Tool descriptions use secondary body text and wrap within the row.
 Admin and member tools both render `web/src/sections/plugins/MCPToolRow.tsx`.
-Admin enable/policy controls use its control slot and do not toggle disclosure.
-Read-only users can still expand descriptions without editing tool settings.
+Admin enable/policy controls use its control slot.
+Read-only users see the same inline descriptions without editing tool settings.
 No refresh component is modified for this view.
 Both panes share
 a viewport-capped height and scroll internally, keeping the header and footer
@@ -215,8 +214,9 @@ View tools selects the Tools tab; unsaved schemas must be saved first. Creation
 retains its endpoint preview because it has no separate Tools tab.
 Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
 header. Tools use the shared endpoint list, search, count, and empty feedback.
-Personal detail panes use a compact, fixed height across connection and
-capability tabs. OpenAPI description and personal default Chat settings use
+Plugin dialogs use the shared large width (50rem) and fit their content.
+Height is capped at 80dvh and the available viewport space, reserving the top offset and bottom gap.
+Long content scrolls in the modal body; tab panels do not impose fixed heights. OpenAPI description and personal default Chat settings use
 Opal content rows. The member switch persists through
 `PATCH /api/tool/{tool_id}/preferences`, stored per user/tool in
 `ToolUserPreference`. Missing rows mean enabled. Member snapshots stamp
@@ -226,7 +226,7 @@ cache updates roll back on failure and refresh composer/default-agent data.
 Opted-out plugins remain in the directory; only default Chat excludes them.
 Custom agents keep their own tool settings. Credentials are unchanged.
 Personal Craft App details use Connection/Skills tabs with the same header
-status, fixed scroll panes, and footer layout. They omit the duplicate account
+status, scrollable modal body, and footer layout. They omit the duplicate account
 table and header subtitle. `web/src/sections/plugins/MemberCraftAppSkills.tsx`
 reads only the caller's skills, filters by external-app ID, and shows search,
 count, enabled state, and loading/retry feedback. Review skills opens the
@@ -323,10 +323,11 @@ do not offer an endpoint input; creation still accepts a URL.
 Metadata-only saves preserve existing access grants, including after a plan downgrade.
 Changing restricted access still requires the applicable plan and permissions.
 
-The Tools editor uses one divided list with aligned availability switches.
-Search, enabled-only filtering, bulk actions, and refresh share a toolbar.
+The Tools editor uses one list with aligned availability switches.
+Search, bulk actions, and refresh share a toolbar. Available tools shows both enabled
+and disabled tools; it has no enabled-only filter.
 It has no fading rows or icon-only list footer. Save Changes stays below the list.
-Craft permissions use the same toolbar, search, divided rows, typography, and
+Craft permissions use the same toolbar, search, rows, typography, and
 right-aligned controls. Per-tool policies appear directly without an Advanced
 accordion. Bulk policy changes apply to all enabled tools, including search-hidden
 tools. Without Craft, the editor omits the redundant single Available tools tab.
@@ -472,10 +473,17 @@ and, when Craft is available, Craft permissions tabs. Enablement and approval po
 disabled while drafts exist. Each completed save batch becomes the new baseline,
 so retrying a partial failure does not repeat successful writes. Tool toggles
 retain per-tool permission checks. Craft policies use raw tool names and retain
-overrides for disabled tools. The shared `web/src/sections/actions/PolicyEditor.tsx`
-also serves Craft's policy tab, with per-action controls always visible.
-Both MCP tool views reserve equal toolbar slots and one fixed-height scrollable
-list viewport. Switching tabs does not resize the dialog or shift the list.
+overrides for disabled tools. The Craft permissions tab also lets admins control
+whether users can manage approval settings. This switch defaults on and joins the
+policy draft, dirty guard, and Save changes request. The request sends
+`action_policies` and `users_can_manage_policies` together.
+Tool availability uses `Tool.enabled`; Craft DENY is a separate workspace policy.
+Changing a Craft policy or user-management switch does not change tool availability.
+Both MCP tool views use the shared modal body for scrolling.
+Short tool lists stay compact; longer lists grow until the viewport limit.
+The shared `web/src/sections/actions/PolicyEditor.tsx` serves external-app,
+personal, and task policy editors. It provides search and a Set permissions menu
+with bulk choices and a separated reset action. Personal and task callers retain ownership of reset behavior.
 
 The authentication form uses tabs for OAuth, API Key, and No authentication,
 plus pass-through as the first tab when enabled. Each tab starts with the same introduction layout.
@@ -951,10 +959,10 @@ each operation and consumes state before exchanging the authorization code.
 
 ### 4.8 Shared Craft action controls
 
-`web/src/sections/actions/PolicyToggle.tsx` is also used by Craft's workspace
-and scheduled-task action editors. It exposes Auto-approve, Ask, and
-Disabled choices. Its `disabled` prop locks all choices; `label` names the group
-for assistive technology, and `aria-pressed` identifies the selected choice.
+`web/src/sections/actions/PolicyToggle.tsx` is also used by Craft's workspace,
+personal, and scheduled-task action editors. It exposes Auto-approve, Ask, and
+Disabled buttons on each row. Its `disabled` prop locks the choices; `label` names the
+group for assistive technology, and `aria-pressed` identifies the selected choice.
 
 Craft locks actions disabled by the workspace and settings managed only by admins.
 The backend enforces those restrictions; disabling the control is a display rule,

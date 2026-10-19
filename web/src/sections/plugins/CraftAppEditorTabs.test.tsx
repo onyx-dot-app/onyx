@@ -23,7 +23,7 @@ function Editor() {
       value={tab}
       onValueChange={setTab}
       configuration={<DraftField />}
-      permissions={<InputTypeIn aria-label="Permission" />}
+      tools={<InputTypeIn aria-label="Permission" />}
     />
   );
 }
@@ -38,7 +38,7 @@ describe("CraftAppEditorTabs", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Draft" }), {
       target: { value: "unsaved name" },
     });
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Permissions" }), {
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Tools" }), {
       button: 0,
     });
     expect(

@@ -1,4 +1,4 @@
-import type { TaskAppActionPolicies } from "@/app/craft/v1/apps/action-policies/types";
+import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 /**
  * Shared types for the Scheduled Tasks feature.
  *

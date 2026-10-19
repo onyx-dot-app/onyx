@@ -278,18 +278,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API-Schlüssel"
+          "label": "API-Schlüssel",
+          "description": "Verwenden Sie einen individuellen API-Schlüssel pro Benutzer oder einen gemeinsamen API-Schlüssel für die gesamte Organisation."
         },
         "label": "Authentifizierungsmethode",
         "none": {
-          "label": "Keine Authentifizierung"
+          "label": "Keine Authentifizierung",
+          "description": "Nicht empfohlen"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Jeder Benutzer muss sich über OAuth mit eigenen Anmeldedaten authentifizieren."
         },
         "placeholder": "Methode auswählen",
         "ptOauth": {
-          "label": "OAuth Pass-through"
+          "label": "OAuth Pass-through",
+          "description": "Das OAuth-Zugriffstoken des Benutzers weiterleiten, mit dem {appName} authentifiziert wird."
         },
         "required": "Der Authentifizierungstyp ist erforderlich"
       },
@@ -320,7 +324,8 @@
         "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der OAuth-Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
-        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut."
+        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
+        "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
       },
       "header": {
         "defaultTitle": "Authentifizierung konfigurieren",
@@ -413,6 +418,13 @@
         "unreachableTitle": "Verfügbarkeit der automatischen Einrichtung konnte nicht ermittelt werden",
         "missingTitle": "OAuth-Endpunkte wurden nicht gefunden",
         "requiresClientTitle": "Automatische Einrichtung ist möglicherweise nicht verfügbar"
+      },
+      "advanced": {
+        "description": "Konfigurieren Sie einen bekannten OAuth-Anbieter mit expliziten Autorisierungs- und Token-Endpunkten statt mit automatischer Erkennung.",
+        "title": "Erweitert"
+      },
+      "knownProvider": {
+        "hint": "Der Modus für bekannte Anbieter erfordert eine Endpunktkonfiguration. Referenz-Endpunkte von Google: Autorisierung {authorizationEndpoint} und Token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -642,7 +654,9 @@
       },
       "credentials": {
         "perUserDescription": "Verwenden Sie Ihre Zugangsdaten, um diesen MCP zu testen und seine Tools zu laden. Sie werden nur in Ihrem Konto gespeichert.",
-        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet."
+        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet.",
+        "perUserTitle": "Nur für Ihr eigenes Konto",
+        "sharedTitle": "Gemeinsame Werte der Organisation"
       },
       "headers": {
         "addButton": {
@@ -2605,7 +2619,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
-            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung"
+            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
+            "paused": "Setzen Sie den Konnektor vor der Neuindizierung fort"
           }
         },
         "toggleStatus": {
@@ -2670,6 +2685,91 @@
           "postProcessing": {
             "label": "Nachverarbeitung"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "Batch laden"
+          },
+          "batchTotal": {
+            "label": "Batch gesamt"
+          },
+          "batchUnaccounted": {
+            "label": "Nicht zugeordnet"
+          },
+          "checkpointLoad": {
+            "label": "Checkpoint laden"
+          },
+          "chunking": {
+            "label": "Chunking"
+          },
+          "connectorFetch": {
+            "label": "Konnektor-Abruf"
+          },
+          "connectorValidation": {
+            "label": "Konnektor-Prüfung"
+          },
+          "contextualRag": {
+            "label": "Contextual RAG"
+          },
+          "coordLockAcquireWait": {
+            "label": "Wartezeit auf Koordinationssperre"
+          },
+          "coordinationUpdate": {
+            "label": "Koordinationsaktualisierung"
+          },
+          "docBatchEnqueue": {
+            "label": "Dokument-Batch einreihen"
+          },
+          "docBatchStore": {
+            "label": "Dokument-Batch speichern"
+          },
+          "docDbPrepare": {
+            "label": "Dokument-DB vorbereiten"
+          },
+          "docLockAcquireWait": {
+            "label": "Wartezeit auf Dokumentsperre"
+          },
+          "docprocessingSetup": {
+            "label": "Docprocessing-Einrichtung"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "Anreicherung vorbereiten"
+          },
+          "finalization": {
+            "label": "Abschluss"
+          },
+          "gcCollect": {
+            "label": "Garbage Collection"
+          },
+          "hierarchyUpsert": {
+            "label": "Hierarchie-Upsert"
+          },
+          "imageProcessing": {
+            "label": "Bildverarbeitung"
+          },
+          "permissionValidation": {
+            "label": "Berechtigungsprüfung"
+          },
+          "postIndexDbUpdate": {
+            "label": "DB-Aktualisierung nach Indizierung"
+          },
+          "queueWait": {
+            "label": "Warteschlangenzeit"
+          },
+          "vectorDbWrite": {
+            "label": "Schreiben in Vektor-DB"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Wartezeit Embedding-Ratenlimit",
+            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Wartezeit Anbieter-Drosselung",
+            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
+          }
         }
       },
       "statusCard": {
@@ -2701,7 +2801,8 @@
           "released": "Indexierung gestartet",
           "releaseFailed": "Indexierung konnte nicht gestartet werden",
           "viewChecks": "Connector-Prüfungen anzeigen"
-        }
+        },
+        "title": "Indexierungsstatus"
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindizierung erfolgreich gestartet",
@@ -2860,7 +2961,9 @@
           "indexed": "indiziert",
           "synced": "synchronisiert",
           "removed": "entfernt",
-          "checksRun": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}"
+          "checksRun": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}",
+          "memberships": "Mitgliedschaften",
+          "checks": "Prüfungen ausgeführt"
         },
         "counts": {
           "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
@@ -2905,7 +3008,8 @@
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
           "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
           "view": "Anzeigen",
-          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}"
+          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}",
+          "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",
         "errorModal": {
@@ -2945,7 +3049,8 @@
         "groups": {
           "failures": "{count, plural, =0 {Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, =0 {Fehler} one {# Fehler} other {# Fehler}}",
-          "other": "Sonstige"
+          "other": "Sonstige",
+          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}"
         },
         "title": {
           "indexing": {
@@ -3019,7 +3124,8 @@
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
-          "resolved": "Behoben"
+          "resolved": "Behoben",
+          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}"
         },
         "more": "Mehr anzeigen",
         "empty": {
@@ -3052,7 +3158,8 @@
         },
         "trace": {
           "header": "Stacktrace • Lauf-ID: {id}",
-          "copy": "Stacktrace kopieren"
+          "copy": "Stacktrace kopieren",
+          "runId": "Lauf-ID: {id}"
         },
         "actions": {
           "resolve": "Beheben"
@@ -3063,6 +3170,9 @@
           "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
           "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, auf den Connectoren, die Sie verwalten, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
           "confirm": "Alle beheben"
+        },
+        "resolved": {
+          "label": "Behoben"
         }
       },
       "stageDetails": {
@@ -9419,7 +9529,9 @@
         "pruned": "Bereinigt",
         "checking": "Wird geprüft",
         "passed": "Abgeschlossen",
-        "failedToRun": "Nicht ausgeführt"
+        "failedToRun": "Nicht ausgeführt",
+        "completedWithErrors": "Mit Fehlern abgeschlossen",
+        "error": "Fehler"
       }
     },
     "systemInfo": {
@@ -9742,6 +9854,9 @@
       "field": {
         "required": {
           "error": "{label} ist erforderlich"
+        },
+        "optional": {
+          "title": "{label} (Optional)"
         }
       },
       "loadError": {
@@ -10570,7 +10685,9 @@
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
-        "inProgress": "Prüfungen laufen..."
+        "inProgress": "Prüfungen laufen...",
+        "completed": "Prüfungen abgeschlossen.",
+        "waiting": "Warten auf Connector-Einstellungen..."
       },
       "advisory": {
         "title": "Einige Inhalte werden nicht indexiert.",
@@ -10674,7 +10791,9 @@
           },
           "error": {
             "title": "Die Einstellungen sind ungültig"
-          }
+          },
+          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
+          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden."
         },
         "warnings": {
           "title": "Warnungen"
@@ -14160,7 +14279,11 @@
           "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Automatisch genehmigen“ führt sie ohne Rückfrage aus.",
           "title": "Berechtigungen"
         },
-        "savingButton": "Wird gespeichert…"
+        "savingButton": "Wird gespeichert…",
+        "advanced": {
+          "description": "Lege für jede Aktion einzeln eine Richtlinie fest.",
+          "title": "Erweitert"
+        }
       },
       "skillsStep": {
         "description": "Optional: Verknüpfe vorhandene Skills oder erstelle einen für diese App.",
@@ -15273,7 +15396,7 @@
     "actionPolicies": {
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
-      "personalDescription": "Diese Einstellungen gelten für Ihre Unterhaltungen und neue Aufgaben. Bestehende Aufgaben behalten ihre Einstellungen.",
+      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Nur aktivierte Apps sind für diese Aufgabe verfügbar. Änderungen gelten nur für diese Aufgabe.",
       "newTaskDescription": "Aktivieren Sie die Apps für diese Aufgabe. Jede App beginnt mit Ihren aktuellen Aktionseinstellungen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
@@ -15306,7 +15429,8 @@
       "viewActions": "Aktionen anzeigen",
       "taskModalDescription": "Änderungen gelten, wenn Sie die Aufgabe speichern. Workspace-Einschränkungen gelten immer.",
       "searchActions": "Aktionen suchen",
-      "applyMatching": "{count} passende bearbeitbare Aktionen festlegen:",
+      "setPermissions": "Berechtigungen festlegen",
+      "applyMatching": "{count} passende bearbeitbare Aktionen",
       "noMatchingActions": "Keine Aktionen entsprechen Ihrer Suche.",
       "close": "Schließen",
       "saveChanges": "Änderungen speichern",

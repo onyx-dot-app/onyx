@@ -21,6 +21,7 @@ async function readErrorDetail(
 }
 
 interface CreateBuiltInExternalAppBody {
+  users_can_manage_policies?: boolean;
   name: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
@@ -50,6 +51,7 @@ export async function createBuiltInExternalApp(
 }
 
 interface CreateCustomExternalAppInput {
+  users_can_manage_policies?: boolean;
   name: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
@@ -75,6 +77,7 @@ export async function createCustomExternalApp(
 }
 
 interface UpdateExternalAppBody {
+  users_can_manage_policies?: boolean;
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;
   name?: string;

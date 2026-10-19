@@ -278,18 +278,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "API 키"
+          "label": "API 키",
+          "description": "사용자별 개별 API 키 또는 조직 전체 공유 API 키를 사용합니다."
         },
         "label": "인증 방법",
         "none": {
-          "label": "인증 없음"
+          "label": "인증 없음",
+          "description": "권장하지 않음"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "각 사용자가 자신의 자격 증명으로 OAuth 인증을 해야 합니다."
         },
         "placeholder": "방법 선택",
         "ptOauth": {
-          "label": "OAuth 패스스루"
+          "label": "OAuth 패스스루",
+          "description": "{appName} 인증에 사용된 사용자의 OAuth 액세스 token을 전달합니다."
         },
         "required": "인증 유형은 필수입니다"
       },
@@ -320,7 +324,8 @@
         "clientRegistrationFailed": "클라이언트 자동 등록에 실패했습니다. 자체 OAuth 클라이언트를 사용하거나 공급자의 설정 요구 사항을 확인하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
         "connectionFailed": "OAuth 서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
-        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요."
+        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
+        "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
       "header": {
         "defaultTitle": "인증 설정",
@@ -413,6 +418,13 @@
         "unreachableTitle": "자동 설정을 사용할 수 있는지 확인할 수 없습니다",
         "missingTitle": "OAuth 엔드포인트를 찾을 수 없습니다",
         "requiresClientTitle": "자동 설정을 사용할 수 없을 수 있습니다"
+      },
+      "advanced": {
+        "description": "자동 검색 대신 권한 부여 엔드포인트와 token 엔드포인트를 직접 지정하여 알려진 OAuth 공급자를 구성합니다.",
+        "title": "고급"
+      },
+      "knownProvider": {
+        "hint": "알려진 공급자 모드에서는 엔드포인트 구성이 필요합니다. Google 참조 엔드포인트: 권한 부여 {authorizationEndpoint}, token {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -642,7 +654,9 @@
       },
       "credentials": {
         "perUserDescription": "자신의 자격 증명으로 이 MCP를 테스트하고 도구를 불러오세요. 자격 증명은 자신의 계정에만 저장됩니다.",
-        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다."
+        "sharedDescription": "이 값은 조직의 모든 사용자에게 사용됩니다.",
+        "perUserTitle": "내 계정 전용",
+        "sharedTitle": "조직 공유 값"
       },
       "headers": {
         "addButton": {
@@ -2605,7 +2619,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "인덱싱이 이미 진행 중이면 재인덱싱할 수 없습니다",
-            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요"
+            "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요",
+            "paused": "재인덱싱하기 전에 커넥터를 다시 시작하세요"
           }
         },
         "toggleStatus": {
@@ -2670,6 +2685,91 @@
           "postProcessing": {
             "label": "후처리"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "배치 로드"
+          },
+          "batchTotal": {
+            "label": "배치 전체"
+          },
+          "batchUnaccounted": {
+            "label": "미분류"
+          },
+          "checkpointLoad": {
+            "label": "체크포인트 로드"
+          },
+          "chunking": {
+            "label": "청킹"
+          },
+          "connectorFetch": {
+            "label": "커넥터 가져오기"
+          },
+          "connectorValidation": {
+            "label": "커넥터 검증"
+          },
+          "contextualRag": {
+            "label": "컨텍스트 기반 RAG"
+          },
+          "coordLockAcquireWait": {
+            "label": "조정 잠금 대기"
+          },
+          "coordinationUpdate": {
+            "label": "조정 업데이트"
+          },
+          "docBatchEnqueue": {
+            "label": "문서 배치 큐 등록"
+          },
+          "docBatchStore": {
+            "label": "문서 배치 저장"
+          },
+          "docDbPrepare": {
+            "label": "문서 DB 준비"
+          },
+          "docLockAcquireWait": {
+            "label": "문서 잠금 획득 대기"
+          },
+          "docprocessingSetup": {
+            "label": "문서 처리 설정"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "보강 준비"
+          },
+          "finalization": {
+            "label": "마무리"
+          },
+          "gcCollect": {
+            "label": "가비지 컬렉션"
+          },
+          "hierarchyUpsert": {
+            "label": "계층 업서트"
+          },
+          "imageProcessing": {
+            "label": "이미지 처리"
+          },
+          "permissionValidation": {
+            "label": "권한 검증"
+          },
+          "postIndexDbUpdate": {
+            "label": "인덱싱 후 DB 업데이트"
+          },
+          "queueWait": {
+            "label": "큐 대기"
+          },
+          "vectorDbWrite": {
+            "label": "벡터 DB 쓰기"
+          },
+          "embeddingRateLimitWait": {
+            "label": "임베딩 요청 한도 대기",
+            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "제공자 제한 대기",
+            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          }
         }
       },
       "statusCard": {
@@ -2701,7 +2801,8 @@
           "released": "인덱싱이 시작됨",
           "releaseFailed": "인덱싱을 시작할 수 없음",
           "viewChecks": "커넥터 검사 보기"
-        }
+        },
+        "title": "인덱싱 상태"
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",
@@ -2860,7 +2961,9 @@
           "indexed": "인덱싱됨",
           "synced": "동기화됨",
           "removed": "개 제거됨",
-          "checksRun": "{count, plural, other {#개 검사 실행됨}}"
+          "checksRun": "{count, plural, other {#개 검사 실행됨}}",
+          "memberships": "멤버십",
+          "checks": "개 검사 실행됨"
         },
         "counts": {
           "newDocs": "{count, plural, other {새 문서 #개}}",
@@ -2905,7 +3008,8 @@
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
           "pastRuns": "{count, plural, other {지난 실행 #개}}",
           "view": "보기",
-          "viewAria": "{count, plural, other {지난 실행 #개 보기}}"
+          "viewAria": "{count, plural, other {지난 실행 #개 보기}}",
+          "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
         },
         "units": "{count, plural, other {실행}}",
         "errorModal": {
@@ -2945,7 +3049,8 @@
         "groups": {
           "failures": "{count, plural, =0 {실패} other {실패 #개}}",
           "errors": "{count, plural, =0 {오류} other {오류 #개}}",
-          "other": "기타"
+          "other": "기타",
+          "resolved": "{count, plural, other {해결됨 #개}}"
         },
         "title": {
           "indexing": {
@@ -3019,7 +3124,8 @@
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
-          "resolved": "해결됨"
+          "resolved": "해결됨",
+          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}"
         },
         "more": "더 보기",
         "empty": {
@@ -3052,7 +3158,8 @@
         },
         "trace": {
           "header": "스택 트레이스 • 실행 ID: {id}",
-          "copy": "스택 트레이스 복사"
+          "copy": "스택 트레이스 복사",
+          "runId": "실행 ID: {id}"
         },
         "actions": {
           "resolve": "해결"
@@ -3063,6 +3170,9 @@
           "description": "현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
           "fleetDescription": "관리 권한이 있는 커넥터에서 현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
           "confirm": "모두 해결"
+        },
+        "resolved": {
+          "label": "해결됨"
         }
       },
       "stageDetails": {
@@ -9419,7 +9529,9 @@
         "pruned": "정리됨",
         "checking": "검사 중",
         "passed": "완료",
-        "failedToRun": "실행 실패"
+        "failedToRun": "실행 실패",
+        "completedWithErrors": "오류와 함께 완료됨",
+        "error": "오류"
       }
     },
     "systemInfo": {
@@ -9742,6 +9854,9 @@
       "field": {
         "required": {
           "error": "{label}은(는) 필수 항목입니다"
+        },
+        "optional": {
+          "title": "{label} (선택 사항)"
         }
       },
       "loadError": {
@@ -10570,7 +10685,9 @@
       "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
-        "inProgress": "검사 진행 중..."
+        "inProgress": "검사 진행 중...",
+        "completed": "검사가 완료되었습니다.",
+        "waiting": "커넥터 설정을 기다리는 중..."
       },
       "advisory": {
         "title": "일부 콘텐츠는 인덱싱되지 않습니다.",
@@ -10674,7 +10791,9 @@
           },
           "error": {
             "title": "설정이 유효하지 않습니다"
-          }
+          },
+          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
+          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다."
         },
         "warnings": {
           "title": "경고"
@@ -14160,7 +14279,11 @@
           "description": "에이전트가 할 수 있는 작업을 선택하세요. \"묻기\"는 각 작업 전에 승인을 요청하고, \"자동 승인\"은 확인 없이 실행합니다.",
           "title": "권한"
         },
-        "savingButton": "저장 중…"
+        "savingButton": "저장 중…",
+        "advanced": {
+          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
+          "title": "고급"
+        }
       },
       "skillsStep": {
         "description": "선택 사항. 기존 스킬을 연결하거나 이 앱을 위한 스킬을 만드세요.",
@@ -15273,7 +15396,7 @@
     "actionPolicies": {
       "appTitle": "{name} 승인 설정",
       "title": "승인 설정",
-      "personalDescription": "이 설정은 대화와 새 작업에 적용됩니다. 기존 작업은 자체 설정을 유지합니다.",
+      "personalDescription": "이 설정은 Craft 대화와 새 작업에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "활성화된 앱만 이 작업에서 사용할 수 있습니다. 변경 사항은 이 작업에만 적용됩니다.",
       "newTaskDescription": "이 작업에서 사용할 앱을 활성화하세요. 각 앱은 현재 작업 설정으로 시작합니다.",
       "workspace_disabled": "워크스페이스에서 비활성화됨",
@@ -15306,7 +15429,8 @@
       "viewActions": "작업 보기",
       "taskModalDescription": "변경 사항은 예약 작업을 저장할 때 적용됩니다. 워크스페이스 제한은 항상 적용됩니다.",
       "searchActions": "작업 검색",
-      "applyMatching": "일치하는 편집 가능한 작업 {count}개 설정:",
+      "setPermissions": "권한 설정",
+      "applyMatching": "일치하는 편집 가능한 작업 {count}개",
       "noMatchingActions": "검색과 일치하는 작업이 없습니다.",
       "close": "닫기",
       "saveChanges": "변경 사항 저장",

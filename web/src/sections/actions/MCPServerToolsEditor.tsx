@@ -17,7 +17,7 @@ import {
 import { Section } from "@opal/layouts";
 import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import { SvgRefreshCw } from "@opal/icons";
-import { cn, richNodes } from "@opal/utils";
+import { richNodes } from "@opal/utils";
 import { IconLoader } from "@opal/loaders";
 import { useSettings } from "@/lib/settings/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -28,6 +28,7 @@ import { refreshMCPServerTools, updateMCPServer } from "@/lib/mcp/svc";
 import { updateToolsStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 
 interface MCPServerToolsEditorProps {
@@ -71,9 +72,13 @@ export default function MCPServerToolsEditor({
   const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
     ...server.action_policies,
   });
+  const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
+    server.users_can_manage_policies ?? true
+  );
+  const [savedUsersCanManagePolicies, setSavedUsersCanManagePolicies] =
+    useState(server.users_can_manage_policies ?? true);
   const [savedPolicies, setSavedPolicies] = useState(policies);
   const [search, setSearch] = useState("");
-  const [onlyEnabled, setOnlyEnabled] = useState(false);
   const [policiesView, setPoliciesView] = useState(false);
   const showPolicies = craftAvailable && policiesView;
   const [busy, setBusy] = useState(false);
@@ -85,7 +90,10 @@ export default function MCPServerToolsEditor({
       enabledDraft[tool.id] !== tool.enabled
   );
   const policiesDirty =
-    craftAvailable && can(server, "edit") && !isEqual(policies, savedPolicies);
+    craftAvailable &&
+    can(server, "edit") &&
+    (!isEqual(policies, savedPolicies) ||
+      usersCanManagePolicies !== savedUsersCanManagePolicies);
   const dirty = changedTools.length > 0 || policiesDirty;
   useEffect(() => {
     onDirtyChange(dirty);
@@ -97,7 +105,7 @@ export default function MCPServerToolsEditor({
     enabledDraft[tool.id] ?? tool.enabled;
   const visibleTools = tools.filter(
     (tool) =>
-      (!(onlyEnabled || showPolicies) || isEnabled(tool)) &&
+      (!showPolicies || isEnabled(tool)) &&
       `${tool.display_name} ${tool.name} ${tool.description}`
         .toLowerCase()
         .includes(search.trim().toLowerCase())
@@ -132,9 +140,13 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, { action_policies: currentPolicies });
+        await updateMCPServer(server.id, {
+          action_policies: currentPolicies,
+          users_can_manage_policies: usersCanManagePolicies,
+        });
         setPolicies(currentPolicies);
         setSavedPolicies(currentPolicies);
+        setSavedUsersCanManagePolicies(usersCanManagePolicies);
       }
       await onSaved();
     } catch (cause) {
@@ -180,7 +192,15 @@ export default function MCPServerToolsEditor({
   const canBulkToggle =
     tools.length > 0 && tools.every((tool) => can(tool, "toggle"));
   const toolsContent = (
-    <div className="flex h-[min(24rem,45dvh)] flex-col gap-3">
+    <div className="flex flex-col gap-3">
+      {showPolicies && (
+        <UserManagementSwitch
+          value={usersCanManagePolicies}
+          onChange={setUsersCanManagePolicies}
+          disabled={policyDisabled}
+        />
+      )}
+
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <div className="flex-1 min-w-40">
           <InputTypeIn
@@ -219,23 +239,6 @@ export default function MCPServerToolsEditor({
                 })
               )}
             </Text>
-            <label
-              aria-hidden={showPolicies}
-              className={cn(
-                "flex items-center gap-2",
-                showPolicies && "invisible"
-              )}
-            >
-              <InputSwitch
-                checked={onlyEnabled}
-                onCheckedChange={setOnlyEnabled}
-                disabled={busy || showPolicies}
-                aria-label={t("toolsList.showEnabledButton.ariaLabel")}
-              />
-              <Text font="secondary-body" color="text-03">
-                {t("toolsList.showEnabledButton.tooltip")}
-              </Text>
-            </label>
           </div>
           <div className="flex min-h-10 items-center justify-end">
             {showPolicies ? (
@@ -315,11 +318,7 @@ export default function MCPServerToolsEditor({
           </div>
         </div>
       )}
-      <div
-        role="region"
-        aria-label={t("mcpTools.title")}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
+      <div role="region" aria-label={t("mcpTools.title")} className="min-w-0">
         {isLoading ? (
           <Section flexDirection="row" gap={2} padding={4} height="auto">
             <IconLoader />
@@ -340,7 +339,7 @@ export default function MCPServerToolsEditor({
             </Text>
           </Section>
         ) : (
-          <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {visibleTools.map((tool) => (
               <MCPToolRow
                 key={tool.id}
@@ -348,6 +347,7 @@ export default function MCPServerToolsEditor({
                 control={
                   showPolicies ? (
                     <PolicyToggle
+                      label={tool.display_name || tool.name}
                       value={policies[tool.name] ?? "ASK"}
                       disabled={policyDisabled}
                       onChange={(value) =>

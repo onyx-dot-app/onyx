@@ -278,18 +278,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "مفتاح API"
+          "label": "مفتاح API",
+          "description": "استخدم مفتاح API فرديًا لكل مستخدم أو مفتاح API مشتركًا على مستوى المؤسسة."
         },
         "label": "طريقة المصادقة",
         "none": {
-          "label": "بلا مصادقة"
+          "label": "بلا مصادقة",
+          "description": "غير موصى به"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "يحتاج كل مستخدم إلى المصادقة عبر OAuth ببيانات اعتماده الخاصة."
         },
         "placeholder": "اختر طريقة",
         "ptOauth": {
-          "label": "تمرير OAuth المباشر"
+          "label": "تمرير OAuth المباشر",
+          "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}."
         },
         "required": "نوع المصادقة مطلوب"
       },
@@ -320,7 +324,8 @@
         "clientRegistrationFailed": "فشل تسجيل العميل تلقائيًا. استخدم عميل OAuth خاصًا بك أو تحقق من متطلبات الإعداد لدى المزوّد.",
         "discoveryFailed": "لم نعثر على إعدادات تسجيل الدخول باستخدام OAuth. تحقق من عنوان URL للخادم أو أدخل نقاط النهاية من المزوّد.",
         "connectionFailed": "تعذّر الوصول إلى خادم OAuth. تحقق من عنوان URL للخادم وحاول مجددًا.",
-        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا."
+        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا.",
+        "oauthInitFailed": "فشل بدء OAuth: {detail}"
       },
       "header": {
         "defaultTitle": "إعداد المصادقة",
@@ -413,6 +418,13 @@
         "unreachableTitle": "تعذّر تحديد ما إذا كان الإعداد التلقائي متاحًا",
         "missingTitle": "تعذّر العثور على نقاط نهاية OAuth",
         "requiresClientTitle": "قد لا يكون الإعداد التلقائي متاحًا"
+      },
+      "advanced": {
+        "description": "هيّئ موفر OAuth معروفًا بنقاط نهاية تفويض ورموز صريحة بدلًا من الاكتشاف التلقائي.",
+        "title": "متقدم"
+      },
+      "knownProvider": {
+        "hint": "يتطلب وضع الموفر المعروف تهيئة نقاط النهاية. نقاط نهاية Google المرجعية: التفويض {authorizationEndpoint} والرمز {tokenEndpoint}."
       }
     },
     "mcpCard": {
@@ -642,7 +654,9 @@
       },
       "credentials": {
         "perUserDescription": "استخدم بيانات اعتمادك لاختبار MCP هذا وتحميل أدواته. تُحفظ في حسابك فقط.",
-        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك."
+        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك.",
+        "perUserTitle": "لحسابك الخاص فقط",
+        "sharedTitle": "قيم المؤسسة المشتركة"
       },
       "headers": {
         "addButton": {
@@ -2605,7 +2619,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "لا يمكن إعادة الفهرسة أثناء وجود فهرسة قيد التنفيذ",
-            "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة"
+            "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة",
+            "paused": "استأنف الموصل قبل إعادة الفهرسة"
           }
         },
         "toggleStatus": {
@@ -2670,6 +2685,91 @@
           "postProcessing": {
             "label": "المعالجة اللاحقة"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "تحميل الدفعة"
+          },
+          "batchTotal": {
+            "label": "إجمالي الدفعة"
+          },
+          "batchUnaccounted": {
+            "label": "غير محسوب"
+          },
+          "checkpointLoad": {
+            "label": "تحميل نقطة التحقق"
+          },
+          "chunking": {
+            "label": "التقسيم"
+          },
+          "connectorFetch": {
+            "label": "جلب الموصل"
+          },
+          "connectorValidation": {
+            "label": "التحقق من الموصل"
+          },
+          "contextualRag": {
+            "label": "RAG السياقي"
+          },
+          "coordLockAcquireWait": {
+            "label": "انتظار قفل التنسيق"
+          },
+          "coordinationUpdate": {
+            "label": "تحديث التنسيق"
+          },
+          "docBatchEnqueue": {
+            "label": "إدراج دفعة المستندات في الطابور"
+          },
+          "docBatchStore": {
+            "label": "تخزين دفعة المستندات"
+          },
+          "docDbPrepare": {
+            "label": "تجهيز قاعدة بيانات المستندات"
+          },
+          "docLockAcquireWait": {
+            "label": "انتظار قفل المستند"
+          },
+          "docprocessingSetup": {
+            "label": "إعداد معالجة المستندات"
+          },
+          "embedding": {
+            "label": "التضمين"
+          },
+          "enrichmentPrep": {
+            "label": "تجهيز الإثراء"
+          },
+          "finalization": {
+            "label": "الإنهاء"
+          },
+          "gcCollect": {
+            "label": "جمع القمامة"
+          },
+          "hierarchyUpsert": {
+            "label": "تحديث التسلسل الهرمي"
+          },
+          "imageProcessing": {
+            "label": "معالجة الصور"
+          },
+          "permissionValidation": {
+            "label": "التحقق من الأذونات"
+          },
+          "postIndexDbUpdate": {
+            "label": "تحديث قاعدة البيانات بعد الفهرسة"
+          },
+          "queueWait": {
+            "label": "انتظار الطابور"
+          },
+          "vectorDbWrite": {
+            "label": "الكتابة في قاعدة المتجهات"
+          },
+          "embeddingRateLimitWait": {
+            "label": "انتظار حد معدل التضمين",
+            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "انتظار تقييد المزوّد",
+            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          }
         }
       },
       "statusCard": {
@@ -2701,7 +2801,8 @@
           "released": "بدأت الفهرسة",
           "releaseFailed": "تعذر بدء الفهرسة",
           "viewChecks": "عرض فحوصات الموصل"
-        }
+        },
+        "title": "حالة الفهرسة"
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
@@ -2860,7 +2961,9 @@
           "indexed": "مفهرس",
           "synced": "متزامن",
           "removed": "تمت إزالتها",
-          "checksRun": "{count, plural, zero {لم يتم تشغيل أي فحص} one {تم تشغيل فحص واحد} two {تم تشغيل فحصين} few {تم تشغيل # فحوصات} many {تم تشغيل # فحصًا} other {تم تشغيل # فحص}}"
+          "checksRun": "{count, plural, zero {لم يتم تشغيل أي فحص} one {تم تشغيل فحص واحد} two {تم تشغيل فحصين} few {تم تشغيل # فحوصات} many {تم تشغيل # فحصًا} other {تم تشغيل # فحص}}",
+          "memberships": "عضويات",
+          "checks": "فحوصات تم تشغيلها"
         },
         "counts": {
           "newDocs": "{count, plural, one {مستند جديد واحد} other {# مستندات جديدة}}",
@@ -2905,7 +3008,8 @@
           "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
           "pastRuns": "{count, plural, one {عملية تشغيل سابقة واحدة} other {# عمليات تشغيل سابقة}}",
           "view": "عرض",
-          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}"
+          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}",
+          "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
         },
         "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
         "errorModal": {
@@ -2945,7 +3049,8 @@
         "groups": {
           "failures": "{count, plural, =0 {الإخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
           "errors": "{count, plural, =0 {الأخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
-          "other": "أخرى"
+          "other": "أخرى",
+          "resolved": "{count, plural, zero {لا شيء تم حله} one {واحد تم حله} two {اثنان تم حلهما} few {# تم حلها} many {# تم حلها} other {# تم حلها}}"
         },
         "title": {
           "indexing": {
@@ -3019,7 +3124,8 @@
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
-          "resolved": "تم الحل"
+          "resolved": "تم الحل",
+          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}"
         },
         "more": "عرض المزيد",
         "empty": {
@@ -3052,7 +3158,8 @@
         },
         "trace": {
           "header": "تتبع المكدس • معرّف التشغيل: {id}",
-          "copy": "نسخ تتبع المكدس"
+          "copy": "نسخ تتبع المكدس",
+          "runId": "معرّف التشغيل: {id}"
         },
         "actions": {
           "resolve": "حل"
@@ -3063,6 +3170,9 @@
           "description": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
           "fleetDescription": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي، في الموصلات التي تديرها. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
           "confirm": "حل الكل"
+        },
+        "resolved": {
+          "label": "تم حلها"
         }
       },
       "stageDetails": {
@@ -9419,7 +9529,9 @@
         "pruned": "تم التقليم",
         "checking": "جارٍ الفحص",
         "passed": "مكتمل",
-        "failedToRun": "تعذر التشغيل"
+        "failedToRun": "تعذر التشغيل",
+        "completedWithErrors": "اكتملت مع أخطاء",
+        "error": "خطأ"
       }
     },
     "systemInfo": {
@@ -9742,6 +9854,9 @@
       "field": {
         "required": {
           "error": "{label} مطلوب"
+        },
+        "optional": {
+          "title": "{label} (اختياري)"
         }
       },
       "loadError": {
@@ -10570,7 +10685,9 @@
       "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
       "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
       "state": {
-        "inProgress": "عمليات التحقق قيد التنفيذ..."
+        "inProgress": "عمليات التحقق قيد التنفيذ...",
+        "completed": "اكتملت عمليات التحقق.",
+        "waiting": "بانتظار إعدادات الموصل..."
       },
       "advisory": {
         "title": "لن تتم فهرسة بعض المحتوى.",
@@ -10674,7 +10791,9 @@
           },
           "error": {
             "title": "الإعدادات غير صالحة"
-          }
+          },
+          "blocks": "فشلت الإعدادات الجديدة في التحقق. أصلحها قبل التطبيق.",
+          "warns": "فشلت بعض الفحوصات الاختيارية. لا يزال بإمكانك التطبيق."
         },
         "warnings": {
           "title": "تحذيرات"
@@ -14160,7 +14279,11 @@
           "description": "اختر ما يمكن للوكيل فعله. «اسأل» يطلب الموافقة قبل كل إجراء؛ و«الموافقة التلقائية» يشغّله دون سؤال.",
           "title": "الأذونات"
         },
-        "savingButton": "جارٍ الحفظ…"
+        "savingButton": "جارٍ الحفظ…",
+        "advanced": {
+          "description": "عيّن سياسة لكل إجراء على حدة.",
+          "title": "متقدم"
+        }
       },
       "skillsStep": {
         "description": "اختياري: اربط مهارات موجودة أو أنشئ واحدة لهذا التطبيق.",
@@ -15273,7 +15396,7 @@
     "actionPolicies": {
       "appTitle": "إعدادات الموافقة لـ {name}",
       "title": "إعدادات الموافقة",
-      "personalDescription": "تنطبق هذه الإعدادات على محادثاتك والمهام الجديدة. تحتفظ المهام الحالية بإعداداتها.",
+      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
       "taskDescription": "تتوفر التطبيقات المفعّلة فقط لهذه المهمة. تنطبق التغييرات على هذه المهمة فقط.",
       "newTaskDescription": "فعّل التطبيقات التي يمكن لهذه المهمة استخدامها. يبدأ كل تطبيق بإعدادات الإجراءات الحالية لديك.",
       "workspace_disabled": "معطل لمساحة العمل",
@@ -15306,7 +15429,8 @@
       "viewActions": "عرض الإجراءات",
       "taskModalDescription": "تُطبّق التغييرات عند حفظ المهمة. تسري قيود مساحة العمل دائمًا.",
       "searchActions": "البحث عن إجراءات",
-      "applyMatching": "تعيين {count} من الإجراءات المطابقة القابلة للتعديل:",
+      "setPermissions": "تعيين الأذونات",
+      "applyMatching": "{count} من الإجراءات المطابقة القابلة للتعديل",
       "noMatchingActions": "لا توجد إجراءات تطابق البحث.",
       "close": "إغلاق",
       "saveChanges": "حفظ التغييرات",

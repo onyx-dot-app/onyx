@@ -45,6 +45,7 @@ export interface MCPServer {
   // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
   // Present on owner/admin views only.
   action_policies?: Record<string, ActionPolicy> | null;
+  users_can_manage_policies?: boolean;
   last_refreshed_at?: string;
   tool_count: number;
   // Server-stamped affordance map; fail-closed (absent = denied).
@@ -95,6 +96,7 @@ export interface MCPServerUpdateRequest {
   available_in_craft?: boolean;
   // Full replace of the stored per-tool overrides; omit to leave unchanged.
   action_policies?: Record<string, ActionPolicy>;
+  users_can_manage_policies?: boolean;
 }
 
 export interface MCPTool {

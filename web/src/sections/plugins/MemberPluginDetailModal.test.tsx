@@ -5,9 +5,11 @@ import {
   screen,
   setupUser,
   waitFor,
+  within,
 } from "@tests/setup/test-utils";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
+import type { AppActionPoliciesView } from "@/lib/plugins/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { NextIntlClientProvider } from "next-intl";
 import {
@@ -22,6 +24,11 @@ import {
   memberApp,
   memberPluginMessages,
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => "/app/plugins",
+}));
 
 let mockCraftEnabled: boolean | undefined = true;
 
@@ -73,7 +80,8 @@ test.each([false, undefined])(
 function show(
   plugin: MemberPlugin,
   onDisconnected = jest.fn(),
-  surface?: "all" | "craft"
+  surface?: "all" | "craft",
+  options: { initialTab?: "approvals"; onClose?: () => void } = {}
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={memberPluginMessages}>
@@ -81,7 +89,8 @@ function show(
         plugin={plugin}
         surface={surface}
         open
-        onClose={jest.fn()}
+        initialTab={options.initialTab}
+        onClose={options.onClose ?? jest.fn()}
         onConnect={jest.fn()}
         onUseInChat={jest.fn()}
         onDisconnected={onDisconnected}
@@ -369,10 +378,6 @@ test("Tools tab searches stored tools and expands full descriptions without live
   expect(screen.queryByText("Search issues")).not.toBeInTheDocument();
   await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
   expect(screen.getByText("Search issues")).toBeVisible();
-  expect(screen.queryByText(description.trim())).not.toBeInTheDocument();
-  await setupUser().click(
-    screen.getByRole("button", { name: "Expand Search issues" })
-  );
   expect(screen.getByText(description.trim())).toBeVisible();
   expect(screen.getByText("1 tool")).toBeVisible();
   expect(screen.getByRole("textbox", { name: "Search tools" })).toBeVisible();
@@ -396,7 +401,7 @@ test("canceling MCP disconnect returns to Connection without a request", async (
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("tab", { name: "Connection" }));
   await user.click(screen.getByRole("button", { name: "Disconnect account" }));
-  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Tools" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute(
     "aria-selected",
@@ -432,7 +437,7 @@ test("Craft MCP details do not imply an empty tool catalog when snapshots are un
     jest.fn(),
     "craft"
   );
-  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Tools" })).not.toBeInTheDocument();
   expect(
     screen.queryByText("No visible tools are stored for this plugin.")
   ).not.toBeInTheDocument();
@@ -705,4 +710,252 @@ test("MCP account disconnect confirms before deleting personal credentials", asy
   expect(requests).toHaveBeenCalledWith("/api/mcp/user-credentials/7", {
     method: "DELETE",
   });
+});
+
+const approvalApp: AppActionPoliciesView = {
+  gated_app_id: 42,
+  kind: "mcp_server",
+  target_id: 7,
+  name: "Linear",
+  enabled: null,
+  users_can_manage_policies: true,
+  actions: [
+    {
+      action_id: "send",
+      normalised_name: "Send report",
+      description: "",
+      effective_policy: "ALWAYS",
+      workspace_policy: "ASK",
+      stored_policy: "ALWAYS",
+      editable: true,
+      lock_reason: null,
+    },
+    {
+      action_id: "delete",
+      normalised_name: "Delete report",
+      description: "",
+      effective_policy: "DENY",
+      workspace_policy: "DENY",
+      stored_policy: null,
+      editable: false,
+      lock_reason: "workspace_disabled",
+    },
+  ],
+};
+const approvalPlugin: MemberPlugin = {
+  kind: "mcp",
+  server: memberServer({ id: 7 }),
+  tools: [],
+  connection: { kind: "connected", ownership: "user" },
+};
+
+test("loads a fresh approval snapshot and saves displayed choices including personal deny", async () => {
+  const opening = deferred<Response>();
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      String(input).endsWith("/action-policies/mcp_server/7")
+        ? opening.promise
+        : jsonResponse({})
+    );
+  const close = jest.fn();
+  show(approvalPlugin, jest.fn(), "craft", {
+    initialTab: "approvals",
+    onClose: close,
+  });
+  expect(
+    screen.queryByRole("group", { name: "Send report" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Try again" })
+  ).not.toBeInTheDocument();
+  await act(async () => opening.resolve(jsonResponse(approvalApp)));
+  const user = setupUser();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  for (const button of within(
+    screen.getByRole("group", { name: "Delete report" })
+  ).getAllByRole("button"))
+    expect(button).toBeDisabled();
+  await user.click(
+    within(screen.getByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Disabled" }
+    )
+  );
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(close).toHaveBeenCalled());
+  expect(requests).toHaveBeenCalledWith(
+    "/api/build/action-policies/42",
+    expect.objectContaining({
+      body: JSON.stringify({ action_policies: { send: "DENY" } }),
+    })
+  );
+});
+
+test("retains approval drafts across tabs and confirms discarding on close", async () => {
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      jsonResponse(String(input).includes("action-policies") ? approvalApp : {})
+    );
+  const close = jest.fn();
+  show(approvalPlugin, jest.fn(), "craft", {
+    initialTab: "approvals",
+    onClose: close,
+  });
+  const user = setupUser();
+  await user.click(
+    within(await screen.findByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  );
+  await user.click(screen.getByRole("tab", { name: "Connection" }));
+  await user.click(screen.getByRole("tab", { name: "Approval settings" }));
+  expect(
+    within(screen.getByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  ).toHaveAttribute("aria-pressed", "true");
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  expect(close).not.toHaveBeenCalled();
+  expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Discard changes" }));
+  expect(close).toHaveBeenCalled();
+});
+
+test("reset clears personal overrides only when saved", async () => {
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input) =>
+      jsonResponse(String(input).endsWith("/mcp_server/7") ? approvalApp : {})
+    );
+  show(approvalPlugin, jest.fn(), "craft", { initialTab: "approvals" });
+  const user = setupUser();
+  await screen.findByRole("group", { name: "Send report" });
+  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+  expect(
+    within(screen.getByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(
+    requests.mock.calls.filter(([, init]) => init?.method === "PUT")
+  ).toHaveLength(0);
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(requests).toHaveBeenCalledWith(
+      "/api/build/action-policies/42",
+      expect.objectContaining({ body: JSON.stringify({ action_policies: {} }) })
+    )
+  );
+});
+
+test("a reopened detail owns its request while the previous request is pending", async () => {
+  const earlier = deferred<Response>();
+  const current = deferred<Response>();
+  let loads = 0;
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    if (String(input).endsWith("/mcp_server/7"))
+      return ++loads === 1 ? earlier.promise : current.promise;
+    return jsonResponse({});
+  });
+  const first = show(approvalPlugin, jest.fn(), "craft", {
+    initialTab: "approvals",
+  });
+  await waitFor(() => expect(loads).toBe(1));
+  first.unmount();
+  show(approvalPlugin, jest.fn(), "craft", { initialTab: "approvals" });
+  await waitFor(() => expect(loads).toBe(2));
+  await act(async () =>
+    current.resolve(
+      jsonResponse({
+        ...approvalApp,
+        actions: approvalApp.actions.map((item) =>
+          item.action_id === "send"
+            ? { ...item, effective_policy: "ASK", stored_policy: "ASK" }
+            : item
+        ),
+      })
+    )
+  );
+  expect(
+    within(await screen.findByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  ).toHaveAttribute("aria-pressed", "true");
+  await act(async () => earlier.resolve(jsonResponse(approvalApp)));
+  expect(
+    within(screen.getByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("keeps a failed save draft and blocks closing while the save is pending", async () => {
+  const save = deferred<Response>();
+  jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (input, init) =>
+      init?.method === "PUT" ? save.promise : jsonResponse(approvalApp)
+    );
+  const close = jest.fn();
+  show(approvalPlugin, jest.fn(), "craft", {
+    initialTab: "approvals",
+    onClose: close,
+  });
+  const user = setupUser();
+  await user.click(
+    within(await screen.findByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  );
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  expect(close).not.toHaveBeenCalled();
+  for (const button of within(
+    screen.getByRole("group", { name: "Send report" })
+  ).getAllByRole("button"))
+    expect(button).toBeDisabled();
+  await user.keyboard("{Escape}");
+  expect(close).not.toHaveBeenCalled();
+  await act(async () =>
+    save.resolve(jsonResponse({ detail: "Save failed" }, 500))
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
+  expect(
+    within(screen.getByRole("group", { name: "Send report" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+});
+
+test("workspace-managed approvals remain visible but cannot be saved", async () => {
+  jest.spyOn(global, "fetch").mockResolvedValue(
+    jsonResponse({
+      ...approvalApp,
+      users_can_manage_policies: false,
+      actions: approvalApp.actions.map((action) => ({
+        ...action,
+        editable: false,
+        lock_reason: "workspace_managed",
+      })),
+    })
+  );
+  show(approvalPlugin, jest.fn(), "craft", { initialTab: "approvals" });
+  for (const button of within(
+    await screen.findByRole("group", { name: "Send report" })
+  ).getAllByRole("button"))
+    expect(button).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "Save" })
+  ).not.toBeInTheDocument();
 });

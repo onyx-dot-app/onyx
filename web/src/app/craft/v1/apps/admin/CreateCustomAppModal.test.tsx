@@ -63,6 +63,7 @@ const CUSTOM_APP: ExternalAppAdminResponse = {
   enabled: true,
   actions: [],
   associated_skills: [],
+  users_can_manage_policies: true,
   is_onyx_managed: false,
 };
 
@@ -96,7 +97,7 @@ describe("CreateCustomAppModal", () => {
     const name = screen.getByRole("textbox", { name: "Name" });
     fireEvent.change(name, { target: { value: "Draft" } });
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("data-width", "md");
+    expect(dialog).toHaveAttribute("data-width", "lg");
     expect(dialog).toHaveAttribute("data-position", "top");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -115,7 +116,7 @@ describe("CreateCustomAppModal", () => {
     const confirmation = screen.getByRole("dialog", {
       name: "Discard unsaved changes?",
     });
-    expect(confirmation).toHaveAttribute("data-width", "md");
+    expect(confirmation).toHaveAttribute("data-width", "lg");
     expect(confirmation).toHaveAttribute("data-position", "top");
   });
 
@@ -126,6 +127,26 @@ describe("CreateCustomAppModal", () => {
       data: { builtins: [], customs: [] },
       isLoading: false,
     });
+  });
+
+  it("saves a change to user management without changing app configuration", async () => {
+    const user = setupUser();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    renderExistingApp();
+    await user.click(
+      screen.getByRole("switch", {
+        name: "Let users manage approval settings",
+      })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ users_can_manage_policies: false })
+      )
+    );
   });
 
   it("focuses the name only when creating an app", () => {
@@ -183,6 +204,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
       });
     });
@@ -230,12 +252,13 @@ describe("CreateCustomAppModal", () => {
         name: "Updated CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
       })
     );
   });
 
-  it("creates configuration and authentication together without a tab bar", async () => {
+  it("separates configuration, authentication, and tools", async () => {
     jest
       .mocked(externalAppsService.createCustomExternalApp)
       .mockResolvedValue(CUSTOM_APP);
@@ -249,10 +272,8 @@ describe("CreateCustomAppModal", () => {
     expect(
       screen.queryByRole("tab", { name: "Skills" })
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("tab", { name: "Permissions" })
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tools" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tools" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Reports API" },
     });
@@ -261,6 +282,9 @@ describe("CreateCustomAppModal", () => {
       target: { value: "https://reports.internal/*" },
     });
     fireEvent.keyDown(pattern, { key: "Enter", code: "Enter" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Authentication" }), {
+      button: 0,
+    });
     fireEvent.change(screen.getByPlaceholderText("Authorization"), {
       target: { value: "Authorization" },
     });
@@ -273,6 +297,9 @@ describe("CreateCustomAppModal", () => {
     fireEvent.change(screen.getByPlaceholderText("sk-…"), {
       target: { value: "reports-secret" },
     });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Configuration" }), {
+      button: 0,
+    });
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
       "Reports API"
     );
@@ -284,6 +311,7 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(externalAppsService.createCustomExternalApp).toHaveBeenCalledWith({
+        users_can_manage_policies: true,
         name: "Reports API",
         upstream_url_patterns: ["https://reports.internal/*"],
         auth_template: { Authorization: "Bearer {reports_key}" },
@@ -308,6 +336,7 @@ describe("CreateCustomAppModal", () => {
       />
     );
 
+    await user.click(screen.getByRole("tab", { name: "Authentication" }));
     const credential = screen.getByPlaceholderText("sk-…");
     expect(credential).toHaveAttribute("type", "password");
     expect(credential).toHaveValue("sk-original-secret+/=");
@@ -339,6 +368,7 @@ describe("CreateCustomAppModal", () => {
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: { Authorization: "Bearer {api_key}" },
         organization_credentials: { api_key: "sk-original-secret+/=" },
+        users_can_manage_policies: true,
       })
     );
   });
@@ -452,6 +482,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        users_can_manage_policies: true,
         organization_credentials: {},
         associated_skill_ids: ["skill-a"],
       })

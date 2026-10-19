@@ -393,7 +393,7 @@ export default function OpenAPIPluginDetailPage({
                   keepMounted
                   hidden={tab !== "server"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
+                  <div className="min-w-0">
                     {canEdit ? (
                       <MetadataEditor
                         key={tool.id}
@@ -421,7 +421,7 @@ export default function OpenAPIPluginDetailPage({
                   keepMounted
                   hidden={tab !== "schema"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
+                  <div className="min-w-0">
                     {visited.has("schema") &&
                       (canEdit ? (
                         <AddOpenAPIActionModal
@@ -451,7 +451,7 @@ export default function OpenAPIPluginDetailPage({
                   keepMounted
                   hidden={tab !== "authentication"}
                 >
-                  <div className="h-[min(24rem,45dvh)] overflow-y-auto">
+                  <div className="min-w-0">
                     {visited.has("authentication") &&
                       (canAuthenticate ? (
                         <OpenAPIAuthenticationModal
@@ -485,7 +485,7 @@ export default function OpenAPIPluginDetailPage({
                   </div>
                 </Tabs.Content>
                 <Tabs.Content value="tools">
-                  <div className="flex h-[min(24rem,45dvh)] flex-col gap-4 overflow-y-auto">
+                  <div className="flex flex-col gap-4">
                     <InputTypeIn
                       searchIcon
                       value={toolSearch}

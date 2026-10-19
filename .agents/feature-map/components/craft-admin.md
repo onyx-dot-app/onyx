@@ -41,9 +41,11 @@ servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and configure its
 credentials. Zendesk also exposes Help Center, side conversation, and macro policies.
 Their reads auto-approve and their writes require approval by default.
-The permissions selector shows Default when effective policies match
-the catalog and Custom for mixed overrides. Default restores each catalog policy.
-The shared MCP editor uses the same control, with Ask as each tool’s default.
+External-app policy editors offer search and a Set permissions menu for bulk Auto-approve, Ask, and Disabled choices.
+Bulk changes affect matching editable actions. Default restores each catalog policy.
+Personal and task editors reuse this control, with a workspace-reset callback.
+Workspace-disabled actions remain locked and explain the restriction on hover.
+The MCP tools editor retains its bulk selector; each tool defaults to Ask.
 Policy rows keep controls on the right. Names and descriptions wrap within the
 remaining width so the full text stays visible without hover or expansion.
 On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
@@ -52,10 +54,15 @@ on Cloud keep a normal credential form, as does a built-in whose OAuth client
 cannot be Onyx-owned because it is registered per customer account (Zendesk).
 External-app editors share the Plugins modal frame with MCP and OpenAPI.
 Built-in and custom editors share `web/src/sections/plugins/CraftAppEditorTabs.tsx`.
-Configuration includes identity, URL patterns where applicable, and credentials.
-Built-in action policies and existing skill associations have separate tabs.
+Tabs follow the MCP flow: Configuration, Authentication, then Tools.
+Configuration includes identity and URL patterns where applicable. Authentication contains credentials and custom headers.
+Tools contains action policies. Existing skill associations remain in a fourth Skills tab.
 Per-action policy controls stay visible; there is no Advanced disclosure.
-New custom apps omit the single-tab bar. Panels keep a stable scroll height;
+Built-in and custom apps show the user-management switch in Configuration.
+Custom apps have no action catalog, so Tools does not invent per-action controls.
+The user-management switch defaults on and saves with the app configuration.
+For existing apps, changing only this switch enables Save and activates the unsaved-change guard.
+The modal fits the active panel content and scrolls at the 80dvh height limit (or the available viewport space, if smaller);
 parents own the drafts and selected tab, including across skill-upload cancellation.
 The header shows the app logo, name, and the same clean service origin as its
 directory card, using MCP's modal padding and tab spacing.
@@ -155,10 +162,12 @@ permission. See §5 for why the flag alone is not the real gate.
 ### User-managed permission storage
 
 `backend/alembic/versions/131ed5e307a4_add_craft_action_policy_storage.py` adds `gated_app.users_can_manage_policies`, defaulting to true.
+The admin action editor exposes this switch for external apps and MCP servers.
 Workspace DENY blocks every user and task. With user management off, workspace settings
 apply directly; with it on, personal or task settings can override ASK and ALWAYS.
 `GET /api/build/admin/action-policies` lists workspace settings.
 `GET /api/build/admin/action-policies/{kind}/{target_id}` loads one app.
+Admin, personal, and task editors share the search, bulk controls, and action rows.
 Admin editors save policies through the existing external-app and MCP update endpoints.
 The external-app update route refreshes affected sandbox skills after committing policy changes.
 Personal settings use `/api/build/action-policies` and its per-app PUT route.

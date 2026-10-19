@@ -17,7 +17,7 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
-import type { TaskAppActionPolicies } from "@/app/craft/v1/apps/action-policies/types";
+import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
