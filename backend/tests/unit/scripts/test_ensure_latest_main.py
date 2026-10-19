@@ -69,9 +69,15 @@ def _run(
     payload: dict[str, str] = {"cwd": str(repo)}
     if event:
         payload["hook_event_name"] = event
+    return _run_raw(repo, json.dumps(payload), **env)
+
+
+def _run_raw(repo: Path, stdin: str, **env: str) -> subprocess.CompletedProcess[str]:
+    """Run the hook with `stdin` as its payload, from `repo` as the cwd."""
     result = subprocess.run(
         [sys.executable, str(_HOOK)],
-        input=json.dumps(payload),
+        input=stdin,
+        cwd=repo,
         env={**_GIT_ENV, **env},
         capture_output=True,
         text=True,
@@ -243,6 +249,22 @@ def test_hook_never_changes_the_working_tree(
     )
 
 
+def test_only_untracked_files_still_warn_about_uncommitted_changes(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    (stale_checkout / "scratch.txt").write_text("untracked\n")
+    _push_new_commit(stale_remote)
+    out = _run(stale_checkout, "SessionStart").stdout
+    assert "uncommitted changes" in out
+
+
+def test_clean_tree_does_not_warn_about_uncommitted_changes(
+    stale_checkout: Path, stale_remote: Path
+) -> None:
+    _push_new_commit(stale_remote)
+    assert "uncommitted changes" not in _run(stale_checkout, "SessionStart").stdout
+
+
 def test_session_start_offline_reports_against_last_known_main(
     stale_checkout: Path, stale_remote: Path
 ) -> None:
@@ -279,6 +301,50 @@ def test_skip_variable_silences_the_hook(
     assert (
         _run(stale_checkout, "SessionStart", ONYX_SKIP_MAIN_SYNC_CHECK="1").stdout == ""
     )
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", ""])
+def test_falsy_skip_values_do_not_disable_the_hook(
+    stale_checkout: Path, stale_remote: Path, value: str
+) -> None:
+    _push_new_commit(stale_remote)
+    out = _run(stale_checkout, "SessionStart", ONYX_SKIP_MAIN_SYNC_CHECK=value).stdout
+    assert "it is stale" in out
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+def test_truthy_skip_values_disable_the_hook(
+    stale_checkout: Path, stale_remote: Path, value: str
+) -> None:
+    _push_new_commit(stale_remote)
+    assert (
+        _run(stale_checkout, "SessionStart", ONYX_SKIP_MAIN_SYNC_CHECK=value).stdout
+        == ""
+    )
+
+
+@pytest.mark.parametrize(
+    "stdin",
+    [
+        "[]",
+        "null",
+        "42",
+        '"text"',
+        "{not json",
+        '{"cwd": 5, "hook_event_name": ["UserPromptSubmit"]}',
+        '{"cwd": ["x"]}',
+        '{"cwd": ""}',
+        "\xff\xfe",
+    ],
+)
+def test_malformed_payload_falls_back_to_the_cwd_and_exits_zero(
+    stale_checkout: Path, stale_remote: Path, stdin: str
+) -> None:
+    _push_new_commit(stale_remote)
+    # Run from inside the checkout: with no usable `cwd` in the payload the hook
+    # checks the directory it was started in, and treats the event as session start.
+    out = _run_raw(stale_checkout, stdin).stdout
+    assert "it is stale" in out
 
 
 def test_outside_a_repository_is_silent(tmp_path: Path) -> None:

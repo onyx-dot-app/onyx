@@ -34,7 +34,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 _REMOTE = "origin"
 _BRANCH = "main"
@@ -49,6 +48,7 @@ _GIT_TIMEOUT_SECONDS = 10
 _MAX_LISTED_FILES = 8
 _AGENT_CONTEXT_DIR = ".agents/"
 _SKIP_ENV = "ONYX_SKIP_MAIN_SYNC_CHECK"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
 def _git(repo: Path, *args: str) -> str | None:
@@ -153,6 +153,7 @@ def _fetch_due(repo: Path) -> bool:
 
 
 def _mark_fetched(repo: Path) -> None:
+    """Record a fetch attempt now, so prompts within the hour do not fetch again."""
     git_dir = _git(repo, "rev-parse", "--absolute-git-dir")
     try:
         if git_dir:
@@ -162,6 +163,7 @@ def _mark_fetched(repo: Path) -> None:
 
 
 def _plural(count: int, noun: str) -> str:
+    """`1 commit`, `2 commits`."""
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
@@ -200,7 +202,8 @@ def _report(repo: Path, fetched: bool | None) -> str | None:
 
     branch = _git(repo, "branch", "--show-current") or "HEAD (detached)"
     on_main = branch == _BRANCH
-    dirty = bool(_git(repo, "status", "--porcelain", "--untracked-files=no"))
+    # Untracked files count: a rebase or merge can collide with them too.
+    dirty = bool(_git(repo, "status", "--porcelain"))
     stale_note = (
         ""
         if fetched is not False
@@ -253,16 +256,34 @@ def _report(repo: Path, fetched: bool | None) -> str | None:
     return "\n".join(lines)
 
 
-def main() -> int:
-    if os.environ.get(_SKIP_ENV):
-        return 0
-    payload: dict[str, Any]
+def _skipped() -> bool:
+    """True when `ONYX_SKIP_MAIN_SYNC_CHECK` holds a truthy value (not `0`, `false`)."""
+    return os.environ.get(_SKIP_ENV, "").strip().lower() in _TRUTHY
+
+
+def _read_payload() -> tuple[Path, bool]:
+    """The directory to check and whether this is a `UserPromptSubmit` event.
+
+    The hook payload arrives as JSON on stdin; anything that is not an object, or
+    has fields of the wrong type, is ignored in favor of the current directory.
+    """
+    decoded: object
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except (json.JSONDecodeError, OSError):
-        payload = {}
-    start = Path(payload.get("cwd") or os.getcwd())
-    quiet = payload.get("hook_event_name") == "UserPromptSubmit"
+        decoded = json.loads(sys.stdin.read() or "{}")
+    except (ValueError, OSError, RecursionError):
+        decoded = {}
+    payload = decoded if isinstance(decoded, dict) else {}
+    cwd = payload.get("cwd")
+    event = payload.get("hook_event_name")
+    start = Path(cwd) if isinstance(cwd, str) and cwd else Path(os.getcwd())
+    return start, event == "UserPromptSubmit"
+
+
+def main() -> int:
+    """Run the check for one hook event; always exits 0."""
+    if _skipped():
+        return 0
+    start, quiet = _read_payload()
     try:
         top = _git(start, "rev-parse", "--show-toplevel")
         if not top:
