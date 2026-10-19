@@ -579,7 +579,16 @@ test("arrows move between search and the cards, and typing on a card returns to 
   expect(search).toHaveValue("w");
   await user.keyboard("{ArrowDown}");
   await user.keyboard("{Escape}");
-  expect(search).toHaveFocus(); // ArrowDown on the filter tabs also moves to the cards.
+  expect(search).toHaveFocus();
+  // ArrowDown on the search field's × button also moves to the cards.
+  await user.click(search);
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Clear" })).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(
+    screen.getAllByLabelText(/./, { selector: "[data-plugin-card]" })[0]
+  ).toHaveFocus();
+  // ArrowDown on the filter tabs also moves to the cards.
   screen.getByRole("tab", { name: copy.filters.all }).focus();
   await user.keyboard("{ArrowDown}");
   expect(

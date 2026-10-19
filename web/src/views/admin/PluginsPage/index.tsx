@@ -127,8 +127,10 @@ export default function PluginsPage() {
   const { plugins, mcp, openapi, externalApps } = useInstalledPlugins();
   const [dialog, setDialog] = useState<PluginDialog>(null);
   const [query, setQuery] = useState("");
-  const { searchRef, onSearchKeyDown, onEntryKeyDown, resultsRef } =
-    useSearchResultsNavigation({ query, itemSelector: "[data-plugin-card]" });
+  const nav = useSearchResultsNavigation({
+    query,
+    itemSelector: "[data-plugin-card]",
+  });
   const [kind, setKind] = useState<"all" | "mcp" | "openapi" | "external-app">(
     "all"
   );
@@ -296,8 +298,7 @@ export default function PluginsPage() {
               searchLabel={t("search.placeholder")}
               query={query}
               onQueryChange={setQuery}
-              searchRef={searchRef}
-              onSearchKeyDown={onSearchKeyDown}
+              searchProps={nav.searchProps}
               filters={
                 <Tabs
                   value={kind}
@@ -308,7 +309,7 @@ export default function PluginsPage() {
                 >
                   <Tabs.List
                     aria-label={t("filters.label")}
-                    onKeyDown={onEntryKeyDown}
+                    {...nav.entryProps}
                   >
                     {kindOptions.map((value) => (
                       <Tabs.Trigger
@@ -360,7 +361,7 @@ export default function PluginsPage() {
               />
             )}
             {filteredPlugins.length > 0 && (
-              <div ref={resultsRef} className="flex flex-col gap-2">
+              <div {...nav.resultsProps} className="flex flex-col gap-2">
                 {filteredPlugins.map((plugin) => (
                   <PluginCard
                     onOpen={(params = new URLSearchParams()) =>

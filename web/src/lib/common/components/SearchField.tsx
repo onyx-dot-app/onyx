@@ -26,8 +26,11 @@ export interface SearchFieldProps {
   focusOnMount?: boolean;
   /** The hotkey that returns focus to the field; `null` binds none. @default "/" */
   hotkey?: string | null;
-  /** Runs after the field's own Escape handling, unless that handled the key. */
-  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
+  /**
+   * Keys from anywhere in the field, its × button included. Runs after the
+   * field's own Escape handling, unless that handled the key.
+   */
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   ref?: Ref<SearchFieldHandle>;
 }
 
@@ -51,20 +54,27 @@ export default function SearchField({
   useImperativeHandle(ref, () => ({ focus: search.focus }), [search.focus]);
 
   return (
-    <InputTypeIn
-      ref={search.ref}
-      type="text"
-      searchIcon
-      clearButton
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
+    // `InputTypeIn`'s own `onKeyDown` sees only the text field; this wrapper
+    // also hears the × button.
+    <div
+      role="presentation"
+      className="contents"
       onKeyDown={(event) => {
-        search.onKeyDown(event);
         if (event.defaultPrevented) return;
         onKeyDown?.(event);
       }}
-      placeholder={placeholder ?? t("placeholder")}
-      aria-label={ariaLabel}
-    />
+    >
+      <InputTypeIn
+        ref={search.ref}
+        type="text"
+        searchIcon
+        clearButton
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={search.onKeyDown}
+        placeholder={placeholder ?? t("placeholder")}
+        aria-label={ariaLabel}
+      />
+    </div>
   );
 }

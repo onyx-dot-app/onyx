@@ -149,24 +149,24 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  const { searchRef, onSearchKeyDown, resultsRef } = useSearchResultsNavigation(
-    { query: rawSearchTerm, itemSelector: "[data-source-card]" }
-  );
+  const nav = useSearchResultsNavigation({
+    query: rawSearchTerm,
+    itemSelector: "[data-source-card]",
+  });
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header icon={route.icon} title={adminRouteTitle(route)}>
         <SearchField
-          ref={searchRef}
+          {...nav.searchProps}
           placeholder={t("search.placeholder")}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={setSearchTerm}
-          onKeyDown={onSearchKeyDown}
         />
       </SettingsLayouts.Header>
       <SettingsLayouts.Body>
         <div
-          ref={resultsRef}
+          {...nav.resultsProps}
           className="@container/sourcecards flex flex-col gap-8"
         >
           <GeneralLayouts.Section

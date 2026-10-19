@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type RefObject } from "react";
 import { useGridNavigation } from "@opal/hooks";
 import type { SearchFieldHandle } from "@/lib/common/components";
 
@@ -11,29 +11,47 @@ export interface UseSearchResultsNavigationOptions {
   itemSelector: string;
 }
 
+/** Spread on the `SearchField`. */
+export interface SearchNavigationProps {
+  ref: RefObject<SearchFieldHandle | null>;
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+}
+
+/** Spread on another control above the results, such as filter tabs. */
+export interface EntryNavigationProps {
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+}
+
+/** Spread on the element that holds the results. */
+export interface ResultsNavigationProps {
+  ref: (element: HTMLElement | null) => void;
+}
+
 export interface UseSearchResultsNavigationReturn {
-  /** Put on the `SearchField`. */
-  searchRef: React.RefObject<SearchFieldHandle | null>;
-  /** Put on the `SearchField` as `onKeyDown`. */
-  onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  /**
-   * Put as `onKeyDown` on other controls above the results, such as filter
-   * tabs: ArrowDown moves to the first result. Enter is left to the control.
-   */
-  onEntryKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
-  /** Put on the element that holds the results. */
-  resultsRef: (element: HTMLElement | null) => void;
+  searchProps: SearchNavigationProps;
+  entryProps: EntryNavigationProps;
+  resultsProps: ResultsNavigationProps;
 }
 
 /**
- * Keyboard movement between a page's `SearchField` and its results.
+ * Keyboard movement between a page's `SearchField` and its results. A page
+ * only spreads the returned props; it holds no key logic of its own.
  *
- * - ArrowDown or Enter in the field, or ArrowDown on another control above
- *   the results (`onEntryKeyDown`), moves to the first result.
+ * - ArrowDown in the field (its × button too) or on an entry control, or
+ *   Enter in the text, moves to the first result. Enter on the × clears, and
+ *   Enter on an entry control is left to it.
  * - Arrows move between results (see `useGridNavigation`).
  * - ArrowUp from the top row, Escape, or typing on a result returns to the
  *   field; typed characters are added to the query. "/" is left to the
  *   field's hotkey.
+ *
+ * @example
+ * ```tsx
+ * const nav = useSearchResultsNavigation({ query, itemSelector: "[data-card]" });
+ * <SearchField {...nav.searchProps} value={query} onChange={setQuery} />
+ * <Tabs.List {...nav.entryProps}>{tabs}</Tabs.List>
+ * <div {...nav.resultsProps}>{cards}</div>
+ * ```
  */
 export function useSearchResultsNavigation({
   query,
@@ -53,9 +71,13 @@ export function useSearchResultsNavigation({
     },
   });
 
-  function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function onSearchKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.nativeEvent.isComposing) return;
-    if ((event.key === "Enter" || event.key === "ArrowDown") && focusFirst()) {
+    const inText = event.target instanceof HTMLInputElement;
+    if (
+      (event.key === "ArrowDown" || (event.key === "Enter" && inText)) &&
+      focusFirst()
+    ) {
       event.preventDefault();
     }
   }
@@ -65,5 +87,9 @@ export function useSearchResultsNavigation({
     if (event.key === "ArrowDown" && focusFirst()) event.preventDefault();
   }
 
-  return { searchRef, onSearchKeyDown, onEntryKeyDown, resultsRef };
+  return {
+    searchProps: { ref: searchRef, onKeyDown: onSearchKeyDown },
+    entryProps: { onKeyDown: onEntryKeyDown },
+    resultsProps: { ref: resultsRef },
+  };
 }
