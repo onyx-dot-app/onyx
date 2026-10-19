@@ -12,13 +12,12 @@ from collections.abc import Callable
 from enum import Enum
 from typing import NoReturn, TypeVar
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     form_config,
 )
@@ -77,13 +76,6 @@ _MAX_SUMMARY_CHARS: int = 40
 _REFRESH_REFUSED_STATUSES: frozenset[int] = frozenset({400, 401})
 
 
-class _RowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    summary: str
-    description: str
-
-
 class _CredentialKind(str, Enum):
     API_KEY = "api_key"
     OAUTH = "oauth"
@@ -126,16 +118,16 @@ def config_from_context(context: CapabilityCheckContext) -> LinearConnectorConfi
     return form_config(context, LinearConnectorConfig)
 
 
-def _timeout_row(sign_in: bool) -> _RowText:
+def _timeout_row(sign_in: bool) -> CheckRowText:
     if sign_in:
-        return _RowText(
+        return CheckRowText(
             summary="Sign-in timed out",
             description=(
                 "Linear did not answer the sign-in in time.\nRe-run, or check "
                 "that Linear is reachable from Onyx."
             ),
         )
-    return _RowText(
+    return CheckRowText(
         summary="Timed out",
         description="The check ran past its time limit.\nRe-run the checks later.",
     )
@@ -195,7 +187,7 @@ def _raise_for_linear_error(
             ),
         ) from error
     if isinstance(error, LinearUnreachableError) and error.timed_out:
-        row: _RowText = _timeout_row(sign_in)
+        row: CheckRowText = _timeout_row(sign_in)
         raise UnreachableValidationError(
             f"Linear did not answer in time: {error}",
             summary=row.summary,
