@@ -20,6 +20,10 @@
     {
       "name": "i18n",
       "specifier": "./tools/oxlint/i18n/index.ts"
+    },
+    {
+      "name": "opal",
+      "specifier": "./tools/oxlint/opal/index.ts"
     }
   ],
   "categories": {
@@ -55,7 +59,40 @@
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
     "anti-slop/no-runtime-typeof": "off",
     "anti-slop/no-shape-in-symbol-names": "off",
-    "i18n/no-raw-jsx-text": "off"
+    "i18n/no-raw-jsx-text": "off",
+    "opal/no-replaced-refresh-import": "warn",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "lucide-react",
+            "message": "Use icons from `@opal/icons`."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["react-icons", "react-icons/*"],
+            "message": "Use icons from `@opal/icons`."
+          },
+          {
+            "group": ["@/components/*", "!@/components/icons/icons"],
+            "message": "`src/components/` is legacy. Use `@opal/*`, then `@/refresh-components/*`, then `@/sections/*`."
+          }
+        ]
+      }
+    ],
+    "react/forbid-elements": [
+      "error",
+      {
+        "forbid": [
+          { "element": "button", "message": "Use `Button` from `@opal/components`." },
+          { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
+          { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
+          { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
@@ -109,6 +146,171 @@
       "rules": {
         "i18n/no-raw-jsx-text": "off"
       }
+    },
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**",
+        "**/*.stories.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": "off",
+        "react/forbid-elements": "off"
+      }
+    },
+    {
+      // Opal implements the primitives, so it renders the raw elements.
+      "files": ["lib/opal/src/**"],
+      "rules": {
+        "react/forbid-elements": "off"
+      }
+    },
+    {
+      // Legacy and being deleted.
+      "files": ["src/components/**"],
+      "rules": {
+        "no-restricted-imports": "off",
+        "react/forbid-elements": "off"
+      }
+    },
+    {
+      // Design-system baseline: files that broke these rules when they landed.
+      // Remove a file once it is clean. Never add one.
+      "files": [
+        "src/app/admin/agents/CollapsibleSection.tsx",
+        "src/app/admin/bots/SlackBotTable.tsx",
+        "src/app/admin/bots/SlackBotUpdateForm.tsx",
+        "src/app/admin/bots/SlackTokensForm.tsx",
+        "src/app/admin/bots/[[]bot-id]/SlackChannelConfigsTable.tsx",
+        "src/app/admin/bots/[[]bot-id]/channels/SlackChannelConfigFormFields.tsx",
+        "src/app/admin/bots/[[]bot-id]/channels/[[]id]/page.tsx",
+        "src/app/admin/bots/[[]bot-id]/channels/new/page.tsx",
+        "src/app/admin/bots/[[]bot-id]/page.tsx",
+        "src/app/admin/bots/page.tsx",
+        "src/app/admin/discord-bot/DiscordGuildsTable.tsx",
+        "src/app/admin/discord-bot/[[]guild-id]/page.tsx",
+        "src/app/admin/discord-bot/page.tsx",
+        "src/app/admin/documents/ScoreEditor.tsx",
+        "src/app/admin/documents/explorer/Explorer.tsx",
+        "src/app/admin/documents/feedback/DocumentFeedbackTable.tsx",
+        "src/app/admin/documents/feedback/page.tsx",
+        "src/app/admin/documents/sets/DocumentSetCreationForm.tsx",
+        "src/app/admin/documents/sets/[[]documentSetId]/page.tsx",
+        "src/app/admin/documents/sets/new/page.tsx",
+        "src/app/admin/documents/sets/page.tsx",
+        "src/app/admin/oauth-test/page.tsx",
+        "src/app/app/message/CodeBlock.tsx",
+        "src/app/app/message/HumanMessage.tsx",
+        "src/app/app/message/MemoizedTextComponents.tsx",
+        "src/app/app/message/errorHelpers.tsx",
+        "src/app/app/message/messageComponents/interfaces.ts",
+        "src/app/app/message/messageComponents/toolDisplayHelpers.tsx",
+        "src/app/app/shared/[[]chatId]/SharedChatDisplay.tsx",
+        "src/app/auth/forgot-password/page.tsx",
+        "src/app/auth/impersonate/page.tsx",
+        "src/app/auth/login/LoginPage.tsx",
+        "src/app/auth/reset-password/page.tsx",
+        "src/app/auth/signup/ReferralSourceSelector.tsx",
+        "src/app/auth/waiting-on-verification/RequestNewVerificationEmail.tsx",
+        "src/app/components/nrf/SettingsPanel.tsx",
+        "src/app/craft/components/AgentSwitcher.tsx",
+        "src/app/craft/components/BigButton.tsx",
+        "src/app/craft/components/BuildWelcome.tsx",
+        "src/app/craft/components/CompactionMarker.tsx",
+        "src/app/craft/components/ConnectDataBanner.tsx",
+        "src/app/craft/components/CraftInputBar.tsx",
+        "src/app/craft/components/OpencodeDebugLogs.tsx",
+        "src/app/craft/components/SuggestedPrompts.tsx",
+        "src/app/craft/components/ThinkingCard.tsx",
+        "src/app/craft/components/TodoListCard.tsx",
+        "src/app/craft/components/UserLibraryModal.tsx",
+        "src/app/craft/components/approvals/ApprovalCard.tsx",
+        "src/app/craft/components/tool-cards/CraftToolCard.tsx",
+        "src/app/craft/components/tool-cards/CraftToolGroup.tsx",
+        "src/app/craft/components/tool-cards/TaskBody.tsx",
+        "src/app/craft/v1/tasks/components/ScheduleEditor.tsx",
+        "src/app/ee/admin/performance/custom-analytics/CustomAnalyticsUpdateForm.tsx",
+        "src/app/ee/admin/performance/query-history/QueryHistoryTable.tsx",
+        "src/app/ee/admin/performance/query-history/[[]id]/page.tsx",
+        "src/app/ee/admin/standard-answer/StandardAnswerCreationForm.tsx",
+        "src/app/ee/admin/standard-answer/[[]id]/page.tsx",
+        "src/app/ee/admin/standard-answer/new/page.tsx",
+        "src/app/ee/admin/standard-answer/page.tsx",
+        "src/app/ee/admin/theme/AppearanceThemeSettings.tsx",
+        "src/app/ee/agents/stats/[[]id]/page.tsx",
+        "src/app/nrf/(main)/page.tsx",
+        "src/app/nrf/side-panel/page.tsx",
+        "src/ee/sections/SearchCard.tsx",
+        "src/ee/sections/SearchUI.tsx",
+        "src/layouts/table-layouts.tsx",
+        "src/lib/credentials/components/EditCredential.tsx",
+        "src/lib/projects/components/ProjectContextPanel.tsx",
+        "src/lib/projects/components/ProjectFolderButton.tsx",
+        "src/lib/tools/components/SourcesView.tsx",
+        "src/providers/ProductGatingWrapper.tsx",
+        "src/refresh-components/buttons/ButtonRenaming.tsx",
+        "src/refresh-components/buttons/SelectButton.tsx",
+        "src/refresh-components/buttons/SquareButton.tsx",
+        "src/refresh-components/buttons/Tag.tsx",
+        "src/refresh-components/buttons/source-tag/SourceTag.tsx",
+        "src/refresh-components/buttons/source-tag/SourceTagDetailsCard.tsx",
+        "src/refresh-components/popovers/FilePickerPopover.tsx",
+        "src/refresh-components/tiles/FileTile.tsx",
+        "src/sections/cards/FileCard.tsx",
+        "src/sections/document-sidebar/ChatDocumentDisplay.tsx",
+        "src/sections/input/PasteTilePopover.tsx",
+        "src/sections/modals/UserFilesModal.tsx",
+        "src/sections/onboarding/steps/LLMStep.tsx",
+        "src/sections/skills/InstructionsDisplayModeToggle.tsx",
+        "src/sections/skills/SkillBundlePicker.tsx",
+        "src/sections/skills/SkillFilesPicker.tsx",
+        "src/views/AgentEditorPage.tsx",
+        "src/views/AppPage.tsx",
+        "src/views/SettingsPage.tsx",
+        "src/views/admin/connectors/AddConnectorPage/form/FieldRendering.tsx",
+        "src/views/admin/connectors/ConnectorDetailPage/InlineFileManagement.tsx",
+        "src/views/admin/connectors/FederatedDetailPage/index.tsx",
+        "src/views/admin/connectors/OAuthFinalizePage/index.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "warn",
+          {
+            "paths": [
+              {
+                "name": "lucide-react",
+                "message": "Use icons from `@opal/icons`."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["react-icons", "react-icons/*"],
+                "message": "Use icons from `@opal/icons`."
+              },
+              {
+                "group": ["@/components/*", "!@/components/icons/icons"],
+                "message": "`src/components/` is legacy. Use `@opal/*`, then `@/refresh-components/*`, then `@/sections/*`."
+              }
+            ]
+          }
+        ],
+        "react/forbid-elements": [
+          "warn",
+          {
+            "forbid": [
+              { "element": "button", "message": "Use `Button` from `@opal/components`." },
+              { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
+              { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
+              { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+            ]
+          }
+        ]
+      }
     }
   ],
   "ignorePatterns": [
@@ -120,7 +322,8 @@
     "storybook-static",
     "lib/opal/dist",
     "tools/oxlint/anti-slop",
-    "tools/oxlint/i18n"
+    "tools/oxlint/i18n",
+    "tools/oxlint/opal"
   ],
   "env": {
     "builtin": true

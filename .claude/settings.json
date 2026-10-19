@@ -35,6 +35,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/opal_migrate_on_edit.py\"",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
