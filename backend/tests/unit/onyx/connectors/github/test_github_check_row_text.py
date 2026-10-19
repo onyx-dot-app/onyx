@@ -23,13 +23,13 @@ from onyx.connectors.github.source_operations import (
     GitHubRateLimitError,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
-from tests.unit.onyx.connectors.github.test_github_capability_checks import (
-    _CLASSIC_PUBLIC_ONLY,
-    _FINE_GRAINED,
-    _api_error,
-    _config,
-    _gateway,
-    _repo,
+from tests.unit.onyx.connectors.github.github_check_helpers import (
+    CLASSIC_PUBLIC_ONLY_TOKEN,
+    FINE_GRAINED_TOKEN,
+    api_error,
+    form_config,
+    healthy_gateway,
+    make_repo,
 )
 
 
@@ -46,7 +46,7 @@ def _run_all(
     context = CapabilityCheckContext(
         source=DocumentSource.GITHUB,
         credential_json={"github_access_token": "ghp_x"},
-        connector_specific_config=config if config is not None else _config(),
+        connector_specific_config=config if config is not None else form_config(),
         source_operations=gateway,
     )
     return {
@@ -69,15 +69,15 @@ def _run(
 
 
 def test_sign_in_names_the_token_user() -> None:
-    result = _run("github_auth", _gateway())
+    result = _run("github_auth", healthy_gateway())
 
     assert result.display_name == "Sign in to GitHub"
     assert result.summary == "Signed in as @octocat"
 
 
 def test_a_revoked_token_is_rejected() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.side_effect = _api_error(401, "Bad credentials")
+    gateway = healthy_gateway()
+    gateway.get_token_info.side_effect = api_error(401, "Bad credentials")
 
     result = _run("github_auth", gateway)
 
@@ -87,8 +87,8 @@ def test_a_revoked_token_is_rejected() -> None:
 
 
 def test_a_saml_denial_says_so() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.side_effect = _api_error(
+    gateway = healthy_gateway()
+    gateway.get_token_info.side_effect = api_error(
         403, "Resource protected by organization SAML enforcement."
     )
 
@@ -99,14 +99,14 @@ def test_a_saml_denial_says_so() -> None:
 
 
 def test_a_404_at_sign_in_is_no_api_at_the_url() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.side_effect = _api_error(404, "Not Found")
+    gateway = healthy_gateway()
+    gateway.get_token_info.side_effect = api_error(404, "Not Found")
 
     assert _run("github_auth", gateway).summary == "No GitHub API at this URL"
 
 
 def test_a_missing_token_says_so() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.get_token_info.side_effect = ConnectorMissingCredentialError("GitHub")
 
     result = _run("github_auth", gateway)
@@ -116,7 +116,7 @@ def test_a_missing_token_says_so() -> None:
 
 
 def test_an_unreachable_server_fails_only_a_form_run() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.get_token_info.side_effect = requests.ConnectionError("refused")
 
     form = _run("github_auth", gateway, form_run=True)
@@ -128,7 +128,7 @@ def test_an_unreachable_server_fails_only_a_form_run() -> None:
 
 
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.get_token_info.side_effect = GitHubRateLimitError(
         "429", status_code=429, secondary=False
     )
@@ -146,8 +146,8 @@ def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
 
 
 def test_a_failed_sign_in_stops_the_checks_after_it() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.side_effect = _api_error(401, "Bad credentials")
+    gateway = healthy_gateway()
+    gateway.get_token_info.side_effect = api_error(401, "Bad credentials")
 
     results = _run_all(
         ["github_auth", "github_owner", "github_repositories_visible", "github_issues"],
@@ -161,7 +161,7 @@ def test_a_failed_sign_in_stops_the_checks_after_it() -> None:
 
 
 def test_an_api_error_carries_the_request_and_body() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.get_token_info.side_effect = GitHubApiError(
         "500",
         status_code=500,
@@ -183,14 +183,16 @@ def test_an_api_error_carries_the_request_and_body() -> None:
 
 
 def test_selected_content_names_what_is_indexed() -> None:
-    result = _run("github_document_types", _gateway(), _config(include_issues=False))
+    result = _run(
+        "github_document_types", healthy_gateway(), form_config(include_issues=False)
+    )
 
     assert result.summary == "Indexing pull requests, documents"
 
 
 def test_a_classic_token_without_repo_names_the_scope() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.return_value = _CLASSIC_PUBLIC_ONLY
+    gateway = healthy_gateway()
+    gateway.get_token_info.return_value = CLASSIC_PUBLIC_ONLY_TOKEN
 
     result = _run("github_token_scopes", gateway)
 
@@ -199,22 +201,22 @@ def test_a_classic_token_without_repo_names_the_scope() -> None:
 
 
 def test_owner_names_its_kind() -> None:
-    assert _run("github_owner", _gateway()).summary == "Found organization acme"
+    assert _run("github_owner", healthy_gateway()).summary == "Found organization acme"
 
 
 def test_a_missing_owner_names_it() -> None:
-    gateway = _gateway()
-    gateway.get_organization.side_effect = _api_error(404, "Not Found")
-    gateway.list_user_repositories.side_effect = _api_error(404, "Not Found")
+    gateway = healthy_gateway()
+    gateway.get_organization.side_effect = api_error(404, "Not Found")
+    gateway.list_user_repositories.side_effect = api_error(404, "Not Found")
 
     assert _run("github_owner", gateway).summary == "No owner named acme"
 
 
 def test_list_repositories_counts_them() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.list_organization_repositories.return_value = [
-        _repo("a"),
-        _repo("b"),
+        make_repo("a"),
+        make_repo("b"),
     ]
 
     assert (
@@ -227,7 +229,9 @@ def test_list_repositories_counts_them() -> None:
 
 def test_all_selected_repositories_found() -> None:
     result = _run(
-        "github_configured_repositories", _gateway(), _config(repositories="a, b")
+        "github_configured_repositories",
+        healthy_gateway(),
+        form_config(repositories="a, b"),
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
@@ -235,11 +239,11 @@ def test_all_selected_repositories_found() -> None:
 
 
 def test_some_denied_repositories_are_incomplete() -> None:
-    gateway = _gateway()
-    gateway.get_repository.side_effect = [_repo("a"), _api_error(403, "Forbidden")]
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = [make_repo("a"), api_error(403, "Forbidden")]
 
     result = _run(
-        "github_configured_repositories", gateway, _config(repositories="a, b")
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
     )
 
     assert result.status == CapabilityCheckStatus.INCOMPLETE
@@ -248,11 +252,11 @@ def test_some_denied_repositories_are_incomplete() -> None:
 
 
 def test_no_selected_repository_found_fails() -> None:
-    gateway = _gateway()
-    gateway.get_repository.side_effect = _api_error(404, "Not Found")
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = api_error(404, "Not Found")
 
     result = _run(
-        "github_configured_repositories", gateway, _config(repositories="a, b")
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
@@ -260,15 +264,15 @@ def test_no_selected_repository_found_fails() -> None:
 
 
 def test_checks_after_a_partial_find_run_on_the_found_repositories() -> None:
-    gateway = _gateway()
-    found = _repo("a")
-    missing = _api_error(404, "Not Found")
+    gateway = healthy_gateway()
+    found = make_repo("a")
+    missing = api_error(404, "Not Found")
     gateway.get_repository.side_effect = [found, missing, found, missing]
 
     results = _run_all(
         ["github_owner", "github_configured_repositories", "github_pull_requests"],
         gateway,
-        _config(repositories="a, gone"),
+        form_config(repositories="a, gone"),
     )
 
     assert (
@@ -283,18 +287,18 @@ def test_checks_after_a_partial_find_run_on_the_found_repositories() -> None:
 
 
 def test_branch_names_the_repositories_without_it() -> None:
-    gateway = _gateway()
-    gateway.get_branch.side_effect = _api_error(404, "Branch not found")
+    gateway = healthy_gateway()
+    gateway.get_branch.side_effect = api_error(404, "Branch not found")
 
-    result = _run("github_branch", gateway, _config(branch="gh-pages"))
+    result = _run("github_branch", gateway, form_config(branch="gh-pages"))
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Branch not found in 1 repository"
 
 
 def test_pull_requests_turned_off_pass_with_a_caveat() -> None:
-    gateway = _gateway()
-    gateway.list_pull_requests.side_effect = _api_error(404, "Not Found")
+    gateway = healthy_gateway()
+    gateway.list_pull_requests.side_effect = api_error(404, "Not Found")
 
     result = _run("github_pull_requests", gateway)
 
@@ -304,7 +308,7 @@ def test_pull_requests_turned_off_pass_with_a_caveat() -> None:
 
 
 def test_no_pull_requests_to_read_is_incomplete() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.list_pull_requests.return_value = []
 
     result = _run("github_pull_requests", gateway)
@@ -314,7 +318,7 @@ def test_no_pull_requests_to_read_is_incomplete() -> None:
 
 
 def test_no_issues_to_read_is_incomplete() -> None:
-    gateway = _gateway()
+    gateway = healthy_gateway()
     gateway.list_issues.return_value = []
 
     result = _run("github_issues", gateway)
@@ -324,16 +328,16 @@ def test_no_issues_to_read_is_incomplete() -> None:
 
 
 def test_files_count_the_documents() -> None:
-    result = _run("github_files", _gateway())
+    result = _run("github_files", healthy_gateway())
 
     assert result.status == CapabilityCheckStatus.PASSED
     assert result.summary == "1 document found in acme/docs"
 
 
 def test_a_denied_sample_names_the_fine_grained_permission() -> None:
-    gateway = _gateway()
-    gateway.get_token_info.return_value = _FINE_GRAINED
-    gateway.list_issues.side_effect = _api_error(403, "Resource not accessible")
+    gateway = healthy_gateway()
+    gateway.get_token_info.return_value = FINE_GRAINED_TOKEN
+    gateway.list_issues.side_effect = api_error(403, "Resource not accessible")
 
     result = _run("github_issues", gateway)
 
