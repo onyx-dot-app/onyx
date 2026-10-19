@@ -73,6 +73,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceSpaceNotFoundError,
     ConfluenceSpacePermissionsVariant,
     ConfluenceUserListVariant,
+    has_anonymous_space_read,
     read_dc_jsonrpc_space_subjects,
     read_dc_rest_space_subjects,
     read_dc_space_subjects,
@@ -1859,9 +1860,8 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
             ) from e
         except HTTPError as e:
             _raise_for_space_permission_error(e, space_key=space_key)
-        return CheckOutput(
-            summary=f"{space_key} anonymous access: {'on' if operations else 'off'}"
-        )
+        state = "on" if has_anonymous_space_read(operations) else "off"
+        return CheckOutput(summary=f"{space_key} anonymous access: {state}")
 
 
 def _user_list_variant(is_cloud: bool) -> ConfluenceUserListVariant:

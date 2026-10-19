@@ -629,6 +629,30 @@ def test_anonymous_access_500_means_not_admin() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "operations,state",
+    [
+        ([{"operation": {"operationKey": "read", "targetType": "space"}}], "on"),
+        ([{"operations": [{"operationKey": "read", "targetType": "space"}]}], "on"),
+        ([{"operation": {"operationKey": "create", "targetType": "page"}}], "off"),
+        ([], "off"),
+    ],
+    ids=["flat_read", "nested_read", "no_space_read", "empty"],
+)
+def test_anonymous_access_reads_like_permission_sync(
+    operations: list[dict[str, Any]], state: str
+) -> None:
+    gateway = _gateway()
+    gateway.get_anonymous_space_permissions.return_value = operations
+
+    output = _CHECKS_BY_ID["confluence_anonymous_space_access"].run(
+        _context(gateway, _form(is_cloud=False))
+    )
+
+    assert output is not None
+    assert output.summary == f"KB anonymous access: {state}"
+
+
 # Group sync
 
 
