@@ -59,6 +59,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.onedrive.capability_checks import (
+    _CANDIDATE_PAGES,
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
     build_onedrive_indexing_checks,
@@ -1470,6 +1471,41 @@ def test_onedrive_permission_check_probes_past_empty_drive() -> None:
 
     assert _advisories(output) == []
     assert gateway.get_delta_page.call_count == 2
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="populated-drive", item_id="raw-item-id"
+    )
+
+
+def test_onedrive_permission_check_tries_the_next_drive_after_a_last_page_end() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.side_effect = [
+        _user("empty@example.com"),
+        _user("populated@example.com"),
+    ]
+    gateway.get_default_drive.side_effect = [
+        OneDriveDrive(id="empty-drive", name="Empty"),
+        OneDriveDrive(id="populated-drive", name="Populated"),
+    ]
+    empty_pages: list[DriveDeltaFetchResult] = [
+        DriveDeltaFetchResult(page=DriveDeltaPage(), next_checkpoint_url="next")
+    ] * (_CANDIDATE_PAGES - 1)
+    gateway.get_delta_page.side_effect = [
+        *empty_pages,
+        DriveDeltaFetchResult(page=DriveDeltaPage()),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[_file_item()])),
+    ]
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={
+            "users": ["empty@example.com", "populated@example.com"]
+        },
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
     gateway.list_permissions.assert_called_once_with(
         drive_id="populated-drive", item_id="raw-item-id"
     )

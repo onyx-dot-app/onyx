@@ -285,10 +285,8 @@ def _first_delta_item(
     drive: OneDriveDrive,
     start_url: str,
 ) -> DriveDeltaItem | None:
-    cursor: str | None = start_url
+    cursor: str = start_url
     for _ in range(_CANDIDATE_PAGES):
-        if cursor is None:
-            return None
         result = gateway.get_delta_page(
             drive_id=drive.id,
             page_url=cursor,
@@ -301,6 +299,8 @@ def _first_delta_item(
         )
         if item is not None:
             return item
+        if result.next_checkpoint_url is None:
+            return None
         cursor = result.next_checkpoint_url
     raise InconclusiveValidationError(
         f"No readable OneDrive item was found in {_CANDIDATE_PAGES} delta pages.",
