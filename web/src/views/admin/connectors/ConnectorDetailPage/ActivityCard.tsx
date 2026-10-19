@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
+  OverflowText,
   Popover,
   SelectButton,
   Tag,
@@ -329,13 +330,15 @@ export default function ActivityCard({
                 >
                   {formatDateTimeLog(run.time_created)}
                 </Text>
+                {/* The identity shrinks before the timestamp, so a long connector name truncates with its tooltip. */}
                 <Section
                   flexDirection="row"
+                  justifyContent="end"
                   alignItems="center"
                   gap={0.5}
                   padding={0.5}
-                  width="fit"
                   height="fit"
+                  className="min-w-0"
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tag
@@ -344,10 +347,10 @@ export default function ActivityCard({
                       color="purple"
                     />
                   )}
-                  <Text font="secondary-body" color={mutedColor} maxLines={1}>
+                  <OverflowText font="secondary-body" color={mutedColor}>
                     {identity}
-                  </Text>
-                  <IdentityIcon size={12} className="stroke-text-02" />
+                  </OverflowText>
+                  <IdentityIcon size={12} className="shrink-0 stroke-text-02" />
                 </Section>
               </Section>
               <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
