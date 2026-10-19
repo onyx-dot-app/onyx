@@ -133,7 +133,6 @@ _EVENT_BODY_DENIED = (
 _ACCOUNT_LABELS = MicrosoftAccountLabels.with_prefix("Microsoft Outlook")
 _MAIL_GRANT = grant_line("Mail.Read").replace(" to the app registration", "")
 _CALENDAR_GRANT = grant_line("Calendars.Read").replace(" to the app registration", "")
-_RETRY_LINE = "Re-run the checks. If it repeats, send the error details to support."
 
 _SIGN_IN_CHECK_ID = "outlook_token_auth"
 _LISTING_CHECK_ID = "outlook_mailbox_listing"
@@ -609,9 +608,13 @@ class _MailboxCountCheck(_ConfigReadingCheck):
                 denied_row=_USERS_DENIED_ROW,
                 request="the user listing",
             )
-        count: str = f"{finding.count}+" if finding.at_least else str(finding.count)
+        noun: str = "mailbox" if finding.count == 1 else "mailboxes"
         return CheckOutput(
-            summary=f"Up to {count} {'mailbox' if count == '1' else 'mailboxes'}",
+            summary=(
+                f"At least {finding.count} {noun}"
+                if finding.at_least
+                else f"Up to {finding.count} {noun}"
+            ),
             findings=[finding],
         )
 
@@ -857,11 +860,15 @@ def _calendar_denied_row(name: str) -> MicrosoftRowText:
 
 
 def _mailbox_problem_row(problem: MailboxProblem) -> MicrosoftRowText:
+    """The summary can cut the address, so the description starts with the
+    full address and the reason."""
     if problem.status is None:
-        return _mailbox_not_found_row(problem.address)
-    if problem.status == 403:
-        return _mail_denied_row(problem.address)
-    return _unusable_mailbox_row(problem.address)
+        row: MicrosoftRowText = _mailbox_not_found_row(problem.address)
+    elif problem.status == 403:
+        row = _mail_denied_row(problem.address)
+    else:
+        row = _unusable_mailbox_row(problem.address)
+    return _row(row.summary, f"Not reachable: {problem.describe()}.\n{row.description}")
 
 
 class _ConfiguredMailboxesCheck(_ConfigReadingCheck):

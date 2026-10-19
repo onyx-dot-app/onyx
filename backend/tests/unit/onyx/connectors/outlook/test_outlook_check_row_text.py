@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckResult,
     CapabilityCheckStatus,
@@ -17,7 +18,7 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
-from onyx.connectors.outlook.models import OutlookEventPage
+from onyx.connectors.outlook.models import OutlookEventPage, OutlookMailboxPage
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     MAILBOX_ADDRESS,
     event,
@@ -157,6 +158,39 @@ def test_one_missing_mailbox_of_two_is_a_partial_find() -> None:
     assert found.summary == "Mailbox not found: ghost@contoso.com"
     # The sample opens the mailbox that answers.
     assert results["outlook_mail_read"].summary == f"Read mail in {MAILBOX_ADDRESS}"
+
+
+def test_a_partial_find_gives_the_full_address_and_reason() -> None:
+    long_address = "shared-mailbox-for-the-finance-team@contoso.com"
+    gateway = _healthy()
+    gateway.resolve_mailbox.side_effect = lambda address: (
+        None if address == long_address else mailbox()
+    )
+
+    result = _run(
+        "outlook_configured_mailboxes",
+        gateway,
+        {"mailboxes": [long_address, MAILBOX_ADDRESS]},
+    )
+
+    assert result.partial
+    assert result.summary is not None and len(result.summary) <= 40
+    assert result.description is not None
+    assert result.description.startswith(
+        f"Not reachable: {long_address} (no such user)."
+    )
+    assert len(result.description.splitlines()) <= 3
+
+
+def test_a_capped_mailbox_count_is_a_lower_bound() -> None:
+    gateway = _healthy()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()] * (MAX_FINDING_OPTIONS + 1)
+    )
+
+    result = _run("outlook_mailbox_count", gateway)
+
+    assert result.summary == f"At least {MAX_FINDING_OPTIONS} mailboxes"
 
 
 def test_no_selected_mailbox_found_fails() -> None:
