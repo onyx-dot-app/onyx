@@ -127,7 +127,7 @@ def test_indexing_checks_pass_on_the_test_site(
 _EMPTY_JQL = f'project = "{_PROJECT}" AND created < "1990-01-01"'
 
 
-def test_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
+def test_jql_check_fails_when_the_jql_matches_nothing(
     test_secrets: dict[TestSecret, str],
 ) -> None:
     credential_json: dict[str, Any] = _credential(test_secrets, False)
@@ -137,15 +137,16 @@ def test_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
         **_results(credential_json, config, perm_sync=True),
     }
 
-    for check_id in (
-        "jira_jql_query",
-        "jira_issue_read",
-        "jira_permission_scheme_read",
-    ):
-        result: CapabilityCheckResult = by_id[check_id]
-        assert result.status == CapabilityCheckStatus.PASSED, result
-        assert len(result.advisories) == 1, result
-        assert "did not verify" in result.advisories[0].message, result
+    jql: CapabilityCheckResult = by_id["jira_jql_query"]
+    assert jql.status == CapabilityCheckStatus.FAILED, jql
+    assert jql.summary == "Query matches no issues", jql
+    # The failed scope stops the issue read on the same run.
+    issue_read: CapabilityCheckResult = by_id["jira_issue_read"]
+    assert issue_read.status == CapabilityCheckStatus.SKIPPED, issue_read
+    assert issue_read.blocked_by == "jira_jql_query", issue_read
+    scheme_read: CapabilityCheckResult = by_id["jira_permission_scheme_read"]
+    assert scheme_read.status == CapabilityCheckStatus.SKIPPED, scheme_read
+    assert "matched no issue" in scheme_read.message, scheme_read
 
 
 @pytest.mark.parametrize(
