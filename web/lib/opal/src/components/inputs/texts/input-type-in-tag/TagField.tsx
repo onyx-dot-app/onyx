@@ -380,7 +380,7 @@ function TagField({
         <Button
           prominence="tertiary"
           icon={SvgX}
-          size="xs"
+          size="sm"
           tooltip={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
