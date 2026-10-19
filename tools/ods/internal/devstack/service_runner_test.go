@@ -179,6 +179,76 @@ func TestFrontendUsesTheBackendModelProcessState(t *testing.T) {
 	}
 }
 
+func TestFrontendCanChangeProjectsOnlyAfterItsProcessStops(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		t.Run(fmt.Sprintf("running=%v", running), func(t *testing.T) {
+			registry := t.TempDir()
+			oldSource := newTestStack(t, registry)
+			newSource := newTestStack(t, registry)
+			mustUp(t, oldSource, &fakeProvider{services: []string{"api"}})
+			mustUp(t, newSource, &fakeProvider{services: []string{"api"}})
+			targetFor := func(source *Stack) Target {
+				return Target{Root: source.Root, OwnerRoot: source.Root, Project: source.Project, StateDir: source.StateDir, Mode: source.Mode, Ports: map[string]int{"api": servicePID(t, source, "api").Port}}
+			}
+			preview, err := Open(oldSource.Root, oldSource.Project, Frontend)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preview.Registry = oldSource.Registry
+			launch := &Launch{Configurations: []LaunchConfig{{
+				Name: "Web Server", Type: "node", Request: "launch", Cwd: preview.Root,
+				RuntimeExecutable: "/bin/sh", RuntimeArgs: []string{"-c", "printf 'preview:%s' \"$INTERNAL_URL\""},
+			}}}
+			var output bytes.Buffer
+			if err := preview.RunService(context.Background(), targetFor(oldSource), launch, "web", ServiceOptions{IO: ServiceIO{Stdout: &output}}); err != nil {
+				t.Fatal(err)
+			}
+			if output.String() != fmt.Sprintf("preview:http://localhost:%d", servicePID(t, oldSource, "api").Port) {
+				t.Fatalf("old preview output=%q", output.String())
+			}
+			var active ServiceRecord
+			if running {
+				port := freeBasePort()
+				specs, err := (&fakeProvider{services: []string{"web"}}).Plan(preview.Root, map[string]int{"web": port}, Env{}, testOptions())
+				if err != nil {
+					t.Fatal(err)
+				}
+				active, err = startService(specs[0], filepath.Join(preview.LogDir(), "web.log"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = stopRecords([]ServiceRecord{active}, time.Second) })
+				if err := preview.WriteState(&State{Phase: PhaseReady, Services: []ServiceRecord{active}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			next, err := Open(preview.Root, newSource.Project, Frontend)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next.Registry = preview.Registry
+			output.Reset()
+			err = next.RunService(context.Background(), targetFor(newSource), launch, "web", ServiceOptions{IO: ServiceIO{Stdout: &output}})
+			if running {
+				if err == nil || !strings.Contains(err.Error(), "frontend already uses project "+oldSource.Project) || !isCurrent(active) {
+					t.Fatalf("active preview switch error=%v process=%+v", err, active)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("switch stopped preview to new project: %v", err)
+			}
+			if output.String() != fmt.Sprintf("preview:http://localhost:%d", servicePID(t, newSource, "api").Port) {
+				t.Fatalf("new preview output=%q", output.String())
+			}
+			state, err := next.ReadState()
+			if err != nil || state == nil || state.Project != newSource.Project || state.Ports["api"] != servicePID(t, newSource, "api").Port {
+				t.Fatalf("new preview state=%+v err=%v", state, err)
+			}
+		})
+	}
+}
+
 type serviceOutput chan string
 
 func (output serviceOutput) Write(data []byte) (int, error) {

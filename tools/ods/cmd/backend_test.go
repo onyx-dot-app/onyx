@@ -103,6 +103,45 @@ func TestBackendCommand_runsUvicornWithMergedEnv(t *testing.T) {
 	}
 }
 
+func TestRunBackendServicePreparesPythonBeforeLaunch(t *testing.T) {
+	for _, service := range []string{"api", "model"} {
+		for _, environment := range []string{"missing", "stale"} {
+			t.Run(service+"/"+environment, func(t *testing.T) {
+				root, _, _ := devtoolBackendRepo(t, "")
+				python := filepath.Join(root, ".venv", "bin", "python")
+				if environment == "missing" {
+					if err := os.RemoveAll(filepath.Join(root, ".venv")); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					writeFile(t, python, "#!/bin/sh\nexit 41\n")
+				}
+				result := filepath.Join(root, "service-started")
+				t.Setenv("ODS_TEST_PYTHON", python)
+				t.Setenv("ODS_TEST_SERVICE_RESULT", result)
+				devtoolFakeTool(t, os.Getenv("PATH"), "uv", `
+[ "$1" = sync ] || exit 42
+/bin/mkdir -p "${ODS_TEST_PYTHON%/*}"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$ODS_TEST_SERVICE_RESULT"\n' > "$ODS_TEST_PYTHON"
+/bin/chmod +x "$ODS_TEST_PYTHON"
+`)
+				port := strconv.Itoa(devtoolFreePort(t))
+				if err := runBackendService(service, port); err != nil {
+					t.Fatalf("start with %s environment: %v", environment, err)
+				}
+				module := "onyx.main:app"
+				if service == "model" {
+					module = "model_server.main:app"
+				}
+				want := "-m\nuvicorn\n" + module + "\n--reload\n--port\n" + port + "\n"
+				if got := devtoolReadFile(t, result); got != want {
+					t.Fatalf("service arguments=%q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestBackendCommand_seedsTheDevLicenseBeforeTheAPIOnly(t *testing.T) {
 	seed := []string{"run", "python", "-m", "scripts.seed_dev_license"}
 	cases := []struct {
