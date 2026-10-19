@@ -33,6 +33,9 @@ from onyx.hooks.points.document_ingestion import (
     DocumentIngestionResponse,
     DocumentIngestionSection,
 )
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
+)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
@@ -1742,3 +1745,43 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     assert len(future_docs) == 1
     assert future_docs[0].id == "doc1"
     assert "doc1" in future_hashes
+
+
+def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
+    """A failed write left the old chunks in place, so the new count would
+    describe an index state that does not exist - and would hide the document
+    from any sweep that looks for an outdated chunk count."""
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=None, doc_created_at=None),
+        MagicMock(id="failed", doc_updated_at=None, doc_created_at=None),
+    ]
+    enrichment = MagicMock(doc_id_to_new_chunk_cnt={"written": 3, "failed": 3})
+
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit") as update_chunk_count,
+        patch(f"{module}.update_docs_updated_at__no_commit"),
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=enrichment,
+            db_session=MagicMock(),
+            index_to_secondary=False,
+            failed_document_ids={"failed"},
+        )
+
+    assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]

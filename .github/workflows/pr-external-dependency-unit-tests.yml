@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - ".agents/hooks/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
