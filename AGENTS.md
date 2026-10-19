@@ -31,7 +31,7 @@ This file provides guidance to AI agents when working with code in this reposito
   Claude Code and Codex run this check at session start and on later prompts.
   The hook is `.agents/hooks/ensure_latest_main.py`. It fetches at most once an hour.
   It is silent unless a rebase is needed.
-  Other agents: run `git fetch origin main`.
+  Other agents: run `git fetch origin +refs/heads/main:refs/remotes/origin/main`.
   Check for conflicts with `git merge-tree --write-tree HEAD origin/main`.
   Exit status 1 means conflicts. Other non-zero codes are errors, not conflicts.
   Check the age with `git show -s --format=%cr $(git merge-base HEAD origin/main)`.

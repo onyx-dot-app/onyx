@@ -38,6 +38,9 @@ from pathlib import Path
 _REMOTE = "origin"
 _BRANCH = "main"
 _REF = f"{_REMOTE}/{_BRANCH}"
+# An explicit destination, so a `--single-branch` clone, whose configured refspec
+# covers only its own branch, gets origin/main.
+_REFSPEC = f"+refs/heads/{_BRANCH}:refs/remotes/{_REF}"
 _FETCH_TIMEOUT_SECONDS = 20
 _PROMPT_FETCH_INTERVAL_SECONDS = 60 * 60
 # A branch whose merge base with origin/main is older than this is stale.
@@ -132,9 +135,7 @@ def _fetch(repo: Path) -> bool:
                 "--no-tags",
                 "--no-recurse-submodules",
                 _REMOTE,
-                # An explicit destination, so a `--single-branch` clone, whose
-                # configured refspec covers only its own branch, gets origin/main.
-                f"+refs/heads/{_BRANCH}:refs/remotes/{_REMOTE}/{_BRANCH}",
+                _REFSPEC,
             ],
             cwd=repo,
             env=env,
@@ -282,7 +283,7 @@ def _report(repo: Path, fetched: bool | None) -> str | None:
             )
         else:
             lines.append(
-                f"Update with `git fetch {_REMOTE} {_BRANCH} && git rebase {_REF}`, "
+                f"Update with `git fetch {_REMOTE} {_REFSPEC} && git rebase {_REF}`, "
                 f"or `git merge {_REF}` if the branch is shared or already pushed. "
                 "If it conflicts, resolve the conflicts, or abort and ask the user."
             )

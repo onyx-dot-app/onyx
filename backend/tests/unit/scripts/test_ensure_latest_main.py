@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -200,6 +201,7 @@ def test_stale_branch_says_to_rebase_and_lists_agent_files(
     assert "merge conflicts" not in out
     assert ".agents/feature-map/x.md" in out
     assert "git rebase origin/main" in out
+    assert "git fetch origin +refs/heads/main:refs/remotes/origin/main" in out
 
 
 def test_stale_main_says_to_pull(stale_checkout: Path, stale_remote: Path) -> None:
@@ -503,7 +505,7 @@ def test_unfinished_rebase_is_not_told_to_start_another_update(
     assert "commit or stash" not in out
 
 
-def _load_hook() -> object:
+def _load_hook() -> ModuleType:
     spec = importlib.util.spec_from_file_location("ensure_latest_main", _HOOK)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -519,7 +521,7 @@ def test_ssh_command_extends_the_configured_one(
     monkeypatch.delenv("GIT_SSH", raising=False)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    ssh_env = hook._ssh_env  # type: ignore[attr-defined]
+    ssh_env = hook._ssh_env
     batch = "-o BatchMode=yes -o ConnectTimeout=10"
 
     assert ssh_env(checkout) == {"GIT_SSH_COMMAND": f"ssh {batch}"}
