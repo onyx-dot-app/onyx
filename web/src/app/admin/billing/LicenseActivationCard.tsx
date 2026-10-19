@@ -1,9 +1,9 @@
 "use client";
 
+import { richNodes } from "@opal/utils";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Button, Card } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Card, Text } from "@opal/components";
 import { InputSingleUpload } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
@@ -113,17 +113,19 @@ export default function LicenseActivationCard({
                   className="stroke-status-success-05"
                 />
               )}
-              <Text secondaryBody text03>
-                {isExpired
-                  ? t("license.expired.label")
-                  : t.rich("license.activeUntil.label", {
-                      date: expirationDate ?? "",
-                      value: (chunks) => (
-                        <Text secondaryBody text04>
-                          {chunks}
-                        </Text>
-                      ),
-                    })}
+              <Text font="secondary-body" color="text-03">
+                {richNodes(
+                  isExpired
+                    ? t("license.expired.label")
+                    : t.rich("license.activeUntil.label", {
+                        date: expirationDate ?? "",
+                        value: (chunks) => (
+                          <Text font="secondary-body" color="text-04">
+                            {richNodes(chunks)}
+                          </Text>
+                        ),
+                      })
+                )}
               </Text>
             </Section>
             <Section flexDirection="row" gap={2} height="auto" width="auto">
@@ -158,7 +160,7 @@ export default function LicenseActivationCard({
             justifyContent="between"
             alignItems="center"
           >
-            <Text headingH3>
+            <Text font="heading-h3" color="text-05">
               {hasLicense
                 ? t("license.updateTitle.title")
                 : t("license.activateTitle.title")}
@@ -171,7 +173,7 @@ export default function LicenseActivationCard({
               {t("license.cancel.label")}
             </Button>
           </Section>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("license.description", { appName })}
           </Text>
         </Section>
@@ -186,7 +188,7 @@ export default function LicenseActivationCard({
           >
             {success && (
               <div className="billing-success-message">
-                <Text secondaryBody>
+                <Text font="secondary-body" color="text-05">
                   {hasLicense
                     ? t("license.updateSuccess.message")
                     : t("license.activateSuccess.message")}
@@ -220,20 +222,22 @@ export default function LicenseActivationCard({
                   <div className="billing-error-icon">
                     <SvgXCircle size={12} />
                   </div>
-                  <Text secondaryBody text04>
-                    {t.rich("license.error.text", {
-                      error,
-                      link: (chunks) => (
-                        <a
-                          href={BILLING_HELP_URL}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="billing-help-link"
-                        >
-                          {chunks}
-                        </a>
-                      ),
-                    })}
+                  <Text font="secondary-body" color="text-04">
+                    {richNodes(
+                      t.rich("license.error.text", {
+                        error,
+                        link: (chunks) => (
+                          <a
+                            href={BILLING_HELP_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="billing-help-link"
+                          >
+                            {chunks}
+                          </a>
+                        ),
+                      })
+                    )}
                   </Text>
                 </Section>
               )}

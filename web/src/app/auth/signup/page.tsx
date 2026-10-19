@@ -1,3 +1,4 @@
+import { Text } from "@opal/components";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
@@ -7,7 +8,6 @@ import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { getTranslations } from "next-intl/server";
 import { fetchAppName } from "@/lib/app/svcSS";
@@ -77,12 +77,12 @@ const Page = async (props: {
           )}
         >
           <div className="w-full">
-            <Text as="p" headingH2 text05>
+            <Text font="heading-h2" color="text-05" as="p">
               {cloud
                 ? t("signup.cloudSignupHeading.title")
                 : t("signup.createAccountHeading.title")}
             </Text>
-            <Text as="p" text03>
+            <Text font="main-ui-body" color="text-03" as="p">
               {t("signup.subtitle.text", { appName })}
             </Text>
           </div>
@@ -91,9 +91,11 @@ const Page = async (props: {
               <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
-                <Text as="p" mainUiMuted text03 className="mx-2">
-                  {t("signup.orDivider.text")}
-                </Text>
+                <div className="mx-2">
+                  <Text as="p" font="main-ui-muted" color="text-03">
+                    {t("signup.orDivider.text")}
+                  </Text>
+                </div>
                 <div className="grow border-t border-border-01" />
               </div>
             </div>

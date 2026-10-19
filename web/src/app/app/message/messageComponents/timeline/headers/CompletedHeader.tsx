@@ -3,9 +3,8 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
-import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
@@ -68,7 +67,7 @@ function MemoryTagWithTooltip({
               height="auto"
             >
               <div className="p-1">
-                <Text as="p" secondaryBody text03>
+                <Text font="secondary-body" color="text-03" as="p">
                   {memoryText}
                 </Text>
               </div>
@@ -175,7 +174,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
   const summary = (
     <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" mainUiAction text03>
+      <Text font="main-ui-action" color="text-03" as="p">
         {isExpanded ? durationText : (imageText ?? durationText)}
       </Text>
       {memoryOperation && !isExpanded && (

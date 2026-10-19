@@ -22,8 +22,8 @@ import { useTranslations } from "next-intl";
 import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
+import RefreshText from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 
 const SALES_URL = "https://www.onyx.app/contact-sales";
@@ -89,7 +89,7 @@ function PlanCard({
         {/* Title */}
         <Section flexDirection="column" alignItems="start" gap={1} width="full">
           <Icon size={24} />
-          <Text headingH3 text04>
+          <Text font="heading-h3" color="text-04">
             {title}
           </Text>
         </Section>
@@ -103,11 +103,11 @@ function PlanCard({
           height="auto"
         >
           {pricing && (
-            <Text headingH2 text04>
+            <Text font="heading-h2" color="text-04">
               {pricing}
             </Text>
           )}
-          <Text
+          <RefreshText
             secondaryBody
             text03
             className={
@@ -115,7 +115,7 @@ function PlanCard({
             }
           >
             {description}
-          </Text>
+          </RefreshText>
         </Section>
 
         {/* Button */}
@@ -125,7 +125,7 @@ function PlanCard({
             // wore a button so it would fill the same slot, which `w-full` and
             // the shared 2.25rem box now do directly.
             <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
-              <Text mainUiAction text03>
+              <Text font="main-ui-action" color="text-03">
                 {t("plans.currentPlan.label")}
               </Text>
             </div>
@@ -147,7 +147,7 @@ function PlanCard({
             // wore a button so it would fill the same slot, which `w-full` and
             // the shared 2.25rem box now do directly.
             <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
-              <Text mainUiAction text03>
+              <Text font="main-ui-action" color="text-03">
                 {t("plans.includedInPlan.label")}
               </Text>
             </div>
@@ -167,7 +167,7 @@ function PlanCard({
           gap={4}
           padding={4}
         >
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             {featuresPrefix}
           </Text>
           <Section
@@ -189,7 +189,7 @@ function PlanCard({
                 <div className="plan-card-feature-icon">
                   <feature.icon size={16} className="stroke-text-03" />
                 </div>
-                <Text mainUiBody text03>
+                <Text font="main-ui-body" color="text-03">
                   {feature.text}
                 </Text>
               </Section>

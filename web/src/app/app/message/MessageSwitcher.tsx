@@ -1,5 +1,4 @@
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { useTranslations } from "next-intl";
 
@@ -47,14 +46,14 @@ export default function MessageSwitcher({
       />
 
       <div className="flex flex-row items-center justify-center">
-        <Text as="p" text03 mainUiAction>
-          {currentPage}
+        <Text font="main-ui-action" color="text-03" as="p">
+          {String(currentPage)}
         </Text>
-        <Text as="p" text03 mainUiAction>
+        <Text font="main-ui-action" color="text-03" as="p">
           /
         </Text>
-        <Text as="p" text03 mainUiAction>
-          {totalPages}
+        <Text font="main-ui-action" color="text-03" as="p">
+          {String(totalPages)}
         </Text>
       </div>
 

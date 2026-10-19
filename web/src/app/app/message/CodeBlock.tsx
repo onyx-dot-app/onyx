@@ -1,5 +1,5 @@
+import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { SvgCheck, SvgCode, SvgCopy } from "@opal/icons";
 import { useTranslations } from "next-intl";
@@ -51,14 +51,14 @@ export const CodeBlock = memo(function CodeBlock({
       {copied ? (
         <div className="flex items-center space-x-2">
           <SvgCheck height={14} width={14} stroke="currentColor" />
-          <Text as="p" secondaryMono>
+          <Text font="secondary-mono" color="text-05" as="p">
             {t("codeBlock.copyButton.copiedLabel")}
           </Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <SvgCopy height={14} width={14} stroke="currentColor" />
-          <Text as="p" secondaryMono>
+          <Text font="secondary-mono" color="text-05" as="p">
             {t("codeBlock.copyButton.label")}
           </Text>
         </div>
@@ -159,7 +159,9 @@ export const CodeBlock = memo(function CodeBlock({
                 stroke="currentColor"
                 className="my-auto"
               />
-              <Text secondaryMono>{language}</Text>
+              <Text font="secondary-mono" color="text-05">
+                {language}
+              </Text>
               {codeText && <CopyButton />}
             </div>
           )}

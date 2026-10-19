@@ -1,8 +1,8 @@
 "use client";
 
+import { Text } from "@opal/components";
 import { FoldableLogo } from "@/lib/app/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
@@ -51,7 +51,7 @@ export default function WelcomeMessage({
         width="fit"
       >
         <SvgEyeClosed size={32} className="text-text-04" />
-        <Text as="p" dir="auto" headingH2>
+        <Text font="heading-h2" color="text-05" as="p" dir="auto">
           {t("incognito.title")}
         </Text>
       </Section>
@@ -66,7 +66,7 @@ export default function WelcomeMessage({
         width="fit"
       >
         <FoldableLogo folded size={32} />
-        <Text as="p" dir="auto" headingH2>
+        <Text font="heading-h2" color="text-05" as="p" dir="auto">
           {greeting}
         </Text>
       </Section>
@@ -81,7 +81,7 @@ export default function WelcomeMessage({
         width="fit"
       >
         <AgentAvatar agent={agent} size={36} />
-        <Text as="p" dir="auto" headingH2>
+        <Text font="heading-h2" color="text-05" as="p" dir="auto">
           {agent.name}
         </Text>
       </Section>

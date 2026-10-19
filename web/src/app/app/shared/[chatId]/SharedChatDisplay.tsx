@@ -15,11 +15,10 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import { useLocale, useTranslations } from "next-intl";
@@ -102,17 +101,17 @@ export default function SharedChatDisplay({
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 px-8 py-4">
-            <Text as="p" text04 headingH2>
+            <Text font="heading-h2" color="text-04" as="p">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>
             <div className="flex flex-col items-end">
-              <Text as="p" text03 secondaryBody>
+              <Text font="secondary-body" color="text-03" as="p">
                 {t("header.sharedOn.text", {
                   date: humanReadableFormat(chatSession.time_created, locale),
                 })}
               </Text>
               {chatSession.owner_name && (
-                <Text as="p" text03 secondaryBody>
+                <Text font="secondary-body" color="text-03" as="p">
                   {t("header.owner.text", { name: chatSession.owner_name })}
                 </Text>
               )}

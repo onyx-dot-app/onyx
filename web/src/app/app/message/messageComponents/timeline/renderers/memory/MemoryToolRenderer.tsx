@@ -1,5 +1,6 @@
 "use client";
 
+import { Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import {
@@ -8,7 +9,6 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
-import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
@@ -60,7 +60,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   // No access case
   if (noAccess) {
     const content = (
-      <Text as="p" text03 className="text-sm">
+      <Text as="p" font="main-ui-body" color="text-03">
         {t("memory.disabled.text")}
       </Text>
     );
@@ -74,9 +74,11 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
           timelineLayout: "content",
           content: (
             <div className="flex flex-col">
-              <Text as="p" text02 className="text-sm mb-1">
-                {t("memory.default.status")}
-              </Text>
+              <div className="mb-1">
+                <Text as="p" font="main-ui-body" color="text-02">
+                  {t("memory.default.status")}
+                </Text>
+              </div>
               {content}
             </div>
           ),
@@ -111,7 +113,12 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       {memoryText ? (
         <div className={cn("w-full flex")}>
           <div className="flex-1 min-w-0">
-            <Text as="p" text02 className="text-sm wrap-break-word">
+            <Text
+              as="p"
+              font="main-ui-body"
+              color="text-02"
+              wordWrap="wrap-break-word"
+            >
               {memoryText}
             </Text>
           </div>
@@ -144,9 +151,11 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
-              {statusLabel}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-body" color="text-02">
+                {statusLabel}
+              </Text>
+            </div>
             {memoryContent}
           </div>
         ),

@@ -1,3 +1,4 @@
+import { Text } from "@opal/components";
 import React, { useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
@@ -22,7 +23,6 @@ import {
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import Text from "@/refresh-components/texts/Text";
 import {
   processContent,
   useMarkdownComponents,
@@ -195,9 +195,11 @@ export const ResearchAgentRenderer: MessageRenderer<
           status: null,
           content: (
             <div className="flex flex-col ps-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted className="mb-1">
-                {t("researchAgent.report.title")}
-              </Text>
+              <div className="mb-1">
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("researchAgent.report.title")}
+                </Text>
+              </div>
               <ExpandableTextDisplay
                 title={t("researchAgent.report.title")}
                 content={fullReportContent}
@@ -260,10 +262,10 @@ export const ResearchAgentRenderer: MessageRenderer<
           status: null,
           content: (
             <div className="flex flex-col ps-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted>
+              <Text font="main-ui-muted" color="text-04" as="p">
                 {t("researchAgent.task.title")}
               </Text>
-              <Text as="p" text03 mainUiMuted>
+              <Text font="main-ui-muted" color="text-03" as="p">
                 {researchTask}
               </Text>
             </div>
@@ -303,7 +305,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           isHover={isHover}
         >
           <div className="ps-(--timeline-common-text-padding)">
-            <Text as="p" text02 mainUiMuted>
+            <Text font="main-ui-muted" color="text-02" as="p">
               {researchTask}
             </Text>
           </div>

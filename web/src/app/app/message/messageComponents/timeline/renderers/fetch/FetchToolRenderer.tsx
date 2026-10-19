@@ -1,3 +1,4 @@
+import { Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
@@ -15,7 +16,6 @@ import {
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
 } from "./fetchStateUtils";
-import Text from "@/refresh-components/texts/Text";
 import { SvgCircle } from "@opal/icons";
 
 const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
@@ -87,9 +87,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
-              {t("fetch.reading.status")}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-body" color="text-02">
+                {t("fetch.reading.status")}
+              </Text>
+            </div>
             {displayDocuments ? (
               <SearchChipList
                 items={documents}

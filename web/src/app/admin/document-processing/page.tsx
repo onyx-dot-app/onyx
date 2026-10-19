@@ -1,5 +1,6 @@
 "use client";
 
+import { Text } from "@opal/components";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
@@ -10,8 +11,8 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { PageLoader } from "@opal/loaders";
 import { SettingsLayouts } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
-import { cn } from "@opal/utils";
+import RefreshText from "@/refresh-components/texts/Text";
+import { cn, richNodes } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
@@ -66,29 +67,38 @@ function Main() {
     <div className="pb-36">
       <div className="w-full max-w-2xl">
         <CardSection className="flex flex-col gap-2">
-          <Text
-            as="p"
-            headingH3
-            text05
-            className="border-b border-border-01 pb-2"
-          >
-            {t("unstructured.title")}
-          </Text>
+          <div className="border-b border-border-01 pb-2">
+            <Text as="p" font="heading-h3" color="text-05">
+              {t("unstructured.title")}
+            </Text>
+          </div>
 
           <div className="flex flex-col gap-2">
-            <Text as="p" mainContentBody text04 className="leading-relaxed">
+            <RefreshText
+              as="p"
+              mainContentBody
+              text04
+              className="leading-relaxed"
+            >
               {t("unstructured.description", { appName })}
+            </RefreshText>
+            <Text as="p" font="main-content-muted" color="text-03">
+              {richNodes(
+                t.rich("unstructured.note", {
+                  label: (chunks) => (
+                    <span className="font-main-ui-action text-text-03">
+                      {chunks}
+                    </span>
+                  ),
+                })
+              )}
             </Text>
-            <Text as="p" mainContentMuted text03>
-              {t.rich("unstructured.note", {
-                label: (chunks) => (
-                  <span className="font-main-ui-action text-text-03">
-                    {chunks}
-                  </span>
-                ),
-              })}
-            </Text>
-            <Text as="p" mainContentBody text04 className="leading-relaxed">
+            <RefreshText
+              as="p"
+              mainContentBody
+              text04
+              className="leading-relaxed"
+            >
               {t.rich("unstructured.learnMore", {
                 link: (chunks) => (
                   <a
@@ -101,7 +111,7 @@ function Main() {
                   </a>
                 ),
               })}
-            </Text>
+            </RefreshText>
             <div className="pt-1.5">
               {isApiKeySet ? (
                 <div
@@ -117,14 +127,14 @@ function Main() {
                     "py-1.5"
                   )}
                 >
-                  <Text
+                  <RefreshText
                     as="p"
                     mainUiMuted
                     text03
                     className="flex-1 tracking-[0.3em] text-text-03"
                   >
                     ••••••••••••••••
-                  </Text>
+                  </RefreshText>
                   <SvgLock className="h-4 w-4 stroke-text-03" aria-hidden />
                 </div>
               ) : (
@@ -141,9 +151,11 @@ function Main() {
                   <Button variant="danger" onClick={handleDelete}>
                     {t("unstructured.deleteButton.label")}
                   </Button>
-                  <Text as="p" mainContentBody text04 className="sm:mt-0">
-                    {t("unstructured.deleteHint")}
-                  </Text>
+                  <div className="sm:mt-0">
+                    <Text as="p" font="main-content-body" color="text-04">
+                      {t("unstructured.deleteHint")}
+                    </Text>
+                  </div>
                 </>
               ) : (
                 <Button
