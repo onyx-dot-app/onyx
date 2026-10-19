@@ -237,6 +237,14 @@ class MCPToolCreateRequest(BaseModel):
             "metadata discovery; KNOWN_PROVIDER uses admin-configured endpoints."
         ),
     )
+    oauth_cimd_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let auto-discovery identify Onyx by its Client ID Metadata Document. "
+            "False registers through Dynamic Client Registration instead, for "
+            "deployments the authorization server cannot reach."
+        ),
+    )
     oauth_authorization_endpoint: Optional[str] = Field(
         None, description="Known-provider OAuth authorization endpoint URL"
     )
@@ -379,6 +387,7 @@ class MCPToolCreateRequest(BaseModel):
         # attempts CIMD before falling back to dynamic client registration.
         if self.auth_type != MCPAuthenticationType.OAUTH:
             self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
+            self.oauth_cimd_enabled = True
             self.oauth_authorization_endpoint = None
             self.oauth_token_endpoint = None
             self.oauth_scopes_override = None
@@ -633,6 +642,7 @@ class MCPServerConnection(BaseModel):
     auth_type: MCPAuthenticationType | None
     transport: MCPTransport | None
     oauth_provider_mode: MCPOAuthProviderMode
+    oauth_cimd_enabled: bool
     oauth_authorization_endpoint: str | None
     oauth_token_endpoint: str | None
 
@@ -642,6 +652,7 @@ class MCPOAuthServerSnapshot(BaseModel):
     auth_type: MCPAuthenticationType
     auth_performer: MCPAuthenticationPerformer
     provider_mode: MCPOAuthProviderMode
+    cimd_enabled: bool
     transport: MCPTransport | None
     authorization_endpoint: str | None
     token_endpoint: str | None
@@ -772,6 +783,7 @@ class MCPServer(BaseModel):
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
@@ -838,6 +850,7 @@ class MCPServerCreateResponse(BaseModel):
     auth_type: str
     auth_performer: Optional[str]
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None
     oauth_scopes_override: Optional[list[str]] = None
