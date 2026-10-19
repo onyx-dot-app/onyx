@@ -222,7 +222,7 @@ export default function ConnectorRow({
                     {canOperate ? (
                       <Link
                         href={`/admin/connector/${row.cc_pair_id}`}
-                        className="w-full min-w-0 hover:underline"
+                        className="w-full hover:underline"
                       >
                         <Content
                           icon={getSourceMetadata(row.source).icon}

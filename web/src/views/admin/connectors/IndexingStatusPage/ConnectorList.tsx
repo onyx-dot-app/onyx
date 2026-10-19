@@ -74,14 +74,17 @@ function FederatedRow({ connector }: FederatedRowProps) {
         padding={2}
         height="fit"
       >
-        <Content
-          icon={getSourceMetadata(connector.source).icon}
-          title={connector.name}
-          titleMaxLines={1}
-          sizePreset="main-ui"
-          variant="section"
-          tag={{ title: t("federated.tag"), color: "gray" }}
-        />
+        {/* The name column shrinks before the button, so the clamp has an edge. */}
+        <Section alignItems="start" height="fit" className="min-w-0 flex-1">
+          <Content
+            icon={getSourceMetadata(connector.source).icon}
+            title={connector.name}
+            titleMaxLines={1}
+            sizePreset="main-ui"
+            variant="section"
+            tag={{ title: t("federated.tag"), color: "gray" }}
+          />
+        </Section>
         <Button
           icon={SvgSettings}
           prominence="tertiary"
