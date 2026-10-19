@@ -3,7 +3,6 @@ package postgres
 import (
 	"net"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -34,11 +33,6 @@ func IsLoopbackHost(host string) bool {
 		host = host[1 : len(host)-1]
 	}
 	return net.ParseIP(host).IsLoopback()
-}
-
-// NewConfigFromEnv creates a Config from environment variables with defaults.
-func NewConfigFromEnv() *Config {
-	return NewConfigFromEnvironment(os.Environ())
 }
 
 // NewConfigFromEnvironment reads a private runtime environment without changing the process.

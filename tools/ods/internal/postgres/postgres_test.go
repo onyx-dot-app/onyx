@@ -19,7 +19,7 @@ func TestIsLoopbackHost(t *testing.T) {
 	}
 }
 
-// postgresEnvKeys lists every variable NewConfigFromEnv reads.
+// postgresEnvKeys lists every variable NewConfigFromEnvironment reads.
 var postgresEnvKeys = []string{
 	"POSTGRES_USER",
 	"POSTGRES_PASSWORD",
@@ -37,10 +37,8 @@ func clearPostgresEnv(t *testing.T) {
 	}
 }
 
-func TestNewConfigFromEnv_usesDefaultsWhenUnset(t *testing.T) {
-	clearPostgresEnv(t)
-
-	config := NewConfigFromEnv()
+func TestNewConfigFromEnvironment_usesDefaultsWhenUnset(t *testing.T) {
+	config := NewConfigFromEnvironment(nil)
 
 	want := Config{
 		User:     DefaultUser,
@@ -54,15 +52,14 @@ func TestNewConfigFromEnv_usesDefaultsWhenUnset(t *testing.T) {
 	}
 }
 
-func TestNewConfigFromEnv_readsTheEnvironment(t *testing.T) {
-	clearPostgresEnv(t)
-	t.Setenv("POSTGRES_USER", "onyx")
-	t.Setenv("POSTGRES_PASSWORD", "secret")
-	t.Setenv("POSTGRES_HOST", "relational_db")
-	t.Setenv("POSTGRES_PORT", "6543")
-	t.Setenv("POSTGRES_DB", "onyx_test")
-
-	config := NewConfigFromEnv()
+func TestNewConfigFromEnvironment_readsTheEnvironment(t *testing.T) {
+	config := NewConfigFromEnvironment([]string{
+		"POSTGRES_USER=onyx",
+		"POSTGRES_PASSWORD=secret",
+		"POSTGRES_HOST=relational_db",
+		"POSTGRES_PORT=6543",
+		"POSTGRES_DB=onyx_test",
+	})
 
 	want := Config{
 		User:     "onyx",

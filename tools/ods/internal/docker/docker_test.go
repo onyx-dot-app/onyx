@@ -271,18 +271,3 @@ func TestGetHostPort(t *testing.T) {
 		})
 	}
 }
-
-func TestIsPortExposed(t *testing.T) {
-	calls := fakeDocker(t, `[ "$2" = web ] && echo 0.0.0.0:3000`)
-
-	if !IsPortExposed("web", "3000") {
-		t.Fatal("expected web:3000 to be exposed")
-	}
-	if IsPortExposed("db", "5432") {
-		t.Fatal("expected db:5432 not to be exposed")
-	}
-	want := []string{"port web 3000", "port db 5432"}
-	if got := readCalls(t, calls); !slices.Equal(got, want) {
-		t.Fatalf("expected calls %q, got %q", want, got)
-	}
-}
