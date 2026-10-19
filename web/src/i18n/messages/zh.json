@@ -588,8 +588,6 @@
           "unknown": "无法验证 PKCE 支持情况。你仍可手动选择设置。"
         },
         "description": "测试这些尚未保存的设置，不会保存配置或令牌。在提供商处授权可能会允许此应用访问你的账户。",
-        "testing": "正在测试连接…",
-        "test": "测试连接",
         "successPkce": "使用 PKCE 参数授权成功。这并不能证明提供商强制执行 PKCE。",
         "success": "不使用 PKCE 的授权成功。",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "测试已过期或中断。请开始新的测试。"
         },
         "returnToSettings": "请返回设置窗口查看结果。",
-        "close": "关闭窗口"
+        "close": "关闭窗口",
+        "title": "测试连接",
+        "start": "开始检查",
+        "testing": "正在测试连接…"
       }
     },
     "openApiCard": {

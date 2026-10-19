@@ -588,8 +588,6 @@
           "unknown": "Could not verify PKCE support. You can still choose the setting manually."
         },
         "description": "Tests these unsaved settings without saving configuration or tokens. Provider consent may grant this app access to your account.",
-        "testing": "Testing connection…",
-        "test": "Test connection",
         "successPkce": "Authorization succeeded with PKCE parameters. This does not prove the provider enforces PKCE.",
         "success": "Authorization succeeded without PKCE.",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "The test expired or was interrupted. Start a new test."
         },
         "returnToSettings": "Return to the settings window to see the result.",
-        "close": "Close window"
+        "close": "Close window",
+        "title": "Test Connection",
+        "start": "Start Checks",
+        "testing": "Testing connection…"
       }
     },
     "openApiCard": {

@@ -588,8 +588,6 @@
           "unknown": "Não foi possível verificar o suporte a PKCE. Você ainda pode escolher a configuração manualmente."
         },
         "description": "Testa estas configurações não salvas sem salvar configurações ou tokens. O consentimento do provedor pode conceder a este aplicativo acesso à sua conta.",
-        "testing": "Testando conexão…",
-        "test": "Testar conexão",
         "successPkce": "Autorização concluída com parâmetros PKCE. Isso não prova que o provedor exige PKCE.",
         "success": "Autorização concluída sem PKCE.",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "O teste expirou ou foi interrompido. Inicie um novo teste."
         },
         "returnToSettings": "Volte à janela de configurações para ver o resultado.",
-        "close": "Fechar janela"
+        "close": "Fechar janela",
+        "title": "Testar conexão",
+        "start": "Iniciar verificações",
+        "testing": "Testando conexão…"
       }
     },
     "openApiCard": {

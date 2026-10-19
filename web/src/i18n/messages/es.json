@@ -588,8 +588,6 @@
           "unknown": "No se pudo verificar la compatibilidad con PKCE. Puedes elegir la opción manualmente."
         },
         "description": "Prueba estos ajustes sin guardar la configuración ni los tokens. El consentimiento del proveedor puede dar a esta aplicación acceso a tu cuenta.",
-        "testing": "Probando conexión…",
-        "test": "Probar conexión",
         "successPkce": "Autorización correcta con parámetros PKCE. Esto no demuestra que el proveedor exija PKCE.",
         "success": "Autorización correcta sin PKCE.",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "La prueba caducó o se interrumpió. Inicia una nueva prueba."
         },
         "returnToSettings": "Vuelve a la ventana de ajustes para ver el resultado.",
-        "close": "Cerrar ventana"
+        "close": "Cerrar ventana",
+        "title": "Probar conexión",
+        "start": "Iniciar comprobaciones",
+        "testing": "Probando conexión…"
       }
     },
     "openApiCard": {

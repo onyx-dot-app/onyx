@@ -588,8 +588,6 @@
           "unknown": "Impossible de vérifier la prise en charge de PKCE. Vous pouvez choisir le réglage manuellement."
         },
         "description": "Teste ces réglages non enregistrés sans sauvegarder la configuration ni les jetons. Le consentement peut autoriser cette application à accéder à votre compte.",
-        "testing": "Test de connexion…",
-        "test": "Tester la connexion",
         "successPkce": "Autorisation réussie avec les paramètres PKCE. Cela ne prouve pas que le fournisseur impose PKCE.",
         "success": "Autorisation réussie sans PKCE.",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "Le test a expiré ou a été interrompu. Lancez un nouveau test."
         },
         "returnToSettings": "Revenez à la fenêtre des réglages pour voir le résultat.",
-        "close": "Fermer la fenêtre"
+        "close": "Fermer la fenêtre",
+        "title": "Tester la connexion",
+        "start": "Lancer les vérifications",
+        "testing": "Test de connexion…"
       }
     },
     "openApiCard": {

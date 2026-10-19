@@ -11,12 +11,12 @@ import {
   InputKeyValue,
   InputPasswordTypeIn,
   InputSingleSelect,
-  InputSwitch,
   InputTypeIn,
   MessageCard,
   type SelectOption,
 } from "@opal/components";
-import { Content, InputPadder, Section } from "@opal/layouts";
+import { Content, InputHorizontal, InputPadder, Section } from "@opal/layouts";
+import { InputSwitchField } from "@opal/form";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
 import { MASKED_OAUTH_CREDENTIAL } from "@/lib/oauth/config";
@@ -308,26 +308,13 @@ export default function OpenAPIAuthFields({
               <FormField.Message messages={{ error: authErrors?.scopes }} />
             </FormField>
 
-            <FormField name="auth.supportsPkce">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <FormField.Label>
-                    {t("openApiAuthModal.pkce.label")}
-                  </FormField.Label>
-                  <FormField.Description>
-                    {t("openApiAuthModal.pkce.description")}
-                  </FormField.Description>
-                </div>
-                <FormField.Control asChild>
-                  <InputSwitch
-                    checked={auth.supportsPkce}
-                    onCheckedChange={(checked) =>
-                      void setFieldValue("auth.supportsPkce", checked)
-                    }
-                  />
-                </FormField.Control>
-              </div>
-            </FormField>
+            <InputHorizontal
+              withLabel="auth.supportsPkce"
+              title={t("openApiAuthModal.pkce.label")}
+              description={t("openApiAuthModal.pkce.description")}
+            >
+              <InputSwitchField name="auth.supportsPkce" />
+            </InputHorizontal>
 
             <OAuthConnectionCheck
               values={auth}

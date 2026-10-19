@@ -1,7 +1,10 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
+import { SvgPlay } from "@opal/icons";
 import { useOAuthConnectionTest } from "@/lib/oauth/hooks";
 import { oauthConfigRequest, type OAuthConfigFields } from "@/lib/oauth/config";
 
@@ -11,6 +14,10 @@ interface OAuthConnectionCheckProps {
   disabled?: boolean;
 }
 
+/**
+ * Runs a test authorization with the unsaved OAuth settings. The button
+ * label stays fixed; its icon turns into a spinner while the check runs.
+ */
 export default function OAuthConnectionCheck({
   values,
   configId,
@@ -24,20 +31,26 @@ export default function OAuthConnectionCheck({
     client_id: config.client_id || undefined,
     client_secret: config.client_secret || undefined,
   });
+  const pending = result.status === "pending";
   return (
     <div className="flex flex-col gap-3">
-      <Text as="p" font="secondary-body" color="text-03">
-        {t("description")}
-      </Text>
-      <div>
-        <Button
-          prominence="secondary"
-          disabled={disabled || result.status === "pending"}
-          onClick={start}
-        >
-          {t(result.status === "pending" ? "testing" : "test")}
-        </Button>
-      </div>
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        padding={0}
+        title={t("title")}
+        description={t("description")}
+        rightChildren={
+          <Button
+            prominence="secondary"
+            icon={pending ? IconLoader : SvgPlay}
+            disabled={disabled || pending}
+            onClick={start}
+          >
+            {t("start")}
+          </Button>
+        }
+      />
       {result.status !== "idle" && result.status !== "pending" && (
         <div role="status" aria-live="polite">
           <MessageCard

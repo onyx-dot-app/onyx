@@ -69,7 +69,7 @@ test("tests unsaved fields and accepts only its popup, origin, and state", async
   const fetchSpy = mockEndpoints();
   const { popup, storage } = fakePopup();
   render(<OAuthConnectionCheck values={fields} />);
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   await waitFor(() =>
     expect(popup.location.href).toContain("state=test-state")
   );
@@ -106,7 +106,7 @@ test("reuses stored edit credentials and invalidates the result after edits", as
   const { rerender } = render(
     <OAuthConnectionCheck values={values} configId={17} />
   );
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   await waitFor(() => expect(popup.location.href).toContain("test-state"));
   const call = fetchSpy.mock.calls.find(([url]) =>
     String(url).endsWith("test/initiate")
@@ -136,12 +136,12 @@ test("reports blocked and closed popups", async () => {
   mockEndpoints();
   jest.spyOn(window, "open").mockReturnValue(null);
   render(<OAuthConnectionCheck values={fields} />);
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   expect(
     await screen.findByText("Allow popups and try again.")
   ).toBeInTheDocument();
   const { popup } = fakePopup();
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   await waitFor(() => expect(popup.location.href).toContain("test-state"));
   popup.closed = true;
   expect(
@@ -156,7 +156,7 @@ test("cancels testing when fields change", async () => {
   mockEndpoints();
   const { popup } = fakePopup();
   const { rerender } = render(<OAuthConnectionCheck values={fields} />);
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   await waitFor(() => expect(popup.location.href).toContain("https:"));
   rerender(
     <OAuthConnectionCheck values={{ ...fields, authorizationUrl: "" }} />
@@ -171,14 +171,14 @@ test("can retry after canceling a pending test and restoring its settings", asyn
   const fetchSpy = mockEndpoints();
   const { popup } = fakePopup();
   const { rerender } = render(<OAuthConnectionCheck values={fields} />);
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
+  await user.click(screen.getByRole("button", { name: "Start Checks" }));
   await waitFor(() => expect(popup.location.href).toContain("test-state"));
   rerender(
     <OAuthConnectionCheck values={{ ...fields, supportsPkce: false }} />
   );
   expect(popup.close).toHaveBeenCalledTimes(1);
   rerender(<OAuthConnectionCheck values={fields} />);
-  const retry = screen.getByRole("button", { name: "Test connection" });
+  const retry = screen.getByRole("button", { name: "Start Checks" });
   expect(retry).toBeEnabled();
   await user.click(retry);
   await waitFor(() =>
@@ -209,7 +209,7 @@ test("receives a channel result after provider isolation disconnects the popup",
   });
   try {
     render(<OAuthConnectionCheck values={fields} />);
-    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await user.click(screen.getByRole("button", { name: "Start Checks" }));
     await waitFor(() => expect(popup.location.href).toContain("test-state"));
     expect(construct).toHaveBeenCalledWith(oauthTestChannelName("test-state"));
     popup.closed = true;

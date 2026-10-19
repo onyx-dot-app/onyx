@@ -588,8 +588,6 @@
           "unknown": "PKCE-Unterstützung konnte nicht geprüft werden. Sie können die Einstellung weiterhin manuell wählen."
         },
         "description": "Testet diese ungespeicherten Einstellungen, ohne Konfiguration oder Tokens zu speichern. Die Zustimmung kann dieser App Zugriff auf Ihr Konto gewähren.",
-        "testing": "Verbindung wird getestet…",
-        "test": "Verbindung testen",
         "successPkce": "Autorisierung mit PKCE-Parametern erfolgreich. Dies beweist nicht, dass der Anbieter PKCE erzwingt.",
         "success": "Autorisierung ohne PKCE erfolgreich.",
         "result": {
@@ -601,7 +599,10 @@
           "interrupted": "Der Test ist abgelaufen oder wurde unterbrochen. Starten Sie einen neuen Test."
         },
         "returnToSettings": "Kehren Sie zum Einstellungsfenster zurück, um das Ergebnis zu sehen.",
-        "close": "Fenster schließen"
+        "close": "Fenster schließen",
+        "title": "Verbindung testen",
+        "start": "Prüfungen starten",
+        "testing": "Verbindung wird getestet…"
       }
     },
     "openApiCard": {
