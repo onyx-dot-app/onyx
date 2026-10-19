@@ -68,6 +68,12 @@ sync (`server.py:_Readiness`).
 
 ### User-facing HTTP endpoints (outside the proxy)
 
+Member app responses include `service_urls`: unique literal HTTP(S) origins for display.
+The projection strips credentials, paths, queries, and default ports. Built-in
+escaped hostname dots and hyphens are decoded. Unescaped regex dots and ambiguous
+regex or wildcard hosts are omitted.
+Raw upstream patterns, authentication templates, and organization credentials remain admin-only.
+
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/api/build/apps/{id}/oauth/start` | `start_external_app_oauth` (`server/features/build/external_apps/oauth.py`) | Begins a user's per-user OAuth connect flow for a built-in app. |
@@ -143,7 +149,11 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). They
+  come from the client for fixed-host built-ins and custom apps. Per-account
+  providers resolve their own patterns after the database write path restores
+  masked credentials. Zendesk uses the same validated subdomain for its gateway,
+  OAuth endpoints, and skill files. `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
 - `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
@@ -424,10 +434,58 @@ identical in shape whether a human or a grant decided.
 
 ### 4.6 OAuth connect and token refresh
 
+Members manage external-app accounts at `/app/plugins` and
+`/craft/v1/plugins`. The Craft list excludes OpenAPI actions and uses
+`craft_connected` for MCP credentials. External apps remain Craft-only.
+The shared directory fills the remaining Craft pane and centers its content.
+Search sits beside connection filters below the heading. Craft and CraftEmpty
+stories cover the populated and empty layouts.
+The old `/craft/v1/apps` route preserves query parameters when redirecting.
+The nested OAuth callback still exchanges the code before returning.
+Connected app details retain a Review skills link when an associated skill
+is disabled. Craft MCP details omit the unfetched Chat tool catalog.
+
+OAuth start accepts an optional safe internal `return_path`. It persists
+that path in Redis state and returns it after exchange. Plugin popup flows
+then verify the app's authenticated state before notifying the opener.
+Without that path, the existing Craft SetupCard popup protocol stays unchanged.
+
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
-authorize URL (`server/features/build/external_apps/oauth.py`); the callback
-exchanges the code, stamps an absolute `expires_at`
-(`external_apps/token_utils.py:stamp_expires_at`) and stores the granted scopes verbatim.
+authorize URL through the shared OAuth builder (`server/features/build/external_apps/oauth.py`).
+Each attempt is bound to the user, tenant, app, and OAuth configuration.
+`AuthorizationAttemptStore` keeps attempts for ten minutes through `CacheBackend`.
+GitHub, Linear, and Zendesk use S256 PKCE. Other providers keep their existing exchange format.
+The callback consumes the attempt before token exchange and rejects changed configuration.
+A failed exchange requires a new connection attempt; retries cannot reuse state.
+The callback rejects malformed provider data and non-string access tokens before storage.
+Providers own scope parameters, client authentication, and token and grant extraction.
+The callback stamps an absolute `expires_at`
+(`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
+
+Zendesk uses a Confidential OAuth client with S256 PKCE and a client secret.
+It requests `read`, `tickets:write`, `hc:write`,
+`side_conversations:write`, and `macros:write` scopes. All five are requested.
+Help Center, side conversations, and macros have separate read and write action policies.
+Reads default to `ALWAYS`; writes default to `ASK`, including nested and bulk resource routes.
+The skill uses its existing `call` command for these workflows. Articles start as drafts;
+macro examples use a personal restriction. Zendesk roles and feature availability still apply.
+View and trigger write scopes are not requested.
+Search and ticket audits require broad `read`; resource-specific read scopes do not cover these endpoints.
+Existing users must reconnect after allowed scopes change to obtain the new grant.
+
+The resolved `OAuthFlowSpec` comes from
+`OAuthExternalAppProvider.resolve_oauth_flow`, not straight from the
+spec: a provider whose endpoints live on the customer's own host (Zendesk's
+`<subdomain>.zendesk.com`) resolves them from the app's organization
+credentials. Both OAuth routes and the refresh path resolve them the same
+way. The attempt fingerprint includes these resolved endpoints, so an account
+change rejects pending callbacks before any token exchange. The same resolved
+configuration supplies URLs, scopes, and PKCE settings. Refresh requires the
+resolved token URL; it cannot fall back to an unresolved spec template.
+
+`OAuthExternalAppProvider.extract_credentials` maps standard OAuth token responses for GitHub and Zendesk.
+Providers with different fields or nested tokens override this mapping.
+Absent refresh fields remain omitted, so refresh merging preserves stored values.
 
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`
@@ -503,18 +561,27 @@ they can never disagree about which server owns a request; see
    request. `_resolve_and_match` sets the 403 and returns before `request()`
    ever reaches credential injection or forwarding
    (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
-3. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
+3. **An app's `upstream_url_patterns` pin a literal upstream host.**
+   The host is the credential-injection boundary: a pattern spanning a whole
+   domain would let a prompt-injected agent spend this tenant's token on
+   another account of the same vendor. `UrlGlob` enforces this for `CUSTOM`
+   apps (the host may hold no wildcard). Fixed-host built-ins use submitted
+   regexes. Per-account providers resolve their patterns on create and config
+   updates, after masked credentials are restored. Zendesk validates one DNS
+   label and escapes it before substitution. Invalid account values reject the
+   write instead of saving a gateway that cannot inject credentials.
+4. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the
    IP-resolved user" check in `resolve_session_by_id`; removing it would let
    a compromised sandbox process attribute an approval to any session,
    including a different user's if that check is what enforces the boundary.
-4. **The CA is scoped to the sandbox and must never leave it.** The private
+5. **The CA is scoped to the sandbox and must never leave it.** The private
    key lives only in the CA store (`Secret`/volume) and the proxy process;
    only the public cert is projected to sandboxes. A change that starts
    mounting `ca.key` (or the K8s `Secret` itself) into the sandbox namespace
    breaks this.
-5. **An unmatched request's default depends on *what* went unmatched, and
+6. **An unmatched request's default depends on *what* went unmatched, and
    the two cases differ:**
    - A request that matches **no connected app and no MCP host at all**
      (`resolve_app_for_url` finds nothing, and no MCP server host claims
@@ -536,11 +603,11 @@ they can never disagree about which server owns a request; see
      applies without credentials.
    - An MCP tool call with no admin override defaults to `ASK`
      (`request_evaluator.py:MCP_TOOL_DEFAULT_POLICY`).
-6. **MCP matching must fail closed when the body cannot be parsed.** Any
+7. **MCP matching must fail closed when the body cannot be parsed.** Any
    non-plumbing, non-well-formed-`tools/call` body on a matched MCP host is
    `UNCLASSIFIABLE` and becomes a synthetic `DENY`
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
-7. **The upstream socket must use only validated destination addresses.**
+8. **The upstream socket must use only validated destination addresses.**
    `http_connect` and `request` reject forbidden destinations early.
    Requests recheck pending and connected upstream addresses under current policy.
    `server_connect` calls `resolve_destination` and rejects the entire answer
@@ -549,11 +616,11 @@ they can never disagree about which server owns a request; see
    lookup. Preserve the original hostname for TLS SNI, certificate verification,
    and credential matching. Keep the real TLS tests when changing mitmproxy;
    they verify address pinning, hostname checks, and credential injection.
-8. **`try_record_decision` is the only writer of a terminal decision;** any
+9. **`try_record_decision` is the only writer of a terminal decision;** any
    new path that can end an approval (a new UI action, a new grant source)
    must go through it, not write `ActionApproval.decision` directly, or the
    proxy's wake/expire race arbiter breaks.
-9. **External-app matcher exceptions are fail-open to "off-catalog", by
+10. **External-app matcher exceptions are fail-open to "off-catalog", by
    design; credential resolution and destination blocking are the actual
    security boundary, not the matcher.** A bug in `recognize_actions` must
    not become a way to reach an internal address or bypass the CA/identity

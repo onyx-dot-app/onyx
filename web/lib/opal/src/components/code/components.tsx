@@ -18,13 +18,20 @@ interface CodeProps extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   children: string;
   /** Show copy-to-clipboard button on hover. @default true */
   showCopyButton?: boolean;
+  /** Tinted fill (`background-tint-01`) with no border. @default false */
+  tint?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
+export function Code({
+  children,
+  showCopyButton = true,
+  tint = false,
+  ...props
+}: CodeProps) {
   const [copied, setCopied] = useState(false);
   const strings = useOpalStrings();
 
@@ -40,7 +47,7 @@ export function Code({ children, showCopyButton = true, ...props }: CodeProps) {
   return (
     <div className="opal-code-root">
       <Hoverable.Root group="code">
-        <code className="opal-code" {...props}>
+        <code className="opal-code" data-tint={tint || undefined} {...props}>
           {children}
         </code>
         {showCopyButton && (

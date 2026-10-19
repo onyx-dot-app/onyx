@@ -19,10 +19,9 @@ from ee.onyx.db.user_group import (
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
-    make_group_manager,
     prepare_user_group_for_deletion,
     rename_user_group,
-    revoke_group_manager,
+    set_group_manager__no_commit,
     set_group_permissions_bulk__no_commit,
     set_user_group_data_access_cc_pairs,
     set_user_group_incognito,
@@ -755,10 +754,12 @@ def set_group_manager(
     )
 
     try:
-        if request.is_manager:
-            make_group_manager(db_session, request.user_id, user_group_id)
-        else:
-            revoke_group_manager(db_session, request.user_id, user_group_id)
+        set_group_manager__no_commit(
+            db_session,
+            user_id=request.user_id,
+            group_id=user_group_id,
+            is_manager=request.is_manager,
+        )
     except ValueError as e:
         # Target isn't a member of the group (a manager is always a member).
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))

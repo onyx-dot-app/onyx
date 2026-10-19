@@ -16,7 +16,7 @@ import type {
 /** The statuses a log line can show. */
 type LogStatus = Extract<
   StatusVariants,
-  "default" | "success" | "warning" | "error"
+  "default" | "info" | "success" | "warning" | "error"
 >;
 
 /** How much a line stands out: `heavy` adds a tinted background. */
@@ -47,6 +47,8 @@ type LogProps = {
 // The title is always text-03; `centerChildren` brings its own colour.
 const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
   default: { status: "default", weight: "light" },
+  "info-heavy": { status: "info", weight: "heavy" },
+  "info-light": { status: "info", weight: "light" },
   "success-heavy": { status: "success", weight: "heavy" },
   "success-light": { status: "success", weight: "light" },
   "warning-heavy": { status: "warning", weight: "heavy" },

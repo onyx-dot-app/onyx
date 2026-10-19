@@ -5,14 +5,13 @@ import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
 import { Divider } from "@opal/components";
-import { InputSingleUploadField } from "@opal/form";
+import { InputSingleUploadField, InputSwitchField } from "@opal/form";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
   EmbeddingProvider,
   IndexSettingsTranslator,
 } from "@/lib/searchSettings/types";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 
@@ -194,7 +193,7 @@ export function ModelSpecFields({
         description={t("fields.normalize.description")}
         withLabel="normalize"
       >
-        <SwitchField name="normalize" />
+        <InputSwitchField name="normalize" />
       </InputHorizontal>
     </>
   );

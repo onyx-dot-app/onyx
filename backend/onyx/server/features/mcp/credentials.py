@@ -6,37 +6,37 @@ Each function here answers exactly one, with the consumer noted:
 - ``ResolvedMCPCredentials.can_authenticate`` — are the effective credentials
   usable for a call right now (lazy refresh still allowed)? Consumed by the
   tool runtime, the sandbox proxy, and the API status fields.
-- ``ResolvedMCPCredentials.needs_reauth`` — is the stored OAuth grant dead
-  (expired with no refresh token), so the user must reconnect?
+- ``ResolvedMCPCredentials.needs_reauth`` — were credentials rejected, or is
+  the OAuth grant expired without a refresh token?
 - ``mcp_token_expired`` — is the stored OAuth access token past its expiry
   (regardless of whether a refresh token could revive it)? Drives refresh.
 - ``requires_user_authentication`` — does the server's shape require a per-user
   credential at all, or is it usable from admin/none config alone?
-- ``user_can_authenticate`` — resolves the user's credentials and reports
-  whether they authenticate; the DB-backed entry point for status listings.
+- ``user_connection_status`` — resolves the user's first connection, usable
+  credentials, or required replacement state for API listings.
 
 This module holds pure logic plus the resolve orchestration; the DB fetch lives
 in ``onyx.db.mcp``. It must not import ``onyx.server.features.mcp.oauth``.
 """
 
-import hashlib
-import json
 import time
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import cast
 
 from mcp.shared.auth import OAuthClientInformationFull
-from pydantic import BaseModel, ConfigDict, SkipValidation
+from pydantic import BaseModel, ConfigDict, JsonValue, SkipValidation
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import MCPConnectionConfig, MCPServer, User
+from onyx.oauth.authorization_attempt import canonical_json_fingerprint
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     MCPAuthTemplate,
     MCPConnectionData,
+    MCPConnectionStatus,
     MCPOAuthKeys,
     merge_mcp_headers,
 )
@@ -72,31 +72,27 @@ def mcp_token_expired(config_data: MCPConnectionData) -> bool:
 
 
 def mcp_oauth_connection_headers_fingerprint(headers: dict[str, str]) -> str:
-    routing_headers = sorted(
-        (key.lower(), value)
-        for key, value in headers.items()
-        if key.lower() != "authorization"
-    )
-    serialized_headers = json.dumps(
-        routing_headers, ensure_ascii=True, separators=(",", ":")
-    )
-    return hashlib.sha256(serialized_headers.encode()).hexdigest()
+    routing_headers: JsonValue = [
+        [key, value]
+        for key, value in sorted(
+            (key.lower(), value)
+            for key, value in headers.items()
+            if key.lower() != "authorization"
+        )
+    ]
+    return canonical_json_fingerprint(routing_headers)
 
 
 def mcp_oauth_client_information_fingerprint(
     client_information: OAuthClientInformationFull,
 ) -> str:
-    serialized_client = json.dumps(
+    return canonical_json_fingerprint(
         client_information.model_dump(
             mode="json",
             exclude_none=True,
             by_alias=True,
         ),
-        ensure_ascii=True,
-        sort_keys=True,
-        separators=(",", ":"),
     )
-    return hashlib.sha256(serialized_client.encode()).hexdigest()
 
 
 def requires_user_authentication(
@@ -111,6 +107,20 @@ def requires_user_authentication(
     if auth_performer == MCPAuthenticationPerformer.ADMIN:
         return False
     return True
+
+
+def uses_user_managed_headers(
+    auth_type: MCPAuthenticationType | None,
+    auth_performer: MCPAuthenticationPerformer | None,
+    auth_template: MCPAuthTemplate | None,
+) -> bool:
+    """Whether a rejected request identifies credentials the user can replace."""
+    if auth_type == MCPAuthenticationType.API_TOKEN:
+        return auth_performer == MCPAuthenticationPerformer.PER_USER
+    # OAuth rejection can concern a refreshable grant or the Onyx login token.
+    return auth_type in (None, MCPAuthenticationType.NONE) and bool(
+        auth_template and auth_template.required_fields
+    )
 
 
 def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
@@ -222,21 +232,48 @@ class ResolvedMCPCredentials(BaseModel):
         return headers
 
     def needs_reauth(self) -> bool:
-        """The stored OAuth grant is dead: the access token is expired and
-        there is no refresh token to redeem, so only a user reconnect can
-        restore it. Its bearer header still takes precedence in
-        ``build_headers``, so no caller-supplied header can work around it."""
+        """Credentials were rejected, or an OAuth grant cannot refresh."""
+        config_data = self.connection_data
+        if config_data.get("reauth_required"):
+            return True
         if self.auth_type != MCPAuthenticationType.OAUTH:
             return False
-        config_data = self.connection_data
         if not mcp_token_expired(config_data):
             return False
         tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
         return not tokens.get("refresh_token")
 
+    def connection_status(self) -> MCPConnectionStatus:
+        """Report local credential state without probing the remote server."""
+        if self.can_authenticate():
+            return MCPConnectionStatus.CONNECTED
+        if self.needs_reauth():
+            return MCPConnectionStatus.REAUTH_REQUIRED
+        if self.auth_type in (None, MCPAuthenticationType.NONE) and (
+            self.auth_template is not None and not self._has_required_substitutions()
+        ):
+            return MCPConnectionStatus.NOT_CONNECTED
+        data = self.connection_data
+        # OAuth setup stores registration and headers before the first grant.
+        if self.auth_type == MCPAuthenticationType.OAUTH:
+            has_credentials = bool(data.get("tokens"))
+        else:
+            has_credentials = bool(
+                data.get("api_token")
+                or data.get("header_substitutions")
+                or data.get("headers")
+            )
+        return (
+            MCPConnectionStatus.REAUTH_REQUIRED
+            if has_credentials
+            else MCPConnectionStatus.NOT_CONNECTED
+        )
+
     def can_authenticate(self) -> bool:
         """Whether these credentials can authenticate a call now (lazy refresh
         of an expired-but-refreshable OAuth token still allowed downstream)."""
+        if self.needs_reauth():
+            return False
         if self.auth_type in (None, MCPAuthenticationType.NONE):
             return self._has_required_substitutions()
         if self.auth_type == MCPAuthenticationType.PT_OAUTH:
@@ -246,7 +283,6 @@ class ResolvedMCPCredentials(BaseModel):
             # reconnect and Craft configs exclude the server.
             return (
                 bool(self._generated_auth_headers())
-                and not self.needs_reauth()
                 and self._has_required_substitutions()
             )
         return bool(self._configured_headers()) and self._has_required_substitutions()
@@ -309,19 +345,18 @@ def resolve_mcp_credentials(
     )
 
 
-def user_can_authenticate(
+def user_connection_status(
     mcp_server: MCPServer,
     user: User,
     db_session: Session,
     *,
     user_configs: Mapping[int, MCPConnectionConfig] | None = None,
-) -> bool:
-    """Resolve the user's credentials and report whether they authenticate:
-    every generated credential and template value is available."""
+) -> MCPConnectionStatus:
+    """Resolve the user's local connection state without probing the server."""
     try:
         credentials = resolve_mcp_credentials(
             mcp_server, user, db_session, user_configs=user_configs
         )
     except MCPCredentialsError:
-        return False
-    return credentials.can_authenticate()
+        return MCPConnectionStatus.NOT_CONNECTED
+    return credentials.connection_status()

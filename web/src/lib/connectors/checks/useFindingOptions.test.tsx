@@ -72,6 +72,7 @@ function report(credentialId: number, label: string): CredentialCheckReport {
       check_results: [checkResult([listing(label)])],
     },
     time_updated: "2026-10-13T00:00:00Z",
+    progress: null,
   };
 }
 

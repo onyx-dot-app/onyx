@@ -1,5 +1,7 @@
 "use client";
 
+import { parseErrorDetail } from "@/lib/fetcher";
+
 import {
   usePlans,
   useTierAtLeast,
@@ -18,9 +20,8 @@ import React, {
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
-import useSWR, { mutate } from "swr";
+import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { Collapsible } from "@opal/components";
@@ -31,13 +32,6 @@ import {
   InputTypeIn,
   type SelectOption,
 } from "@opal/components";
-import { SimpleModelSelector } from "@/lib/languageModels/components";
-import {
-  filterModelConfigurations,
-  findLlmOptionById,
-} from "@/lib/languageModels/options";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import {
   SvgAddLines,
   SvgActions,
@@ -59,6 +53,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
+import { DEFAULT_LOCALE, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -85,17 +80,14 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/utils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/mcp/types";
+import { MCPConnectionStatus, MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { Tier } from "@/lib/tiers/types";
+import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
+
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
-
-interface DefaultAgentConfiguration {
-  tool_ids: number[];
-  system_prompt: string | null;
-  default_system_prompt: string;
-}
 
 interface MCPServerCardTool {
   id: number;
@@ -129,7 +121,7 @@ function MCPServerCard({
 
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.user_can_authenticate;
+  const needsAuth = server.connection_status !== MCPConnectionStatus.CONNECTED;
   const authTooltip = needsAuth ? t("mcpServer.authTooltip") : undefined;
 
   const expanded = !isFolded;
@@ -760,89 +752,6 @@ export default function ChatPreferencesPage() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
-  // Dedicated chat-naming model. Auto-naming reads this designation via
-  // fetch_default_chat_naming_model; when unset it uses the session's model.
-  const {
-    llmProviders,
-    defaultChatNaming,
-    modelPaging,
-    refetch: refetchLlmProviders,
-  } = useAdminLanguageModels();
-
-  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
-  // for the select.
-  const chatNamingModelConfigId = useMemo(() => {
-    if (!defaultChatNaming || !llmProviders) return null;
-    for (const p of llmProviders) {
-      if (p.id !== defaultChatNaming.provider_id) continue;
-      const mc = p.model_configurations.find(
-        (m) => m.name === defaultChatNaming.model_name
-      );
-      if (mc?.id != null) return mc.id;
-    }
-    return null;
-  }, [llmProviders, defaultChatNaming]);
-
-  const handleChatNamingModelChange = useCallback(
-    async ({
-      modelName,
-      modelConfigurationId,
-    }: {
-      modelName: string;
-      modelConfigurationId: number | null | undefined;
-    }) => {
-      const provider = findProviderOwningModelConfig(
-        llmProviders,
-        modelConfigurationId
-      );
-      if (!provider) {
-        toast.error(t("toasts.providerResolveFailed"));
-        return;
-      }
-      try {
-        const response = await fetch("/api/admin/llm/default-chat-naming", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider_id: provider.id,
-            model_name: modelName,
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(
-            (await response.json()).detail ?? t("toasts.chatNamingUpdateFailed")
-          );
-        }
-        await refetchLlmProviders();
-        toast.success(t("toasts.chatNamingUpdated"));
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("toasts.unknownError")
-        );
-      }
-    },
-    [llmProviders, refetchLlmProviders, t]
-  );
-
-  const handleClearChatNamingModel = useCallback(async () => {
-    try {
-      const response = await fetch("/api/admin/llm/default-chat-naming", {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error(
-          (await response.json()).detail ?? t("toasts.chatNamingResetFailed")
-        );
-      }
-      await refetchLlmProviders();
-      toast.success(t("toasts.chatNamingReset"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("toasts.unknownError")
-      );
-    }
-  }, [refetchLlmProviders, t]);
-
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
   const [companyDescription, setCompanyDescription] = useState(
@@ -918,68 +827,24 @@ export default function ChatPreferencesPage() {
   }));
 
   // Default agent configuration (system prompt)
-  const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
-    useSWR<DefaultAgentConfiguration>(
-      SWR_KEYS.defaultAssistantConfig,
-      errorHandlingFetcher
-    );
-
+  const {
+    data: defaultAgentConfig,
+    mutate: mutateDefaultAgent,
+    updateTools,
+  } = useDefaultAssistantConfiguration();
   const enabledToolIds = defaultAgentConfig?.tool_ids ?? [];
-
-  const isToolEnabled = useCallback(
-    (toolDbId: number) => enabledToolIds.includes(toolDbId),
-    [enabledToolIds]
-  );
-
-  const saveToolIds = useCallback(
-    async (newToolIds: number[]) => {
-      // Optimistic update so subsequent toggles read fresh state
-      const optimisticData = defaultAgentConfig
-        ? { ...defaultAgentConfig, tool_ids: newToolIds }
-        : undefined;
-      try {
-        await mutateDefaultAgent(
-          async () => {
-            const response = await fetch("/api/admin/default-assistant", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ tool_ids: newToolIds }),
-            });
-            if (!response.ok) {
-              const errorMsg = (await response.json()).detail;
-              throw new Error(errorMsg);
-            }
-            return optimisticData;
-          },
-          { optimisticData, revalidate: true }
-        );
-        toast.success(t("toasts.toolsUpdated"));
-      } catch {
-        toast.error(t("toasts.toolsUpdateFailed"));
-      }
-    },
-    [defaultAgentConfig, mutateDefaultAgent, t]
-  );
-
-  const toggleTool = useCallback(
-    (toolDbId: number, enabled: boolean) => {
-      const newToolIds = enabled
-        ? [...enabledToolIds, toolDbId]
-        : enabledToolIds.filter((id) => id !== toolDbId);
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
-
-  const toggleTools = useCallback(
-    (toolDbIds: number[], enabled: boolean) => {
-      const idsSet = new Set(toolDbIds);
-      const withoutIds = enabledToolIds.filter((id) => !idsSet.has(id));
-      const newToolIds = enabled ? [...withoutIds, ...toolDbIds] : withoutIds;
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
+  const isToolEnabled = (toolDbId: number) => enabledToolIds.includes(toolDbId);
+  const toggleTools = async (toolDbIds: number[], enabled: boolean) => {
+    try {
+      await updateTools(toolDbIds, enabled);
+      toast.success(t("toasts.toolsUpdated"));
+    } catch {
+      toast.error(t("toasts.toolsUpdateFailed"));
+    }
+  };
+  const toggleTool = (toolDbId: number, enabled: boolean) => {
+    void toggleTools([toolDbId], enabled);
+  };
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
@@ -1002,8 +867,9 @@ export default function ChatPreferencesPage() {
         });
 
         if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
+          throw new Error(
+            await parseErrorDetail(response, t("toasts.settingsUpdateFailed"))
+          );
         }
 
         router.refresh();
@@ -1142,49 +1008,35 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-              <InputHorizontal
-                title={t("chatNaming.title")}
-                description={t("chatNaming.description")}
-                withLabel
-              >
-                <div className="flex items-center gap-2">
-                  {chatNamingModelConfigId !== null && (
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      onClick={() => void handleClearChatNamingModel()}
-                    >
-                      {t("chatNaming.resetButton.label")}
-                    </Button>
-                  )}
-                  <SimpleModelSelector
-                    providers={filterModelConfigurations(llmProviders ?? [], {
-                      keep: chatNamingModelConfigId,
-                    })}
-                    value={chatNamingModelConfigId}
-                    grouped={!settings.hide_provider_grouping}
-                    modelPaging={modelPaging}
-                    onChange={(modelConfigurationId) => {
-                      const opt = findLlmOptionById(
-                        llmProviders,
-                        modelConfigurationId
-                      );
-                      if (!opt) return;
-                      void handleChatNamingModelChange({
-                        modelName: opt.modelName,
-                        modelConfigurationId,
-                      });
-                    }}
-                  />
-                </div>
-              </InputHorizontal>
             </Section>
           </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-          {/* Team Context */}
+          <Section alignItems="stretch" gap={3}>
+            <Content title={t("taskModels.title")} sizePreset="main-ui" />
+            <ChatTaskModelSettings />
+          </Section>
+
+          {/* Workspace language and team context */}
           <Section gap={4}>
+            <InputVertical
+              title={t("defaultLanguage.title")}
+              subDescription={t("defaultLanguage.description")}
+              withLabel
+            >
+              <InputSingleSelect
+                value={s.default_language}
+                onValueChange={(value) => {
+                  // SAFETY: LOCALE_OPTIONS only carries SUPPORTED_LOCALES values.
+                  void saveSettings({ default_language: value as Locale });
+                }}
+                defaultOption={DEFAULT_LOCALE}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={LOCALE_OPTIONS}
+              />
+            </InputVertical>
+
             <InputVertical
               title={t("teamName.title")}
               subDescription={t("teamName.description")}
@@ -1651,8 +1503,12 @@ export default function ChatPreferencesPage() {
                   body: JSON.stringify({ system_prompt }),
                 });
                 if (!response.ok) {
-                  const errorMsg = (await response.json()).detail;
-                  throw new Error(errorMsg);
+                  throw new Error(
+                    await parseErrorDetail(
+                      response,
+                      t("toasts.systemPromptUpdateFailed")
+                    )
+                  );
                 }
                 await mutateDefaultAgent();
                 setSystemPromptModalOpen(false);

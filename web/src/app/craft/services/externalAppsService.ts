@@ -122,10 +122,11 @@ interface OAuthStartResponse {
 }
 
 export async function startExternalAppOAuth(
-  externalAppId: number
+  externalAppId: number,
+  returnPath?: string
 ): Promise<OAuthStartResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start`
+    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start${returnPath ? `?${new URLSearchParams({ return_path: returnPath })}` : ""}`
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to start OAuth"));
@@ -136,6 +137,7 @@ export async function startExternalAppOAuth(
 interface OAuthCallbackResponse {
   success: boolean;
   external_app_id: number;
+  return_path?: string | null;
 }
 
 export async function completeExternalAppOAuthCallback(

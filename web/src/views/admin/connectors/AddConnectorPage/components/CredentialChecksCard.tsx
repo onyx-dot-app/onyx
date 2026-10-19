@@ -26,10 +26,10 @@ import {
   SvgExpand,
   SvgFold,
   SvgHourglass,
-  SvgMinusCircle,
   SvgPlay,
-  SvgRefreshCw,
+  SvgXCircle,
   SvgXOctagon,
+  SvgRefreshCw,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
@@ -69,8 +69,9 @@ export type CheckLine = Pick<
 > & { state: CheckLineState };
 
 // Outcomes that need reading (passed, failed, unverified) show their details
-// in a heavier font and their status colour; the rest stay muted.
-const OUTCOME_FONT: TextFont = "main-ui-action";
+// in the primary text colour; the rest stay muted. Only a required failure is
+// red and heavy, in `CheckLog`.
+const OUTCOME = { font: "main-ui-body", color: "text-04" } as const;
 const MUTED = { font: "secondary-body", color: "text-03" } as const;
 
 const CHECK_LOGS = {
@@ -78,32 +79,30 @@ const CHECK_LOGS = {
     variant: "success-light",
     icon: SvgCheckCircle,
     detail: "status.passed",
-    font: OUTCOME_FONT,
-    color: "text-04",
+    ...OUTCOME,
   },
-  // A failed required check blocks, so `CheckLog` makes it heavy.
   failed: {
     variant: "error-light",
     icon: SvgXOctagon,
     detail: "status.failed",
-    font: OUTCOME_FONT,
-    color: "status-error-05",
+    ...OUTCOME,
   },
   indeterminate: {
     variant: "warning-light",
     icon: SvgAlertCircle,
     detail: "status.indeterminate",
-    font: OUTCOME_FONT,
-    color: "theme-amber-05",
+    ...OUTCOME,
+    font: "main-ui-action",
+    color: "status-warning-05",
   },
   skipped: {
     variant: "default",
-    icon: SvgMinusCircle,
+    icon: SvgXCircle,
     detail: "status.skipped",
     ...MUTED,
   },
   running: {
-    variant: "default",
+    variant: "info-light",
     icon: IconLoader,
     detail: "status.running",
     ...MUTED,
@@ -167,6 +166,8 @@ function CheckLog({ check }: CheckLogProps) {
       : undefined;
 
   const logVariant: LogVariant = blocking ? "error-heavy" : variant;
+  const messageFont: TextFont = blocking ? "main-ui-action" : font;
+  const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   return (
     <Log
@@ -176,8 +177,8 @@ function CheckLog({ check }: CheckLogProps) {
       centerChildren={
         <OverflowText
           as="p"
-          font={font}
-          color={color}
+          font={messageFont}
+          color={messageColor}
           textPosition="text-start"
         >
           {check.message || t(detail)}
@@ -191,7 +192,14 @@ function CheckLog({ check }: CheckLogProps) {
               tooltip={guidance}
             />
           )}
-          {check.required && <Tag title={t("required.label")} color="gray" />}
+          {check.required && (
+            <Tag
+              title={t("required.label")}
+              color="white"
+              variant="status"
+              font="secondary-action"
+            />
+          )}
         </Section>
       }
     />
@@ -280,7 +288,8 @@ interface CheckCardViewProps {
   defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
-  onRerun: () => void;
+  /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
+  onRerun?: () => void;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
@@ -379,46 +388,24 @@ export function CheckCardView({
       icon={notice ? FailedToRunIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
-      // Expanded, a short state line keeps the header's height steady while
-      // the rows fold. A run that broke reads the same either way. Checks
-      // that wait for settings have not run, so the run is not complete.
-      description={
-        notice ??
-        (collapsed
-          ? summary
-          : isRunning || inProgressCount > 0
-            ? t("state.inProgress")
-            : expectedCount > 0
-              ? t("state.waiting")
-              : t("state.completed"))
-      }
+      description={summary}
       sizePreset="main-content"
       variant="section"
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {notice ? (
-            // The way to try again, so it says what it does.
-            <Button
-              rightIcon={SvgRefreshCw}
-              prominence="internal"
-              disabled={isRunning}
-              onClick={onRerun}
-            >
-              {tAccount("rerunButton.label")}
-            </Button>
-          ) : (
-            !collapsed && (
+          {(notice !== undefined || stateCounts.failed > 0) &&
+            onRerun !== undefined && (
+              // A run that broke or failed a check can be tried again without editing settings.
               <Button
-                icon={SvgRefreshCw}
-                prominence="internal"
-                tooltip={tAccount("rerunButton.label")}
-                aria-label={tAccount("rerunButton.label")}
+                rightIcon={SvgRefreshCw}
+                prominence="tertiary"
                 disabled={isRunning}
                 onClick={onRerun}
-              />
-            )
-          )}
+              >
+                {tAccount("rerunButton.label")}
+              </Button>
+            )}
           {collapsed && requiredFailed > 0 && (
             <Tag
               icon={SvgXOctagon}
@@ -430,9 +417,7 @@ export function CheckCardView({
           {(!notice || hasRows) && (
             <Button
               icon={collapsed ? SvgExpand : SvgFold}
-              // Folded, the card hovers grey itself; tertiary matches that
-              // grey, where internal would paint a white square on it.
-              prominence={collapsed ? "tertiary" : "internal"}
+              prominence="tertiary"
               tooltip={
                 collapsed ? t("foldButton.expand") : t("foldButton.fold")
               }

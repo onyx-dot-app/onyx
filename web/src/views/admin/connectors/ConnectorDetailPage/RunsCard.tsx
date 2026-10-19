@@ -1,26 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { richNodes } from "@opal/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
+  Button,
   Card,
+  Divider,
   Dropdown,
   FilterButton,
   InputTypeIn,
   MessageCard,
   Pagination,
   Tag,
+  Text,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { SvgLongWait, SvgNoResult } from "@opal/illustrations";
 import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgCheckCircle,
+  SvgChevronRight,
   SvgClock,
   SvgSlowMotion,
+  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -34,10 +40,21 @@ import type {
   CCPairRunStatusGroup,
 } from "@/lib/connectors/types";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import {
+  PAIR_WINDOWS,
+  ThroughputWindowPicker,
+  pickedWindowStart,
+  rangeWithin,
+  windowStart,
+  type PickedWindow as SharedWindow,
+  type PickerWindow,
+  type SliceRange,
+} from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import { useFocusedRow } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 
 const PAGE_SIZE = 10;
 export const RUNS_POLL_MS = 5000;
@@ -56,12 +73,7 @@ const WINDOWS = [
 ] as const;
 type TimeWindow = (typeof WINDOWS)[number];
 
-interface PickedWindow {
-  window: TimeWindow;
-  /** Fixed when the window is picked, so polling keeps one cache key. */
-  since: string | null;
-}
-const ALL_TIME: PickedWindow = { window: WINDOWS[0], since: null };
+const ALL_TIME: TimeWindow = WINDOWS[0];
 const LOADER_ROWS = 3;
 
 const STATUS_GROUPS: CCPairRunStatusGroup[] = [
@@ -71,11 +83,12 @@ const STATUS_GROUPS: CCPairRunStatusGroup[] = [
   "canceled",
 ];
 
-// The header counts. Canceled runs get none.
+// The header counts. A group with no runs shows no tag.
 const COUNT_TAGS = [
   { group: "succeeded", icon: SvgCheckCircle, color: "green" },
   { group: "running", icon: IconLoader, color: "blue" },
   { group: "failed", icon: SvgXOctagon, color: "red" },
+  { group: "canceled", icon: SvgXCircle, color: "gray" },
 ] as const;
 
 const ALL = "all";
@@ -84,8 +97,23 @@ export interface RunsCardProps {
   ccPairId: number;
   /** Shows the cancel action on running or queued index attempts. */
   canOperate: boolean;
-  /** Renders the list without its own card, for a card that already frames it. */
+  /** Renders a compact list for a card that already frames it: search, the newest page of runs, no filters or pages. */
   embedded?: boolean;
+  /** Buttons beside the search in the embedded list. */
+  actions?: ReactNode;
+  /** The page's window, shared with the status card. Without it the list keeps its own. */
+  sharedWindow?: SharedWindow;
+  onSharedWindowChange?: (window: PickerWindow) => void;
+  /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
+  range?: SliceRange | null;
+  onClearRange?: () => void;
+  /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
+  onFocusChange?: (focused: boolean) => void;
+}
+
+/** A run's key in the list. */
+function runKey(run: CCPairRun): string {
+  return `${run.kind}-${run.attempt.id}`;
 }
 
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
@@ -93,11 +121,42 @@ export default function RunsCard({
   ccPairId,
   canOperate,
   embedded = false,
+  actions,
+  sharedWindow,
+  onSharedWindowChange,
+  onFocusChange,
+  range = null,
+  onClearRange,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const [page, setPage] = useState(1);
-  const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
+  const [picked, setPicked] = useState<TimeWindow>(ALL_TIME);
+  // "View" on the empty state widens the list to all time until the window or slice changes.
+  const [widened, setWidened] = useState(false);
+  const windowSince =
+    sharedWindow !== undefined
+      ? pickedWindowStart(sharedWindow)
+      : picked.hours === null
+        ? null
+        : windowStart(picked.hours);
+  const windowRange = rangeWithin(windowSince, range);
+  // A new window or slice starts the list over at its first page. The key is
+  // the selection, not the moving start, so a passing minute keeps the page.
+  const selection = [
+    sharedWindow !== undefined ? sharedWindow.window : picked.id,
+    range?.since ?? "",
+    range?.until ?? "",
+  ].join("|");
+  const [pagedSelection, setPagedSelection] = useState(selection);
+  if (pagedSelection !== selection) {
+    setPagedSelection(selection);
+    setPage(1);
+    setWidened(false);
+  }
+  const since = widened ? null : windowRange.since;
+  const until = widened ? null : windowRange.until;
+  const focus = useFocusedRow<string>(onFocusChange);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
   const [statusGroup, setStatusGroup] = useState<CCPairRunStatusGroup | null>(
     null
@@ -109,27 +168,82 @@ export default function RunsCard({
   const key = SWR_KEYS.ccPairRuns(ccPairId, {
     pageNum: page - 1,
     pageSize: PAGE_SIZE,
-    since: picked.since,
+    since,
+    until,
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
     errors: null,
+    superseded: null,
+    resolved: null,
   });
   const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
     key,
     errorHandlingFetcher,
     { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
   );
+  // An empty window with no other filter counts the pair's runs before it.
+  const emptyWindow =
+    data !== undefined &&
+    data.items.length === 0 &&
+    since !== null &&
+    kind === null &&
+    statusGroup === null &&
+    search === "";
+  const { data: allTime } = useSWR<CCPairRunsResponse>(
+    emptyWindow
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          kinds: null,
+          statusGroups: null,
+          q: "",
+          errors: null,
+          until: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: RUNS_POLL_MS }
+  );
+  const pastRuns = allTime?.total_items ?? 0;
+  // The newest page can miss a long run that newer runs pushed off it, so the embedded list fetches the running runs on their own and shows them first.
+  const { data: runningData } = useSWR<CCPairRunsResponse>(
+    embedded
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: PAGE_SIZE,
+          since: null,
+          until: null,
+          kinds: null,
+          statusGroups: ["running"],
+          q: search,
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
+  );
+  const items = useMemo(() => {
+    const runningRuns = runningData?.items ?? [];
+    const runningKeys = new Set(runningRuns.map(runKey));
+    return [
+      ...runningRuns,
+      ...(data?.items ?? []).filter((run) => !runningKeys.has(runKey(run))),
+    ];
+  }, [runningData, data]);
+  const { retain } = focus;
+  useEffect(() => {
+    if (data !== undefined) retain(items.map(runKey));
+  }, [data, items, retain]);
 
   function pickWindow(window: TimeWindow) {
-    setPicked({
-      window,
-      since:
-        window.hours === null
-          ? null
-          : new Date(Date.now() - window.hours * 3_600_000).toISOString(),
-    });
-    setPage(1);
+    setPicked(window);
+    setWidened(false);
   }
 
   function pickKind(next: CCPairRunKind | null) {
@@ -171,21 +285,105 @@ export default function RunsCard({
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+  // The shared window is always set, so only a local narrowing counts as a filter.
   const filtered =
     kind !== null ||
     statusGroup !== null ||
-    picked.since !== null ||
+    (sharedWindow === undefined && picked.hours !== null) ||
+    range !== null ||
     search !== "";
+
+  const searchInputField = (
+    <InputTypeIn
+      searchIcon
+      variant={embedded ? "primary" : "internal"}
+      placeholder={t("search.placeholder")}
+      value={searchInput}
+      onChange={(event) => {
+        setSearchInput(event.target.value);
+        setPage(1);
+      }}
+    />
+  );
+  const runList =
+    error !== undefined ? (
+      <MessageCard variant="error" title={t("loadError.title")} />
+    ) : isLoading && data === undefined ? (
+      <Section alignItems="stretch" gap={1} height="fit">
+        {Array.from({ length: LOADER_ROWS }, (_, index) => (
+          <CardLoader
+            key={index}
+            color="background-tint-00"
+            border="none"
+            rounding={2}
+            padding={2}
+          />
+        ))}
+      </Section>
+    ) : emptyWindow ? (
+      <Section alignItems="stretch" gap={0} height="fit">
+        <IllustrationContent
+          illustration={SvgLongWait}
+          title={t("empty.title")}
+        />
+        {pastRuns > 0 && !embedded && (
+          <Section flexDirection="row" alignItems="center" gap={0} height="fit">
+            <Section height="fit" className="min-w-0 flex-1">
+              <Divider title={t("empty.pastRuns", { count: pastRuns })} />
+            </Section>
+            <Button
+              icon={SvgChevronRight}
+              prominence="tertiary"
+              size="sm"
+              tooltip={t("empty.view")}
+              aria-label={t("empty.viewAria", { count: pastRuns })}
+              onClick={() => {
+                setWidened(true);
+                setPage(1);
+              }}
+            />
+          </Section>
+        )}
+      </Section>
+    ) : items.length === 0 ? (
+      filtered ? (
+        <IllustrationContent
+          illustration={SvgNoResult}
+          title={t("empty.filteredTitle")}
+        />
+      ) : (
+        <IllustrationContent
+          illustration={SvgLongWait}
+          title={t("empty.title")}
+        />
+      )
+    ) : (
+      <Section alignItems="stretch" gap={1} height="fit">
+        {items.map((run) => (
+          <RunRow
+            key={runKey(run)}
+            run={run}
+            canCancel={canOperate}
+            onCancel={() => void cancel(run)}
+            onViewLogs={() => setLogRun(run)}
+            open={focus.isOpen(runKey(run))}
+            onOpenChange={(open) => focus.setOpen(runKey(run), open)}
+            dimmed={focus.isDimmed(runKey(run))}
+          />
+        ))}
+      </Section>
+    );
+  const logModal = logRun !== null && (
+    <ExceptionTraceModal
+      onOutsideClick={() => setLogRun(null)}
+      exceptionTrace={runErrorText(logRun) ?? ""}
+      title={t(`errorModal.${logRun.kind}`)}
+    />
+  );
 
   const body = (
     <>
-      {logRun !== null && (
-        <ExceptionTraceModal
-          onOutsideClick={() => setLogRun(null)}
-          exceptionTrace={runErrorText(logRun) ?? ""}
-          title={t(`errorModal.${logRun.kind}`)}
-        />
-      )}
+      {logModal}
       <Section alignItems="stretch" gap={1} height="fit">
         <Section
           flexDirection="row"
@@ -194,16 +392,7 @@ export default function RunsCard({
           height="fit"
         >
           <Section height="fit" className="min-w-0 flex-1">
-            <InputTypeIn
-              searchIcon
-              variant="internal"
-              placeholder={t("search.placeholder")}
-              value={searchInput}
-              onChange={(event) => {
-                setSearchInput(event.target.value);
-                setPage(1);
-              }}
-            />
+            {searchInputField}
           </Section>
           <Section
             flexDirection="row"
@@ -212,7 +401,9 @@ export default function RunsCard({
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map(({ group, icon, color }) => (
+            {COUNT_TAGS.filter(
+              ({ group }) => (data?.status_counts[group] ?? 0) > 0
+            ).map(({ group, icon, color }) => (
               <Tag
                 key={group}
                 icon={icon}
@@ -233,30 +424,47 @@ export default function RunsCard({
           height="fit"
           wrap
         >
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <FilterButton
-                icon={SvgClock}
-                active={picked.since !== null}
-                onClear={() => pickWindow(ALL_TIME.window)}
-              >
-                {t(`window.${picked.window.id}`)}
-              </FilterButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("window.label")}
-              value={picked.window.id}
-              onSelect={(option) => {
-                const window = WINDOWS.find((w) => w.id === option.value);
-                if (window !== undefined) pickWindow(window);
+          {sharedWindow !== undefined && onSharedWindowChange !== undefined ? (
+            // The shared window is always set, so it is the status card's picker, not a clearable filter.
+            <ThroughputWindowPicker
+              windows={PAIR_WINDOWS}
+              value={sharedWindow.window}
+              // A widened list reaches past the chart's window, and says so.
+              label={widened ? t("window.all") : undefined}
+              onChange={(window) => {
+                // Picking the same window again still leaves the widened view.
+                setWidened(false);
+                onSharedWindowChange(window);
               }}
-              items={WINDOWS.map((option) => ({
-                kind: "option" as const,
-                value: option.id,
-                title: t(`window.${option.id}`),
-              }))}
+              selection={range}
+              onClearSelection={onClearRange}
             />
-          </Dropdown>
+          ) : (
+            <Dropdown>
+              <Dropdown.Trigger asChild>
+                <FilterButton
+                  icon={SvgClock}
+                  active={picked.hours !== null}
+                  onClear={() => pickWindow(ALL_TIME)}
+                >
+                  {t(`window.${picked.id}`)}
+                </FilterButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("window.label")}
+                value={picked.id}
+                onSelect={(option) => {
+                  const window = WINDOWS.find((w) => w.id === option.value);
+                  if (window !== undefined) pickWindow(window);
+                }}
+                items={WINDOWS.map((option) => ({
+                  kind: "option" as const,
+                  value: option.id,
+                  title: t(`window.${option.id}`),
+                }))}
+              />
+            </Dropdown>
+          )}
           {kinds.length > 1 && (
             <Dropdown>
               <Dropdown.Trigger asChild>
@@ -329,64 +537,84 @@ export default function RunsCard({
           </Dropdown>
         </Section>
 
-        {error !== undefined ? (
-          <MessageCard variant="error" title={t("loadError.title")} />
-        ) : isLoading && data === undefined ? (
-          <Section alignItems="stretch" gap={1} height="fit">
-            {Array.from({ length: LOADER_ROWS }, (_, index) => (
-              <CardLoader
-                key={index}
-                color="background-tint-00"
-                border="none"
-                rounding={2}
-                padding={2}
-              />
-            ))}
-          </Section>
-        ) : (data?.items.length ?? 0) === 0 ? (
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={filtered ? t("empty.filteredTitle") : t("empty.title")}
-            description={filtered ? undefined : t("empty.description")}
-          />
-        ) : (
-          <Section alignItems="stretch" gap={1} height="fit">
-            {data?.items.map((run) => (
-              <RunRow
-                key={`${run.kind}-${run.attempt.id}`}
-                run={run}
-                canCancel={canOperate}
-                onCancel={() => void cancel(run)}
-                onViewLogs={() => setLogRun(run)}
-              />
-            ))}
-          </Section>
-        )}
+        {runList}
 
-        {totalItems > PAGE_SIZE && (
-          <Pagination
-            variant="count"
-            currentPage={page}
-            totalPages={totalPages}
-            pageSize={PAGE_SIZE}
-            totalItems={totalItems}
-            onChange={setPage}
-            units={t("units", { count: totalItems })}
-            size="sm"
-          />
+        {totalItems > 0 && (
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            gap={2}
+            height="fit"
+          >
+            <Text font="secondary-body" color="text-03">
+              {richNodes(
+                t.rich("showing", {
+                  from: format.number((page - 1) * PAGE_SIZE + 1),
+                  to: format.number(Math.min(page * PAGE_SIZE, totalItems)),
+                  total: format.number(totalItems),
+                  mono: (chunks) => (
+                    <Text font="secondary-mono" color="text-03">
+                      {String(chunks)}
+                    </Text>
+                  ),
+                })
+              )}
+            </Text>
+            <Pagination
+              variant="list"
+              currentPage={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              size="sm"
+            />
+          </Section>
         )}
       </Section>
     </>
   );
+  // The list sits flush against the framing card's sides and bottom, which round its corners.
   if (embedded) {
     return (
-      <Section alignItems="stretch" height="fit" data-testid="connector-runs">
-        {body}
+      <Section
+        alignItems="stretch"
+        gap={0}
+        height="fit"
+        data-testid="connector-runs"
+      >
+        {logModal}
+        <Section
+          flexDirection="row"
+          alignItems="center"
+          gap={1}
+          height="fit"
+          className="px-2 pb-2"
+        >
+          <Section height="fit" className="min-w-0 flex-1">
+            {searchInputField}
+          </Section>
+          {actions}
+        </Section>
+        <Section
+          alignItems="stretch"
+          gap={1}
+          padding={2}
+          height="fit"
+          className="rounded-b-16 border-t border-border-01 bg-background-tint-01"
+        >
+          {runList}
+        </Section>
       </Section>
     );
   }
   return (
-    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
+    <Card
+      color="background-tint-01"
+      border="solid"
+      rounding={4}
+      padding={2}
+      data-testid="connector-runs"
+    >
       {body}
     </Card>
   );

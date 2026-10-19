@@ -40,7 +40,7 @@ export const Default: Story = {
 export const WidthVariants: Story = {
   render: () => (
     <div style={{ display: "flex", gap: 16 }}>
-      {(["fit", "md", "lg", "xl"] as const).map((width) => (
+      {(["fit", 40, 50, 60, 70, 80, 90, 120, 160] as const).map((width) => (
         <Popover key={width}>
           <Popover.Trigger asChild>
             <Button prominence="secondary">{width}</Button>
@@ -62,7 +62,7 @@ export const WithMenu: Story = {
       <Popover.Trigger asChild>
         <Button>Options</Button>
       </Popover.Trigger>
-      <Popover.Content width="lg">
+      <Popover.Content width={60}>
         <Popover.Menu>
           <Popover.Close asChild>
             <Button prominence="tertiary" width="full">

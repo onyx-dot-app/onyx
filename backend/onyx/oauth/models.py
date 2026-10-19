@@ -1,16 +1,39 @@
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field
+
+from onyx.utils.url import sanitize_next_url
 
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
+PKCESupport = Literal["supported", "unsupported", "unknown"]
+
+
+def _validate_safe_oauth_return_path(value: str) -> str:
+    if sanitize_next_url(value) != value or any(
+        not character.isprintable() for character in value
+    ):
+        raise ValueError("OAuth return path must be a safe internal path")
+    return value
+
+
+SafeOAuthReturnPath = Annotated[
+    str,
+    Field(max_length=2048),
+    AfterValidator(_validate_safe_oauth_return_path),
+]
+OAuthConfigurationFingerprint = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+PKCECodeVerifier = Annotated[
+    str, Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$")
+]
 
 
 class AuthorizationAttempt(BaseModel, Generic[PayloadT]):
     """One pending authorization request for an authenticated user.
 
     Payloads can contain identifiers, protocol context, and short-lived
-    transaction secrets such as PKCE verifiers. They must not contain long-lived
-    credentials or provider client secrets.
+    transaction secrets such as PKCE verifiers. Draft connection tests can
+    include unsaved settings using the deployment credential protection.
+    Never include provider access or refresh tokens.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)

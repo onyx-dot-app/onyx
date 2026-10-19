@@ -17,6 +17,7 @@ import {
   THROUGHPUT_POLL_MS,
   ThroughputBars,
   ThroughputWindowPicker,
+  type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
 const WINDOWS: readonly CCPairThroughputWindow[] = ["1h", "12h", "24h", "7d"];
@@ -70,16 +71,30 @@ function RatioStat({ part, whole, caption, label }: RatioStatProps) {
   );
 }
 
+export interface OverviewCardProps {
+  /** The span of the chart the page is narrowed to. A new window clears it. */
+  range: SliceRange | null;
+  onRangeChange: (range: SliceRange | null) => void;
+}
+
 /** Every readable connector at a glance: how many index now, the documents they hold, and documents indexed over time. */
-export default function OverviewCard() {
+export default function OverviewCard({
+  range,
+  onRangeChange,
+}: OverviewCardProps) {
   const t = useTranslations("admin.indexing.overview");
-  const [range, setRange] = useState<CCPairThroughputWindow>("1h");
+  const [timeWindow, setTimeWindow] = useState<CCPairThroughputWindow>("1h");
   const { data, error } = useSWR<IndexingOverviewResponse>(
-    SWR_KEYS.indexMonitoringOverview(range),
+    SWR_KEYS.indexMonitoringOverview(timeWindow),
     errorHandlingFetcher,
     // A window switch changes the key, so the loader shows until the new window lands.
     { refreshInterval: THROUGHPUT_POLL_MS }
   );
+  // The span belongs to the old chart, so a new window drops it.
+  function changeWindow(picked: CCPairThroughputWindow) {
+    setTimeWindow(picked);
+    onRangeChange(null);
+  }
   if (error !== undefined) {
     return <MessageCard variant="error" title={t("loadError")} />;
   }
@@ -116,23 +131,29 @@ export default function OverviewCard() {
           <Section
             flexDirection="row"
             justifyContent="end"
-            alignItems="start"
+            alignItems="center"
+            gap={1}
             width="auto"
             height="fit"
             className="grow basis-0"
+            wrap
           >
             <ThroughputWindowPicker
               windows={WINDOWS}
-              value={range}
-              onChange={setRange}
+              value={timeWindow}
+              onChange={changeWindow}
+              selection={range}
+              onClearSelection={() => onRangeChange(null)}
             />
           </Section>
         </Section>
         <Section padding={2} alignItems="stretch" height="fit">
           <ThroughputBars
             data={data.throughput}
-            range={range}
+            range={timeWindow}
             height={BARS_HEIGHT}
+            selection={range}
+            onRangeSelect={onRangeChange}
           />
         </Section>
       </Section>

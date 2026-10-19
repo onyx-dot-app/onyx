@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CredentialCapability,
+    PendingCheck,
     ProposedPairingValidation,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -159,6 +160,15 @@ def test_a_slow_check_is_unfinished_and_not_enqueued(
 
     assert [r.check_id for r in result.check_results] == [_CHANNELS]
     assert result.unfinished_check_ids == frozenset({_TOKEN})
+    # The unfinished check is described by its definition, not a cached result.
+    assert result.unfinished_checks == [
+        PendingCheck(
+            capability=CredentialCapability.INDEXING,
+            check_id=_TOKEN,
+            display_name=f"{_TOKEN} display",
+            required=True,
+        )
+    ]
     harness.assert_no_side_effects(db_session, slack_pair)
 
 

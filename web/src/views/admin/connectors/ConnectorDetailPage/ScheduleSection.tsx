@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
-import { Card, Collapsible, InputNumber, Text } from "@opal/components";
+import { Card, Collapsible, InputNumber } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -96,6 +96,7 @@ function FrequencyField({
           suffix={suffix}
           disabled={disabled}
           allowEmpty={onClear !== undefined}
+          plain
         />
       </Section>
     </InputHorizontal>
@@ -108,7 +109,7 @@ export interface ScheduleSectionProps {
   editable: boolean;
 }
 
-/** When the connector refreshes and prunes, and the date it indexes from. */
+/** When the connector refreshes, prunes and runs its checks. */
 export default function ScheduleSection({
   ccPair,
   editable,
@@ -117,9 +118,7 @@ export default function ScheduleSection({
   const tFields = useTranslations("admin.connectorsList.scheduled");
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
-  const format = useFormatter();
-  const { refresh_freq, prune_freq, check_freq, indexing_start } =
-    ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq } = ccPair.connector;
   const refreshMinutes =
     refresh_freq === null ? null : Math.round(refresh_freq / 60);
   const pruneHours =
@@ -127,7 +126,7 @@ export default function ScheduleSection({
   const checkHours =
     check_freq === null ? null : Number((check_freq / 3600).toFixed(3));
 
-  // Whole hours read as hours, whole days as days.
+  // Whole hours read as hours, and a day reads as 24 hours.
   function minutesLabel(minutes: number): string {
     return minutes >= 60 && minutes % 60 === 0
       ? tDuration("hours", { count: minutes / 60 })
@@ -137,10 +136,7 @@ export default function ScheduleSection({
     if (hours < 1) {
       return tDuration("minutes", { count: Math.round(hours * 60) });
     }
-    const whole = Math.round(hours);
-    return whole >= 24 && whole % 24 === 0
-      ? tDuration("days", { count: whole / 24 })
-      : tDuration("hours", { count: whole });
+    return tDuration("hours", { count: Math.round(hours) });
   }
 
   // null clears the schedule, which only the check frequency allows.
@@ -176,20 +172,49 @@ export default function ScheduleSection({
     return true;
   }
 
-  const summary = format.list(
-    [
+  const clauses = {
+    refresh:
       refreshMinutes === null
         ? null
         : t("refresh", { every: minutesLabel(refreshMinutes) }),
+    prune:
       pruneHours === null
         ? null
         : t("prune", { every: hoursLabel(pruneHours) }),
+    checks:
       checkHours === null
         ? null
         : t("checks", { every: hoursLabel(checkHours) }),
-    ].filter((part) => part !== null),
-    { type: "unit" }
-  );
+  };
+  // Each combination is its own message, so the catalog owns the joining.
+  const has = {
+    refresh: clauses.refresh !== null,
+    prune: clauses.prune !== null,
+    checks: clauses.checks !== null,
+  };
+  const summaryKey = has.refresh
+    ? has.prune
+      ? has.checks
+        ? "summary.refreshAndPruneAndChecks"
+        : "summary.refreshAndPrune"
+      : has.checks
+        ? "summary.refreshAndChecks"
+        : "summary.refresh"
+    : has.prune
+      ? has.checks
+        ? "summary.pruneAndChecks"
+        : "summary.prune"
+      : has.checks
+        ? "summary.checks"
+        : null;
+  const summary =
+    summaryKey === null
+      ? ""
+      : t(summaryKey, {
+          refresh: clauses.refresh ?? "",
+          prune: clauses.prune ?? "",
+          checks: clauses.checks ?? "",
+        });
 
   return (
     <Collapsible
@@ -267,22 +292,6 @@ export default function ScheduleSection({
               }
             />
           )}
-          <InputHorizontal
-            title={tFields("indexingStart.title")}
-            description={tFields("indexingStart.description")}
-            suffix="optional"
-            fillInput
-            center
-          >
-            {/* Read-only here. The connector form changes it. */}
-            <Text font="main-ui-body" color="text-04">
-              {indexing_start === null
-                ? tFields("indexingStart.placeholder")
-                : format.dateTime(new Date(indexing_start), {
-                    dateStyle: "medium",
-                  })}
-            </Text>
-          </InputHorizontal>
         </Section>
       </Card>
     </Collapsible>

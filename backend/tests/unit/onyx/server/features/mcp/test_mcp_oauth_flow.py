@@ -53,6 +53,7 @@ def _server(
         auth_performer=MCPAuthenticationPerformer.PER_USER,
         transport=transport,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
         oauth_scopes_override=None,
@@ -69,7 +70,7 @@ def _flow(
 ) -> MCPOAuthFlowState:
     mcp_server = cast(MCPServer, _server())
     client_information = _client_information(client_id)
-    code_verifier = f"{state}-verifier"
+    code_verifier = f"{state}-verifier".ljust(43, "v")
     return MCPOAuthFlowState(
         server_id=mcp_server.id,
         connection_config_id=101,
@@ -179,7 +180,7 @@ def _setup_flow_coordinator(
     attempt_store = MagicMock()
     monkeypatch.setattr(oauth_flow, "make_oauth_provider", make_oauth_provider)
     monkeypatch.setattr(oauth_flow, "initialize_mcp_client", initialize)
-    monkeypatch.setattr(oauth_flow, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(oauth_flow, "MCP_OAUTH_ATTEMPTS", attempt_store)
     return providers, initialize, attempt_store
 
 
@@ -538,6 +539,7 @@ def test_reverse_order_completions_restore_their_own_registration(
                 "connection_config_id": 101,
                 "transport": "STREAMABLE_HTTP",
                 "oauth_provider_mode": "AUTO_DISCOVERY",
+                "oauth_cimd_enabled": True,
             },
         )
         exchange = AsyncMock()
@@ -572,8 +574,8 @@ def test_reverse_order_completions_restore_their_own_registration(
     )
     assert providers[1].context.client_info == _client_information("first-registration")
     exchanges[0].assert_awaited_once_with(
-        "second-code", "second-state-verifier", resource=None
+        "second-code", "second-state-verifier".ljust(43, "v"), resource=None
     )
     exchanges[1].assert_awaited_once_with(
-        "first-code", "first-state-verifier", resource=None
+        "first-code", "first-state-verifier".ljust(43, "v"), resource=None
     )

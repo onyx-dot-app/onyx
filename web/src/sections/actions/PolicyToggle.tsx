@@ -7,11 +7,16 @@ import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 interface PolicyToggleProps {
   value: EndpointPolicy;
   onChange: (value: EndpointPolicy) => void;
+  disabled?: boolean;
 }
 
 /** Three-state Craft approval policy selector, shared by per-action and
  * per-tool policy rows. */
-export default function PolicyToggle({ value, onChange }: PolicyToggleProps) {
+export default function PolicyToggle({
+  value,
+  onChange,
+  disabled = false,
+}: PolicyToggleProps) {
   const t = useTranslations("actions");
 
   const policyOptions: { value: EndpointPolicy; label: string }[] = [
@@ -26,6 +31,8 @@ export default function PolicyToggle({ value, onChange }: PolicyToggleProps) {
         <Button
           key={option.value}
           size="xs"
+          disabled={disabled}
+          aria-pressed={value === option.value}
           prominence={value === option.value ? "primary" : "tertiary"}
           onClick={() => onChange(option.value)}
         >

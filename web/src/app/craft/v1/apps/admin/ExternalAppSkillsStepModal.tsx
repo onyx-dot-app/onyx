@@ -21,6 +21,7 @@ import {
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
 import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
+import PluginModalContent from "@/sections/plugins/PluginModalContent";
 
 interface ExternalAppSkillsStepModalProps {
   app: ExternalAppAdminResponse;
@@ -104,10 +105,7 @@ export default function ExternalAppSkillsStepModal({
 
   return (
     <Modal open>
-      <Modal.Content
-        width={confirmationOpen || upload.isOpen ? "sm" : "lg"}
-        height={confirmationOpen || upload.isOpen ? "fit" : "lg"}
-        preventAccidentalClose={!confirmationOpen}
+      <PluginModalContent
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
@@ -140,10 +138,14 @@ export default function ExternalAppSkillsStepModal({
         ) : (
           <>
             <Modal.Header
+              padding={4}
               title={t("title", { name: app.name })}
               description={t("description")}
+              onClose={() => {
+                if (!isSaving) unsavedChanges.requestLeave(onClose);
+              }}
             />
-            <Modal.Body>
+            <Modal.Body twoTone={false} alignItems="stretch" padding={6}>
               <div className="flex flex-col gap-3">
                 <AssociatedSkillsEditor
                   app={app}
@@ -170,7 +172,7 @@ export default function ExternalAppSkillsStepModal({
                 )}
               </div>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer padding={6}>
               <div className="flex w-full justify-end gap-2">
                 <Button
                   prominence="secondary"
@@ -189,7 +191,7 @@ export default function ExternalAppSkillsStepModal({
             </Modal.Footer>
           </>
         )}
-      </Modal.Content>
+      </PluginModalContent>
     </Modal>
   );
 }

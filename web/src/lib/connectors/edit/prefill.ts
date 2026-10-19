@@ -29,12 +29,6 @@ export function usesDataAccessGroups(accessType: AccessType): boolean {
   return accessType === "private" || accessType === "sync_restricted";
 }
 
-// The API sends dates as strings, although the type says `Date`.
-function isoOf(value: Date | string | null): string | null {
-  if (value === null) return null;
-  return value instanceof Date ? value.toISOString() : value;
-}
-
 /** Whether the stored config holds a non-empty value for the field. */
 function storesValue(config: Record<string, unknown>, name: string): boolean {
   const value = config[name];
@@ -143,7 +137,6 @@ export function editInitialValues(
   const config: Record<string, unknown> =
     ccPair.connector.connector_specific_config ?? {};
   const { refresh_freq, prune_freq, indexing_start } = ccPair.connector;
-  const indexingStart = isoOf(indexing_start);
   return {
     ...createConnectorInitialValues(source),
     ...tabValues(
@@ -157,7 +150,7 @@ export function editInitialValues(
     refreshFreq: refresh_freq === null ? undefined : refresh_freq / 60,
     pruneFreq: prune_freq === null ? undefined : prune_freq / 3600,
     // The date picker holds "YYYY-MM-DD".
-    indexingStart: indexingStart === null ? "" : indexingStart.slice(0, 10),
+    indexingStart: indexing_start === null ? "" : indexing_start.slice(0, 10),
   };
 }
 
@@ -280,9 +273,9 @@ function proposedSeconds(
 function proposedIndexingStart(
   value: string | undefined,
   initial: string | undefined,
-  stored: Date | string | null
+  stored: string | null
 ): string | null {
-  if (value === initial) return isoOf(stored);
+  if (value === initial) return stored;
   // As at creation: the picked day at midnight UTC.
   return value ? new Date(value).toISOString() : null;
 }

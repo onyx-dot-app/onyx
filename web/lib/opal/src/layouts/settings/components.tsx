@@ -60,7 +60,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 // ---------------------------------------------------------------------------
 
 export interface SettingsHeaderProps {
-  icon: IconFunctionComponent;
+  icon?: IconFunctionComponent;
   /** Extra icons after `icon` in the title's icon row; see `Content`. */
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
@@ -70,6 +70,8 @@ export interface SettingsHeaderProps {
   descriptionTag?: TagProps;
   /** The title can be edited in place, as `Content` does it. */
   editable?: boolean;
+  /** When the editable title shows its pencil: on hover, or at rest too. Default: `"hover"`. */
+  editButton?: "hover" | "rest";
   /** Called when the user commits a title edit. */
   onTitleChange?: (newTitle: string) => void;
   children?: React.ReactNode;
@@ -79,6 +81,7 @@ export interface SettingsHeaderProps {
    * `key`, as in any list.
    */
   actions?: React.ReactNode[];
+  stackActionsOnMobile?: boolean;
   /**
    * Renders a secondary Cancel as the first action. `true` goes back in
    * history; a function overrides the destination.
@@ -100,9 +103,11 @@ function SettingsHeader({
   description,
   descriptionTag,
   editable,
+  editButton,
   onTitleChange,
   children,
   actions,
+  stackActionsOnMobile = false,
   cancel,
   divider,
 }: SettingsHeaderProps) {
@@ -138,18 +143,54 @@ function SettingsHeader({
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [isSticky]);
 
+  // Sticky content in the body (e.g. a side panel) reads these to pin under the header and fit the visible height.
+  useEffect(() => {
+    const header = headerRef.current;
+    const scrollContainer = document.getElementById(
+      "page-wrapper-scroll-container"
+    );
+    if (!header || !scrollContainer) return;
+
+    const publish = () => {
+      scrollContainer.style.setProperty(
+        "--settings-header-height",
+        isSticky ? `${header.offsetHeight}px` : "0px"
+      );
+      scrollContainer.style.setProperty(
+        "--settings-scroll-height",
+        `${scrollContainer.clientHeight}px`
+      );
+    };
+
+    publish();
+    const resizeObserver = new ResizeObserver(publish);
+    resizeObserver.observe(header);
+    resizeObserver.observe(scrollContainer);
+
+    return () => {
+      resizeObserver.disconnect();
+      scrollContainer.style.removeProperty("--settings-header-height");
+      scrollContainer.style.removeProperty("--settings-scroll-height");
+    };
+  }, [isSticky]);
+
   return (
     <div
       ref={headerRef}
       className={cn(
-        "w-full -mb-6",
+        "w-full",
         isSticky && "sticky top-0 z-settings-header bg-background-tint-01"
       )}
     >
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4">
-        <div className="flex w-full items-start justify-between gap-4">
+        <div
+          className={cn(
+            "flex w-full items-start justify-between gap-4",
+            stackActionsOnMobile && "flex-col sm:flex-row"
+          )}
+        >
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
@@ -159,13 +200,19 @@ function SettingsHeader({
               description={description}
               descriptionTag={descriptionTag}
               editable={editable}
+              editButton={editButton}
               onTitleChange={onTitleChange}
               sizePreset="headline"
               variant="heading"
             />
           </div>
           {hasActions && (
-            <div className="flex shrink-0 items-start justify-end gap-2">
+            <div
+              className={cn(
+                "flex shrink-0 items-start justify-end gap-2",
+                stackActionsOnMobile && "w-full sm:w-auto"
+              )}
+            >
               {onCancel && (
                 <Button prominence="secondary" onClick={onCancel}>
                   {strings.settingsHeaderCancel}
@@ -187,8 +234,6 @@ function SettingsHeader({
       ) : (
         <Spacer rem={0.5} />
       )}
-      {/* The header paints the body's top gap (its -mb-6 pulls the body up under it), so a pinned header leaves no unpainted band where scrolled content can show. */}
-      <Spacer rem={1.5} />
 
       {/* No fade: an opacity transition here makes Chrome paint stale page content in this band. */}
       {isSticky && (

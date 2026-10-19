@@ -24,9 +24,9 @@ import {
   InputMultiUploadField,
   InputSingleSelectField,
   InputSingleUploadField,
+  InputSwitchField,
 } from "@opal/form";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import SwitchField from "@/refresh-components/form/SwitchField";
 import TextListField from "@/refresh-components/form/TextListField";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -256,7 +256,7 @@ function ToggleField({ name, label, description, disabled }: ToggleFieldProps) {
       title={label}
       description={description}
     >
-      <SwitchField name={name} disabled={disabled} />
+      <InputSwitchField name={name} disabled={disabled} />
     </InputHorizontal>
   );
 }

@@ -136,7 +136,7 @@ function EntryPickerPopover({
       <Popover.Content
         side="top"
         align="start"
-        width="xl"
+        width={70}
         onOpenAutoFocus={(e) => e.preventDefault()}
         data-testid="skill-picker-popover"
         aria-label={t("entryPickerPopover.content.ariaLabel")}

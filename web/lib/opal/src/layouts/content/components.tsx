@@ -131,6 +131,8 @@ type XlContentProps = ContentBaseProps & {
   moreIcon2?: IconFunctionComponent;
   /** Tag rendered inline after the description (ContentXl only). */
   descriptionTag?: TagProps;
+  /** When an editable title shows its pencil: on hover, or at rest too (ContentXl only). Default: `"hover"`. */
+  editButton?: "hover" | "rest";
 };
 
 type LgContentProps = ContentBaseProps & {

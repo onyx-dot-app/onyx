@@ -388,12 +388,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=True,
         default=None,
     )
-    language: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        default="en",
-        server_default="en",
-    )
+    # UI language. None = follow Settings.default_language.
+    language: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
     default_app_mode: Mapped[DefaultAppMode] = mapped_column(
         Enum(DefaultAppMode, native_enum=False),
@@ -3080,6 +3076,31 @@ class IndexAttemptError(Base):
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
 
 
+class CCPairRunResolution(Base):
+    """A failed run, or a run with errors, an admin marked resolved. It keeps
+    its status: the feed only moves it out of the open failures and errors."""
+
+    __tablename__ = "cc_pair_run_resolution"
+
+    # A CCPairRunKind value. A run id is unique only within its kind's table.
+    run_kind: Mapped[str] = mapped_column(String, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    resolved_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # None when the system resolved it.
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
 class IndexAttemptStageMetric(Base):
     """Per-stage timing aggregate for an `IndexAttempt`.
 
@@ -3159,6 +3180,7 @@ class SyncRecord(Base):
     sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, native_enum=False))
 
     num_docs_synced: Mapped[int] = mapped_column(Integer, default=0)
+    num_docs_failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     sync_start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -4175,6 +4197,20 @@ class Tool(Base):
     )
 
 
+class ToolUserPreference(Base):
+    __tablename__ = "tool_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tool_id: Mapped[int] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
+
 class OAuthConfig(Base):
     """OAuth provider configuration that can be shared across multiple tools"""
 
@@ -4199,6 +4235,9 @@ class OAuthConfig(Base):
     scopes: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
     additional_params: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    supports_pkce: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     # Metadata
@@ -6035,6 +6074,11 @@ class MCPServer(Base):
     oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # CIMD makes the authorization server fetch this deployment's client metadata
+    # document. When off, auto-discovery registers through DCR instead.
+    oauth_cimd_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
         Enum(MCPServerStatus, native_enum=False),
@@ -6094,6 +6138,23 @@ class MCPServer(Base):
         "UserGroup",
         secondary="mcp_server__user_group",
         back_populates="accessible_mcp_servers",
+    )
+
+
+class MCPServerUserPreference(Base):
+    __tablename__ = "mcp_server_user_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled_in_chat: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
     )
 
 
@@ -6217,6 +6278,16 @@ class DocPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
@@ -6228,6 +6299,13 @@ class DocPermissionSyncAttempt(Base):
             "ix_permission_sync_attempt_latest_for_cc_pair",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the doc permission sync lock
+        Index(
+            "uq_doc_permission_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_permission_sync_attempt_status_time",
@@ -6287,6 +6365,16 @@ class ExternalGroupPermissionSyncAttempt(Base):
     time_finished: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Lease renewed by the running worker; the reaper fails the attempt when it expires
+    heartbeat_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Last time the sync fetched or wrote something; the counts above are written with it
+    last_progress_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
@@ -6298,6 +6386,13 @@ class ExternalGroupPermissionSyncAttempt(Base):
             "ix_group_sync_attempt_cc_pair_time",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the group sync lock
+        Index(
+            "uq_group_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_group_sync_attempt_status_time",

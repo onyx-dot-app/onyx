@@ -15,8 +15,14 @@ from onyx.server.documents.models import (
     CCPairThroughputWindow,
 )
 
-# Bars per chart whatever the window: 10 minutes each over 12 hours.
-THROUGHPUT_SLICES = 72
+# Bars per window, each wide enough to read at the chart's width: 3 minutes over
+# an hour, 10 over 12 hours, 20 over a day and 2 hours over a week.
+THROUGHPUT_SLICES: dict[CCPairThroughputWindow, int] = {
+    CCPairThroughputWindow.HOURS_1: 20,
+    CCPairThroughputWindow.HOURS_12: 72,
+    CCPairThroughputWindow.HOURS_24: 72,
+    CCPairThroughputWindow.DAYS_7: 84,
+}
 
 
 def run_ended_at(attempt: IndexAttempt, started: datetime) -> datetime | None:
@@ -82,7 +88,7 @@ def throughput_of(
         window_start=window_start,
         window_end=window_end,
         docs_indexed=docs_indexed_per_slice(
-            attempts, window_start, window_end, THROUGHPUT_SLICES
+            attempts, window_start, window_end, THROUGHPUT_SLICES[window]
         ),
         # Every run the query gives overlaps the window, also one that began before it.
         runs=[_throughput_run(attempt) for attempt in attempts],

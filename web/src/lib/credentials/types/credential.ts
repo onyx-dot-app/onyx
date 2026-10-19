@@ -1,5 +1,8 @@
 import type { SWRResponse } from "swr";
-import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
+import type {
+  CapabilityCheckResult,
+  DraftCheckState,
+} from "@/lib/connectors/checks/types";
 import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
@@ -185,6 +188,12 @@ export interface CredentialCheckReport {
   report: {
     checked_at: string;
     check_results: CapabilityCheckResult[];
+  } | null;
+  /** The running run's checks so far; null unless `run_status` is running. */
+  progress: {
+    check_results: CapabilityCheckResult[];
+    /** In run order: the first running, the rest queued. */
+    open_checks: DraftCheckState[];
   } | null;
   time_updated: string;
 }
