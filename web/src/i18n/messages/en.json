@@ -1099,7 +1099,8 @@
       "add": {
         "label": "New Plugin",
         "mcp": "Add custom MCP server",
-        "openapi": "Add OpenAPI action"
+        "openapi": "Add OpenAPI action",
+        "mcpDescription": "Connect MCP server to add custom actions."
       },
       "catalog": {
         "slack": {

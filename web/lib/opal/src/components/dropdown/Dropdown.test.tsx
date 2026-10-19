@@ -528,7 +528,7 @@ describe("Dropdown menu", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 
-  test("Tab closes a button-triggered menu and lets focus move on", async () => {
+  test("Tab walks a button-triggered menu's rows and keeps it open", async () => {
     const user = setupUser();
     render(<MenuHarness onAction={jest.fn()} onToggle={jest.fn()} />);
     const trigger = screen.getByRole("button", { name: "Actions" });
@@ -537,8 +537,9 @@ describe("Dropdown menu", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
 
     await user.keyboard("{Tab}");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(trigger).not.toHaveFocus();
   });
 
   test("letters type ahead to the row they start", async () => {

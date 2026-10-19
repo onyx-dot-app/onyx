@@ -107,6 +107,7 @@ type PluginDialog =
 
 export default function PluginsPage() {
   const t = useTranslations("actions.plugins");
+  const tActions = useTranslations("actions");
   const tSidebar = useTranslations("sidebar");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -190,6 +191,7 @@ export default function PluginsPage() {
                     id: "mcp",
                     icon: PLUGIN_KIND_ICONS.mcp,
                     title: t("kind.mcp"),
+                    description: t("add.mcpDescription"),
                     onSelect: () =>
                       setDialog({ kind: "catalog", catalogKind: "mcp" }),
                   },
@@ -198,6 +200,10 @@ export default function PluginsPage() {
                     id: "openapi",
                     icon: PLUGIN_KIND_ICONS.openapi,
                     title: t("kind.openapi"),
+                    // The same text as the add modal's header.
+                    description: tActions(
+                      "addOpenApiModal.addHeader.description"
+                    ),
                     onSelect: () =>
                       setDialog({
                         kind: "create",

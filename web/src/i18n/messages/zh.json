@@ -1099,7 +1099,8 @@
       "add": {
         "label": "新建插件",
         "mcp": "添加自定义 MCP 服务器",
-        "openapi": "添加 OpenAPI 操作"
+        "openapi": "添加 OpenAPI 操作",
+        "mcpDescription": "连接 MCP 服务器以添加自定义操作。"
       },
       "catalog": {
         "slack": {

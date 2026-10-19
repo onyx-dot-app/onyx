@@ -1099,7 +1099,8 @@
       "add": {
         "label": "إضافة جديدة",
         "mcp": "إضافة خادم MCP مخصص",
-        "openapi": "إضافة إجراء OpenAPI"
+        "openapi": "إضافة إجراء OpenAPI",
+        "mcpDescription": "اربط خادم MCP لإضافة إجراءات مخصصة."
       },
       "catalog": {
         "slack": {

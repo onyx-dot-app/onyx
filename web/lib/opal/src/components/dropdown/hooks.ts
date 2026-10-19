@@ -135,16 +135,14 @@ export interface ListModel {
 }
 
 /**
- * What Tab does while the list is open: `"walk"` moves the highlight
- * through the rows and wraps, for a field that must keep focus; `"leave"`
- * closes the list and lets focus move on, as a native menu does.
+ * What Tab does while the list is open: `"walk"` (the default) moves the
+ * highlight through the rows and wraps; `"leave"` closes the list and lets
+ * focus move on, as a native menu does.
  */
 export type DropdownTabKey = "walk" | "leave";
 
 /** How the key arrived: from which kind of trigger, and whether letters type ahead. */
 export interface DropdownKeyOptions {
-  /** A text input: its letters are the filter, and Tab walks the rows. */
-  typeIn: boolean;
   /** Letters jump the highlight to the row they start. */
   typeAhead: boolean;
   /**
@@ -300,7 +298,8 @@ export function useDropdownKeyboard({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>, options: DropdownKeyOptions) => {
       if (e.defaultPrevented) return;
-      const tab = tabKey ?? (options.typeIn ? "walk" : "leave");
+      // Tab walks the open list's rows; Escape is how to leave it.
+      const tab = tabKey ?? "walk";
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();

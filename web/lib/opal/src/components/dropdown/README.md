@@ -93,7 +93,7 @@ Left to itself the list sizes from its anchor: the anchor's width plus 6px on ea
 | `id`            | `string`                                               | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it                                                                            |
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }`           | —          | A rectangle to position against instead of an element, like a text caret                                                                               |
 | `container`     | `HTMLElement \| null`                                  | body       | Where the list portals to, for a dropdown inside a modal                                                                                               |
-| `tabKey`        | `"walk" \| "leave"`                                    | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise                                            |
+| `tabKey`        | `"walk" \| "leave"`                                    | `"walk"`   | What Tab does while open: walk the rows, or close and move on                                                                                          |
 | `width`         | `30 \| 40 \| 50 \| 60 \| 70 \| 80 \| 90 \| 120 \| 160` | —          | A fixed width on the Tailwind scale, the contextual-menu steps (30 is 7.5rem, 160 is 40rem), punch-out included; left out, the list matches its anchor |
 | `align`         | `"start" \| "end"`                                     | `"start"`  | The anchor edge the list lines up with                                                                                                                 |
 | `side`          | `"bottom" \| "top" \| "right"`                         | `"bottom"` | Below the anchor, above it, or a flyout to its right (the opposite side when there is no room), its `align` edge lined up with the anchor's            |
@@ -214,7 +214,7 @@ Build views that hold state (a toggle, search results) in render and pass them t
 
 Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control, and Escape leaves a view or closes; an open list takes Escape before anything around it, so a dialog holding it stays put. A trigger's own `onKeyDown` runs first; a key it cancels is left alone. A view opened from the keyboard highlights its first row; leaving it from the keyboard returns the highlight to the row that led in.
 
-**Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
+**Tab** walks the open list's rows like the arrows, both ways, wrapping, from any trigger. Escape closes the list. `tabKey="leave"` makes Tab close the list and let focus move on instead, as a native menu does.
 
 **Groups, from a trigger with nothing to type into:** ArrowRight on a folded title unfolds it; on an open title it moves to the first row inside. A text field (a type-in, or the search field) keeps the key for its caret; a row's secondary control gets it once the caret is at the end of the text.
 

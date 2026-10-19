@@ -100,9 +100,9 @@ interface DropdownProps {
    */
   side?: DropdownSide;
   /**
-   * What Tab does while the list is open. By default a type-in trigger
-   * walks the rows and any other trigger closes the list and lets focus
-   * move on; set it to make every trigger behave one way.
+   * What Tab does while the list is open. By default it walks the rows, both
+   * ways, wrapping; Escape closes the list. `"leave"` closes the list and
+   * lets focus move on, as a native menu does.
    */
   tabKey?: DropdownTabKey;
   children: React.ReactNode;
@@ -193,7 +193,7 @@ function Dropdown({
       "aria-autocomplete": typeIn ? "list" : undefined,
       // A type-in's letters are its filter; any other trigger types ahead.
       onKeyDown: (event) =>
-        handleKeyDown(event, { typeIn, typeAhead: !typeIn, textField: typeIn }),
+        handleKeyDown(event, { typeAhead: !typeIn, textField: typeIn }),
     }),
     [mode, isOpen, activeId, id, handleKeyDown]
   );
@@ -983,10 +983,8 @@ function DropdownData(props: DropdownDataProps) {
                   setIsKeyboardNav(false);
                 },
                 onKeyDown: (event) => {
-                  // The field's letters are the filter, so no type-ahead; Tab
-                  // follows the dropdown's setting, else leaves.
+                  // The field's letters are the filter, so no type-ahead.
                   handleKeyDown(event, {
-                    typeIn: false,
                     typeAhead: false,
                     textField: true,
                   });

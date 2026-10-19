@@ -1099,7 +1099,8 @@
       "add": {
         "label": "新しいプラグイン",
         "mcp": "カスタム MCP サーバーを追加",
-        "openapi": "OpenAPI アクションを追加"
+        "openapi": "OpenAPI アクションを追加",
+        "mcpDescription": "MCP サーバーを接続してカスタムアクションを追加。"
       },
       "catalog": {
         "slack": {

@@ -619,30 +619,6 @@ function OpenAPIPluginForm({
                 {(isAdd || tool) &&
                   (canEdit || canToggle ? (
                     <div className="flex flex-col">
-                      {canToggle && (
-                        <>
-                          <InputPadder>
-                            <InputHorizontal
-                              withLabel="enabled"
-                              title={t(
-                                "plugins.openapi.workspaceEnabled.title"
-                              )}
-                              description={t(
-                                "plugins.openapi.workspaceEnabled.description"
-                              )}
-                            >
-                              <InputSwitchField
-                                name="enabled"
-                                disabled={busy}
-                              />
-                            </InputHorizontal>
-                          </InputPadder>
-                          <Divider
-                            paddingParallel={2}
-                            paddingPerpendicular={2}
-                          />
-                        </>
-                      )}
                       {canEdit && (
                         <>
                           <InputPadder>
@@ -680,6 +656,32 @@ function OpenAPIPluginForm({
                                 rows={3}
                               />
                             </InputVertical>
+                          </InputPadder>
+                        </>
+                      )}
+                      {canToggle && (
+                        <>
+                          {canEdit && (
+                            <Divider
+                              paddingParallel={2}
+                              paddingPerpendicular={2}
+                            />
+                          )}
+                          <InputPadder>
+                            <InputHorizontal
+                              withLabel="enabled"
+                              title={t(
+                                "plugins.openapi.workspaceEnabled.title"
+                              )}
+                              description={t(
+                                "plugins.openapi.workspaceEnabled.description"
+                              )}
+                            >
+                              <InputSwitchField
+                                name="enabled"
+                                disabled={busy}
+                              />
+                            </InputHorizontal>
                           </InputPadder>
                         </>
                       )}
