@@ -134,10 +134,3 @@ func GetHostPort(container string, containerPort int) (int, error) {
 	}
 	return port, nil
 }
-
-// IsPortExposed checks if a container port is exposed to the host.
-func IsPortExposed(container string, containerPort string) bool {
-	port, _ := strconv.Atoi(containerPort)
-	_, err := GetHostPort(container, port)
-	return err == nil
-}
