@@ -9,7 +9,7 @@ import {
   CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
+import { MessageRenderer, RenderType } from "../types";
 import { buildImgUrl } from "../../../components/files/images/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
