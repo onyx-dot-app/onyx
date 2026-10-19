@@ -257,6 +257,7 @@ function InputDatePicker({
                 prominence="tertiary"
                 size="sm"
                 tooltip={strings.openCalendar}
+                aria-label={strings.openCalendar}
                 disabled={disabled}
               />
             </Popover.Trigger>
@@ -267,6 +268,7 @@ function InputDatePicker({
                 prominence="tertiary"
                 size="sm"
                 tooltip={strings.clear}
+                aria-label={strings.clear}
                 onClick={() => onChange(null)}
               />
             )}

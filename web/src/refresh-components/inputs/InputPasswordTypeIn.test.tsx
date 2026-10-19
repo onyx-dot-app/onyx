@@ -96,6 +96,18 @@ describe("InputPasswordTypeIn", () => {
     expect(screen.getByTestId("pw")).toHaveAttribute("type", "password");
   });
 
+  test("Escape on the reveal toggle returns focus to the field", async () => {
+    const user = setupUser();
+    render(<ControlledPassword initialValue="secret" />);
+    const input = screen.getByTestId("pw");
+
+    await user.click(input);
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Show password" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(input).toHaveFocus();
+  });
+
   describe("existingValue", () => {
     const EXISTING = "sk-abcd...wxyz";
 

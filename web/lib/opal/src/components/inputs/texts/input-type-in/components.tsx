@@ -102,6 +102,14 @@ export default function InputTypeIn({
       data-open={open || undefined}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
+      onKeyDown={(e) => {
+        // Escape on a control beside the field (the clear button, a reveal
+        // toggle, a chevron) returns focus to the field. It does so even when
+        // a tooltip or popover consumed the key to close itself.
+        if (e.key !== "Escape") return;
+        const input = e.currentTarget.querySelector("input");
+        if (input && e.target !== input) input.focus();
+      }}
     >
       {searchIcon && (
         <div className="opal-input-leading-icon">

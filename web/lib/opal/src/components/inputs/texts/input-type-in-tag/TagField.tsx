@@ -259,6 +259,17 @@ function TagField({
   // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
+    // Escape on a control in the field (a chip, the clear button, a
+    // chevron) returns focus to the field, even when a tooltip or popover
+    // consumed the key to close itself.
+    if (
+      event.key === "Escape" &&
+      target !== inputRef.current &&
+      target !== triggerRef.current
+    ) {
+      focusField();
+      return;
+    }
     if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
     const buttons = removeButtons();
     const index = buttons.indexOf(target as HTMLButtonElement);
@@ -382,6 +393,7 @@ function TagField({
           icon={SvgX}
           size="sm"
           tooltip={strings.clear}
+          aria-label={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
             onClear();

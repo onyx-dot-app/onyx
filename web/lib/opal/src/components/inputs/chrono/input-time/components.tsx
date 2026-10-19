@@ -243,6 +243,7 @@ function InputTime({
               prominence="tertiary"
               size="sm"
               tooltip={strings.clear}
+              aria-label={strings.clear}
               onClick={() => onChange(null)}
             />
           </div>

@@ -25,3 +25,15 @@ it("clears from the keyboard and keeps focus in the field", async () => {
   expect(field).toHaveValue("");
   expect(field).toHaveFocus();
 });
+
+it("Escape on a control beside the field returns focus to the field", async () => {
+  const user = setupUser();
+  render(<ClearableField />);
+  const field = screen.getByRole("textbox", { name: "Search" });
+  await user.click(field);
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Clear" })).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(field).toHaveFocus();
+  expect(field).toHaveValue("query");
+});
