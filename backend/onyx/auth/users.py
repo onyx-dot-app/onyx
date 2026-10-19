@@ -57,13 +57,13 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
+from redis.exceptions import WatchError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
-from onyx.auth.constants import API_KEY_HEADER_NAME, BEARER_PREFIX
 from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import (
     send_forgot_password_email,
@@ -1698,14 +1698,10 @@ bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
 
 
 def get_session_token_from_request(request: Request) -> str | None:
-    """The session token of the request: the auth cookie, else a Bearer header."""
-    cookie_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    if cookie_token:
-        return cookie_token
-    auth_header = request.headers.get(API_KEY_HEADER_NAME)
-    if auth_header and auth_header.startswith(BEARER_PREFIX):
-        return auth_header[len(BEARER_PREFIX) :].strip() or None
-    return None
+    """The session token ``optional_user`` accepted for this request, if any.
+    None for API key / PAT requests."""
+    token = request.scope.get("state", {}).get("authenticated_session_token")
+    return token if isinstance(token, str) and token else None
 
 
 T = TypeVar("T", covariant=True)
@@ -1722,6 +1718,9 @@ class RefreshableStrategy(Protocol):
         Returns either the same token with extended expiration or a new token.
         """
         ...
+
+
+_REFRESH_WATCH_ATTEMPTS = 3
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
@@ -1765,9 +1764,22 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
 
     async def _index_session(self, user_id: str, token: str) -> None:
         # Per-user set of session tokens, so revoke_user_sessions needs no scan.
-        # It lives as long as the user's newest session.
+        # It lives as long as the user's newest session; members whose token
+        # key has expired are pruned here.
         redis = await get_async_redis_connection()
         index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = list(
+            await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        )
+        if members:
+            pipe = redis.pipeline(transaction=False)
+            for member in members:
+                member_token = member.decode() if isinstance(member, bytes) else member
+                pipe.exists(f"{self.key_prefix}{member_token}")
+            exists = await pipe.execute()
+            expired = [m for m, found in zip(members, exists, strict=True) if not found]
+            if expired:
+                await cast(Awaitable[int], redis.srem(index_key, *expired))
         await cast(Awaitable[int], redis.sadd(index_key, token))
         ttl = physical_session_ttl_seconds(self.lifetime_seconds)
         if ttl is not None:
@@ -1853,26 +1865,45 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 
-        raw_value = await redis.get(token_key)
-        result = classify_session_token_value(raw_value)
-        if isinstance(result, SessionRejection) or result.sub is None:
-            # Only a live session is extendable; mint a fresh one otherwise.
-            return await self.write_token(user)
+        # WATCH makes the extend fail if a revoke/logout tombstone lands
+        # between the read and the write, so a revoked session is never revived.
+        for _ in range(_REFRESH_WATCH_ATTEMPTS):
+            async with redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(token_key)
+                raw_value = await pipe.get(token_key)
+                result = classify_session_token_value(raw_value)
+                if isinstance(result, SessionRejection) or result.sub is None:
+                    # Never extend or replace a revoked, expired or unknown
+                    # session.
+                    if isinstance(result, SessionRejection):
+                        record_session_rejection(result)
+                    raise build_session_rejection_error() or OnyxError(
+                        OnyxErrorCode.UNAUTHENTICATED
+                    )
 
-        # Extend the logical expiry; keep the original issue time.
-        now = datetime.now(timezone.utc)
-        await redis.set(
-            token_key,
-            build_session_token_value(
-                user_id=result.sub,
-                tenant_id=result.tenant_id,
-                issued_at=result.issued_at or now,
-                expires_at=compute_session_expires_at(now, self.lifetime_seconds),
-            ),
-            ex=physical_session_ttl_seconds(self.lifetime_seconds),
-        )
-        await self._index_session(result.sub, token)
+                # Extend the logical expiry; keep the original issue time.
+                now = datetime.now(timezone.utc)
+                pipe.multi()
+                pipe.set(
+                    token_key,
+                    build_session_token_value(
+                        user_id=result.sub,
+                        tenant_id=result.tenant_id,
+                        issued_at=result.issued_at or now,
+                        expires_at=compute_session_expires_at(
+                            now, self.lifetime_seconds
+                        ),
+                    ),
+                    ex=physical_session_ttl_seconds(self.lifetime_seconds),
+                )
+                try:
+                    await pipe.execute()
+                except WatchError:
+                    continue
+            await self._index_session(result.sub, token)
+            return token
 
+        # Persistent contention: leave the session as it is.
         return token
 
 
@@ -1896,8 +1927,8 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
         access_token = await self._access_token_db.get_by_token(token)
 
         if access_token is None:
-            # Token not found, create new one
-            return await self.write_token(user)
+            # Deleted by logout or revocation; never mint a replacement.
+            raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
         # Update expiration time
         new_expires = datetime.now(timezone.utc) + timedelta(
@@ -2105,9 +2136,14 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                             user.email,
                         )
                         return await backend.transport.get_login_response(new_token)
+                    except OnyxError:
+                        raise
                     except Exception as e:
                         logger.error("Error refreshing session token: %s", str(e))
-                        # Fallback to logout and login if refresh fails
+                        # Fallback to logout and login if refresh fails, but
+                        # never replace a session that was revoked meanwhile.
+                        if await strategy.read_token(token, user_manager) is None:
+                            raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
                         await backend.logout(strategy, user, token)
                         return await backend.login(strategy, user)
 
@@ -2117,6 +2153,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 )
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
+            except OnyxError:
+                raise
             except Exception as e:
                 logger.error("Unexpected error in refresh endpoint: %s", str(e))
                 raise HTTPException(

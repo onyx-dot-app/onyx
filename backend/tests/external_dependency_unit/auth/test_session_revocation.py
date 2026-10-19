@@ -14,7 +14,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import AuthBackend
-from onyx.auth.session_tokens import SessionRejectionReason, get_session_rejection
+from onyx.auth.session_tokens import (
+    SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    SessionRejection,
+    SessionRejectionReason,
+    SessionTokenValue,
+    build_session_tombstone_value,
+    classify_session_token_value,
+    get_session_rejection,
+)
 from onyx.auth.users import TenantAwareRedisStrategy, UserManager
 from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
@@ -116,6 +124,96 @@ async def test_redis_logout_and_refresh_maintain_index(
         assert await strategy.refresh_token(refreshed, user) == refreshed
 
         assert _indexed_tokens(user) == {refreshed}
+    finally:
+        _cleanup_index(user)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_index_prunes_expired_sessions_on_write(
+    db_session: Session, written_tokens: list[str]
+) -> None:
+    user = create_test_user(db_session, "revoke_prune")
+    strategy = TenantAwareRedisStrategy()
+    try:
+        expired = await strategy.write_token(user)
+        written_tokens.append(expired)
+        get_raw_redis_client().delete(REDIS_AUTH_KEY_PREFIX + expired)
+
+        live = await strategy.write_token(user)
+        written_tokens.append(live)
+
+        assert _indexed_tokens(user) == {live}
+    finally:
+        _cleanup_index(user)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_refresh_after_revoke_does_not_revive_session(
+    db_session: Session, written_tokens: list[str]
+) -> None:
+    user = create_test_user(db_session, "revoke_then_refresh")
+    strategy = TenantAwareRedisStrategy()
+    try:
+        token = await strategy.write_token(user)
+        written_tokens.append(token)
+        # The refresh route authenticated the request while the session was live.
+        assert await _read_user_id(token) == str(user.id)
+
+        await strategy.revoke_user_sessions(str(user.id))
+
+        with pytest.raises(OnyxError):
+            await strategy.refresh_token(token, user)
+        assert await _read_user_id(token) is None
+        assert _indexed_tokens(user) == set()
+    finally:
+        _cleanup_index(user)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_revoke_between_refresh_read_and_write_wins(
+    db_session: Session,
+    written_tokens: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_test_user(db_session, "revoke_race")
+    strategy = TenantAwareRedisStrategy()
+    try:
+        token = await strategy.write_token(user)
+        written_tokens.append(token)
+
+        calls = 0
+
+        def classify_then_revoke(
+            raw_value: str | bytes | None,
+        ) -> SessionTokenValue | SessionRejection:
+            # Refresh has read the live value; a revoke lands before it writes.
+            nonlocal calls
+            calls += 1
+            result = classify_session_token_value(raw_value)
+            if calls == 1:
+                get_raw_redis_client().set(
+                    REDIS_AUTH_KEY_PREFIX + token,
+                    build_session_tombstone_value(raw_value, str(user.id)),
+                    ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+                )
+            return result
+
+        monkeypatch.setattr(
+            "onyx.auth.users.classify_session_token_value", classify_then_revoke
+        )
+
+        with pytest.raises(OnyxError):
+            await strategy.refresh_token(token, user)
+        monkeypatch.undo()
+
+        assert calls == 2
+        assert await _read_user_id(token) is None
+        rejection = get_session_rejection()
+        assert rejection is not None
+        assert rejection.reason == SessionRejectionReason.TERMINATED
     finally:
         _cleanup_index(user)
 
