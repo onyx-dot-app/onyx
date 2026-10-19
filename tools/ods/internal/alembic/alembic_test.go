@@ -1,6 +1,7 @@
 package alembic
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
@@ -8,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
@@ -352,6 +355,54 @@ esac`)
 	}
 	if len(calls(t, binary)) != 0 {
 		t.Fatal("local Alembic ran for a hidden port")
+	}
+}
+
+func TestRun_dockerFallbackKeepsPasswordOutOfArguments(t *testing.T) {
+	for _, source := range []string{"shell", "file"} {
+		t.Run(source, func(t *testing.T) {
+			f := newFixture(t)
+			const secret = "selected-database-secret"
+			if err := os.MkdirAll(filepath.Join(f.root, ".vscode"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			password := secret
+			if source == "shell" {
+				password = "overridden-file-password"
+				t.Setenv("POSTGRES_PASSWORD", secret)
+			}
+			if err := os.WriteFile(filepath.Join(f.root, ".vscode", ".env"), []byte("POSTGRES_PASSWORD="+password+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			docker := f.docker(t, `case "$1 $4" in
+"inspect selected-relational_db-1"|"inspect selected-api_server-1") echo true ;;
+inspect*) echo false ;;
+port*) exit 1 ;;
+exec*) printf '%s' "$POSTGRES_PASSWORD" > "$0.password" ;;
+esac`)
+			var logs bytes.Buffer
+			logger := log.StandardLogger()
+			previous := logger.Out
+			logger.SetOutput(&logs)
+			t.Cleanup(func() { logger.SetOutput(previous) })
+			target := f.target()
+			target.Project = "selected"
+			if err := History(target, SchemaPrivate, true); err != nil {
+				t.Fatal(err)
+			}
+			arguments := strings.Join(calls(t, docker), "\n")
+			if strings.Contains(arguments, secret) || strings.Contains(logs.String(), secret) {
+				t.Fatal("database password exposed in process arguments or logs")
+			}
+			want := "exec -i -e POSTGRES_HOST=selected-relational_db-1 -e POSTGRES_PORT=5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD -e POSTGRES_DB=postgres selected-api_server-1 alembic -n schema_private history -v"
+			if got := calls(t, docker); got[len(got)-1] != want {
+				t.Fatalf("Docker arguments = %q, want %q", got[len(got)-1], want)
+			}
+			data, err := os.ReadFile(docker + ".password")
+			if err != nil || string(data) != secret {
+				t.Fatalf("Docker password = %q, err = %v", data, err)
+			}
+		})
 	}
 }
 

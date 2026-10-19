@@ -150,12 +150,13 @@ func runViaDockerExec(target devstack.Target, args []string, schema Schema, conf
 		"-e", "POSTGRES_HOST=" + docker.ContainerName(docker.NormalizeProjectName(target.Project), "relational_db"),
 		"-e", "POSTGRES_PORT=5432",
 		"-e", "POSTGRES_USER=" + config.User,
-		"-e", "POSTGRES_PASSWORD=" + config.Password,
+		"-e", "POSTGRES_PASSWORD",
 		"-e", "POSTGRES_DB=" + config.Database,
 		container, "alembic",
 	}
 	dockerArgs = append(dockerArgs, commandArgs(args, schema)...)
 	cmd := exec.Command("docker", dockerArgs...)
+	cmd.Env = devstack.MergeEnv(os.Environ(), []string{"POSTGRES_PASSWORD=" + config.Password})
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
