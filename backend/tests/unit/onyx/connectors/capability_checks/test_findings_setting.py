@@ -96,6 +96,9 @@ def test_findings_turned_off_during_a_run_are_not_kept(
     )
     second: _UsersCheck = _UsersCheck()
     second.check_id = "users_check_2"
+    # Checks run side by side; the second runs after the first, so the setting
+    # is read for them in this order.
+    second.depends_on = ("users_check",)
 
     results: list[CapabilityCheckResult] = run_capability_checks(
         [_UsersCheck(), second], _context()
