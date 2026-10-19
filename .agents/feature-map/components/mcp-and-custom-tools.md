@@ -102,9 +102,8 @@ Workspace credentials and no-auth services count as connected. Connected externa
 Loading and failed account-status checks remain distinct from missing credentials.
 Connected and needs-auth cards omit the extra connection text line; the dot and
 its tooltip retain account status. Setup errors and unavailable states remain visible.
-Craft App cards show their Craft-only scope as a passive tag beside the
-description, without adding a third line or shifting the service icon.
-OpenAPI cards use the matching Chat-only tag and scope tooltip.
+Craft App and OpenAPI cards show unsupported surfaces in the availability indicator and tooltip.
+The Craft MCP catalog includes default Chat availability for this indicator and sorting.
 
 Member details show returned tool metadata without live discovery. Provider account
 emails and granted scopes are not available in these responses. The UI does not

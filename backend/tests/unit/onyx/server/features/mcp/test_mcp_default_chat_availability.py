@@ -131,8 +131,10 @@ def test_scoped_manager_server_summary_reports_only_visible_servers(
     ]
 
 
+@pytest.mark.parametrize("craft", [False, True])
 def test_member_server_summary_reports_only_accessible_servers(
     monkeypatch: pytest.MonkeyPatch,
+    craft: bool,
 ) -> None:
     from onyx.db.enums import MCPServerStatus
     from onyx.server.features.mcp import api
@@ -143,6 +145,8 @@ def test_member_server_summary_reports_only_accessible_servers(
     servers = [MCPServer(id=42), MCPServer(id=43)]
     selected_servers = MagicMock(return_value={43})
     monkeypatch.setattr(api, "get_mcp_servers_accessible_to_user", lambda *_: servers)
+    monkeypatch.setattr(api, "get_craft_enabled_mcp_servers", lambda *_, **__: servers)
+    monkeypatch.setattr(api, "get_user_connection_configs", lambda *_: {})
     monkeypatch.setattr(api, "get_default_chat_mcp_server_ids", selected_servers)
     monkeypatch.setattr(
         api,
@@ -157,7 +161,11 @@ def test_member_server_summary_reports_only_accessible_servers(
         ),
     )
 
-    response = api.get_mcp_servers_for_user(db, user)
+    response = (
+        api.get_craft_mcp_servers_for_user(db, user)
+        if craft
+        else api.get_mcp_servers_for_user(db, user)
+    )
 
     selected_servers.assert_called_once_with([42, 43], db)
     assert [

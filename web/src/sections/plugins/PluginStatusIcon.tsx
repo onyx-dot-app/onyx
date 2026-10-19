@@ -27,6 +27,7 @@ export default function PluginStatusIcon({
   if (secondary && tertiary)
     return (
       <span
+        dir="ltr"
         aria-hidden
         className={cn(
           "relative block size-3 overflow-hidden rounded-full",
