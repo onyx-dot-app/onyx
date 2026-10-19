@@ -12,8 +12,6 @@ INCOMPLETE, and the drive checks after it walk the users it found.
 from collections.abc import Callable, Generator
 from typing import NoReturn, TypeVar
 
-from pydantic import BaseModel
-
 from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -57,6 +55,8 @@ from onyx.connectors.onedrive.models import (
     OneDriveDrive,
     OneDriveUser,
     OneDriveUserPage,
+    Opened,
+    UserProblem,
 )
 from onyx.connectors.onedrive.scope import normalize_configured_users
 from onyx.connectors.onedrive.source_operations import (
@@ -229,19 +229,12 @@ def _candidate_users(
             return
 
 
-class _Opened(BaseModel):
-    """The user whose OneDrive answered a probe."""
-
-    user: OneDriveUser
-    drive: OneDriveDrive
-
-
 def _first_drive_that(
     context: CapabilityCheckContext,
     opens: Callable[[OneDriveDrive], T | None],
     denied_message: str,
     nothing_to_probe: MicrosoftRowText,
-) -> tuple[_Opened, T]:
+) -> tuple[Opened, T]:
     """The first candidate's OneDrive on which ``opens`` returns something.
     A 403 is remembered: when nothing opens it is the likelier cause."""
     gateway = _gateway(context)
@@ -266,7 +259,7 @@ def _first_drive_that(
                 denied = error
             continue
         if opened is not None:
-            return _Opened(user=user, drive=drive), opened
+            return Opened(user=user, drive=drive), opened
     if denied is not None:
         raise_for_graph_error(denied, denied_message, denied_row=_DRIVES_DENIED_ROW)
     raise _NoCandidateFound(
@@ -492,13 +485,7 @@ class _DriveCountCheck(_ConfigReadingCheck):
         )
 
 
-class _UserProblem(BaseModel):
-    identifier: str
-    message: str
-    locked: bool
-
-
-def _user_problem_row(problem: _UserProblem) -> MicrosoftRowText:
+def _user_problem_row(problem: UserProblem) -> MicrosoftRowText:
     if problem.locked:
         return _row(
             _line("User is locked: ", problem.identifier),
@@ -511,7 +498,7 @@ def _user_problem_row(problem: _UserProblem) -> MicrosoftRowText:
     )
 
 
-def _users_output(identifiers: list[str], problems: list[_UserProblem]) -> CheckOutput:
+def _users_output(identifiers: list[str], problems: list[UserProblem]) -> CheckOutput:
     if not problems:
         return CheckOutput(
             summary=(
@@ -568,7 +555,7 @@ class _ConfiguredUsersCheck(_ConfigReadingCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = _gateway(context)
         identifiers: list[str] = _configured_users(context)
-        problems: list[_UserProblem] = []
+        problems: list[UserProblem] = []
         for identifier in identifiers:
             try:
                 user = gateway.get_user(identifier=identifier)
@@ -581,7 +568,7 @@ class _ConfiguredUsersCheck(_ConfigReadingCheck):
                         request="the user lookup",
                     )
                 problems.append(
-                    _UserProblem(
+                    UserProblem(
                         identifier=identifier,
                         message=f"The app cannot resolve `{identifier}` ({error.code}).",
                         locked=True,
@@ -590,7 +577,7 @@ class _ConfiguredUsersCheck(_ConfigReadingCheck):
                 continue
             if user is None:
                 problems.append(
-                    _UserProblem(
+                    UserProblem(
                         identifier=identifier,
                         message=f"No user matches `{identifier}`.",
                         locked=False,
