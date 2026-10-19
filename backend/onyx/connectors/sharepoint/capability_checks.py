@@ -88,9 +88,16 @@ logger = setup_logger()
 
 _DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/sharepoint"
 _PROBE_SITES: int = 5
+# Listed sites the documents probe reads in turn for one file indexing would
+# read. Tenants often list empty or demo sites first, in no stable order.
+# Each site costs one library listing, so the whole first listing page (up to
+# hundreds of sites) is too many.
+_PROBE_SAMPLE_SITES: int = 20
 # Libraries whose first delta page holds no indexable file before the probe
 # stops, so a tenant of empty libraries cannot spend the check's budget.
 _PROBE_LIBRARIES: int = 10
+# The same bound for the documents probe, one library for each sample site.
+_PROBE_SAMPLE_LIBRARIES: int = _PROBE_SAMPLE_SITES
 # Site groups searched for an Entra group when the site names none directly,
 # the way the sync expands site groups to find the Entra groups inside them.
 _PROBE_SITE_GROUPS: int = 5
@@ -220,10 +227,12 @@ def _is_indexable_file(
     return not is_path_excluded(relative_path, excluded_paths)
 
 
-def _probe_sites(context: CapabilityCheckContext) -> list[SiteDescriptor]:
+def _probe_sites(
+    context: CapabilityCheckContext, listed_limit: int = _PROBE_SITES
+) -> list[SiteDescriptor]:
     """The sites a probe reads: the first configured sites, or without any
-    the first sites Graph lists. Configured sites the exclusions remove leave
-    the scope empty, as they do for indexing."""
+    the first ``listed_limit`` sites Graph lists. Configured sites the
+    exclusions remove leave the scope empty, as they do for indexing."""
     config: SharepointConnectorConfig = _config(context)
     if _configured_sites(config):
         return _descriptors(config)[:_PROBE_SITES]
@@ -241,7 +250,11 @@ def _probe_sites(context: CapabilityCheckContext) -> list[SiteDescriptor]:
         for site_url in site_urls
         if ONEDRIVE_HOST_MARKER not in site_url
         and not is_site_excluded(site_url, patterns)
-    ][:_PROBE_SITES]
+    ][:listed_limit]
+
+
+def _counted_sites(count: int) -> str:
+    return "1 site" if count == 1 else f"{count} sites"
 
 
 def _site_drives(
@@ -646,7 +659,9 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
 
 class _DocumentsReadCheck(_SharepointCheck):
     """The first non-empty probe library answers a delta page and lists its
-    files, and one file reads by id, with its content when it is small."""
+    files, and one file reads by id, with its content when it is small.
+    Without configured sites the probe reads listed sites in turn until one
+    holds a file indexing would read."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -663,13 +678,16 @@ class _DocumentsReadCheck(_SharepointCheck):
         config: SharepointConnectorConfig = _config(context)
         graph_api_base: str = _graph_api_base(config)
         probed: int = 0
+        sites_read: int = 0
         excluded_paths: list[str] = _excluded_paths(config)
-        for site in _probe_sites(context):
+        for site in _probe_sites(context, listed_limit=_PROBE_SAMPLE_SITES):
+            sites_read += 1
             for drive in _site_drives(context, site):
-                if probed == _PROBE_LIBRARIES:
+                if probed == _PROBE_SAMPLE_LIBRARIES:
                     raise UnexpectedValidationError(
-                        f"The first {_PROBE_LIBRARIES} libraries list no file "
-                        "indexing would read, so no file was read."
+                        f"The first {probed} libraries, on "
+                        f"{_counted_sites(sites_read)}, list no file indexing "
+                        "would read, so no file was read."
                     )
                 probed += 1
                 item: DriveItemData | None = _first_indexable_file(
@@ -683,6 +701,12 @@ class _DocumentsReadCheck(_SharepointCheck):
             raise UnexpectedValidationError(
                 "No library was found on the probe sites, so no file was read."
             )
+        logger.info(
+            "%s libraries on %s list no file indexing would read; the listings "
+            "stand for the grant.",
+            probed,
+            _counted_sites(sites_read),
+        )
 
     def _read_one(
         self, gateway: SharepointSourceOperations, drive: SiteDrive, item: DriveItemData
