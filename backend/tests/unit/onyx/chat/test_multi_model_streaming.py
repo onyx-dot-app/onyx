@@ -1202,7 +1202,7 @@ def test_writer_reports_tool_usage_once_after_reader_disconnect(
 
 
 @pytest.mark.parametrize("n_models", [1, 2])
-def test_writer_reports_llm_cycles_at_the_first_answer(n_models: int) -> None:
+def test_lagging_writer_reports_the_cycle_of_the_first_answer(n_models: int) -> None:
     from onyx.chat.process_message import _run_models
     from onyx.utils.fleet_query_telemetry import (
         QueryMode,
@@ -1211,10 +1211,18 @@ def test_writer_reports_llm_cycles_at_the_first_answer(n_models: int) -> None:
     )
 
     finished = threading.Event()
+    next_cycle_started = threading.Event()
     observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
     setup = _make_setup(n_models=n_models)
+    observe_packet = observation.observe_packet
 
-    def answer_after_one_tool_round(**kwargs: Any) -> None:
+    def lagging_observe(packet: Any) -> None:
+        # Hold the writer on the answer until its model starts another cycle.
+        if isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta):
+            assert next_cycle_started.wait(timeout=5)
+        observe_packet(packet)
+
+    def answer_then_keep_working(**kwargs: Any) -> None:
         emitter = kwargs["emitter"]
         emitter.llm_step_started()
         emitter.llm_step_started()
@@ -1224,13 +1232,15 @@ def test_writer_reports_llm_cycles_at_the_first_answer(n_models: int) -> None:
                 obj=AgentResponseDelta(content="private answer"),
             )
         )
+        emitter.llm_step_started()
+        next_cycle_started.set()
 
     with (
         patch("onyx.chat.process_message.load_settings"),
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message.run_llm_loop",
-            side_effect=answer_after_one_tool_round,
+            side_effect=answer_then_keep_working,
         ),
         patch("onyx.chat.process_message.construct_tools", return_value={}),
         patch("onyx.chat.process_message.llm_loop_completion_handle"),
@@ -1241,6 +1251,7 @@ def test_writer_reports_llm_cycles_at_the_first_answer(n_models: int) -> None:
             "onyx.chat.process_message.set_processing_status",
             side_effect=lambda **_: finished.set(),
         ),
+        patch.object(observation, "observe_packet", side_effect=lagging_observe),
         patch("onyx.utils.fleet_query_telemetry.emit_telemetry") as sink,
     ):
         list(

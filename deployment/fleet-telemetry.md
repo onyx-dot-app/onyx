@@ -47,10 +47,12 @@ Cancellation freezes usage at the server's stop point. Search-mode requests leav
 Outcome remains separate from tool usage. Deploy the receiving server's optional `tool_usage` field before this instrumentation.
 
 Chat queries report `llm_cycles`: the chat-loop LLM calls up to and including the call that produced the
-first answer token. If no answer token arrived, the count includes every call. 1 means the model answered
-directly. 2 means one round of tool calls came first. Text that a model streams before a tool call is the
-first answer, so the count always matches the work that `first_answer_ms` measures. Model comparisons
-report the count of the model that answered first. LLM calls inside tools do not count.
+first answer token. 1 means the model answered directly. 2 means one round of tool calls came first. Text
+that a model streams before a tool call is the first answer, so the count always matches the work that
+`first_answer_ms` measures. The emitter records the count when it queues that text, so a slow stream writer
+cannot change it. Model comparisons report the count of the model that answered first. If no answer token
+arrived, the count is the highest number of calls that one model made: the models run in parallel, so their
+counts are not added. LLM calls inside tools do not count.
 
 Deep research requests report the `deep_research` mode instead of `chat`. They report tool usage, but not
 `llm_cycles`, because their orchestration is not a chat loop. Deploy the receiving server's optional

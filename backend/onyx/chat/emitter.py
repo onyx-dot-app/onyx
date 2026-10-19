@@ -46,6 +46,8 @@ class Emitter:
     def emit(self, packet: Packet) -> None:
         if self._drain_done is not None and self._drain_done.is_set():
             return
+        if self._query_observation is not None:
+            self._query_observation.packet_queued(packet, model_idx=self._model_idx)
         base = packet.placement or Placement(turn_index=0)
         tagged = Packet(
             placement=base.model_copy(update={"model_index": self._model_idx}),

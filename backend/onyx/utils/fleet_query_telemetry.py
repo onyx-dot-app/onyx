@@ -15,6 +15,7 @@ from onyx.utils.fleet_telemetry import emit_telemetry, error_category
 
 if TYPE_CHECKING:
     from onyx.chat.models import AnswerStreamPart, StreamingError
+    from onyx.server.query_and_chat.streaming_models import Packet
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -65,6 +66,12 @@ def _mode(kwargs: dict[str, Any]) -> QueryMode:
     return QueryMode.CHAT
 
 
+def _is_answer_text(packet: "Packet") -> bool:
+    from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+    return isinstance(packet.obj, AgentResponseDelta) and bool(packet.obj.content)
+
+
 class QueryToolUsage(str, Enum):
     NONE = "none"
     SEARCH_ONLY = "search_only"
@@ -88,7 +95,9 @@ class QueryObservation:
         self._used_other_tool = False
         # Chat-loop LLM calls per model index; model comparisons share one observation.
         self._llm_steps: dict[int, int] = {}
-        self._answer_llm_steps: int | None = None
+        # Each model's count when it queued its first answer text.
+        self._answer_llm_steps: dict[int, int] = {}
+        self._answer_model: int | None = None
         self._finished = False
 
     def llm_step_started(self, *, model_idx: int) -> None:
@@ -97,13 +106,24 @@ class QueryObservation:
                 return
             self._llm_steps[model_idx] = self._llm_steps.get(model_idx, 0) + 1
 
-    def _llm_cycles(self) -> int:
-        """LLM calls up to the first answer token, or every call when none arrived.
-        Text streamed before a tool call is the first answer, so later cycles
-        are not part of ``first_answer_ms``."""
-        if self._answer_llm_steps is not None:
-            return self._answer_llm_steps
-        return max(self._llm_steps.values(), default=0)
+    def packet_queued(self, packet: "Packet", *, model_idx: int) -> None:
+        """Runs in the model's worker thread before the writer can read the packet,
+        so a first answer keeps the count of the call that produced it."""
+        if not _is_answer_text(packet):
+            return
+        with self._lock:
+            if not self._finished:
+                self._answer_llm_steps.setdefault(
+                    model_idx, self._llm_steps.get(model_idx, 0)
+                )
+
+    def _llm_cycles(self) -> int | None:
+        """The first answering model's LLM calls up to its first answer text, which
+        can come before a tool call; None if that text bypassed the emitter. With no
+        answer, the most calls one model made: comparison models run in parallel."""
+        if self._answer_model is None:
+            return max(self._llm_steps.values(), default=0)
+        return self._answer_llm_steps.get(self._answer_model)
 
     def tool_started(self, *, is_search: bool) -> None:
         with self._lock:
@@ -128,14 +148,10 @@ class QueryObservation:
 
     def observe_packet(self, packet: "AnswerStreamPart") -> None:
         from onyx.chat.models import StreamingError
-        from onyx.server.query_and_chat.streaming_models import (
-            AgentResponseDelta,
-            OverallStop,
-            Packet,
-        )
+        from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 
         if isinstance(packet, Packet):
-            if isinstance(packet.obj, AgentResponseDelta) and packet.obj.content:
+            if _is_answer_text(packet):
                 self.answer(model_idx=packet.placement.model_index or 0)
             elif isinstance(packet.obj, OverallStop):
                 stop_outcome = _STOP_OUTCOMES.get(packet.obj.stop_reason or "")
@@ -147,10 +163,8 @@ class QueryObservation:
     def answer(self, *, model_idx: int) -> None:
         if self.first_answer_ms is None:
             self.first_answer_ms = max(0, (time.monotonic() - self.started) * 1000)
-            # The writer drains packets as workers queue them, and a model's next
-            # cycle waits for a tool round, so this count is still current.
             with self._lock:
-                self._answer_llm_steps = self._llm_steps.get(model_idx, 0)
+                self._answer_model = model_idx
 
     def results(self) -> None:
         if self.time_to_results_ms is None:
