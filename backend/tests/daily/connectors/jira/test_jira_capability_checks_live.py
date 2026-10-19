@@ -12,6 +12,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckNotRunReason,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -232,36 +233,70 @@ def test_scoped_sign_in_fails_for_a_bad_token(
     assert result.status == CapabilityCheckStatus.FAILED, result
 
 
+# The project `AS` is open to all users: these checks find no role or user to
+# read, so they skip with nothing in scope.
+_NOTHING_IN_SCOPE_CHECK_IDS: frozenset[str] = frozenset(
+    {"jira_project_roles_read", "jira_permission_user_emails"}
+)
+
+
+def _skipped_for_nothing_in_scope(
+    result: CapabilityCheckResult, by_id: dict[str, CapabilityCheckResult]
+) -> bool:
+    """True for a skip with nothing in scope, or a skip that such a skip caused."""
+    if result.status != CapabilityCheckStatus.SKIPPED:
+        return False
+    if result.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
+        return True
+    return (
+        result.not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+        and result.blocked_by is not None
+        and _skipped_for_nothing_in_scope(by_id[result.blocked_by], by_id)
+    )
+
+
 def test_perm_sync_checks_pass_with_the_classic_token(
     test_secrets: dict[TestSecret, str],
 ) -> None:
     """The test account is a Jira admin, so every permission-sync and
-    group-sync check passes."""
+    group-sync check passes, except the checks that find nothing in scope on
+    the open project."""
     by_id = _results(
         _credential(test_secrets, False),
         _form(False, project_key=_PROJECT),
         perm_sync=True,
     )
 
-    failures = {
-        check_id: result.message
+    not_passed: dict[str, CapabilityCheckResult] = {
+        check_id: result
         for check_id, result in by_id.items()
         if result.status != CapabilityCheckStatus.PASSED
     }
-    assert not failures, failures
-    verdicts = compute_capability_verdicts(
-        {
-            CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
-        },
-        list(by_id.values()),
-    )
-    assert (
-        verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == CapabilityVerdict.PASSED
-    )
-    assert (
-        verdicts[CredentialCapability.EXTERNAL_GROUP_SYNC] == CapabilityVerdict.PASSED
-    )
+    unexpected: dict[str, str] = {
+        check_id: f"{result.status}: {result.message}"
+        for check_id, result in not_passed.items()
+        if check_id not in _NOTHING_IN_SCOPE_CHECK_IDS
+        or not _skipped_for_nothing_in_scope(result, by_id)
+    }
+    assert not unexpected, unexpected
+    capabilities: set[CredentialCapability] = {
+        CredentialCapability.DOC_PERMISSION_SYNC,
+        CredentialCapability.EXTERNAL_GROUP_SYNC,
+    }
+    verdicts = compute_capability_verdicts(capabilities, list(by_id.values()))
+    for capability in capabilities:
+        # A required check skipped with nothing in scope makes the verdict SKIPPED.
+        expected: CapabilityVerdict = (
+            CapabilityVerdict.SKIPPED
+            if any(
+                result.capability == capability
+                and result.required
+                and result.applicable
+                for result in not_passed.values()
+            )
+            else CapabilityVerdict.PASSED
+        )
+        assert verdicts[capability] == expected, (capability, verdicts[capability])
 
 
 def test_ci_scoped_token_cannot_read_group_members(
