@@ -714,6 +714,7 @@ def _anthropic_completion_kwargs(
         (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", "low"),
         (LlmProviderNames.VERTEX_AI, "gemini-3.7-flash", "low"),
         (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", "low"),
+        (LlmProviderNames.VERTEX_AI, "gemini-4-argon", "low"),
         (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", None),
         (LlmProviderNames.VERTEX_AI, "gemini-3-flash-preview", None),
         (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", None),
