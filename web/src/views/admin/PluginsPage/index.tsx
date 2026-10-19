@@ -19,7 +19,7 @@ import { PLUGIN_KIND_ICONS } from "@/lib/plugins/constants";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useInstalledPlugins } from "@/lib/plugins/hooks";
-import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
+import { withPluginSearchParams } from "@/lib/plugins/routes";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import PluginCard from "@/views/admin/PluginsPage/PluginCard";
 import PluginAddCatalogModal, {
@@ -388,10 +388,9 @@ export default function PluginsPage() {
                   }
                 : undefined
             }
-            onCompleted={(server) => {
+            onCompleted={() => {
               setDialog(null);
               void mcp.refresh();
-              router.push(pluginDetailHref({ kind: "mcp", id: server.id }));
             }}
           />
         )}
