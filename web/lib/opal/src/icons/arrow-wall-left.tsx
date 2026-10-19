@@ -1,4 +1,5 @@
 import type { IconProps } from "@opal/types";
+
 const SvgArrowWallLeft = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
@@ -10,11 +11,12 @@ const SvgArrowWallLeft = ({ size, ...props }: IconProps) => (
     {...props}
   >
     <path
-      d="M6.55719 5.16673L4.19527 7.52866C4.06509 7.65883 4 7.82944 4 8.00006M6.55719 10.8334L4.19526 8.47146C4.06509 8.34129 4 8.17068 4 8.00006M14 8.00006H4M1 3.16675V12.8334"
+      d="M6.55719 5.16667L4.19527 7.5286C4.06509 7.65877 4 7.82938 4 8M6.55719 10.8333L4.19526 8.4714C4.06509 8.34123 4 8.17062 4 8M14 8H4M1 3.16669V12.8334"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
+
 export default SvgArrowWallLeft;

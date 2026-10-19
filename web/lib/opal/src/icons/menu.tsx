@@ -1,18 +1,18 @@
 import type { IconProps } from "@opal/types";
+
 const SvgMenu = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 16 16"
+    viewBox="0 0 32 32"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
     <path
-      d="M2 8H14M2 4H14M2 12H14"
-      strokeWidth={1.5}
-      strokeLinecap="round"
+      d="M26.5 9H5.5M5.5 23H26.5M26.5 16H5.5"
+      strokeWidth={2}
       strokeLinejoin="round"
     />
   </svg>
