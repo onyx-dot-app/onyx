@@ -420,6 +420,16 @@ func buildInventory(in inventoryInput) Inventory {
 		rows = append(rows, row)
 	}
 
+	attached := map[string]bool{}
+	for _, row := range rows {
+		attached[row.OwnerRecord] = true
+	}
+	for _, owner := range in.Owners {
+		if owner.Err == nil && !attached[owner.Path] {
+			rows = append(rows, &StackRow{OwnerRecord: owner.Path, StateDir: owner.StateDir, Mode: modeOfStateDir(owner.StateDir),
+				Status: StatusOrphaned, OrphanReason: "the owner record points to missing state", Errors: []string{}})
+		}
+	}
 	for _, row := range rows {
 		if row.Root != "" {
 			row.RootExists = in.Exists(row.Root)

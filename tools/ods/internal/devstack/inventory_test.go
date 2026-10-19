@@ -257,3 +257,12 @@ func TestInventoryNextCommandStopsEachStack(t *testing.T) {
 		}
 	}
 }
+
+func TestInventoryListsOwnerRecordWithoutStateOrContainers(t *testing.T) {
+	m := &fakeMachine{}
+	m.owners = []ownerRecord{{Path: "/data/projects/z/owner.json", Key: "z", StateDir: "/repo/.git/worktrees/z/ods-stack"}}
+	inv := buildInventory(m.input())
+	if len(inv.Rows) != 1 || inv.Rows[0].Status != StatusOrphaned || inv.Rows[0].Next != "ods stack prune" {
+		t.Fatalf("owner-only record: %+v", inv.Rows)
+	}
+}

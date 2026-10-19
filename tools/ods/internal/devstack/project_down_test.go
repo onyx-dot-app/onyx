@@ -131,3 +131,34 @@ func TestCleanupRowKeepsContainersOfAnotherOwner(t *testing.T) {
 		t.Fatalf("a secondary state removed the owner record: %v", err)
 	}
 }
+
+func TestStopProjectReleasesApplicationLeases(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "stop-leases")
+	if err := os.RemoveAll(stack.Root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StopProject(context.Background(), stack.Registry, stack.Project, ProjectOptions{StopTimeout: testOptions().StopTimeout, LockWait: time.Second, Discover: discoverWith(nil)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := leaseNames(t, stack.Registry, stack.Root); got["api"] != 0 {
+		t.Fatalf("stop --project kept application leases: %v", got)
+	}
+}
+
+func TestDownProjectRemovesOwnerRecordWithoutState(t *testing.T) {
+	registry := &Registry{Dir: t.TempDir()}
+	path := ownerPath(registry, "old-data")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"state_dir":"/missing/ods-stack"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	compose := &fakeCompose{}
+	if _, err := DownProject(context.Background(), registry, "old-data", compose.down, ProjectOptions{LockWait: time.Second, Discover: discoverWith(nil)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("owner record remains: %v", err)
+	}
+}

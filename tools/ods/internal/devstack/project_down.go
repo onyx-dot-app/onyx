@@ -86,6 +86,9 @@ func FindProject(registry *Registry, project string, opts DiscoverOptions) (Stac
 	if fallback != nil {
 		return *fallback, nil
 	}
+	if registry != nil && pathExists(ownerPath(registry, project)) {
+		return StackRow{Project: project, OwnerRecord: ownerPath(registry, project), StateDir: ownerDir, Status: StatusOrphaned, Errors: []string{}}, nil
+	}
 	return StackRow{}, fmt.Errorf("no dev stack found for project %s; list stacks with 'ods stack ls --all'", project)
 }
 
@@ -123,7 +126,10 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		if err != nil {
 			return nil, err
 		}
-		if st != nil && st.Project == row.Project {
+		if st != nil && st.Project != row.Project {
+			return nil, fmt.Errorf("the state in %s now records project %s; run 'ods stack ls' again", row.StateDir, st.Project)
+		}
+		if st != nil {
 			if !opts.Force && liveInWorktree(st) {
 				flag := ""
 				if row.Mode == Isolated {
@@ -138,6 +144,11 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 			}
 			if err := stack.stopServices(opts.StopTimeout); err != nil {
 				return result, err
+			}
+			if compose == nil && registry != nil && row.LeaseRoot != "" {
+				if err := registry.ReleaseNames(row.LeaseRoot, appLeaseNames(st)); err != nil {
+					return result, err
+				}
 			}
 		}
 	}
@@ -159,7 +170,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		result.ReleasedLeases = len(row.Leases)
 	}
-	if row.Status == StatusOrphaned && row.Project != "" {
+	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") {
 		removed, err := removeOrphanOwner(registry, row)
 		if err != nil {
 			return result, err
@@ -184,7 +195,10 @@ func liveInWorktree(st *State) bool {
 }
 
 func removeOrphanOwner(registry *Registry, row StackRow) (bool, error) {
-	path := ownerPath(registry, row.Project)
+	path := row.OwnerRecord
+	if path == "" {
+		path = ownerPath(registry, row.Project)
+	}
 	owner := readOwner(path)
 	if errors.Is(owner.Err, os.ErrNotExist) {
 		return false, nil
@@ -205,5 +219,9 @@ func ownedElsewhere(registry *Registry, row StackRow) bool {
 		return false
 	}
 	owner := readOwner(ownerPath(registry, row.Project))
-	return owner.Err == nil && owner.StateDir != row.StateDir && pathExists(filepath.Join(owner.StateDir, stateFileName))
+	if owner.Err != nil || owner.StateDir == row.StateDir {
+		return false
+	}
+	st, err := (&Stack{StateDir: owner.StateDir}).ReadState()
+	return err == nil && st != nil && st.Project == row.Project
 }
