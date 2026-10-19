@@ -3,7 +3,7 @@
 import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import type { MethodSpec } from "@/lib/tools/types";
 
-type OpenAPIMethod = Pick<MethodSpec, "name" | "summary">;
+type OpenAPIMethod = Pick<MethodSpec, "method" | "path" | "name" | "summary">;
 
 export default function OpenAPIEndpointList({
   methods,
@@ -14,7 +14,7 @@ export default function OpenAPIEndpointList({
     <ul className="m-0 flex list-none flex-col gap-2 p-0">
       {methods.map((method) => (
         <MCPToolRow
-          key={method.name}
+          key={`${method.method}-${method.path}-${method.name}`}
           tool={{
             name: method.name,
             display_name: method.name,
