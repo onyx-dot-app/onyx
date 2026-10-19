@@ -19,6 +19,7 @@ import {
   SvgCheckCircle,
   SvgCheckSquare,
   SvgFiles,
+  SvgRefreshCw,
   SvgTextLines,
   SvgUserShield,
   SvgUsers,
@@ -151,7 +152,7 @@ export interface ActivityCardProps {
   closed: boolean;
   /** Names the pair in place of the run's kind, for a feed across pairs. */
   connector?: CCPairRef;
-  /** Whether the viewer may re-fetch single documents of this pair. Otherwise the resolve actions hide, except a disabled Resolve All when `canResolveRuns` holds. */
+  /** Whether the viewer may re-fetch single documents of this pair. Otherwise the retry actions hide, except a disabled Retry when `canResolveRuns` holds. */
   canResolve: boolean;
   /** Whether the viewer may mark the run resolved. */
   canResolveRuns: boolean;
@@ -433,7 +434,7 @@ export default function ActivityCard({
                     {/* One click re-indexes every open failed document, without opening the list. */}
                     {(resolvable || resolveUnsupported) && !closed && (
                       <Button
-                        rightIcon={SvgCheckAll}
+                        rightIcon={SvgRefreshCw}
                         prominence="tertiary"
                         size="xs"
                         disabled={resolving || resolveUnsupported}
@@ -444,7 +445,7 @@ export default function ActivityCard({
                         )}
                         onClick={() => onResolve(null)}
                       >
-                        {t("docs.resolveAll")}
+                        {t("docs.retry", { count: openDocs })}
                       </Button>
                     )}
                   </>

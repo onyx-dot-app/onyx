@@ -3148,10 +3148,11 @@
           "search": {
             "placeholder": "ドキュメントを検索…"
           },
-          "resolveAll": "すべて解決",
+          "resolveAll": "すべて再試行",
           "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
           "resolveAllUnsupported": "このコネクタは個別のドキュメントを再インデックスできません。再試行するにはコネクタを再インデックスしてください。",
-          "resolveOne": "このドキュメントを解決",
+          "resolveOne": "このドキュメントを再試行",
+          "retry": "{count, plural, other {# 件のドキュメントを再試行}}",
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",

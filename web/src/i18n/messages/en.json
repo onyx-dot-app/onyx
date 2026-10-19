@@ -3148,10 +3148,11 @@
           "search": {
             "placeholder": "Search documents…"
           },
-          "resolveAll": "Resolve All",
+          "resolveAll": "Retry all",
           "resolveAllTooltip": "Re-index every failed document of this run",
           "resolveAllUnsupported": "This connector can't re-index single documents. Re-index the connector to retry them.",
-          "resolveOne": "Resolve this document",
+          "resolveOne": "Retry this document",
+          "retry": "{count, plural, one {Retry # doc} other {Retry # docs}}",
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",

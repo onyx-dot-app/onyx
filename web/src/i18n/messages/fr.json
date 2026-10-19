@@ -3148,10 +3148,11 @@
           "search": {
             "placeholder": "Rechercher des documents…"
           },
-          "resolveAll": "Tout résoudre",
+          "resolveAll": "Tout réessayer",
           "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
           "resolveAllUnsupported": "Ce connecteur ne peut pas réindexer des documents individuels. Réindexez le connecteur pour les réessayer.",
-          "resolveOne": "Résoudre ce document",
+          "resolveOne": "Réessayer ce document",
+          "retry": "{count, plural, one {Réessayer # document} other {Réessayer # documents}}",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",

@@ -3148,10 +3148,11 @@
           "search": {
             "placeholder": "Pesquisar documentos…"
           },
-          "resolveAll": "Resolver tudo",
+          "resolveAll": "Repetir todos",
           "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
           "resolveAllUnsupported": "Este conector não pode reindexar documentos individuais. Reindexe o conector para tentar novamente.",
-          "resolveOne": "Resolver este documento",
+          "resolveOne": "Repetir este documento",
+          "retry": "{count, plural, one {Repetir # documento} other {Repetir # documentos}}",
           "more": "Mais",
           "less": "Menos",
           "unknownDocument": "Documento desconhecido",
