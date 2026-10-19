@@ -969,7 +969,7 @@ export default function SourceHierarchyBrowser({
                         <GeneralLayouts.Section
                           flexDirection="column"
                           justifyContent="start"
-                          alignItems="start"
+                          alignItems="stretch"
                           gap={0}
                           height="auto"
                           className="min-w-0 grow"

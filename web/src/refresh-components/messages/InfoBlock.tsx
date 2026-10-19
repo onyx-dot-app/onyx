@@ -29,7 +29,7 @@ const InfoBlockInner = React.forwardRef<HTMLDivElement, InfoBlockProps>(
         </div>
 
         {/* Text Content */}
-        <div className="flex flex-col flex-1 items-start min-w-0">
+        <div className="flex flex-col flex-1 items-stretch min-w-0">
           <OverflowText
             as="p"
             textPosition="text-start"
