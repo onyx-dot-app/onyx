@@ -27,6 +27,12 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
   so touch devices still show the item.
 - `@opal/core` primitives (`Interactive`, `Disabled`) build components. App code does not use them.
 
+oxlint enforces the import, icon and raw-element rules. Files that broke them when the rules
+landed are in the design-system baseline in `.oxlintrc.json`, where they only warn. Remove a file
+from the baseline once it is clean. Never add one. `opal/no-replaced-refresh-import` warns on each
+refresh-components import that Opal replaces. Migrate a file to Opal when you edit it. For Claude
+Code, `.agents/hooks/opal_migrate_on_edit.py` reports these problems after each edit.
+
 ## Rules with a reason
 
 - **No `dark:` Tailwind modifier.** The tokens already define both themes, and overrides break dark
