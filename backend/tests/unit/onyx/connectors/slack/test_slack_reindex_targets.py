@@ -10,7 +10,6 @@ import pytest
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
-    DocumentFailure,
     HierarchyNode,
 )
 from onyx.connectors.slack.connector import SlackConnector
@@ -23,6 +22,7 @@ from onyx.connectors.slack.source_operations import (
     SlackUserInfoResponse,
 )
 from onyx.connectors.slack.utils import SlackTextCleaner
+from tests.utils.reindex_targets import synthetic_failure
 
 
 def _channel(channel_id: str, **overrides: Any) -> ChannelType:
@@ -62,13 +62,6 @@ def _msg(ts: str, thread_ts: str | None = None, **overrides: Any) -> MessageType
         data["thread_ts"] = thread_ts
     data.update(overrides)
     return cast(MessageType, data)
-
-
-def _failure(document_id: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(document_id=document_id, document_link=None),
-        failure_message="synthetic",
-    )
 
 
 @pytest.fixture
@@ -113,10 +106,10 @@ def test_reindex_reads_threads_by_channel_and_root_timestamp(
     outputs = list(
         connector.reindex(
             [
-                _failure("C1__1.0"),
-                _failure("C1__2.0"),
-                _failure("C1__4.0"),
-                _failure("C1__5.0"),
+                synthetic_failure("C1__1.0"),
+                synthetic_failure("C1__2.0"),
+                synthetic_failure("C1__4.0"),
+                synthetic_failure("C1__5.0"),
             ]
         )
     )
@@ -141,7 +134,13 @@ def test_reindex_keys_every_failure_on_the_target_id(
     connector: SlackConnector,
 ) -> None:
     outputs = list(
-        connector.reindex([_failure("C1__9.0"), _failure("C1__3.0"), _failure("nope")])
+        connector.reindex(
+            [
+                synthetic_failure("C1__9.0"),
+                synthetic_failure("C1__3.0"),
+                synthetic_failure("nope"),
+            ]
+        )
     )
 
     failures = [o for o in outputs if isinstance(o, ConnectorFailure)]

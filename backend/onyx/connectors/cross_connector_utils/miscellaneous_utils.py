@@ -1,5 +1,5 @@
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, TypeVar
@@ -13,7 +13,9 @@ from onyx.configs.constants import IGNORE_FOR_QA, DocumentSource
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
+    Document,
     DocumentFailure,
+    HierarchyNode,
     OnyxMetadata,
 )
 from onyx.utils.datetime import datetime_to_utc
@@ -34,6 +36,30 @@ def reindex_failure(
         failure_message=f"Failed to resolve during targeted reindex: {message}",
         exception=exception,
     )
+
+
+def resolve_targets(
+    errors: list[ConnectorFailure],
+    resolve: Callable[[DocumentFailure], Iterable[Document | HierarchyNode]],
+    source: DocumentSource,
+) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+    """A targeted reindex target by target: `resolve` yields a target's nodes
+    and document, and whatever it raises becomes that target's failure, so one
+    bad target never stops the rest."""
+    for error in errors:
+        failed = error.failed_document
+        if failed is None:
+            continue
+        try:
+            yield from resolve(failed)
+        except Exception as e:
+            logger.warning(
+                "Failed to resolve %s target %s: %s",
+                source.value,
+                failed.document_id,
+                e,
+            )
+            yield reindex_failure(failed, str(e), e)
 
 
 def time_str_to_utc(datetime_str: str) -> datetime:

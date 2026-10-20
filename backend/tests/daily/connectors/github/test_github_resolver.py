@@ -6,8 +6,9 @@ import time
 import pytest
 
 from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
+from onyx.connectors.models import ConnectorFailure, Document
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.reindex_targets import synthetic_failure
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.ACCESS_TOKEN_GITHUB)
@@ -27,15 +28,6 @@ def github_connector(test_secrets: dict[TestSecret, str]) -> GithubConnector:
     return connector
 
 
-def _failure(document_id: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(
-            document_id=document_id, document_link=document_id
-        ),
-        failure_message="synthetic failure",
-    )
-
-
 def test_reindex_returns_crawled_pull_requests_and_fails_the_rest(
     github_connector: GithubConnector,
 ) -> None:
@@ -48,7 +40,11 @@ def test_reindex_returns_crawled_pull_requests_and_fails_the_rest(
 
     outputs = list(
         github_connector.reindex(
-            [_failure(target.id), _failure(missing), _failure(foreign)]
+            [
+                synthetic_failure(target.id, target.id),
+                synthetic_failure(missing, missing),
+                synthetic_failure(foreign, foreign),
+            ]
         )
     )
 

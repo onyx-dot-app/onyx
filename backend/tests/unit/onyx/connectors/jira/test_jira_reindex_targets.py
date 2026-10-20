@@ -11,16 +11,9 @@ from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
-    DocumentFailure,
     HierarchyNode,
 )
-
-
-def _failure(url: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(document_id=url, document_link=url),
-        failure_message="synthetic",
-    )
+from tests.utils.reindex_targets import synthetic_failure
 
 
 def test_server_reindex_searches_each_key_and_reports_the_rest(
@@ -41,7 +34,12 @@ def test_server_reindex_searches_each_key_and_reports_the_rest(
 
     outputs = list(
         jira_connector.reindex(
-            [_failure(found), _failure(skipped), _failure(missing), _failure(foreign)]
+            [
+                synthetic_failure(found, found),
+                synthetic_failure(skipped, skipped),
+                synthetic_failure(missing, missing),
+                synthetic_failure(foreign, foreign),
+            ]
         )
     )
 
@@ -73,7 +71,11 @@ def test_cloud_reindex_bulk_fetches_the_keys(
     found = build_jira_url(jira_base_url, "TEST-1")
     missing = build_jira_url(jira_base_url, "TEST-9")
 
-    outputs = list(jira_connector.reindex([_failure(found), _failure(missing)]))
+    outputs = list(
+        jira_connector.reindex(
+            [synthetic_failure(found, found), synthetic_failure(missing, missing)]
+        )
+    )
 
     assert [o.id for o in outputs if isinstance(o, Document)] == [found]
     assert [

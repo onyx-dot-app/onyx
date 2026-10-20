@@ -11,14 +11,8 @@ from onyx.connectors.github.models import (
     GitHubPullRequest,
     GitHubRepository,
 )
-from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
-
-
-def _failure(url: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(document_id=url, document_link=url),
-        failure_message="synthetic",
-    )
+from onyx.connectors.models import ConnectorFailure, Document
+from tests.utils.reindex_targets import synthetic_failure
 
 
 def test_reindex_reads_pull_requests_issues_and_files_by_url(
@@ -39,7 +33,11 @@ def test_reindex_reads_pull_requests_issues_and_files_by_url(
 
     outputs = list(
         connector.reindex(
-            [_failure(pr.html_url), _failure(issue.html_url), _failure(file_url)]
+            [
+                synthetic_failure(pr.html_url, pr.html_url),
+                synthetic_failure(issue.html_url, issue.html_url),
+                synthetic_failure(file_url, file_url),
+            ]
         )
     )
 
@@ -74,7 +72,11 @@ def test_reindex_keys_every_failure_on_the_target_url(
 
     outputs = list(
         connector.reindex(
-            [_failure(missing_pr), _failure(other_branch_file), _failure(not_github)]
+            [
+                synthetic_failure(missing_pr, missing_pr),
+                synthetic_failure(other_branch_file, other_branch_file),
+                synthetic_failure(not_github, not_github),
+            ]
         )
     )
 

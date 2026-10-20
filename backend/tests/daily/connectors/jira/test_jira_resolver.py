@@ -7,8 +7,9 @@ import pytest
 
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
+from onyx.connectors.models import ConnectorFailure, Document
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.reindex_targets import synthetic_failure
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.JIRA_USER_EMAIL, TestSecret.JIRA_API_TOKEN)
@@ -30,15 +31,6 @@ def jira_connector(test_secrets: dict[TestSecret, str]) -> JiraConnector:
     return connector
 
 
-def _failure(document_id: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(
-            document_id=document_id, document_link=document_id
-        ),
-        failure_message="synthetic failure",
-    )
-
-
 def test_reindex_returns_crawled_issues_and_fails_the_rest(
     jira_connector: JiraConnector,
 ) -> None:
@@ -50,7 +42,11 @@ def test_reindex_returns_crawled_issues_and_fails_the_rest(
 
     outputs = list(
         jira_connector.reindex(
-            [_failure(target.id), _failure(missing), _failure(foreign)]
+            [
+                synthetic_failure(target.id, target.id),
+                synthetic_failure(missing, missing),
+                synthetic_failure(foreign, foreign),
+            ]
         )
     )
 

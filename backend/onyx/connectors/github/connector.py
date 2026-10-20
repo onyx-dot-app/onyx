@@ -14,7 +14,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import reindex_failure
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import resolve_targets
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -661,19 +661,13 @@ class GithubConnector(
         URL, which is its document id. A file is read at the connector's
         branch, so one indexed from another branch stays a failure."""
         repos: dict[str, tuple[GitHubRepository, ExternalAccess | None]] = {}
-        for error in errors:
-            failed = error.failed_document
-            if failed is None:
-                continue
-            try:
-                yield self._reindex_target(
-                    failed.document_id, repos, include_permissions
-                )
-            except Exception as e:
-                logger.warning(
-                    "Failed to resolve GitHub target %s: %s", failed.document_id, e
-                )
-                yield reindex_failure(failed, str(e), e)
+        return resolve_targets(
+            errors,
+            lambda failed: [
+                self._reindex_target(failed.document_id, repos, include_permissions)
+            ],
+            DocumentSource.GITHUB,
+        )
 
     def _reindex_target(
         self,

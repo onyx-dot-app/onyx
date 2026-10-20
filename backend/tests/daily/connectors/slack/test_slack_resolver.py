@@ -8,21 +8,14 @@ import pytest
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
-    DocumentFailure,
     HierarchyNode,
 )
 from onyx.connectors.slack.connector import SlackConnector
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.reindex_targets import synthetic_failure
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.SLACK_BOT_TOKEN)
-
-
-def _failure(document_id: str) -> ConnectorFailure:
-    return ConnectorFailure(
-        failed_document=DocumentFailure(document_id=document_id, document_link=None),
-        failure_message="synthetic failure",
-    )
 
 
 @pytest.mark.parametrize(
@@ -37,7 +30,11 @@ def test_reindex_returns_crawled_threads_and_fails_missing_ones(
     channel_id = target.id.split("__", 1)[0]
     missing = f"{channel_id}__1.000001"
 
-    outputs = list(slack_connector.reindex([_failure(target.id), _failure(missing)]))
+    outputs = list(
+        slack_connector.reindex(
+            [synthetic_failure(target.id), synthetic_failure(missing)]
+        )
+    )
 
     documents = [o for o in outputs if isinstance(o, Document)]
     failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
