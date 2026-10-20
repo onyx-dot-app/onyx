@@ -113,6 +113,11 @@ def _load_local_first(
                 type(e).__name__,
                 e,
             )
+    else:
+        logger.notice(
+            "%s is not in the model server's Hugging Face cache. Downloading it.",
+            model_name,
+        )
     try:
         return load(False)
     except Exception as e:

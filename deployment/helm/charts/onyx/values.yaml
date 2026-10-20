@@ -1755,6 +1755,10 @@ configMap:
   ASYM_PASSAGE_PREFIX: ""
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
+  # Seconds the API server waits on startup for the model server to load a
+  # self-hosted embedding model, including a download if it is not cached;
+  # "" = 1800. Startup fails when the wait runs out. "0" disables the wait.
+  LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""

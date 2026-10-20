@@ -1410,19 +1410,18 @@ class EmbeddingModel:
                 reraise=True,
             )(final_make_request_func)
 
-        response: Response | None = None
-
         try:
             response = final_make_request_func()
             return EmbedResponse(**response.json())
         except requests.HTTPError as e:
-            if not response:
+            # raise_for_status() raised, so the failed response is only on the error.
+            if e.response is None:
                 raise HTTPError("HTTP error occurred - response is None.") from e
 
             try:
-                error_detail = response.json().get("detail", str(e))
+                error_detail = e.response.json().get("detail", str(e))
             except Exception:
-                error_detail = response.text
+                error_detail = e.response.text
             raise HTTPError(f"HTTP error occurred: {error_detail}") from e
         except requests.RequestException as e:
             raise HTTPError(f"Request failed: {str(e)}") from e

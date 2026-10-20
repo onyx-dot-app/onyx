@@ -7,6 +7,7 @@ from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
     INTEGRATION_TESTS_MODE,
+    LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT,
 )
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.model_configs import GEN_AI_API_KEY, GEN_AI_MODEL_VERSION
@@ -50,10 +51,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
-from onyx.natural_language_processing.search_nlp_models import (
-    EmbeddingModel,
-    warm_up_bi_encoder,
-)
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -65,14 +63,20 @@ from onyx.server.settings.store import (
 )
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from shared_configs.configs import (
+    DISABLE_MODEL_SERVER,
     MODEL_SERVER_HOST,
     MODEL_SERVER_PORT,
     MULTI_TENANT,
 )
 from shared_configs.embedding_models import get_local_model_spec
+from shared_configs.enums import EmbedTextType
 
 logger = setup_logger()
+
+_STARTUP_EMBED_TEXT = "Onyx startup check"
+_STARTUP_RETRY_SECONDS = 10
 
 
 def setup_onyx(
@@ -150,19 +154,79 @@ def setup_onyx(
         logger.notice(
             "Model Server: http://%s:%s", MODEL_SERVER_HOST, MODEL_SERVER_PORT
         )
-        if search_settings.provider_type is None:
-            # In integration tests, do not block API startup on warm-up
-            warm_up_bi_encoder(
-                embedding_model=EmbeddingModel.from_db_model(
-                    search_settings=search_settings,
-                    server_host=MODEL_SERVER_HOST,
-                    server_port=MODEL_SERVER_PORT,
-                ),
-                non_blocking=INTEGRATION_TESTS_MODE,
-            )
+        # Multi-tenant tenant creation and integration tests must not block on it.
+        if (
+            search_settings.provider_type is None
+            and LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT > 0
+            and not (MULTI_TENANT or INTEGRATION_TESTS_MODE or DISABLE_MODEL_SERVER)
+        ):
+            wait_for_local_embedding_model(search_settings)
 
         # update multipass indexing setting based on GPU availability
         update_default_multipass_indexing(db_session)
+
+
+def wait_for_local_embedding_model(search_settings: SearchSettings) -> None:
+    """Block until the inference model server embeds with the self-hosted model in
+    use. Its first request loads the model and downloads it if it is not cached
+    (e.g. nomic, which the image no longer bundles). Raise when the wait runs out,
+    so the API server does not start with search that cannot embed queries."""
+    model_name = search_settings.model_name
+    embedding_model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+    logger.notice(
+        "Waiting up to %ss for the model server to load embedding model %s. "
+        "It downloads the model first if the model is not in its cache.",
+        LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT,
+        model_name,
+    )
+    start = time.monotonic()
+    deadline = start + LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT
+    last_error: Exception | None = None
+    while (remaining := deadline - time.monotonic()) > 0:
+        try:
+            run_with_timeout(
+                remaining,
+                lambda: embedding_model.encode(
+                    texts=[_STARTUP_EMBED_TEXT], text_type=EmbedTextType.QUERY
+                ),
+            )
+        except TimeoutError:
+            # The deadline passed during a request, e.g. a slow download.
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Embedding model %s is not ready on the model server after %.0fs: %s",
+                model_name,
+                time.monotonic() - start,
+                e,
+            )
+            time.sleep(min(_STARTUP_RETRY_SECONDS, max(deadline - time.monotonic(), 0)))
+            continue
+        logger.notice(
+            "Embedding model %s is ready on the model server (%.0fs).",
+            model_name,
+            time.monotonic() - start,
+        )
+        return
+
+    reason = (
+        f"Last error: {last_error}"
+        if last_error
+        else "The last request was still waiting for the model server."
+    )
+    raise RuntimeError(
+        f"The model server at {MODEL_SERVER_HOST}:{MODEL_SERVER_PORT} did not load "
+        f"embedding model {model_name} within {LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT}s. "
+        f"{reason} If the model server cannot download the model (for example, it "
+        "has no internet access), add the model to its Hugging Face cache. "
+        "LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT sets the wait; 0 disables it."
+    ) from last_error
 
 
 def warn_on_custom_models_with_registry_names(

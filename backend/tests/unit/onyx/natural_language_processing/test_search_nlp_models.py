@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import requests
 from cohere import AsyncClient as RealCohereAsyncClient
 from google import genai
 from google.auth.credentials import Credentials
@@ -876,6 +877,19 @@ def test_query_embeddings_never_wait_for_the_rate_limit() -> None:
         model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
 
     load_limiter.assert_not_called()
+
+
+def test_model_server_error_detail_reaches_the_caller() -> None:
+    model = _make_local_embedding_model()
+    failed = MagicMock(status_code=500)
+    failed.raise_for_status.side_effect = requests.HTTPError("500", response=failed)
+    failed.json.return_value = {"detail": "model is not in the cache"}
+
+    with (
+        patch(f"{_SEARCH_NLP_MODULE}.requests.post", return_value=failed),
+        pytest.raises(httpx.HTTPError, match="model is not in the cache"),
+    ):
+        model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
 
 
 @pytest.mark.asyncio
