@@ -1480,6 +1480,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jira_service_management": {
+          "description": "Atlassian 服务台请求"
         }
       }
     },
@@ -4810,6 +4813,16 @@
             "mailboxes": {
               "label": "邮箱",
               "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "从单个 Jira Service Management 服务项目索引所有请求（工单）。",
+          "fields": {
+            "project_key": {
+              "label": "服务项目键",
+              "description": "要索引的服务项目的键（例如 “SD”）。"
             }
           }
         }

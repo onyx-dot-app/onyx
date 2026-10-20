@@ -318,6 +318,8 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
+    extra_metadata: dict[str, str | list[str]] | None = None,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -404,11 +406,14 @@ def process_jira_issue(
     else:
         logger.error("Project should exist but does not for %s", issue_key)
 
+    if extra_metadata:
+        metadata_dict.update(extra_metadata)
+
     summary: Any = get_issue_field(issue, "summary")
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -438,6 +443,9 @@ class JiraConnector(
     SlimConnectorWithPermSync,
 ):
     slim_listing_honors_indexing_start = True
+    # Subclasses (e.g. Jira Service Management) index the same issue API under
+    # their own source.
+    document_source: DocumentSource = DocumentSource.JIRA
 
     def __init__(
         self,
@@ -602,10 +610,17 @@ class JiraConnector(
         # the document belongs directly under the project in the hierarchy
         return project_key
 
+    def _extra_issue_metadata(
+        self,
+        issue: JiraIssue,  # noqa: ARG002
+    ) -> dict[str, str | list[str]]:
+        """Source-specific metadata merged into each document. None for Jira."""
+        return {}
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._source_operations = JiraSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
-                None, DocumentSource.JIRA.value, credentials
+                None, self.document_source.value, credentials
             ),
             connector_specific_config={
                 "jira_base_url": self.jira_base,
@@ -744,6 +759,8 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.document_source,
+                    extra_metadata=self._extra_issue_metadata(issue),
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -882,6 +899,13 @@ class JiraConnector(
                             issue, project_key, seen_hierarchy_node_ids
                         )
                     )
+
+                issue_labels = get_issue_field(issue, _FIELD_LABELS) or []
+                if self.labels_to_skip and any(
+                    label in issue_labels for label in self.labels_to_skip
+                ):
+                    current_offset += 1
+                    continue
 
                 # Now add the slim document
                 doc_id = build_jira_url(self.jira_base, _issue_key(issue))
