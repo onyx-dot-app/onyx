@@ -186,9 +186,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
     const providerId = await adminClient.createProvider(providerName);
     // The Cost Overrides panel sits on this page but reads its own endpoint, so
     // seed a row the holder must be able to see.
-    const overrideModel = await adminClient.upsertCostOverride(
-      `e2e-manage-llm-${Date.now()}`
-    );
+    const override = await adminClient.createCostOverride(providerId);
 
     try {
       // Phase 1: Without MANAGE_LLMS — the page should redirect to /app
@@ -220,7 +218,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
       // Cost overrides are gated separately from the page, so reaching the page
       // is not evidence the panel loaded — assert the row, not just the heading.
-      await expect(page.getByText(overrideModel)).toBeVisible({
+      await expect(page.getByText(override.modelDisplayName)).toBeVisible({
         timeout: 10000,
       });
       await expect(
@@ -243,7 +241,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
         await loginAs(page, "admin");
         const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteProvider(providerId);
-        await cleanupClient.deleteCostOverride(overrideModel);
+        await cleanupClient.deleteCostOverride(override.modelConfigurationId);
       });
     }
   });

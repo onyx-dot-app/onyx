@@ -40,6 +40,7 @@ def llm_generation_span(
         tools=tools,
         parent=parent,
         content_mode=content_mode,
+        model_configuration_id=llm.config.model_configuration_id,
     ) as span:
         if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(

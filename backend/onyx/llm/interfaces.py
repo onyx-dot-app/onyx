@@ -61,6 +61,9 @@ class LLMConfig(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     # Admin-configured flag, for models the catalog does not know.
     supports_reasoning: bool = False
+    # The saved model configuration this LLM runs, when there is one. Admin
+    # cost overrides are keyed on it.
+    model_configuration_id: int | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

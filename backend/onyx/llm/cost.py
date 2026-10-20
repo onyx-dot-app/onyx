@@ -67,11 +67,14 @@ def get_model_price_per_million(
     model: str,
     provider: str | None,
     db_session: Session | None = None,
+    model_configuration_id: int | None = None,
 ) -> ModelPrice:
-    """Return override-aware USD per million tokens without raising."""
-    if db_session is not None:
+    """Return override-aware USD per million tokens without raising.
+
+    An admin override applies only to a known model configuration."""
+    if db_session is not None and model_configuration_id is not None:
         try:
-            rates = cost_overrides.get_override(db_session, model, provider or "")
+            rates = cost_overrides.get_override(db_session, model_configuration_id)
         except Exception:
             logger.exception("Override lookup failed for model %s", model)
             rates = None
@@ -241,6 +244,7 @@ def compute_cost_cents(
     image_count: int = 1,
     db_session: Session | None = None,
     served_model: str | None = None,
+    model_configuration_id: int | None = None,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
@@ -248,7 +252,8 @@ def compute_cost_cents(
     subsets of it, not additions to it.
 
     served_model is the model a router (openrouter/auto) actually served; the
-    catalog is priced by it, while admin overrides on the configured model win.
+    catalog is priced by it. model_configuration_id is the configured model
+    (the router itself, for a router); an admin override on it wins.
 
     Resolution order: image pricing → admin override → model catalog → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
@@ -268,23 +273,20 @@ def compute_cost_cents(
         )
 
     catalog_model: str = served_model or model
-    if db_session is not None:
-        for override_model in dict.fromkeys((model, catalog_model)):
-            try:
-                rates = cost_overrides.get_override(
-                    db_session, override_model, provider or ""
-                )
-            except Exception:
-                logger.exception("Override lookup failed for model %s", override_model)
-                rates = None
-            if rates is not None:
-                return _override_cost_cents(
-                    rates,
-                    prompt_tokens,
-                    completion_tokens,
-                    cache_read_tokens,
-                    cache_creation_tokens,
-                )
+    if db_session is not None and model_configuration_id is not None:
+        try:
+            rates = cost_overrides.get_override(db_session, model_configuration_id)
+        except Exception:
+            logger.exception("Override lookup failed for model %s", model)
+            rates = None
+        if rates is not None:
+            return _override_cost_cents(
+                rates,
+                prompt_tokens,
+                completion_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
+            )
 
     if _is_locally_hosted(model, provider):
         return 0.0, 0.0

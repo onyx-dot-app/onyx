@@ -913,6 +913,7 @@ def run_llm_step_pkt_generator(
         | {
             "model_impl": "litellm",
         },
+        model_configuration_id=llm.config.model_configuration_id,
     ) as span_generation:
         span_generation.span_data.model_config = {
             **(span_generation.span_data.model_config or {}),

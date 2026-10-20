@@ -446,12 +446,19 @@ export interface LlmDefaults {
 }
 
 /**
- * Admin-set negotiated per-model rate, overriding the built-in price book.
- * Rates are USD per MILLION tokens. Keyed on (provider, model); provider is ""
- * for a provider-agnostic override.
+ * Admin-set negotiated rate for one model configuration, overriding the
+ * built-in price book. Rates are USD per MILLION tokens.
  */
 export interface CostOverride {
-  model: string;
+  model_configuration_id: number;
+  /** The model's API name. */
+  model_name: string;
+  /** The name to show (custom, then display, then API name). */
+  model_display_name: string;
+  llm_provider_id: number;
+  /** The provider's own name; null when unnamed. */
+  llm_provider_name: string | null;
+  /** Provider type, e.g. "openai". */
   provider: string;
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
@@ -459,13 +466,16 @@ export interface CostOverride {
   updated_at: string | null;
 }
 
-/** PUT body — an idempotent upsert keyed on (provider, model). */
-export interface CostOverrideUpsert {
-  model: string;
-  provider?: string; // "" / omitted = provider-agnostic
+/** PUT body: an override's rates. */
+export interface CostOverrideRates {
   input_cost_per_mtok: number;
   output_cost_per_mtok: number;
   cache_read_cost_per_mtok: number | null;
+}
+
+/** POST body: a new override for a model configuration that has none. */
+export interface CostOverrideCreate extends CostOverrideRates {
+  model_configuration_id: number;
 }
 
 /**

@@ -4816,9 +4816,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "모든 제공업체"
-      },
       "deleteModal": {
         "description": "**{model}**({provider}) 사용량은 다시 기본 제공 가격으로 계산됩니다.",
         "submit": {

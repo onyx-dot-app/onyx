@@ -4816,9 +4816,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "Tous les fournisseurs"
-      },
       "deleteModal": {
         "description": "L'utilisation de **{model}** ({provider}) sera de nouveau facturée au prix intégré.",
         "submit": {
