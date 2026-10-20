@@ -80,6 +80,18 @@ class OneDriveUserDrive(BaseModel):
     drive: OneDriveDrive
 
 
+class OneDriveReindexCache(BaseModel):
+    """Lookups shared by the targets of one `reindex` call."""
+
+    personal_drives: dict[str, OneDrivePersonalDrive | None] = Field(
+        default_factory=dict
+    )
+    users: dict[str, OneDriveUser | None] = Field(default_factory=dict)
+    default_drives: dict[str, OneDriveDrive | None] = Field(default_factory=dict)
+    configured_drives: list[OneDriveUserDrive] | None = None
+    emitted_node_ids: set[str] = Field(default_factory=set)
+
+
 class OneDriveDiscoveredFile(BaseModel):
     model_config = ConfigDict(frozen=True)
 

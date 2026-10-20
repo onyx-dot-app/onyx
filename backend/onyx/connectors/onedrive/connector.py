@@ -3,8 +3,6 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field
-
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -63,7 +61,7 @@ from onyx.connectors.onedrive.models import (
     OneDriveDiscoveredFile,
     OneDriveDrive,
     OneDrivePermission,
-    OneDrivePersonalDrive,
+    OneDriveReindexCache,
     OneDriveSettings,
     OneDriveUser,
     OneDriveUserDrive,
@@ -253,18 +251,6 @@ def _reindex_failure(
 
 class _ReindexTargetError(Exception):
     """One target cannot be re-fetched; the other targets continue."""
-
-
-class _ReindexCache(BaseModel):
-    """Lookups shared by the targets of one `reindex` call."""
-
-    personal_drives: dict[str, OneDrivePersonalDrive | None] = Field(
-        default_factory=dict
-    )
-    users: dict[str, OneDriveUser | None] = Field(default_factory=dict)
-    default_drives: dict[str, OneDriveDrive | None] = Field(default_factory=dict)
-    configured_drives: list[OneDriveUserDrive] | None = None
-    emitted_node_ids: set[str] = Field(default_factory=set)
 
 
 class OneDriveConnector(
@@ -806,13 +792,15 @@ class OneDriveConnector(
         )
 
     def _cached_user(
-        self, identifier: str, cache: _ReindexCache
+        self, identifier: str, cache: OneDriveReindexCache
     ) -> OneDriveUser | None:
         if identifier not in cache.users:
             cache.users[identifier] = self.ops.get_user(identifier=identifier)
         return cache.users[identifier]
 
-    def _configured_drives(self, cache: _ReindexCache) -> list[OneDriveUserDrive]:
+    def _configured_drives(
+        self, cache: OneDriveReindexCache
+    ) -> list[OneDriveUserDrive]:
         if cache.configured_drives is not None:
             return cache.configured_drives
         drives: list[OneDriveUserDrive] = []
@@ -830,7 +818,7 @@ class OneDriveConnector(
         return drives
 
     def _linked_drive(
-        self, document_link: str, cache: _ReindexCache
+        self, document_link: str, cache: OneDriveReindexCache
     ) -> OneDriveUserDrive | None:
         """Finds the indexed drive a recorded web URL points at.
 
@@ -876,7 +864,7 @@ class OneDriveConnector(
         return OneDriveUserDrive(user=owner, drive=default_drive)
 
     def _locate_item(
-        self, failed: DocumentFailure, cache: _ReindexCache
+        self, failed: DocumentFailure, cache: OneDriveReindexCache
     ) -> tuple[OneDriveUserDrive, DriveDeltaItem]:
         linked = (
             self._linked_drive(failed.document_link, cache)
@@ -886,9 +874,14 @@ class OneDriveConnector(
         if linked is not None:
             candidates = [linked]
         elif self.settings.indexes_all_users:
+            reason = (
+                f"`{failed.document_link}` is not a OneDrive personal site URL."
+                if failed.document_link
+                else "this target has none."
+            )
             raise _ReindexTargetError(
                 "A connector that indexes all users needs the document's OneDrive "
-                "web URL to find its drive; this target has none."
+                f"web URL to find its drive; {reason}"
             )
         else:
             candidates = self._configured_drives(cache)
@@ -906,7 +899,7 @@ class OneDriveConnector(
         self,
         owned: OneDriveUserDrive,
         item: DriveDeltaItem,
-        cache: _ReindexCache,
+        cache: OneDriveReindexCache,
         include_permissions: bool,
     ) -> Generator[HierarchyNode, None, None]:
         user, drive = owned.user, owned.drive
@@ -953,7 +946,7 @@ class OneDriveConnector(
     def _reindex_target(
         self,
         failed: DocumentFailure,
-        cache: _ReindexCache,
+        cache: OneDriveReindexCache,
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         owned, item = self._locate_item(failed, cache)
@@ -990,7 +983,7 @@ class OneDriveConnector(
         """
         if self._ops is None:
             raise ConnectorMissingCredentialError("OneDrive")
-        cache = _ReindexCache()
+        cache = OneDriveReindexCache()
         self._folder_access.clear()
         try:
             for error in errors:

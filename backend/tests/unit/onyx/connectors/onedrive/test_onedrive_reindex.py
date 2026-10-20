@@ -212,7 +212,17 @@ def test_reindex_all_users_rejects_non_default_drive() -> None:
 def test_reindex_all_users_needs_link() -> None:
     connector, gateway = _connector(_item())
 
-    _assert_single_failure(_run(connector, link=None), "needs the document's")
+    _assert_single_failure(_run(connector, link=None), "this target has none")
+    gateway.get_drive_item.assert_not_called()
+
+
+def test_reindex_all_users_names_rejected_link() -> None:
+    connector, gateway = _connector(_item())
+    link = "https://example.com/sites/team/report.txt"
+
+    _assert_single_failure(
+        _run(connector, link=link), f"`{link}` is not a OneDrive personal site URL"
+    )
     gateway.get_drive_item.assert_not_called()
 
 
