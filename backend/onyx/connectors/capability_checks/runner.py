@@ -136,6 +136,7 @@ class _CheckOutcome(BaseModel):
     error_detail: CheckErrorDetail | None = None
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
+    partial: bool = False
     summary: str | None = None
     description: str | None = None
     duration_ms: int | None = None
@@ -160,6 +161,7 @@ def _build_result(
         error_detail=outcome.error_detail,
         not_run_reason=outcome.not_run_reason,
         blocked_by=outcome.blocked_by,
+        partial=outcome.partial,
         summary=outcome.summary,
         description=outcome.description,
         is_fallback=check.is_fallback,
@@ -323,8 +325,14 @@ def _execute_check(
         return _error_outcome(check, context, e, form_run, duration_ms=elapsed_ms())
     output = output or CheckOutput()
     return _CheckOutcome(
-        status=CapabilityCheckStatus.PASSED,
+        status=(
+            CapabilityCheckStatus.INCOMPLETE
+            if output.partial
+            else CapabilityCheckStatus.PASSED
+        ),
+        partial=output.partial,
         summary=output.summary,
+        description=output.description,
         duration_ms=elapsed_ms(),
         findings=_findings_for_source(output.findings, check, context.source),
         advisories=output.advisories,
@@ -484,7 +492,8 @@ def _dependency_not_run_outcome(
                 blocked_by=dependency.blocked_by,
             )
         reason = _NOT_RUN_REASON_BY_DEPENDENCY_STATUS.get(dependency.status)
-        if reason is None:
+        # A partial result lets its dependents run on what it found.
+        if reason is None or dependency.partial:
             continue
         line = _NOT_RUN_LINE_BY_REASON[reason].format(name=dependency.display_name)
         return _CheckOutcome(

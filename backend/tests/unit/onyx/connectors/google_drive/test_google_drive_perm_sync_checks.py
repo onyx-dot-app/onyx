@@ -94,11 +94,29 @@ def _run(check_id: str, ops: MagicMock) -> CapabilityCheckResult:
         "google_drive_directory_users",
         "google_drive_groups",
         "google_drive_shared_drive_members",
-        "google_drive_folder_permissions",
     ],
 )
 def test_checks_pass_for_a_workspace_admin(check_id: str) -> None:
     assert _run(check_id, _ops()).status == CapabilityCheckStatus.PASSED
+
+
+def test_folder_permissions_skip_without_a_folder() -> None:
+    result = _run("google_drive_folder_permissions", _ops())
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No folders in scope"
+
+
+def test_folder_permissions_pass_with_a_readable_folder() -> None:
+    ops = _ops()
+    ops.list_folders_with_permissions.side_effect = _listing(
+        {"id": "f1", "name": "Eng", "permissions": [{"id": "p", "type": "user"}]}
+    )
+
+    result = _run("google_drive_folder_permissions", ops)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Permissions of Eng readable"
 
 
 def test_checks_apply_only_to_permission_synced_connectors() -> None:
