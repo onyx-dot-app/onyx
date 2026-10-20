@@ -86,6 +86,24 @@ def test_sdk_errors_leave_as_api_errors(error: GithubException) -> None:
     assert excinfo.value.__cause__ is error
 
 
+def test_api_errors_carry_the_request_and_body() -> None:
+    """Error Details show the request and GitHub's answer."""
+    gateway, _request = _gateway()
+    client = MagicMock()
+    client.requester.base_url = "https://api.github.com"
+    client.requester.requestJsonAndCheck.side_effect = GithubException(
+        500, {"message": "Server Error"}, {}
+    )
+    gateway._cached_client = client
+
+    with pytest.raises(GitHubApiError) as excinfo:
+        gateway.get_repository(owner="o", name="r")
+
+    assert excinfo.value.method == "GET"
+    assert excinfo.value.url == "https://api.github.com/repos/o/r"
+    assert excinfo.value.body == '{"message": "Server Error"}'
+
+
 def test_primary_rate_limit_is_a_rate_limit_error() -> None:
     gateway, request = _gateway()
     request.side_effect = RateLimitExceededException(

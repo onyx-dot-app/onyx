@@ -75,7 +75,13 @@ def validate_credential_base_url(base_url: str) -> None:
         )
     except (SSRFException, ValueError) as e:
         raise ConnectorValidationError(
-            f"Invalid GitHub Enterprise Server URL '{base_url}': {e}"
+            f"Invalid GitHub Enterprise Server URL '{base_url}': {e}",
+            summary="Enterprise Server URL is blocked",
+            description=(
+                "The GitHub Enterprise Server URL points at a host the security "
+                "settings block.\nEnter a public HTTPS server URL, or ask an admin "
+                "to allow private hosts."
+            ),
         ) from e
 
 
