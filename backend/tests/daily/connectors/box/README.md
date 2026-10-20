@@ -1,7 +1,7 @@
 # Box Connector Test Setup
 
 How to provision a Box test enterprise so the daily tests in this directory
-(`test_box_basic.py`) pass. The tests assert against the exact corpus
+(`test_box_basic.py`, `test_box_resolver.py`) pass. The tests assert against the exact corpus
 defined below — names and file contents must match character-for-character.
 
 The unit tests under `backend/tests/unit/onyx/connectors/box/` need none of
@@ -177,5 +177,10 @@ PYTHONPATH=backend python backend/onyx/connectors/box/connector.py
 - `test_group_sync` — `Onyx Test Group` syncs with the collaborator as a
   member, and the synthetic `box-enterprise-all-users` group contains every
   managed user.
+- `test_box_resolver.py` — targeted reindex (`BoxConnector.reindex`) re-fetches
+  crawled files and the web link by document id, with the same metadata,
+  parent folders and (in perm-sync mode) the same `external_access` as the
+  crawl. Unknown, unparseable, out-of-scope and disabled-web-link ids yield a
+  `ConnectorFailure` keyed on the input id.
 - `test_validate_connector_settings` — valid credentials pass validation and
   the perm-sync probes; a nonexistent folder ID fails with a validation error.

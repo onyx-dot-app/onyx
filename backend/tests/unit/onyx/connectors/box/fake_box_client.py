@@ -7,6 +7,7 @@ from io import BytesIO
 from box_sdk_gen.box.errors import BoxAPIError, RequestInfo, ResponseInfo
 from box_sdk_gen.schemas.collaboration import Collaboration
 from box_sdk_gen.schemas.collaborations import Collaborations
+from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.group_full import GroupFull
 from box_sdk_gen.schemas.group_membership import GroupMembership
@@ -74,6 +75,20 @@ class FakeFoldersManager:
         if key not in self._pages:
             raise make_box_api_error(404)
         return self._pages[key]
+
+
+class FakeFilesManager:
+    def __init__(self, files_by_id: dict[str, FileFull]) -> None:
+        self._files_by_id = files_by_id
+
+    def get_file_by_id(
+        self,
+        file_id: str,
+        fields: list[str] | None = None,  # noqa: ARG002
+    ) -> FileFull:
+        if file_id not in self._files_by_id:
+            raise make_box_api_error(404)
+        return self._files_by_id[file_id]
 
 
 class FakeDownloadsManager:
@@ -225,12 +240,14 @@ class FakeBoxClient:
         groups: list[GroupFull] | None = None,
         members_by_group: dict[str, list[UserMini]] | None = None,
         membership_fail_status_by_group: dict[str, int] | None = None,
+        files_by_id: dict[str, FileFull] | None = None,
         # small page so pagination loops run without thousands of fake entries
         page_size: int = 2,
     ) -> None:
         self.folders = FakeFoldersManager(
             folders_by_id, pages, fail_listing_folder_ids or set()
         )
+        self.files = FakeFilesManager(files_by_id or {})
         self.downloads = FakeDownloadsManager(file_contents or {})
         self.list_collaborations = FakeListCollaborationsManager(
             folder_collaborations or {}, file_collaborations or {}
