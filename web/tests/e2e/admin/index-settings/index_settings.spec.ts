@@ -312,7 +312,11 @@ test.describe("Index Settings Page @exclusive", () => {
       const apiKeyInput = modal.getByLabel(/api key/i);
       await expect(apiKeyInput).toHaveValue("");
       await expect(
-        modal.locator(".opal-input").filter({ has: apiKeyInput })
+        modal
+          .locator(".opal-input")
+          // `has` searches inside each match, so it takes a locator that is
+          // not rooted at the dialog.
+          .filter({ has: page.getByLabel(/api key/i) })
       ).toContainText(/\*{2,}|•|\.\.\./);
 
       await modal.getByRole("button", { name: /cancel/i }).click();

@@ -31,8 +31,9 @@ import { useOpalStrings } from "@opal/strings";
    TABS ROOT
    ============================================================================= */
 
+// Tabs are laid out horizontally only, so the Radix `orientation` is omitted.
 interface TabsRootProps extends WithoutStyles<
-  React.ComponentProps<typeof TabsPrimitive.Root>
+  Omit<React.ComponentProps<typeof TabsPrimitive.Root>, "orientation">
 > {
   /**
    * Visual variant applied to the whole tab group.

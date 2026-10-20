@@ -196,7 +196,11 @@ test.describe("Web Search Provider Configuration", () => {
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await expect(apiKeyInput).toHaveValue("");
       await expect(
-        modalDialog.locator(".opal-input").filter({ has: apiKeyInput })
+        modalDialog
+          .locator(".opal-input")
+          // `has` searches inside each match, so it takes a locator that is
+          // not rooted at the dialog.
+          .filter({ has: page.getByLabel(/api key/i) })
       ).toContainText(/\*{2,}|•|\.\.\./);
 
       // Immediately click Connect without changing anything
