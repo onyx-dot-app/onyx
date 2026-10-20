@@ -73,7 +73,6 @@ from onyx.connectors.outlook.errors import (
 from onyx.connectors.outlook.mailboxes import (
     configured_addresses,
     configured_groups,
-    describe_group_mismatch,
     describe_unavailable_groups,
     describe_unavailable_mailboxes,
     resolve_mailbox_for_validation,
@@ -300,21 +299,22 @@ class _Candidates:
         are skipped: "Find selected groups" reports them. None usable FAILS
         with the first one's row."""
         group_ids: list[str] = []
+        first_problem: GroupProblem | None = None
         for name in self._group_names:
             matches: list[EntraGroup] = self._gateway.resolve_groups(identifier=name)
             if len(matches) == 1:
                 group_ids.append(matches[0].id)
+            elif first_problem is None:
+                first_problem = GroupProblem(identifier=name, match_count=len(matches))
         if group_ids:
             return group_ids
-        first: str = self._group_names[0]
+        problem: GroupProblem = first_problem or GroupProblem(
+            identifier=self._group_names[0], match_count=0
+        )
         _raise_row(
             ConnectorValidationError,
-            f"{describe_group_mismatch(first, 0)}. {GROUP_UNAVAILABLE_REMEDIATION}",
-            _row(
-                fit_summary("Group not found: ", first),
-                "A Mailbox Groups entry does not name exactly one Entra group.\n"
-                "Use the group's object ID in Mailbox Groups.",
-            ),
+            f"{problem.describe()}. {GROUP_UNAVAILABLE_REMEDIATION}",
+            _group_problem_row(problem),
         )
 
     def pages(self) -> Generator[OutlookMailboxPage, None, None]:
@@ -927,8 +927,11 @@ class _ConfiguredMailboxesCheck(_ConfigReadingCheck):
 
 
 def _group_problem_row(problem: GroupProblem) -> CheckRowText:
+    prefix: str = (
+        "Group not found: " if problem.match_count == 0 else "Group name not unique: "
+    )
     return _row(
-        fit_summary("Group not found: ", problem.identifier),
+        fit_summary(prefix, problem.identifier),
         f"{problem.describe()}.\nUse the group's object ID in Mailbox Groups.",
     )
 

@@ -217,6 +217,17 @@ def test_a_group_that_matches_nothing_names_it() -> None:
     assert result.summary == "Group not found: Ghost"
 
 
+def test_a_sample_on_an_ambiguous_group_says_it_is_ambiguous() -> None:
+    gateway = _healthy()
+    gateway.resolve_groups.return_value = [EntraGroup(id="a"), EntraGroup(id="b")]
+
+    result = _run("outlook_mail_read", gateway, {"mailbox_groups": ["Sales"]})
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Group name not unique: Sales"
+    assert "More than one group is named Sales" in (result.description or "")
+
+
 def test_a_refused_group_read_names_the_grant() -> None:
     gateway = _healthy()
     gateway.resolve_groups.side_effect = graph_error(403)
