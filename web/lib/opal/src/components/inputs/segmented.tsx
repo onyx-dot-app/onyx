@@ -37,9 +37,23 @@ export function makeSegmentChangeHandler<S extends { [K in keyof S]: string }>(
     };
 }
 
+/** Focuses a segment with the caret at its start or end. */
+function focusSegment(
+  ref: React.RefObject<HTMLInputElement | null> | null,
+  caret: "start" | "end"
+): boolean {
+  const input = ref?.current;
+  if (!input) return false;
+  input.focus();
+  const position = caret === "start" ? 0 : input.value.length;
+  input.setSelectionRange(position, position);
+  return true;
+}
+
 /**
- * Per-render factory for segment onKeyDown: Enter commits the draft, and
- * Backspace in an already-empty segment hops focus back.
+ * Per-render factory for segment onKeyDown: Enter commits the draft,
+ * Backspace in an already-empty segment hops focus back, and ArrowLeft /
+ * ArrowRight at a segment's edge move to the adjacent segment.
  */
 export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
   segments: S,
@@ -47,7 +61,8 @@ export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
 ) {
   return (
     part: keyof S,
-    prevRef: React.RefObject<HTMLInputElement | null> | null
+    prevRef: React.RefObject<HTMLInputElement | null> | null,
+    nextRef: React.RefObject<HTMLInputElement | null> | null = null
   ) =>
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") {
@@ -59,6 +74,25 @@ export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
       }
       if (e.key === "Backspace" && segments[part] === "") {
         prevRef?.current?.focus();
+        e.preventDefault();
+        return;
+      }
+
+      // Arrows only cross a segment edge with a collapsed caret, so
+      // Shift+Arrow selection and mid-segment caret moves stay native.
+      const { selectionStart, selectionEnd, value } = e.currentTarget;
+      if (e.shiftKey || selectionStart !== selectionEnd) return;
+      if (
+        e.key === "ArrowLeft" &&
+        selectionStart === 0 &&
+        focusSegment(prevRef, "end")
+      ) {
+        e.preventDefault();
+      } else if (
+        e.key === "ArrowRight" &&
+        selectionEnd === value.length &&
+        focusSegment(nextRef, "start")
+      ) {
         e.preventDefault();
       }
     };

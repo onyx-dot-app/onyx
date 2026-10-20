@@ -243,7 +243,10 @@ function InputDatePicker({
                   )}
                   onKeyDown={handleSegmentKeyDown(
                     field.part,
-                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null
+                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
+                    i < SEGMENT_FIELDS.length - 1
+                      ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
+                      : null
                   )}
                 />
               </React.Fragment>
