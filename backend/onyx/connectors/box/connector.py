@@ -872,14 +872,16 @@ class BoxConnector(
         include_permissions: bool,
         folder_cache: dict[str, BoxFolderFrontierEntry],
     ) -> list[BoxFolderFrontierEntry] | None:
-        """Rebuild the crawl's frontier entries from the outermost configured
-        entry folder down to the item's parent. Returns None when no configured
-        entry folder is an ancestor of the item."""
+        """Rebuild the crawl's frontier entries from the innermost configured
+        entry folder down to the item's parent. The crawl seeds every configured
+        folder as a root before it visits any subfolder, so a nested configured
+        folder is always a root. Returns None when no configured entry folder
+        is an ancestor of the item."""
         entry_index = next(
             (
                 index
-                for index, folder in enumerate(path_entries)
-                if folder.id in self.entry_folder_ids
+                for index in reversed(range(len(path_entries)))
+                if path_entries[index].id in self.entry_folder_ids
             ),
             None,
         )
@@ -986,6 +988,10 @@ class BoxConnector(
                     "over the size threshold, or empty).",
                 )
             elif isinstance(converted, ConnectorFailure):
+                if isinstance(
+                    converted.exception, BoxAPIError
+                ) and _is_box_credential_error(converted.exception):
+                    raise converted.exception
                 # Rekey on the input id so the caller can match it.
                 yield _reindex_failure(
                     document_id, converted.failure_message, converted.exception

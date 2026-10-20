@@ -208,6 +208,33 @@ def test_reindex_file_outside_configured_folder(
     assert failures[0].failed_document.document_id == target
 
 
+def test_reindex_nested_configured_folder_matches_crawl(
+    test_secrets: dict[TestSecret, str], crawled_docs: dict[str, Document]
+) -> None:
+    # Configure the test folder and its child Shared Folder. The crawl roots
+    # Shared Folder at itself, and reindex must do the same.
+    shared_folder_id = crawled_docs[SHARED_DOC_NAME].parent_hierarchy_raw_node_id
+    assert shared_folder_id is not None
+    connector = BoxConnector(
+        folder_ids=[_find_test_folder_id(test_secrets), shared_folder_id]
+    )
+    connector.load_credentials(_credentials(test_secrets))
+    crawl = load_all_from_connector(connector, 0, time())
+    crawled = {d.semantic_identifier: d for d in crawl.documents}[SHARED_DOC_NAME]
+    assert crawled.metadata["path"] == SHARED_FOLDER_NAME
+
+    docs, failures, nodes = _split(
+        list(connector.reindex(_build_failures([crawled.id])))
+    )
+
+    assert failures == []
+    assert [d.id for d in docs] == [crawled.id]
+    assert docs[0].metadata == crawled.metadata
+    assert [(n.raw_node_id, n.raw_parent_id) for n in nodes] == [
+        (shared_folder_id, None)
+    ]
+
+
 @pytest.mark.parametrize("bogus", ["box-file-999999999999", "box-weblink-999999999999"])
 def test_reindex_unknown_id_yields_failure(
     box_connector: BoxConnector, bogus: str
