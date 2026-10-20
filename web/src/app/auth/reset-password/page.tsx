@@ -10,7 +10,8 @@ import Link from "next/link";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { TextFormField } from "@/components/Field";
+import { FieldLabel } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
 import { redirect, useSearchParams } from "next/navigation";
@@ -81,20 +82,36 @@ const ResetPasswordPage: React.FC = () => {
         >
           {({ isSubmitting }) => (
             <Form className="w-full flex flex-col items-stretch mt-2">
-              <TextFormField
-                name="password"
-                label={t("resetPassword.newPasswordField.label")}
-                type="password"
-                placeholder={t("resetPassword.newPasswordField.placeholder")}
-              />
-              <TextFormField
-                name="confirmPassword"
-                label={t("resetPassword.confirmPasswordField.label")}
-                type="password"
-                placeholder={t(
-                  "resetPassword.confirmPasswordField.placeholder"
-                )}
-              />
+              <div className="w-full">
+                <FieldLabel
+                  name="password"
+                  label={t("resetPassword.newPasswordField.label")}
+                />
+                <div className="mt-1">
+                  <PasswordInputTypeInField
+                    name="password"
+                    autoComplete="new-password"
+                    placeholder={t(
+                      "resetPassword.newPasswordField.placeholder"
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="w-full">
+                <FieldLabel
+                  name="confirmPassword"
+                  label={t("resetPassword.confirmPasswordField.label")}
+                />
+                <div className="mt-1">
+                  <PasswordInputTypeInField
+                    name="confirmPassword"
+                    autoComplete="new-password"
+                    placeholder={t(
+                      "resetPassword.confirmPasswordField.placeholder"
+                    )}
+                  />
+                </div>
+              </div>
 
               <div className="flex">
                 <Button disabled={isSubmitting} type="submit" width="full">

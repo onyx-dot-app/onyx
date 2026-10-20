@@ -655,6 +655,11 @@ export default function OpenAPIAuthenticationModal({
                             name="clientSecret"
                             value={values.clientSecret}
                             onChange={handleChange}
+                            existingValue={
+                              isEditingOAuthConfig
+                                ? MASKED_OAUTH_CREDENTIAL
+                                : undefined
+                            }
                             placeholder=" "
                           />
                         </FormField.Control>

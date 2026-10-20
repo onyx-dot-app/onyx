@@ -250,25 +250,35 @@ function InputDatePicker({
             ))}
           </div>
 
-          <div className="opal-input-segmented-actions">
-            {clearable && value && !disabled && (
-              <Button
-                icon={SvgX}
-                prominence="internal"
-                size="sm"
-                tooltip={strings.clear}
-                onClick={() => onChange(null)}
-              />
-            )}
+          <div
+            role="presentation"
+            className="opal-input-segmented-actions"
+            // Escape on an action returns focus to the field's first segment.
+            onKeyDown={(event) => {
+              if (event.key === "Escape") monthRef.current?.focus();
+            }}
+          >
             <Popover.Trigger asChild>
               <Button
                 icon={SvgCalendar}
-                prominence="internal"
+                prominence="tertiary"
                 size="sm"
                 tooltip={strings.openCalendar}
+                aria-label={strings.openCalendar}
                 disabled={disabled}
               />
             </Popover.Trigger>
+            {/* The clear action is always the field's last control. */}
+            {clearable && value && !disabled && (
+              <Button
+                icon={SvgX}
+                prominence="tertiary"
+                size="sm"
+                tooltip={strings.clear}
+                aria-label={strings.clear}
+                onClick={() => onChange(null)}
+              />
+            )}
           </div>
         </div>
 

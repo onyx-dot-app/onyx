@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Formik, Form, useFormikContext } from "formik";
+import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
@@ -116,6 +116,11 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const { initialValues } = useFormikContext<BaseLLMFormValues>();
+  // On edit, the initial value is the backend's masked stored key.
+  const storedValue: unknown = getIn(initialValues, name);
+  const existingValue =
+    typeof storedValue === "string" && storedValue ? storedValue : undefined;
   return (
     <InputPadder>
       <InputVertical
@@ -132,7 +137,7 @@ export function APIKeyField({
         }
         suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
-        <PasswordInputTypeInField name={name} />
+        <PasswordInputTypeInField name={name} existingValue={existingValue} />
       </InputVertical>
     </InputPadder>
   );

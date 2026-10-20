@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useField } from "formik";
 import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
@@ -31,6 +32,8 @@ interface ApiKeyFieldProps {
 
 export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
+  // On edit, the initial value is the stored masked key.
+  const [, meta] = useField<string>("apiKey");
 
   return (
     <InputVertical
@@ -44,7 +47,10 @@ export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
         })
       )}
     >
-      <PasswordInputTypeInField name="apiKey" />
+      <PasswordInputTypeInField
+        name="apiKey"
+        existingValue={meta.initialValue}
+      />
     </InputVertical>
   );
 }

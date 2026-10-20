@@ -100,6 +100,8 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
                   field.onChange(e);
                   resetApiState();
                 }}
+                // Fetched credentials become the initial value on edit.
+                existingValue={meta.initialValue}
                 placeholder={
                   isLoadingCredentials
                     ? t("form.loading.placeholder")

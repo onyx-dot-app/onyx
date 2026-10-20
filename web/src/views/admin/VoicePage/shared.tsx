@@ -355,6 +355,7 @@ export function VoiceProviderSetupModal({
                     <PasswordInputTypeInField
                       name="api_key"
                       placeholder={t("setupModal.apiKey.placeholder")}
+                      existingValue={existingProvider?.api_key ?? undefined}
                     />
                   </InputVertical>
 
@@ -372,6 +373,9 @@ export function VoiceProviderSetupModal({
                       <PasswordInputTypeInField
                         name="api_secret"
                         placeholder={t("setupModal.apiSecret.placeholder")}
+                        existingValue={
+                          existingProvider?.api_secret ?? undefined
+                        }
                       />
                     </InputVertical>
                   )}

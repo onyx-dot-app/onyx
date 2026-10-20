@@ -82,6 +82,8 @@ function BedrockModalInternals({
   const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
+  // On edit, the initial secrets are the backend's masked stored values.
+  const storedConfig = formikProps.initialValues.custom_config;
   // A provider saved with a region outside the list (a newer AWS region)
   // keeps it as an option, so the saved value shows instead of an error.
   const savedRegion = formikProps.values.custom_config?.AWS_REGION_NAME;
@@ -207,6 +209,7 @@ function BedrockModalInternals({
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                existingValue={storedConfig?.AWS_SECRET_ACCESS_KEY || undefined}
               />
             </InputVertical>
           </Section>
@@ -234,6 +237,9 @@ function BedrockModalInternals({
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 placeholder={t("bedrock.longTermApiKeyField.placeholder")}
+                existingValue={
+                  storedConfig?.AWS_BEARER_TOKEN_BEDROCK || undefined
+                }
               />
             </InputVertical>
           </Section>
