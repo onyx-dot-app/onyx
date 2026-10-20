@@ -16913,7 +16913,7 @@
           "title": "Instrucciones"
         },
         "loadError": {
-          "description": "Prueba a cerrar y abrir la vista previa otra vez.",
+          "description": "No se pudieron cargar las instrucciones de esta habilidad.",
           "title": "No se pudo cargar la habilidad"
         },
         "metadata": {

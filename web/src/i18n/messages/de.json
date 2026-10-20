@@ -16913,7 +16913,7 @@
           "title": "Anweisungen"
         },
         "loadError": {
-          "description": "Schließen Sie die Vorschau und öffnen Sie sie erneut.",
+          "description": "Die Anweisungen dieses Skills konnten nicht geladen werden.",
           "title": "Der Skill konnte nicht geladen werden"
         },
         "metadata": {
