@@ -982,8 +982,10 @@ class SalesforceConnector(
                 if user_record:
                     primary_owner = BasicExpertInfo.from_dict(user_record)
                     primary_owner_list = [primary_owner]
-            except Exception:
-                pass
+            except Exception as e:
+                # the owner is optional, but a run-fatal error must still stop
+                if _fails_the_whole_run(e):
+                    raise
 
         doc = convert_sf_query_result_to_doc(
             parent_id,
@@ -1322,14 +1324,26 @@ class SalesforceConnector(
         if not target_types:
             return
 
-        ctx = self._describe_parent_types(
-            sorted(set(target_types.values())), self.sf_client
-        )
-
+        # described per type so one type that cannot be described fails only
+        # its own targets
+        contexts: dict[str, SalesforceConnectorContext] = {}
+        describe_errors: dict[str, Exception] = {}
         for document_id, parent_type in target_types.items():
             record_id = targets[document_id]
             try:
-                doc = self._build_parent_doc(record_id, parent_type, ctx)
+                if parent_type in describe_errors:
+                    raise describe_errors[parent_type]
+                if parent_type not in contexts:
+                    try:
+                        contexts[parent_type] = self._describe_parent_types(
+                            [parent_type], self.sf_client
+                        )
+                    except Exception as e:
+                        describe_errors[parent_type] = e
+                        raise
+                doc = self._build_parent_doc(
+                    record_id, parent_type, contexts[parent_type]
+                )
             except Exception as e:
                 # one bad target must not cost the rest of the batch their retry
                 if _fails_the_whole_run(e):

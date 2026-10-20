@@ -101,11 +101,19 @@ _DESCRIBES: dict[str, dict[str, Any]] = {
 
 
 class _FakeSalesforce(OnyxSalesforce):
-    def __init__(self, fail_auth: bool = False) -> None:
+    def __init__(
+        self,
+        fail_auth: bool = False,
+        owner_error: Exception | None = None,
+        undescribable_types: frozenset[str] = frozenset(),
+    ) -> None:
         # skip the login in Salesforce.__init__
         self.sf_instance = "test.my.salesforce.com"
         self.fail_auth = fail_auth
+        self.owner_error = owner_error
+        self.undescribable_types = undescribable_types
         self.queries: list[str] = []
+        self.described: list[str] = []
 
     def describe(self, **_kwargs: Any) -> dict[str, Any]:
         return {
@@ -113,10 +121,14 @@ class _FakeSalesforce(OnyxSalesforce):
                 {"keyPrefix": "001", "name": "Account"},
                 {"keyPrefix": "003", "name": "Contact"},
                 {"keyPrefix": "005", "name": "User"},
+                {"keyPrefix": "00Q", "name": "Lead"},
             ]
         }
 
     def describe_type(self, name: str) -> Any:
+        self.described.append(name)
+        if name in self.undescribable_types:
+            raise SalesforceMalformedRequest("url", 400, "describe", b"no such type")
         return _DESCRIBES[name]
 
     def safe_query(self, query: str, **_kwargs: Any) -> dict[str, Any]:
@@ -133,6 +145,8 @@ class _FakeSalesforce(OnyxSalesforce):
         if record_id == BROKEN_ACCOUNT_ID:
             raise SalesforceMalformedRequest("url", 400, "query", b"bad query")
         if record_id == USER_ID:
+            if self.owner_error is not None:
+                raise self.owner_error
             return {
                 "records": [
                     {
@@ -312,3 +326,39 @@ def test_reindex_no_document_targets_makes_no_calls() -> None:
     assert list(_connector(fake).reindex([])) == []
     assert list(_connector(fake).reindex([entity])) == []
     assert fake.queries == []
+
+
+def test_reindex_type_that_cannot_be_described_fails_only_its_targets() -> None:
+    fake = _FakeSalesforce(undescribable_types=frozenset({"Lead"}))
+    connector = SalesforceConnector(requested_objects=["Account", "Lead"])
+    connector._sf_client = fake
+    good = f"{ID_PREFIX}{ACCOUNT_ID}"
+    leads = [f"{ID_PREFIX}00Q000000000001AAA", f"{ID_PREFIX}00Q000000000002AAA"]
+
+    results = list(connector.reindex(_failures(leads + [good])))
+
+    assert [r.id for r in results if isinstance(r, Document)] == [good]
+    assert _failed_ids(results) == set(leads)
+    # the failed describe is not repeated for each target of the type
+    assert fake.described.count("Lead") == 1
+
+
+def test_reindex_owner_lookup_raises_run_fatal_errors() -> None:
+    fake = _FakeSalesforce(
+        owner_error=SalesforceAuthenticationFailed("INVALID_LOGIN", "bad creds")
+    )
+    with pytest.raises(SalesforceAuthenticationFailed):
+        list(_connector(fake).reindex(_failures([f"{ID_PREFIX}{ACCOUNT_ID}"])))
+
+
+def test_reindex_owner_lookup_other_errors_keep_the_document() -> None:
+    fake = _FakeSalesforce(
+        owner_error=SalesforceMalformedRequest("url", 400, "query", b"bad query")
+    )
+    target = f"{ID_PREFIX}{ACCOUNT_ID}"
+
+    results = list(_connector(fake).reindex(_failures([target])))
+
+    docs = [r for r in results if isinstance(r, Document)]
+    assert [d.id for d in docs] == [target]
+    assert docs[0].primary_owners is None
