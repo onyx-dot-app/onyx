@@ -225,6 +225,12 @@ def _file_content(
         # Unsafe owner or repository names.
         "https://github.com/test-org/../private-repo/pull/1",
         "https://github.com/test-org/test%2Drepo/issues/1",
+        # A query or fragment on a pull request or issue id.
+        f"{_REPO_URL}/pull/1?x=1",
+        f"{_REPO_URL}/issues/1#issuecomment-1",
+        # Traversal after a '#' or '?', which urlparse would hide.
+        f"{_REPO_URL}/blob/main/docs/a#/../../../other/README.md",
+        f"{_REPO_URL}/blob/main/docs/a?/../../README.md",
     ],
 )
 def test_reindex_refuses_unsafe_paths_without_fetching(
@@ -245,14 +251,17 @@ def test_reindex_refuses_unsafe_paths_without_fetching(
     mock_source_operations.get_issue.assert_not_called()
 
 
-def test_reindex_keeps_literal_percent_in_file_name(
+@pytest.mark.parametrize(
+    "path", ["docs/100%.md", "docs/topic#1.md", "docs/what?.md", "a#b/c?d/e.md"]
+)
+def test_reindex_keeps_url_characters_in_file_name(
     build_github_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
     create_repo: Callable[..., GitHubRepository],
+    path: str,
 ) -> None:
-    # The crawl writes tree paths unescaped, so a git path may hold '%'.
+    # The crawl writes tree paths unescaped, so an id may hold '%', '#' or '?'.
     mock_source_operations.get_repository.return_value = create_repo()
-    path = "docs/100%.md"
     mock_source_operations.get_file_content.return_value = _file_content(path, b"x")
     doc_id = f"{_REPO_URL}/blob/main/{path}"
 
@@ -260,6 +269,40 @@ def test_reindex_keeps_literal_percent_in_file_name(
 
     assert failed_ids == []
     assert [d.id for d in docs] == [doc_id]
+    assert mock_source_operations.get_file_content.call_args.kwargs["path"] == path
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        GitHubApiError("bad credentials", status_code=401),
+        GitHubRateLimitError("limited", status_code=403, secondary=False),
+    ],
+)
+def test_reindex_file_stop_errors_end_the_run(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    error: GitHubApiError,
+) -> None:
+    # The repository read succeeds; the file read then fails for the run.
+    mock_source_operations.get_repository.return_value = create_repo()
+    mock_source_operations.get_file_content.side_effect = error
+    targets = [
+        f"{_REPO_URL}/blob/main/docs/a.md",
+        f"{_REPO_URL}/blob/main/docs/b.md",
+    ]
+
+    with (
+        patch("onyx.connectors.github.connector.sleep_after_rate_limit_exception"),
+        pytest.raises(type(error)),
+    ):
+        _run(build_github_connector(include_files=True), targets)
+
+    # The run stops at the first file. A rate limit makes one call and five
+    # retries for that file only.
+    expected_calls = 6 if isinstance(error, GitHubRateLimitError) else 1
+    assert mock_source_operations.get_file_content.call_count == expected_calls
 
 
 @pytest.mark.parametrize(

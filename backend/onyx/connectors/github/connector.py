@@ -7,7 +7,7 @@ from enum import Enum
 from functools import partial
 from io import BytesIO
 from typing import Any, TypeVar
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 
 from pydantic import BaseModel
 from typing_extensions import override
@@ -25,12 +25,14 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.github.models import (
     GitHubCursorItem,
+    GitHubDocKind,
     GitHubFileContent,
     GitHubGitTree,
     GitHubIssue,
     GitHubPullRequest,
     GitHubRepository,
     GitHubUser,
+    ParsedGitHubDocId,
     SerializedRepository,
 )
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
@@ -153,21 +155,8 @@ def is_indexable_path(path: str, size: int | None) -> bool:
     return False
 
 
-class GitHubDocKind(str, Enum):
-    """The document types the connector writes, by their URL segment."""
-
-    PULL_REQUEST = "pull"
-    ISSUE = "issues"
-    FILE = "blob"
-
-
-class ParsedGitHubDocId(BaseModel):
-    owner: str
-    repo: str
-    kind: GitHubDocKind
-    # Pull request or issue number. None for a file.
-    number: int | None = None
-
+# A document id: an http(s) URL. The host ends at the first '/', '?' or '#'.
+_DOC_ID_URL_RE = re.compile(r"https?://[^/?#]+(?P<path>/.*)")
 
 # GitHub owner and repository names use only these characters.
 _GITHUB_NAME_RE = re.compile(r"[A-Za-z0-9._-]+")
@@ -206,15 +195,14 @@ def parse_github_document_id(doc_id: str) -> ParsedGitHubDocId | None:
     id has none of the shapes ``/<owner>/<repo>/pull/<n>``,
     ``/<owner>/<repo>/issues/<n>`` or ``/<owner>/<repo>/blob/<branch>/<path>``.
     """
-    # urlparse drops tabs and newlines, so check the raw id first.
     if any(ord(char) < 0x20 or ord(char) == 0x7F for char in doc_id):
         return None
-    parsed = urlparse(doc_id)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+    # Not urlparse: the crawl writes file paths unescaped, so '?' and '#'
+    # belong to the path, not to a query or fragment.
+    match = _DOC_ID_URL_RE.fullmatch(doc_id)
+    if match is None:
         return None
-    if parsed.query or parsed.fragment:
-        return None
-    segments = parsed.path.split("/")[1:]
+    segments = match.group("path").split("/")[1:]
     if len(segments) < 4:
         return None
     owner, repo, kind_segment = segments[0], segments[1], segments[2]
@@ -961,42 +949,33 @@ class GithubConnector(
         self,
         repo: GitHubRepository,
         path: str,
-        attempt_num: int = 0,
         verify_location: bool = False,
     ) -> bytes:
         """``verify_location`` refuses content that GitHub reports at another
         path or in another repository. Reindex sets it, because its path comes
-        from a stored id, not from the tree listing."""
-        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
-            raise RuntimeError(
-                "Re-tried fetching file content too many times. "
-                "Something is going wrong with fetching objects from Github"
-            )
-        try:
-            content: GitHubFileContent = self.source_operations.get_file_content(
+        from a stored id, not from the tree listing. Raises the
+        ``GitHubRateLimitError`` when the rate limit outlasts the retries."""
+        content: GitHubFileContent = self._call_rate_limited(
+            partial(
+                self.source_operations.get_file_content,
                 repo_full_name=repo.full_name,
                 path=path,
                 ref=self._resolve_branch(repo),
             )
-            if verify_location and (
-                content.path != path
-                or not (content.html_url or "").startswith(f"{repo.html_url}/blob/")
-            ):
-                raise ValueError(
-                    f"GitHub returned content at path {content.path!r} "
-                    f"({content.html_url!r}), not {path!r} in {repo.full_name}"
-                )
-            if content.content is None:
-                raise ValueError(
-                    f"Could not decode content for {path} "
-                    f"(encoding={content.encoding!r})"
-                )
-            return content.content
-        except GitHubRateLimitError:
-            sleep_after_rate_limit_exception(self.source_operations)
-            return self._fetch_file_content(
-                repo, path, attempt_num + 1, verify_location
+        )
+        if verify_location and (
+            content.path != path
+            or not (content.html_url or "").startswith(f"{repo.html_url}/blob/")
+        ):
+            raise ValueError(
+                f"GitHub returned content at path {content.path!r} "
+                f"({content.html_url!r}), not {path!r} in {repo.full_name}"
             )
+        if content.content is None:
+            raise ValueError(
+                f"Could not decode content for {path} (encoding={content.encoding!r})"
+            )
+        return content.content
 
     def _file_to_document(
         self,
@@ -1004,12 +983,15 @@ class GithubConnector(
         path: str,
         branch: str,
         repo_external_access: ExternalAccess | None,
-        verify_location: bool = False,
+        reindex: bool = False,
     ) -> Document | ConnectorFailure:
-        """Fetch one repo file and convert it, or describe why it failed."""
+        """Fetch one repo file and convert it, or describe why it failed.
+
+        ``reindex`` verifies where the content came from and raises errors
+        that stop the whole run, as ``reindex`` does for other targets."""
         html_url = f"{repo.html_url}/blob/{branch}/{path}"
         try:
-            raw = self._fetch_file_content(repo, path, verify_location=verify_location)
+            raw = self._fetch_file_content(repo, path, verify_location=reindex)
             # The crawl filters on the tree size; a fetch by id has only the
             # content to check.
             if not is_indexable_path(path, len(raw)):
@@ -1033,6 +1015,8 @@ class GithubConnector(
                 repo, path, content_text, repo_external_access, branch
             )
         except Exception as e:
+            if reindex and _fails_the_whole_run(e):
+                raise
             error_msg = f"Error converting file {path} to document: {e}"
             logger.exception(error_msg)
             return ConnectorFailure(
@@ -1581,7 +1565,7 @@ class GithubConnector(
                     doc_id, f"File '{path}' is not a file type the connector indexes."
                 )
             return self._file_to_document(
-                repo, path, branch, repo_external_access, verify_location=True
+                repo, path, branch, repo_external_access, reindex=True
             )
 
         if parsed.number is None:
