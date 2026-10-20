@@ -7,7 +7,8 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 - Typing `.`, `,` or the locale separator in the whole segment jumps to the fraction.
 - Pasting `12.50` into the whole segment fills both segments.
 - Left/Right arrows cross segment edges, and Backspace in an empty fraction returns to the whole segment.
-- The field commits on blur or Enter. An empty field commits `null`.
+- Edits report through `onChange` as you type, so a form sees the amount at once. An empty field reports `null`.
+- Blur and Enter tidy the display (`3.5` becomes `3.50`).
 
 ```tsx
 <InputCurrency value={rate} onChange={setRate} decimalPlaces={6} />
@@ -18,7 +19,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | Prop            | Type                                     | Default                   | Description                                                                 |
 | --------------- | ---------------------------------------- | ------------------------- | --------------------------------------------------------------------------- |
 | `value`         | `number \| null`                         | —                         | The amount (required, controlled). Negative values render empty.            |
-| `onChange`      | `(value: number \| null) => void`        | —                         | Fires on commit, `null` when cleared                                        |
+| `onChange`      | `(value: number \| null) => void`        | —                         | Fires on each edit, `null` when cleared                                      |
 | `currency`      | `string`                                 | `"USD"`                   | ISO 4217 code. Sets the symbol, its side and the default decimals.          |
 | `decimalPlaces` | `number`                                 | the currency's (USD `2`)  | Most digits the fraction takes. `0` hides the fraction segment.             |
 | `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |

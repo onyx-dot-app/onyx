@@ -6,7 +6,6 @@ import type { InputVariants } from "@opal/types";
 import {
   SEGMENT_INPUT_PROPS,
   SegmentSeparator,
-  makeSegmentChangeHandler,
   makeSegmentKeyDownHandler,
 } from "@opal/components/inputs/segmented";
 import { useOpalStrings } from "@opal/strings";
@@ -62,7 +61,7 @@ interface InputCurrencyProps {
   /** The amount, or null when empty. */
   value: number | null;
 
-  /** Fires with the committed amount, or null when cleared. */
+  /** Fires on each edit with the amount, or null when cleared. */
   onChange: (value: number | null) => void;
 
   /**
@@ -91,8 +90,8 @@ interface InputCurrencyProps {
 /**
  * InputCurrency: a segmented amount field (`$ [whole] . [fraction]`) on the
  * shared .opal-input chrome. The locale sets the symbol, its side and the
- * decimal separator. Typing commits on blur or Enter; an empty field commits
- * null.
+ * decimal separator. Edits report through onChange as they happen (an empty
+ * field reports null); blur and Enter tidy the display.
  */
 function InputCurrency({
   value,
@@ -125,21 +124,28 @@ function InputCurrency({
   const wholeRef = React.useRef<HTMLInputElement>(null);
   const fractionRef = React.useRef<HTMLInputElement>(null);
 
+  // Resync only when the value differs from the draft, so the echo of our own
+  // onChange never reformats the segment being typed in.
   React.useEffect(() => {
-    setSegments(toSegments(value, maxFraction, minFraction));
+    setSegments((prev) =>
+      parseSegments(prev) === value
+        ? prev
+        : toSegments(value, maxFraction, minFraction)
+    );
   }, [value, maxFraction, minFraction]);
 
-  function commit(next: AmountSegments) {
+  // Every draft is a valid amount, so edits report at once.
+  function update(next: AmountSegments) {
+    setSegments(next);
     const parsed = parseSegments(next);
-    if (parsed !== value) {
-      onChange(parsed);
-    } else {
-      // Same amount: normalise the display ("3.5" → "3.50").
-      setSegments(toSegments(value, maxFraction, minFraction));
-    }
+    if (parsed !== value) onChange(parsed);
   }
 
-  const handleSegmentChange = makeSegmentChangeHandler(setSegments);
+  // Blur and Enter tidy the display ("3.5" → "3.50").
+  function commit(next: AmountSegments) {
+    setSegments(toSegments(parseSegments(next), maxFraction, minFraction));
+  }
+
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // The whole segment splits on a decimal separator, so typing "." jumps to
@@ -149,7 +155,7 @@ function InputCurrency({
     const separators = [parts.decimal, ...DECIMAL_KEYS];
     const index = Math.max(...separators.map((sep) => raw.indexOf(sep)));
     if (index < 0 || !showFraction) {
-      setSegments((prev) => ({ ...prev, whole: raw.replace(/\D/g, "") }));
+      update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
     const whole = raw.slice(0, index).replace(/\D/g, "");
@@ -157,12 +163,17 @@ function InputCurrency({
       .slice(index + 1)
       .replace(/\D/g, "")
       .slice(0, maxFraction);
-    setSegments((prev) => ({ whole, fraction: fraction || prev.fraction }));
+    update({ whole, fraction: fraction || segments.fraction });
     fractionRef.current?.focus();
     fractionRef.current?.select();
   }
 
-  // Commit when focus leaves the whole field, not on intra-field moves.
+  function handleFractionChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const fraction = e.target.value.replace(/\D/g, "").slice(0, maxFraction);
+    update({ ...segments, fraction });
+  }
+
+  // Tidy when focus leaves the whole field, not on intra-field moves.
   function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     commit(segments);
@@ -222,7 +233,7 @@ function InputCurrency({
                 style={{
                   width: segmentWidth(segments.fraction, fractionPlaceholder),
                 }}
-                onChange={handleSegmentChange("fraction", maxFraction, null)}
+                onChange={handleFractionChange}
                 onKeyDown={handleSegmentKeyDown("fraction", wholeRef)}
               />
             </>
