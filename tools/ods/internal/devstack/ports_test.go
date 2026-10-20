@@ -83,7 +83,7 @@ func TestLeaseSkipsOwnerWithLiveProcessGroup(t *testing.T) {
 	port := freeBasePort() + 310
 	pid := livePGroup(t)
 	foreignOwner(t, registry, "web", port, PhaseStopped, []ServiceRecord{{Slug: "worker", PID: pid, PGID: pid}})
-	got, err := registry.Lease(t.TempDir(), []PortRequest{{Name: "web", Preferred: port}})
+	got, err := registry.LeaseFor(t.TempDir(), "", []PortRequest{{Name: "web", Preferred: port}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestLeaseSkipsOwnerThatIsNotStopped(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	port := freeBasePort() + 320
 	foreignOwner(t, registry, "web", port, PhaseDegraded, nil)
-	got, err := registry.Lease(t.TempDir(), []PortRequest{{Name: "web", Preferred: port}})
+	got, err := registry.LeaseFor(t.TempDir(), "", []PortRequest{{Name: "web", Preferred: port}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestLeaseReclaimsInfrastructurePortOnlyWithoutRunningContainers(t *testing.
 		port := freeBasePort() + 330
 		fakeContainersRunning(t, running)
 		foreignOwner(t, registry, "POSTGRES_HOST_PORT", port, PhaseStopped, nil)
-		got, err := registry.Lease(t.TempDir(), []PortRequest{{Name: "POSTGRES_HOST_PORT", Preferred: port}})
+		got, err := registry.LeaseFor(t.TempDir(), "", []PortRequest{{Name: "POSTGRES_HOST_PORT", Preferred: port}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,14 +125,14 @@ func TestLeaseMovesStoppedServiceDownToLowestFreePort(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	root := t.TempDir()
 	base := freeBasePort() + 340
-	if _, err := registry.Lease(root, []PortRequest{{Name: "web", Fixed: base + 5}}); err != nil {
+	if _, err := registry.LeaseFor(root, "", []PortRequest{{Name: "web", Fixed: base + 5}}); err != nil {
 		t.Fatal(err)
 	}
-	running, err := registry.Lease(root, []PortRequest{{Name: "web", Preferred: base, Running: true}})
+	running, err := registry.LeaseFor(root, "", []PortRequest{{Name: "web", Preferred: base, Running: true}})
 	if err != nil || running["web"] != base+5 {
 		t.Fatalf("running service moved: %v %v", running, err)
 	}
-	stopped, err := registry.Lease(root, []PortRequest{{Name: "web", Preferred: base}})
+	stopped, err := registry.LeaseFor(root, "", []PortRequest{{Name: "web", Preferred: base}})
 	if err != nil || stopped["web"] != base {
 		t.Fatalf("stopped service did not move down: %v %v", stopped, err)
 	}
@@ -142,10 +142,10 @@ func TestReleaseNamesKeepsOtherLeases(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	root, other := t.TempDir(), t.TempDir()
 	base := freeBasePort() + 360
-	if _, err := registry.Lease(root, []PortRequest{{Name: "web", Fixed: base}, {Name: "POSTGRES_HOST_PORT", Fixed: base + 1}}); err != nil {
+	if _, err := registry.LeaseFor(root, "", []PortRequest{{Name: "web", Fixed: base}, {Name: "POSTGRES_HOST_PORT", Fixed: base + 1}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.Lease(other, []PortRequest{{Name: "web", Fixed: base + 2}}); err != nil {
+	if _, err := registry.LeaseFor(other, "", []PortRequest{{Name: "web", Fixed: base + 2}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := registry.ReleaseNames(root, []string{"web"}); err != nil {

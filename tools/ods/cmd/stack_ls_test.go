@@ -120,7 +120,7 @@ func TestStackLsWithoutStacks(t *testing.T) {
 
 func TestStackLsHidesStaleLeasesUntilAll(t *testing.T) {
 	stackLsEnv(t, "exit 0\n")
-	if _, err := runtimeRegistry().Lease(t.TempDir(), []devstack.PortRequest{{Name: "web", Fixed: 43123}}); err != nil {
+	if _, err := runtimeRegistry().LeaseFor(t.TempDir(), "", []devstack.PortRequest{{Name: "web", Fixed: 43123}}); err != nil {
 		t.Fatal(err)
 	}
 	if code, out := runStackCLI(t, "stack", "ls"); code != 0 || !strings.Contains(out, "ods stack ls --all") {

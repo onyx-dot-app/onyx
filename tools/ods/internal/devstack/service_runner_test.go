@@ -107,11 +107,11 @@ func TestServiceLauncherPreservesForegroundIOAndExitStatus(t *testing.T) {
 func TestServicePortCanReplaceAnOldLease(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	root := t.TempDir()
-	first, err := registry.Lease(root, []PortRequest{{Name: "api", Preferred: testBasePort + 200}})
+	first, err := registry.LeaseFor(root, "", []PortRequest{{Name: "api", Preferred: testBasePort + 200}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := registry.Lease(root, []PortRequest{{Name: "api", Preferred: testBasePort + 201, Replace: true}})
+	second, err := registry.LeaseFor(root, "", []PortRequest{{Name: "api", Preferred: testBasePort + 201, Replace: true}})
 	if err != nil || first["api"] != testBasePort+200 || second["api"] != testBasePort+201 {
 		t.Fatalf("first=%v second=%v err=%v", first, second, err)
 	}
@@ -120,7 +120,7 @@ func TestServicePortCanReplaceAnOldLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = listener.Close() }()
-	third, err := registry.Lease(root, []PortRequest{{Name: "api", Preferred: testBasePort + 202, Replace: true}})
+	third, err := registry.LeaseFor(root, "", []PortRequest{{Name: "api", Preferred: testBasePort + 202, Replace: true}})
 	if err != nil || third["api"] != testBasePort+203 {
 		t.Fatalf("replacement for busy port=%v err=%v", third, err)
 	}

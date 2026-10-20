@@ -271,26 +271,26 @@ func TestRegistry_leasesAreDurableAndDisjoint(t *testing.T) {
 	base := freeBasePort()
 	reqs := []PortRequest{{Name: "web", Preferred: base}, {Name: "api", Preferred: base}}
 
-	a, err := r.Lease(rootA, reqs)
+	a, err := r.LeaseFor(rootA, "", reqs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a["web"] == a["api"] {
 		t.Errorf("same port for two names: %v", a)
 	}
-	b, err := r.Lease(rootB, reqs)
+	b, err := r.LeaseFor(rootB, "", reqs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if b["web"] == a["web"] || b["web"] == a["api"] || b["api"] == a["web"] {
 		t.Errorf("leases overlap: %v %v", a, b)
 	}
-	again, err := r.Lease(rootA, reqs)
+	again, err := r.LeaseFor(rootA, "", reqs)
 	if err != nil || !reflect.DeepEqual(again, a) {
 		t.Errorf("lease not durable: %v %v", again, err)
 	}
 	// A fixed port is recorded as is, and 8000 is never leased.
-	fixed, err := r.Lease(rootA, []PortRequest{{Name: "db", Fixed: 5555}, {Name: "ci", Preferred: 8000}})
+	fixed, err := r.LeaseFor(rootA, "", []PortRequest{{Name: "db", Fixed: 5555}, {Name: "ci", Preferred: 8000}})
 	if err != nil || fixed["db"] != 5555 || fixed["ci"] == 8000 {
 		t.Errorf("fixed/never lease: %v %v", fixed, err)
 	}
@@ -298,7 +298,7 @@ func TestRegistry_leasesAreDurableAndDisjoint(t *testing.T) {
 	if err := os.RemoveAll(rootB); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Lease(rootA, nil); err != nil {
+	if _, err := r.LeaseFor(rootA, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	leases, _ := r.Leases()
