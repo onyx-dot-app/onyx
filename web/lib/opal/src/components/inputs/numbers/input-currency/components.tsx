@@ -41,6 +41,11 @@ function toSegments(
   return { whole, fraction: fraction.slice(0, end) };
 }
 
+// "0007" reads "7" and "0000" reads "0": leading zeros never change the amount.
+function trimLeadingZeros(whole: string): string {
+  return whole.replace(/^0+(?=\d)/, "");
+}
+
 // Joins the segments as text before one Number() so no float drift creeps in.
 function parseSegments({ whole, fraction }: AmountSegments): number | null {
   if (whole === "" && fraction === "") return null;
@@ -182,7 +187,7 @@ function InputCurrency({
       update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
-    const whole = raw.slice(0, index).replace(/\D/g, "");
+    const whole = trimLeadingZeros(raw.slice(0, index).replace(/\D/g, ""));
     const fraction = raw
       .slice(index + 1)
       .replace(/\D/g, "")
@@ -231,6 +236,14 @@ function InputCurrency({
             inputMode={showFraction ? "decimal" : "numeric"}
             disabled={disabled}
             ref={wholeRef}
+            // Tidy the whole segment as soon as focus leaves it, not only when
+            // focus leaves the field.
+            onBlur={() =>
+              setSegments((prev) => ({
+                ...prev,
+                whole: trimLeadingZeros(prev.whole),
+              }))
+            }
             id={id}
             aria-label={strings.inputCurrencyWhole}
             placeholder={wholePlaceholder}

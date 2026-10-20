@@ -61,6 +61,16 @@ describe("typing", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("trims leading zeros as soon as focus leaves the whole segment", async () => {
+    const user = setupUser();
+    render(<InputCurrency value={null} onChange={() => {}} />);
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.keyboard("0000{Enter}");
+    expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
+    expect(screen.getByLabelText("Whole amount")).toHaveValue("0");
+  });
+
   it("blocks fraction digits beyond the precision", async () => {
     const user = setupUser();
     const onChange = jest.fn();
