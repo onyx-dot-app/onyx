@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "追加"
         },
+        "description": "モデルの交渉済み単価を設定します。利用コストの計算で組み込み価格の代わりに使われます。",
         "editTitle": "コストの上書きを編集",
         "newTitle": "新しいコストの上書き",
         "cacheRate": {

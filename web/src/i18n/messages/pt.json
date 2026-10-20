@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Adicionar"
         },
+        "description": "Defina uma taxa negociada para um modelo. Ela substitui o preço integrado nos cálculos de custo de uso.",
         "editTitle": "Editar substituição de custo",
         "newTitle": "Nova substituição de custo",
         "cacheRate": {

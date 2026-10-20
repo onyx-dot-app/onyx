@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Ajouter"
         },
+        "description": "Définissez un tarif négocié pour un modèle. Il remplace le prix intégré dans le calcul du coût d'utilisation.",
         "editTitle": "Modifier le remplacement de coût",
         "newTitle": "Nouveau remplacement de coût",
         "cacheRate": {

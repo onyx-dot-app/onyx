@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Hinzufügen"
         },
+        "description": "Legen Sie einen ausgehandelten Preis für ein Modell fest. Er ersetzt den integrierten Preis bei der Berechnung der Nutzungskosten.",
         "editTitle": "Kostenüberschreibung bearbeiten",
         "newTitle": "Neue Kostenüberschreibung",
         "cacheRate": {

@@ -169,6 +169,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
         <Modal.Header
           icon={SvgWallet}
           title={isEdit ? t("form.editTitle") : t("form.newTitle")}
+          description={t("form.description")}
           onClose={onClose}
         />
         <Modal.Body alignItems="stretch">

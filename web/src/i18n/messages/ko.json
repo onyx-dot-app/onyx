@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "추가"
         },
+        "description": "모델의 협상된 요금을 설정합니다. 사용 비용 계산에서 기본 제공 가격을 대체합니다.",
         "editTitle": "비용 재정의 편집",
         "newTitle": "새 비용 재정의",
         "cacheRate": {

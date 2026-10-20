@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Agregar"
         },
+        "description": "Establece una tarifa negociada para un modelo. Reemplaza el precio integrado en los cálculos del costo de uso.",
         "editTitle": "Editar anulación de costo",
         "newTitle": "Nueva anulación de costo",
         "cacheRate": {

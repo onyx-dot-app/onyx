@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "添加"
         },
+        "description": "为模型设置协商价格。它会在使用成本计算中替换内置价格。",
         "editTitle": "编辑成本覆盖",
         "newTitle": "新建成本覆盖",
         "cacheRate": {

@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Add"
         },
+        "description": "Set a negotiated rate for a model. It replaces the built-in price in usage cost calculations.",
         "editTitle": "Edit Cost Override",
         "newTitle": "New Cost Override",
         "cacheRate": {
