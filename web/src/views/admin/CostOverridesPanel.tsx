@@ -1,25 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
+import {
+  ConfirmationModalLayout,
+  ContentAction,
+  InputHorizontal,
+  Section,
+  toast,
+} from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
 import {
   BasicModalFooter,
   Button,
-  Card,
   InputCurrency,
   InputTypeIn,
   MessageCard,
   Modal,
+  SelectCard,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgEdit, SvgPlus, SvgTrash, SvgWallet, SvgX } from "@opal/icons";
-import { markdown } from "@opal/utils";
+import { SvgPlus, SvgSettings, SvgTrash, SvgWallet, SvgX } from "@opal/icons";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
-import { getProvider } from "@/lib/languageModels/utils";
+import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   filterModelConfigurations,
@@ -244,7 +251,8 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   );
 }
 
-// One configured override with edit and delete actions.
+// One configured override, styled like the provider cards above it: the card
+// opens the edit modal, and delete asks for confirmation first.
 
 interface OverrideRowProps {
   override: CostOverride;
@@ -254,31 +262,49 @@ function OverrideRow({ override }: OverrideRowProps) {
   const t = useTranslations("admin.costOverrides");
   const providerNames = useProviderNames();
   const locale = useLocale();
+  const format = useFormatter();
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const deleteModal = useCreateModal();
   const providerDisplayName = getProviderDisplayName(
     override.provider,
     t("allProviders.label"),
     providerNames
   );
   const rates = {
-    provider: providerDisplayName,
     input: formatRate(override.input_cost_per_mtok, locale),
     output: formatRate(override.output_cost_per_mtok, locale),
   };
+  const rateSummary =
+    override.cache_read_cost_per_mtok != null
+      ? t("row.ratesWithCache", {
+          ...rates,
+          cache: formatRate(override.cache_read_cost_per_mtok, locale),
+        })
+      : t("row.rates", rates);
+  const description = override.updated_at
+    ? t("row.description", {
+        provider: providerDisplayName,
+        time: format.dateTime(new Date(override.updated_at), {
+          dateStyle: "medium",
+        }),
+      })
+    : providerDisplayName;
+  const ariaNames = {
+    provider: providerDisplayName,
+    model: override.model,
+  };
 
   async function handleDelete() {
-    setDeleting(true);
     try {
       await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
+      deleteModal.toggle(false);
       toast.success(t("toasts.removed", { model: override.model }));
     } catch (e) {
       console.error("Failed to remove cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.removeFailed", { message }));
-      setDeleting(false);
     }
   }
 
@@ -287,63 +313,84 @@ function OverrideRow({ override }: OverrideRowProps) {
       {editing && (
         <OverrideModal existing={override} onClose={() => setEditing(false)} />
       )}
-      <Hoverable.Root group="OverrideRow">
-        <Card border="solid" rounding={4} padding={2}>
-          <div className="flex flex-row items-center justify-between gap-2 p-2">
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <Text
-                font="main-ui-action"
-                color="text-04"
-                wordWrap="whitespace-nowrap"
-              >
-                {override.model}
-              </Text>
-              <Text font="secondary-body" color="text-03">
-                {override.cache_read_cost_per_mtok != null
-                  ? t("row.ratesWithCache", {
-                      ...rates,
-                      cache: formatRate(
-                        override.cache_read_cost_per_mtok,
-                        locale
-                      ),
-                    })
-                  : t("row.rates", rates)}
-              </Text>
-              {override.updated_at && (
-                <Text font="secondary-body" color="text-02">
-                  {t("row.updated", {
-                    time: new Date(override.updated_at).toLocaleString(locale),
-                  })}
-                </Text>
-              )}
-            </div>
 
-            <div className="flex flex-row">
-              <Button
-                icon={SvgEdit}
-                prominence="tertiary"
-                aria-label={t("row.editButton.ariaLabel", {
-                  provider: providerDisplayName,
-                  model: override.model,
-                })}
-                disabled={deleting}
-                onClick={() => setEditing(true)}
-              />
-              <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
-                <Button
-                  icon={SvgTrash}
-                  prominence="tertiary"
-                  aria-label={t("row.deleteButton.ariaLabel", {
-                    provider: providerDisplayName,
-                    model: override.model,
-                  })}
-                  disabled={deleting}
-                  onClick={handleDelete}
-                />
-              </Hoverable.Item>
+      {deleteModal.isOpen && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={markdown(
+            t("deleteModal.title", { model: escapeMarkdown(override.model) })
+          )}
+          onClose={() => deleteModal.toggle(false)}
+          submit={
+            <Button variant="danger" onClick={handleDelete}>
+              {t("deleteModal.submit.label")}
+            </Button>
+          }
+        >
+          <Text font="main-ui-body" color="text-03">
+            {markdown(
+              t("deleteModal.description", {
+                model: escapeMarkdown(override.model),
+                provider: escapeMarkdown(providerDisplayName),
+              })
+            )}
+          </Text>
+        </ConfirmationModalLayout>
+      )}
+
+      <Hoverable.Root
+        group="OverrideRow"
+        interaction={deleteModal.isOpen ? "hover" : "rest"}
+      >
+        <SelectCard
+          state="filled"
+          padding={2}
+          rounding={4}
+          aria-label={override.model}
+          onClick={() => setEditing(true)}
+        >
+          <Section gap={0} alignItems="stretch" height="fit">
+            <ContentAction
+              icon={getModelIcon(override.provider, override.model)}
+              title={override.model}
+              description={description}
+              titleMaxLines={1}
+              descriptionMaxLines={1}
+              sizePreset="main-ui"
+              variant="section"
+              padding={2}
+              rightChildren={
+                <div className="flex flex-row">
+                  <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
+                    <Button
+                      icon={SvgTrash}
+                      prominence="tertiary"
+                      aria-label={t("row.deleteButton.ariaLabel", ariaNames)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteModal.toggle(true);
+                      }}
+                    />
+                  </Hoverable.Item>
+                  <Button
+                    icon={SvgSettings}
+                    prominence="tertiary"
+                    aria-label={t("row.editButton.ariaLabel", ariaNames)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(true);
+                    }}
+                  />
+                </div>
+              }
+            />
+            <div className="ps-5">
+              <Text font="secondary-mono" color="text-03">
+                {rateSummary}
+              </Text>
             </div>
-          </div>
-        </Card>
+          </Section>
+        </SelectCard>
       </Hoverable.Root>
     </>
   );

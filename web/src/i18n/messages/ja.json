@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "すべてのプロバイダー"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "*{model}* の上書きを削除"
+      },
       "empty": {
         "description": "モデルに交渉済みの単価（100 万 tokens あたりの USD）を適用するには、追加してください。",
         "title": "コストオーバーライドは設定されていません。"
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを削除"
         },
+        "description": "{provider} · 更新 {time}",
         "editButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを編集"
         },
-        "rates": "{provider} · 入力 {input} · 出力 {output} · 100 万 tokens あたりの USD",
-        "ratesWithCache": "{provider} · 入力 {input} · 出力 {output} · キャッシュ {cache} · 100 万 tokens あたりの USD",
-        "updated": "更新 {time}"
+        "rates": "入力 {input} · 出力 {output}",
+        "ratesWithCache": "入力 {input} · 出力 {output} · キャッシュ {cache}"
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",

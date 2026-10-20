@@ -136,8 +136,10 @@ describe("CostOverridesPanel", () => {
   test("distinguishes the same model under different providers", () => {
     render(<CostOverridesPanel />);
 
-    expect(screen.getByText(/OpenAI · In \$0.001/)).toBeInTheDocument();
-    expect(screen.getByText(/Anthropic · In \$3.00/)).toBeInTheDocument();
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("In $0.001 · Out $2.00")).toBeInTheDocument();
+    expect(screen.getByText("In $3.00 · Out $4.00")).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: "Edit Anthropic override for shared-model",

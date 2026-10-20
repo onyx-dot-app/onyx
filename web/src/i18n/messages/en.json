@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "All providers"
       },
+      "deleteModal": {
+        "description": "Usage of **{model}** ({provider}) will be priced at the built-in rate again.",
+        "submit": {
+          "label": "Delete"
+        },
+        "title": "Delete *{model}* override"
+      },
       "empty": {
         "description": "Add one to apply a negotiated rate (USD per 1M tokens) for a model.",
         "title": "No cost overrides set."
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "Delete {provider} override for {model}"
         },
+        "description": "{provider} · Updated {time}",
         "editButton": {
           "ariaLabel": "Edit {provider} override for {model}"
         },
-        "rates": "{provider} · In {input} · Out {output} · USD per 1M tokens",
-        "ratesWithCache": "{provider} · In {input} · Out {output} · Cache {cache} · USD per 1M tokens",
-        "updated": "Updated {time}"
+        "rates": "In {input} · Out {output}",
+        "ratesWithCache": "In {input} · Out {output} · Cache {cache}"
       },
       "toasts": {
         "removeFailed": "Failed to remove override: {message}",

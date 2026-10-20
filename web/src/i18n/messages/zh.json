@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "所有提供方"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 *{model}* 的覆盖"
+      },
       "empty": {
         "description": "添加一项，为某个模型应用协商价格（每 100 万 tokens 的美元价格）。",
         "title": "尚未设置费用覆盖。"
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "删除 {model} 的 {provider} 覆盖"
         },
+        "description": "{provider} · 更新于 {time}",
         "editButton": {
           "ariaLabel": "编辑 {model} 的 {provider} 覆盖"
         },
-        "rates": "{provider} · 输入 {input} · 输出 {output} · 每 100 万 tokens 美元",
-        "ratesWithCache": "{provider} · 输入 {input} · 输出 {output} · 缓存 {cache} · 每 100 万 tokens 美元",
-        "updated": "更新于 {time}"
+        "rates": "输入 {input} · 输出 {output}",
+        "ratesWithCache": "输入 {input} · 输出 {output} · 缓存 {cache}"
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",

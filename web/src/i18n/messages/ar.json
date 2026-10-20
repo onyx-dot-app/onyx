@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "جميع الموفرين"
       },
+      "deleteModal": {
+        "description": "سيُحتسب استخدام **{model}** ({provider}) بالسعر المدمج مرة أخرى.",
+        "submit": {
+          "label": "حذف"
+        },
+        "title": "حذف تجاوز *{model}*"
+      },
       "empty": {
         "description": "أضف تجاوزًا لتطبيق سعر متفاوض عليه (دولار لكل مليون رمز) لنموذج.",
         "title": "لا توجد تجاوزات تكلفة معيّنة."
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "حذف تجاوز {provider} للنموذج {model}"
         },
+        "description": "{provider} · آخر تحديث {time}",
         "editButton": {
           "ariaLabel": "تعديل تجاوز {provider} للنموذج {model}"
         },
-        "rates": "{provider} · إدخال {input} · إخراج {output} · دولار لكل مليون رمز",
-        "ratesWithCache": "{provider} · إدخال {input} · إخراج {output} · ذاكرة مؤقتة {cache} · دولار لكل مليون رمز",
-        "updated": "حُدّث {time}"
+        "rates": "إدخال {input} · إخراج {output}",
+        "ratesWithCache": "إدخال {input} · إخراج {output} · ذاكرة مؤقتة {cache}"
       },
       "toasts": {
         "removeFailed": "فشلت إزالة التجاوز: {message}",

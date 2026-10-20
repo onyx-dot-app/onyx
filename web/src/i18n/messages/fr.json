@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "Tous les fournisseurs"
       },
+      "deleteModal": {
+        "description": "L'utilisation de **{model}** ({provider}) sera de nouveau facturée au prix intégré.",
+        "submit": {
+          "label": "Supprimer"
+        },
+        "title": "Supprimer le remplacement de *{model}*"
+      },
       "empty": {
         "description": "Ajoutez-en un pour appliquer un tarif négocié (USD par million de jetons) à un modèle.",
         "title": "Aucun remplacement de tarif défini."
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "Supprimer le remplacement {provider} pour {model}"
         },
+        "description": "{provider} · Mis à jour {time}",
         "editButton": {
           "ariaLabel": "Modifier le remplacement {provider} pour {model}"
         },
-        "rates": "{provider} · Entrée {input} · Sortie {output} · USD par million de jetons",
-        "ratesWithCache": "{provider} · Entrée {input} · Sortie {output} · Cache {cache} · USD par million de jetons",
-        "updated": "Mis à jour {time}"
+        "rates": "Entrée {input} · Sortie {output}",
+        "ratesWithCache": "Entrée {input} · Sortie {output} · Cache {cache}"
       },
       "toasts": {
         "removeFailed": "Échec de la suppression du remplacement : {message}",

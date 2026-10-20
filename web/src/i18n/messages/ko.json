@@ -4819,6 +4819,13 @@
       "allProviders": {
         "label": "모든 제공업체"
       },
+      "deleteModal": {
+        "description": "**{model}**({provider}) 사용량은 다시 기본 제공 가격으로 계산됩니다.",
+        "submit": {
+          "label": "삭제"
+        },
+        "title": "*{model}* 재정의 삭제"
+      },
       "empty": {
         "description": "모델에 협상된 요금(100만 token당 USD)을 적용하려면 재정의를 추가하세요.",
         "title": "설정된 비용 재정의가 없습니다."
@@ -4869,12 +4876,12 @@
         "deleteButton": {
           "ariaLabel": "{model}의 {provider} 재정의 삭제"
         },
+        "description": "{provider} · 업데이트 {time}",
         "editButton": {
           "ariaLabel": "{model}의 {provider} 재정의 편집"
         },
-        "rates": "{provider} · 입력 {input} · 출력 {output} · 100만 token당 USD",
-        "ratesWithCache": "{provider} · 입력 {input} · 출력 {output} · 캐시 {cache} · 100만 token당 USD",
-        "updated": "{time}에 업데이트됨"
+        "rates": "입력 {input} · 출력 {output}",
+        "ratesWithCache": "입력 {input} · 출력 {output} · 캐시 {cache}"
       },
       "toasts": {
         "removeFailed": "재정의를 제거하지 못했습니다: {message}",
