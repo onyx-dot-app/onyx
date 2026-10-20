@@ -16,6 +16,7 @@ from onyx.connectors.gmail import connector as gmail_connector_module
 from onyx.connectors.gmail.connector import (
     GmailCheckpoint,
     GmailConnector,
+    _batch_get_threads,
     _build_time_range_query,
     thread_to_document,
 )
@@ -436,92 +437,228 @@ def test_reindex_matches_crawl_document_for_listed_thread() -> None:
     )
 
 
-def _http_error(status: int) -> HttpError:
-    return HttpError(resp=httplib2.Response({"status": status}), content=b"error")
-
-
-def test_reindex_oauth_reads_only_the_admin_mailbox() -> None:
-    """An OAuth user cannot list the domain's users (403), so the crawl reads
-    only the admin's mailbox. Reindex must read only that mailbox too."""
-    admin_email = "admin@example.com"
-    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
-    with open(json_path, "r") as f:
-        admin_thread = cast(dict[str, Any], json.load(f))
-    admin_thread_id = cast(str, admin_thread["id"])
-    other_thread_id = "aaaaaaaaaaaaaaaa"
-    mailboxes: dict[str, dict[str, dict[str, Any]]] = {
-        admin_email: {admin_thread_id: admin_thread}
-    }
-    read_mailboxes: list[str] = []
-
-    class FakeThreads:
-        def get(self, userId: str, id: str, fields: str) -> tuple[str, str]:  # noqa: A002, ARG002
-            return userId, id
-
-    class FakeUsers:
-        def threads(self) -> FakeThreads:
-            return FakeThreads()
-
-    class FakeBatch:
-        def __init__(self, callback: Callable[[str, Any, Exception | None], None]):
-            self._callback = callback
-            self._requests: list[tuple[tuple[str, str], str]] = []
-
-        def add(self, request: tuple[str, str], request_id: str) -> None:
-            self._requests.append((request, request_id))
-
-        def execute(self) -> None:
-            for (user_email, thread_id), request_id in self._requests:
-                read_mailboxes.append(user_email)
-                thread = mailboxes.get(user_email, {}).get(thread_id)
-                if thread is None:
-                    self._callback(request_id, None, _http_error(404))
-                else:
-                    self._callback(request_id, copy.deepcopy(thread), None)
-
-    class FakeGmailService:
-        def users(self) -> FakeUsers:
-            return FakeUsers()
-
-        def new_batch_http_request(
-            self, callback: Callable[[str, Any, Exception | None], None]
-        ) -> FakeBatch:
-            return FakeBatch(callback)
-
-    admin_service = MagicMock()
-    admin_service.users.return_value.list.return_value.execute.side_effect = (
-        _http_error(403)
+def _http_error(status: int, reason: str | None = None) -> HttpError:
+    error: dict[str, Any] = {"code": status, "message": reason or "error"}
+    if reason is not None:
+        error["errors"] = [{"reason": reason, "message": reason}]
+    payload = {"error": error}
+    return HttpError(
+        resp=httplib2.Response({"status": status}),
+        content=json.dumps(payload).encode(),
     )
 
+
+_ThreadOutcome = dict[str, Any] | HttpError
+
+
+class _FakeGmailBatch:
+    def __init__(
+        self,
+        gmail: "_FakeGmail",
+        callback: Callable[[str, Any, Exception | None], None],
+    ) -> None:
+        self._gmail = gmail
+        self._callback = callback
+        self._requests: list[tuple[tuple[str, str], str]] = []
+
+    def add(self, request: tuple[str, str], request_id: str) -> None:
+        self._requests.append((request, request_id))
+
+    def execute(self) -> None:
+        if self._gmail.batch_errors:
+            raise self._gmail.batch_errors.pop(0)
+        for key, request_id in self._requests:
+            self._gmail.reads.append(key)
+            outcomes = self._gmail.outcomes.get(key)
+            if not outcomes:
+                self._callback(request_id, None, _http_error(404))
+                continue
+            outcome = outcomes.pop(0) if len(outcomes) > 1 else outcomes[0]
+            if isinstance(outcome, HttpError):
+                self._callback(request_id, None, outcome)
+            else:
+                self._callback(request_id, copy.deepcopy(outcome), None)
+
+
+class _FakeGmail:
+    """Gmail client fake for batched threads.get. Each (mailbox, thread id)
+    returns its outcomes in order, and the last one repeats. Any other thread
+    gets a 404. ``batch_errors`` fail whole batch requests, in order."""
+
+    def __init__(
+        self,
+        outcomes: dict[tuple[str, str], list[_ThreadOutcome]],
+        batch_errors: list[HttpError] | None = None,
+    ) -> None:
+        self.outcomes = outcomes
+        self.batch_errors = list(batch_errors or [])
+        self.reads: list[tuple[str, str]] = []
+
+    def users(self) -> "_FakeGmail":
+        return self
+
+    def threads(self) -> "_FakeGmail":
+        return self
+
+    def get(self, userId: str, id: str, fields: str) -> tuple[str, str]:  # noqa: A002, ARG002
+        return userId, id
+
+    def new_batch_http_request(
+        self, callback: Callable[[str, Any, Exception | None], None]
+    ) -> _FakeGmailBatch:
+        return _FakeGmailBatch(self, callback)
+
+
+_MAILBOX = "admin@example.com"
+
+
+def _batch_get(
+    gmail: _FakeGmail, thread_ids: list[str]
+) -> tuple[dict[str, dict[str, Any]], dict[str, Exception]]:
+    with patch.object(gmail_connector_module.time, "sleep"):
+        return _batch_get_threads(
+            cast(gmail_connector_module.GmailService, gmail), _MAILBOX, thread_ids
+        )
+
+
+def test_batch_get_threads_retries_rate_limits_and_server_errors() -> None:
+    gmail = _FakeGmail(
+        {
+            (_MAILBOX, "a"): [_http_error(403, "userRateLimitExceeded"), {"id": "a"}],
+            (_MAILBOX, "b"): [_http_error(429), {"id": "b"}],
+            (_MAILBOX, "c"): [_http_error(503), {"id": "c"}],
+            (_MAILBOX, "d"): [{"id": "d"}],
+        }
+    )
+
+    found, errors = _batch_get(gmail, ["a", "b", "c", "d"])
+
+    assert set(found) == {"a", "b", "c", "d"}
+    assert errors == {}
+    # A thread read on the first try is not read again.
+    assert sorted(gmail.reads) == sorted(
+        [(_MAILBOX, tid) for tid in ["a", "b", "c", "d", "a", "b", "c"]]
+    )
+
+
+def test_batch_get_threads_retries_a_failed_batch_request() -> None:
+    gmail = _FakeGmail(
+        {(_MAILBOX, "a"): [{"id": "a"}]},
+        batch_errors=[_http_error(503), _http_error(429)],
+    )
+
+    found, errors = _batch_get(gmail, ["a"])
+
+    assert set(found) == {"a"}
+    assert errors == {}
+    assert gmail.reads == [(_MAILBOX, "a")]
+
+
+def test_batch_get_threads_raises_a_non_retryable_batch_error() -> None:
+    gmail = _FakeGmail({}, batch_errors=[_http_error(400)])
+
+    with pytest.raises(HttpError):
+        _batch_get(gmail, ["a"])
+
+
+def test_batch_get_threads_reports_exhausted_retries_as_errors() -> None:
+    gmail = _FakeGmail(
+        {(_MAILBOX, "a"): [_http_error(429)], (_MAILBOX, "b"): [{"id": "b"}]}
+    )
+
+    found, errors = _batch_get(gmail, ["a", "b"])
+
+    assert set(found) == {"b"}
+    # Never "not found": the thread may still be in this mailbox.
+    assert set(errors) == {"a"}
+    assert (
+        gmail.reads.count((_MAILBOX, "a")) == gmail_connector_module._GMAIL_BATCH_TRIES
+    )
+    assert gmail.reads.count((_MAILBOX, "b")) == 1
+
+
+def _reindex_with_fake_gmail(
+    gmail: _FakeGmail,
+    thread_ids: list[str],
+    admin_service: MagicMock,
+) -> list[Document | ConnectorFailure | HierarchyNode]:
     def fake_get_google_service(service: GoogleService, _: object, __: str) -> object:
         if service is GoogleService.ADMIN:
             return admin_service
         assert service is GoogleService.GMAIL
-        return FakeGmailService()
+        return gmail
 
     connector = GmailConnector()
     connector._creds = MagicMock()
-    connector._primary_admin_email = admin_email
+    connector._primary_admin_email = _MAILBOX
     failures = [
         ConnectorFailure(
             failed_document=DocumentFailure(document_id=thread_id),
             failure_message="synthetic",
         )
-        for thread_id in (admin_thread_id, other_thread_id)
+        for thread_id in thread_ids
     ]
-    with patch.object(
-        gmail_connector_module,
-        "get_google_service",
-        side_effect=fake_get_google_service,
+    with (
+        patch.object(
+            gmail_connector_module,
+            "get_google_service",
+            side_effect=fake_get_google_service,
+        ),
+        patch.object(gmail_connector_module.time, "sleep"),
     ):
-        results = list(connector.reindex(failures))
+        return list(connector.reindex(failures))
+
+
+def _admin_service_listing(user_emails: list[str]) -> MagicMock:
+    admin_service = MagicMock()
+    admin_service.users.return_value.list.return_value.execute.return_value = {
+        "users": [{"primaryEmail": email} for email in user_emails]
+    }
+    return admin_service
+
+
+def test_reindex_reports_exhausted_retries_as_failures() -> None:
+    other_mailbox = "user1@example.com"
+    gmail = _FakeGmail({(_MAILBOX, "aaaa"): [_http_error(429)]})
+
+    results = _reindex_with_fake_gmail(
+        gmail, ["aaaa"], _admin_service_listing([_MAILBOX, other_mailbox])
+    )
+
+    assert len(results) == 1
+    failure = results[0]
+    assert isinstance(failure, ConnectorFailure)
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == "aaaa"
+    assert "Failed to retrieve thread" in failure.failure_message
+    # The thread resolved to a failure, so no other mailbox is searched.
+    assert {mailbox for mailbox, _ in gmail.reads} == {_MAILBOX}
+
+
+def test_reindex_oauth_reads_only_the_admin_mailbox() -> None:
+    """An OAuth user cannot list the domain's users (403), so the crawl reads
+    only the admin's mailbox. Reindex must read only that mailbox too."""
+    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
+    with open(json_path, "r") as f:
+        admin_thread = cast(dict[str, Any], json.load(f))
+    admin_thread_id = cast(str, admin_thread["id"])
+    other_thread_id = "aaaaaaaaaaaaaaaa"
+    gmail = _FakeGmail({(_MAILBOX, admin_thread_id): [admin_thread]})
+    admin_service = MagicMock()
+    admin_service.users.return_value.list.return_value.execute.side_effect = (
+        _http_error(403)
+    )
+
+    results = _reindex_with_fake_gmail(
+        gmail, [admin_thread_id, other_thread_id], admin_service
+    )
 
     docs = [r for r in results if isinstance(r, Document)]
     missing = [r for r in results if isinstance(r, ConnectorFailure)]
     assert [d.id for d in docs] == [admin_thread_id]
     assert docs[0].external_access is not None
-    assert docs[0].external_access.external_user_emails == {admin_email}
+    assert docs[0].external_access.external_user_emails == {_MAILBOX}
     assert len(missing) == 1
     assert missing[0].failed_document is not None
     assert missing[0].failed_document.document_id == other_thread_id
-    assert set(read_mailboxes) == {admin_email}
+    assert {mailbox for mailbox, _ in gmail.reads} == {_MAILBOX}

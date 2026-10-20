@@ -461,7 +461,8 @@ def _batch_get_threads(
                     callback=callback
                 ),
             )
-            for thread_id in pending[start : start + _MAX_GMAIL_BATCH_SIZE]:
+            chunk = pending[start : start + _MAX_GMAIL_BATCH_SIZE]
+            for thread_id in chunk:
                 batch.add(
                     gmail_service.users()  # ty: ignore[unresolved-attribute]
                     .threads()
@@ -472,7 +473,13 @@ def _batch_get_threads(
                     ),
                     request_id=thread_id,
                 )
-            batch.execute()
+            try:
+                batch.execute()
+            except HttpError as e:
+                # The whole batch request failed, so no callback ran.
+                if not _is_retryable_batch_error(e):
+                    raise
+                retry.extend(chunk)
 
         if not retry:
             break
