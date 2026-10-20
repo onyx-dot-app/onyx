@@ -1,8 +1,10 @@
 "use client";
 
+import { installedPluginStatus, sortPlugins } from "@/lib/plugins/sort";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Dropdown, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import {
@@ -107,6 +109,7 @@ type PluginDialog =
   | null;
 
 export default function PluginsPage() {
+  const locale = useLocale();
   const t = useTranslations("actions.plugins");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -153,7 +156,18 @@ export default function PluginsPage() {
   }, [canCreate, canManageActions, canManageApps, router, searchParams]);
 
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredPlugins = plugins.filter((plugin) => {
+  const filteredPlugins = sortPlugins(
+    plugins,
+    (plugin) =>
+      installedPluginStatus(plugin, settings.onyx_craft_available === true),
+    (plugin) =>
+      plugin.kind === "mcp"
+        ? plugin.server.name
+        : plugin.kind === "openapi"
+          ? plugin.tool.name
+          : plugin.app.name,
+    locale
+  ).filter((plugin) => {
     if (kind !== "all" && plugin.kind !== kind) return false;
     const text =
       plugin.kind === "mcp"

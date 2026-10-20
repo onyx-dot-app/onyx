@@ -652,3 +652,49 @@ test("keeps creation controls absent without action-management authority", async
   ).not.toBeInTheDocument();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+test("orders cards by availability, then type, then name", async () => {
+  mockFullAdmin = true;
+  mockNetwork({
+    servers: [
+      {
+        ...mockServer,
+        id: 1,
+        name: "MCP disabled",
+        default_chat_enabled: false,
+      },
+      {
+        ...mockServer,
+        id: 2,
+        name: "MCP Craft only",
+        default_chat_enabled: false,
+        available_in_craft: true,
+      },
+      { ...mockServer, id: 3, name: "MCP Chat active" },
+    ],
+    tools: [
+      { ...tool, id: 1, name: "OpenAPI disabled", enabled: false },
+      { ...tool, id: 2, name: "OpenAPI active" },
+    ],
+    apps: [
+      { ...externalApp, id: 1, name: "App disabled", enabled: false },
+      { ...externalApp, id: 2, name: "App active" },
+    ],
+  });
+  render(<PluginsPage />);
+  await waitFor(() =>
+    expect(
+      screen
+        .getAllByRole("group", { name: /^(MCP|OpenAPI|App) / })
+        .map((card) => card.getAttribute("aria-label"))
+    ).toEqual([
+      "MCP Chat active",
+      "MCP Craft only",
+      "OpenAPI active",
+      "App active",
+      "MCP disabled",
+      "OpenAPI disabled",
+      "App disabled",
+    ])
+  );
+});

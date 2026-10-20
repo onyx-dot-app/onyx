@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "Activado",
         "off": "Desactivado",
-        "unknown": "Desconocida"
+        "unknown": "Desconocida",
+        "disabledByAdmin": "Desactivado por el administrador",
+        "disabledByYou": "Desactivado por ti",
+        "agents": "Agentes personalizados",
+        "notAvailable": "No disponible"
       },
       "state": {
         "loading": "Cargando complementos",

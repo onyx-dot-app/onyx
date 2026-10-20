@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "开启",
         "off": "关闭",
-        "unknown": "未知"
+        "unknown": "未知",
+        "disabledByAdmin": "已被管理员禁用",
+        "disabledByYou": "已被你禁用",
+        "agents": "自定义智能体",
+        "notAvailable": "不可用"
       },
       "state": {
         "loading": "正在加载插件",

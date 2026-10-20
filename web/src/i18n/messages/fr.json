@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "Activé",
         "off": "Désactivé",
-        "unknown": "Inconnue"
+        "unknown": "Inconnue",
+        "disabledByAdmin": "Désactivé par l’administrateur",
+        "disabledByYou": "Désactivé par vous",
+        "agents": "Agents personnalisés",
+        "notAvailable": "Non disponible"
       },
       "state": {
         "loading": "Chargement des extensions",

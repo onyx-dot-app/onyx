@@ -1544,6 +1544,9 @@ def get_craft_mcp_servers_for_user(
     db_mcp_servers = get_craft_enabled_mcp_servers(
         db, user, include_personal_disabled=True
     )
+    default_chat_server_ids = get_default_chat_mcp_server_ids(
+        [server.id for server in db_mcp_servers], db
+    )
     user_configs = get_user_connection_configs(
         [s.id for s in db_mcp_servers], user.email, db
     )
@@ -1552,6 +1555,7 @@ def get_craft_mcp_servers_for_user(
         server = _db_mcp_server_to_api_mcp_server(
             db_server, db, request_user=user, user_configs=user_configs
         )
+        server.default_chat_enabled = server.id in default_chat_server_ids
         server.craft_connected = (
             server.connection_status == MCPConnectionStatus.CONNECTED
         )

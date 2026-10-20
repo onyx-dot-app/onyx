@@ -937,7 +937,11 @@
         "craft": "Craft",
         "on": "مفعّل",
         "off": "معطّل",
-        "unknown": "غير معروف"
+        "unknown": "غير معروف",
+        "disabledByAdmin": "عطّله المسؤول",
+        "disabledByYou": "عطّلته أنت",
+        "agents": "الوكلاء المخصصون",
+        "notAvailable": "غير متاح"
       },
       "state": {
         "loading": "جارٍ تحميل الإضافات",

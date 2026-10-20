@@ -31,6 +31,14 @@ how an admin creates the `Tool` row and its associated `MCPServer` /
 An admin who wants Onyx to call an outside system has two paths, both under
 Admin > Plugins.
 
+Both overview pages sort by status: green active cards, yellow issues, then gray cards.
+Within each status, types appear as MCP, OpenAPI, then Craft App.
+Cards with the same status and type sort alphabetically by displayed name,
+using the current locale and numeric ordering.
+Admin MCPs count as active when Chat or an available Craft surface is enabled.
+Member app sorting and indicators share
+associated-skill state, so saved skill changes update both.
+
 The Plugins directory combines permission-stamped MCP servers, OpenAPI schemas,
 and full-admin-only external apps. External-app admin records are never fetched
 for scoped action managers. Add opens a type dropdown. MCP opens its suggested
@@ -90,13 +98,12 @@ The member directory uses `/mcp/servers`, `/tool`, and the caller's OAuth token
 status. Craft-enabled members also see external apps from `/build/apps`.
 It does not use admin listing endpoints. All, Connected, and Needs sign-in
 filters distinguish account state without separating services by protocol.
-Workspace credentials and no-auth services count as connected. Connected external apps with disabled associated skills show a yellow directory indicator with an explanatory tooltip. Card type labels use the singular Craft App.
+Workspace credentials and no-auth services count as connected. Connected external apps with disabled associated skills show a yellow directory indicator with an explanatory tooltip. Card type labels use the singular Craft App. Surface support appears in the status indicator instead of Chat only or Craft only tags.
 Loading and failed account-status checks remain distinct from missing credentials.
 Connected and needs-auth cards omit the extra connection text line; the dot and
 its tooltip retain account status. Setup errors and unavailable states remain visible.
-Craft App cards show their Craft-only scope as a passive tag beside the
-description, without adding a third line or shifting the service icon.
-OpenAPI cards use the matching Chat-only tag and scope tooltip.
+Craft App and OpenAPI cards show unsupported surfaces in the availability indicator and tooltip.
+The Craft MCP catalog includes default Chat availability for this indicator and sorting.
 
 Member details show returned tool metadata without live discovery. Provider account
 emails and granted scopes are not available in these responses. The UI does not
@@ -175,7 +182,7 @@ Member UI does not display read/write policy badges or promise approval before w
 Installed rows show a status indicator beside the delete action.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
-neutral gray when disabled, matching member directory indicators.
+neutral gray when disabled.
 Admin indicators show workspace availability only; individual authentication
 never changes their color or tooltip. Personal pages retain orange needs-auth
 indicators. Tooltips show both workspace states when Craft is available.
@@ -451,8 +458,16 @@ Member plugin Tools views place Available tools and Approval settings in nested 
 External apps retain a separate Skills tab. Approval links open Tools > Approval settings directly.
 Personal approval drafts survive tab changes and write only on Save.
 Opening the plugin modal preloads approval settings, before Tools is selected. If a tab switch must wait, the available list stays visible with a tab spinner.
-The personal directory dot describes account state, not workspace availability:
-green means connected, orange means credentials are needed, gray means unavailable.
+Member indicators and tooltip rows use Main Chat, Custom agents, then Craft.
+The segments run clockwise: upper left, upper right, then bottom.
+Workspace setup uses one gray dot and one setup message instead of surface rows.
+Other plugin states show three segments. Unsupported surfaces are gray and say Not available;
+these segments do not lower the plugin's sort priority. Tooltip rows have no introductory status sentence.
+Supported segments are green when connected and enabled, orange when sign-in is needed
+or an admin or personal setting disables the surface, and gray when state is unknown.
+Tooltips identify admin-disabled and personally disabled surfaces.
+Custom agents remain ready when only default Chat or personal Craft preferences are disabled;
+each agent must still be configured with the plugin. Sorting uses the same supported-surface rules.
 Ordinary discovery of an existing server does not change availability.
 MCP Configuration has independent Chat and Craft draft switches. Toggling them makes no API writes.
 Save applies the changes; failed saves retain the draft for retry.
