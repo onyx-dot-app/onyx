@@ -333,7 +333,9 @@ class _TokenCheck(_LinearCheck):
         )
         if viewer.email is None:
             return CheckOutput(summary="Signed in to Linear")
-        return CheckOutput(summary=f"Signed in as {viewer.email}")
+        return CheckOutput(
+            summary=_fit(f"Signed in as {viewer.email}", "Signed in to Linear")
+        )
 
 
 class _TeamsCheck(_LinearCheck):

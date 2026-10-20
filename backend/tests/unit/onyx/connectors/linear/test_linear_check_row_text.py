@@ -141,6 +141,18 @@ def test_sign_in_names_the_user() -> None:
     assert result.summary == "Signed in as ada@x.com"
 
 
+def test_a_long_email_falls_back_to_a_short_sign_in_line() -> None:
+    gateway = _gateway()
+    gateway.get_viewer.return_value = LinearViewer(
+        email="ada.lovelace.engineering@example.com", guest=False
+    )
+
+    result = _run("linear_token", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Signed in to Linear"
+
+
 def test_a_rejected_key_names_a_new_key_and_oauth_names_reconnect() -> None:
     gateway = _gateway()
     gateway.get_viewer.side_effect = LinearAuthError(
