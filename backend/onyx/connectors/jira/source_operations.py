@@ -83,13 +83,21 @@ def _translate_errors() -> Iterator[None]:
     try:
         yield
     except JIRAError as e:
+        # ``str(e)`` prints the request and response headers, which hold the
+        # credential (Basic auth) and session cookies. So the message is not
+        # ``str(e)``, and ``from None`` keeps the SDK error, with its text,
+        # out of the stored stack trace.
         raise JiraApiError(
-            str(e),
+            f"JiraError HTTP {e.status_code}",
             status_code=e.status_code,
-            method=e.response.request.method if e.response is not None else None,
+            method=(
+                e.response.request.method
+                if e.response is not None and e.response.request is not None
+                else None
+            ),
             url=e.url,
             body=_error_text(e),
-        ) from e
+        ) from None
     except requests.HTTPError as e:
         raise JiraApiError(
             str(e),
