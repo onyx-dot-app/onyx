@@ -131,110 +131,114 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
       }}
     >
       <Modal.Content width="md">
-        <Modal.Header
-          icon={SvgWallet}
-          title={isEdit ? t("form.editTitle") : t("form.newTitle")}
-          description={t("form.description")}
-          onClose={onClose}
-        />
-        <Modal.Body alignItems="stretch">
-          <InputHorizontal
-            withLabel
-            title={t("form.model.label")}
-            description={t("form.model.description")}
-            fillInput
-            center
-          >
-            {isEdit ? (
-              <InputTypeIn value={modelLabel} variant="readOnly" />
-            ) : (
-              <SimpleModelSelector
-                nullable
-                providers={filterModelConfigurations(llmProviders ?? [], {
-                  visibleOnly: false,
-                })}
-                value={modelConfigId}
-                grouped={!hideProviderGrouping}
-                modelPaging={modelPaging}
-                onChange={(modelConfigurationId) => {
-                  const opt = findLlmOptionById(
-                    llmProviders,
-                    modelConfigurationId
-                  );
-                  setModel(opt?.modelName ?? "");
-                  setProvider(opt?.provider ?? "");
-                  setModelConfigId(modelConfigurationId);
-                }}
-              />
-            )}
-          </InputHorizontal>
-
-          <InputHorizontal
-            withLabel
-            title={t("form.inputRate.label")}
-            description={t("form.units.description")}
-            fillInput
-            center
-          >
-            <InputCurrency
-              value={inputRate}
-              onChange={setInputRate}
-              precision={RATE_PRECISION}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            withLabel
-            title={t("form.outputRate.label")}
-            description={t("form.units.description")}
-            fillInput
-            center
-          >
-            <InputCurrency
-              value={outputRate}
-              onChange={setOutputRate}
-              precision={RATE_PRECISION}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            withLabel
-            title={t("form.cacheRate.label")}
-            description={t("form.cacheRate.description")}
-            suffix="optional"
-            fillInput
-            center
-          >
-            <InputCurrency
-              value={cacheRate}
-              onChange={setCacheRate}
-              precision={RATE_PRECISION}
-            />
-          </InputHorizontal>
-        </Modal.Body>
-        <Modal.Footer>
-          <BasicModalFooter
-            cancel={
-              <Button
-                prominence="secondary"
-                onClick={onClose}
-                disabled={submitting}
-              >
-                {t("form.cancelButton.label")}
-              </Button>
-            }
-            submit={
-              <Button
-                onClick={handleSubmit}
-                disabled={!canSubmit || submitting}
-              >
-                {isEdit
-                  ? t("form.saveButton.label")
-                  : t("form.addButton.label")}
-              </Button>
-            }
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <Modal.Header
+            icon={SvgWallet}
+            title={isEdit ? t("form.editTitle") : t("form.newTitle")}
+            description={t("form.description")}
+            onClose={onClose}
           />
-        </Modal.Footer>
+          <Modal.Body alignItems="stretch">
+            <InputHorizontal
+              withLabel
+              title={t("form.model.label")}
+              description={t("form.model.description")}
+              fillInput
+              center
+            >
+              {isEdit ? (
+                <InputTypeIn value={modelLabel} variant="readOnly" />
+              ) : (
+                <SimpleModelSelector
+                  nullable
+                  providers={filterModelConfigurations(llmProviders ?? [], {
+                    visibleOnly: false,
+                  })}
+                  value={modelConfigId}
+                  grouped={!hideProviderGrouping}
+                  modelPaging={modelPaging}
+                  onChange={(modelConfigurationId) => {
+                    const opt = findLlmOptionById(
+                      llmProviders,
+                      modelConfigurationId
+                    );
+                    setModel(opt?.modelName ?? "");
+                    setProvider(opt?.provider ?? "");
+                    setModelConfigId(modelConfigurationId);
+                  }}
+                />
+              )}
+            </InputHorizontal>
+
+            <InputHorizontal
+              withLabel
+              title={t("form.inputRate.label")}
+              description={t("form.units.description")}
+              fillInput
+              center
+            >
+              <InputCurrency
+                value={inputRate}
+                onChange={setInputRate}
+                precision={RATE_PRECISION}
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              withLabel
+              title={t("form.outputRate.label")}
+              description={t("form.units.description")}
+              fillInput
+              center
+            >
+              <InputCurrency
+                value={outputRate}
+                onChange={setOutputRate}
+                precision={RATE_PRECISION}
+              />
+            </InputHorizontal>
+
+            <InputHorizontal
+              withLabel
+              title={t("form.cacheRate.label")}
+              description={t("form.cacheRate.description")}
+              suffix="optional"
+              fillInput
+              center
+            >
+              <InputCurrency
+                value={cacheRate}
+                onChange={setCacheRate}
+                precision={RATE_PRECISION}
+              />
+            </InputHorizontal>
+          </Modal.Body>
+          <Modal.Footer>
+            <BasicModalFooter
+              cancel={
+                <Button
+                  prominence="secondary"
+                  onClick={onClose}
+                  disabled={submitting}
+                >
+                  {t("form.cancelButton.label")}
+                </Button>
+              }
+              submit={
+                <Button type="submit" disabled={!canSubmit || submitting}>
+                  {isEdit
+                    ? t("form.saveButton.label")
+                    : t("form.addButton.label")}
+                </Button>
+              }
+            />
+          </Modal.Footer>
+        </form>
       </Modal.Content>
     </Modal>
   );
