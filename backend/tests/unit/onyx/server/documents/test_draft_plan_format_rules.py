@@ -97,6 +97,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
             "sites",
             SITE_URL_FORMAT_ERROR,
         ),
+        (
+            DocumentSource.SHAREPOINT,
+            {"sites": ["https://acme.sharepoint.com/eng?next=/sites/hr"]},
+            "sites",
+            SITE_URL_FORMAT_ERROR,
+        ),
         # Indexing validates every entry, blanks included.
         (
             DocumentSource.SHAREPOINT,
