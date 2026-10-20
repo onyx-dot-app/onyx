@@ -99,6 +99,7 @@ export default function ChatDocumentDisplay({
           font="main-ui-body"
           color="text-05"
           maxLines={2}
+          wordWrap="break-all"
         >
           {title}
         </OverflowText>
