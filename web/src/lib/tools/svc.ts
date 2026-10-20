@@ -99,6 +99,7 @@ export async function validateToolDefinition(toolData: {
 }
 
 export async function createCustomTool(toolData: {
+  enabled?: boolean;
   name: string;
   description?: string;
   definition: Record<string, any>;

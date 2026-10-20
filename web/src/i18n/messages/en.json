@@ -219,6 +219,15 @@
         "createFailed": "Failed to create OpenAPI action",
         "invalidJson": "Invalid JSON format in OpenAPI schema definition",
         "updateFailed": "Failed to update OpenAPI action"
+      },
+      "humanDescription": {
+        "title": "Description for Humans",
+        "hint": "Displayed on the plugin card and in plugin details."
+      },
+      "agentDescription": {
+        "title": "Description for Agents",
+        "hint": "Edits info.description in the OpenAPI schema.",
+        "disabled": "Enter a valid schema to edit this field."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Use your account in Craft.",
         "craftOnly": "Craft only",
-        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it."
+        "craftOnlyDescription": "This app is available in Craft. Main Chat does not support it.",
+        "craftDisabledDescription": "This app is disabled in Craft. Main Chat does not support it."
       }
     },
     "plugins": {
@@ -1045,9 +1055,13 @@
         "manageAvailability": "Manage workspace availability",
         "more": "More actions",
         "disableChat": "Disable for main Chat",
-        "enableChat": "Enable for main Chat",
+        "enableChat": "Enable in default Chat",
         "disableCraft": "Disable for Craft",
-        "enableCraft": "Enable for Craft"
+        "enableCraft": "Enable for Craft",
+        "chatDescription": "Make this plugin available in chats without a custom agent. Access controls still apply.",
+        "mcpCraftDescription": "Make this plugin available in Craft. Access controls and tool permissions still apply.",
+        "craftAppDescription": "Make this app available in Craft. Connection and approval requirements still apply.",
+        "workspaceDescription": "Make this plugin available in Chat and custom agents. Access controls and authentication requirements still apply."
       },
       "craftApp": {
         "tabs": {
@@ -1073,7 +1087,7 @@
         },
         "createTitle": "Add an OpenAPI plugin",
         "detailDescription": "Manage this API and the tools available to your agents.",
-        "detailsTitle": "Plugin details",
+        "detailsTitle": "Configuration",
         "schemaTitle": "OpenAPI schema",
         "notFound": "Plugin not found",
         "loadFailed": "Could not load this plugin",
@@ -1127,6 +1141,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft App",
         "manage": {
           "label": "Manage {name}"
         },
@@ -1206,15 +1221,16 @@
     "mcpTools": {
       "title": "Tools",
       "enabledTab": "Available tools",
-      "policiesTab": "Craft permissions",
+      "policiesTab": "Approval settings",
       "refresh": "Refresh tools",
       "loadError": "Could not load tools",
       "saveError": "Could not save tool settings",
       "refreshError": "Could not refresh tools",
-      "search": "Search tools"
+      "search": "Search tools",
+      "enabledCount": "Tools enabled: {enabled} of {total}"
     },
     "mcpDetail": {
-      "configuration": "Server configuration",
+      "configuration": "Configuration",
       "authentication": "Authentication",
       "loadError": "Could not load MCP server",
       "notFound": "MCP server not found",

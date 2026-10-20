@@ -59,8 +59,11 @@ export class AdminMcpServersPage {
     await expect(this.serverUrlInput).toBeVisible();
   }
 
-  async enterServerUrlAndContinue(url: string): Promise<void> {
+  async enterServerUrlAndContinue(url: string, group?: string): Promise<void> {
     await this.serverUrlInput.fill(url);
+    if (group) {
+      await this.restrictToGroup(group);
+    }
     const next = this.page.getByRole("button", {
       name: "Continue",
       exact: true,
@@ -81,20 +84,12 @@ export class AdminMcpServersPage {
     await expect(this.accessControlSelector).toBeVisible();
   }
 
-  async fillServerDetails(details: {
-    name: string;
-    /** Restrict to this group. Required for a scoped manager: the backend
-     *  refuses a public server outside the groups they manage. */
-    group?: string;
-  }): Promise<void> {
+  async fillServerDetails(details: { name: string }): Promise<void> {
     await this.page.getByRole("button", { name: "Back", exact: true }).click();
     await this.nameInput.fill(details.name);
     await this.page
       .getByRole("button", { name: "Continue", exact: true })
       .click();
-    if (details.group) {
-      await this.restrictToGroup(details.group);
-    }
   }
 
   async restrictToGroup(group: string): Promise<void> {

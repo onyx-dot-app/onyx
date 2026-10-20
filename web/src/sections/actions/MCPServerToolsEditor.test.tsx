@@ -148,7 +148,6 @@ it("uses raw names for Craft policies and preserves disabled-tool overrides", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      users_can_manage_policies: true,
       action_policies: { raw_tool: "ALWAYS", disabled_tool: "DENY" },
     })
   );
@@ -280,7 +279,6 @@ it("treats mixed permissions as valid and excludes removed tools from saves", as
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      users_can_manage_policies: true,
       action_policies: { raw_tool: "ALWAYS" },
     })
   );
@@ -423,7 +421,6 @@ it("searches policy rows while bulk policy changes include hidden enabled tools"
   );
   await waitFor(() =>
     expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      users_can_manage_policies: true,
       action_policies: {
         raw_tool: "ALWAYS",
         hidden_tool: "ALWAYS",
@@ -504,27 +501,14 @@ it("locks per-tool and bulk policies while saving a policy draft", async () => {
   await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false));
 });
 
-it("saves the user management switch with the workspace policies", async () => {
-  const user = setupUser();
+it("keeps user management out of the tool permissions tab", async () => {
   render(<Harness />);
-  await user.click(
+  await setupUser().click(
     await screen.findByRole("tab", {
       name: messages.actions.mcpTools.policiesTab,
     })
   );
-  await user.click(
-    screen.getByRole("switch", { name: "Let users manage approval settings" })
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: messages.actions.addMcpModal.submitButton.saveLabel,
-    })
-  );
-  await waitFor(() =>
-    expect(updateMCPServer).toHaveBeenCalledWith(7, {
-      action_policies: { disabled_tool: "DENY" },
-      users_can_manage_policies: false,
-    })
-  );
-  expect(updateToolsStatus).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("switch", { name: "Let users manage approval settings" })
+  ).not.toBeInTheDocument();
 });

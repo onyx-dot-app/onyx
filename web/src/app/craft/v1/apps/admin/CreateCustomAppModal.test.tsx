@@ -85,6 +85,125 @@ function renderExistingApp({
 }
 
 describe("CreateCustomAppModal", () => {
+  it("saves Craft availability above user permissions", async () => {
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    renderExistingApp();
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    const permissions = screen.getByRole("switch", {
+      name: "Let users manage approval settings",
+    });
+    expect(
+      availability.compareDocumentPosition(permissions) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(availability);
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
+  });
+
+  it("preserves availability changes made by another administrator", async () => {
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue({ ...CUSTOM_APP, enabled: false });
+    const view = render(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: "Enable for Craft" })
+    ).not.toBeChecked();
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "New name" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalled()
+    );
+    expect(
+      jest.mocked(externalAppsService.updateExternalApp).mock.calls[0]?.[1]
+    ).not.toHaveProperty("enabled");
+  });
+
+  it("keeps an availability draft through saved-value refreshes", async () => {
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    jest
+      .mocked(externalAppsService.updateExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
+    const view = render(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    const availability = screen.getByRole("switch", {
+      name: "Enable for Craft",
+    });
+    fireEvent.click(availability);
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    view.rerender(
+      <CreateCustomAppModal
+        onClose={onClose}
+        onSaved={onSaved}
+        existingApp={CUSTOM_APP}
+      />
+    );
+    expect(availability).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(
+        CUSTOM_APP.id,
+        expect.objectContaining({ enabled: false })
+      )
+    );
+  });
+
+  it("describes a disabled app accurately", () => {
+    render(
+      <CreateCustomAppModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        existingApp={{ ...CUSTOM_APP, enabled: false }}
+      />
+    );
+    expect(
+      screen.getAllByText(
+        "This app is disabled in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+  });
+
   it("labels the name and discards a new draft from the close button", () => {
     const onClose = jest.fn();
     render(
@@ -108,7 +227,12 @@ describe("CreateCustomAppModal", () => {
 
   it("keeps the editor shell stable during discard confirmation", () => {
     renderExistingApp();
-    expect(screen.getAllByText("https://api.acme.test")[0]).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "This app is available in Craft. Main Chat does not support it."
+      )[0]
+    ).toBeVisible();
+    expect(screen.queryByText("https://api.acme.test")).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Draft" },
     });
@@ -204,6 +328,7 @@ describe("CreateCustomAppModal", () => {
         name: "Acme CRM",
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
+        enabled: true,
         users_can_manage_policies: true,
         organization_credentials: {},
       });
@@ -311,6 +436,7 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(externalAppsService.createCustomExternalApp).toHaveBeenCalledWith({
+        enabled: true,
         users_can_manage_policies: true,
         name: "Reports API",
         upstream_url_patterns: ["https://reports.internal/*"],

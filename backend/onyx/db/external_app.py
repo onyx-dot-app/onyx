@@ -315,6 +315,7 @@ def create_external_app(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
     action_policies: dict[str, ActionPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Create an external-app gateway row and its policy state.
 
@@ -331,6 +332,7 @@ def create_external_app(
             organization_credentials, upstream_url_patterns
         )
     app = ExternalApp(
+        enabled=enabled,
         name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,

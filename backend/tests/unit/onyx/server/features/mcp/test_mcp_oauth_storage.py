@@ -324,6 +324,8 @@ def test_cimd_off_replaces_shared_cimd_registration_with_dcr_without_conflict(
     expected_registration = dcr_registration.model_dump(mode="json")
     assert config_data[101][MCPOAuthKeys.CLIENT_INFO.value] == expected_registration
     assert config_data[100][MCPOAuthKeys.CLIENT_INFO.value] == expected_registration
+    assert config_data[101]["oauth_setup_mode"] == "automatic"
+    assert config_data[100]["oauth_setup_mode"] == "automatic"
     assert asyncio.run(storage.get_client_info()) == dcr_registration
 
 
@@ -367,6 +369,7 @@ def test_client_registration_isolated_to_each_locked_configuration_row(
     assert config_data[101][MCPOAuthKeys.CLIENT_INFO.value] == expected_registration
     assert config_data[100] == {
         "unrelated": "preserved",
+        "oauth_setup_mode": "automatic",
         MCPOAuthKeys.CLIENT_INFO.value: expected_registration,
     }
     assert update_config.call_count == 2

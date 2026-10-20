@@ -6,6 +6,7 @@ import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
 import {
   Button,
+  Divider,
   InputTypeIn,
   Modal,
   InputPasswordTypeIn,
@@ -21,6 +22,7 @@ export type { PolicyEditorItem } from "@/sections/actions/PolicyEditor";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
@@ -45,11 +47,13 @@ interface ActionPolicyEditorModalProps {
   }) => React.ReactNode;
   alternateContentConfirmationOpen?: boolean;
   isAdditionalContentDirty?: boolean;
+  enabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
   usersCanManagePolicies?: boolean;
   onUsersCanManagePoliciesChange?: (value: boolean) => void;
   onClose: () => void;
   title: string;
-  displayUrl?: string;
+  description?: string | RichStr;
   icon?: IconFunctionComponent;
   authenticationInstructions?: string | RichStr;
   /** Shown in place of field inputs when there is nothing to type in. */
@@ -83,11 +87,13 @@ export default function ActionPolicyEditorModal({
   alternateContent,
   alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
+  enabled,
+  onEnabledChange,
   usersCanManagePolicies,
   onUsersCanManagePoliciesChange,
   onClose,
   title,
-  displayUrl,
+  description,
   icon,
   authenticationInstructions,
   note,
@@ -180,7 +186,7 @@ export default function ActionPolicyEditorModal({
           <InputVertical
             key={field.key}
             title={field.label}
-            subDescription={field.description}
+            description={field.description}
             withLabel={`${fieldId}-${field.key}`}
           >
             <Input
@@ -225,7 +231,7 @@ export default function ActionPolicyEditorModal({
           <>
             <Modal.Header
               title={title}
-              description={displayUrl || undefined}
+              description={description}
               icon={icon}
               onClose={requestClose}
             />
@@ -243,6 +249,18 @@ export default function ActionPolicyEditorModal({
                         renderFields("configuration")
                       ) : (
                         <Text font="main-ui-action">{title}</Text>
+                      )}
+                      {((enabled !== undefined && onEnabledChange) ||
+                        (usersCanManagePolicies !== undefined &&
+                          onUsersCanManagePoliciesChange)) && (
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
+                      )}
+                      {enabled !== undefined && onEnabledChange && (
+                        <PluginAvailabilitySwitch
+                          enabled={enabled}
+                          onChange={onEnabledChange}
+                          disabled={isSaving}
+                        />
                       )}
                       {usersCanManagePolicies !== undefined &&
                         onUsersCanManagePoliciesChange && (

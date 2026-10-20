@@ -231,7 +231,7 @@ def create_custom_tool(
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
-        enabled=True,
+        enabled=tool_data.enabled,
     )
     db_session.commit()
     return ToolSnapshot.from_model(tool)

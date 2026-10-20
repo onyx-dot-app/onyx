@@ -219,6 +219,15 @@
         "createFailed": "创建 OpenAPI 操作失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
         "updateFailed": "更新 OpenAPI 操作失败"
+      },
+      "humanDescription": {
+        "title": "面向用户的描述",
+        "hint": "显示在插件卡片和插件详情中。"
+      },
+      "agentDescription": {
+        "title": "面向智能体的描述",
+        "hint": "编辑 OpenAPI 架构中的 info.description。",
+        "disabled": "请输入有效的架构以编辑此字段。"
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "在 Craft 中使用你的账号。",
         "craftOnly": "仅限 Craft",
-        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。"
+        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。",
+        "craftDisabledDescription": "此应用在 Craft 中已禁用。主聊天不支持此应用。"
       }
     },
     "plugins": {
@@ -1045,9 +1055,13 @@
         "manageAvailability": "管理工作区可用性",
         "more": "更多操作",
         "disableChat": "在主聊天中禁用",
-        "enableChat": "在主聊天中启用",
+        "enableChat": "在默认聊天中启用",
         "disableCraft": "在 Craft 中禁用",
-        "enableCraft": "在 Craft 中启用"
+        "enableCraft": "在 Craft 中启用",
+        "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
+        "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
+        "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
+        "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"
       },
       "craftApp": {
         "tabs": {
@@ -1073,7 +1087,7 @@
         },
         "createTitle": "添加 OpenAPI 插件",
         "detailDescription": "管理此 API 和智能体可用的工具。",
-        "detailsTitle": "插件详情",
+        "detailsTitle": "配置",
         "schemaTitle": "OpenAPI 架构",
         "notFound": "未找到插件",
         "loadFailed": "无法加载此插件",
@@ -1127,6 +1141,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft 应用",
         "manage": {
           "label": "管理 {name}"
         },
@@ -1206,15 +1221,16 @@
     "mcpTools": {
       "title": "工具",
       "enabledTab": "可用工具",
-      "policiesTab": "Craft 权限",
+      "policiesTab": "审批设置",
       "refresh": "刷新工具",
       "loadError": "无法加载工具",
       "saveError": "无法保存工具设置",
       "refreshError": "无法刷新工具",
-      "search": "搜索工具"
+      "search": "搜索工具",
+      "enabledCount": "已启用工具：{enabled} / {total}"
     },
     "mcpDetail": {
-      "configuration": "服务器配置",
+      "configuration": "配置",
       "authentication": "身份验证",
       "loadError": "无法加载 MCP 服务器",
       "notFound": "未找到 MCP 服务器",

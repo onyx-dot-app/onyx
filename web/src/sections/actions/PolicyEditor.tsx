@@ -11,6 +11,7 @@ import {
   InputSwitch,
   Tooltip,
 } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
@@ -25,7 +26,6 @@ export interface PolicyEditorItem {
 
 interface PolicyEditorProps {
   showTitle?: boolean;
-  showDescription?: boolean;
   disabled?: boolean;
   onReset?: () => void;
   resetLabel?: string | RichStr;
@@ -36,7 +36,6 @@ interface PolicyEditorProps {
 
 export default function PolicyEditor({
   showTitle = true,
-  showDescription = true,
   disabled = false,
   onReset,
   resetLabel,
@@ -47,6 +46,8 @@ export default function PolicyEditor({
   const t = useTranslations("craft.apps.policyEditor");
   const copy = useTranslations("craft.actionPolicies");
   const policyCopy = useTranslations("actions.policyToggle");
+  const toolCopy = useTranslations("actions.mcpTools");
+  const detailCopy = useTranslations("actions.memberPlugins.detail");
   const [query, setQuery] = useState("");
   const search = query.trim().toLocaleLowerCase();
   const shownItems = items.filter((item) =>
@@ -72,25 +73,19 @@ export default function PolicyEditor({
   }
 
   return (
-    <div className="flex flex-col gap-2 pt-2">
+    <div className="flex flex-col gap-4">
       {showTitle && <Text font="main-ui-action">{t("permissions.title")}</Text>}
-      {showDescription && (
-        <Text font="secondary-body" color="text-03">
-          {t("permissions.description")}
-        </Text>
-      )}
-
       <InputTypeIn
         searchIcon
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder={copy("searchActions")}
-        aria-label={copy("searchActions")}
+        placeholder={toolCopy("search")}
+        aria-label={toolCopy("search")}
       />
       {onChange && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Text font="secondary-body" color="text-03">
-            {copy("applyMatching", { count: editableItems.length })}
+            {detailCopy("toolCount", { count: shownItems.length })}
           </Text>
           <div className="ms-auto w-44">
             <InputSingleSelect
@@ -203,19 +198,20 @@ export function UserManagementSwitch({
 }: UserManagementSwitchProps) {
   const t = useTranslations("craft.actionPolicies");
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex flex-col">
-        <Text font="main-ui-action">{t("userManagement")}</Text>
-        <Text font="secondary-body" color="text-03">
-          {t("userManagementDescription")}
-        </Text>
-      </div>
-      <InputSwitch
-        disabled={disabled}
-        checked={value}
-        onCheckedChange={onChange}
-        aria-label={t("userManagement")}
-      />
-    </div>
+    <ContentAction
+      title={t("userManagement")}
+      description={t("userManagementDescription")}
+      sizePreset="main-ui"
+      variant="section"
+      padding={0}
+      rightChildren={
+        <InputSwitch
+          disabled={disabled}
+          checked={value}
+          onCheckedChange={onChange}
+          aria-label={t("userManagement")}
+        />
+      }
+    />
   );
 }

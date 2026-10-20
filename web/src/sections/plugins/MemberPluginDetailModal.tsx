@@ -443,7 +443,6 @@ export default function MemberPluginDetailModal({
                     {policyApp ? (
                       <PolicyEditor
                         showTitle={false}
-                        showDescription={false}
                         items={policyApp.actions.map((item) => ({
                           id: item.action_id,
                           name: item.normalised_name,

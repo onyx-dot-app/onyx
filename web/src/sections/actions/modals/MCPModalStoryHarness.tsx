@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import useSWR, { SWRConfig, type State } from "swr";
 import { Button, Modal, MessageCard } from "@opal/components";
@@ -461,6 +462,7 @@ function MockEnvironment({
 const REOPEN_PREVIEW = "Reopen preview";
 
 function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
+  const t = useTranslations("actions.mcpDetail");
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
@@ -489,7 +491,7 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
       >
         <Modal.Content preventAccidentalClose={false}>
           <Modal.Header
-            title={kind === "auth" ? "Authentication" : "Server configuration"}
+            title={kind === "auth" ? t("authentication") : t("configuration")}
             onClose={close}
           />
           <Modal.Body padding={0}>

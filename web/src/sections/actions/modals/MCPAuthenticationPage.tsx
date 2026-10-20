@@ -39,6 +39,7 @@ import * as Yup from "yup";
 import { useSettings } from "@/lib/settings/hooks";
 import {
   MCPAuthenticationPerformer,
+  MCPConnectionStatus,
   MCPAuthenticationType,
   MCPOAuthProviderMode,
   MCPTransportType,
@@ -143,7 +144,9 @@ export default function MCPAuthenticationPage({
       recommendation?.kind === "auth_unknown" ? null : initialValues.auth_type
     );
   const persistedValues = useRef(initialValues);
-  const [hasChosenSetup, setHasChosenSetup] = useState(false);
+  const [hasChosenSetup, setHasChosenSetup] = useState(
+    "oauth_setup_mode" in mcpServer && mcpServer.oauth_setup_mode != null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   useEffect(() => onBusyChange(isSubmitting), [isSubmitting, onBusyChange]);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
@@ -152,6 +155,12 @@ export default function MCPAuthenticationPage({
     message: string;
     reason?: MCPOAuthFailureReason;
   } | null>(null);
+
+  const savedConnectionReady =
+    "status" in mcpServer &&
+    mcpServer.status === MCPServerStatus.CONNECTED &&
+    mcpServer.connection_status !== MCPConnectionStatus.NOT_CONNECTED &&
+    mcpServer.connection_status !== MCPConnectionStatus.REAUTH_REQUIRED;
 
   const isOAuthEnabled = useOAuthPassThroughEnabled();
   const recommendedAuthentication =
@@ -396,7 +405,7 @@ export default function MCPAuthenticationPage({
       validate={(values) => validateMCPAuthCredentials(values, t)}
       onSubmit={handleSubmit}
     >
-      {({ values, setFieldValue, setValues, isValid }) => {
+      {({ values, setFieldValue, setValues, isValid, dirty }) => {
         return (
           <Form
             id={formId}
@@ -641,6 +650,11 @@ export default function MCPAuthenticationPage({
                   <Button
                     disabled={
                       !canSubmit ||
+                      (!dirty &&
+                        savedConnectionReady &&
+                        !chatEnableIntent &&
+                        !recommendation &&
+                        !connectionError) ||
                       !isValid ||
                       selectedAuthentication === null ||
                       isSubmitting ||

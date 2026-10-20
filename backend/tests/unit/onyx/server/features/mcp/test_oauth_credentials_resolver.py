@@ -18,7 +18,8 @@ from onyx.server.features.mcp.api import (
     _build_oauth_admin_config_data_for_update,
     _resolve_oauth_credentials,
 )
-from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.credentials import mcp_oauth_setup_mode
+from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from onyx.utils.encryption import mask_string
 
 TokenEndpointAuthMethod = Literal[
@@ -412,3 +413,32 @@ class TestBuildOAuthAdminConfigDataForUpdate:
         )
         # scope is reset to REQUESTED_SCOPE (currently None)
         assert client_info_dict.get("scope") is None
+
+
+@pytest.mark.parametrize("mode", ["automatic", "own_client"])
+def test_oauth_config_update_preserves_setup_mode(
+    mode: Literal["automatic", "own_client"],
+) -> None:
+    client = _make_existing_client()
+    config = _build_oauth_admin_config_data_for_update(
+        client_id=client.client_id,
+        client_secret=client.client_secret,
+        existing_client=client,
+        setup_mode=mode,
+    )
+    assert mcp_oauth_setup_mode(config) == mode
+
+
+def test_manual_client_is_distinct_from_automatic_registration() -> None:
+    config = _build_oauth_admin_config_data(client_id="manual", client_secret=None)
+    assert mcp_oauth_setup_mode(config) == "own_client"
+    assert mcp_oauth_setup_mode(MCPConnectionData(headers={})) == "automatic"
+    assert (
+        mcp_oauth_setup_mode(
+            MCPConnectionData(
+                headers={},
+                client_info={"client_id": "registered", "client_id_issued_at": 123},
+            )
+        )
+        == "automatic"
+    )

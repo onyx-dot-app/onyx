@@ -238,6 +238,8 @@ export default function MCPServerDetailPage({
               is_public: saved.is_public,
               groups: saved.groups,
               users: saved.users,
+              users_can_manage_policies: saved.users_can_manage_policies,
+              available_in_craft: saved.available_in_craft,
             }
           : saved,
       { revalidate: false }
@@ -310,6 +312,12 @@ export default function MCPServerDetailPage({
                   active={tab === "server"}
                   footerTarget={footerTarget}
                   server={server}
+                  onAuthenticate={() => {
+                    setVisited(
+                      (current) => new Set([...current, "authentication"])
+                    );
+                    setTab("authentication");
+                  }}
                   onSaved={saveDetails}
                   onBusyChange={setDetailsBusy}
                   onDirtyChange={setDetailsDirty}
@@ -398,7 +406,7 @@ export default function MCPServerDetailPage({
           <Modal.Header
             icon={icon}
             title={title}
-            description={server?.server_url}
+            description={server?.description}
             onClose={close}
           />
           <Modal.Body twoTone={false} alignItems="stretch">

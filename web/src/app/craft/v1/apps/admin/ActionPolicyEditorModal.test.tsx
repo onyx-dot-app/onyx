@@ -41,7 +41,7 @@ async function renderEditor(
     <ActionPolicyEditorModal
       onClose={jest.fn()}
       title="App settings"
-      displayUrl="https://example.com"
+      description="Configure this app for Craft."
       fields={[]}
       initialFieldValues={{}}
       policyItems={items}

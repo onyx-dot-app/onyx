@@ -1204,6 +1204,39 @@ test("keeps an explicit automatic choice when discovery finishes late", async ()
 });
 
 describe("inline authentication", () => {
+  test("saved authentication stays clean until an actual field changes", async () => {
+    const configuredServer = { ...server, status: MCPServerStatus.CONNECTED };
+    mockNetwork(configuredServer);
+    const dirty = jest.fn();
+    render(
+      <MCPAuthenticationPage
+        active
+        variant="page"
+        mcpServer={configuredServer}
+        onTriggerFetchTools={async () => {}}
+        onBusyChange={() => {}}
+        onDirtyChange={dirty}
+        onSaved={async () => {}}
+        onComplete={() => {}}
+      />
+    );
+    const save = screen.getByTestId("mcp-auth-connect-button");
+    await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+    expect(save).toBeDisabled();
+    const user = setupUser();
+    const clientId = screen.getByLabelText(copy.clientId.label, {
+      exact: false,
+    });
+    await user.clear(clientId);
+    await user.type(clientId, "updated-client");
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(dirty).toHaveBeenLastCalledWith(true);
+    await user.clear(clientId);
+    await user.type(clientId, "registered-client");
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(dirty).toHaveBeenLastCalledWith(false);
+  });
+
   test("selecting the active automatic radio preserves the choice without making a dirty draft", async () => {
     const configuredServer = { ...server, admin_credentials: {} };
     const network = mockNetwork(configuredServer);
@@ -1496,4 +1529,65 @@ describe("inline authentication", () => {
       screen.getByRole("combobox", { name: copy.authType.label })
     ).toBeDisabled();
   });
+});
+
+test("restores automatic OAuth setup after registration without a dirty form", async () => {
+  const configuredServer: MCPServer = {
+    ...server,
+    oauth_setup_mode: "automatic",
+    status: MCPServerStatus.CONNECTED,
+    admin_credentials: { client_id: "********", client_secret: "********" },
+  };
+  mockNetwork(configuredServer);
+  const dirty = jest.fn();
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={configuredServer}
+      onTriggerFetchTools={async () => {}}
+      onBusyChange={() => {}}
+      onDirtyChange={dirty}
+      onSaved={async () => {}}
+      onComplete={() => {}}
+    />
+  );
+  const automatic = await screen.findByRole("radio", {
+    name: new RegExp(`^${copy.oauthSetup.automatic.label}`),
+  });
+  expect(automatic).toHaveAttribute("aria-checked", "true");
+  expect(
+    screen.queryByLabelText(copy.clientId.label, { exact: false })
+  ).not.toBeInTheDocument();
+  await setupUser().click(automatic);
+  expect(dirty).toHaveBeenLastCalledWith(false);
+});
+
+test("discovers tools for a Chat-enable intent without changing connected authentication", async () => {
+  const configuredServer: MCPServer = {
+    ...server,
+    auth_type: MCPAuthenticationType.NONE,
+    status: MCPServerStatus.CONNECTED,
+    tool_count: 0,
+  };
+  mockNetwork(configuredServer);
+  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={configuredServer}
+      chatEnableIntent="pending-chat-intent"
+      onTriggerFetchTools={fetchTools}
+      onBusyChange={() => {}}
+      onSaved={async () => {}}
+      onComplete={() => {}}
+    />
+  );
+  const save = await screen.findByTestId("mcp-auth-connect-button");
+  expect(save).toBeEnabled();
+  await setupUser().click(save);
+  await waitFor(() =>
+    expect(fetchTools).toHaveBeenCalledWith(7, "pending-chat-intent")
+  );
 });

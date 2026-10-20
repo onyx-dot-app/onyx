@@ -219,6 +219,15 @@
         "createFailed": "Die OpenAPI-Aktion konnte nicht erstellt werden",
         "invalidJson": "Ungültiges JSON-Format in der Definition des OpenAPI-Schemas",
         "updateFailed": "Die OpenAPI-Aktion konnte nicht aktualisiert werden"
+      },
+      "humanDescription": {
+        "title": "Beschreibung für Menschen",
+        "hint": "Wird auf der Plugin-Karte und in den Plugin-Details angezeigt."
+      },
+      "agentDescription": {
+        "title": "Beschreibung für Agenten",
+        "hint": "Bearbeitet info.description im OpenAPI-Schema.",
+        "disabled": "Gib ein gültiges Schema ein, um dieses Feld zu bearbeiten."
       }
     },
     "cardHeader": {
@@ -1020,7 +1029,8 @@
       "externalApp": {
         "description": "Verwende dein Konto in Craft.",
         "craftOnly": "Nur Craft",
-        "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht."
+        "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht.",
+        "craftDisabledDescription": "Diese App ist in Craft deaktiviert. Der Hauptchat unterstützt sie nicht."
       }
     },
     "plugins": {
@@ -1045,9 +1055,13 @@
         "manageAvailability": "Verfügbarkeit im Arbeitsbereich verwalten",
         "more": "Weitere Aktionen",
         "disableChat": "Für Hauptchat deaktivieren",
-        "enableChat": "Für Hauptchat aktivieren",
+        "enableChat": "Im Standard-Chat aktivieren",
         "disableCraft": "Für Craft deaktivieren",
-        "enableCraft": "Für Craft aktivieren"
+        "enableCraft": "Für Craft aktivieren",
+        "chatDescription": "Dieses Plugin in Chats ohne benutzerdefinierten Agenten verfügbar machen. Die Zugriffskontrollen gelten weiterhin.",
+        "mcpCraftDescription": "Dieses Plugin in Craft verfügbar machen. Zugriffskontrollen und Tool-Berechtigungen gelten weiterhin.",
+        "craftAppDescription": "Diese App in Craft verfügbar machen. Verbindungs- und Genehmigungsanforderungen gelten weiterhin.",
+        "workspaceDescription": "Dieses Plugin in Chat und benutzerdefinierten Agenten verfügbar machen. Zugriffsregeln und Authentifizierungsanforderungen gelten weiterhin."
       },
       "craftApp": {
         "tabs": {
@@ -1073,7 +1087,7 @@
         },
         "createTitle": "OpenAPI-Plugin hinzufügen",
         "detailDescription": "Verwalten Sie diese API und die Tools für Ihre Agenten.",
-        "detailsTitle": "Plugin-Details",
+        "detailsTitle": "Konfiguration",
         "schemaTitle": "OpenAPI-Schema",
         "notFound": "Plugin nicht gefunden",
         "loadFailed": "Dieses Plugin konnte nicht geladen werden",
@@ -1127,6 +1141,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Craft-App",
         "manage": {
           "label": "{name} verwalten"
         },
@@ -1206,15 +1221,16 @@
     "mcpTools": {
       "title": "Tools",
       "enabledTab": "Verfügbare Tools",
-      "policiesTab": "Craft-Berechtigungen",
+      "policiesTab": "Genehmigungseinstellungen",
       "refresh": "Tools aktualisieren",
       "loadError": "Tools konnten nicht geladen werden",
       "saveError": "Tool-Einstellungen konnten nicht gespeichert werden",
       "refreshError": "Tools konnten nicht aktualisiert werden",
-      "search": "Tools suchen"
+      "search": "Tools suchen",
+      "enabledCount": "Aktivierte Tools: {enabled} von {total}"
     },
     "mcpDetail": {
-      "configuration": "Serverkonfiguration",
+      "configuration": "Konfiguration",
       "authentication": "Authentifizierung",
       "loadError": "MCP-Server konnte nicht geladen werden",
       "notFound": "MCP-Server nicht gefunden",

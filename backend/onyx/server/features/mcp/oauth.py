@@ -49,6 +49,7 @@ from onyx.server.features.mcp.credentials import (
     extract_connection_data,
     mcp_oauth_client_information_fingerprint,
     mcp_oauth_connection_headers_fingerprint,
+    mcp_oauth_setup_mode,
     mcp_token_expired,
 )
 from onyx.server.features.mcp.models import (
@@ -598,10 +599,17 @@ class OnyxTokenStorage(TokenStorage):
                 if registration_conflict
                 else info_payload
             )
+            setup_mode = (
+                mcp_oauth_setup_mode(shared_config_data)
+                if registration_conflict and shared_config_data is not None
+                else "automatic"
+            )
+            config_data["oauth_setup_mode"] = setup_mode
             config_data[MCPOAuthKeys.CLIENT_INFO.value] = selected_info_payload
             update_connection_config__no_commit(config.id, db_session, config_data)
 
             if shared_config is not None and shared_config_data is not None:
+                shared_config_data["oauth_setup_mode"] = setup_mode
                 shared_config_data[MCPOAuthKeys.CLIENT_INFO.value] = (
                     selected_info_payload
                 )

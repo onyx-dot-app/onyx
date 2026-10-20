@@ -140,7 +140,7 @@ export const Loading: Story = { args: { scenario: "loading" } };
 export const LoadError: Story = { args: { scenario: "error" } };
 export const Missing: Story = { args: { scenario: "missing" } };
 export const EditDetails: Story = {
-  name: "Plugin details",
+  name: "Configuration",
   play: async () => {
     await userEvent.click(
       await within(document.body).findByRole("tab", {

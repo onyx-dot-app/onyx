@@ -103,7 +103,7 @@ async function configureOauthServer(
   const adminMcp = new AdminMcpServersPage(page);
   await adminMcp.goto();
   await adminMcp.openAddServerModal();
-  await adminMcp.enterServerUrlAndContinue(options.serverUrl);
+  await adminMcp.enterServerUrlAndContinue(options.serverUrl, options.group);
   await adminMcp.selectAuthMethod("OAuth");
   await adminMcp.fillOAuthCredentials(
     oauthConfig().clientId,
@@ -111,7 +111,6 @@ async function configureOauthServer(
   );
   await adminMcp.fillServerDetails({
     name: options.serverName,
-    group: options.group,
   });
   let serverId: number | null = null;
   await oauthFlow.clickAndWaitForPossibleUrlChange(async () => {

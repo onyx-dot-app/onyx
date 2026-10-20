@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
   Button,
+  Divider,
   InputTypeIn,
   MessageCard,
   Modal,
@@ -17,6 +18,7 @@ import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import PluginModalContent from "@/sections/plugins/PluginModalContent";
 import { UserManagementSwitch } from "@/sections/actions/PolicyEditor";
+import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import CraftAppEditorTabs from "@/sections/plugins/CraftAppEditorTabs";
 import {
   getAppTypeLogo,
@@ -41,7 +43,6 @@ import {
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
-import { externalAppDisplayUrl } from "@/lib/plugins/externalAppDisplayUrl";
 
 interface CreateCustomAppModalProps {
   onClose: () => void;
@@ -76,12 +77,20 @@ export default function CreateCustomAppModal({
   existingApp,
 }: CreateCustomAppModalProps) {
   const t = useTranslations("craft.apps.customApp");
+  const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const policyText = useTranslations("craft.actionPolicies");
   const [usersCanManagePolicies, setUsersCanManagePolicies] = useState(
     existingApp?.users_can_manage_policies ?? true
   );
   const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
+  const savedEnabled = existingApp?.enabled ?? true;
+  const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
+  const enabled = enabledDraft ?? savedEnabled;
+  const availabilityChanged = enabled !== savedEnabled;
+  function setEnabled(value: boolean) {
+    setEnabledDraft(value === savedEnabled ? null : value);
+  }
   const nameId = useId();
   const router = useRouter();
   // Focus the name field for new apps only; edits keep the natural tab order.
@@ -118,7 +127,8 @@ export default function CreateCustomAppModal({
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
   const configDirty = existingApp
-    ? usersCanManagePolicies !== existingApp.users_can_manage_policies ||
+    ? availabilityChanged ||
+      usersCanManagePolicies !== existingApp.users_can_manage_policies ||
       name !== existingApp.name ||
       associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
@@ -164,18 +174,21 @@ export default function CreateCustomAppModal({
     setError(null);
     try {
       if (existingApp) {
-        await updateExternalApp(existingApp.id, {
+        const payload: Parameters<typeof updateExternalApp>[1] = {
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
           associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
-        });
+        };
+        if (availabilityChanged) payload.enabled = enabled;
+        await updateExternalApp(existingApp.id, payload);
         onSaved();
         onClose();
       } else {
         const created = await createCustomExternalApp({
+          enabled,
           users_can_manage_policies: usersCanManagePolicies,
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
@@ -293,7 +306,9 @@ export default function CreateCustomAppModal({
             <Modal.Header
               icon={getAppTypeLogo("CUSTOM")}
               title={existingApp?.name ?? t("createTitle")}
-              description={externalAppDisplayUrl(upstreamPatterns) || undefined}
+              description={pluginCopy(
+                enabled ? "craftOnlyDescription" : "craftDisabledDescription"
+              )}
               onClose={requestClose}
             />
             <Modal.Body twoTone={false} alignItems="stretch">
@@ -336,6 +351,12 @@ export default function CreateCustomAppModal({
                         placeholder={t("placeholders.allowedUrl")}
                       />
                     </div>
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    <PluginAvailabilitySwitch
+                      enabled={enabled}
+                      onChange={setEnabled}
+                      disabled={isSaving}
+                    />
                     <UserManagementSwitch
                       value={usersCanManagePolicies}
                       onChange={setUsersCanManagePolicies}
@@ -345,13 +366,11 @@ export default function CreateCustomAppModal({
                 }
                 authentication={
                   <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-1">
-                      <Text font="main-ui-action">
-                        {t("fields.headers.label")}
-                      </Text>
-                      <Text font="secondary-body" color="text-03">
-                        {t("fields.headers.description")}
-                      </Text>
+                    <InputVertical
+                      title={t("fields.headers.label")}
+                      description={t("fields.headers.description")}
+                      suffix="optional"
+                    >
                       <InputKeyValue
                         keyTitle={t("fields.headers.keyTitle")}
                         valueTitle={t("fields.headers.valueTitle")}
@@ -362,15 +381,13 @@ export default function CreateCustomAppModal({
                         mode="line"
                         addButtonLabel={t("fields.headers.addButton")}
                       />
-                    </div>
+                    </InputVertical>
 
-                    <div className="flex flex-col gap-1">
-                      <Text font="main-ui-action">
-                        {t("fields.orgCredentials.label")}
-                      </Text>
-                      <Text font="secondary-body" color="text-03">
-                        {t("fields.orgCredentials.description")}
-                      </Text>
+                    <InputVertical
+                      title={t("fields.orgCredentials.label")}
+                      description={t("fields.orgCredentials.description")}
+                      suffix="optional"
+                    >
                       <InputKeyValue
                         keyTitle={t("fields.orgCredentials.keyTitle")}
                         valueTitle={t("fields.orgCredentials.valueTitle")}
@@ -382,7 +399,7 @@ export default function CreateCustomAppModal({
                         mode="line"
                         addButtonLabel={t("fields.orgCredentials.addButton")}
                       />
-                    </div>
+                    </InputVertical>
                   </div>
                 }
                 skills={

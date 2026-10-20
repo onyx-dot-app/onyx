@@ -63,15 +63,23 @@ When Craft is unavailable, admin lists do not fetch Craft Apps or offer their
 creation, filters, or direct-link editors. MCP indicators show Chat only.
 Member defaults, Craft metadata, skills links, and Craft actions require the
 member's Craft entitlement. MCP setup and admin tools retain their deployment gates.
-Admin row actions sit beside the detail link in normal flex flow, without
-absolute positioning or a placeholder spacer.
-Availability controls use workspace enable/disable wording. Disabling an OpenAPI
-plugin requires confirmation that it affects everyone, including custom agents,
-while preserving its settings and credentials.
+Admin row actions sit beside the detail link in normal flex flow.
+The detail link covers the card, including blank space above and below row actions.
+Action buttons remain separate click targets above that link.
+Availability controls use workspace enable/disable wording. Configuration switches are form drafts.
+Save applies availability changes; closing uses the form unsaved-changes guard.
+Disabling an OpenAPI plugin preserves its settings and credentials.
 OpenAPI indicators and lifecycle actions follow global `Tool.enabled`,
 independently of default Chat attachments.
-The sliders action says Disable when all supported surfaces are enabled and Enable when all are disabled.
-Mixed or unknown MCP states say Manage workspace availability. Disabled Craft does not affect this label.
+MCP setup places main Chat and Craft availability switches below access controls. Configuration editors
+show the same workspace controls below access controls. Saving Chat enablement starts authentication when required.
+Directory indicators are read-only; plugin rows no longer open availability menus.
+OpenAPI setup and Configuration expose workspace availability as a switch.
+New actions default on; disabling during setup creates them disabled without attaching them to default Chat.
+MCP copy describes default Chat as chats without a custom agent.
+Descriptions distinguish surface availability from access controls and tool permissions.
+Only full admins can change main Chat defaults. Craft controls follow deployment availability
+and server edit permission. Setup preserves these choices through authentication.
 Member OAuth opens a normal new tab, without popup sizing or window features.
 The correlated callback still closes the sign-in tab and refreshes the original page.
 Its completion screen uses a bounded, centered card with return and close-tab
@@ -146,10 +154,10 @@ At send time, default Chat suppresses forced MCP/OpenAPI choices when personal
 preferences disable them or member metadata is unavailable. Stored per-chat
 choices remain unchanged. Custom agents and built-in forced Search retain their
 existing behavior.
-Full-admin OpenAPI creation and directory Enable attach the action to default
+Enabled full-admin OpenAPI creation and the editor Enable switch attach the action to default
 Chat through `useDefaultAssistantConfiguration`, preserving other tool selections.
-An enabled action missing that attachment still offers Enable. Scoped action
-managers retain status-only controls and cannot change default Chat attachments.
+An already-enabled action does not change its default Chat attachment when other configuration fields save.
+Scoped action managers retain status-only controls and cannot change default Chat attachments.
 Successful lifecycle writes refresh member catalogs and agent rosters. Disconnect
 disables the action globally but retains its agent attachments for later re-enabling.
 Return-intent readiness waits for the selected resource's roster and connection
@@ -161,7 +169,7 @@ checks server access before reading credentials, validating them, or saving them
 
 Main Chat still executes MCP and OpenAPI calls without Craft approval enforcement.
 Member UI does not display read/write policy badges or promise approval before writes.
-Installed rows show a status control between the type label and the row menu.
+Installed rows show a status indicator beside the delete action.
 MCP circles split diagonally: the upper-left half shows main Chat and the lower-right
 half shows Craft. Each half uses the standard success green when enabled and
 neutral gray when disabled, matching member directory indicators.
@@ -175,11 +183,11 @@ list's `default_chat_enabled` summary, not credential connection status.
 Missing summaries use a neutral dot with a Chat unknown tooltip.
 
 Add opens the type dropdown and then its native catalog or creation flow.
-OpenAPI creation combines schema entry and live action review on the first step, then authorization.
-The validated schema preview groups its service logo, name, server URL, and
-description in one compact identity row, shared by creation and schema editing.
-Back preserves schema and credential drafts.
+OpenAPI creation shows schema entry, descriptions, and workspace availability on the first step, then authorization.
+A divider separates workspace availability from the schema fields. Creation omits the server and endpoint preview.
+Back preserves schema and credential drafts. Creation keeps one dialog and backdrop mounted across schema and authentication steps.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
+Existing Craft App edits omit unchanged availability, so unrelated saves preserve concurrent admin changes.
 Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
 Failed retries reuse the created tool ID and any newly created OAuth configuration ID.
 Retry writes require a successful authoritative refresh, not SWR's cached
@@ -188,8 +196,7 @@ ID without sending cached header or pass-through settings. Forms
 retain only unlinked OAuth IDs and reuse them after failed linking. Saved
 editors support No authentication. Hidden OAuth fields do not invalidate other
 methods. New OAuth configurations reject blank or masked credentials.
-Schema checks retain one result keyed to the current text. Request identity
-blocks old responses from replacing current previews or errors, and blocks
+Schema validation uses request identity to ignore outdated responses and blocks
 Continue completion after unmount.
 Format is disabled during submission. Lenient JSON normalization leaves quoted
 text unchanged. Failed background refreshes retain cached editors and drafts;
@@ -198,9 +205,8 @@ Schema drafts remain fixed for each open editor, even when saved definitions
 refresh. Fresh capability loss removes write fields; a missing record restores
 the fallback. Rejected saves remain visible through errors and toasts.
 Schema editing remains on one step.
-Review shows one divided list of actions, with method badges and endpoint paths beside each summary.
-Creation and details render `web/src/sections/plugins/OpenAPIEndpointList.tsx`, keeping endpoint typography,
-method badges, spacing, and responsive behavior identical.
+Admin and personal OpenAPI Tools tabs render `web/src/sections/plugins/OpenAPIEndpointList.tsx`.
+The shared list keeps endpoint typography, method badges, spacing, and responsive behavior identical.
 Creation schema and authentication modals use the same top-anchored, single-tone
 surface as MCP setup. Admin detail tabs embed those same forms without headers
 or nested dialogs, and portal only the active form's save action to the footer.
@@ -209,11 +215,15 @@ saves block navigation. The inline Authentication Method has no divider.
 Closing saved OpenAPI details confirms unsaved edits within the same modal frame.
 Keeping edits preserves each mounted form. Authentication saves reject a changed
 OAuth link before writing, so stale values cannot target a replacement config.
-The inline Schema tab shows validation and a detected-tool count, not endpoints.
-View tools selects the Tools tab; unsaved schemas must be saved first. Creation
-retains its endpoint preview because it has no separate Tools tab.
+Configuration combines name, description, schema, and workspace availability in one saved form.
+Description for Humans is optional display text; creation leaves it blank unless entered.
+Creation shows the schema first, then Description for Humans, then Description for Agents.
+Description for Agents edits schema info.description directly; raw schema edits update the same input.
+Schema edits preserve the display name and human description unless those fields are also edited.
+A divider precedes workspace availability. Tools lists endpoints; Configuration has no detected-tool row.
 Personal OpenAPI details reuse the MCP Connection/Tools tabs and URL/status
 header. Tools use the shared endpoint list, search, count, and empty feedback.
+Plugin input descriptions sit below labels and above controls; optional fields have a label suffix.
 Plugin dialogs use the shared large width (50rem) and fit their content.
 Height is capped at 80dvh and the available viewport space, reserving the top offset and bottom gap.
 Long content scrolls in the modal body; tab panels do not impose fixed heights. OpenAPI description and personal default Chat settings use
@@ -233,7 +243,7 @@ count, enabled state, and loading/retry feedback. Review skills opens the
 existing app-filtered skills page; no admin metadata or policies are fetched.
 Craft must be enabled before skills or launch actions appear. Apps needing
 authentication show Connect account instead of Open in Craft.
-`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, review,
+`web/src/sections/plugins/OpenAPIPluginCreateModal.stories.tsx` covers schema entry, workspace availability,
 Back navigation, authorization choices and draft retention, invalid JSON, validation failure/pending, saving, creation failure/success,
 and closing/reopening a discarded draft. Network fixtures remain local to each story.
 Explore offers official remote endpoints for Slack, HubSpot, Asana, Linear, Notion,
@@ -340,7 +350,7 @@ and manual OAuth endpoints remain under Advanced settings.
 New servers open a modal from Plugins, rendered by
 `web/src/sections/actions/modals/MCPPluginSetupModal.tsx`. The modal has one continuous surface without a timeline. Footer buttons own navigation.
 Server contains name and URL inputs. Description remains editable on the server detail page.
-Connection combines authentication and access.
+The Server step contains access and availability; Connection contains authentication.
 Both steps use the same content insets. The footer uses an explicit Back button.
 Closing MCP or OpenAPI creation discards the local draft immediately, without confirmation.
 Directory and catalog rows share horizontal padding. Suggested rows are keyboard-accessible cards.
@@ -349,8 +359,9 @@ starts `POST /admin/mcp/probe` after 700 milliseconds without another URL edit.
 The NDJSON stream reports Contacting server, then Detecting authentication.
 A real MCP initialization or authentication challenge completes contact. Authentication
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
-fails that row. Unreachable servers fail contact and leave authentication waiting.
-Closing the stream cancels its probe task. Detection rows remain visible before Continue. The modal discards
+fails that row. Unreachable servers fail contact and leave authentication pending.
+Closing the stream cancels its probe task. The first setup page places access controls and Chat/Craft availability below a divider, before authentication.
+Authentication method and connection transport rows render immediately with pending spinners. They stay visible during URL entry, debounce, and detection before Continue. Failed probes stop pending spinners. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
 then tries compatible SSE. It uses the shared SSRF guard, bounded timeouts, and
@@ -364,8 +375,8 @@ Connection failures keep the first form open without creating a server. Retry
 checks the URL again. Configure manually lets an admin supply headers or transport
 settings when the connection check fails. Blocked destinations have no bypass.
 Continue opens Connection without database writes. Connection contains authentication,
-client setup, custom headers, and advanced transport settings. Continue validates
-authentication and access on the Connection step. The name remains editable on the Server step.
+client setup, custom headers, and advanced transport settings. Continue requires valid access settings on the Server step.
+Connect validates authentication and rechecks access. The name remains editable on the Server step.
 Public server metadata supplies
 the suggested name. Other servers use the URL hostname. Connect saves details and
 access, then saves authentication and starts the connection flow. Failed retries
@@ -398,11 +409,11 @@ managed group. These grants control attaching tools to agents; they do not chang
 access to custom agents that already use those tools. Default Chat still checks
 server access before showing tools or resolving credentials.
 `web/src/sections/actions/modals/MCPServerDetailsPage.tsx` owns the Access Control
-selector and its group validation.
+selector and its group validation. The optional description field always appears below the name, without a collapsible section.
 
-Each admin installed plugin row has a disconnect dropdown and a separate trash
-button for deletion. Clicking its status circle opens the same availability
-dropdown. Delete is not a dropdown item. Controls respect resource permissions,
+Each admin installed plugin row has a read-only availability indicator and a separate
+trash button for deletion. Availability is edited in Configuration.
+Controls respect resource permissions,
 and managed external apps cannot be deleted. MCP deletion confirmation names
 the server and states that its tools are deleted for everyone in the organization.
 Enable for main Chat opens authentication when the server needs sign-in or has no
@@ -434,13 +445,8 @@ existing scoped SWR caches optimistically and rolls back failed saves.
 The personal directory dot describes account state, not workspace availability:
 green means connected, orange means credentials are needed, gray means unavailable.
 Ordinary discovery of an existing server does not change availability.
-MCP menus have independent Chat and Craft actions.
-Organization-wide MCP disable actions show "All users in your organization"
-in the menu and require confirmation. Chat confirmation explains that default
-Chat changes for everyone, while custom agents remain unchanged. Craft
-confirmation explains that Craft changes for everyone, while Chat is unchanged.
-Enabling stays immediate. Cancelling makes no writes. Failed disables retain
-the confirmation for retry. Delete and disable share one confirmation owner.
+MCP Configuration has independent Chat and Craft draft switches. Toggling them makes no API writes.
+Save applies the changes; failed saves retain the draft for retry.
 Main Chat uses the same
 `Persona__Tool` selections as Admin > Chat Preferences. There is no separate
 server flag or schema migration. The page reads
@@ -457,26 +463,25 @@ Refreshing an existing server does not select new tools automatically. Custom
 agent attachments remain unchanged.
 
 The active MCP editor's Save Changes button appears on the right of the sticky modal footer.
-Detail modals contain editing controls only, with no Delete or Disconnect buttons.
-OpenAPI row menus enable or disconnect the action. Delete opens a confirmation
-over the Plugins directory, not over another modal.
+Authentication Save stays disabled for an unchanged, connected server. Initial setup, reconnection, and failed connection retries remain available.
+Admin detail modals contain editing controls only, with no Delete or Disconnect buttons.
+OpenAPI Configuration saves workspace availability. Delete opens a confirmation
+over the Plugins directory.
 
-When deployment settings enable Craft, the row menu includes a Craft action.
+When deployment settings enable Craft, MCP setup and Configuration include a Craft availability switch.
 New servers default to enabled. Existing servers retain their saved setting.
-Availability menu actions save immediately.
+Availability changes save with the form.
 This uses `available_in_craft` and does not change access grants.
 The simple create API accepts this flag atomically; omitted values still default
 to false for other API callers.
 
 The inline `web/src/sections/actions/MCPServerToolsEditor.tsx` has Available tools
-and, when Craft is available, Craft permissions tabs. Enablement and approval policies are drafts until Save changes. Refresh is
+and, when Craft is available, Approval settings tabs. Enablement and approval policies are drafts until Save changes. Refresh is
 disabled while drafts exist. Each completed save batch becomes the new baseline,
 so retrying a partial failure does not repeat successful writes. Tool toggles
 retain per-tool permission checks. Craft policies use raw tool names and retain
-overrides for disabled tools. The Craft permissions tab also lets admins control
-whether users can manage approval settings. This switch defaults on and joins the
-policy draft, dirty guard, and Save changes request. The request sends
-`action_policies` and `users_can_manage_policies` together.
+overrides for disabled tools. Configuration controls whether users can manage approval settings.
+This switch defaults on and saves with the Configuration draft. Tools saves only `action_policies`.
 Tool availability uses `Tool.enabled`; Craft DENY is a separate workspace policy.
 Changing a Craft policy or user-management switch does not change tool availability.
 Both MCP tool views use the shared modal body for scrolling.
@@ -541,8 +546,8 @@ without another browser redirect.
 **OpenAPI (custom) action.** Each schema has a detail modal at
 `/admin/plugins/openapi/[toolId]`. It reads the permission-stamped OpenAPI list,
 not the single-tool or mutation response. Metadata saves preserve `oauth_config_id`.
-Plugin details, OpenAPI schema, Authentication, and Tools use one tab row with
-directly editable fields. Schema and authentication reuse the existing forms
+Configuration, Authentication, and Tools use one tab row with
+directly editable fields. Configuration and authentication reuse the existing forms
 in inline mode. A `configure=authentication` return selects authentication once,
 after the authorized record loads. Lifecycle controls stay on the directory.
 The admin pastes an OpenAPI 3.x schema and,
@@ -826,6 +831,10 @@ choice at server-creation time is what decides this, and it is visible on the
 `MCPServer` row, not implicit.
 
 ### 4.4 The MCP OAuth flow
+
+OAuth connection config records the automatic or own-client setup choice separately from registered credentials.
+Admin authentication forms restore this choice after OAuth. Older records use registration metadata when available.
+Saving only this choice locks and reloads the connection config before merging it, preserving concurrent credential refreshes.
 
 Automatic discovery finds OAuth settings after the admin selects OAuth. It
 does not detect the authentication method. Client setup can use supplied
