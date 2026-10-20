@@ -157,6 +157,10 @@ describe("CostOverridesPanel", () => {
         name: "Edit Anthropic override for shared-model",
       })
     );
+    // Save stays disabled until a value changes.
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.clear(wholeAmountField(1));
+    await user.type(wholeAmountField(1), "5");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -164,7 +168,7 @@ describe("CostOverridesPanel", () => {
         model: "shared-model",
         provider: "anthropic",
         input_cost_per_mtok: 3,
-        output_cost_per_mtok: 4,
+        output_cost_per_mtok: 5,
         cache_read_cost_per_mtok: null,
       });
     });

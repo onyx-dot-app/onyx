@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
+import { Form, Formik } from "formik";
+import * as Yup from "yup";
 import {
   ConfirmationModalLayout,
   ContentAction,
@@ -70,6 +72,25 @@ function formatRate(value: number, locale: string): string {
 // Shared add/edit modal for the idempotent upsert. Mount it only while open,
 // so each open starts from fresh form state.
 
+interface OverrideFormValues {
+  model: string;
+  provider: string;
+  // The override keys on the model name; the picked config id only lets the
+  // selector highlight the current choice.
+  modelConfigId: number | null;
+  inputRate: number | null;
+  outputRate: number | null;
+  // Empty (null) bills cache reads at the input rate.
+  cacheRate: number | null;
+}
+
+const overrideValidationSchema = Yup.object({
+  model: Yup.string().trim().required(),
+  inputRate: Yup.number().nullable().required(),
+  outputRate: Yup.number().nullable().required(),
+  cacheRate: Yup.number().nullable(),
+});
+
 interface OverrideModalProps {
   // Editing an existing row locks the model name (it's the upsert key).
   existing?: CostOverride;
@@ -82,51 +103,36 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const { mutate } = useSWRConfig();
   const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
-  const [model, setModel] = useState(existing?.model ?? "");
-  const [provider, setProvider] = useState(existing?.provider ?? "");
-  const [inputRate, setInputRate] = useState<number | null>(
-    existing?.input_cost_per_mtok ?? null
-  );
-  const [outputRate, setOutputRate] = useState<number | null>(
-    existing?.output_cost_per_mtok ?? null
-  );
-  // Empty (null) bills cache reads at the input rate.
-  const [cacheRate, setCacheRate] = useState<number | null>(
-    existing?.cache_read_cost_per_mtok ?? null
-  );
-  const [submitting, setSubmitting] = useState(false);
-
-  // The override keys on the model name; track the picked config id too so the
-  // selector can highlight the current choice.
-  const [modelConfigId, setModelConfigId] = useState<number | null>(null);
-
   const isEdit = existing !== undefined;
-  const modelLabel = model
-    ? `${getProviderDisplayName(provider, t("allProviders.label"), providerNames)} · ${model}`
-    : "";
-  const canSubmit =
-    model.trim() !== "" && inputRate !== null && outputRate !== null;
 
-  async function handleSubmit() {
-    if (!canSubmit || inputRate === null || outputRate === null) return;
-    setSubmitting(true);
+  const initialValues: OverrideFormValues = {
+    model: existing?.model ?? "",
+    provider: existing?.provider ?? "",
+    modelConfigId: null,
+    inputRate: existing?.input_cost_per_mtok ?? null,
+    outputRate: existing?.output_cost_per_mtok ?? null,
+    cacheRate: existing?.cache_read_cost_per_mtok ?? null,
+  };
+
+  async function handleSubmit(values: OverrideFormValues) {
+    // The schema guarantees both rates; this narrows them for the request.
+    if (values.inputRate === null || values.outputRate === null) return;
+    const model = values.model.trim();
     try {
       await upsertCostOverride({
-        model: model.trim(),
-        provider,
-        input_cost_per_mtok: inputRate,
-        output_cost_per_mtok: outputRate,
-        cache_read_cost_per_mtok: cacheRate,
+        model,
+        provider: values.provider,
+        input_cost_per_mtok: values.inputRate,
+        output_cost_per_mtok: values.outputRate,
+        cache_read_cost_per_mtok: values.cacheRate,
       });
       await refreshCostOverrides(mutate);
-      toast.success(t("toasts.saved", { model: model.trim() }));
+      toast.success(t("toasts.saved", { model }));
       onClose();
     } catch (e) {
       console.error("Failed to save cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.saveFailed", { message }));
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -138,114 +144,127 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
       }}
     >
       <Modal.Content width="md">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleSubmit();
-          }}
+        <Formik
+          initialValues={initialValues}
+          validationSchema={overrideValidationSchema}
+          validateOnMount
+          onSubmit={handleSubmit}
         >
-          <Modal.Header
-            icon={SvgWallet}
-            title={isEdit ? t("form.editTitle") : t("form.newTitle")}
-            description={t("form.description")}
-            onClose={onClose}
-          />
-          <Modal.Body alignItems="stretch">
-            <InputHorizontal
-              withLabel
-              title={t("form.model.label")}
-              description={t("form.model.description")}
-              fillInput
-              center
-            >
-              {isEdit ? (
-                <InputTypeIn value={modelLabel} variant="readOnly" />
-              ) : (
-                <SimpleModelSelector
-                  nullable
-                  providers={filterModelConfigurations(llmProviders ?? [], {
-                    visibleOnly: false,
-                  })}
-                  value={modelConfigId}
-                  grouped={!hideProviderGrouping}
-                  modelPaging={modelPaging}
-                  onChange={(modelConfigurationId) => {
-                    const opt = findLlmOptionById(
-                      llmProviders,
-                      modelConfigurationId
-                    );
-                    setModel(opt?.modelName ?? "");
-                    setProvider(opt?.provider ?? "");
-                    setModelConfigId(modelConfigurationId);
-                  }}
-                />
-              )}
-            </InputHorizontal>
-
-            <InputHorizontal
-              withLabel
-              title={t("form.inputRate.label")}
-              description={t("form.units.description")}
-              fillInput
-              center
-            >
-              <InputCurrency
-                value={inputRate}
-                onChange={setInputRate}
-                precision={RATE_PRECISION}
+          {({ values, setFieldValue, isValid, dirty, isSubmitting }) => (
+            <Form>
+              <Modal.Header
+                icon={SvgWallet}
+                title={isEdit ? t("form.editTitle") : t("form.newTitle")}
+                description={t("form.description")}
+                onClose={onClose}
               />
-            </InputHorizontal>
-
-            <InputHorizontal
-              withLabel
-              title={t("form.outputRate.label")}
-              description={t("form.units.description")}
-              fillInput
-              center
-            >
-              <InputCurrency
-                value={outputRate}
-                onChange={setOutputRate}
-                precision={RATE_PRECISION}
-              />
-            </InputHorizontal>
-
-            <InputHorizontal
-              withLabel
-              title={t("form.cacheRate.label")}
-              description={t("form.cacheRate.description")}
-              suffix="optional"
-              fillInput
-              center
-            >
-              <InputCurrency
-                value={cacheRate}
-                onChange={setCacheRate}
-                precision={RATE_PRECISION}
-              />
-            </InputHorizontal>
-          </Modal.Body>
-          <Modal.Footer>
-            <BasicModalFooter
-              cancel={
-                <Button
-                  prominence="secondary"
-                  onClick={onClose}
-                  disabled={submitting}
+              <Modal.Body alignItems="stretch">
+                <InputHorizontal
+                  withLabel
+                  title={t("form.model.label")}
+                  description={t("form.model.description")}
+                  fillInput
+                  center
                 >
-                  {t("form.cancelButton.label")}
-                </Button>
-              }
-              submit={
-                <Button type="submit" disabled={!canSubmit || submitting}>
-                  {isEdit
-                    ? t("form.saveButton.label")
-                    : t("form.addButton.label")}
-                </Button>
-              }
-            />
-          </Modal.Footer>
-        </form>
+                  {isEdit ? (
+                    <InputTypeIn
+                      value={`${getProviderDisplayName(values.provider, t("allProviders.label"), providerNames)} · ${values.model}`}
+                      variant="readOnly"
+                    />
+                  ) : (
+                    <SimpleModelSelector
+                      nullable
+                      providers={filterModelConfigurations(llmProviders ?? [], {
+                        visibleOnly: false,
+                      })}
+                      value={values.modelConfigId}
+                      grouped={!hideProviderGrouping}
+                      modelPaging={modelPaging}
+                      onChange={(modelConfigurationId) => {
+                        const opt = findLlmOptionById(
+                          llmProviders,
+                          modelConfigurationId
+                        );
+                        void setFieldValue("model", opt?.modelName ?? "");
+                        void setFieldValue("provider", opt?.provider ?? "");
+                        void setFieldValue(
+                          "modelConfigId",
+                          modelConfigurationId
+                        );
+                      }}
+                    />
+                  )}
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.inputRate.label")}
+                  description={t("form.units.description")}
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.inputRate}
+                    onChange={(rate) => void setFieldValue("inputRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.outputRate.label")}
+                  description={t("form.units.description")}
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.outputRate}
+                    onChange={(rate) => void setFieldValue("outputRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+
+                <InputHorizontal
+                  withLabel
+                  title={t("form.cacheRate.label")}
+                  description={t("form.cacheRate.description")}
+                  suffix="optional"
+                  fillInput
+                  center
+                >
+                  <InputCurrency
+                    value={values.cacheRate}
+                    onChange={(rate) => void setFieldValue("cacheRate", rate)}
+                    precision={RATE_PRECISION}
+                  />
+                </InputHorizontal>
+              </Modal.Body>
+              <Modal.Footer>
+                <BasicModalFooter
+                  cancel={
+                    <Button
+                      prominence="secondary"
+                      onClick={onClose}
+                      disabled={isSubmitting}
+                    >
+                      {t("form.cancelButton.label")}
+                    </Button>
+                  }
+                  submit={
+                    <Button
+                      type="submit"
+                      disabled={!isValid || !dirty || isSubmitting}
+                    >
+                      {isEdit
+                        ? t("form.saveButton.label")
+                        : t("form.addButton.label")}
+                    </Button>
+                  }
+                />
+              </Modal.Footer>
+            </Form>
+          )}
+        </Formik>
       </Modal.Content>
     </Modal>
   );
