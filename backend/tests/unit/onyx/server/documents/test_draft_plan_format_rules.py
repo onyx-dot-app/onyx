@@ -122,6 +122,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
             "root_page_id",
             ROOT_PAGE_ID_FORMAT_ERROR,
         ),
+        (
+            DocumentSource.NOTION,
+            {"root_page_id": f"https://notion.so.example.com/{_NOTION_PAGE_ID}"},
+            "root_page_id",
+            ROOT_PAGE_ID_FORMAT_ERROR,
+        ),
     ],
 )
 def test_a_value_that_breaks_a_format_rule_is_a_form_error(
