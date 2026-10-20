@@ -149,6 +149,7 @@ def _build_result(
         display_name=check.display_name,
         required=check.required,
         status=outcome.status,
+        row_id=check.row_id,
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,
@@ -308,6 +309,7 @@ def _execute_check(
     output = output or CheckOutput()
     return _CheckOutcome(
         status=CapabilityCheckStatus.PASSED,
+        summary=output.summary,
         duration_ms=elapsed_ms(),
         findings=_findings_for_source(output.findings, check, context.source),
         advisories=output.advisories,

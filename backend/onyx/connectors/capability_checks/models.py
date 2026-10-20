@@ -143,9 +143,10 @@ class CheckAdvisory(BaseModel):
 
 
 class CheckOutput(BaseModel):
-    """What a passing check returns: findings, and advisories about what it
-    could not verify."""
+    """What a passing check returns: its row's short line (what it found),
+    findings, and advisories about what it could not verify."""
 
+    summary: str | None = None
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
 
@@ -330,6 +331,15 @@ def check_error_detail(
     return detail if detail != CheckErrorDetail() else None
 
 
+class CheckRowText(BaseModel):
+    """A row's line and description."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
 class CheckNotRunReason(str, Enum):
     """Why a SKIPPED check did not run, when a gate of the run stopped it."""
 
@@ -478,6 +488,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         discovery: bool = False,
         fails_when_unreachable: bool = False,
         depends_on: tuple[str, ...] = (),
+        row_id: str | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -524,6 +535,10 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         # left out, so a check can list alternatives (e.g. both token types'
         # sign-in checks).
         self.depends_on = depends_on
+        # The row the check shows on. Checks that share one are one row: the
+        # variants of a probe (token types, deployments) and a probe's
+        # discovery step. Defaults to the check_id.
+        self.row_id = row_id or check_id
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool
@@ -591,6 +606,8 @@ class CapabilityCheckResult(BaseModel):
     display_name: str
     required: bool
     status: CapabilityCheckStatus
+    # The row the check shows on; None in results stored before rows.
+    row_id: str | None = None
     # Exception text for failures, skip reason for skips, empty on success.
     message: str = ""
     # Exception class name, for support diagnosis.
