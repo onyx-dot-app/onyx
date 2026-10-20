@@ -101,10 +101,12 @@ export default function OverviewCard({
   if (data === undefined) return <CardLoader descriptionLines={3} />;
 
   return (
+    // Fills the row beside the Activities card, so the two cards share one height.
     <Card
       border="solid"
       rounding={4}
       padding={2}
+      height="full"
       data-testid="indexing-overview"
     >
       <Section alignItems="stretch" gap={1} height="fit">

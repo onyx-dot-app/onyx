@@ -308,3 +308,74 @@ func TestProjectAliasesUseOneInfrastructureIdentity(t *testing.T) {
 		t.Fatal("Docker-equivalent names bypass infrastructure identity")
 	}
 }
+
+// stoppedLegacyStack starts an isolated stack in root and stops it the way
+// an older ODS did: the processes end and the leases stay.
+func stoppedLegacyStack(t *testing.T, root, project string, registry *Registry, services []ServiceRecord) (*Stack, map[string]int) {
+	t.Helper()
+	legacy, err := Open(root, project, Isolated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Registry = registry
+	status := mustUp(t, legacy, &fakeProvider{services: []string{"web", "api"}})
+	if err := legacy.stopServices(testOptions().StopTimeout); err != nil {
+		t.Fatal(err)
+	}
+	st, err := legacy.ReadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Services = services
+	if err := legacy.WriteState(st); err != nil {
+		t.Fatal(err)
+	}
+	return legacy, status.Ports
+}
+
+func TestSharedAdoptionReleasesStoppedLegacyLeases(t *testing.T) {
+	fakeContainersRunning(t, false)
+	a, b := sharedPair(t)
+	legacy, ports := stoppedLegacyStack(t, b.Root, "legacy-data", a.Registry, nil)
+	shared, err := Open(a.Root, "", Shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared.Registry = a.Registry
+	status := mustUp(t, shared, &fakeProvider{services: []string{"web", "api"}})
+	if shared.Project != legacy.Project {
+		t.Fatalf("shared stack did not adopt %s", legacy.Project)
+	}
+	if status.Ports["web"] != ports["web"] || status.Ports["api"] != ports["api"] {
+		t.Fatalf("shared stack got %v, want the adopted ports %v", status.Ports, ports)
+	}
+	if got := leaseNames(t, a.Registry, legacy.Root); len(got) != 0 {
+		t.Fatalf("adopted legacy stack kept leases: %v", got)
+	}
+}
+
+func TestSharedAdoptionKeepsLeasesOfLiveLegacyProcesses(t *testing.T) {
+	fakeContainersRunning(t, false)
+	a, b := sharedPair(t)
+	pid := livePGroup(t)
+	live, ports := stoppedLegacyStack(t, b.Root, "live-data", a.Registry, []ServiceRecord{{Name: "worker", Slug: "worker", PID: pid, PGID: pid}})
+	adopted, err := Open(a.Root, "legacy-data", Isolated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adopted.WriteState(&State{Phase: PhaseStopped}); err != nil {
+		t.Fatal(err)
+	}
+	shared, err := Open(a.Root, "legacy-data", Shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared.Registry = a.Registry
+	status := mustUp(t, shared, &fakeProvider{services: []string{"web", "api"}})
+	if status.Ports["web"] == ports["web"] || status.Ports["api"] == ports["api"] {
+		t.Fatalf("shared stack took leases of a legacy stack with live processes: %v", status.Ports)
+	}
+	if got := leaseNames(t, a.Registry, live.Root); got["web"] != ports["web"] || got["api"] != ports["api"] {
+		t.Fatalf("live legacy stack lost leases: %v", got)
+	}
+}

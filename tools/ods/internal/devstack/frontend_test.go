@@ -113,6 +113,9 @@ func TestFullStackHandoffStopsPreviewBeforeMigration(t *testing.T) {
 	if err := preview.WriteState(&State{Services: []ServiceRecord{record}, Ports: map[string]int{"web": port}, Phase: PhaseReady}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := preview.Registry.LeaseFor(preview.StateDir, preview.StateDir, []PortRequest{{Name: "web", Fixed: port}}); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = preview.stopServices(testOptions().StopTimeout) })
 	next, err := source.Up(context.Background(), &handoffProvider{fakeProvider: &fakeProvider{services: []string{"api", "web"}}, previous: record}, testOptions())
 	if err != nil {
@@ -124,5 +127,8 @@ func TestFullStackHandoffStopsPreviewBeforeMigration(t *testing.T) {
 	state, err := preview.ReadState()
 	if err != nil || len(state.Services) > 0 {
 		t.Fatalf("preview still owns full-stack web: %+v %v", state, err)
+	}
+	if got := leaseNames(t, source.Registry, preview.StateDir); len(got) != 0 {
+		t.Fatalf("handoff kept the preview's leases: %v", got)
 	}
 }

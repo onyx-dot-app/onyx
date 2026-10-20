@@ -75,12 +75,11 @@ export default function CustomAnalyticsUpdateForm() {
             })}
           </>
         </SubLabel>
-        <div className="mt-1">
-          <InputPasswordTypeIn
-            value={secretKey}
-            onChange={(e) => setSecretKey(e.target.value)}
-          />
-        </div>
+        <Spacer rem={0.25} />
+        <InputPasswordTypeIn
+          value={secretKey}
+          onChange={(e) => setSecretKey(e.target.value)}
+        />
         <Spacer rem={1} />
         <Button type="submit">{t("updateButton.label")}</Button>
       </form>

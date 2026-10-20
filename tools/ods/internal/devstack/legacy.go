@@ -151,3 +151,33 @@ func (s *Stack) selectLegacyProject() error {
 	}
 	return nil
 }
+
+// releaseLegacyLeases drops the port leases of the stopped legacy isolated
+// stacks of this repository when shared mode adopts their data. A stack
+// with a live process group keeps every lease; one whose containers still
+// run keeps its Compose host port leases.
+func (s *Stack) releaseLegacyLeases() error {
+	if s.Registry == nil {
+		return nil
+	}
+	legacy, err := s.legacyStates()
+	if err != nil {
+		return err
+	}
+	for _, candidate := range legacy {
+		st := candidate.State
+		if st.Phase != PhaseStopped || st.Root == "" || anyGroupAlive(st.Services) {
+			continue
+		}
+		if running, err := projectContainersRunning(st.Project); err != nil || running {
+			if err := s.Registry.ReleaseNames(st.Root, appLeaseNames(st)); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.Registry.Release(st.Root); err != nil {
+			return err
+		}
+	}
+	return nil
+}

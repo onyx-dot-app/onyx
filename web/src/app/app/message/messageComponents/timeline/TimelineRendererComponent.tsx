@@ -7,7 +7,7 @@ import {
   RenderType,
   RendererResult,
   RendererOutput,
-} from "../interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */

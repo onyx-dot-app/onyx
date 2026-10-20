@@ -16,7 +16,7 @@ import {
   SvgAlertCircle,
   SvgChevronDown,
   SvgServer,
-  SvgFileBraces,
+  SvgCodeFile,
   SvgPlug,
 } from "@opal/icons";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -196,7 +196,7 @@ export default function PluginsPage() {
                   {
                     kind: "action" as const,
                     id: "openapi",
-                    icon: SvgFileBraces,
+                    icon: SvgCodeFile,
                     title: t("kind.openapi"),
                     onSelect: () =>
                       setDialog({
