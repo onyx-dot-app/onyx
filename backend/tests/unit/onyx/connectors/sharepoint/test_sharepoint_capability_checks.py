@@ -606,7 +606,9 @@ def test_documents_check_stops_after_the_first_libraries() -> None:
 def _listed_sites_with_one_file(gateway: MagicMock, count: int, file_at: int) -> None:
     """``count`` listed sites, each with one library. Only the library of site
     ``file_at`` (from 1) holds a file indexing would read."""
-    gateway.list_site_urls.return_value = [f"{SITE_URL}{n}" for n in range(count)]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[f"{SITE_URL}{n}" for n in range(count)], complete=True
+    )
     gateway.list_drives.side_effect = lambda site_url: [
         SharepointDrive(id=site_url, name="Documents", web_url=site_url)
     ]
