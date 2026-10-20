@@ -1,0 +1,5 @@
+/* Amount segments grow with their text, so the caret starts at the front
+   instead of the center of a fixed-width box. */
+.opal-input-currency .opal-input-segment {
+  text-align: start;
+}

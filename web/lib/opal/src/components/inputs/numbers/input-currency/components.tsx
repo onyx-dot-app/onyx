@@ -1,6 +1,7 @@
 "use client";
 
 import "@opal/components/inputs/shared.css";
+import "@opal/components/inputs/numbers/input-currency/styles.css";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import {
@@ -182,7 +183,7 @@ function InputCurrency({
   const symbol = <SegmentSeparator>{parts.symbol}</SegmentSeparator>;
 
   return (
-    <div className="opal-input-segmented-root">
+    <div className="opal-input-segmented-root opal-input-currency">
       <div
         role="presentation"
         className="opal-input opal-input-segmented"
