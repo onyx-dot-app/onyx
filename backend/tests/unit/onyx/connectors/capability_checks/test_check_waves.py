@@ -309,9 +309,12 @@ def test_checks_that_call_the_connector_run_one_at_a_time() -> None:
             in_connector += 1
             most_in_connector = max(most_in_connector, in_connector)
         connector_started.set()
-        gateway_ran_alongside.wait(_WAIT_SECONDS)
-        with lock:
-            in_connector -= 1
+        try:
+            if not gateway_ran_alongside.wait(_WAIT_SECONDS):
+                raise RuntimeError("the gateway check did not run alongside")
+        finally:
+            with lock:
+                in_connector -= 1
 
     def gateway_body() -> None:
         if not connector_started.wait(_WAIT_SECONDS):
