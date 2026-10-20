@@ -101,7 +101,8 @@ The naming split is real: the product says Agent, the router paths say
 | GET | `/admin/agents` | `api.py:get_agents_admin_paginated` | |
 | PATCH | `/admin/agents/display-priorities` | `api.py:patch_agents_display_priorities` | |
 | GET | `/admin/default-assistant/configuration` | `default_assistant/api.py:get_default_assistant_configuration` | |
-| PATCH | `/admin/default-assistant` | `default_assistant/api.py:update_default_assistant` | Only touches `tool_ids` and `system_prompt`. |
+| PATCH | `/admin/default-assistant` | `default_assistant/api.py:update_default_assistant` | Only touches `tool_ids` (full list) and `system_prompt`. |
+| PATCH | `/admin/default-assistant/tools` | `default_assistant/api.py:update_default_assistant_tools` | Adds or removes only the given `tool_ids` (`enabled`). |
 | GET | `/analytics/assistant/{id}/stats` | `ee/onyx/server/analytics/api.py:get_assistant_stats` | Backs the stats page. EE only. |
 | GET | `/analytics/admin/persona/messages`, `/unique-users` | `ee/onyx/server/analytics/api.py` | Finer-grained analytics feeding the same page. |
 
@@ -320,11 +321,15 @@ Removing it only changes default Chat selection. Custom agents ignore the legacy
 flag but still require access and authentication. No migration rewrites existing rows.
 See [[mcp-and-custom-tools]] §4.5 for the plugin API contract.
 
-Frontend `useDefaultAssistantConfiguration` sequences complete replacement
-writes per SWR cache. Plugin forms and the default-assistant editor share that queue
-without copying configuration data. A failed write rolls back before the next
-operation reads the cache. Separate browsers still need backend concurrency
-control for simultaneous edits.
+All writers of the default assistant's tool list lock its persona row
+(`db/persona.py:_lock_default_assistant__no_commit`), so concurrent writes
+serialize. They change `persona__tool` rows with core SQL, not an ORM
+collection replace, so a concurrent delete cannot cause `StaleDataError`.
+
+Frontend `useDefaultAssistantConfiguration.updateTools` sends only the changed
+tool ids to `PATCH /admin/default-assistant/tools`. A stale cache therefore
+cannot drop tools that another client added. Writes are also sequenced per SWR
+cache, and a failed write rolls back before the next operation reads the cache.
 
 ### 4.6 Pinning
 

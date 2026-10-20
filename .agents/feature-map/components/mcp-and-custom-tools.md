@@ -487,14 +487,15 @@ Main Chat uses the same
 `Persona__Tool` selections as Admin > Chat Preferences. There is no separate
 server flag or schema migration. The page reads
 `GET /admin/default-assistant/configuration` and saves through
-`PATCH /admin/default-assistant` with `tool_ids`. These endpoints require
+`PATCH /admin/default-assistant/tools` with the changed `tool_ids` and
+`enabled`. These endpoints require
 `FULL_ADMIN_PANEL_ACCESS`. Other action managers cannot change the main Chat setting.
 Enabling selects this server's tools; disabling removes them. Both operations
 preserve selections from other servers and built-in tools. A selected subset
 shows the server as available. Changes in either surface appear in the other.
-The frontend sequences complete replacement writes across hook instances
-sharing one SWR cache. Rejection rolls back before the next write. Different
-browser clients still require backend concurrency control.
+The backend locks the default persona row for each write, so different
+browser clients serialize. The frontend also sequences writes across hook
+instances sharing one SWR cache. Rejection rolls back before the next write.
 Refreshing an existing server does not select new tools automatically. Custom
 agent attachments remain unchanged.
 

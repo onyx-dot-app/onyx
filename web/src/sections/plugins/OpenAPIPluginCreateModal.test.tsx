@@ -53,8 +53,10 @@ test.each([
         writes.push({ path, body: JSON.parse(String(init.body)) });
       if (path === "/api/admin/default-assistant/configuration")
         return new Response(JSON.stringify({ tool_ids: [99] }));
-      if (path === "/api/admin/default-assistant")
-        return new Response(JSON.stringify({ tool_ids: [99, 42] }));
+      if (path === "/api/admin/default-assistant/tools")
+        return new Response(
+          JSON.stringify({ tool_ids: enabled ? [99, 42] : [99] })
+        );
       if (path === "/api/tool/openapi")
         return new Response(
           JSON.stringify(
@@ -107,13 +109,15 @@ test.each([
       body: expect.objectContaining({ enabled: true }),
     });
     expect(writes).toContainEqual({
-      path: "/api/admin/default-assistant",
-      body: { tool_ids: enabled ? [99, 42] : [99] },
+      path: "/api/admin/default-assistant/tools",
+      body: { tool_ids: [42], enabled },
     });
     expect(
       writes.findIndex((write) => write.path === "/api/admin/tool/custom")
     ).toBeLessThan(
-      writes.findIndex((write) => write.path === "/api/admin/default-assistant")
+      writes.findIndex(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )
     );
   }
 );

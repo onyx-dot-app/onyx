@@ -114,6 +114,89 @@ def test_explicit_legacy_openapi_selection_enables_default_chat(
     assert tool.id in [selected.id for selected in persona.tools]
 
 
+def test_full_list_resend_does_not_enable_stale_legacy_attachment(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    legacy = make_tool(enabled=False, openapi=True)
+    active = make_tool(enabled=True, openapi=True)
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    persona.tools = [legacy, active]
+    db_session.commit()
+
+    update_default_assistant_configuration(db_session=db_session, tool_ids=[active.id])
+
+    db_session.refresh(legacy)
+    assert legacy.enabled is False
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    assert [tool.id for tool in persona.tools] == [active.id]
+
+
+def test_concurrent_full_list_updates_do_not_fail(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    """Parallel full-list writes used to collide on the persona__tool rows and
+    fail with StaleDataError. They must serialize and each succeed."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    shared_ids = [make_tool(enabled=True).id for _ in range(30)]
+    extra_ids = [make_tool(enabled=True).id for _ in range(8)]
+    bind = db_session.get_bind()
+
+    def replace_full_list(extra_id: int) -> None:
+        with Session(bind=bind) as session:
+            update_default_assistant_configuration(
+                db_session=session, tool_ids=[*shared_ids, extra_id]
+            )
+
+    for _ in range(3):
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(replace_full_list, extra_ids))
+
+    db_session.expire_all()
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    selected = {tool.id for tool in persona.tools}
+    assert set(shared_ids) <= selected
+    assert len(selected & set(extra_ids)) == 1
+
+
+def test_concurrent_targeted_adds_keep_every_tool(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from onyx.db.persona import set_default_chat_tools__no_commit
+
+    groups = [[make_tool(enabled=True).id for _ in range(5)] for _ in range(6)]
+    bind = db_session.get_bind()
+
+    def add_tools(tool_ids: list[int]) -> None:
+        with Session(bind=bind) as session:
+            set_default_chat_tools__no_commit(session, tool_ids, True)
+            session.commit()
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        list(executor.map(add_tools, groups))
+
+    db_session.expire_all()
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    selected = {tool.id for tool in persona.tools}
+    for ids in groups:
+        assert set(ids) <= selected
+
+    # Removal only drops the given tools.
+    set_default_chat_tools__no_commit(db_session, groups[0], False)
+    db_session.commit()
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    selected = {tool.id for tool in persona.tools}
+    assert not set(groups[0]) & selected
+    assert set(groups[1]) <= selected
+
+
 @pytest.mark.parametrize("enabled", [True, False])
 def test_targeted_default_chat_update_preserves_other_selection(
     db_session: Session, make_tool: ToolFactory, enabled: bool
@@ -234,4 +317,68 @@ def test_custom_tool_api_saves_default_chat_with_metadata(
         assert api.get_custom_tool(created.id, db_session, User()).name == "renamed"
     finally:
         delete_tool__no_commit(created.id, db_session)
+        db_session.commit()
+
+
+def test_tools_endpoint_adds_and_rejects_unknown_tools(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    from onyx.db.models import User
+    from onyx.error_handling.exceptions import OnyxError
+    from onyx.server.features.default_assistant.api import (
+        update_default_assistant_tools,
+    )
+    from onyx.server.features.default_assistant.models import (
+        DefaultAssistantToolsUpdateRequest,
+    )
+
+    tool = make_tool(enabled=True)
+    configuration = update_default_assistant_tools(
+        DefaultAssistantToolsUpdateRequest(tool_ids=[tool.id], enabled=True),
+        User(),
+        db_session,
+    )
+    assert tool.id in configuration.tool_ids
+
+    with pytest.raises(OnyxError, match="not found") as error:
+        update_default_assistant_tools(
+            DefaultAssistantToolsUpdateRequest(tool_ids=[2_000_000_000], enabled=True),
+            User(),
+            db_session,
+        )
+    assert error.value.status_code == 400
+
+
+def test_default_selection_leaves_custom_agent_tools_alone(
+    db_session: Session, make_tool: ToolFactory
+) -> None:
+    from onyx.db.models import Persona
+    from onyx.db.persona import set_default_chat_tools__no_commit
+
+    shared = make_tool(enabled=True)
+    custom_only = make_tool(enabled=True)
+    custom = Persona(
+        name=f"default-assistant-isolation-{uuid4().hex[:8]}",
+        description="custom agent",
+        system_prompt=None,
+        tools=[shared, custom_only],
+        document_sets=[],
+        users=[],
+        groups=[],
+        is_listed=True,
+        is_public=True,
+        deleted=False,
+    )
+    db_session.add(custom)
+    db_session.commit()
+    try:
+        update_default_assistant_configuration(
+            db_session=db_session, tool_ids=[shared.id]
+        )
+        set_default_chat_tools__no_commit(db_session, [shared.id], False)
+        db_session.commit()
+        db_session.refresh(custom)
+        assert {tool.id for tool in custom.tools} == {shared.id, custom_only.id}
+    finally:
+        db_session.delete(custom)
         db_session.commit()

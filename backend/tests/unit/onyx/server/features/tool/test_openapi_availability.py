@@ -81,10 +81,9 @@ def test_legacy_disabled_openapi_is_available_only_to_custom_agents(
         assert not is_tool_available_for_persona(other, persona_id)
 
 
-def test_default_configuration_omits_legacy_disabled_links_and_explicit_selection_enables(
+def test_default_configuration_omits_legacy_disabled_links(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.db import persona as persona_db
     from onyx.db.models import Persona
     from onyx.server.features.default_assistant import api as default_api
 
@@ -93,23 +92,8 @@ def test_default_configuration_omits_legacy_disabled_links_and_explicit_selectio
     default = Persona(id=0, tools=[legacy, active], system_prompt=None)
     db = MagicMock(spec=Session)
     monkeypatch.setattr(default_api, "get_default_assistant", lambda *_: default)
-    monkeypatch.setattr(persona_db, "get_default_assistant", lambda *_: default)
-    tools = {1: legacy, 2: active}
-    db.query.return_value.filter.return_value.one_or_none.side_effect = [
-        active,
-        legacy,
-        active,
-    ]
     before = default_api.get_default_assistant_configuration(User(), db)
     assert before.tool_ids == [2]
-    # A read-modify-write of another setting must not activate stale attachments.
-    persona_db.update_default_assistant_configuration(db, tool_ids=before.tool_ids)
-    assert legacy.enabled is False
-    assert default.tools == [active]
-    persona_db.update_default_assistant_configuration(db, tool_ids=[1, 2])
-    assert legacy.enabled is True
-    assert default.tools == [tools[1], tools[2]]
-    assert db.commit.call_count == 2
 
 
 @pytest.mark.parametrize("enabled", [True, False])
