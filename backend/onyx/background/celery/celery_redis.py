@@ -8,10 +8,14 @@ from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.configs.app_configs import (
+    REDIS_DB_NUMBER_CELERY,
     REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_POOL_MAX_CONNECTIONS,
+    REDIS_SENTINEL_HOSTS,
     REDIS_SOCKET_TIMEOUT_KWARGS,
 )
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
+from onyx.redis.redis_pool import RedisPool
 
 _broker_client: Redis | None = None
 _broker_url: str | None = None
@@ -52,6 +56,18 @@ def celery_get_broker_client(app: Celery) -> Redis:
             _broker_client = None
 
         _broker_url = url
+        # redis-py can't parse kombu's `sentinel://` URLs, so resolve the master
+        # through the same Sentinel config the app Redis pool uses.
+        if REDIS_SENTINEL_HOSTS and url.startswith("sentinel://"):
+            _broker_client = Redis(
+                connection_pool=RedisPool._create_sentinel_pool(
+                    db=REDIS_DB_NUMBER_CELERY,
+                    max_connections=REDIS_POOL_MAX_CONNECTIONS,
+                    replica=False,
+                )
+            )
+            return _broker_client
+
         _broker_client = Redis.from_url(
             url,
             decode_responses=False,
