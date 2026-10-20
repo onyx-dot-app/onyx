@@ -97,10 +97,7 @@ from onyx.file_processing.unstructured import (
 )
 from onyx.indexing.port_reembed import ReembedStrategy, select_reembed_strategy
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
-from onyx.natural_language_processing.search_nlp_models import (
-    EmbeddingModel,
-    clean_model_name,
-)
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
@@ -135,6 +132,7 @@ from shared_configs.embedding_models import (
     selectable_embedding_model_specs,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.utils import clean_model_name
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()

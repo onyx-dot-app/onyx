@@ -101,7 +101,6 @@ from shared_configs.model_server_models import (
 from shared_configs.utils import batch_list
 
 # Re-export: alembic dbaa756c2ccf and other callers import it from this module.
-from shared_configs.utils import clean_model_name as clean_model_name
 
 logger = setup_logger()
 

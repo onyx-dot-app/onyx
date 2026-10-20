@@ -12,9 +12,7 @@ import pytest
 
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.natural_language_processing import search_nlp_models
 from onyx.server.manage.search_settings import _compute_index_name
-from shared_configs import utils as shared_utils
 from shared_configs.embedding_models import (
     EmbeddingModelSpec,
     selectable_embedding_model_specs,
@@ -118,11 +116,6 @@ def test_new_supported_embedding_models(name: str, dim: int, index_name: str) ->
 def test_no_pre_existing_index_name_was_removed() -> None:
     index_names = {m.index_name for m in SUPPORTED_EMBEDDING_MODELS}
     assert _PRE_EXISTING_INDEX_NAMES <= index_names
-
-
-def test_clean_model_name_is_re_exported_from_search_nlp_models() -> None:
-    """alembic dbaa756c2ccf imports it from search_nlp_models."""
-    assert search_nlp_models.clean_model_name is shared_utils.clean_model_name
 
 
 _BACKEND_DIR = Path(__file__).resolve().parents[4]

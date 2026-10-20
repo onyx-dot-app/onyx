@@ -28,11 +28,11 @@ from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
     _vertex_requires_single_content,
-    clean_model_name,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
+from shared_configs.utils import clean_model_name
 
 
 @pytest.fixture
