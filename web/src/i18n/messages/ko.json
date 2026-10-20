@@ -4825,9 +4825,9 @@
       },
       "form": {
         "addButton": {
-          "label": "재정의 추가"
+          "label": "추가"
         },
-        "addTitle": "비용 재정의 추가",
+        "title": "비용 재정의",
         "cacheRate": {
           "label": "캐시 읽기 요금",
           "placeholder": "기본값은 입력 요금입니다"
@@ -4835,7 +4835,6 @@
         "cancelButton": {
           "label": "취소"
         },
-        "editTitle": "비용 재정의 편집",
         "inputRate": {
           "label": "입력 요금"
         },

@@ -4825,9 +4825,9 @@
       },
       "form": {
         "addButton": {
-          "label": "Añadir tarifa personalizada"
+          "label": "Agregar"
         },
-        "addTitle": "Agregar anulación de costo",
+        "title": "Anulación de costo",
         "cacheRate": {
           "label": "Tarifa de lectura de caché",
           "placeholder": "usa la tarifa de entrada"
@@ -4835,7 +4835,6 @@
         "cancelButton": {
           "label": "Cancelar"
         },
-        "editTitle": "Editar anulación de costo",
         "inputRate": {
           "label": "Tarifa de entrada"
         },

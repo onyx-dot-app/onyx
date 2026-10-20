@@ -174,7 +174,7 @@ describe("CostOverridesPanel", () => {
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
-        name: "Add override",
+        name: "Add",
       }
     );
     await user.click(submitButton);
@@ -203,7 +203,7 @@ describe("CostOverridesPanel", () => {
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
-        name: "Add override",
+        name: "Add",
       }
     );
     await user.click(submitButton);
@@ -232,7 +232,7 @@ describe("CostOverridesPanel", () => {
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
-        name: "Add override",
+        name: "Add",
       }
     );
     expect(submitButton).toBeEnabled();

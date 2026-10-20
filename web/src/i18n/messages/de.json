@@ -4825,9 +4825,9 @@
       },
       "form": {
         "addButton": {
-          "label": "Überschreibung hinzufügen"
+          "label": "Hinzufügen"
         },
-        "addTitle": "Kostenüberschreibung hinzufügen",
+        "title": "Kostenüberschreibung",
         "cacheRate": {
           "label": "Preis für Cache-Lesevorgänge",
           "placeholder": "standardmäßig der Eingabepreis"
@@ -4835,7 +4835,6 @@
         "cancelButton": {
           "label": "Abbrechen"
         },
-        "editTitle": "Kostenüberschreibung bearbeiten",
         "inputRate": {
           "label": "Eingabepreis"
         },
