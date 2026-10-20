@@ -199,6 +199,22 @@ TRANSIENT_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
         CheckErrorKind.UNEXPECTED,
     }
 )
+
+
+class CheckNotRunReason(str, Enum):
+    """Why a SKIPPED check did not run, when a gate of the run stopped it."""
+
+    # A check it depends on FAILED.
+    DEPENDENCY_FAILED = "dependency_failed"
+    # A check it depends on is INCOMPLETE.
+    DEPENDENCY_INCOMPLETE = "dependency_incomplete"
+    # A check it depends on was SKIPPED for a reason of its own, such as a
+    # setting it needs.
+    DEPENDENCY_SKIPPED = "dependency_skipped"
+    # The source rate limited an earlier check, so the run stopped.
+    RATE_LIMITED = "rate_limited"
+
+
 _UNREACHABLE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
     {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE}
 )
@@ -332,6 +348,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         validates_binding: bool = False,
         discovery: bool = False,
         fails_when_unreachable: bool = False,
+        depends_on: tuple[str, ...] = (),
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -373,6 +390,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         # FAILS it, because Onyx cannot use the account. Other runs keep it
         # INCOMPLETE, so a slow source never holds indexing.
         self.fails_when_unreachable = fails_when_unreachable
+        # The check_ids this check runs after. A dependency that FAILED, is
+        # INCOMPLETE or did not run stops the check. One that does not apply is
+        # left out, so a check can list alternatives (e.g. both token types'
+        # sign-in checks).
+        self.depends_on = depends_on
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool
@@ -446,6 +468,9 @@ class CapabilityCheckResult(BaseModel):
     error_type: str | None = None
     # Why a FAILED or INCOMPLETE check did not pass.
     error_kind: CheckErrorKind | None = None
+    # Why a SKIPPED check did not run, and the dependency that stopped it.
+    not_run_reason: CheckNotRunReason | None = None
+    blocked_by: str | None = None
     is_fallback: bool = False
     remediation: str | None = None
     docs_link: str | None = None

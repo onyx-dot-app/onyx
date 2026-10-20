@@ -250,6 +250,44 @@ def _sample_pages(
     )
 
 
+_SIGN_IN_CHECK_IDS = ("confluence_auth", "confluence_scoped_token_auth")
+_SPACE_PERMISSION_CHECK_IDS = (
+    "confluence_space_permissions_read",
+    "confluence_space_permissions_read_dc_rest",
+    "confluence_space_permissions_read_dc_jsonrpc",
+)
+_USER_LISTING_CHECK_IDS = ("confluence_user_listing", "confluence_user_listing_dc")
+# check_id to the checks it runs after, in run order. A listed check that does
+# not apply (another token type or deployment) is left out.
+_DEPENDS_ON: dict[str, tuple[str, ...]] = {
+    "confluence_spaces_visible": _SIGN_IN_CHECK_IDS,
+    "confluence_space_listing": ("confluence_spaces_visible",),
+    "confluence_configured_space": ("confluence_spaces_visible",),
+    "confluence_configured_page": ("confluence_spaces_visible",),
+    "confluence_cql_query": ("confluence_spaces_visible",),
+    "confluence_content_read": (
+        "confluence_spaces_visible",
+        "confluence_configured_space",
+        "confluence_configured_page",
+        "confluence_cql_query",
+    ),
+    "confluence_comments_read": ("confluence_content_read",),
+    "confluence_attachments_read": ("confluence_content_read",),
+    "confluence_user_names": ("confluence_content_read",),
+    "confluence_page_restrictions_read": ("confluence_content_read",),
+    "confluence_restrictions_batch_read": ("confluence_page_restrictions_read",),
+    **dict.fromkeys(_SPACE_PERMISSION_CHECK_IDS, ("confluence_spaces_visible",)),
+    "confluence_permission_user_emails": _SPACE_PERMISSION_CHECK_IDS,
+    "confluence_permission_user_emails_dc": _SPACE_PERMISSION_CHECK_IDS,
+    "confluence_anonymous_space_access": _SPACE_PERMISSION_CHECK_IDS,
+    **dict.fromkeys(_USER_LISTING_CHECK_IDS, _SIGN_IN_CHECK_IDS),
+    "confluence_group_membership": _USER_LISTING_CHECK_IDS,
+    "confluence_group_membership_dc": _USER_LISTING_CHECK_IDS,
+    "confluence_group_user_emails": _USER_LISTING_CHECK_IDS,
+    "confluence_group_user_emails_dc": _USER_LISTING_CHECK_IDS,
+}
+
+
 class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
     config_class = ConfluenceConnectorConfig
 
@@ -277,6 +315,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             validates_binding=validates_binding,
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
+            depends_on=_DEPENDS_ON.get(check_id, ()),
         )
 
 
