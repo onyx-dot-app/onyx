@@ -21,7 +21,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
