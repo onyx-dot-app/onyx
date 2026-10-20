@@ -480,8 +480,8 @@ that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
 as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`. For a source with a
 check graph file (loaded by `backend/onyx/connectors/capability_checks/graph.py`; Jira so
-far, `backend/onyx/connectors/jira/check_graph.json`, with its EE permission-sync nodes in
-`backend/ee/onyx/external_permissions/jira/check_graph.json`), that file is the source of truth for
+far, `backend/onyx/connectors/jira/checks.json`, with its EE permission-sync nodes in
+`backend/ee/onyx/external_permissions/jira/checks.json`), that file is the source of truth for
 the check metadata and `depends_on`: check classes read their node with
 `init_from_graph`, and the file is validated (unique ids, known dependencies, no
 cycle) when first loaded;

@@ -1,4 +1,4 @@
-"""The check graph: each source's ``check_graph.json`` loads, validates, and
+"""The check graph: each source's ``checks.json`` loads, validates, and
 matches the checks the code registers."""
 
 from collections.abc import Iterator
@@ -35,14 +35,14 @@ def _fresh_graphs() -> Iterator[None]:
 def _write_graph(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, nodes_json: str
 ) -> None:
-    path = tmp_path / "check_graph.json"
+    path = tmp_path / "checks.json"
     path.write_text(f'{{"source": "jira", "nodes": {nodes_json}}}')
     monkeypatch.setattr(graph, "_graph_paths", lambda _source: [path])
 
 
 def test_every_graph_file_loads_and_validates() -> None:
-    files = sorted(_BACKEND_ROOT.glob("onyx/connectors/*/check_graph.json")) + sorted(
-        _BACKEND_ROOT.glob("ee/onyx/external_permissions/*/check_graph.json")
+    files = sorted(_BACKEND_ROOT.glob("onyx/connectors/*/checks.json")) + sorted(
+        _BACKEND_ROOT.glob("ee/onyx/external_permissions/*/checks.json")
     )
     assert files, "no check graph files found"
     for path in files:

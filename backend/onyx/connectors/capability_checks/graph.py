@@ -1,7 +1,7 @@
 """The connector check graph: each source's checks, their static metadata and
 the checks each one runs after.
 
-A source's ``check_graph.json`` is the source of truth for that metadata and
+A source's ``checks.json`` is the source of truth for that metadata and
 for the dependencies. Check classes keep only behaviour (``run``, ``applies``)
 and read the rest from their node by ``check_id``. Permission-sync nodes,
 which only the EE registry registers, live in a separate file under ``ee/``.
@@ -20,7 +20,7 @@ from onyx.db.enums import AccessType
 
 # backend/, the parent of the onyx/ and ee/ packages.
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
-_GRAPH_FILE_NAME = "check_graph.json"
+_GRAPH_FILE_NAME = "checks.json"
 
 
 class CheckNode(BaseModel):
@@ -53,7 +53,7 @@ class CheckNode(BaseModel):
 
 
 class CheckGraphFile(BaseModel):
-    """The contents of one ``check_graph.json``."""
+    """The contents of one ``checks.json``."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
