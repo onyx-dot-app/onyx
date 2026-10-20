@@ -15,6 +15,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CheckAdvisory,
+    CheckErrorDetail,
     CheckErrorKind,
     CheckFinding,
     CheckNotApplicableError,
@@ -22,8 +23,10 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
+    check_error_detail,
     check_error_kind,
     compute_capability_verdicts,
+    credential_strings,
 )
 from onyx.connectors.capability_checks.registry import (
     get_applicable_capabilities,
@@ -105,6 +108,7 @@ class _CheckOutcome(BaseModel):
     message: str = ""
     error_type: str | None = None
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
     duration_ms: int | None = None
@@ -125,6 +129,7 @@ def _build_result(
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,
+        error_detail=outcome.error_detail,
         not_run_reason=outcome.not_run_reason,
         blocked_by=outcome.blocked_by,
         is_fallback=check.is_fallback,
@@ -139,8 +144,28 @@ def _build_result(
     )
 
 
+def _safe_error_detail(
+    check: CapabilityCheck,
+    context: CapabilityCheckContext,
+    error: Exception,
+    error_kind: CheckErrorKind,
+) -> CheckErrorDetail | None:
+    """The error's detail, or None when building it fails: a detail is for
+    support, and must never fail the run."""
+    try:
+        return check_error_detail(
+            error, error_kind, credential_strings(context.credential_json)
+        )
+    except Exception:
+        logger.exception(
+            "Could not build the error detail of capability check %s", check.check_id
+        )
+        return None
+
+
 def _error_outcome(
     check: CapabilityCheck,
+    context: CapabilityCheckContext,
     error: Exception,
     form_run: bool,
     message: str | None = None,
@@ -154,12 +179,13 @@ def _error_outcome(
         message=str(error) if message is None else message,
         error_type=type(error).__name__,
         error_kind=error_kind,
+        error_detail=_safe_error_detail(check, context, error, error_kind),
         duration_ms=duration_ms,
     )
 
 
 def _missing_instance_outcome(
-    check: CapabilityCheck, instantiation_error: Exception | None, form_run: bool
+    check: CapabilityCheck, context: CapabilityCheckContext, form_run: bool
 ) -> _CheckOutcome:
     """
     Maps a missing connector instance to an outcome for an instance-requiring
@@ -170,12 +196,12 @@ def _missing_instance_outcome(
     with a supplied config is real signal and follows the check exception
     contract.
     """
-    if instantiation_error is None:
+    if context.instantiation_error is None:
         return _CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_NEEDS_INSTANCE_MESSAGE,
         )
-    return _error_outcome(check, instantiation_error, form_run)
+    return _error_outcome(check, context, context.instantiation_error, form_run)
 
 
 def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
@@ -232,7 +258,12 @@ def _execute_check(
             timeout_seconds,
         )
         return _error_outcome(
-            check, e, form_run, message=_TIMEOUT_MESSAGE, duration_ms=elapsed_ms()
+            check,
+            context,
+            e,
+            form_run,
+            message=_TIMEOUT_MESSAGE,
+            duration_ms=elapsed_ms(),
         )
     except Exception as e:
         if check_error_kind(e) == CheckErrorKind.UNEXPECTED:
@@ -241,7 +272,7 @@ def _execute_check(
                 check.check_id,
                 e,
             )
-        return _error_outcome(check, e, form_run, duration_ms=elapsed_ms())
+        return _error_outcome(check, context, e, form_run, duration_ms=elapsed_ms())
     output = output or CheckOutput()
     return _CheckOutcome(
         status=CapabilityCheckStatus.PASSED,
@@ -632,9 +663,7 @@ def _unrunnable_outcome(
         case CheckReadinessKind.RUNNABLE:
             return None
         case CheckReadinessKind.NEEDS_INSTANCE:
-            return _missing_instance_outcome(
-                check, context.instantiation_error, form_run
-            )
+            return _missing_instance_outcome(check, context, form_run)
         case CheckReadinessKind.INVALID_FIELDS:
             return _CheckOutcome(
                 status=CapabilityCheckStatus.FAILED,

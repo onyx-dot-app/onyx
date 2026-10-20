@@ -1,10 +1,14 @@
+import re
+import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from typing import Annotated, Any, Generic, Literal
+from urllib.parse import urlparse
 
+import requests
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,6 +31,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InsufficientPermissionsError,
     RateLimitedValidationError,
+    SourceApiError,
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
@@ -34,6 +39,7 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 
 logger = setup_logger()
 
@@ -199,6 +205,129 @@ TRANSIENT_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
         CheckErrorKind.UNEXPECTED,
     }
 )
+
+
+# Kinds whose cause the check does not know: their result keeps a stack trace.
+_UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE, CheckErrorKind.UNEXPECTED}
+)
+# Bounds what a result stores of the source's response and of a stack trace:
+# results live in stored reports and in every draft snapshot write.
+MAX_RESPONSE_EXCERPT_CHARS: int = 500
+MAX_STACK_TRACE_CHARS: int = 4000
+# How much of a response body is redacted before the excerpt is cut from it.
+# Far past the excerpt, so a secret cut at this bound never reaches it.
+_MAX_REDACTED_BODY_CHARS: int = 64 * 1024
+# A URL anywhere in a text, with any scheme. Each match is rebuilt by
+# ``_safe_location``, the parser the request line uses too.
+_URL_PATTERN = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>]+", re.IGNORECASE)
+_UNPARSABLE_URL = "[URL]"
+
+
+class CheckErrorDetail(BaseModel):
+    """What support needs about a check that did not pass, beyond its
+    message. The form shows it as Error Details."""
+
+    # The source's HTTP status, request and response, when the error carries
+    # an HTTP response. The request has no query string, which can hold
+    # secrets.
+    status_code: int | None = None
+    request: str | None = None
+    response_excerpt: str | None = None
+    # Only when the cause is unknown: a timeout, an unreachable source or an
+    # unexpected error.
+    stack_trace: str | None = None
+
+
+def _safe_location(url: str) -> str:
+    """A URL's host, port and path only: its user info, parameters, query
+    string and fragment can hold secrets. A URL that does not parse is
+    replaced whole."""
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+        host = parsed.hostname or ""
+    except ValueError:
+        return _UNPARSABLE_URL
+    return f"{host}{f':{port}' if port else ''}{parsed.path}"
+
+
+def _request_line(method: str | None, url: str | None) -> str | None:
+    if url is None:
+        return None
+    location = _safe_location(url)
+    return f"{method} {location}" if method else location
+
+
+def credential_strings(credential_json: Any) -> list[str]:
+    """Every string in a credential's values, nested ones included, to redact
+    from what a check stores."""
+    if isinstance(credential_json, str):
+        return [credential_json]
+    if isinstance(credential_json, dict):
+        return [
+            text
+            for value in credential_json.values()
+            for text in credential_strings(value)
+        ]
+    if isinstance(credential_json, list):
+        return [text for value in credential_json for text in credential_strings(value)]
+    return []
+
+
+def _scrubbed(text: str, secrets: Iterable[str]) -> str:
+    without_urls = _URL_PATTERN.sub(lambda match: _safe_location(match[0]), text)
+    return scrub_sensitive_values(without_urls, secrets)
+
+
+def _http_detail(error: BaseException) -> CheckErrorDetail | None:
+    """The HTTP response of the first error in the chain that has one, with
+    the whole body: ``check_error_detail`` redacts it, then cuts it. The
+    chain follows the cause, else the context the traceback would show."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, SourceApiError):
+            return CheckErrorDetail(
+                status_code=current.status_code,
+                request=_request_line(current.method, current.url),
+                response_excerpt=current.body or None,
+            )
+        if isinstance(current, requests.HTTPError) and current.response is not None:
+            response = current.response
+            return CheckErrorDetail(
+                status_code=response.status_code,
+                request=_request_line(
+                    response.request.method if response.request else None,
+                    response.url,
+                ),
+                response_excerpt=response.text or None,
+            )
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
+    return None
+
+
+def check_error_detail(
+    error: Exception, error_kind: CheckErrorKind, secrets: Iterable[str]
+) -> CheckErrorDetail | None:
+    """The detail of a check's exception: the HTTP response it carries, and a
+    stack trace when the cause is unknown. None when it has neither. URL query
+    strings and every value of ``secrets`` (the run's credential values) are
+    removed from the response and the trace before either is cut to size,
+    so a cut cannot leave part of a secret."""
+    secrets = list(secrets)
+    detail = _http_detail(error) or CheckErrorDetail()
+    if detail.response_excerpt is not None:
+        detail.response_excerpt = _scrubbed(
+            detail.response_excerpt[:_MAX_REDACTED_BODY_CHARS], secrets
+        )[:MAX_RESPONSE_EXCERPT_CHARS]
+    if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
+        trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
+        detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
+    return detail if detail != CheckErrorDetail() else None
 
 
 class CheckNotRunReason(str, Enum):
@@ -468,6 +597,7 @@ class CapabilityCheckResult(BaseModel):
     error_type: str | None = None
     # Why a FAILED or INCOMPLETE check did not pass.
     error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
     # Why a SKIPPED check did not run, and the dependency that stopped it.
     not_run_reason: CheckNotRunReason | None = None
     blocked_by: str | None = None
