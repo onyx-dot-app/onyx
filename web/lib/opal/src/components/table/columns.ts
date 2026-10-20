@@ -61,6 +61,7 @@ function resolveData<TData>(
     sortIcon,
     weight = 20,
     alignment,
+    truncate,
   } = col;
   const helper = createColumnHelper<TData>();
   const options = {
@@ -109,6 +110,7 @@ function resolveData<TData>(
     width: { weight, minWidth: Math.max(title.length * 8 + 40, 80) },
     icon: sortIcon,
     alignment,
+    truncate,
   };
 }
 

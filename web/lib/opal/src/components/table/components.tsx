@@ -264,8 +264,15 @@ export function Table<TData>(props: DataTableProps<TData>) {
     }
   }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveDraggable = serverSide ? undefined : draggable;
+  // Drag indexes come from the rows the query leaves visible, so hidden rows
+  // keep their positions.
+  const filteredRows = table.getFilteredRowModel().rows;
+  const draggableData = useMemo(
+    () => filteredRows.map((row) => row.original),
+    [filteredRows]
+  );
   const draggableReturn = useDraggableRows({
-    data: items,
+    data: draggableData,
     getRowId,
     enabled: !!effectiveDraggable && table.getState().sorting.length === 0,
     onReorder: effectiveDraggable?.onReorder,
@@ -624,6 +631,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                           data-column-id={cell.column.id}
                           alignment={
                             columnKindMap.get(cell.column.id)?.alignment
+                          }
+                          truncate={
+                            cellColDef?.kind === "data" && cellColDef.truncate
                           }
                         >
                           {flexRender(
