@@ -8,7 +8,10 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks import draft_runs, runner
-from onyx.connectors.capability_checks.creation import _unfinished_results
+from onyx.connectors.capability_checks.creation import (
+    _defer_dependents_of_unfinished,
+    _unfinished_results,
+)
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckState,
     DraftCheckStateKind,
@@ -255,6 +258,37 @@ def test_unfinished_checks_after_a_failed_dependency_report_its_cause() -> None:
     ]
     for result in results[:2]:
         assert result.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+        assert result.blocked_by == "sign_in"
+
+
+def test_a_check_that_finished_before_its_dependency_waits_for_it() -> None:
+    checks: list[CapabilityCheck] = [
+        _Check("sign_in"),
+        _Check("list", depends_on=("sign_in",)),
+        _Check("content", depends_on=("list",)),
+        _Check("other"),
+    ]
+    finished, unfinished = _defer_dependents_of_unfinished(
+        checks,
+        [
+            _result("list", CapabilityCheckStatus.FAILED),
+            _result("content", CapabilityCheckStatus.PASSED),
+            _result("other", CapabilityCheckStatus.PASSED),
+        ],
+        frozenset({"sign_in"}),
+    )
+
+    # The early failure does not block the pairing.
+    assert [result.check_id for result in finished] == ["other"]
+    assert unfinished == {"sign_in", "list", "content"}
+    stored = _unfinished_results(checks, unfinished, finished, "Pairing refused")
+    assert [(result.check_id, result.status) for result in stored] == [
+        ("sign_in", CapabilityCheckStatus.INCOMPLETE),
+        ("list", CapabilityCheckStatus.SKIPPED),
+        ("content", CapabilityCheckStatus.SKIPPED),
+    ]
+    for result in stored[1:]:
+        assert result.not_run_reason == CheckNotRunReason.DEPENDENCY_INCOMPLETE
         assert result.blocked_by == "sign_in"
 
 

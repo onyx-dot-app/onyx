@@ -47,6 +47,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             check_id=check_id,
             display_name=f"{check_id} display",
             requires_connector_instance=False,
+            depends_on=harness.depends_on.get(check_id, ()),
         )
         self._harness = harness
 
@@ -63,6 +64,7 @@ class _Harness:
         self.configs: list[dict[str, Any] | None] = []
         self.errors: dict[str, Exception] = {}
         self.slow: dict[str, threading.Event] = {}
+        self.depends_on: dict[str, tuple[str, ...]] = {}
         self.send_run_task = MagicMock()
         self.record_outcome = MagicMock()
         monkeypatch.setattr(
@@ -169,6 +171,23 @@ def test_a_slow_check_is_unfinished_and_not_enqueued(
             required=True,
         )
     ]
+    harness.assert_no_side_effects(db_session, slack_pair)
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_check_waits_for_its_unfinished_dependency(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.slow[_TOKEN] = threading.Event()
+    harness.depends_on[_CHANNELS] = (_TOKEN,)
+    harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel")
+
+    result = _validate(db_session, slack_pair)
+
+    # The failure came before its dependency's result, so it does not block.
+    assert not result.blocks_pairing
+    assert result.check_results == []
+    assert result.unfinished_check_ids == frozenset({_TOKEN, _CHANNELS})
     harness.assert_no_side_effects(db_session, slack_pair)
 
 

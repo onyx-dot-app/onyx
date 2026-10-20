@@ -1,7 +1,9 @@
 """A row's short line and description: the check error's own, else the
 default of its kind, and the not-run line for a check a gate stopped."""
 
+import ast
 import time
+from pathlib import Path
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
@@ -22,6 +24,10 @@ from onyx.connectors.exceptions import (
 )
 
 _TIMEOUT_SECONDS = 0.2
+_BACKEND_ROOT = Path(__file__).parents[5]
+_MAX_DESCRIPTION_LINES = 3
+# Calls that take a row description without a ``summary`` keyword.
+_ROW_TEXT_CALLS = frozenset({"CheckRowText", "CheckOutput"})
 
 
 class _Check(CapabilityCheck):
@@ -146,3 +152,97 @@ def test_nothing_in_scope_is_a_skipped_row_and_stops_its_dependents() -> None:
     dependent = results["member_emails"]
     assert dependent.not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
     assert dependent.summary == "Not run: Run emails found nothing to test"
+
+
+def _string_values(tree: ast.Module) -> dict[str, list[ast.expr]]:
+    """Each name assigned in the file, with every value assigned to it."""
+    values: dict[str, list[ast.expr]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                values.setdefault(target.id, []).append(value)
+    return values
+
+
+def _line_breaks(
+    node: ast.expr, values: dict[str, list[ast.expr]], seen: frozenset[str]
+) -> int:
+    """The most line breaks the text of ``node`` can hold, as far as the file
+    shows it: calls and attributes count as one line."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value.count("\n")
+    if isinstance(node, ast.JoinedStr):
+        return sum(_line_breaks(value, values, seen) for value in node.values)
+    if isinstance(node, ast.FormattedValue):
+        return _line_breaks(node.value, values, seen)
+    if isinstance(node, ast.BinOp):
+        return _line_breaks(node.left, values, seen) + _line_breaks(
+            node.right, values, seen
+        )
+    if isinstance(node, ast.IfExp):
+        return max(
+            _line_breaks(node.body, values, seen),
+            _line_breaks(node.orelse, values, seen),
+        )
+    if isinstance(node, ast.Name) and node.id not in seen:
+        return max(
+            (
+                _line_breaks(value, values, seen | {node.id})
+                for value in values.get(node.id, [])
+            ),
+            default=0,
+        )
+    return 0
+
+
+def _long_descriptions(source: str) -> list[int]:
+    """The lines of row-text calls whose description can pass the limit."""
+    tree = ast.parse(source)
+    values = _string_values(tree)
+    long: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+        description = keywords.get("description")
+        name = node.func.id if isinstance(node.func, ast.Name) else None
+        if description is None or (
+            "summary" not in keywords and name not in _ROW_TEXT_CALLS
+        ):
+            continue
+        if _line_breaks(description, values, frozenset()) >= _MAX_DESCRIPTION_LINES:
+            long.append(node.lineno)
+    return long
+
+
+def test_the_line_count_reads_names_and_branches() -> None:
+    source = (
+        'NEED = "Two\\nlines"\n'
+        'CheckRowText(summary="s", description=f"One\\n{NEED}\\nFour")\n'
+        'CheckOutput(description="a" if x else "b\\nc\\nd\\ne")\n'
+        'CheckRowText(summary="s", description="One\\nTwo\\nThree")\n'
+    )
+
+    assert _long_descriptions(source) == [2, 3]
+
+
+def test_every_row_description_has_at_most_three_lines() -> None:
+    paths = sorted(
+        {
+            *(_BACKEND_ROOT / "onyx" / "connectors").rglob("*.py"),
+            *(_BACKEND_ROOT / "ee" / "onyx").rglob("capability_checks*.py"),
+        }
+    )
+    long = {
+        str(path.relative_to(_BACKEND_ROOT)): lines
+        for path in paths
+        if (lines := _long_descriptions(path.read_text()))
+    }
+
+    assert long == {}

@@ -678,9 +678,9 @@ class _JqlQueryCheck(_JiraCheck):
                     ),
                 ),
             )
-        if issue is None:
-            # An empty scope fails the first check that reads it: the
-            # connector would index nothing.
+        # An empty issue is an id the fetch did not return: the account cannot
+        # read it. An empty scope fails the first check that reads it.
+        if not issue:
             raise ConnectorValidationError(
                 "The JQL query matched no issue that this credential can read. "
                 "Jira accepted the query. If issues exist, check the query.",

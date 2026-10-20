@@ -1,8 +1,10 @@
 """Error details: the HTTP response an error carries, without the query
 string, and a stack trace only when the cause is unknown."""
 
+import pytest
 import requests
 
+from onyx.connectors.capability_checks import models
 from onyx.connectors.capability_checks.models import (
     MAX_RESPONSE_EXCERPT_CHARS,
     CheckErrorDetail,
@@ -28,10 +30,7 @@ def _http_error(status: int, url: str, body: str) -> requests.HTTPError:
 
 
 def _detail(error: Exception) -> CheckErrorDetail | None:
-    try:
-        raise error
-    except Exception as raised:
-        return check_error_detail(raised, check_error_kind(raised), [])
+    return check_error_detail(error, check_error_kind(error), [])
 
 
 def test_a_mapped_http_error_keeps_the_response_but_not_the_query() -> None:
@@ -182,3 +181,52 @@ def test_a_url_that_does_not_parse_is_replaced() -> None:
     assert detail is not None and detail.stack_trace is not None
     assert "[URL]" in detail.stack_trace
     assert "token=t" not in detail.stack_trace
+
+
+def test_parameters_of_every_path_segment_are_removed() -> None:
+    detail = _detail(
+        RuntimeError("Tried https://api.example.com/a;jsessionid=s1/b;token=s2/c")
+    )
+
+    assert detail is not None and detail.stack_trace is not None
+    assert "api.example.com/a/b/c" in detail.stack_trace
+    assert "s1" not in detail.stack_trace
+    assert "s2" not in detail.stack_trace
+
+
+def test_a_secret_at_the_redaction_bound_is_not_kept_in_part(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Redacting the long URL makes the text short, so the bound reaches the
+    # excerpt.
+    monkeypatch.setattr(models, "_MAX_REDACTED_BODY_CHARS", 1000)
+    secret = "sk-secret-value-that-is-long"
+    prefix = "https://api.example.com/x?q=" + "a" * 966 + " "
+    # The bound splits the secret.
+    assert len(prefix) == 995
+    body = prefix + secret
+    try:
+        raise UnexpectedValidationError("Bad.") from SourceApiError(
+            "HTTP 500", status_code=500, body=body
+        )
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [secret])
+
+    assert detail is not None and detail.response_excerpt is not None
+    assert detail.response_excerpt == "api.example.com/x "
+
+
+def test_a_source_api_error_without_a_response_gives_its_cause() -> None:
+    http_error = _http_error(503, "https://api.example.com/v1/items", "Down.")
+    source_error = SourceApiError("Failed.", status_code=None)
+    source_error.__cause__ = http_error
+    try:
+        raise UnexpectedValidationError("Bad.") from source_error
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.INVALID, [])
+
+    assert detail == CheckErrorDetail(
+        status_code=503,
+        request="GET api.example.com/v1/items",
+        response_excerpt="Down.",
+    )

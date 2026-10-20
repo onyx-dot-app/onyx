@@ -189,6 +189,19 @@ def test_directory_admin_keeps_the_legacy_message() -> None:
     assert f"Primary admin {_ADMIN} is not authorized" in result.message
 
 
+def test_a_denied_admin_lookup_names_the_directory_read() -> None:
+    ops = _ops()
+    ops.get_admin_user.side_effect = _http_error(403)
+
+    result = _run("google_drive_shared_drive_members", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == f"{_ADMIN} cannot read the directory"
+    assert result.description == (
+        "The primary admin cannot read the Workspace directory. (HTTP 403)"
+    )
+
+
 def test_admin_sdk_turned_off_is_reported() -> None:
     ops = _ops()
     ops.list_groups.side_effect = _http_error(403, "accessNotConfigured")

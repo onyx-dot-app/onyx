@@ -93,6 +93,15 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
+def _configure_confluence_rest_spy(spy: MagicMock) -> None:
+    """A DC 9.1+ site whose REST space-permissions endpoint answers: the
+    anonymous-access check reads the anonymous endpoint, as permission sync
+    does on such a site."""
+    spy.get_server_version.return_value = (9, 1)
+    spy.get_space_permissions.return_value = []
+    spy.get_anonymous_space_permissions.return_value = []
+
+
 def _configure_slack_spy(spy: MagicMock) -> None:
     """A Grid org with one workspace, where the bot sees one channel with one
     member and one user, so the checks that read an item after they find one
@@ -324,7 +333,10 @@ def _configure_youtrack_spy(spy: MagicMock) -> None:
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
-    DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.CONFLUENCE: [
+        _configure_confluence_spy,
+        _configure_confluence_rest_spy,
+    ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],

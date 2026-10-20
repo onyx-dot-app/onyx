@@ -1818,13 +1818,14 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
                 summary="Cannot read space permissions",
                 description="Read space permissions reports why.",
             ) from e
-        users = [
-            subjects[0]
+        # A user with several grants counts once.
+        users = {
+            subjects[0].get("accountId"): subjects[0]
             for permission in permissions
             if (subjects := _cloud_subjects(permission, "user"))
             and subjects[0].get("accountType") != _APP_USER_TYPE
-        ]
-        return sum(1 for user in users if user.get("email")), len(users)
+        }
+        return sum(1 for user in users.values() if user.get("email")), len(users)
 
     def _sample_dc(
         self, context: CapabilityCheckContext, space_key: str
@@ -1852,8 +1853,8 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
 
 
 class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
-    """Data Center 9.1+ reads anonymous access with its own call. Before 9.1 the
-    call returns 404, which reads as no anonymous access."""
+    """Reads anonymous access as permission sync does: with its own call where
+    the 9.1+ REST API answers, else from the JSON-RPC permissions."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -1873,10 +1874,21 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         space_key = _probe_space_key(context, config)
+        gateway = _gateway(context)
         try:
-            operations = _gateway(context).get_anonymous_space_permissions(
-                space_key=space_key
-            )
+            subjects = read_dc_space_subjects(gateway, space_key)
+        except (HTTPError, ConnectorValidationError) as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot read the space permissions, so this check cannot "
+                "run. The space-permission checks report why.",
+                summary="Cannot read space permissions",
+                description="Read space permissions reports why.",
+            ) from e
+        if subjects.api == ConfluenceSpacePermissionsVariant.DC_JSONRPC:
+            state = "on" if subjects.has_anonymous_entry else "off"
+            return CheckOutput(summary=f"{space_key} anonymous access: {state}")
+        try:
+            operations = gateway.get_anonymous_space_permissions(space_key=space_key)
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(
                 f"Confluence returned HTTP 500 for the anonymous permissions of "
@@ -2040,8 +2052,9 @@ class _GroupMembershipCheck(_GroupSyncCheck):
                 summary="No users to sample",
                 description="List users reports why.",
             )
+        sample = users[:_SAMPLE_PERMISSION_USERS]
         try:
-            for user in users[:_SAMPLE_PERMISSION_USERS]:
+            for user in sample:
                 if next(gateway.list_user_groups(user_id=user.user_id), None):
                     return CheckOutput(summary="Read the groups of a listed user")
         except HTTPError as e:
@@ -2060,7 +2073,11 @@ class _GroupMembershipCheck(_GroupSyncCheck):
         raise InconclusiveValidationError(
             "The first listed users are in no group, so Onyx cannot verify that "
             f"group memberships are readable. {hint}",
-            summary=f"First {_SAMPLE_PERMISSION_USERS} users are in no group",
+            summary=(
+                "The listed user is in no group"
+                if len(sample) == 1
+                else f"First {len(sample)} users are in no group"
+            ),
             description=(
                 f"The reads worked, but the sampled users have no groups.\n{need}"
             ),

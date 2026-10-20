@@ -504,7 +504,8 @@ For a source with named checks, a pairing at creation or credential swap
 `validate_connector_settings`/`validate_perm_sync` calls.
 `capability_checks/creation.py:validate_pairing_with_named_checks` runs the named
 checks instead and stores the full report. Only a required check that `FAILED`
-within the blocking budget blocks the pairing. Indexing and perm-sync attempts keep
+within the blocking budget blocks the pairing. A check whose dependency did not
+finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
