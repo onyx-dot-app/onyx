@@ -515,6 +515,7 @@ class ScheduledTaskErrorClass(str, PyEnum):
     TIMEOUT = "timeout"
     STUCK = "stuck"
     AGENT_EXCEPTION = "agent_exception"
+    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
@@ -573,7 +574,7 @@ class ExternalAppType(str, PyEnum):
         return self is not ExternalAppType.CUSTOM
 
 
-class EndpointPolicy(str, PyEnum):
+class ActionPolicy(str, PyEnum):
     """What the egress layer does with an outbound request once it has been
     matched to an action of a connected external app."""
 
@@ -585,10 +586,10 @@ class EndpointPolicy(str, PyEnum):
 # Strictness ordering: higher = stricter. When one request matches several
 # actions, the strictest policy governs (sort/`max` with this key); readers
 # of a persisted `actions` list rely on `actions[0]` being the strictest.
-POLICY_SEVERITY: dict[EndpointPolicy, int] = {
-    EndpointPolicy.ALWAYS: 0,
-    EndpointPolicy.ASK: 1,
-    EndpointPolicy.DENY: 2,
+POLICY_SEVERITY: dict[ActionPolicy, int] = {
+    ActionPolicy.ALWAYS: 0,
+    ActionPolicy.ASK: 1,
+    ActionPolicy.DENY: 2,
 }
 
 

@@ -634,7 +634,7 @@ def test_document_permissions_stop_after_the_first_libraries() -> None:
     assert gateway.list_role_assignments.call_count == 10
 
 
-def test_an_item_without_a_list_item_id_is_indeterminate() -> None:
+def test_an_item_without_a_list_item_id_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.get_list_item_id.return_value = None
 

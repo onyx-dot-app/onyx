@@ -906,6 +906,8 @@ if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
     )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+# Per-user set of live session tokens, used to revoke all of a user's sessions.
+REDIS_USER_SESSIONS_KEY_PREFIX = "fastapi_users_user_sessions:"
 
 # Rate limiting for auth endpoints
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
@@ -1652,6 +1654,13 @@ TABULAR_VALUE_CHUNKS_PER_SHEET = max(
 # Upper bound on the chunks of one workbook or CSV file.
 TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
     1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
+)
+
+# Arms the one-time migration that re-chunks tabular documents indexed with the
+# previous strategy. Only arms it: the KV record decides whether work remains,
+# so leaving this true across restarts does not re-run a finished migration.
+TABULAR_RECHUNK_ENABLED = (
+    os.environ.get("TABULAR_RECHUNK_ENABLED", "").lower() == "true"
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort

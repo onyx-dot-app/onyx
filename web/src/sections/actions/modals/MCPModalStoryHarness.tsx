@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import useSWR, { SWRConfig, type State } from "swr";
 import { Button, Modal, MessageCard } from "@opal/components";
@@ -23,7 +24,7 @@ import {
 import { refreshMCPServerTools } from "@/lib/mcp/svc";
 import { Permission } from "@/lib/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { MCPOAuthDiscovery } from "@/lib/mcp/types";
 
 export const storyServer: MCPServer = {
@@ -409,16 +410,18 @@ function MockEnvironment({
           )
             savedServer.available_in_craft = payload.available_in_craft;
           if (
-            "tool_policies" in payload &&
-            payload.tool_policies &&
-            typeof payload.tool_policies === "object"
+            "action_policies" in payload &&
+            payload.action_policies &&
+            typeof payload.action_policies === "object"
           ) {
-            const policies: Record<string, EndpointPolicy> = {};
-            for (const [name, value] of Object.entries(payload.tool_policies)) {
+            const policies: Record<string, ActionPolicy> = {};
+            for (const [name, value] of Object.entries(
+              payload.action_policies
+            )) {
               if (value === "ALWAYS" || value === "ASK" || value === "DENY")
                 policies[name] = value;
             }
-            savedServer.tool_policies = policies;
+            savedServer.action_policies = policies;
           }
           if ("name" in payload && typeof payload.name === "string")
             savedServer.name = payload.name;
@@ -459,6 +462,7 @@ function MockEnvironment({
 const REOPEN_PREVIEW = "Reopen preview";
 
 function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
+  const t = useTranslations("actions.mcpDetail");
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
@@ -487,7 +491,7 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
       >
         <Modal.Content preventAccidentalClose={false}>
           <Modal.Header
-            title={kind === "auth" ? "Authentication" : "Server configuration"}
+            title={kind === "auth" ? t("authentication") : t("configuration")}
             onClose={close}
           />
           <Modal.Body padding={0}>

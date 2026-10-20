@@ -144,10 +144,13 @@ string values.
 
 1. No-ops immediately if `drain_done` is set, so a cancelled turn's workers stop
    pushing packets without blocking on the queue.
-2. Copies the packet's `Placement` with `model_index` overwritten
+2. Passes the packet to the turn's fleet `QueryObservation`, if any
+   (`packet_queued`). In the worker thread, it records the model's LLM cycle
+   count at its first answer text, per [[observability]].
+3. Copies the packet's `Placement` with `model_index` overwritten
    (`base.model_copy(update={"model_index": self._model_idx})`). The producer's
    own `model_index`, if any, is discarded here.
-3. Puts `(model_idx, tagged_packet)` onto the shared `merged_queue`, the same
+4. Puts `(model_idx, tagged_packet)` onto the shared `merged_queue`, the same
    queue every model's worker thread writes to, per [[core-chat-loop]].
 
 `NullEmitter` (`emitter.py:NullEmitter`) implements the same interface but

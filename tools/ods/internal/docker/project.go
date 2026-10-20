@@ -2,12 +2,10 @@ package docker
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
 
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
 
@@ -125,34 +123,10 @@ func (r *ResolvedPorts) AppEnv() map[string]string {
 	return env
 }
 
-var flagProject string
-
-// SetFlags stores CLI flag values for project resolution. Called once from the
-// root command's PersistentPreRun.
-func SetProjectFlags(project string) {
-	flagProject = project
-}
-
-// ProjectName returns the Docker Compose project name. Uses --project if set,
-// otherwise the basename of the git working tree root (e.g. "onyx" for the main
-// checkout, "feature-x" for a worktree at .../feature-x). The result is
-// normalized to satisfy Docker Compose's naming rules (lowercase alphanumeric,
-// hyphens, and underscores).
-func ProjectName() string {
-	if flagProject != "" {
-		return normalizeProjectName(flagProject)
-	}
-	root, err := paths.GitRoot()
-	if err != nil {
-		return defaultProjectName
-	}
-	return normalizeProjectName(filepath.Base(root))
-}
-
-// normalizeProjectName converts a string into a valid Docker Compose project
+// NormalizeProjectName converts a string into a valid Docker Compose project
 // name: lowercase, keeping only alphanumeric characters, hyphens, and
 // underscores. Characters that don't match are dropped.
-func normalizeProjectName(name string) string {
+func NormalizeProjectName(name string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(name) {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
@@ -171,10 +145,9 @@ func normalizeProjectName(name string) string {
 // when the container is not running does it probe for a free port. A global
 // claimed set prevents cross-service collisions (e.g., inference_model_server
 // and object-store both defaulting near port 9000).
-func FindAvailablePorts() (*ResolvedPorts, error) {
+func FindAvailablePorts(projName string) (*ResolvedPorts, error) {
 	resolved := NewResolvedPorts()
 	claimed := make(map[int]bool)
-	projName := ProjectName()
 
 	for _, svc := range InfraServices {
 		container := ContainerName(projName, svc.Name)

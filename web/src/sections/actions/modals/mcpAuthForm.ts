@@ -105,6 +105,7 @@ export type MCPAuthSource = Pick<MCPServer, "server_url"> &
       | "auth_performer"
       | "admin_credentials"
       | "oauth_provider_mode"
+      | "oauth_setup_mode"
       | "oauth_cimd_enabled"
       | "oauth_authorization_endpoint"
       | "oauth_token_endpoint"
@@ -130,11 +131,12 @@ export function getMCPAuthInitialValues(
       fullServer.auth_performer || MCPAuthenticationPerformer.PER_USER,
     api_token: fullServer.admin_credentials?.api_key || "",
     oauth_setup_mode:
-      fullServer.admin_credentials?.client_id ||
+      fullServer.oauth_setup_mode ??
+      (fullServer.admin_credentials?.client_id ||
       fullServer.admin_credentials?.client_secret ||
       fullServer.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER
         ? "own_client"
-        : "automatic",
+        : "automatic"),
     oauth_client_id: fullServer.admin_credentials?.client_id || "",
     oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
     oauth_provider_mode:
@@ -277,6 +279,10 @@ export function prepareMCPAuthPayload(
     admin_credentials_changed: hasUserHeaderValues
       ? computeAdminCredentialsChangedFlags(values)
       : undefined,
+    oauth_setup_mode:
+      authType === MCPAuthenticationType.OAUTH
+        ? values.oauth_setup_mode
+        : undefined,
     oauth_client_id:
       authType === MCPAuthenticationType.OAUTH
         ? values.oauth_client_id

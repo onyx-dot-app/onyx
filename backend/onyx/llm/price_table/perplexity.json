@@ -1,9 +1,42 @@
 {
   "aliases": {},
   "models": {
+    "pplx-decider-flash-latest": {
+      "cost": {
+        "input": 0.01,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-flash-latest"
+    },
+    "pplx-decider-flash-v1.2": {
+      "cost": {
+        "input": 0.01,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-flash-v1.2"
+    },
+    "pplx-decider-latest": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-latest"
+    },
     "pplx-decider-v1-27b": {
       "cost": {
-        "input": 0.04,
+        "input": 0.02,
         "output": 0.0
       },
       "limit": {
@@ -11,6 +44,28 @@
       },
       "mode": "evaluation",
       "name": "pplx-decider-v1-27b"
+    },
+    "pplx-decider-v1.1-27b": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-v1.1-27b"
+    },
+    "pplx-decider-v1.2": {
+      "cost": {
+        "input": 0.02,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-v1.2"
     },
     "pplx-embed-context-v1-0.6b": {
       "cost": {

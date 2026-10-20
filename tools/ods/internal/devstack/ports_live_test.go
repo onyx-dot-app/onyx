@@ -74,7 +74,7 @@ func TestLeaseAvoidsLoopbackPortAndPreservesForeignListener(t *testing.T) {
 			listener := listenPortProbe(t, probe.network, net.JoinHostPort(probe.host, "0"))
 			port := listener.Addr().(*net.TCPAddr).Port
 			registry := &Registry{Dir: t.TempDir()}
-			ports, err := registry.Lease(t.TempDir(), []PortRequest{{Name: "web", Preferred: port}})
+			ports, err := registry.LeaseFor(t.TempDir(), "", []PortRequest{{Name: "web", Preferred: port}})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -4,6 +4,8 @@ package devstack
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,6 +14,46 @@ type barrierProvider struct {
 	*fakeProvider
 	entered chan<- struct{}
 	release <-chan struct{}
+}
+
+func TestSharedStartupDoesNotHoldProjectWhileWaitingForLocalCheckout(t *testing.T) {
+	shared, _ := sharedPair(t)
+	local, err := Open(shared.Root, shared.Project, Isolated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local.Registry = shared.Registry
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	releaseLocal, err := local.Lock(ctx, "isolated startup", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := testOptions()
+	opts.LockWait = 3 * time.Second
+	done := make(chan error, 1)
+	go func() {
+		_, err := shared.Up(ctx, &fakeProvider{services: []string{"api"}}, opts)
+		done <- err
+	}()
+	projectLock := filepath.Join(shared.Registry.Dir, "projects", ProjectName(shared.Project), lockFileName)
+	deadline := time.Now().Add(750 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if strings.Contains(readLockOwner(projectLock), "infrastructure lifecycle") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	releaseProject, err := local.LockInfrastructure(ctx, 0)
+	if err != nil {
+		t.Errorf("shared startup acquired project before local checkout: %v", err)
+	} else {
+		releaseProject()
+	}
+	releaseLocal()
+	if err := <-done; err != nil {
+		t.Fatalf("shared startup did not finish after local checkout released: %v", err)
+	}
 }
 
 func (p *barrierProvider) Prepare(ctx context.Context) error {

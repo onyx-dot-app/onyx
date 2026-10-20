@@ -112,6 +112,7 @@
 
 .opal-modal-body {
   @apply flex-auto min-h-0 overflow-y-auto w-full;
+  scrollbar-gutter: stable both-edges;
 }
 .opal-modal-body[data-two-tone] {
   @apply bg-background-tint-01;

@@ -7,7 +7,10 @@ import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import type { ToolSnapshot } from "@/lib/tools/types";
 
 interface MemberMCPToolsListProps {
-  tools: readonly ToolSnapshot[];
+  tools: readonly (Pick<
+    ToolSnapshot,
+    "name" | "display_name" | "description"
+  > & { id: string | number })[];
 }
 
 export default function MemberMCPToolsList({ tools }: MemberMCPToolsListProps) {
@@ -22,21 +25,18 @@ export default function MemberMCPToolsList({ tools }: MemberMCPToolsListProps) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <InputTypeIn
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("mcpTools.search")}
-            aria-label={t("mcpTools.search")}
-          />
-        </div>
-        <Text font="secondary-body" color="text-03">
-          {t("memberPlugins.detail.toolCount", { count: visible.length })}
-        </Text>
-      </div>
+      <InputTypeIn
+        searchIcon
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder={t("mcpTools.search")}
+        aria-label={t("mcpTools.search")}
+      />
+      <Text font="secondary-body" color="text-03">
+        {t("memberPlugins.detail.toolCount", { count: visible.length })}
+      </Text>
       {visible.length ? (
-        <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {visible.map((tool) => (
             <MCPToolRow key={tool.id} tool={tool} />
           ))}

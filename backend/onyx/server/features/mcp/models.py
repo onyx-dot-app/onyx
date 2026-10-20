@@ -12,7 +12,7 @@ from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -131,6 +131,7 @@ class MCPConnectionData(TypedDict):
     # Note: Update MCPOAuthKeys if necessary when modifying these
     # Unfortunately we can't use the actual models here because basemodels aren't compatible
     # with SQLAlchemy
+    oauth_setup_mode: NotRequired[Literal["automatic", "own_client"]]
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
@@ -228,6 +229,7 @@ class MCPToolCreateRequest(BaseModel):
             "the stored token is reused instead of the masked request value."
         ),
     )
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
     oauth_provider_mode: MCPOAuthProviderMode = Field(
@@ -456,12 +458,16 @@ class MCPServerSimpleCreateRequest(BaseModel):
 
 
 class MCPServerSimpleUpdateRequest(BaseModel):
+    users_can_manage_policies: bool | None = Field(
+        default=None,
+        description="Whether users may manage Craft action policies. None leaves this unchanged.",
+    )
     name: Optional[str] = Field(None, description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         default=None,
         description=(
             "Sparse per-tool Craft approval overrides keyed by tool name; "
@@ -784,6 +790,7 @@ class MCPServer(BaseModel):
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
     oauth_cimd_enabled: bool = True
     oauth_authorization_endpoint: Optional[str] = None
     oauth_token_endpoint: Optional[str] = None
@@ -796,6 +803,7 @@ class MCPServer(BaseModel):
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
     available_in_craft: bool = False
+    users_can_manage_policies: bool = True
     user_enabled_in_chat: bool = True
     user_enabled_in_craft: bool = True
     default_chat_enabled: bool | None = Field(
@@ -805,7 +813,7 @@ class MCPServer(BaseModel):
             "Computed by member and admin listings, independently of credentials and tool enablement."
         ),
     )
-    tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
+    action_policies: Optional[dict[str, ActionPolicy]] = Field(
         None,
         description=(
             "Stored per-tool Craft approval overrides (sparse; unlisted tools "

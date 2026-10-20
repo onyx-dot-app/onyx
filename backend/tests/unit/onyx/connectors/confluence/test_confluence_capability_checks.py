@@ -46,6 +46,7 @@ from onyx.connectors.confluence.source_operations import (
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
@@ -213,6 +214,10 @@ def test_attachments_off_is_not_applicable() -> None:
 
 def test_full_run_in_space_mode_passes_the_indexing_verdict() -> None:
     gateway = _gateway()
+    # A sample with a comment and an attachment, so every check can decide.
+    gateway.search_comments.side_effect = lambda **_: iter([{"id": "c1"}])
+    gateway.search_attachments.side_effect = lambda **_: _attachments(10)
+    gateway.download_attachment.return_value = b"0123456789"
     context = _context(gateway, _form(space="KB"))
 
     results = run_capability_checks(build_confluence_indexing_checks(), context)
@@ -273,7 +278,7 @@ def test_auth_with_no_visible_space_leaves_it_to_the_spaces_check() -> None:
     _run("confluence_auth", _context(gateway, _form()))
 
 
-def test_scoped_auth_tenant_info_server_error_is_indeterminate() -> None:
+def test_scoped_auth_tenant_info_server_error_is_incomplete() -> None:
     gateway = _gateway()
     gateway.probe_site.side_effect = _http_error(
         503, url="https://acme.atlassian.net/_edge/tenant_info"
@@ -297,7 +302,7 @@ def test_scoped_auth_tenant_info_failure_names_the_cloud_id() -> None:
         )
 
 
-def test_auth_connection_error_is_indeterminate() -> None:
+def test_auth_connection_error_is_incomplete() -> None:
     gateway = _gateway()
     gateway.probe_site.side_effect = requests.ConnectionError("dns")
 
@@ -559,7 +564,7 @@ def test_cql_query_with_no_match_fails() -> None:
     gateway = _gateway()
     gateway.search_pages.side_effect = lambda **_: iter([])
 
-    with pytest.raises(UnexpectedValidationError, match="matches no page"):
+    with pytest.raises(ConnectorValidationError, match="matches no page"):
         _run("confluence_cql_query", _context(gateway, _form(cql_query="type=page")))
 
 
@@ -586,13 +591,15 @@ def test_content_read_without_body_fails() -> None:
 
 
 @pytest.mark.parametrize("overrides", [{}, {"space": "KB"}])
-def test_content_read_with_an_empty_scope_is_indeterminate(
+def test_content_read_with_an_empty_scope_fails(
     overrides: dict[str, Any],
 ) -> None:
+    """An empty scope fails the first check that reads it: the connector
+    would index nothing."""
     gateway = _gateway()
     gateway.search_pages_from_url.side_effect = lambda **_: iter([])
 
-    with pytest.raises(UnexpectedValidationError, match="no page"):
+    with pytest.raises(ConnectorValidationError, match="no page"):
         _run("confluence_content_read", _context(gateway, _form(**overrides)))
 
 
@@ -601,6 +608,7 @@ def test_content_read_with_an_empty_scope_is_indeterminate(
 
 def test_comments_read_searches_the_sample_page() -> None:
     gateway = _gateway()
+    gateway.search_comments.side_effect = lambda **_: iter([{"id": "c1"}])
 
     _run("confluence_comments_read", _context(gateway, _form()))
 
@@ -655,10 +663,11 @@ def _attachments(*sizes: int) -> Iterator[dict[str, Any]]:
     )
 
 
-def test_attachments_none_found_passes_without_download() -> None:
+def test_attachments_none_found_is_incomplete_without_download() -> None:
     gateway = _gateway()
 
-    _run("confluence_attachments_read", _context(gateway, _form()))
+    with pytest.raises(InconclusiveValidationError, match="no attachments"):
+        _run("confluence_attachments_read", _context(gateway, _form()))
 
     gateway.search_attachments.assert_called_once()
     gateway.download_attachment.assert_not_called()
@@ -675,22 +684,36 @@ def test_attachments_downloads_the_smallest() -> None:
     assert kwargs["parent_content_id"] == "42"
 
 
-def test_attachments_too_large_proves_only_the_listing() -> None:
+def test_attachments_too_large_are_incomplete() -> None:
     gateway = _gateway()
     gateway.search_attachments.side_effect = lambda **_: _attachments(10**9)
 
-    _run("confluence_attachments_read", _context(gateway, _form()))
+    with pytest.raises(InconclusiveValidationError, match="small enough"):
+        _run("confluence_attachments_read", _context(gateway, _form()))
 
     gateway.download_attachment.assert_not_called()
 
 
-def test_attachments_without_a_known_size_prove_only_the_listing() -> None:
+def test_attachments_continue_past_a_page_with_only_large_ones() -> None:
+    gateway = _gateway()
+    gateway.search_pages.side_effect = lambda **_: iter(
+        [dict(_PAGE), {**_PAGE, "id": "43"}]
+    )
+    gateway.search_attachments.side_effect = [_attachments(10**9), _attachments(10)]
+
+    _run("confluence_attachments_read", _context(gateway, _form()))
+
+    assert gateway.download_attachment.call_args.kwargs["parent_content_id"] == "43"
+
+
+def test_attachments_without_a_known_size_are_incomplete() -> None:
     gateway = _gateway()
     gateway.search_attachments.side_effect = lambda **_: iter(
         [{"id": "att0", "title": "f.txt", "extensions": {}}]
     )
 
-    _run("confluence_attachments_read", _context(gateway, _form()))
+    with pytest.raises(InconclusiveValidationError, match="small enough"):
+        _run("confluence_attachments_read", _context(gateway, _form()))
 
     gateway.download_attachment.assert_not_called()
 
@@ -717,7 +740,7 @@ def test_attachments_listing_403_names_the_scope() -> None:
         )
 
 
-def test_attachments_download_retries_exhausted_is_indeterminate() -> None:
+def test_attachments_download_retries_exhausted_is_incomplete() -> None:
     gateway = _gateway()
     gateway.search_attachments.side_effect = lambda **_: _attachments(10)
     gateway.download_attachment.side_effect = ConfluenceRetriesExhaustedError(
@@ -756,7 +779,7 @@ def test_unknown_user_name_fails() -> None:
         requests.Timeout("slow"),
     ],
 )
-def test_user_name_lookup_errors_are_indeterminate(error: Exception) -> None:
+def test_user_name_lookup_errors_are_incomplete(error: Exception) -> None:
     gateway = _gateway()
     gateway.lookup_user_display_name.side_effect = error
 
@@ -764,11 +787,12 @@ def test_user_name_lookup_errors_are_indeterminate(error: Exception) -> None:
         _run("confluence_user_names", _context(gateway, _form()))
 
 
-def test_user_names_without_an_author_pass() -> None:
+def test_user_names_without_an_author_are_incomplete() -> None:
     gateway = _gateway()
     gateway.search_pages.side_effect = lambda **_: iter([{"id": "42"}])
 
-    _run("confluence_user_names", _context(gateway, _form()))
+    with pytest.raises(InconclusiveValidationError, match="no author"):
+        _run("confluence_user_names", _context(gateway, _form()))
 
     gateway.lookup_user_display_name.assert_not_called()
 

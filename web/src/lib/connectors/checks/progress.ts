@@ -26,7 +26,7 @@ export interface ChecksProgress {
  * decides both, so they always agree:
  *
  * - passed and skipped are green (finished, not blocking), failed red,
- *   indeterminate amber (it blocks, but is not a failure), running grey;
+ *   incomplete amber (it blocks, but is not a failure), running grey;
  * - pending and waiting checks have not started, so they leave a gap;
  * - the count is the finished checks out of every check that runs or will
  *   run, so it matches the ring's coloured share less the running arc;
@@ -43,7 +43,7 @@ export function checksProgress(
   const ring: ChecksRing = {
     success: counts.passed + counts.skipped,
     error: counts.failed,
-    warning: counts.indeterminate,
+    warning: counts.incomplete + counts.indeterminate,
     neutral: counts.running,
     rest: counts.pending + counts.waiting,
   };
@@ -52,7 +52,11 @@ export function checksProgress(
   return {
     ring: counted === 0 && status === "running" ? null : ring,
     complete:
-      counts.passed + counts.failed + counts.indeterminate + counts.skipped,
+      counts.passed +
+      counts.failed +
+      counts.incomplete +
+      counts.indeterminate +
+      counts.skipped,
     counted,
   };
 }

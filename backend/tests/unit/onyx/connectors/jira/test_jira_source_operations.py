@@ -7,10 +7,17 @@ from jira import JIRA
 from jira.exceptions import JIRAError
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.models import (
+    CheckErrorKind,
+    check_error_detail,
+)
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.jira import source_operations
 from onyx.connectors.jira.source_operations import (
     _JIRA_BULK_FETCH_LIMIT,
     JiraApiError,
+    JiraCloudIdError,
     JiraSourceOperations,
     is_cloud_credential,
     is_cloud_gateway,
@@ -203,7 +210,40 @@ def test_sdk_errors_become_jira_api_errors() -> None:
         _gateway(client).get_project(project_key="NOPE")
 
     assert exc_info.value.status_code == 404
-    assert "No project could be found" in (exc_info.value.text or "")
+    assert "No project could be found" in (exc_info.value.body or "")
+
+
+def test_sdk_error_messages_leave_out_the_request_headers() -> None:
+    client = _mock_jira_client()
+    # The SDK reads the request's headers like a response's.
+    request = requests.Response()
+    request.headers["Authorization"] = "Basic dXNlcjpzZWNyZXQtdG9rZW4="
+    response = requests.Response()
+    response.status_code = 500
+    client.project.side_effect = JIRAError(
+        status_code=500, text="Internal error", request=request, response=response
+    )
+
+    with pytest.raises(JiraApiError) as exc_info:
+        _gateway(client).get_project(project_key="NOPE")
+
+    assert "dXNlcjpzZWNyZXQtdG9rZW4=" not in str(exc_info.value)
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.body == "Internal error"
+
+    # The stored error detail keeps the response, and its stack trace does
+    # not print the SDK error with the request headers.
+    try:
+        raise UnexpectedValidationError("Unexpected Jira response.") from (
+            exc_info.value
+        )
+    except UnexpectedValidationError as error:
+        detail = check_error_detail(error, CheckErrorKind.UNEXPECTED, [])
+
+    assert detail is not None and detail.stack_trace is not None
+    assert detail.response_excerpt == "Internal error"
+    assert "dXNlcjpzZWNyZXQtdG9rZW4=" not in detail.stack_trace
+    assert "request headers" not in detail.stack_trace
 
 
 def test_http_errors_become_jira_api_errors() -> None:
@@ -219,7 +259,7 @@ def test_http_errors_become_jira_api_errors() -> None:
         _gateway(client).search_issue_ids(jql="project = AS")
 
     assert exc_info.value.status_code == 400
-    assert "Error in the JQL Query" in (exc_info.value.text or "")
+    assert "Error in the JQL Query" in (exc_info.value.body or "")
 
 
 @pytest.mark.parametrize(
@@ -235,3 +275,37 @@ def test_credential_selects_the_api_family(
 ) -> None:
     assert is_cloud_credential(credentials) is expected_cloud
     assert is_cloud_gateway(_gateway(credentials=credentials)) is expected_cloud
+
+
+@pytest.mark.parametrize(
+    "error,expected",
+    [
+        (KeyError("cloudId"), JiraCloudIdError),
+        (
+            requests.exceptions.JSONDecodeError("Expecting value", "<html>", 0),
+            ValueError,
+        ),
+    ],
+    ids=["no_cloud_id", "not_json"],
+)
+def test_scoped_api_url_keeps_a_non_json_answer_apart(
+    monkeypatch: pytest.MonkeyPatch, error: Exception, expected: type[Exception]
+) -> None:
+    def fail(_url: str, _product: str) -> str:
+        raise error
+
+    monkeypatch.setattr(source_operations, "scoped_url", fail)
+    gateway = JiraSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None,
+            DocumentSource.JIRA.value,
+            {"jira_user_email": "user@example.com", "jira_api_token": "token"},
+        ),
+        connector_specific_config={
+            "jira_base_url": "https://jira.example.com",
+            "scoped_token": True,
+        },
+    )
+
+    with pytest.raises(expected):
+        gateway._api_url()

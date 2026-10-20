@@ -95,7 +95,7 @@ func TestRunCI_createsBranchAndPR(t *testing.T) {
 		"--base", "main",
 		"--head", "run-ci/7353",
 		"--title", "chore: [Running GitHub actions for #7353]",
-		"--body", "This PR runs GitHub Actions CI for #7353.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**",
+		"--body", "This PR runs GitHub Actions CI for #7353.\n\n**This PR should be closed (not merged) after CI completes.**",
 	})
 	if branch := gittest.Git(t, repo.Work, "branch", "--show-current"); branch != "main" {
 		t.Errorf("expected to be back on main, got %q", branch)
@@ -123,7 +123,7 @@ func TestRunCI_forEditsCreatesReplacementPR(t *testing.T) {
 		"--base", "main",
 		"--head", gitrelEditableBranch,
 		"--title", "feat: from a fork [edit of #7353]",
-		"--body", "> [!IMPORTANT]\n> This PR supersedes #7353. Merge this PR and close #7353 without merging.\n\n## Original PR description\n\nPR body\n\n- [ ] [Optional] Please cherry-pick this PR to the latest release version.\n- [x] Override Linear Check",
+		"--body", "> [!IMPORTANT]\n> This PR supersedes #7353. Merge this PR and close #7353 without merging.\n\n## Original PR description\n\nPR body\n\n- [ ] [Optional] Please cherry-pick this PR to the latest release version.",
 	})
 }
 

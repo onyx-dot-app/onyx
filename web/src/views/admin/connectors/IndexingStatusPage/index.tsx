@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { cn } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type {
   CCPairFullInfo,
@@ -34,15 +35,14 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
     buildCCPairInfoUrl(row.cc_pair_id),
     errorHandlingFetcher
   );
+  // Both flags come from the details, so a supported connector never reads as unsupported while they load.
+  const operates = ccPair !== undefined && can(ccPair, "operate");
   return (
     <ActivityPanel
       scope={{
         ccPairId: row.cc_pair_id,
-        canResolve:
-          ccPair !== undefined &&
-          can(ccPair, "operate") &&
-          ccPair.supports_targeted_reindex,
-        canResolveRuns: can(row, "operate"),
+        canResolve: operates && ccPair.supports_targeted_reindex,
+        canResolveRuns: operates,
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}
@@ -89,16 +89,17 @@ export default function IndexingStatusPage() {
             height="fit"
             className="min-w-0 flex-1"
           >
-            {/* The overview takes the wider share. Both wrap to full width on a narrow screen. */}
+            {/* The overview takes the wider share. Both wrap to full width on a narrow screen. Side by side, the overview sets the row's height and starts at its top, so it never floats while the Activities card's minimum holds the row during the overview's load or error. */}
             <Section
               flexDirection="row"
               alignItems="stretch"
               gap={2}
               height="fit"
               wrap
-              className={focusDimClass(listFocused)}
+              className={cn("@container/overview", focusDimClass(listFocused))}
             >
               <Section
+                justifyContent="start"
                 alignItems="stretch"
                 width="auto"
                 height="auto"
@@ -112,12 +113,13 @@ export default function IndexingStatusPage() {
                   }}
                 />
               </Section>
+              {/* At 38.5rem (both min widths plus the gap) the cards sit side by side, and size containment lets a long feed scroll inside at the overview's height instead of stretching the row. The minimum keeps the card usable while the overview shows only a loader or an error. */}
               {!historyOpen && (
                 <Section
                   alignItems="stretch"
                   width="auto"
                   height="auto"
-                  className="min-w-72 grow-[5] basis-0"
+                  className="min-w-72 grow-[5] basis-0 @[38.5rem]/overview:contain-size @[38.5rem]/overview:min-h-64"
                 >
                   <ActivitiesCard onOpenHistory={() => setHistory("fleet")} />
                 </Section>

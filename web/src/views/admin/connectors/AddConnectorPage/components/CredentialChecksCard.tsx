@@ -74,6 +74,15 @@ export type CheckLine = Pick<
 const OUTCOME = { font: "main-ui-body", color: "text-04" } as const;
 const MUTED = { font: "secondary-body", color: "text-03" } as const;
 
+const INCOMPLETE_LOG = {
+  variant: "warning-light",
+  icon: SvgAlertCircle,
+  detail: "status.indeterminate",
+  ...OUTCOME,
+  font: "main-ui-action",
+  color: "status-warning-05",
+} as const;
+
 const CHECK_LOGS = {
   passed: {
     variant: "success-light",
@@ -87,14 +96,9 @@ const CHECK_LOGS = {
     detail: "status.failed",
     ...OUTCOME,
   },
-  indeterminate: {
-    variant: "warning-light",
-    icon: SvgAlertCircle,
-    detail: "status.indeterminate",
-    ...OUTCOME,
-    font: "main-ui-action",
-    color: "status-warning-05",
-  },
+  incomplete: INCOMPLETE_LOG,
+  // Legacy: an incomplete check in an older stored result.
+  indeterminate: INCOMPLETE_LOG,
   skipped: {
     variant: "default",
     icon: SvgXCircle,
@@ -133,7 +137,7 @@ const CHECK_LOGS = {
 /** Group order: what blocks first, what is unknown next, then the rest. */
 const GROUPS = [
   { label: "groups.failed", states: ["failed"] },
-  { label: "groups.indeterminate", states: ["indeterminate"] },
+  { label: "groups.indeterminate", states: ["incomplete", "indeterminate"] },
   { label: "groups.passed", states: ["passed"] },
   { label: "groups.skipped", states: ["skipped"] },
   { label: "groups.running", states: ["running"] },
@@ -153,7 +157,9 @@ function CheckLog({ check }: CheckLogProps) {
   const blocking = check.state === "failed" && check.required;
   // How to fix a failed or unverified check, with a link to the docs.
   const guidance: RichStr | undefined =
-    (check.state === "failed" || check.state === "indeterminate") &&
+    (check.state === "failed" ||
+      check.state === "incomplete" ||
+      check.state === "indeterminate") &&
     (check.remediation !== null || check.docs_link !== null)
       ? markdown(
           ...(check.remediation !== null
@@ -337,6 +343,7 @@ export function CheckCardView({
       results.filter((result) => result.status === status).length,
     [results]
   );
+  const incompleteCount: number = count("incomplete") + count("indeterminate");
   const isRunning: boolean = status === "running";
   // A broken run outranks the counts.
   const notice: string | undefined =
@@ -355,10 +362,7 @@ export function CheckCardView({
     if (!hasChecks) return isRunning ? t("state.inProgress") : t("empty.label");
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
-      [
-        t("summary.unverified", { count: count("indeterminate") }),
-        count("indeterminate"),
-      ],
+      [t("summary.unverified", { count: incompleteCount }), incompleteCount],
       [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
       [t("summary.expected", { count: expectedCount }), expectedCount],
       [t("summary.skipped", { count: count("skipped") }), count("skipped")],
@@ -467,7 +471,6 @@ export function CheckCardView({
             alignItems="stretch"
             height="fit"
             gap={1}
-            className="pt-1"
           >
             {hasRows ? (
               <CheckLineGroups lines={lines} />

@@ -54,13 +54,54 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
 
+  async openConfiguration(serverName: string): Promise<void> {
+    await this.goto();
+    await this.plugins.openPlugin(serverName);
+    await this.page
+      .getByRole("tab", { name: "Configuration", exact: true })
+      .click();
+    await expect(this.defaultChatToggle).toBeEnabled();
+  }
+
+  get defaultChatToggle(): Locator {
+    return this.page.getByRole("switch", {
+      name: "Enable in default Chat",
+      exact: true,
+    });
+  }
+
+  async setDefaultChatEnabled(enabled: boolean): Promise<void> {
+    const toggle = this.defaultChatToggle;
+    await expect(toggle).toBeEnabled();
+    if ((await toggle.isChecked()) === enabled) return;
+    await toggle.setChecked(enabled);
+    const save = this.page.getByRole("button", {
+      name: "Save Changes",
+      exact: true,
+    });
+    await expect(save).toBeEnabled();
+    const responsePromise = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/default-assistant" &&
+        response.request().method() === "PATCH"
+    );
+    await save.click();
+    expect((await responsePromise).ok()).toBeTruthy();
+    await expect(save).toBeDisabled();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toBeChecked({ checked: enabled });
+  }
+
   async openAddServerModal(): Promise<void> {
     await this.plugins.openAddMcp();
     await expect(this.serverUrlInput).toBeVisible();
   }
 
-  async enterServerUrlAndContinue(url: string): Promise<void> {
+  async enterServerUrlAndContinue(url: string, group?: string): Promise<void> {
     await this.serverUrlInput.fill(url);
+    if (group) {
+      await this.restrictToGroup(group);
+    }
     const next = this.page.getByRole("button", {
       name: "Continue",
       exact: true,
@@ -81,20 +122,12 @@ export class AdminMcpServersPage {
     await expect(this.accessControlSelector).toBeVisible();
   }
 
-  async fillServerDetails(details: {
-    name: string;
-    /** Restrict to this group. Required for a scoped manager: the backend
-     *  refuses a public server outside the groups they manage. */
-    group?: string;
-  }): Promise<void> {
+  async fillServerDetails(details: { name: string }): Promise<void> {
     await this.page.getByRole("button", { name: "Back", exact: true }).click();
     await this.nameInput.fill(details.name);
     await this.page
       .getByRole("button", { name: "Continue", exact: true })
       .click();
-    if (details.group) {
-      await this.restrictToGroup(details.group);
-    }
   }
 
   async restrictToGroup(group: string): Promise<void> {

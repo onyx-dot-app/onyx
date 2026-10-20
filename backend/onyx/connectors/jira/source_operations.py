@@ -22,6 +22,7 @@ from more_itertools import chunked
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.jira.config import JiraCredentialBinding
 from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
@@ -43,19 +44,14 @@ _JIRA_BULK_FETCH_LIMIT = 100
 _GROUP_PICKER_MAX_RESULTS = 9999
 
 
-class JiraApiError(Exception):
-    """A Jira API call returned an error response.
+class JiraCloudIdError(Exception):
+    """The site's ``tenant_info`` JSON holds no Atlassian cloud id: it is not
+    a Jira Cloud site a scoped token can use."""
 
-    ``status_code`` is None when the error has no HTTP status. ``text`` is the
-    response body, None when there is none.
-    """
 
-    def __init__(
-        self, message: str, *, status_code: int | None, text: str | None
-    ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-        self.text = text
+class JiraApiError(SourceApiError):
+    """A Jira API call returned an error response. ``status_code`` is None
+    when the error has no HTTP status, and ``body`` when it has no body."""
 
 
 def rest_api_version(credentials: Mapping[str, Any]) -> str:
@@ -87,14 +83,28 @@ def _translate_errors() -> Iterator[None]:
     try:
         yield
     except JIRAError as e:
+        # ``str(e)`` prints the request and response headers, which hold the
+        # credential (Basic auth) and session cookies. So the message is not
+        # ``str(e)``, and ``from None`` keeps the SDK error, with its text,
+        # out of the stored stack trace.
         raise JiraApiError(
-            str(e), status_code=e.status_code, text=_error_text(e)
-        ) from e
+            f"JiraError HTTP {e.status_code}",
+            status_code=e.status_code,
+            method=(
+                e.response.request.method
+                if e.response is not None and e.response.request is not None
+                else None
+            ),
+            url=e.url,
+            body=_error_text(e),
+        ) from None
     except requests.HTTPError as e:
         raise JiraApiError(
             str(e),
             status_code=e.response.status_code if e.response is not None else None,
-            text=_error_text(e),
+            method=e.request.method if e.request is not None else None,
+            url=e.response.url if e.response is not None else None,
+            body=_error_text(e),
         ) from e
 
 
@@ -167,10 +177,19 @@ class JiraSourceOperations(SourceOperations):
     def _api_url(self) -> str:
         """The URL the client calls. Scoped tokens go through
         ``api.atlassian.com``; resolving its cloud id (``tenant_info``) raises
-        ``requests.HTTPError`` on failure."""
+        ``requests.HTTPError`` on an error response, ``ValueError`` on an
+        answer that is not JSON, and ``JiraCloudIdError`` when the JSON holds
+        no cloud id."""
         binding: JiraCredentialBinding = self._binding()
         jira_base: str = binding.jira_base_url.rstrip("/")
-        return scoped_url(jira_base, "jira") if binding.scoped_token else jira_base
+        if not binding.scoped_token:
+            return jira_base
+        try:
+            return scoped_url(jira_base, "jira")
+        except KeyError as e:
+            raise JiraCloudIdError(
+                f"{jira_base}/_edge/tenant_info returned no Atlassian cloud id."
+            ) from e
 
     def _build_client(self, api_url: str) -> JIRA:
         credentials: dict[str, Any] = self._credentials()

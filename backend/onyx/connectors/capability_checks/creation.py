@@ -7,7 +7,7 @@ source's checks for the pairing's access type and stores the full report. A
 fresh result of a draft run on the same form (for an edit, of a dry run on the
 same pair and proposed state) is reused, so the check does not run again. Only
 a required check that failed within the blocking budget blocks the pairing:
-INDETERMINATE is transient, and skipped checks do not apply. A check that is
+INCOMPLETE is transient, and skipped checks do not apply. A check that is
 still running at the end of the budget does not block; a background run
 produces its result.
 """
@@ -35,14 +35,19 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
+    CredentialCapability,
     CredentialCapabilityReport,
     NamedCheckRun,
     PendingCheck,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    dependency_not_run_result,
     generate_capability_report,
     merge_capability_results,
+    run_order,
+    stop_blocked_results,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -310,24 +315,59 @@ def _run_checks_within_budget(
     return finished, frozenset(unfinished)
 
 
+def _defer_dependents_of_unfinished(
+    checks: list[CapabilityCheck[Any]],
+    finished: list[CapabilityCheckResult],
+    unfinished: frozenset[str],
+) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
+    """Moves each check that depends, directly or not, on an unfinished check
+    to the unfinished checks: its result came before its dependency's, so it
+    neither blocks the pairing nor goes into a report."""
+    deferred: set[str] = set(unfinished)
+    for check in run_order(checks):
+        if deferred.intersection(check.depends_on):
+            deferred.add(check.check_id)
+    return (
+        [result for result in finished if result.check_id not in deferred],
+        frozenset(deferred),
+    )
+
+
 def _unfinished_results(
-    checks: list[CapabilityCheck[Any]], unfinished: frozenset[str], message: str
+    checks: list[CapabilityCheck[Any]],
+    unfinished: frozenset[str],
+    finished: list[CapabilityCheckResult],
+    message: str,
 ) -> list[CapabilityCheckResult]:
-    """INDETERMINATE rows for checks with no result, for a report that is
-    stored without a background run."""
-    return [
-        CapabilityCheckResult(
+    """Rows for checks with no result, for a report that is stored without a
+    background run: not run when a dependency stops the check, else
+    INCOMPLETE: their result never arrives, so they time out."""
+    result_by_check_id = {result.check_id: result for result in finished}
+    result_by_key: dict[tuple[str, CredentialCapability], CapabilityCheckResult] = {}
+    # In run order, so a row built here stops the unfinished checks after it.
+    for check in run_order(checks):
+        if check.check_id not in unfinished:
+            continue
+        result = dependency_not_run_result(
+            check, result_by_check_id
+        ) or CapabilityCheckResult(
             capability=check.capability,
             check_id=check.check_id,
+            row_id=check.row_id,
             display_name=check.display_name,
             required=check.required,
-            status=CapabilityCheckStatus.INDETERMINATE,
+            status=CapabilityCheckStatus.INCOMPLETE,
             message=message,
+            error_kind=CheckErrorKind.TIMEOUT,
             is_fallback=check.is_fallback,
             remediation=check.remediation,
             docs_link=check.docs_link,
             validates_binding=check.validates_binding,
         )
+        result_by_key[(check.check_id, check.capability)] = result
+        result_by_check_id[check.check_id] = result
+    return [
+        result_by_key[(check.check_id, check.capability)]
         for check in checks
         if check.check_id in unfinished
     ]
@@ -499,8 +539,11 @@ def run_named_checks_within_budget(
         for check in checks
         if check.discovery and check.check_id not in reused
     )
+    finished, unfinished = _defer_dependents_of_unfinished(checks, finished, unfinished)
+    # The checks ran side by side, so a check whose dependency failed ran
+    # anyway: it reports its dependency, not its own failure.
     return NamedCheckRun(
-        finished_results=finished,
+        finished_results=stop_blocked_results(checks, finished),
         unfinished_checks=[
             PendingCheck(
                 capability=check.capability,
@@ -518,6 +561,7 @@ def _discovery_not_run_result(check: CapabilityCheck[Any]) -> CapabilityCheckRes
     return CapabilityCheckResult(
         capability=check.capability,
         check_id=check.check_id,
+        row_id=check.row_id,
         display_name=check.display_name,
         required=False,
         status=CapabilityCheckStatus.SKIPPED,
@@ -604,7 +648,10 @@ def validate_pairing_with_named_checks(
             _store_report(
                 finished
                 + _unfinished_results(
-                    get_capability_checks(source), unfinished, _REJECTED_MESSAGE
+                    get_capability_checks(source),
+                    unfinished,
+                    finished,
+                    _REJECTED_MESSAGE,
                 ),
                 credential_id=credential_id,
                 connector_id=connector_id,

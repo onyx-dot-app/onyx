@@ -1,10 +1,14 @@
+import re
+import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from typing import Annotated, Any, Generic, Literal
+from urllib.parse import urlsplit
 
+import requests
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -21,11 +25,22 @@ from onyx.connectors.capability_checks.form_state import (
     FormState,
     validate_form_state,
 )
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    CredentialInvalidError,
+    InconclusiveValidationError,
+    InsufficientPermissionsError,
+    RateLimitedValidationError,
+    SourceApiError,
+    UnreachableValidationError,
+)
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 
 logger = setup_logger()
 
@@ -129,9 +144,17 @@ class CheckAdvisory(BaseModel):
 
 
 class CheckOutput(BaseModel):
-    """What a passing check returns: findings, and advisories about what it
-    could not verify."""
+    """What a passing check returns: its row's short line (what it found),
+    findings, and advisories about what it could not verify.
 
+    ``partial`` marks a check that confirmed only part of its scope, such as a
+    Find that found some selected items: it is INCOMPLETE, with
+    ``description`` saying what is missing, and the checks after it run on
+    what it found."""
+
+    summary: str | None = None
+    description: str | None = None
+    partial: bool = False
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
 
@@ -147,13 +170,253 @@ class CapabilityCheckStatus(str, Enum):
     PASSED = "passed"
     # A ``ConnectorValidationError``-family failure: real and actionable.
     FAILED = "failed"
-    # Transient or unknown failure (``UnexpectedValidationError`` or any
-    # unrecognized exception). Mirrors the contract that such errors must never
-    # be treated as proof the credential is broken.
+    # The check started but did not finish, or it could not decide: a timeout,
+    # a rate limit, an unexpected response (``UnexpectedValidationError`` or
+    # any unrecognized exception). Never proof that the credential is broken.
+    INCOMPLETE = "incomplete"
+    # Legacy: INCOMPLETE before it had its own value. Stored reports and run
+    # history still hold it; no check result is written with it.
     INDETERMINATE = "indeterminate"
     # The check needs state (connector instance or config) that was not
     # supplied.
     SKIPPED = "skipped"
+
+
+INCOMPLETE_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
+    {CapabilityCheckStatus.INCOMPLETE, CapabilityCheckStatus.INDETERMINATE}
+)
+
+
+class CheckErrorKind(str, Enum):
+    """Why a check FAILED or is INCOMPLETE, for the form to show the right
+    detail without reading the message."""
+
+    # The source rejected the credential.
+    REJECTED = "rejected"
+    # The credential signs in, but lacks a permission or scope.
+    PERMISSION = "permission"
+    # Any other actionable failure: a setting or the source rules it out.
+    INVALID = "invalid"
+    RATE_LIMITED = "rate_limited"
+    TIMEOUT = "timeout"
+    UNREACHABLE = "unreachable"
+    # The probe ran, but its sample cannot decide.
+    INCONCLUSIVE = "inconclusive"
+    # An error the check does not know.
+    UNEXPECTED = "unexpected"
+
+
+# Kinds that say nothing lasting about the credential: running the check again
+# can give a different result.
+TRANSIENT_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {
+        CheckErrorKind.RATE_LIMITED,
+        CheckErrorKind.TIMEOUT,
+        CheckErrorKind.UNREACHABLE,
+        CheckErrorKind.UNEXPECTED,
+    }
+)
+
+
+# Kinds whose cause the check does not know: their result keeps a stack trace.
+_UNKNOWN_CAUSE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE, CheckErrorKind.UNEXPECTED}
+)
+# Bounds what a result stores of the source's response and of a stack trace:
+# results live in stored reports and in every draft snapshot write.
+MAX_RESPONSE_EXCERPT_CHARS: int = 500
+MAX_STACK_TRACE_CHARS: int = 4000
+# How much of a response body is redacted before the excerpt is cut from it.
+# Redaction can shorten the text, so this bound can reach the excerpt.
+_MAX_REDACTED_BODY_CHARS: int = 64 * 1024
+# A URL anywhere in a text, with any scheme. Each match is rebuilt by
+# ``_safe_location``, the parser the request line uses too.
+_URL_PATTERN = re.compile(r"\b[a-z][a-z0-9+.\-]*://[^\s'\"<>]+", re.IGNORECASE)
+_UNPARSABLE_URL = "[URL]"
+
+
+class CheckErrorDetail(BaseModel):
+    """What support needs about a check that did not pass, beyond its
+    message. The form shows it as Error Details."""
+
+    # The source's HTTP status, request and response, when the error carries
+    # an HTTP response. The request has no query string, which can hold
+    # secrets.
+    status_code: int | None = None
+    request: str | None = None
+    response_excerpt: str | None = None
+    # Only when the cause is unknown: a timeout, an unreachable source or an
+    # unexpected error.
+    stack_trace: str | None = None
+
+
+def _safe_location(url: str) -> str:
+    """A URL's host, port and path only: its user info, parameters, query
+    string and fragment can hold secrets. A URL that does not parse is
+    replaced whole."""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+        host = parsed.hostname or ""
+    except ValueError:
+        return _UNPARSABLE_URL
+    # Any segment can carry `;params`, such as a session id.
+    path = "/".join(segment.split(";", 1)[0] for segment in parsed.path.split("/"))
+    return f"{host}{f':{port}' if port else ''}{path}"
+
+
+def _request_line(method: str | None, url: str | None) -> str | None:
+    if url is None:
+        return None
+    location = _safe_location(url)
+    return f"{method} {location}" if method else location
+
+
+def credential_strings(credential_json: Any) -> list[str]:
+    """Every string in a credential's values, nested ones included, to redact
+    from what a check stores."""
+    if isinstance(credential_json, str):
+        return [credential_json]
+    if isinstance(credential_json, dict):
+        return [
+            text
+            for value in credential_json.values()
+            for text in credential_strings(value)
+        ]
+    if isinstance(credential_json, list):
+        return [text for value in credential_json for text in credential_strings(value)]
+    return []
+
+
+def _scrubbed(text: str, secrets: Iterable[str]) -> str:
+    without_urls = _URL_PATTERN.sub(lambda match: _safe_location(match[0]), text)
+    return scrub_sensitive_values(without_urls, secrets)
+
+
+def _cut_for_redaction(text: str, secrets: list[str]) -> str:
+    """``text`` cut to the redaction bound, and before any secret that the
+    bound would split: a partial secret does not match redaction."""
+    cut = _MAX_REDACTED_BODY_CHARS
+    if len(text) <= cut:
+        return text
+    for secret in secrets:
+        if not secret:
+            continue
+        start = text.find(
+            secret,
+            max(_MAX_REDACTED_BODY_CHARS - len(secret) + 1, 0),
+            _MAX_REDACTED_BODY_CHARS + len(secret) - 1,
+        )
+        if start != -1:
+            cut = min(cut, start)
+    return text[:cut]
+
+
+def _http_detail(error: BaseException) -> CheckErrorDetail | None:
+    """The HTTP response of the first error in the chain that has one, with
+    the whole body: ``check_error_detail`` redacts it, then cuts it. The
+    chain follows the cause, else the context the traceback would show."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        # A source error without response data can wrap the HTTP error.
+        if isinstance(current, SourceApiError) and (
+            current.status_code is not None or current.url is not None or current.body
+        ):
+            return CheckErrorDetail(
+                status_code=current.status_code,
+                request=_request_line(current.method, current.url),
+                response_excerpt=current.body or None,
+            )
+        if isinstance(current, requests.HTTPError) and current.response is not None:
+            response = current.response
+            return CheckErrorDetail(
+                status_code=response.status_code,
+                request=_request_line(
+                    response.request.method if response.request else None,
+                    response.url,
+                ),
+                response_excerpt=response.text or None,
+            )
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
+    return None
+
+
+def check_error_detail(
+    error: Exception, error_kind: CheckErrorKind, secrets: Iterable[str]
+) -> CheckErrorDetail | None:
+    """The detail of a check's exception: the HTTP response it carries, and a
+    stack trace when the cause is unknown. None when it has neither. URL query
+    strings and every value of ``secrets`` (the run's credential values) are
+    removed from the response and the trace before either is cut to size,
+    so a cut cannot leave part of a secret."""
+    secrets = list(secrets)
+    detail = _http_detail(error) or CheckErrorDetail()
+    if detail.response_excerpt is not None:
+        detail.response_excerpt = _scrubbed(
+            _cut_for_redaction(detail.response_excerpt, secrets), secrets
+        )[:MAX_RESPONSE_EXCERPT_CHARS]
+    if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
+        trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
+        detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
+    return detail if detail != CheckErrorDetail() else None
+
+
+class CheckRowText(BaseModel):
+    """A row's line and description."""
+
+    model_config = ConfigDict(frozen=True)
+
+    summary: str
+    description: str
+
+
+class CheckNotRunReason(str, Enum):
+    """Why a SKIPPED check did not run, when a gate of the run stopped it."""
+
+    # A check it depends on FAILED.
+    DEPENDENCY_FAILED = "dependency_failed"
+    # A check it depends on is INCOMPLETE.
+    DEPENDENCY_INCOMPLETE = "dependency_incomplete"
+    # A check it depends on was SKIPPED for a reason of its own, such as a
+    # setting it needs.
+    DEPENDENCY_SKIPPED = "dependency_skipped"
+    # The source rate limited an earlier check, so the run stopped.
+    RATE_LIMITED = "rate_limited"
+    # The check found nothing in scope to test (``NothingToCheckError``).
+    NOTHING_IN_SCOPE = "nothing_in_scope"
+
+
+# Kinds that leave the check INCOMPLETE: they prove nothing about the
+# credential.
+_INCOMPLETE_ERROR_KINDS: frozenset[CheckErrorKind] = TRANSIENT_ERROR_KINDS | {
+    CheckErrorKind.INCONCLUSIVE
+}
+_UNREACHABLE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE}
+)
+
+
+def check_error_kind(error: Exception) -> CheckErrorKind:
+    """The kind of a check's exception, per the check exception contract."""
+    if isinstance(error, (CredentialExpiredError, CredentialInvalidError)):
+        return CheckErrorKind.REJECTED
+    if isinstance(error, InsufficientPermissionsError):
+        return CheckErrorKind.PERMISSION
+    if isinstance(error, ConnectorValidationError):
+        return CheckErrorKind.INVALID
+    if isinstance(error, RateLimitedValidationError):
+        return CheckErrorKind.RATE_LIMITED
+    if isinstance(error, InconclusiveValidationError):
+        return CheckErrorKind.INCONCLUSIVE
+    if isinstance(error, TimeoutError):
+        return CheckErrorKind.TIMEOUT
+    if isinstance(error, UnreachableValidationError):
+        return CheckErrorKind.UNREACHABLE
+    return CheckErrorKind.UNEXPECTED
 
 
 class CapabilityVerdict(str, Enum):
@@ -266,6 +529,9 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         docs_link: str | None = None,
         validates_binding: bool = False,
         discovery: bool = False,
+        fails_when_unreachable: bool = False,
+        depends_on: tuple[str, ...] = (),
+        row_id: str | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -294,7 +560,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         )
         # Per-check hang guard in seconds; None falls back to the
         # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
-        # INDETERMINATE, never FAILED.
+        # INCOMPLETE, except as ``fails_when_unreachable`` says.
         self.timeout_seconds = timeout_seconds
         # True for synthesized wrappers around the legacy validation blobs
         # (``validate_connector_settings`` / ``validate_perm_sync``) rather than
@@ -303,6 +569,31 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.remediation = remediation
         self.docs_link = docs_link
         self.validates_binding = validates_binding
+        # A sign-in check: on a form run, a timeout or an unreachable source
+        # FAILS it, because Onyx cannot use the account. Other runs keep it
+        # INCOMPLETE, so a slow source never holds indexing.
+        self.fails_when_unreachable = fails_when_unreachable
+        # The check_ids this check runs after. A dependency that FAILED, is
+        # INCOMPLETE or did not run stops the check. One that does not apply is
+        # left out, so a check can list alternatives (e.g. both token types'
+        # sign-in checks).
+        self.depends_on = depends_on
+        # The row the check shows on. Checks that share one are one row: the
+        # variants of a probe (token types, deployments) and a probe's
+        # discovery step. Defaults to the check_id.
+        self.row_id = row_id or check_id
+
+    def outcome_status(
+        self, error_kind: CheckErrorKind, form_run: bool
+    ) -> CapabilityCheckStatus:
+        """The status of a check that raised an error of ``error_kind``."""
+        if error_kind not in _INCOMPLETE_ERROR_KINDS or (
+            form_run
+            and self.fails_when_unreachable
+            and error_kind in _UNREACHABLE_ERROR_KINDS
+        ):
+            return CapabilityCheckStatus.FAILED
+        return CapabilityCheckStatus.INCOMPLETE
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
@@ -358,10 +649,25 @@ class CapabilityCheckResult(BaseModel):
     display_name: str
     required: bool
     status: CapabilityCheckStatus
+    # The row the check shows on; None in results stored before rows.
+    row_id: str | None = None
     # Exception text for failures, skip reason for skips, empty on success.
     message: str = ""
     # Exception class name, for support diagnosis.
     error_type: str | None = None
+    # Why a FAILED or INCOMPLETE check did not pass.
+    error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
+    # Why a SKIPPED check did not run, and the dependency that stopped it.
+    not_run_reason: CheckNotRunReason | None = None
+    blocked_by: str | None = None
+    # An INCOMPLETE check that confirmed part of its scope; its dependents run.
+    partial: bool = False
+    # The row's text: a short line of what the check found or what is wrong,
+    # and up to three lines of what happened and what is needed. None when
+    # the check gives none; ``message`` stays the full text for support.
+    summary: str | None = None
+    description: str | None = None
     is_fallback: bool = False
     remediation: str | None = None
     docs_link: str | None = None
@@ -466,9 +772,9 @@ def aggregate_capability_verdict(
     """Rolls the per-check results of one capability up into a single verdict.
 
     Pure function, evaluated in strict precedence order. Required checks gate
-    the verdict: a required FAILED is FAILED, and a required INDETERMINATE or
+    the verdict: a required FAILED is FAILED, and a required INCOMPLETE or
     SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
-    made. Non-required failures and indeterminates only downgrade to
+    made. Non-required failures and incomplete checks only downgrade to
     PASSED_WITH_WARNINGS (partial capability); non-required skips do not
     downgrade at all. Checks that do not apply are left out. An empty result
     list aggregates to SKIPPED: a capability is never PASSED on the basis of
@@ -485,8 +791,7 @@ def aggregate_capability_verdict(
     ):
         return CapabilityVerdict.FAILED
     if any(
-        result.status == CapabilityCheckStatus.INDETERMINATE and result.required
-        for result in results
+        result.status in INCOMPLETE_STATUSES and result.required for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
     if any(
@@ -495,8 +800,8 @@ def aggregate_capability_verdict(
     ):
         return CapabilityVerdict.SKIPPED
     if any(
-        result.status
-        in (CapabilityCheckStatus.FAILED, CapabilityCheckStatus.INDETERMINATE)
+        result.status == CapabilityCheckStatus.FAILED
+        or result.status in INCOMPLETE_STATUSES
         for result in results
     ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS

@@ -2,19 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { Button, SelectCard, Text, Tooltip } from "@opal/components";
+import { useLocale, useTranslations } from "next-intl";
+import { Button, Modal, SelectCard, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
 import {
   SvgChevronRight,
-  SvgFileBraces,
+  SvgCodeFile,
   SvgPlus,
   SvgSettings,
 } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import type { IconProps } from "@opal/types";
-import { cn } from "@opal/utils";
+import PluginStatusIcon from "@/sections/plugins/PluginStatusIcon";
+import { useSettings } from "@/lib/settings/hooks";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -24,52 +25,77 @@ import {
   useMemberPlugins,
   type MemberPlugin,
 } from "@/lib/plugins/member";
-import { memberPluginChatHref } from "@/lib/plugins/chat";
 import type { PluginReference } from "@/lib/plugins/types";
 import PluginRowLayout from "@/sections/plugins/PluginRowLayout";
-import MemberPluginDetailModal from "@/sections/plugins/MemberPluginDetailModal";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
+import { MemberPluginDetailContent } from "@/sections/plugins/MemberPluginDetailModal";
+import { MemberPluginConnectionContent } from "@/sections/plugins/MemberPluginConnectionDialog";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import PluginDirectoryToolbar from "@/sections/plugins/PluginDirectoryToolbar";
+import { useExternalAppsWithSkillIssues } from "@/lib/externalApps/hooks";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { CRAFT_PATH } from "@/app/craft/v1/constants";
+
+import {
+  memberPluginStatus,
+  memberPluginSurfaceStatus,
+  memberPluginSurfaceAvailability,
+  MEMBER_PLUGIN_SURFACES,
+  sortPlugins,
+} from "@/lib/plugins/sort";
 
 type MemberPluginDialog =
-  | { kind: "details"; reference: PluginReference }
+  | { kind: "details"; reference: PluginReference; initialTab?: "approvals" }
   | { kind: "connect"; reference: PluginReference }
   | null;
 
 function PluginConnectionStatus({
   plugin,
   onOpen,
+  hasSkillIssues = false,
+  craftAvailable,
 }: {
   plugin: MemberPlugin;
   onOpen: () => void;
+  hasSkillIssues?: boolean;
+  craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.memberPlugins");
+  const skillCopy = useTranslations("craft.apps.page.status");
   const connection = plugin.connection;
   const needsAuth =
     connection.kind === "oauth" || connection.kind === "credentials";
-  const label = needsAuth
+  const skillWarning = connection.kind === "connected" && hasSkillIssues;
+  const availabilityCopy = useTranslations("actions.plugins.availability");
+  const connectionLabel = needsAuth
     ? t("filters.needsSignIn")
     : connection.kind === "connected"
-      ? t(
-          `status.${connection.ownership === "user" ? "connected" : connection.ownership}`
-        )
+      ? t("status.none")
       : t(`status.${connection.kind}`);
 
-  function StatusIcon({ className }: IconProps) {
+  const requiresWorkspaceSetup = connection.kind === "unconfigured";
+
+  function StatusIcon(props: IconProps) {
+    if (requiresWorkspaceSetup)
+      return <PluginStatusIcon {...props} primary="inactive" />;
     return (
-      <span
-        aria-hidden
-        className={cn(
-          "block size-3 rounded-full",
-          needsAuth
-            ? "bg-status-warning-05"
-            : connection.kind === "connected"
-              ? "bg-status-success-05"
-              : "bg-text-03",
-          className
+      <PluginStatusIcon
+        {...props}
+        primary={memberPluginSurfaceStatus(
+          plugin,
+          "chat",
+          hasSkillIssues,
+          craftAvailable
+        )}
+        secondary={memberPluginSurfaceStatus(
+          plugin,
+          "agents",
+          hasSkillIssues,
+          craftAvailable
+        )}
+        tertiary={memberPluginSurfaceStatus(
+          plugin,
+          "craft",
+          hasSkillIssues,
+          craftAvailable
         )}
       />
     );
@@ -81,7 +107,43 @@ function PluginConnectionStatus({
       side="top"
       sideOffset={6}
       delayDuration={250}
-      tooltip={<Text font="secondary-body">{label}</Text>}
+      tooltip={
+        requiresWorkspaceSetup ? (
+          <Text font="secondary-body">{connectionLabel}</Text>
+        ) : (
+          <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1.5">
+            {MEMBER_PLUGIN_SURFACES.map((item) => {
+              const { supported, available, personallyEnabled } =
+                memberPluginSurfaceAvailability(plugin, item, craftAvailable);
+              const value = !supported
+                ? t("availability.notAvailable")
+                : connection.kind !== "connected"
+                  ? connectionLabel
+                  : item === "craft" && skillWarning
+                    ? skillCopy("skillWarningSummary")
+                    : available === false
+                      ? t("availability.disabledByAdmin")
+                      : personallyEnabled === false
+                        ? t("availability.disabledByYou")
+                        : available === true
+                          ? t("status.none")
+                          : availabilityCopy("unknown");
+              return (
+                <div key={item} className="contents">
+                  <Text font="secondary-body" color="text-03">
+                    {item === "agents"
+                      ? t("availability.agents")
+                      : availabilityCopy(
+                          item === "chat" ? "mainChat" : "craft"
+                        )}
+                  </Text>
+                  <Text font="secondary-body">{value}</Text>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
     >
       <Button
         icon={StatusIcon}
@@ -99,10 +161,14 @@ function PluginConnectionStatus({
 
 function MemberPluginRow({
   plugin,
+  craftAvailable,
+  hasSkillIssues,
   onDetails,
   onConnect,
 }: {
   plugin: MemberPlugin;
+  hasSkillIssues: boolean;
+  craftAvailable: boolean;
   onDetails: () => void;
   onConnect: () => void;
 }) {
@@ -129,7 +195,7 @@ function MemberPluginRow({
             ? getAppTypeLogo(plugin.app.app_type)
             : plugin.kind === "mcp"
               ? getActionIcon(plugin.server.server_url, name)
-              : SvgFileBraces
+              : SvgCodeFile
         }
         title={name}
         description={
@@ -146,27 +212,17 @@ function MemberPluginRow({
             </Text>
           ) : undefined
         }
-        descriptionTag={
-          plugin.kind === "external-app"
-            ? {
-                title: t("externalApp.craftOnly"),
-                color: "gray",
-                tooltip: t("externalApp.craftOnlyDescription"),
-              }
-            : plugin.kind === "openapi"
-              ? {
-                  title: t("openapi.chatOnly"),
-                  color: "gray",
-                  tooltip: t("openapi.chatOnlyDescription"),
-                }
-              : undefined
-        }
         action={
           <>
             <Text font="secondary-body" color="text-03">
               {t(`kind.${plugin.kind}`)}
             </Text>
-            <PluginConnectionStatus plugin={plugin} onOpen={onDetails} />
+            <PluginConnectionStatus
+              plugin={plugin}
+              onOpen={onDetails}
+              hasSkillIssues={hasSkillIssues}
+              craftAvailable={craftAvailable}
+            />
             <Button
               icon={connectable ? SvgPlus : SvgChevronRight}
               size="sm"
@@ -203,11 +259,27 @@ export default function MemberPluginsPage({
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
+  const locale = useLocale();
+  const craftAvailable = useSettings().onyx_craft_enabled === true;
   const [filter, setFilter] = useState(initialFilter);
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<MemberPluginDialog>(null);
+  const appsWithSkillIssues = useExternalAppsWithSkillIssues(
+    plugins.some(
+      (plugin) =>
+        plugin.kind === "external-app" && plugin.connection.kind === "connected"
+    )
+  );
+  const hasSkillIssues = (plugin: MemberPlugin) =>
+    plugin.kind === "external-app" && appsWithSkillIssues.has(plugin.app.id);
   const normalizedQuery = query.trim().toLowerCase();
-  const filtered = plugins.filter((plugin) => {
+  const filtered = sortPlugins(
+    plugins,
+    (plugin) =>
+      memberPluginStatus(plugin, hasSkillIssues(plugin), craftAvailable),
+    memberPluginName,
+    locale
+  ).filter((plugin) => {
     if (
       surface === "craft" &&
       (plugin.kind === "openapi" ||
@@ -246,8 +318,51 @@ export default function MemberPluginsPage({
   );
   const handledConnect = useRef<string | null>(null);
   const connectIntent = searchParams.get("connect");
+  const policyIntent = searchParams.get("actionPolicies");
+  const handledPolicy = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!policyIntent) {
+      handledPolicy.current = null;
+      return;
+    }
+    if (handledPolicy.current === policyIntent) return;
+    const match = /^(app|mcp)-(\d+)$/.exec(policyIntent);
+    if (!match) return;
+    const plugin = plugins.find((item) =>
+      match[1] === "app"
+        ? item.kind === "external-app" && item.app.id === Number(match[2])
+        : item.kind === "mcp" && item.server.id === Number(match[2])
+    );
+    if (!plugin) return;
+    handledPolicy.current = policyIntent;
+    const needsConnection =
+      plugin.connection.kind === "oauth" ||
+      plugin.connection.kind === "credentials";
+    setDialog(
+      needsConnection
+        ? { kind: "connect", reference: memberPluginReference(plugin) }
+        : {
+            kind: "details",
+            reference: memberPluginReference(plugin),
+            initialTab: "approvals",
+          }
+    );
+  }, [policyIntent, plugins]);
+
+  function closeDialog() {
+    setDialog(null);
+    if (!policyIntent) return;
+    handledConnect.current = connectIntent;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("actionPolicies");
+    const query = params.toString();
+    const path = surface === "craft" ? "/craft/v1/plugins" : "/app/plugins";
+    router.replace(query ? `${path}?${query}` : path, { scroll: false });
+  }
+
+  useEffect(() => {
+    if (policyIntent) return;
     if (!connectIntent) {
       handledConnect.current = null;
       return;
@@ -271,7 +386,7 @@ export default function MemberPluginsPage({
           : "details",
       reference: memberPluginReference(plugin),
     });
-  }, [connectIntent, plugins]);
+  }, [connectIntent, plugins, policyIntent]);
 
   function show(plugin: MemberPlugin, kind: "details" | "connect") {
     setDialog({ kind, reference: memberPluginReference(plugin) });
@@ -381,6 +496,8 @@ export default function MemberPluginsPage({
                       <MemberPluginRow
                         key={`${reference.kind}-${reference.id}`}
                         plugin={plugin}
+                        hasSkillIssues={hasSkillIssues(plugin)}
+                        craftAvailable={craftAvailable}
                         onDetails={() => show(plugin, "details")}
                         onConnect={() => show(plugin, "connect")}
                       />
@@ -431,40 +548,38 @@ export default function MemberPluginsPage({
           </div>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
-      {activePlugin && dialog?.kind === "details" && (
-        <MemberPluginDetailModal
-          key={`${dialog.reference.kind}-${dialog.reference.id}`}
-          plugin={activePlugin}
-          surface={surface}
-          open
-          onClose={() => setDialog(null)}
-          onConnect={() => show(activePlugin, "connect")}
-          onOpenInCraft={() => router.push(CRAFT_PATH)}
-          onUseInChat={() => {
-            const reference = memberPluginReference(activePlugin);
-            if (reference.kind === "external-app") return;
-            router.push(
-              memberPluginChatHref(reference, searchParams.get("returnTo"))
-            );
-          }}
-          onDisconnected={() => {
-            setDialog(null);
-            void refresh();
-          }}
-        />
-      )}
-      {activePlugin && dialog?.kind === "connect" && (
-        <MemberPluginConnectionDialog
-          plugin={activePlugin}
-          surface={surface}
-          open
-          onClose={() => setDialog(null)}
-          onConnected={() => {
-            show(activePlugin, "details");
-            void refresh();
-          }}
-        />
-      )}
+      <Modal open={Boolean(activePlugin && dialog)}>
+        <Modal.Backdrop />
+        {activePlugin && dialog?.kind === "details" && (
+          <MemberPluginDetailContent
+            key={`${dialog.reference.kind}-${dialog.reference.id}`}
+            plugin={activePlugin}
+            surface={surface}
+            initialTab={dialog.initialTab}
+            open
+            skipOverlay
+            onClose={closeDialog}
+            onConnect={() => show(activePlugin, "connect")}
+            onDisconnected={() => {
+              closeDialog();
+              void refresh();
+            }}
+          />
+        )}
+        {activePlugin && dialog?.kind === "connect" && (
+          <MemberPluginConnectionContent
+            key={`${dialog.reference.kind}-${dialog.reference.id}`}
+            plugin={activePlugin}
+            surface={surface}
+            skipOverlay
+            onClose={closeDialog}
+            onConnected={() => {
+              show(activePlugin, "details");
+              void refresh();
+            }}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

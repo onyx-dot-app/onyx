@@ -106,7 +106,12 @@ export interface CredentialChoice {
   options: CredentialPath[];
 }
 
-export type EditCheckStatus = "passed" | "failed" | "indeterminate" | "skipped";
+export type EditCheckStatus =
+  | "passed"
+  | "failed"
+  | "incomplete"
+  | "indeterminate"
+  | "skipped";
 
 export interface EditCheckResult {
   capability: CredentialCapability;

@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
@@ -53,10 +54,22 @@ Examples:
 }
 
 func runEnv(dryRun bool) error {
-	projName := docker.ProjectName()
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockRuntimeTarget(target, false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	projName := target.Project
 
 	resolved := queryContainerPorts(projName)
 	appEnv := resolved.AppEnv()
+	if _, ok := appEnv["POSTGRES_PORT"]; !ok {
+		return fmt.Errorf("no running PostgreSQL container with a published port for project %s", projName)
+	}
 
 	log.Infof("Project: %s", projName)
 
@@ -84,7 +97,7 @@ func runEnv(dryRun bool) error {
 		}
 	}
 
-	if err := setEnvValues(envPath, appEnv); err != nil {
+	if err := devstack.UpsertEnvFile(envPath, appEnv); err != nil {
 		return fatalErrorf("Failed to update %s: %w", envPath, err)
 	}
 	// Dev runs the object store only, so a legacy endpoint left by an earlier
@@ -102,8 +115,8 @@ func runEnv(dryRun bool) error {
 
 // queryContainerPorts discovers the actual host ports of running containers by
 // calling "docker port" for each port spec in InfraServices. Container names
-// follow the Docker Compose convention "<project>-<service>-1". If a container
-// is not running, the default host port from the spec is used instead.
+// follow the Docker Compose convention "<project>-<service>-1". Missing
+// containers are excluded.
 func queryContainerPorts(projName string) *docker.ResolvedPorts {
 	resolved := docker.NewResolvedPorts()
 
@@ -120,49 +133,6 @@ func queryContainerPorts(projName string) *docker.ResolvedPorts {
 	}
 
 	return resolved
-}
-
-// setEnvValues upserts multiple key=value pairs in a dotenv file. For each key,
-// it scans existing lines for a matching "KEY=" prefix and replaces the line in
-// place. Keys not already present are appended at the end. The file is created
-// if it does not exist.
-func setEnvValues(envPath string, values map[string]string) error {
-	data, err := os.ReadFile(envPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", envPath, err)
-	}
-
-	lines := []string{""}
-	if len(data) > 0 {
-		lines = strings.Split(string(data), "\n")
-	}
-
-	remaining := make(map[string]string, len(values))
-	for k, v := range values {
-		remaining[k] = v
-	}
-
-	for i, line := range lines {
-		for key, val := range remaining {
-			prefix := key + "="
-			if strings.HasPrefix(line, prefix) {
-				lines[i] = prefix + val
-				delete(remaining, key)
-				break
-			}
-		}
-	}
-
-	for key, val := range remaining {
-		entry := key + "=" + val
-		if lines[len(lines)-1] == "" {
-			lines = append(lines[:len(lines)-1], entry, "")
-		} else {
-			lines = append(lines, entry)
-		}
-	}
-
-	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 // removeEnvKey drops every "KEY=" line from a dotenv file.

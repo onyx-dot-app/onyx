@@ -442,6 +442,40 @@
       "temperature": true,
       "tool_call": true
     },
+    "databricks-gemini-3-5-flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "cache_write": 1.87502,
+        "input": 1.5,
+        "input_audio": 1.5,
+        "output": 9
+      },
+      "family": "gemini-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 3.5 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-05-19",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "databricks-gemini-3-flash": {
       "attachment": true,
       "cost": {

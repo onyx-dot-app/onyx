@@ -12,7 +12,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";

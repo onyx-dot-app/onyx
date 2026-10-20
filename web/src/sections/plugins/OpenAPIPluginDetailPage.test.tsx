@@ -14,6 +14,11 @@ import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import OpenAPIPluginDetailPage from "@/sections/plugins/OpenAPIPluginDetailPage";
 
+let mockFullAdmin = true;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({ isGlobalHolder: mockFullAdmin }),
+}));
+
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockRouter = { push: mockPush, replace: mockReplace };
@@ -60,6 +65,7 @@ const configuredTool: ToolSnapshot = {
 };
 
 let tool: ToolSnapshot;
+let defaultChatToolIds: number[];
 let writes: { path: string; body: unknown; method?: string }[];
 let listResponse: (() => Promise<Response>) | undefined;
 let oauthResponse: ((id: number) => Promise<Response>) | undefined;
@@ -74,10 +80,12 @@ const json = (body: unknown, status = 200) =>
 
 beforeEach(() => {
   toast.clearAll();
+  mockFullAdmin = true;
   mockQuery = new URLSearchParams();
   mockPush.mockClear();
   mockReplace.mockClear();
   tool = { ...configuredTool };
+  defaultChatToolIds = [99, 42];
   writes = [];
   listResponse = undefined;
   oauthResponse = undefined;
@@ -96,6 +104,8 @@ beforeEach(() => {
       }
       return listResponse ? listResponse() : json([tool]);
     }
+    if (path === "/api/admin/default-assistant/configuration")
+      return json({ tool_ids: defaultChatToolIds });
     if (path === "/api/settings") return json({});
     if (path === "/api/enterprise-settings") return json({});
     if (path === "/api/auth/type") return json({ oauth_enabled: true });
@@ -128,8 +138,7 @@ beforeEach(() => {
       writes.push({ path, body, method: init.method });
       if (failWrite) return json({ detail: failWrite }, 400);
       if (init.method === "DELETE") return json(true);
-      if (path === "/api/admin/tool/status")
-        return json({ updated_count: 1, tool_ids: [42] });
+      if (path === "/api/admin/default-assistant") return json(body);
       if (path === "/api/admin/oauth-config/7") return json({ id: 7 });
       if (path === "/api/admin/oauth-config/create") {
         configCreates += 1;
@@ -185,8 +194,8 @@ async function findEditorTab(name: string) {
       name === "Edit authentication"
         ? "Authentication"
         : name === "Edit schema"
-          ? "OpenAPI schema"
-          : "Plugin details",
+          ? "Configuration"
+          : "Configuration",
   });
 }
 
@@ -196,6 +205,126 @@ async function findToolsPreview() {
 }
 
 describe("detail modal", () => {
+  test("saving metadata preserves availability changed by another administrator", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const user = setupUser();
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    await user.type(name, "Updated API");
+    defaultChatToolIds = [99];
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual(
+      expect.objectContaining({
+        path: "/api/admin/tool/custom/42",
+        body: expect.objectContaining({ name: "Updated API" }),
+      })
+    );
+    expect(defaultChatToolIds).toEqual([99]);
+  });
+
+  test("scoped editors save metadata without loading default Chat settings", async () => {
+    mockFullAdmin = false;
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    expect(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    ).toHaveAttribute("aria-disabled", "true");
+    fireEvent.change(name, { target: { value: "Scoped edit" } });
+    await setupUser().click(
+      screen.getByRole("button", { name: "Save Changes" })
+    );
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]?.path).toBe("/api/admin/tool/custom/42");
+    expect(
+      jest
+        .mocked(global.fetch)
+        .mock.calls.some(([path]) => String(path).includes("default-assistant"))
+    ).toBe(false);
+  });
+
+  test("returning default Chat to its saved value clears the draft without writing", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const toggle = await screen.findByRole("switch", {
+      name: "Enable in default Chat",
+    });
+    await waitFor(() =>
+      expect(toggle).not.toHaveAttribute("aria-disabled", "true")
+    );
+    const user = setupUser();
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
+    expect(writes).toEqual([]);
+  });
+
+  test("does not overwrite concurrent metadata after reverting a draft", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const name = await screen.findByRole("textbox", { name: "Name" });
+    fireEvent.change(name, { target: { value: "Temporary name" } });
+    fireEvent.change(name, { target: { value: configuredTool.name } });
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    );
+    tool = { ...tool, name: "Another administrator's name" };
+    await setupUser().click(
+      screen.getByRole("button", { name: "Save Changes" })
+    );
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: "/api/admin/default-assistant",
+        method: "PATCH",
+        body: { tool_ids: [99] },
+      })
+    );
+    expect(
+      writes.some((write) => write.path === "/api/admin/tool/custom/42")
+    ).toBe(false);
+    expect(tool.name).toBe("Another administrator's name");
+  });
+
+  test("configuration saves metadata, schema, and availability together", async () => {
+    render(<OpenAPIPluginDetailPage toolId={42} />);
+    const user = setupUser();
+    const availability = await screen.findByRole("switch", {
+      name: "Enable in default Chat",
+    });
+    const updatedDefinition = {
+      ...definition,
+      info: { ...definition.info, version: "2.0" },
+    };
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Updated API" },
+    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ }),
+      { target: { value: JSON.stringify(updatedDefinition) } }
+    );
+    await user.click(availability);
+    expect(writes).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: "/api/admin/tool/custom/42",
+        method: "PUT",
+        body: {
+          name: "Updated API",
+          description: "Read release status",
+          definition: updatedDefinition,
+          oauth_config_id: 7,
+        },
+      })
+    );
+    await waitFor(() =>
+      expect(writes).toContainEqual({
+        path: "/api/admin/default-assistant",
+        method: "PATCH",
+        body: { tool_ids: [99] },
+      })
+    );
+  });
+
   test.each(["metadata", "schema", "authentication"] as const)(
     "guards %s drafts in the same frame and retains them when staying",
     async (editor) => {
@@ -219,7 +348,7 @@ describe("detail modal", () => {
       }
       const input =
         editor === "schema"
-          ? screen.getByRole("textbox")
+          ? screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ })
           : screen.getByRole("textbox", {
               name: editor === "metadata" ? "Name" : "Token URL",
             });
@@ -311,16 +440,21 @@ describe("detail modal", () => {
     const user = setupUser();
     render(<OpenAPIPluginDetailPage toolId={42} />);
     const dialog = await screen.findByRole("dialog", { name: /Release API/ });
-    expect(screen.getByRole("tab", { name: "Plugin details" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Configuration" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    expect(dialog).toHaveAccessibleDescription("https://releases.example.com");
+    expect(dialog).toHaveAccessibleDescription("Read release status");
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "OpenAPI schema" }));
-    expect(await screen.findByText("1 tool detected")).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("tab", { name: "OpenAPI schema" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("1 tool detected")).not.toBeInTheDocument();
     expect(screen.queryByText("listReleases")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "View tools" }));
+    await user.click(screen.getByRole("tab", { name: "Tools" }));
     expect(screen.getByRole("tab", { name: "Tools" })).toHaveAttribute(
       "aria-selected",
       "true"
@@ -451,7 +585,9 @@ describe("background detail reads", () => {
       }
       const input =
         editor === "schema"
-          ? within(dialog).getByRole("textbox")
+          ? within(dialog).getByRole("textbox", {
+              name: /OpenAPI Schema Definition/,
+            })
           : within(dialog).getByRole("textbox", {
               name: editor === "metadata" ? "Name" : "Token URL",
             });
@@ -500,7 +636,7 @@ describe("permission-bearing detail reads", () => {
     tool = { ...tool, permissions: undefined };
     render(<OpenAPIPluginDetailPage toolId={42} />);
     expect(await findToolsPreview()).toBeInTheDocument();
-    expect(screen.getByText("/releases")).toBeInTheDocument();
+    expect(screen.getByText("List releases")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Edit" })
     ).not.toBeInTheDocument();
@@ -584,9 +720,6 @@ describe.each(["metadata", "schema", "authentication"] as const)(
           )
         );
         const editorDialog = await screen.findByRole("dialog");
-        if (editor === "schema") {
-          await waitFor(() => expect(initialRead).toHaveBeenCalledTimes(2));
-        }
         if (editor === "authentication") {
           await waitFor(() =>
             expect(
@@ -596,7 +729,9 @@ describe.each(["metadata", "schema", "authentication"] as const)(
         }
         fireEvent.change(
           editor === "schema"
-            ? within(editorDialog).getByRole("textbox")
+            ? within(editorDialog).getByRole("textbox", {
+                name: /OpenAPI Schema Definition/,
+              })
             : within(editorDialog).getByRole("textbox", {
                 name: editor === "metadata" ? "Name" : "Token URL",
               }),
@@ -634,7 +769,7 @@ describe.each(["metadata", "schema", "authentication"] as const)(
         expect(freshRead).not.toHaveBeenCalled();
         await user.click(submit);
         const detailDialog = await screen.findByRole("dialog", {
-          name: outcome === "missing" ? /Plugin details/ : /Release API/,
+          name: outcome === "missing" ? /Configuration/ : /Release API/,
         });
         expect(detailDialog).toBeVisible();
         expect(screen.getAllByRole("dialog")).toHaveLength(1);
@@ -736,10 +871,10 @@ describe("focused edit workflows", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Token URL" }), {
       target: { value: "https://identity.example.com/token" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "OAuth Client ID" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /OAuth Client ID/ }), {
       target: { value: "release-client" },
     });
-    fireEvent.change(screen.getByLabelText("OAuth Client Secret"), {
+    fireEvent.change(screen.getByLabelText(/OAuth Client Secret/), {
       target: { value: "release-secret" },
     });
     await waitFor(() =>
@@ -815,12 +950,12 @@ describe("focused edit workflows", () => {
         expect(tool.oauth_config_id).toBeNull();
       }
       fireEvent.change(
-        screen.getByRole("textbox", { name: "OAuth Client ID" }),
+        screen.getByRole("textbox", { name: /OAuth Client ID/ }),
         {
           target: { value: "new-client" },
         }
       );
-      fireEvent.change(screen.getByLabelText("OAuth Client Secret"), {
+      fireEvent.change(screen.getByLabelText(/OAuth Client Secret/), {
         target: { value: "new-secret" },
       });
       await waitFor(() =>
@@ -864,10 +999,10 @@ describe("focused edit workflows", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Token URL" }), {
       target: { value: "https://identity.example.com/token" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "OAuth Client ID" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /OAuth Client ID/ }), {
       target: { value: "release-client" },
     });
-    fireEvent.change(screen.getByLabelText("OAuth Client Secret"), {
+    fireEvent.change(screen.getByLabelText(/OAuth Client Secret/), {
       target: { value: "release-secret" },
     });
     await waitFor(() =>
@@ -1032,11 +1167,16 @@ describe("focused edit workflows", () => {
       ...definition,
       info: { ...definition.info, description: "Updated release status" },
     };
-    fireEvent.change(within(dialog).getByRole("textbox"), {
-      target: {
-        value: JSON.stringify(updatedDefinition),
-      },
-    });
+    fireEvent.change(
+      within(dialog).getByRole("textbox", {
+        name: /OpenAPI Schema Definition/,
+      }),
+      {
+        target: {
+          value: JSON.stringify(updatedDefinition),
+        },
+      }
+    );
     await user.click(
       within(dialog).getByRole("button", { name: "Save Changes" })
     );
@@ -1048,7 +1188,7 @@ describe("focused edit workflows", () => {
           definition: updatedDefinition,
           name: "Release API",
           oauth_config_id: 7,
-          description: "Updated release status",
+          description: "Read release status",
         },
       })
     );

@@ -10,7 +10,7 @@ import {
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";

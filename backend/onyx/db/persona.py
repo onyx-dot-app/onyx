@@ -4,7 +4,8 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, func, not_, or_, select, update
+from sqlalchemy import Select, delete, func, not_, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -58,7 +59,10 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
-from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import (
+    is_openapi_tool,
+    should_expose_tool_to_fe,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -2110,6 +2114,39 @@ def get_default_assistant(db_session: Session) -> Persona | None:
     )
 
 
+def set_default_chat_tool__no_commit(
+    db_session: Session, tool: Tool, enabled: bool
+) -> None:
+    """Change one selection without replacing other plugins' default settings."""
+    persona = db_session.scalar(
+        select(Persona)
+        .where(
+            Persona.id == DEFAULT_PERSONA_ID,
+            Persona.builtin_persona.is_(True),
+            Persona.deleted.is_(False),
+        )
+        .with_for_update()
+    )
+    if persona is None:
+        raise ValueError("Default assistant not found")
+    if enabled:
+        db_session.execute(
+            insert(Persona__Tool)
+            .values(persona_id=persona.id, tool_id=tool.id)
+            .on_conflict_do_nothing()
+        )
+        if is_openapi_tool(tool):
+            tool.enabled = True
+    else:
+        db_session.execute(
+            delete(Persona__Tool).where(
+                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.tool_id == tool.id,
+            )
+        )
+    db_session.expire(persona, ["tools"])
+
+
 def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
@@ -2153,10 +2190,12 @@ def update_default_assistant_configuration(
             if not should_expose_tool_to_fe(tool):
                 raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
 
-            # A disabled tool stays attached, because disabling one does not detach
-            # it. Callers resend the whole list, so rejecting a disabled id here
-            # failed every update rather than just the tool being toggled.
-            # construct_tools keeps a disabled tool out of chat.
+            # Inclusion explicitly enables default Chat for a legacy disabled plugin.
+            if is_openapi_tool(tool):
+                tool.enabled = True
+
+            # Disabled MCP and built-in tools stay attached when callers resend
+            # the full selection. Tool construction still excludes them.
             persona.tools.append(tool)
 
     db_session.commit()

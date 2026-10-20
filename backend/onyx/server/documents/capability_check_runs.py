@@ -38,6 +38,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     save_draft_run,
     set_latest_draft_run,
+    wait_for_dependencies,
 )
 from onyx.connectors.capability_checks.form_state import (
     FormState,
@@ -274,13 +275,15 @@ def _plan_draft(
         connector_specific_config=connector_specific_config,
         access_type=access_type,
     )
+    checks: list[tuple[CapabilityCheck[Any], DraftCheckState]] = [
+        (check, decide_draft_check_state(check, context))
+        for check in get_capability_checks(source)
+    ]
+    wait_for_dependencies(checks)
     return _PlannedDraft(
         form_state=form_state,
         connector_specific_config=connector_specific_config,
-        checks=[
-            (check, decide_draft_check_state(check, context))
-            for check in get_capability_checks(source)
-        ],
+        checks=checks,
     )
 
 

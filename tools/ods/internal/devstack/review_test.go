@@ -15,9 +15,9 @@ import (
 )
 
 func TestSpecHashIgnoresAgentSession(t *testing.T) {
-	a := Spec{Name: "api", Env: []string{"TERM_SESSION_ID=agent-a", "CODEX_SESSION_ID=a", "GEN_AI_API_KEY=original"}}
+	a := Spec{Name: "api", Env: []string{"TMUX_PANE=%1", "TERM_SESSION_ID=agent-a", "CODEX_SESSION_ID=a", "GEN_AI_API_KEY=original"}}
 	b := a
-	b.Env = []string{"TERM_SESSION_ID=agent-b", "CODEX_SESSION_ID=b", "GEN_AI_API_KEY=original"}
+	b.Env = []string{"TMUX_PANE=%2", "TERM_SESSION_ID=agent-b", "CODEX_SESSION_ID=b", "GEN_AI_API_KEY=original"}
 	if a.Hash() != b.Hash() {
 		t.Fatal("agent session metadata changed service identity")
 	}

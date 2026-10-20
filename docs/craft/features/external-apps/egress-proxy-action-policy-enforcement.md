@@ -47,7 +47,7 @@ deliberately left open — this plan keeps the contract independent of both.
   calls. Keep provider specifics out of the proxy; the proxy stays a thin
   policy *consumer*.
 - **One resolution function.** Extract the current inline logic into a single
-  `resolve_policy(app, action_id) -> EndpointPolicy` (and a request-level
+  `resolve_policy(app, action_id) -> ActionPolicy` (and a request-level
   `decide(app, request) -> Decision`) that both `action_policy_views` and the
   proxy call. This is the linchpin — the admin preview and live enforcement must
   never disagree.

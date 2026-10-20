@@ -1,7 +1,10 @@
+import { customFixture } from "@/lib/skills/__fixtures__/picker";
+import type { SkillsList } from "@/lib/skills/types";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   act,
   deferred,
+  fireEvent,
   render as renderWithProviders,
   screen,
   setupUser,
@@ -32,11 +35,12 @@ function render(ui: ReactElement) {
 }
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 let mockManage = false;
 let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/app/plugins",
 }));
@@ -56,12 +60,14 @@ function network({
   serverError = false,
   apps = [],
   appError = false,
+  skills = { builtins: [], customs: [] },
 }: {
   servers?: MCPServer[];
   tools?: ToolSnapshot[];
   serverError?: boolean;
   apps?: ExternalAppUserResponse[];
   appError?: boolean;
+  skills?: SkillsList;
 } = {}) {
   return jest.spyOn(global, "fetch").mockImplementation(async (input) => {
     switch (String(input)) {
@@ -78,7 +84,10 @@ function network({
       case "/api/user-oauth-token/status":
         return jsonResponse([]);
       case "/api/skills":
-        return jsonResponse({ builtins: [], customs: [] });
+        return jsonResponse(skills);
+      case "/api/build/apps/7/credentials":
+        for (const app of apps) if (app.id === 7) app.authenticated = true;
+        return jsonResponse({});
       case "/api/build/apps":
         return jsonResponse(
           appError ? { detail: "Apps unavailable" } : apps,
@@ -105,7 +114,13 @@ test("connected cards use the status dot without an extra Connected line", async
   await setupUser().hover(
     screen.getByRole("button", { name: "Connection status for Linear" })
   );
-  expect(await screen.findByRole("tooltip")).toHaveTextContent("Connected");
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).not.toHaveTextContent("Connected");
+  expect(
+    within(tooltip)
+      .getAllByText(/^(Main Chat|Custom agents|Craft)$/)
+      .map((row) => row.textContent)
+  ).toEqual(["Main Chat", "Custom agents", "Craft"]);
 });
 
 test("ordinary members see approved native plugins with colliding IDs without admin requests", async () => {
@@ -117,7 +132,7 @@ test("ordinary members see approved native plugins with colliding IDs without ad
   expect(
     screen.getByRole("button", { name: "View Reports API" })
   ).toBeVisible();
-  expect(screen.getByText("Chat only")).toBeVisible();
+  expect(screen.queryByText("Chat only")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "Manage workspace plugins" })
   ).not.toBeInTheDocument();
@@ -233,6 +248,24 @@ test("pending account status stays checking instead of offering a missing-accoun
   ).toBeVisible();
 });
 
+function expectDialogWheelAllowed() {
+  const body = screen.getByRole("dialog").querySelector(".opal-modal-body");
+  if (!(body instanceof HTMLElement)) throw new Error("Missing dialog body");
+  // jsdom has no layout, but Radix's real scroll-lock listener still runs.
+  body.style.overflowY = "auto";
+  Object.defineProperties(body, {
+    scrollHeight: { configurable: true, value: 1000 },
+    clientHeight: { configurable: true, value: 200 },
+  });
+  const wheel = new WheelEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    deltaY: 100,
+  });
+  body.dispatchEvent(wheel);
+  expect(wheel.defaultPrevented).toBe(false);
+}
+
 test("connecting from details replaces the detail dialog and dismissing leaves no dialog", async () => {
   network({
     servers: [
@@ -243,25 +276,83 @@ test("connecting from details replaces the detail dialog and dismissing leaves n
   const user = setupUser();
   await user.click(await screen.findByText("Linear"));
   expect(screen.getByRole("dialog", { name: /^Linear/ })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Connect account" }));
+  const backdrop = document.querySelector(".opal-modal-overlay");
+  expect(backdrop).not.toBeNull();
+  expectDialogWheelAllowed();
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(document.querySelectorAll(".opal-modal-overlay")).toHaveLength(1);
+  expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(screen.getByRole("dialog", { name: /^Connect Linear/ })).toBeVisible();
+  expectDialogWheelAllowed();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("Use in Chat preserves a validated chat target and supplies the native plugin identity", async () => {
+test.each([{ button: 2 }, { button: 0, ctrlKey: true }])(
+  "context-menu gestures outside member dialogs do not dismiss them: %p",
+  async (gesture) => {
+    network({
+      servers: [
+        memberServer({ connection_status: MCPConnectionStatus.NOT_CONNECTED }),
+      ],
+    });
+    render(<MemberPluginsPage />);
+    const user = setupUser();
+    await user.click(await screen.findByText("Linear"));
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { ...gesture, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { ...gesture, bubbles: true })
+    );
+    fireEvent.click(document.body, gesture);
+    expect(screen.getByRole("dialog", { name: /^Linear/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    // Radix arms the replacement content's outside-pointer listener next tick.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { ...gesture, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { ...gesture, bubbles: true })
+    );
+    fireEvent.click(document.body, gesture);
+    expect(
+      screen.getByRole("dialog", { name: /^Connect Linear/ })
+    ).toBeVisible();
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerdown", { button: 0, bubbles: true })
+    );
+    fireEvent(
+      document.body,
+      new MouseEvent("pointerup", { button: 0, bubbles: true })
+    );
+    fireEvent.click(document.body, { button: 0 });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  }
+);
+
+test("plugin details use Cancel and Save without navigating to Chat or Craft", async () => {
   network();
-  mockSearchParams = new URLSearchParams({
-    returnTo: "/app?chatId=existing-chat&agentId=4&unsafe=drop",
-  });
   render(<MemberPluginsPage />);
   const user = setupUser();
   await user.click(await screen.findByRole("button", { name: "View Linear" }));
-  await user.click(screen.getByRole("button", { name: "Use in Chat" }));
-  expect(mockPush).toHaveBeenCalledWith(
-    "/app?chatId=existing-chat&agentId=4&pluginKind=mcp&pluginId=7"
-  );
+  const dialog = screen.getByRole("dialog");
+  expect(
+    within(dialog).queryByRole("button", { name: /Use in Chat|Open in Craft/ })
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test("All keeps connected, missing, checking, unavailable, and workspace-setup entries in one list", async () => {
@@ -364,7 +455,7 @@ test("a legacy connection link can reopen after navigating away from its query",
   ).toBeVisible();
 });
 
-test("Craft MCP details omit unavailable Chat and tool metadata and open Craft", async () => {
+test("Craft MCP details omit unavailable Chat metadata and use the settings footer", async () => {
   network({
     servers: [
       memberServer({ craft_connected: true, default_chat_enabled: undefined }),
@@ -375,20 +466,23 @@ test("Craft MCP details omit unavailable Chat and tool metadata and open Craft",
   await user.click(await screen.findByRole("button", { name: "View Linear" }));
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).queryByText("Main Chat")).not.toBeInTheDocument();
-  expect(within(dialog).queryByText("Tools")).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("tab", { name: "Tools" })).toBeVisible();
   expect(
     within(dialog).queryByText(/No tools|Chat availability/i)
   ).not.toBeInTheDocument();
   expect(
     within(dialog).queryByRole("button", { name: "Use in Chat" })
   ).not.toBeInTheDocument();
-  await user.click(
-    within(dialog).getByRole("button", { name: "Open in Craft" })
-  );
-  expect(mockPush).toHaveBeenCalledWith("/craft/v1");
+  expect(
+    within(dialog).queryByRole("button", { name: "Open in Craft" })
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
-test("external app details offer Craft without invented tools or Chat use", async () => {
+test("external app details show tools and the settings footer", async () => {
   network({ apps: [memberApp({ authenticated: true })] });
   render(<MemberPluginsPage />);
   const user = setupUser();
@@ -399,11 +493,14 @@ test("external app details offer Craft without invented tools or Chat use", asyn
   expect(
     within(dialog).queryByRole("button", { name: "Use in Chat" })
   ).not.toBeInTheDocument();
-  expect(within(dialog).queryByText("Tools")).not.toBeInTheDocument();
-  await user.click(
-    within(dialog).getByRole("button", { name: "Open in Craft" })
-  );
-  expect(mockPush).toHaveBeenCalledWith("/craft/v1");
+  expect(within(dialog).getByRole("tab", { name: "Tools" })).toBeVisible();
+  expect(
+    within(dialog).queryByRole("button", { name: "Open in Craft" })
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 test("external app source errors preserve available MCP and OpenAPI rows", async () => {
@@ -458,16 +555,243 @@ test("connecting an app keeps its row in the default All filter", async () => {
   const details = await screen.findByRole("dialog", {
     name: /^Workspace GitHub/,
   });
-  await waitFor(() =>
-    expect(within(details).getByText("Connected")).toBeVisible()
-  );
+  await user.click(within(details).getByRole("tab", { name: "Connection" }));
+  expect(within(details).getByRole("status")).toHaveTextContent("Connected");
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  await user.click(within(details).getByRole("button", { name: /^Close$/ }));
+  await user.click(within(details).getByRole("button", { name: /^Cancel$/ }));
   expect(
     screen.getByRole("button", { name: "View Workspace GitHub" })
   ).toBeVisible();
   expect(screen.getByRole("button", { name: /^All$/ })).toHaveAttribute(
     "aria-pressed",
     "true"
+  );
+});
+
+test("closes an approval deep link without reopening or dropping other parameters", async () => {
+  network({ apps: [memberApp({ authenticated: true })] });
+  mockSearchParams = new URLSearchParams({
+    actionPolicies: "app-7",
+    returnTo: "/app?chatId=42",
+  });
+  render(<MemberPluginsPage />);
+  const user = setupUser();
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("tab", { name: "Tools" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(mockReplace).toHaveBeenCalledWith(
+    "/app/plugins?returnTo=%2Fapp%3FchatId%3D42",
+    { scroll: false }
+  );
+});
+
+test.each([true, false])(
+  "external app status reflects associated skill enablement (%s)",
+  async (enabled) => {
+    network({
+      apps: [memberApp({ authenticated: true, name: "GitHub" })],
+      skills: {
+        builtins: [],
+        customs: [
+          customFixture({
+            enabled,
+            external_app: {
+              external_app_id: 7,
+              name: "GitHub",
+              enabled: true,
+              ready: true,
+            },
+          }),
+        ],
+      },
+    });
+    render(<MemberPluginsPage />);
+    const indicator = await screen.findByRole("button", {
+      name: "Connection status for GitHub",
+    });
+    await waitFor(() =>
+      expect(
+        indicator.querySelectorAll("span[aria-hidden] > span")[2]
+      ).toHaveClass(enabled ? "bg-status-success-05" : "bg-status-warning-05")
+    );
+    await setupUser().hover(indicator);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      enabled ? "Ready to use" : "Not all associated skills are enabled."
+    );
+    expect(screen.getByText("Craft App")).toBeVisible();
+  }
+);
+
+test("a successful connection returns to the Connection tab with the same backdrop", async () => {
+  const app = memberApp({
+    supports_oauth: false,
+    credential_keys: ["api_key"],
+  });
+  network({ apps: [app] });
+  render(<MemberPluginsPage />);
+  const user = setupUser();
+  await user.click(
+    await screen.findByRole("button", { name: "Connect Workspace GitHub" })
+  );
+  const backdrop = document.querySelector(".opal-modal-overlay");
+  await user.type(screen.getByLabelText("api_key"), "test-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(
+    await screen.findByRole("tab", { name: "Connection" })
+  ).toHaveAttribute("aria-selected", "true");
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent("Connected")
+  );
+  expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
+});
+
+test("orders cards by status, then type, then name", async () => {
+  network({
+    servers: [
+      memberServer({ id: 1, name: "MCP gray", connection_status: null }),
+      memberServer({
+        id: 2,
+        name: "MCP warning",
+        connection_status: MCPConnectionStatus.NOT_CONNECTED,
+      }),
+      memberServer({ id: 3, name: "MCP active" }),
+    ],
+    tools: [
+      memberTool({ name: "OpenAPI active", display_name: "OpenAPI active" }),
+    ],
+    apps: [
+      memberApp({ id: 1, name: "App gray", supports_oauth: false }),
+      memberApp({ id: 2, name: "App skill warning", authenticated: true }),
+      memberApp({ id: 3, name: "App active", authenticated: true }),
+      memberApp({ id: 4, name: "App sign-in" }),
+    ],
+    skills: {
+      builtins: [],
+      customs: [
+        customFixture({
+          enabled: false,
+          external_app: {
+            external_app_id: 2,
+            name: "App skill warning",
+            enabled: true,
+            ready: true,
+          },
+        }),
+      ],
+    },
+  });
+  render(<MemberPluginsPage />);
+  await waitFor(() =>
+    expect(
+      screen
+        .getAllByRole("button", { name: /^(View|Connect) (MCP|OpenAPI|App) / })
+        .map((card) => card.getAttribute("aria-label"))
+    ).toEqual([
+      "View MCP active",
+      "View OpenAPI active",
+      "View App active",
+      "Connect MCP warning",
+      "Connect App sign-in",
+      "View App skill warning",
+      "View MCP gray",
+      "View App gray",
+    ])
+  );
+});
+
+test.each([
+  { preference: "default_chat_enabled", label: "Disabled by admin", half: 0 },
+  { preference: "user_enabled_in_chat", label: "Disabled by you", half: 0 },
+  { preference: "available_in_craft", label: "Disabled by admin", half: 2 },
+  { preference: "user_enabled_in_craft", label: "Disabled by you", half: 2 },
+])(
+  "connected MCP shows a warning for $preference",
+  async ({ preference, label, half }) => {
+    network({ servers: [memberServer({ [preference]: false })] });
+    render(<MemberPluginsPage />);
+    const indicator = await screen.findByRole("button", {
+      name: "Connection status for Linear",
+    });
+    const halves = indicator.querySelectorAll("span[aria-hidden] > span");
+    expect(halves[half]).toHaveClass("bg-status-warning-05");
+    expect(halves[2 - half]).toHaveClass("bg-status-success-05");
+    expect(halves[1]).toHaveClass("bg-status-success-05");
+    await setupUser().hover(indicator);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(label);
+  }
+);
+
+test("connected OpenAPI shows personal Chat disablement as a warning", async () => {
+  network({
+    servers: [],
+    tools: [memberTool({ user_enabled_in_chat: false })],
+  });
+  render(<MemberPluginsPage />);
+  const indicator = await screen.findByRole("button", {
+    name: "Connection status for Reports API",
+  });
+  const segments = indicator.querySelectorAll("span[aria-hidden] > span");
+  expect(segments[0]).toHaveClass("bg-status-warning-05");
+  expect(segments[1]).toHaveClass("bg-status-success-05");
+  await setupUser().hover(indicator);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).toHaveTextContent("Disabled by you");
+  expect(tooltip).toHaveTextContent("Custom agents");
+  expect(tooltip).toHaveTextContent("Ready to use");
+});
+
+test("surface indicators replace Chat-only and Craft-only tags", async () => {
+  network({ servers: [], apps: [memberApp({ authenticated: true })] });
+  render(<MemberPluginsPage />);
+  const user = setupUser();
+  const app = await screen.findByRole("button", {
+    name: "Connection status for Workspace GitHub",
+  });
+  expect(screen.queryByText("Craft only")).not.toBeInTheDocument();
+  expect(screen.queryByText("Chat only")).not.toBeInTheDocument();
+  const appSegments = app.querySelectorAll("span[aria-hidden] > span");
+  expect(appSegments[0]).toHaveClass("bg-text-03");
+  expect(appSegments[1]).toHaveClass("bg-text-03");
+  expect(appSegments[2]).toHaveClass("bg-status-success-05");
+  await user.hover(app);
+  expect(
+    within(await screen.findByRole("tooltip")).getAllByText("Not available")
+  ).toHaveLength(2);
+});
+
+test("OpenAPI marks Craft unavailable in its status indicator", async () => {
+  network({ servers: [] });
+  render(<MemberPluginsPage />);
+  const user = setupUser();
+  const tool = await screen.findByRole("button", {
+    name: "Connection status for Reports API",
+  });
+  expect(tool.querySelectorAll("span[aria-hidden] > span")[2]).toHaveClass(
+    "bg-text-03"
+  );
+  await user.hover(tool);
+  expect(
+    within(await screen.findByRole("tooltip")).getAllByText("Not available")
+  ).toHaveLength(1);
+});
+
+test("workspace setup uses one gray dot and one status message", async () => {
+  network({ servers: [], apps: [memberApp({ supports_oauth: false })] });
+  render(<MemberPluginsPage />);
+  const indicator = await screen.findByRole("button", {
+    name: "Connection status for Workspace GitHub",
+  });
+  expect(indicator.querySelector("span[aria-hidden]")).toHaveClass(
+    "bg-text-03"
+  );
+  expect(indicator.querySelectorAll("span[aria-hidden] > span")).toHaveLength(
+    0
+  );
+  await setupUser().hover(indicator);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    /^Workspace setup required$/
   );
 });

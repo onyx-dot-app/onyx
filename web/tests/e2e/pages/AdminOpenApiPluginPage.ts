@@ -98,11 +98,13 @@ export class AdminOpenApiPluginPage {
     );
     await expect(dialog.getByLabel(/^Scopes/)).toHaveValue(settings.scopes);
     await expect(
-      dialog.getByLabel("OAuth Client ID", { exact: true })
+      dialog.getByLabel(/^OAuth Client ID\s*\(Optional\)$/)
     ).toHaveValue("********");
+    // The stored client secret shows as a tag; the input itself stays empty.
     await expect(
-      dialog.getByLabel("OAuth Client Secret", { exact: true })
-    ).toHaveValue("********");
+      dialog.getByLabel(/^OAuth Client Secret\s*\(Optional\)$/)
+    ).toHaveValue("");
+    await expect(dialog.getByText("********", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toBeHidden();
   }

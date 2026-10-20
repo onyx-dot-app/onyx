@@ -1111,6 +1111,40 @@
       "mode": "realtime",
       "name": "gemini-3.8-live-extended-thinking"
     },
+    "gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "input_audio": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {

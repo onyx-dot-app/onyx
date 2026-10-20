@@ -147,7 +147,14 @@ lists plus its own additions):
   `check-for-index-attempt-cleanup`, `backfill-cc-pair-ids`, and more). The
   `backfill-cc-pair-ids` entry runs every 5 minutes on the `index_reclaim` queue
   (Light worker) and fills `cc_pair_ids` on existing OpenSearch chunks for the
-  cc-pair access filter (see [[access-control]] §4.3a). Filtered by
+  cc-pair access filter (see [[access-control]] §4.3a). The `tabular-rechunk`
+  entry shares that cadence but runs on the `docprocessing` queue, where its
+  embedding belongs: each tick scans the document table by primary key, across
+  all cc-pairs, and re-chunks the tabular documents still holding more chunks
+  than the current chunker could produce, until its time budget runs out
+  (`background/indexing/run_tabular_rechunk.py`).
+  `TABULAR_RECHUNK_ENABLED` arms it and a KV record stops it, so a finished
+  migration costs one cached read per tick. Both are filtered by
   `_VECTOR_DB_BEAT_TASK_NAMES` when `DISABLE_VECTOR_DB` is set.
   `beat_schedule.py:beat_task_templates`
 - `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant
@@ -338,7 +345,17 @@ is so long-running headless-agent task runs do not compete for Heavy's slots
 other workers. Light is the exception: it reads
 `CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER`, default 8.
 
+Scheduled-task creation and edits save action policies through
+`backend/onyx/db/action_policy.py`. New tasks start with all apps disabled.
+Enabling an app first copies personal settings; later toggles retain its saved choices. The proxy reads task settings for each
+request while the run is RUNNING; workers do not grant blanket app approval.
+Scheduling, queue selection, and dispatch locking are unchanged. See
+[[craft-scheduled-tasks]] for permission ownership and approval outcomes.
+
 ---
+
+Scheduled-task updates lock and authorize the task through `get_scheduled_task` before saving action policies.
+Policy writes receive that task; they do not repeat task ownership queries.
 
 ## 5. Contracts and invariants
 

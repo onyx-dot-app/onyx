@@ -28,6 +28,7 @@ from googleapiclient.http import BatchHttpRequest, MediaIoBaseDownload
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
     DRIVE_RESOURCE_KEY_FIELD,
@@ -102,7 +103,7 @@ _FOLDER_PERMISSION_FIELDS = (
 )
 
 
-class GoogleDriveHttpError(Exception):
+class GoogleDriveHttpError(SourceApiError):
     """A Google API request failed with an HTTP error status."""
 
     def __init__(
@@ -112,9 +113,15 @@ class GoogleDriveHttpError(Exception):
         reasons: tuple[str, ...],
         access_denied: bool,
         message: str,
+        method: str | None = None,
+        url: str | None = None,
+        body: str | None = None,
     ) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+        super().__init__(
+            message, status_code=status_code, method=method, url=url, body=body
+        )
+        # Always set for a Drive error.
+        self.status_code: int = status_code
         # The machine-readable reasons Google gave, e.g. "accessNotConfigured"
         # or "teamDriveMembershipRequired".
         self.reasons = reasons
@@ -187,11 +194,16 @@ def _error_reasons(error_details: object) -> tuple[str, ...]:
 
 
 def _from_http_error(error: HttpError) -> GoogleDriveHttpError:
+    content: bytes | str = error.content or b""
     return GoogleDriveHttpError(
         status_code=error.status_code,
         reasons=_error_reasons(error.error_details),
         access_denied=is_access_denied(error),
         message=str(error),
+        url=error.uri,
+        body=(
+            content.decode(errors="replace") if isinstance(content, bytes) else content
+        ),
     )
 
 
@@ -217,6 +229,13 @@ def _from_requests_error(error: requests.HTTPError) -> GoogleDriveHttpError:
         reasons=reasons,
         access_denied=status in (403, 404) and not rate_limited,
         message=str(error),
+        method=(
+            response.request.method
+            if response is not None and response.request is not None
+            else None
+        ),
+        url=response.url if response is not None else None,
+        body=response.text if response is not None else None,
     )
 
 

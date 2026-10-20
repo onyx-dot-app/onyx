@@ -311,6 +311,7 @@ export async function upsertMCPServer(serverData: {
   auth_performer: MCPAuthenticationPerformer;
   api_token?: string;
   api_token_changed?: boolean;
+  oauth_setup_mode?: "automatic" | "own_client";
   oauth_client_id?: string;
   oauth_client_secret?: string;
   oauth_provider_mode?: MCPOAuthProviderMode;

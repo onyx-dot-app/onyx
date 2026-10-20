@@ -134,6 +134,8 @@ The element the list positions against and matches in width, when that is not th
 | `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                                                                                                                            |
 | `views`               | `Record<string, DropdownView>`                           | —           | Secondary views by key, rebuilt every render, so a view on the stack shows its latest rows                                                                                            |
 
+The floating card also caps its height to the available space inside clipping ancestors and the viewport. The search field stays visible while the rows scroll.
+
 ## Items
 
 | Kind     | Fields                                                                                                                                                                                                                                                   | Enter                                                                                                                |

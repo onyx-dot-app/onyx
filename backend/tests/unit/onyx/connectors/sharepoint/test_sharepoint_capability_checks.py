@@ -572,13 +572,53 @@ def test_documents_check_matches_exclusions_on_the_literal_name() -> None:
 
 def test_documents_check_stops_after_the_first_libraries() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_drives.return_value = [DRIVE] * 11
+    gateway.list_drives.return_value = [DRIVE] * 21
     gateway.get_delta_page.return_value = _delta_page()
 
-    with pytest.raises(UnexpectedValidationError, match="first 10 libraries"):
+    with pytest.raises(
+        UnexpectedValidationError, match="first 20 libraries, on 1 site,"
+    ):
         _run("sharepoint_documents_read", _context(gateway, _config()))
 
-    assert gateway.get_delta_page.call_count == 10
+    assert gateway.get_delta_page.call_count == 20
+    gateway.get_drive_item.assert_not_called()
+
+
+def _listed_sites_with_one_file(gateway: MagicMock, count: int, file_at: int) -> None:
+    """``count`` listed sites, each with one library. Only the library of site
+    ``file_at`` (from 1) holds a file indexing would read."""
+    gateway.list_site_urls.return_value = [f"{SITE_URL}{n}" for n in range(count)]
+    gateway.list_drives.side_effect = lambda site_url: [
+        SharepointDrive(id=site_url, name="Documents", web_url=site_url)
+    ]
+    file_site: str = f"{SITE_URL}{file_at - 1}"
+    gateway.get_delta_page.side_effect = lambda drive_id, **_: (
+        _delta_page(ITEM_JSON) if drive_id == file_site else _delta_page()
+    )
+
+
+def test_documents_check_reads_past_listed_sites_without_a_file() -> None:
+    gateway: MagicMock = _gateway()
+    _listed_sites_with_one_file(gateway, count=10, file_at=7)
+
+    _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
+
+    assert gateway.list_drives.call_count == 7
+    assert gateway.get_delta_page.call_count == 7
+    gateway.get_drive_item.assert_called_once_with(
+        drive_id=f"{SITE_URL}6", item_id="item-id"
+    )
+
+
+def test_documents_check_reads_a_bounded_number_of_listed_sites() -> None:
+    gateway: MagicMock = _gateway()
+    _listed_sites_with_one_file(gateway, count=30, file_at=21)
+
+    _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
+
+    gateway.list_site_urls.assert_called_once_with(max_pages=1)
+    assert gateway.list_drives.call_count == 20
+    assert gateway.get_delta_page.call_count == 20
     gateway.get_drive_item.assert_not_called()
 
 
@@ -640,7 +680,7 @@ def test_refused_file_listing_names_the_grant() -> None:
         _run("sharepoint_documents_read", _context(gateway, _config()))
 
 
-def test_throttled_listing_is_indeterminate() -> None:
+def test_throttled_listing_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.side_effect = _refusal(429, "tooManyRequests")
 
@@ -657,7 +697,7 @@ def test_documents_check_is_skipped_when_documents_are_off() -> None:
     )
 
 
-def test_no_library_anywhere_is_indeterminate() -> None:
+def test_no_library_anywhere_is_incomplete() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = []
 

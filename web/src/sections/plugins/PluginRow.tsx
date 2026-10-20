@@ -4,9 +4,9 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useId } from "react";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
-import { SvgFileBraces } from "@opal/icons";
+import { SvgCodeFile } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { cn } from "@opal/utils";
+import PluginStatusIcon from "@/sections/plugins/PluginStatusIcon";
 import { getActionIcon } from "@/lib/tools/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import { pluginDetailHref } from "@/lib/plugins/routes";
@@ -23,14 +23,10 @@ interface PluginRowProps {
 
 function PluginAvailability({
   plugin,
-  onOpen,
   disabled,
-  expanded,
   craftAvailable,
 }: PluginRowProps & {
-  onOpen?: () => void;
   disabled: boolean;
-  expanded: boolean;
   craftAvailable: boolean;
 }) {
   const t = useTranslations("actions.plugins.availability");
@@ -39,68 +35,41 @@ function PluginAvailability({
     plugin.kind === "external-app"
       ? plugin.app.enabled
       : plugin.kind === "openapi"
-        ? plugin.tool.enabled
+        ? plugin.tool.default_chat_enabled
         : plugin.server.default_chat_enabled;
   const label =
     plugin.kind === "external-app"
       ? t(enabled ? "craftEnabled" : "craftDisabled")
-      : plugin.kind === "openapi"
-        ? t(enabled ? "enabled" : "disabled")
-        : t(
-            enabled == null
-              ? "chatUnknown"
-              : enabled
-                ? "chatEnabled"
-                : "chatDisabled"
-          );
+      : t(
+          enabled == null
+            ? "chatUnknown"
+            : enabled
+              ? "chatEnabled"
+              : "chatDisabled"
+        );
   const craftLabel =
     craftAvailable &&
     plugin.kind === "mcp" &&
     plugin.server.available_in_craft !== undefined
       ? t(plugin.server.available_in_craft ? "craftEnabled" : "craftDisabled")
       : null;
-  function StatusIcon({ className }: IconProps) {
-    const chatColor =
-      enabled == null
-        ? "bg-text-02"
-        : enabled
-          ? "bg-status-success-05"
-          : "bg-text-03";
-    if (plugin.kind !== "mcp" || !craftAvailable)
-      return (
-        <span
-          aria-hidden
-          className={cn("block size-3 rounded-full", chatColor, className)}
-        />
-      );
-    const craftColor =
-      plugin.server.available_in_craft == null
-        ? "bg-text-02"
-        : plugin.server.available_in_craft
-          ? "bg-status-success-05"
-          : "bg-text-03";
+  function StatusIcon(props: IconProps) {
+    const craft =
+      plugin.kind === "mcp" ? plugin.server.available_in_craft : undefined;
     return (
-      <span
-        aria-hidden
-        className={cn(
-          "relative block size-3 overflow-hidden rounded-full",
-          className
-        )}
-      >
-        <span
-          className={cn(
-            "absolute inset-0 [clip-path:polygon(0_0,100%_0,0_100%)]",
-            chatColor
-          )}
-        />
-        <span
-          className={cn(
-            "absolute inset-0 [clip-path:polygon(100%_0,100%_100%,0_100%)]",
-            craftColor
-          )}
-        />
-        <span className="absolute inset-x-0 top-1/2 h-px -rotate-45 bg-background-neutral-00" />
-      </span>
+      <PluginStatusIcon
+        {...props}
+        primary={enabled == null ? "unknown" : enabled ? "active" : "inactive"}
+        secondary={
+          plugin.kind === "mcp" && craftAvailable
+            ? craft == null
+              ? "unknown"
+              : craft
+                ? "active"
+                : "inactive"
+            : undefined
+        }
+      />
     );
   }
   return (
@@ -141,10 +110,7 @@ function PluginAvailability({
           icon={StatusIcon}
           aria-label={label}
           aria-describedby={craftLabel ? craftDescriptionId : undefined}
-          onClick={onOpen}
           disabled={disabled}
-          aria-haspopup={onOpen ? "menu" : undefined}
-          aria-expanded={onOpen ? expanded : undefined}
         />
       </Tooltip>
       {craftLabel && (
@@ -176,7 +142,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
     plugin.kind === "mcp"
       ? getActionIcon(plugin.server.server_url, plugin.server.name)
       : plugin.kind === "openapi"
-        ? SvgFileBraces
+        ? SvgCodeFile
         : getAppTypeLogo(plugin.app.app_type);
   const canManage =
     plugin.kind === "external-app" ||
@@ -185,7 +151,11 @@ export function PluginRow({ plugin }: PluginRowProps) {
       : can(plugin.tool, "edit") || can(plugin.tool, "authenticate"));
 
   return (
-    <div className="relative min-w-0" role="group" aria-label={resource.name}>
+    <div
+      className="relative min-w-0 [&_button]:relative [&_button]:z-10"
+      role="group"
+      aria-label={resource.name}
+    >
       <SelectCard border="none" padding={0}>
         <div className="flex min-w-0 items-center gap-2 pe-3">
           <Link
@@ -193,7 +163,7 @@ export function PluginRow({ plugin }: PluginRowProps) {
             aria-label={t(canManage ? "row.manage.label" : "row.view.label", {
               name: resource.name,
             })}
-            className="block min-w-0 flex-1 rounded-12 focus-visible:outline focus-visible:outline-2"
+            className="block min-w-0 flex-1 rounded-12 after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2"
           >
             <PluginRowLayout
               icon={icon}
@@ -201,14 +171,17 @@ export function PluginRow({ plugin }: PluginRowProps) {
               description={description}
               action={
                 <Text font="secondary-body" color="text-03">
-                  {t(`kind.${plugin.kind}`)}
+                  {t(
+                    plugin.kind === "external-app"
+                      ? "row.externalAppKind"
+                      : `kind.${plugin.kind}`
+                  )}
                 </Text>
               }
             />
           </Link>
           <PluginLifecycleMenu
             plugin={plugin}
-            craftAvailable={craftAvailable}
             renderStatus={(controls) => (
               <PluginAvailability
                 plugin={plugin}

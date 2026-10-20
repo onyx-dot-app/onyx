@@ -16,7 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
-from onyx.connectors.capability_checks.runner import run_capability_checks
+from onyx.connectors.capability_checks.runner import run_capability_checks, run_order
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
@@ -207,8 +207,21 @@ def test_binding_checks_require_only_bound_fields(source: DocumentSource) -> Non
     for check in _registered_checks(source):
         if not check.validates_binding:
             continue
-        assert binding_class is not None, check.check_id
-        assert check.requires_fields <= set(binding_class.model_fields), check.check_id
+        bound_fields = set(binding_class.model_fields) if binding_class else set()
+        assert check.requires_fields <= bound_fields, check.check_id
+
+
+@pytest.mark.parametrize("source", sorted(CONNECTOR_CLASS_MAP, key=str))
+def test_dependencies_name_registered_checks_without_a_cycle(
+    source: DocumentSource,
+) -> None:
+    checks = _registered_checks(source)
+    check_ids = {check.check_id for check in checks}
+    for check in checks:
+        assert set(check.depends_on) <= check_ids, check.check_id
+        assert check.check_id not in check.depends_on, check.check_id
+    # Raises on a cycle.
+    run_order(checks)
 
 
 def test_confluence_declares_its_binding_checks() -> None:

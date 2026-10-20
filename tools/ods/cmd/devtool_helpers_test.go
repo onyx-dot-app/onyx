@@ -17,6 +17,9 @@ import (
 // and returns its root as git reports it.
 func devtoolRepo(t *testing.T) string {
 	t.Helper()
+	project, isolated := rootProject, rootIsolated
+	rootProject, rootIsolated = "", false
+	t.Cleanup(func() { rootProject, rootIsolated = project, isolated })
 	dir := t.TempDir()
 	gittest.Git(t, dir, "init", "-q")
 	t.Chdir(dir)

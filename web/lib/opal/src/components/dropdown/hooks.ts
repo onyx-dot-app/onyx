@@ -533,7 +533,7 @@ export function useDropdownOverlay({
         shift({ padding: 8 }),
         size({
           padding: 8,
-          apply({ rects, elements, availableWidth }) {
+          apply({ rects, elements, availableWidth, availableHeight }) {
             // Read through a ref: floating-ui compares middleware by source
             // text, so a closure over `width` would never be seen to change.
             // Inline, so a fixed width also beats the stylesheet's floor.
@@ -543,6 +543,10 @@ export function useDropdownOverlay({
               widthRef.current === undefined
                 ? undefined
                 : `min(${contextualMenuWidthToCss(widthRef.current)}, ${availableWidth}px)`;
+            elements.floating.style.setProperty(
+              "--opal-dropdown-available-height",
+              `${Math.max(0, availableHeight)}px`
+            );
             Object.assign(
               elements.floating.style,
               fixed !== undefined

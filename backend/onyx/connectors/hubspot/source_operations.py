@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 import requests
+import urllib3
 from hubspot import HubSpot
 from hubspot.crm.associations.v4.exceptions import (
     ApiException as AssociationsApiException,
@@ -29,6 +30,7 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
 from onyx.connectors.hubspot.models import (
     ApiActionPermittedUsers,
@@ -60,6 +62,9 @@ PORTAL_INFO_PATH = "/integrations/v1/me"
 USERS_PATH = "/settings/users/2026-09"
 PERMITTED_USERS_PATH = "/resource-permissions/v3/permitted-users"
 VIEW_ACTION = "crm-object:VIEW"
+# The SDK calls' paths, for error details.
+_OBJECTS_PATH = "/crm/v3/objects"
+_ASSOCIATIONS_PATH = "/crm/v4/objects"
 CREDENTIAL_ACCESS_TOKEN = "hubspot_access_token"
 
 HUBSPOT_PAGE_SIZE = 100
@@ -88,9 +93,10 @@ _ItemT = TypeVar("_ItemT")
 QueryParams = dict[str, str | int | list[str]]
 
 
-class HubSpotApiError(Exception):
+class HubSpotApiError(SourceApiError):
     """A refused or failed HubSpot call. Carries the status and headers the
-    rate limiter reads, and the operation name for error messages."""
+    rate limiter reads, the operation name for error messages, and the
+    request and body for a check's Error Details."""
 
     def __init__(
         self,
@@ -98,11 +104,40 @@ class HubSpotApiError(Exception):
         status: int | None,
         headers: Mapping[str, str] | None,
         detail: str,
+        *,
+        method: str | None = None,
+        url: str | None = None,
     ) -> None:
+        super().__init__(
+            f"HubSpot returned {status} for {operation}: {detail[:200]}",
+            status_code=status,
+            method=method,
+            url=url,
+            body=detail or None,
+        )
         self.operation = operation
-        self.status = status
         self.headers = headers
-        super().__init__(f"HubSpot returned {status} for {operation}: {detail[:200]}")
+
+    @property
+    def status(self) -> int | None:
+        # The rate limiter reads `status`, as on the SDK's own exceptions.
+        return self.status_code
+
+
+class HubSpotConnectionError(Exception):
+    """HubSpot did not answer a call: the connection failed or timed out."""
+
+    def __init__(self, operation: str, *, timed_out: bool, detail: str) -> None:
+        verb: str = "timed out" if timed_out else "failed"
+        super().__init__(f"The HubSpot {operation} {verb}: {detail}")
+        self.operation = operation
+        self.timed_out = timed_out
+
+
+def _sdk_timed_out(error: urllib3.exceptions.HTTPError) -> bool:
+    if isinstance(error, urllib3.exceptions.MaxRetryError):
+        return isinstance(error.reason, urllib3.exceptions.TimeoutError)
+    return isinstance(error, urllib3.exceptions.TimeoutError)
 
 
 def iter_pages(
@@ -158,6 +193,7 @@ def _record_page(page: Any) -> HubSpotPage[HubSpotRecord]:
     return HubSpotPage(
         items=[_record(item) for item in raw.results],
         next_after=_next_after(raw.paging),
+        total=raw.total,
     )
 
 
@@ -207,10 +243,19 @@ class HubSpotSourceOperations(SourceOperations):
             NOTES_OBJECT_TYPE: crm.objects.notes,
         }[variant]
 
-    def _sdk(self, operation: str, func: Callable[..., _T], **kwargs: Any) -> _T:
+    def _sdk(
+        self,
+        operation: str,
+        method: str,
+        path: str,
+        func: Callable[..., _T],
+        **kwargs: Any,
+    ) -> _T:
         """Runs one SDK call under the rate limiter. The SDK sends no timeout
         unless one is passed per call. An SDK refusal becomes a HubSpotApiError
-        so callers see one error type for SDK and REST calls."""
+        and a failed connection a HubSpotConnectionError, so callers see one
+        error type for SDK and REST calls. ``method`` and
+        ``path`` name the request, which the SDK's error does not carry."""
         kwargs.setdefault("_request_timeout", REQUEST_TIMEOUT_SECONDS)
 
         def call() -> _T:
@@ -218,7 +263,16 @@ class HubSpotSourceOperations(SourceOperations):
                 return func(**kwargs)
             except _SDK_API_EXCEPTIONS as e:
                 raise HubSpotApiError(
-                    operation, e.status, e.headers, str(e.body or e.reason or "")
+                    operation,
+                    e.status,
+                    e.headers,
+                    str(e.body or e.reason or ""),
+                    method=method,
+                    url=f"{HUBSPOT_API_BASE}{path}",
+                ) from e
+            except urllib3.exceptions.HTTPError as e:
+                raise HubSpotConnectionError(
+                    operation, timed_out=_sdk_timed_out(e), detail=str(e)
                 ) from e
 
         return self._limiter().call(call)
@@ -227,17 +281,33 @@ class HubSpotSourceOperations(SourceOperations):
         self, operation: str, model: type[_M], path: str, params: QueryParams
     ) -> _M:
         """Runs one REST call the SDK has no client for."""
+        url: str = f"{HUBSPOT_API_BASE}{path}"
 
         def call() -> _M:
-            response: requests.Response = requests.get(
-                f"{HUBSPOT_API_BASE}{path}",
-                headers={"Authorization": f"Bearer {self._access_token()}"},
-                params=params,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
+            try:
+                response: requests.Response = requests.get(
+                    url,
+                    headers={"Authorization": f"Bearer {self._access_token()}"},
+                    params=params,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+            # Timeout first: a connect timeout is also a ConnectionError.
+            except requests.Timeout as e:
+                raise HubSpotConnectionError(
+                    operation, timed_out=True, detail=str(e)
+                ) from e
+            except requests.ConnectionError as e:
+                raise HubSpotConnectionError(
+                    operation, timed_out=False, detail=str(e)
+                ) from e
             if response.status_code >= 400:
                 raise HubSpotApiError(
-                    operation, response.status_code, response.headers, response.text
+                    operation,
+                    response.status_code,
+                    response.headers,
+                    response.text,
+                    method="GET",
+                    url=url,
                 )
             return model.model_validate(response.json())
 
@@ -270,6 +340,8 @@ class HubSpotSourceOperations(SourceOperations):
         has_more set when HubSpot paged them."""
         page: Any = self._sdk(
             f"{variant} listing",
+            "GET",
+            f"{_OBJECTS_PATH}/{variant}",
             self._crm(variant).basic_api.get_page,
             limit=limit,
             properties=properties,
@@ -325,6 +397,8 @@ class HubSpotSourceOperations(SourceOperations):
         )
         page: Any = self._sdk(
             f"{variant} search",
+            "POST",
+            f"{_OBJECTS_PATH}/{variant}/search",
             self._crm(variant).search_api.do_search,
             public_object_search_request=request,
         )
@@ -346,6 +420,9 @@ class HubSpotSourceOperations(SourceOperations):
         """One page of ids of the records (or notes) linked to one record."""
         page: Any = self._sdk(
             f"{object_type} to {to_object_type} associations",
+            "GET",
+            f"{_ASSOCIATIONS_PATH}/{object_type}/{object_id}/associations/"
+            f"{to_object_type}",
             self._api().crm.associations.v4.basic_api.get_page,
             object_type=object_type.value,
             object_id=object_id,
@@ -381,6 +458,8 @@ class HubSpotSourceOperations(SourceOperations):
         )
         response: Any = self._sdk(
             f"{variant} batch read",
+            "POST",
+            f"{_OBJECTS_PATH}/{variant}/batch/read",
             self._crm(variant).batch_api.read,
             batch_read_input_simple_public_object_id=request,
         )

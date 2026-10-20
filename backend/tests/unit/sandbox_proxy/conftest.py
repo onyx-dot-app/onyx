@@ -27,7 +27,7 @@ from mitmproxy import http
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.enums import EndpointPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
@@ -220,7 +220,7 @@ def make_matched_actions(
     display_name: str = "Post a message",
     description: str = "Post a message to a channel or conversation.",
     payload: dict[str, Any] | None = None,
-    policy: EndpointPolicy = EndpointPolicy.ASK,
+    policy: ActionPolicy = ActionPolicy.ASK,
     external_app_id: int = 42,
     app_name: str = "Slack",
 ) -> AllMatchedActions:

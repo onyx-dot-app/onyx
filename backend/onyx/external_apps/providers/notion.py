@@ -5,7 +5,7 @@ from onyx.configs.app_configs import (
     EXT_APP_NOTION_CLIENT_ID,
     EXT_APP_NOTION_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -71,14 +71,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/v1/users"),
             RestRoute(method="GET", path="/v1/users/{user_id}"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.SEARCH,
         normalised_name="Search",
         description="Search all pages and data sources the integration can access.",
         matches=(RestRoute(method="POST", path="/v1/search"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.PAGES_READ,
@@ -90,7 +90,7 @@ _ENDPOINTS: list[EndpointSpec] = [
                 method="GET", path="/v1/pages/{page_id}/properties/{property_id}"
             ),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.BLOCKS_READ,
@@ -100,21 +100,21 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/v1/blocks/{block_id}"),
             RestRoute(method="GET", path="/v1/blocks/{block_id}/children"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.DATABASES_READ,
         normalised_name="Read databases",
         description="List a database's data sources (each with an id and name).",
         matches=(RestRoute(method="GET", path="/v1/databases/{database_id}"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.DATA_SOURCES_READ,
         normalised_name="Read data sources",
         description="Fetch a data source's schema (its property definitions).",
         matches=(RestRoute(method="GET", path="/v1/data_sources/{data_source_id}"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.DATA_SOURCES_QUERY,
@@ -123,14 +123,14 @@ _ENDPOINTS: list[EndpointSpec] = [
         matches=(
             RestRoute(method="POST", path="/v1/data_sources/{data_source_id}/query"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.COMMENTS_READ,
         normalised_name="Read comments",
         description="List the unresolved comments on a page or block.",
         matches=(RestRoute(method="GET", path="/v1/comments"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=NotionAction.PAGES_CREATE,

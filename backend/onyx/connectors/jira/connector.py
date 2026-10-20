@@ -199,7 +199,7 @@ def _handle_jira_search_error(e: JiraApiError, jql: str) -> None:
         InsufficientPermissionsError: For HTTP 403 errors
         JiraApiError: Re-raises the original error for other status codes
     """
-    error_text: str = e.text or ""
+    error_text: str = e.body or ""
     error_payload: Any
     try:
         error_payload = json.loads(error_text)
@@ -989,7 +989,7 @@ class JiraConnector(
             )
 
         # Try to extract original error message from the response
-        error_message = e.text if isinstance(e, JiraApiError) else None
+        error_message = e.body if isinstance(e, JiraApiError) else None
         if error_message is None:
             raise UnexpectedValidationError(
                 f"Unexpected Jira error during validation: {e}"

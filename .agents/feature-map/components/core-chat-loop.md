@@ -152,6 +152,14 @@ Preparation resolves:
 - the user message row via `create_new_chat_message`
 - assistant message IDs via `reserve_message_id` or `reserve_multi_model_message_ids`
 
+Setup clears a forced tool ID when `is_tool_available_for_persona` excludes its
+attached tool. Construction uses the same predicate, so both paths apply the same
+legacy-flag rule. Disabled MCP and built-in tools remain excluded. Legacy disabled
+OpenAPI tools remain excluded from default Chat, while configured custom agents
+can use and force them, subject to access and authentication. No migration changes
+these legacy flags; explicit default Chat selection normalizes them.
+See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
+
 ### 4.3 Execution: `_run_models`
 
 One worker thread per model in a `ThreadPoolExecutor`, each submitted with a copied

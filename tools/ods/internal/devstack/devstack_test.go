@@ -150,6 +150,12 @@ func (p *fakeProvider) Migrate(_ context.Context, env []string) error {
 	return nil
 }
 
+func (p *fakeProvider) MigrationsPending(context.Context, []string) (bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.migrated) == 0, nil
+}
+
 func (p *fakeProvider) Plan(_ string, ports map[string]int, env Env, _ Options) ([]Spec, error) {
 	if p.planHook != nil {
 		p.planHook()
@@ -211,7 +217,7 @@ func newTestStack(t *testing.T, registryDir string) *Stack {
 			t.Fatal(err)
 		}
 	}
-	s, err := Open(dir, "")
+	s, err := Open(dir, "", Isolated)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,8 +326,8 @@ func TestUp_twoStacksGetDistinctPortsAndState(t *testing.T) {
 			t.Errorf("%s moved from %d to %d across restart", name, port, again.Ports[name])
 		}
 	}
-	if len(pa.migrated) != 2 {
-		t.Errorf("rerunning up skipped migrations: ran %d times", len(pa.migrated))
+	if len(pa.migrated) != 1 {
+		t.Errorf("rerunning up migrated a database already at head: ran %d times", len(pa.migrated))
 	}
 }
 

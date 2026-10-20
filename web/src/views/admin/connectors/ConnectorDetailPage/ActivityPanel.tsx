@@ -293,23 +293,60 @@ export default function ActivityPanel({
     </Section>
   );
 
-  // Beside the main column the panel pins under the settings header and
-  // scrolls inside its own height, so a long list never lengthens the page.
+  // Beside the main column the panel stretches to the column's height under size
+  // containment, so a long list scrolls inside the card and a short one stays short.
   return (
     <Section
+      justifyContent="start"
       alignItems="stretch"
       width="full"
       height="fit"
       className={cn(
-        "lg:max-w-104 lg:shrink-0 lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[calc(var(--settings-scroll-height,100dvh)_-_var(--settings-header-height,0px)_-_6rem)]",
+        "lg:max-w-104 lg:shrink-0 lg:h-auto lg:self-stretch lg:contain-size",
         className
       )}
       data-testid="connector-activity"
     >
-      <Card border="solid" rounding={4} padding={2} height="full">
-        <Section alignItems="stretch" gap={3} height="fit" className="min-h-0">
-          <Section alignItems="stretch" gap={1} height="fit">
-            {title !== undefined && (
+      <Section
+        alignItems="stretch"
+        height="fit"
+        className="min-h-0 lg:max-h-full"
+      >
+        <Card border="solid" rounding={4} padding={2} height="full">
+          <Section
+            alignItems="stretch"
+            gap={3}
+            height="fit"
+            className="min-h-0"
+          >
+            <Section alignItems="stretch" gap={1} height="fit">
+              {title !== undefined && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="between"
+                  alignItems="center"
+                  gap={1}
+                  height="fit"
+                >
+                  <Content
+                    icon={SvgActivity}
+                    title={title}
+                    sizePreset="main-ui"
+                    variant="section"
+                  />
+                  {onClose !== undefined && (
+                    <Button
+                      icon={SvgFold}
+                      prominence="tertiary"
+                      tooltip={tPanel("close")}
+                      tooltipSide="start"
+                      aria-label={tPanel("close")}
+                      onClick={onClose}
+                    />
+                  )}
+                </Section>
+              )}
+              {/* Beside the page the search shares its row with the counts. The side panel gives the search its own row. */}
               <Section
                 flexDirection="row"
                 justifyContent="between"
@@ -317,154 +354,130 @@ export default function ActivityPanel({
                 gap={1}
                 height="fit"
               >
-                <Content
-                  icon={SvgActivity}
-                  title={title}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
-                {onClose !== undefined && (
-                  <Button
-                    icon={SvgFold}
-                    prominence="tertiary"
-                    tooltip={tPanel("close")}
-                    tooltipSide="start"
-                    aria-label={tPanel("close")}
-                    onClick={onClose}
+                <Section height="fit" className="min-w-0 flex-1">
+                  <InputTypeIn
+                    searchIcon
+                    variant={title === undefined ? "internal" : "primary"}
+                    placeholder={t("search.placeholder")}
+                    maxLength={SEARCH_MAX_LENGTH}
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
                   />
-                )}
+                </Section>
+                {title === undefined && countTags}
               </Section>
-            )}
-            {/* Beside the page the search shares its row with the counts. The side panel gives the search its own row. */}
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              gap={1}
-              height="fit"
-            >
-              <Section height="fit" className="min-w-0 flex-1">
-                <InputTypeIn
-                  searchIcon
-                  variant={title === undefined ? "internal" : "primary"}
-                  placeholder={t("search.placeholder")}
-                  maxLength={SEARCH_MAX_LENGTH}
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                />
-              </Section>
-              {title === undefined && countTags}
-            </Section>
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              gap={1}
-              height="fit"
-            >
-              {/* The chart's span sits with the other filters, inside the row that wraps instead of overflowing. */}
               <Section
                 flexDirection="row"
-                justifyContent="start"
+                justifyContent="between"
+                alignItems="center"
                 gap={1}
-                width="fit"
                 height="fit"
-                wrap
               >
-                <Dropdown>
-                  <Dropdown.Trigger asChild>
-                    <FilterButton
-                      icon={SvgActivity}
-                      active={shown !== "all"}
-                      onClear={() => setShown("all")}
-                    >
-                      {t(`filter.${shown}`)}
-                    </FilterButton>
-                  </Dropdown.Trigger>
-                  <Dropdown.Data
-                    label={t("filter.label")}
-                    value={shown}
-                    onSelect={(option) =>
-                      setShown(
-                        shownOptions.find(
-                          (candidate) => candidate === option.value
-                        ) ?? "all"
-                      )
-                    }
-                    items={shownOptions.map((candidate) => ({
-                      kind: "option" as const,
-                      value: candidate,
-                      title: t(`filter.${candidate}`),
-                    }))}
-                  />
-                </Dropdown>
-                <SelectButton
-                  variant="select-filter"
-                  icon={showResolved ? SvgEye : SvgEyeClosed}
-                  state={showResolved ? "selected" : "empty"}
-                  onClick={() => setShowResolved((value) => !value)}
+                {/* The filters shrink and wrap before the counts, so a narrow panel never clips the counts. */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  height="fit"
+                  wrap
                 >
-                  {t("filter.resolved")}
-                </SelectButton>
-                {canResolveAll && resolvable.count > 0 && (
-                  <Button
-                    rightIcon={SvgCheckAll}
-                    prominence="tertiary"
-                    disabled={resolving || !resolveAllSettled}
-                    onClick={() =>
-                      setConfirmingResolveAll({
-                        level: resolveAllLevel,
-                        q: search,
-                        timeRange,
-                        count: resolvable.count,
-                      })
-                    }
+                  <Dropdown>
+                    <Dropdown.Trigger asChild>
+                      <FilterButton
+                        icon={SvgActivity}
+                        active={shown !== "all"}
+                        onClear={() => setShown("all")}
+                      >
+                        {t(`filter.${shown}`)}
+                      </FilterButton>
+                    </Dropdown.Trigger>
+                    <Dropdown.Data
+                      label={t("filter.label")}
+                      value={shown}
+                      onSelect={(option) =>
+                        setShown(
+                          shownOptions.find(
+                            (candidate) => candidate === option.value
+                          ) ?? "all"
+                        )
+                      }
+                      items={shownOptions.map((candidate) => ({
+                        kind: "option" as const,
+                        value: candidate,
+                        title: t(`filter.${candidate}`),
+                      }))}
+                    />
+                  </Dropdown>
+                  <SelectButton
+                    variant="select-filter"
+                    icon={showResolved ? SvgEye : SvgEyeClosed}
+                    state={showResolved ? "selected" : "empty"}
+                    onClick={() => setShowResolved((value) => !value)}
                   >
-                    {t("resolveAll.button")}
-                  </Button>
+                    {t("filter.resolved")}
+                  </SelectButton>
+                  {canResolveAll && resolvable.count > 0 && (
+                    <Button
+                      rightIcon={SvgCheckAll}
+                      prominence="tertiary"
+                      disabled={resolving || !resolveAllSettled}
+                      onClick={() =>
+                        setConfirmingResolveAll({
+                          level: resolveAllLevel,
+                          q: search,
+                          timeRange,
+                          count: resolvable.count,
+                        })
+                      }
+                    >
+                      {t("resolveAll.button")}
+                    </Button>
+                  )}
+                </Section>
+                {title !== undefined && countTags}
+              </Section>
+            </Section>
+
+            <ShadowDiv shadowHeight={4}>
+              <Section alignItems="stretch" gap={3} height="fit">
+                {failed ? (
+                  <MessageCard variant="error" title={t("loadError.title")} />
+                ) : loading ? (
+                  <Section alignItems="stretch" gap={1} height="fit">
+                    {Array.from({ length: LOADER_ROWS }, (_, index) => (
+                      <CardLoader
+                        key={index}
+                        color="background-tint-00"
+                        border="none"
+                        rounding={2}
+                        padding={2}
+                      />
+                    ))}
+                  </Section>
+                ) : empty ? (
+                  <IllustrationContent
+                    illustration={SvgLongWait}
+                    title={emptyTitle()}
+                  />
+                ) : (
+                  groups.map((group) => (
+                    <GroupList
+                      key={group.group}
+                      state={group}
+                      closed={showResolved}
+                      resolving={resolving}
+                      onResolve={(item, errorIds) =>
+                        void resolve(item, errorIds)
+                      }
+                      onResolveRun={(item) => void resolveRun(item)}
+                    />
+                  ))
                 )}
               </Section>
-              {title !== undefined && countTags}
-            </Section>
+            </ShadowDiv>
           </Section>
-
-          <ShadowDiv shadowHeight={4}>
-            <Section alignItems="stretch" gap={3} height="fit">
-              {failed ? (
-                <MessageCard variant="error" title={t("loadError.title")} />
-              ) : loading ? (
-                <Section alignItems="stretch" gap={1} height="fit">
-                  {Array.from({ length: LOADER_ROWS }, (_, index) => (
-                    <CardLoader
-                      key={index}
-                      color="background-tint-00"
-                      border="none"
-                      rounding={2}
-                      padding={2}
-                    />
-                  ))}
-                </Section>
-              ) : empty ? (
-                <IllustrationContent
-                  illustration={SvgLongWait}
-                  title={emptyTitle()}
-                />
-              ) : (
-                groups.map((group) => (
-                  <GroupList
-                    key={group.group}
-                    state={group}
-                    closed={showResolved}
-                    resolving={resolving}
-                    onResolve={(item, errorIds) => void resolve(item, errorIds)}
-                    onResolveRun={(item) => void resolveRun(item)}
-                  />
-                ))
-              )}
-            </Section>
-          </ShadowDiv>
-        </Section>
-      </Card>
+        </Card>
+      </Section>
       {confirmingResolveAll !== null && (
         <ConfirmationModalLayout
           icon={SvgCheckAll}

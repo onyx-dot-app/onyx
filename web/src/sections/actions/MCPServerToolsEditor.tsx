@@ -17,7 +17,6 @@ import {
 import { Section } from "@opal/layouts";
 import MCPToolRow from "@/sections/plugins/MCPToolRow";
 import { SvgRefreshCw } from "@opal/icons";
-import { cn, richNodes } from "@opal/utils";
 import { IconLoader } from "@opal/loaders";
 import { useSettings } from "@/lib/settings/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -27,7 +26,7 @@ import { MCPServerStatus, type MCPServer } from "@/lib/mcp/types";
 import { refreshMCPServerTools, updateMCPServer } from "@/lib/mcp/svc";
 import { updateToolsStatus } from "@/lib/tools/svc";
 import type { ToolSnapshot } from "@/lib/tools/types";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 
 interface MCPServerToolsEditorProps {
@@ -48,7 +47,6 @@ export default function MCPServerToolsEditor({
   footerTarget = null,
 }: MCPServerToolsEditorProps) {
   const t = useTranslations("actions");
-  const commonCopy = useTranslations("common");
   const policyText = useTranslations("craft.apps.mcpPolicy");
   const policyEditorText = useTranslations("craft.apps.policyEditor");
   const settings = useSettings();
@@ -68,12 +66,11 @@ export default function MCPServerToolsEditor({
     }
   );
   const [enabledDraft, setEnabledDraft] = useState<Record<number, boolean>>({});
-  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({
-    ...server.tool_policies,
+  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({
+    ...server.action_policies,
   });
   const [savedPolicies, setSavedPolicies] = useState(policies);
   const [search, setSearch] = useState("");
-  const [onlyEnabled, setOnlyEnabled] = useState(false);
   const [policiesView, setPoliciesView] = useState(false);
   const showPolicies = craftAvailable && policiesView;
   const [busy, setBusy] = useState(false);
@@ -97,7 +94,7 @@ export default function MCPServerToolsEditor({
     enabledDraft[tool.id] ?? tool.enabled;
   const visibleTools = tools.filter(
     (tool) =>
-      (!(onlyEnabled || showPolicies) || isEnabled(tool)) &&
+      (!showPolicies || isEnabled(tool)) &&
       `${tool.display_name} ${tool.name} ${tool.description}`
         .toLowerCase()
         .includes(search.trim().toLowerCase())
@@ -132,7 +129,9 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, { tool_policies: currentPolicies });
+        await updateMCPServer(server.id, {
+          action_policies: currentPolicies,
+        });
         setPolicies(currentPolicies);
         setSavedPolicies(currentPolicies);
       }
@@ -180,10 +179,11 @@ export default function MCPServerToolsEditor({
   const canBulkToggle =
     tools.length > 0 && tools.every((tool) => can(tool, "toggle"));
   const toolsContent = (
-    <div className="flex h-[min(24rem,45dvh)] flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="flex-1 min-w-40">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-40 flex-1">
           <InputTypeIn
+            searchIcon
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("mcpTools.search")}
@@ -211,34 +211,13 @@ export default function MCPServerToolsEditor({
         <div className="grid shrink-0 grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="flex min-h-10 flex-wrap items-center gap-4">
             <Text font="secondary-body" color="text-03">
-              {richNodes(
-                commonCopy.rich("enabledCount.label", {
-                  enabled: enabledCount,
-                  total: tools.length,
-                  value: (chunks) => chunks,
-                })
-              )}
+              {t("memberPlugins.detail.toolCount", {
+                count: visibleTools.length,
+              })}
             </Text>
-            <label
-              aria-hidden={showPolicies}
-              className={cn(
-                "flex items-center gap-2",
-                showPolicies && "invisible"
-              )}
-            >
-              <InputSwitch
-                checked={onlyEnabled}
-                onCheckedChange={setOnlyEnabled}
-                disabled={busy || showPolicies}
-                aria-label={t("toolsList.showEnabledButton.ariaLabel")}
-              />
-              <Text font="secondary-body" color="text-03">
-                {t("toolsList.showEnabledButton.tooltip")}
-              </Text>
-            </label>
           </div>
           <div className="flex min-h-10 items-center justify-end">
-            {showPolicies ? (
+            {showPolicies && tools.length > 0 ? (
               <div className="flex items-center gap-2">
                 <Text font="secondary-body" color="text-03">
                   {policyEditorText("permissions.title")}
@@ -315,11 +294,7 @@ export default function MCPServerToolsEditor({
           </div>
         </div>
       )}
-      <div
-        role="region"
-        aria-label={t("mcpTools.title")}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
+      <div role="region" aria-label={t("mcpTools.title")} className="min-w-0">
         {isLoading ? (
           <Section flexDirection="row" gap={2} padding={4} height="auto">
             <IconLoader />
@@ -340,7 +315,7 @@ export default function MCPServerToolsEditor({
             </Text>
           </Section>
         ) : (
-          <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {visibleTools.map((tool) => (
               <MCPToolRow
                 key={tool.id}
@@ -348,6 +323,7 @@ export default function MCPServerToolsEditor({
                 control={
                   showPolicies ? (
                     <PolicyToggle
+                      label={tool.display_name || tool.name}
                       value={policies[tool.name] ?? "ASK"}
                       disabled={policyDisabled}
                       onChange={(value) =>

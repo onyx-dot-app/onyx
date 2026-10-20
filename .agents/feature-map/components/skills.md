@@ -42,7 +42,9 @@ documentation, browser, and one per connectable app such as Slack, Linear,
 Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion, Zendesk) and
 custom skills (their own, shared with them, or published organization-wide). Each
 card shows an enable/disable toggle, a preview of the rendered instructions,
-and, for a custom skill they can edit, an edit action.
+and, for a custom skill they can edit, Edit and Delete actions. Delete is available directly on the card, including invalid skills whose editor cannot load. It requires confirmation and uses the same edit permission as the editor.
+
+Member external-app plugin modals also offer instruction previews and per-user skill switches in their Skills tab. Preview replaces the plugin modal content without opening a second dialog. Back or Escape returns to Skills and preserves enable drafts. These switches remain drafts until Save; Cancel discards them.
 
 Turning a skill on or off changes what the agent can do on its next turn: an
 enabled skill's files land in the sandbox and its `SKILL.md` becomes

@@ -7,7 +7,7 @@ import type {
   ScheduledRunContextResponse,
   ScheduledRunSummary,
   ScheduledTaskRunStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 export function formatRelativeShort(isoOrDate: string | Date | null): string {
   if (!isoOrDate) return "—";

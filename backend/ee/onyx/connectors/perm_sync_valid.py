@@ -22,6 +22,7 @@ from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import identify_connector_class
@@ -46,6 +47,9 @@ from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.youtrack.config import YouTrackConnectorConfig
 from onyx.connectors.youtrack.connector import YouTrackConnector
 from onyx.connectors.zoom.connector import ZoomConnector
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
@@ -119,7 +123,7 @@ def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
             continue
         if result.status is CapabilityCheckStatus.FAILED:
             raise ConnectorValidationError(result.message)
-        if result.status is CapabilityCheckStatus.INDETERMINATE:
+        if result.status is CapabilityCheckStatus.INCOMPLETE:
             raise UnexpectedValidationError(result.message)
 
 
@@ -202,7 +206,11 @@ def validate_hubspot_perm_sync(connector: HubSpotConnector) -> None:
         source_operations=connector.ops,
     )
     for check in build_hubspot_doc_permission_sync_checks():
-        check.run(context)
+        try:
+            check.run(context)
+        except NothingToCheckError as e:
+            # A portal with no records has no viewers to sync yet.
+            logger.info("HubSpot check %s found nothing to test: %s", check.check_id, e)
 
 
 # The single source of truth for which connectors carry a real perm-sync probe:

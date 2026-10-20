@@ -16,7 +16,10 @@ import {
   PacketType,
   StopReason,
 } from "../../../services/streamingModels";
-import { MessageRenderer, FullChatState } from "../interfaces";
+import {
+  MessageRenderer,
+  FullChatState,
+} from "@/app/app/message/messageComponents/types";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
 import { processContent, ScrollableTable } from "../markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";

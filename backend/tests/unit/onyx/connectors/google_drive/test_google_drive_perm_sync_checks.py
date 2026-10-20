@@ -96,11 +96,29 @@ def _run(check_id: str, ops: MagicMock) -> CapabilityCheckResult:
         "google_drive_directory_users",
         "google_drive_groups",
         "google_drive_shared_drive_members",
-        "google_drive_folder_permissions",
     ],
 )
 def test_checks_pass_for_a_workspace_admin(check_id: str) -> None:
     assert _run(check_id, _ops()).status == CapabilityCheckStatus.PASSED
+
+
+def test_folder_permissions_skip_without_a_folder() -> None:
+    result = _run("google_drive_folder_permissions", _ops())
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.summary == "No folders in scope"
+
+
+def test_folder_permissions_pass_with_a_readable_folder() -> None:
+    ops = _ops()
+    ops.list_folders_with_permissions.side_effect = _listing(
+        {"id": "f1", "name": "Eng", "permissions": [{"id": "p", "type": "user"}]}
+    )
+
+    result = _run("google_drive_folder_permissions", ops)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Permissions of Eng readable"
 
 
 def test_checks_apply_only_to_permission_synced_connectors() -> None:
@@ -139,14 +157,14 @@ def test_a_file_denied_by_id_is_skipped_for_the_next() -> None:
     )
 
 
-def test_every_sampled_file_denied_is_indeterminate() -> None:
+def test_every_sampled_file_denied_is_incomplete() -> None:
     ops = _ops()
     ops.list_files.side_effect = _listing({"id": "f1", "permissionIds": ["p"]})
     ops.list_file_permissions.side_effect = _http_error(403)
 
     result = _run("google_drive_file_permissions", ops)
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
 
 
 def test_a_missing_scope_on_the_permission_read_fails() -> None:
@@ -171,6 +189,19 @@ def test_directory_admin_keeps_the_legacy_message() -> None:
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.error_type == "InsufficientPermissionsError"
     assert f"Primary admin {_ADMIN} is not authorized" in result.message
+
+
+def test_a_denied_admin_lookup_names_the_directory_read() -> None:
+    ops = _ops()
+    ops.get_admin_user.side_effect = _http_error(403)
+
+    result = _run("google_drive_shared_drive_members", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == f"{_ADMIN} cannot read the directory"
+    assert result.description == (
+        "The primary admin cannot read the Workspace directory. (HTTP 403)"
+    )
 
 
 def test_admin_sdk_turned_off_is_reported() -> None:

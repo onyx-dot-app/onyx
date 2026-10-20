@@ -1,6 +1,7 @@
 "use client";
 
-import { TextFormField } from "@/components/Field";
+import { FieldLabel, TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
@@ -113,22 +114,50 @@ export const SlackTokensForm = ({
               })}
             </div>
           )}
-          <TextFormField
-            name="bot_token"
-            label={t("tokensForm.botToken.label")}
-            type="password"
-          />
-          <TextFormField
-            name="app_token"
-            label={t("tokensForm.appToken.label")}
-            type="password"
-          />
-          <TextFormField
-            name="user_token"
-            label={t("tokensForm.userToken.label")}
-            type="password"
-            subtext={t("tokensForm.userToken.subtext")}
-          />
+          {/* On update, the tokens arrive masked from the backend. */}
+          <div className="w-full">
+            <FieldLabel
+              name="bot_token"
+              label={t("tokensForm.botToken.label")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="bot_token"
+                existingValue={
+                  isUpdate ? (initialValues.bot_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="w-full">
+            <FieldLabel
+              name="app_token"
+              label={t("tokensForm.appToken.label")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="app_token"
+                existingValue={
+                  isUpdate ? (initialValues.app_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="w-full">
+            <FieldLabel
+              name="user_token"
+              label={t("tokensForm.userToken.label")}
+              subtext={t("tokensForm.userToken.subtext")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="user_token"
+                existingValue={
+                  isUpdate ? (initialValues.user_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
           <div className="flex justify-end w-full mt-4">
             <Button
               disabled={

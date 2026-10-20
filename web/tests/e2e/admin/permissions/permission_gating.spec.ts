@@ -7,7 +7,6 @@ import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { mockPublicMcpProbe } from "@tests/e2e/utils/mcpSetup";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -562,9 +561,7 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       await mcp.goto();
       await mcp.plugins.expectPluginVisible(toolName);
       await mcp.plugins.expectPluginVisible(mcpName);
-      await mockPublicMcpProbe(page);
       await mcp.openAddServerModal();
-      await mcp.enterServerUrlAndContinue("https://example.com/mcp");
       await mcp.expectAccessControlVisible();
       await mcp.selectGroupAccess();
       await mcp.discardSetup();

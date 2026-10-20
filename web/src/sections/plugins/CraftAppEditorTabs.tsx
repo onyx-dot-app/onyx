@@ -8,7 +8,8 @@ interface CraftAppEditorTabsProps {
   value: string;
   onValueChange: (value: string) => void;
   configuration: ReactNode;
-  permissions?: ReactNode;
+  authentication?: ReactNode;
+  tools?: ReactNode;
   skills?: ReactNode;
   busy?: boolean;
 }
@@ -17,23 +18,33 @@ export default function CraftAppEditorTabs({
   value,
   onValueChange,
   configuration,
-  permissions,
+  authentication,
+  tools,
   skills,
   busy = false,
 }: CraftAppEditorTabsProps) {
-  const t = useTranslations("actions.plugins.craftApp.tabs");
+  const t = useTranslations("actions");
   const panels = [
-    { value: "configuration" as const, content: configuration },
-    { value: "permissions" as const, content: permissions },
-    { value: "skills" as const, content: skills },
+    {
+      value: "configuration" as const,
+      label: t("plugins.craftApp.tabs.configuration"),
+      content: configuration,
+    },
+    {
+      value: "authentication" as const,
+      label: t("mcpDetail.authentication"),
+      content: authentication,
+    },
+    { value: "tools" as const, label: t("mcpTools.title"), content: tools },
+    {
+      value: "skills" as const,
+      label: t("plugins.craftApp.tabs.skills"),
+      content: skills,
+    },
   ].filter((panel) => panel.content !== undefined);
 
   function pane(content: ReactNode) {
-    return (
-      <div className="h-[min(24rem,45dvh)] overflow-y-auto">
-        <div className="flex flex-col gap-4 pb-1">{content}</div>
-      </div>
-    );
+    return <div className="flex flex-col gap-4 pb-1">{content}</div>;
   }
 
   if (panels.length === 1) return pane(configuration);
@@ -43,7 +54,7 @@ export default function CraftAppEditorTabs({
       <Tabs.List>
         {panels.map((panel) => (
           <Tabs.Trigger key={panel.value} value={panel.value} disabled={busy}>
-            {t(panel.value)}
+            {panel.label}
           </Tabs.Trigger>
         ))}
       </Tabs.List>

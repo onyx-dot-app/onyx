@@ -198,11 +198,7 @@ export default function ConnectorRow({
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">
-              <Section
-                alignItems="stretch"
-                height="fit"
-                className={expanded ? "px-2 pt-2 pb-1" : "p-2"}
-              >
+              <Section alignItems="stretch" height="fit">
                 <Section
                   flexDirection="row"
                   alignItems="start"
@@ -218,14 +214,16 @@ export default function ConnectorRow({
                     height="fit"
                     className="min-w-0 flex-1"
                   >
+                    {/* The link spans the column so the clamped title truncates at its edge. */}
                     {canOperate ? (
                       <Link
                         href={`/admin/connector/${row.cc_pair_id}`}
-                        className="hover:underline"
+                        className="w-full hover:underline"
                       >
                         <Content
                           icon={getSourceMetadata(row.source).icon}
                           title={row.name}
+                          titleMaxLines={1}
                           sizePreset="main-ui"
                           variant="section"
                         />
@@ -234,6 +232,7 @@ export default function ConnectorRow({
                       <Content
                         icon={getSourceMetadata(row.source).icon}
                         title={row.name}
+                        titleMaxLines={1}
                         sizePreset="main-ui"
                         variant="section"
                       />

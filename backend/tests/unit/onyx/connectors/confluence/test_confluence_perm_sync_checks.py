@@ -42,7 +42,9 @@ from onyx.connectors.confluence.source_operations import (
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.db.enums import AccessType
@@ -321,7 +323,8 @@ def test_confcloud_77618_passes_with_the_per_page_fallback() -> None:
     assert expands[-1] == ",".join(PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
 
 
-def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
+def test_confcloud_77618_passes_with_a_caveat() -> None:
+    """Sync reads parent pages one at a time: slower, but correct."""
     gateway = _gateway()
     gateway.search_pages_with_restrictions.side_effect = _fail_fast_expand
     context = _context(gateway)
@@ -330,9 +333,9 @@ def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
 
     by_id = {result.check_id: result for result in results}
     batch = by_id["confluence_restrictions_batch_read"]
-    assert batch.status == CapabilityCheckStatus.FAILED
-    assert not batch.required
-    assert "CONFCLOUD-77618" in batch.message
+    assert batch.status == CapabilityCheckStatus.PASSED
+    assert batch.summary == "Reads parent pages one at a time"
+    assert "CONFCLOUD-77618" in batch.advisories[0].message
     assert (
         by_id["confluence_page_restrictions_read"].status
         == CapabilityCheckStatus.PASSED
@@ -341,8 +344,7 @@ def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
         {CredentialCapability.DOC_PERMISSION_SYNC}, results
     )
     assert (
-        verdicts[CredentialCapability.DOC_PERMISSION_SYNC]
-        == CapabilityVerdict.PASSED_WITH_WARNINGS
+        verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == CapabilityVerdict.PASSED
     )
 
 
@@ -565,6 +567,29 @@ def test_cloud_permission_emails_read_the_first_user_of_each_permission() -> Non
         _run("confluence_permission_user_emails", _context(gateway))
 
 
+def test_cloud_permission_emails_count_each_user_once() -> None:
+    gateway = _gateway()
+    gateway.get_space_permissions.side_effect = None
+    gateway.get_space_permissions.return_value = [
+        {
+            "operation": {"operation": operation, "targetType": "space"},
+            "subjects": {"user": {"results": [user]}},
+        }
+        for operation in ("read", "create")
+        for user in (
+            {"accountId": "a-1", "accountType": "atlassian", "email": "a@x.io"},
+            {"accountId": "b-1", "accountType": "atlassian"},
+        )
+    ]
+
+    output = _CHECKS_BY_ID["confluence_permission_user_emails"].run(_context(gateway))
+
+    assert output is not None
+    assert output.summary == "1 of 2 users show an email"
+    (advisory,) = output.advisories
+    assert advisory.message.startswith("1 users without")
+
+
 @pytest.mark.parametrize(
     "version,variant,user",
     [
@@ -629,6 +654,65 @@ def test_anonymous_access_500_means_not_admin() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "operations,state",
+    [
+        ([{"operation": {"operationKey": "read", "targetType": "space"}}], "on"),
+        ([{"operations": [{"operationKey": "read", "targetType": "space"}]}], "on"),
+        ([{"operation": {"operationKey": "create", "targetType": "page"}}], "off"),
+        ([], "off"),
+    ],
+    ids=["flat_read", "nested_read", "no_space_read", "empty"],
+)
+def test_anonymous_access_reads_like_permission_sync(
+    operations: list[dict[str, Any]], state: str
+) -> None:
+    gateway = _gateway()
+    gateway.get_anonymous_space_permissions.return_value = operations
+
+    output = _CHECKS_BY_ID["confluence_anonymous_space_access"].run(
+        _context(gateway, _form(is_cloud=False))
+    )
+
+    assert output is not None
+    assert output.summary == f"KB anonymous access: {state}"
+
+
+@pytest.mark.parametrize(
+    "permissions,state",
+    [
+        (
+            [
+                {
+                    "type": "VIEWSPACE",
+                    "spacePermissions": [
+                        {"userName": "alice"},
+                        {"userName": None, "groupName": None},
+                    ],
+                }
+            ],
+            "on",
+        ),
+        (_DC_JSONRPC_PERMISSIONS, "off"),
+    ],
+    ids=["anonymous_entry", "no_anonymous_entry"],
+)
+def test_anonymous_access_before_91_reads_the_jsonrpc_permissions(
+    permissions: list[dict[str, Any]], state: str
+) -> None:
+    gateway = _gateway()
+    gateway.get_server_version.return_value = (8, 5)
+    gateway.get_space_permissions.side_effect = lambda **_: permissions
+
+    output = _CHECKS_BY_ID["confluence_anonymous_space_access"].run(
+        _context(gateway, _form(is_cloud=False))
+    )
+
+    assert output is not None
+    assert output.summary == f"KB anonymous access: {state}"
+    gateway.get_anonymous_space_permissions.assert_not_called()
+
+
 # Group sync
 
 
@@ -676,7 +760,7 @@ def test_group_membership_reads_a_person_before_apps() -> None:
     gateway.list_user_groups.assert_called_once_with(user_id="a-1")
 
 
-def test_group_membership_without_groups_is_indeterminate() -> None:
+def test_group_membership_without_groups_is_incomplete() -> None:
     # Group sync reads every user, so ungrouped sampled users prove nothing.
     gateway = _gateway()
     gateway.list_user_groups.side_effect = lambda **_: iter([])
@@ -688,12 +772,38 @@ def test_group_membership_without_groups_is_indeterminate() -> None:
         )
 
 
+def test_group_membership_names_the_users_it_checked() -> None:
+    gateway = _gateway()
+    gateway.list_user_groups.side_effect = lambda **_: iter([])
+
+    with pytest.raises(InconclusiveValidationError) as raised:
+        _run("confluence_group_membership", _context(gateway))
+
+    assert raised.value.summary == "First 2 users are in no group"
+
+
 def test_cloud_group_users_without_emails_fail() -> None:
     gateway = _gateway()
     hidden = _PERSON.model_copy(update={"email": None})
     gateway.list_users.side_effect = lambda **_: iter([_APP, hidden])
 
     with pytest.raises(InsufficientPermissionsError, match="has an email"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_capped_app_sample_is_inconclusive() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 100)
+
+    with pytest.raises(InconclusiveValidationError, match="are apps"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_full_app_listing_has_nothing_to_check() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 3)
+
+    with pytest.raises(NothingToCheckError, match="only apps"):
         _run("confluence_group_user_emails", _context(gateway))
 
 

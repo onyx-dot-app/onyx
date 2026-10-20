@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "اربط خادم MCP (بروتوكول سياق النموذج) لإضافة إجراءات مخصصة.",
         "title": "إضافة خادم MCP"
-      },
-      "authStatus": {
-        "apiTokenDescription": "تم تهيئة رمز API",
-        "connectedDescription": "متصل",
-        "title": "تمت المصادقة والاتصال"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -140,16 +134,6 @@
         "suffix": "اختياري",
         "title": "الوصف"
       },
-      "disconnectButton": {
-        "tooltip": "قطع الاتصال بالخادم"
-      },
-      "editConfigsButton": {
-        "label": "إعدادات الاتصال"
-      },
-      "manageHeader": {
-        "description": "حدّث إعدادات خادم MCP وأدر المصادقة.",
-        "title": "إدارة خادم MCP"
-      },
       "name": {
         "placeholder": "مثل Linear",
         "required": "اسم الخادم مطلوب",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "يجب أن يكون عنوان URL صالحًا",
-        "required": "عنوان URL للخادم مطلوب",
         "title": "عنوان URL لخادم MCP"
       },
       "submitButton": {
-        "addLabel": "إضافة خادم",
-        "addingLabel": "جارٍ الإضافة...",
         "saveLabel": "حفظ التغييرات",
         "savingLabel": "جارٍ الحفظ..."
       },
       "toasts": {
-        "createFailed": "فشل إنشاء خادم MCP",
-        "serverCreated": "تم إنشاء خادم MCP بنجاح",
-        "serverUpdated": "تم تحديث خادم MCP بنجاح",
         "updateFailed": "فشل تحديث خادم MCP"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "يتطلب الوصول عبر المجموعات خطة Business."
       },
-      "craft": {
-        "title": "متاح في Craft",
-        "description": "السماح للمستخدمين بالوصول إلى خادم MCP هذا في Craft."
-      },
       "defaultChat": {
-        "title": "متاح في دردشة Onyx الافتراضية",
-        "description": "عند إيقافه، يجب على المستخدمين إضافة هذا الخادم إلى وكيل مخصص لاستخدامه في الدردشة."
+        "title": "متاح في دردشة Onyx الافتراضية"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "أضف مخطط OpenAPI لإضافة إجراءات مخصصة.",
         "title": "إضافة إجراء OpenAPI"
-      },
-      "authStatus": {
-        "configuredTitle": "تم تهيئة المصادقة",
-        "enabledTitle": "تمت المصادقة والتفعيل",
-        "headersDescription": "تم تهيئة ترويسات مصادقة مخصصة",
-        "oauthDescription": "تم تهيئة مصادقة OAuth",
-        "oauthNamedDescription": "OAuth متصل عبر {name}",
-        "passthroughDescription": "تم تفعيل مصادقة التمرير المباشر"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -227,15 +191,10 @@
         "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذا الإجراء. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إجراءات OpenAPI]({docsUrl}).",
         "title": "تعريف مخطط OpenAPI"
       },
-      "disableButton": {
-        "tooltip": "تعطيل الإجراء"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة",
-        "label": "تعديل الإعدادات"
+        "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة"
       },
       "editHeader": {
-        "description": "حدّث مخطط OpenAPI لهذا الإجراء.",
         "title": "تعديل إجراء OpenAPI"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "لا يوجد ملخص"
-      },
-      "serverUrl": {
-        "description": "عنوان URL موجود في المخطط. لا تتصل إلا بالخوادم التي تثق بها."
       },
       "submitButton": {
         "addLabel": "إضافة إجراء",
@@ -263,6 +219,15 @@
         "createFailed": "فشل إنشاء إجراء OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
         "updateFailed": "فشل تحديث إجراء OpenAPI"
+      },
+      "humanDescription": {
+        "title": "وصف للبشر",
+        "hint": "يظهر في بطاقة الإضافة وتفاصيلها."
+      },
+      "agentDescription": {
+        "title": "وصف للوكلاء",
+        "hint": "يحرر info.description في مخطط OpenAPI.",
+        "disabled": "أدخل مخططًا صالحًا لتحرير هذا الحقل."
       }
     },
     "cardHeader": {
@@ -322,18 +287,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "مفتاح API"
+          "label": "مفتاح API",
+          "description": "استخدم مفتاح API فرديًا لكل مستخدم أو مفتاح API مشتركًا على مستوى المؤسسة."
         },
         "label": "طريقة المصادقة",
         "none": {
-          "label": "بلا مصادقة"
+          "label": "بلا مصادقة",
+          "description": "غير موصى به"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "يحتاج كل مستخدم إلى المصادقة عبر OAuth ببيانات اعتماده الخاصة."
         },
         "placeholder": "اختر طريقة",
         "ptOauth": {
-          "label": "تمرير OAuth المباشر"
+          "label": "تمرير OAuth المباشر",
+          "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}."
         },
         "required": "نوع المصادقة مطلوب"
       },
@@ -364,7 +333,8 @@
         "clientRegistrationFailed": "فشل تسجيل العميل تلقائيًا. استخدم عميل OAuth خاصًا بك أو تحقق من متطلبات الإعداد لدى المزوّد.",
         "discoveryFailed": "لم نعثر على إعدادات تسجيل الدخول باستخدام OAuth. تحقق من عنوان URL للخادم أو أدخل نقاط النهاية من المزوّد.",
         "connectionFailed": "تعذّر الوصول إلى خادم OAuth. تحقق من عنوان URL للخادم وحاول مجددًا.",
-        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا."
+        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا.",
+        "oauthInitFailed": "فشل بدء OAuth: {detail}"
       },
       "header": {
         "defaultTitle": "إعداد المصادقة",
@@ -457,12 +427,16 @@
         "unreachableTitle": "تعذّر تحديد ما إذا كان الإعداد التلقائي متاحًا",
         "missingTitle": "تعذّر العثور على نقاط نهاية OAuth",
         "requiresClientTitle": "قد لا يكون الإعداد التلقائي متاحًا"
+      },
+      "advanced": {
+        "description": "هيّئ موفر OAuth معروفًا بنقاط نهاية تفويض ورموز صريحة بدلًا من الاكتشاف التلقائي.",
+        "title": "متقدم"
+      },
+      "knownProvider": {
+        "hint": "يتطلب وضع الموفر المعروف تهيئة نقاط النهاية. نقاط نهاية Google المرجعية: التفويض {authorizationEndpoint} والرمز {tokenEndpoint}."
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "بطاقة خادم MCP {title}"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "هل أنت متأكد من رغبتك في حذف خادم MCP هذا؟",
@@ -472,27 +446,6 @@
           "label": "حذف"
         },
         "title": "حذف خادم MCP"
-      },
-      "lastRefreshed": {
-        "label": "آخر تحديث للأدوات {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "تحديث الأدوات",
-        "tooltip": "تحديث الأدوات"
-      },
-      "setupIncomplete": {
-        "label": "الإعداد غير مكتمل.",
-        "actionHint": "الإعداد غير مكتمل. انقر لإكمال الإعداد."
-      },
-      "status": {
-        "ready": "جاهز · {count, plural, one {أداة واحدة} other {# أدوات}}",
-        "incomplete": "الإعداد غير مكتمل",
-        "loading": "جارٍ تحميل الأدوات",
-        "disconnected": "غير متصل"
-      },
-      "authenticationButton": {
-        "tooltip": "إعداد المصادقة",
-        "ariaLabel": "إعداد المصادقة لـ {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -554,25 +507,10 @@
       },
       "toasts": {
         "deleteFailed": "فشل حذف خادم MCP",
-        "disableAllFailed": "فشل تعطيل جميع الأدوات",
         "disconnectFailed": "فشل قطع الاتصال بخادم MCP",
-        "enableAllFailed": "فشل تفعيل جميع الأدوات",
         "fetchToolsFailed": "فشل جلب الأدوات: {error}",
-        "noToolsToDisable": "لا توجد أدوات لتعطيلها",
         "reconnectFailed": "فشلت إعادة الاتصال بخادم MCP",
-        "refreshToolsFailed": "فشل تحديث الأدوات",
-        "renameFailed": "فشلت إعادة تسمية خادم MCP",
-        "serverDeleted": "تم حذف خادم MCP بنجاح",
-        "serverDisconnected": "تم قطع الاتصال بخادم MCP بنجاح",
-        "serverReconnected": "تمت إعادة الاتصال بخادم MCP بنجاح",
-        "serverRenamed": "تمت إعادة تسمية خادم MCP بنجاح",
-        "toolDisabled": "تم تعطيل الأداة بنجاح",
-        "toolEnabled": "تم تفعيل الأداة بنجاح",
-        "toolUpdateFailed": "فشل تحديث الأداة",
-        "toolsDisabled": "{count, plural, one {تم تعطيل أداة واحدة بنجاح} other {تم تعطيل # أدوات بنجاح}}",
-        "toolsEnabled": "{count, plural, one {تم تفعيل أداة واحدة بنجاح} other {تم تفعيل # أدوات بنجاح}}",
-        "toolsFetched": "تم تحميل الأدوات",
-        "toolsRefreshed": "تم تحديث الأدوات بنجاح"
+        "serverDeleted": "تم حذف خادم MCP بنجاح"
       }
     },
     "openApiAuthModal": {
@@ -708,27 +646,15 @@
       "addButton": {
         "label": "إضافة إجراء OpenAPI"
       },
-      "authModal": {
-        "authenticateTitle": "مصادقة {name}",
-        "defaultTitle": "مصادقة إجراء OpenAPI",
-        "updateTitle": "تحديث المصادقة لـ {name}"
-      },
       "empty": {
         "description": "أضف إجراءات مخصصة من مخططات OpenAPI."
       },
       "toasts": {
-        "actionRenamed": "تمت إعادة تسمية إجراء OpenAPI بنجاح",
-        "authHeadersSaved": "تم حفظ ترويسات المصادقة لـ {name} بنجاح.",
-        "authPassthroughSaved": "تم حفظ التمرير المباشر للمصادقة لـ {name} بنجاح.",
         "authSaveFailed": "فشل حفظ إعدادات المصادقة.",
         "authSaved": "تم حفظ المصادقة لـ {name} بنجاح.",
-        "authUpdated": "تم تحديث المصادقة لـ {name} بنجاح.",
         "deleteFailed": "فشل حذف الأداة.",
-        "deleteUnexpectedError": "حدث خطأ غير متوقع أثناء حذف الأداة.",
         "disconnectFailed": "فشل قطع الاتصال بإجراء OpenAPI.",
-        "renameFailed": "فشلت إعادة تسمية إجراء OpenAPI",
-        "toolDeleted": "تم حذف {name} بنجاح.",
-        "toolDisconnected": "تم قطع الاتصال بـ {name}."
+        "toolDeleted": "تم حذف {name} بنجاح."
       }
     },
     "perUserAuth": {
@@ -737,7 +663,9 @@
       },
       "credentials": {
         "perUserDescription": "استخدم بيانات اعتمادك لاختبار MCP هذا وتحميل أدواته. تُحفظ في حسابك فقط.",
-        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك."
+        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك.",
+        "perUserTitle": "لحسابك الخاص فقط",
+        "sharedTitle": "قيم المؤسسة المشتركة"
       },
       "headers": {
         "addButton": {
@@ -761,7 +689,7 @@
         "label": "سؤال"
       },
       "deny": {
-        "label": "رفض"
+        "label": "معطل"
       }
     },
     "switchList": {
@@ -986,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "تطبيقات Craft"
+        "external-app": "تطبيق Craft"
       },
       "row": {
         "view": "عرض {name}",
@@ -1009,7 +937,11 @@
         "craft": "Craft",
         "on": "مفعّل",
         "off": "معطّل",
-        "unknown": "غير معروف"
+        "unknown": "غير معروف",
+        "disabledByAdmin": "عطّله المسؤول",
+        "disabledByYou": "عطّلته أنت",
+        "agents": "الوكلاء المخصصون",
+        "notAvailable": "غير متاح"
       },
       "state": {
         "loading": "جارٍ تحميل الإضافات",
@@ -1026,17 +958,15 @@
         "emptyDescription": "جرّب عامل تصفية اتصال آخر أو اطلب من مسؤول مساحة العمل إضافة إحدى الإضافات."
       },
       "detail": {
+        "issuesTitle": "مشكلات",
+        "readyDescription": "يمكنك البدء في استخدام هذه الإضافة.",
         "connection": "الاتصال",
-        "serverUrl": "عنوان URL للخادم",
         "tools": "الأدوات",
         "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",
-        "toolsDescription": "الأدوات المتاحة من إضافة مساحة العمل هذه.",
         "noTools": "لا توجد أدوات مرئية محفوظة لهذه الإضافة.",
         "connect": "ربط الحساب",
         "useInChat": "استخدام في المحادثة",
-        "chatDisabled": "هذه الإضافة غير مفعّلة للمحادثة الرئيسية. يمكن لمسؤول مساحة العمل تغيير إتاحتها.",
-        "chatUnknown": "تعذر التأكد من إتاحتها في المحادثة الرئيسية.",
-        "disconnect": "قطع اتصال الحساب",
+        "disconnect": "قطع الاتصال",
         "disconnectTitle": "قطع اتصال {name}؟",
         "disconnectDescription": "سيؤدي هذا إلى إزالة اتصال حسابك. لن تتغير الإتاحة في مساحة العمل.",
         "oauthDisconnectWarning": "تشترك جميع الإضافات والتطبيقات التي تستخدم إعداد OAuth نفسه في اتصال هذا الحساب. يؤدي قطع الاتصال إلى إزالة اتصالك منها جميعًا.",
@@ -1081,18 +1011,20 @@
         "showAll": "عرض جميع الإضافات"
       },
       "defaults": {
-        "chat": "التمكين افتراضيًا في الدردشة الرئيسية",
-        "craft": "التمكين افتراضيًا في Craft",
-        "chatDescription": "ينطبق على الدردشة الافتراضية. تحتفظ الوكلاء المخصصة بإعدادات أدواتها الخاصة.",
-        "craftDescription": "استخدام هذا MCP في جلسات Craft الخاصة بك.",
+        "chat": "تفعيل في الدردشة الافتراضية",
+        "craft": "تفعيل في Craft",
+        "chatDescription": "اجعل هذا الملحق متاحًا في محادثاتك التي لا تستخدم وكيلًا مخصصًا.",
+        "craftDescription": "اجعل هذا الملحق متاحًا في جلسات Craft والمهام المجدولة الخاصة بك. تظل أذونات الأدوات في مؤسستك سارية.",
         "unavailable": "عطّل المسؤول هذه الإضافة في {surface}.",
-        "saveFailed": "تعذر حفظ إعدادات الإضافات الافتراضية. حاول مجددًا."
+        "saveFailed": "تعذر حفظ إعدادات الإضافات الافتراضية. حاول مجددًا.",
+        "chatUnavailable": "عطّل المسؤول هذه الإضافة في {surface}. قد تظل الوكلاء المخصصة التي تم إعدادها باستخدام هذه الإضافة قادرة على استخدامها."
       },
       "openapi": {
         "chatOnly": "الدردشة فقط",
         "chatOnlyDescription": "هذه الإضافة متاحة في الدردشة، وليس في Craft."
       },
       "appSkills": {
+        "preview": "معاينة",
         "search": "البحث في المهارات",
         "count": "{count, plural, one {# مهارة} other {# مهارات}}",
         "empty": "لا توجد مهارات مرتبطة بهذا التطبيق.",
@@ -1105,7 +1037,8 @@
       "externalApp": {
         "description": "استخدم حسابك في Craft.",
         "craftOnly": "Craft فقط",
-        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية."
+        "craftOnlyDescription": "هذا التطبيق متاح في Craft. لا تدعمه المحادثة الرئيسية.",
+        "craftDisabledDescription": "هذا التطبيق معطّل في Craft. الدردشة الرئيسية لا تدعمه."
       }
     },
     "plugins": {
@@ -1130,9 +1063,14 @@
         "manageAvailability": "إدارة الإتاحة في مساحة العمل",
         "more": "المزيد من الإجراءات",
         "disableChat": "تعطيل في الدردشة الرئيسية",
-        "enableChat": "تفعيل في الدردشة الرئيسية",
+        "enableChat": "تفعيل في الدردشة الافتراضية",
         "disableCraft": "تعطيل في Craft",
-        "enableCraft": "تفعيل في Craft"
+        "enableCraft": "تفعيل في Craft",
+        "chatDescription": "إتاحة هذه الإضافة في المحادثات التي لا تستخدم وكيلًا مخصصًا. تظل ضوابط الوصول سارية.",
+        "defaultChatAdminOnly": "يمكن لمسؤولي مساحة العمل فقط تغيير الإتاحة في الدردشة الافتراضية.",
+        "mcpCraftDescription": "إتاحة هذه الإضافة في Craft. تظل ضوابط الوصول وأذونات الأدوات سارية.",
+        "craftAppDescription": "إتاحة هذا التطبيق في Craft. تظل متطلبات الاتصال والموافقة سارية.",
+        "workspaceDescription": "اجعل هذه الإضافة متاحة في الدردشة والوكلاء المخصصين. تظل ضوابط الوصول ومتطلبات المصادقة سارية."
       },
       "craftApp": {
         "tabs": {
@@ -1156,19 +1094,14 @@
           "viewTools": "عرض الأدوات",
           "saveToUpdate": "احفظ التغييرات لتحديث الأدوات."
         },
-        "reviewTitle": "مراجعة {name}",
         "createTitle": "إضافة إضافة OpenAPI",
         "detailDescription": "إدارة واجهة API هذه والأدوات المتاحة لوكلائك.",
-        "detailsTitle": "تفاصيل الإضافة",
+        "detailsTitle": "الإعدادات",
         "schemaTitle": "مخطط OpenAPI",
-        "editSchema": "تعديل المخطط",
         "notFound": "لم يتم العثور على الإضافة",
         "loadFailed": "تعذر تحميل هذه الإضافة",
         "unavailable": "قد تكون هذه الإضافة قد حُذفت، أو قد لا تملك صلاحية الوصول.",
         "readOnly": "يمكنك عرض هذه الإضافة، لكن حسابك لا يستطيع تغيير إعداداتها.",
-        "disableTitle": "تعطيل {name}؟",
-        "disableDescription": "لن تتمكن الوكلاء من استخدام هذه الإضافة. يمكنك تفعيلها مجددًا.",
-        "deleteTitle": "حذف {name}؟",
         "deleteDescription": "سيؤدي ذلك إلى حذف إضافة OpenAPI وإعداداتها نهائيًا."
       },
       "title": "الإضافات",
@@ -1217,6 +1150,7 @@
         }
       },
       "row": {
+        "externalAppKind": "تطبيق Craft",
         "manage": {
           "label": "إدارة {name}"
         },
@@ -1295,31 +1229,22 @@
     },
     "mcpTools": {
       "title": "الأدوات",
-      "description": "اختر الأدوات المتاحة وحدد أذوناتها.",
       "enabledTab": "الأدوات المتاحة",
-      "policiesTab": "أذونات Craft",
-      "enabledDescription": "اختر الأدوات التي يمكن للمستخدمين استخدامها في Onyx.",
-      "policiesDescription": "اختر متى يطلب Craft الموافقة قبل استخدام كل أداة.",
-      "back": "المصادقة",
+      "policiesTab": "إعدادات الموافقة",
       "refresh": "تحديث الأدوات",
       "loadError": "تعذر تحميل الأدوات",
       "saveError": "تعذر حفظ إعدادات الأدوات",
       "refreshError": "تعذر تحديث الأدوات",
-      "search": "البحث عن أدوات"
+      "search": "البحث عن أدوات",
+      "enabledCount": "الأدوات المفعّلة: {enabled} من {total}"
     },
     "mcpDetail": {
-      "configuration": "إعدادات الخادم",
-      "editConfiguration": "تعديل إعدادات الخادم",
+      "configuration": "الإعدادات",
       "authentication": "المصادقة",
-      "editAuthentication": "تعديل المصادقة",
-      "availability": "التوفر",
-      "edit": "تعديل",
       "loadError": "تعذر تحميل خادم MCP",
       "notFound": "لم يتم العثور على خادم MCP",
       "unavailable": "ربما تم حذف هذا الخادم، أو قد لا تملك صلاحية الوصول إليه.",
       "retry": "إعادة المحاولة",
-      "restrictedAccess": "{groups, plural, one {# مجموعة} other {# مجموعات}} · {users, plural, one {# مستخدم} other {# مستخدمين}}",
-      "authenticationIncomplete": "لم يتم إعداد المصادقة.",
       "availabilitySaved": "تم تحديث التوفر"
     }
   },
@@ -2498,6 +2423,7 @@
           "title": "وكيل البرمجة"
         },
         "description": "الأدوات والقدرات المتاحة للمحادثة. لا ينطبق هذا على الوكلاء.",
+        "pluginsNote": "يمكنك إعداد خوادم MCP وإجراءات OpenAPI للدردشة الافتراضية في [الإضافات]({url}).",
         "imageGeneration": {
           "description": "توليد الصور ومعالجتها باستخدام أدوات مدعومة بالذكاء الاصطناعي.",
           "disabledTooltip": "يتطلب توليد الصور نموذجًا مهيأً. قم بإعداده من التهيئة > توليد الصور، أو اطلب من مسؤول.",
@@ -2719,7 +2645,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "لا يمكن إعادة الفهرسة أثناء وجود فهرسة قيد التنفيذ",
-            "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة"
+            "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة",
+            "paused": "استأنف الموصل قبل إعادة الفهرسة"
           }
         },
         "toggleStatus": {
@@ -2784,6 +2711,91 @@
           "postProcessing": {
             "label": "المعالجة اللاحقة"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "تحميل الدفعة"
+          },
+          "batchTotal": {
+            "label": "إجمالي الدفعة"
+          },
+          "batchUnaccounted": {
+            "label": "غير محسوب"
+          },
+          "checkpointLoad": {
+            "label": "تحميل نقطة التحقق"
+          },
+          "chunking": {
+            "label": "التقسيم"
+          },
+          "connectorFetch": {
+            "label": "جلب الموصل"
+          },
+          "connectorValidation": {
+            "label": "التحقق من الموصل"
+          },
+          "contextualRag": {
+            "label": "RAG السياقي"
+          },
+          "coordLockAcquireWait": {
+            "label": "انتظار قفل التنسيق"
+          },
+          "coordinationUpdate": {
+            "label": "تحديث التنسيق"
+          },
+          "docBatchEnqueue": {
+            "label": "إدراج دفعة المستندات في الطابور"
+          },
+          "docBatchStore": {
+            "label": "تخزين دفعة المستندات"
+          },
+          "docDbPrepare": {
+            "label": "تجهيز قاعدة بيانات المستندات"
+          },
+          "docLockAcquireWait": {
+            "label": "انتظار قفل المستند"
+          },
+          "docprocessingSetup": {
+            "label": "إعداد معالجة المستندات"
+          },
+          "embedding": {
+            "label": "التضمين"
+          },
+          "enrichmentPrep": {
+            "label": "تجهيز الإثراء"
+          },
+          "finalization": {
+            "label": "الإنهاء"
+          },
+          "gcCollect": {
+            "label": "جمع القمامة"
+          },
+          "hierarchyUpsert": {
+            "label": "تحديث التسلسل الهرمي"
+          },
+          "imageProcessing": {
+            "label": "معالجة الصور"
+          },
+          "permissionValidation": {
+            "label": "التحقق من الأذونات"
+          },
+          "postIndexDbUpdate": {
+            "label": "تحديث قاعدة البيانات بعد الفهرسة"
+          },
+          "queueWait": {
+            "label": "انتظار الطابور"
+          },
+          "vectorDbWrite": {
+            "label": "الكتابة في قاعدة المتجهات"
+          },
+          "embeddingRateLimitWait": {
+            "label": "انتظار حد معدل التضمين",
+            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "انتظار تقييد المزوّد",
+            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          }
         }
       },
       "statusCard": {
@@ -2815,7 +2827,8 @@
           "released": "بدأت الفهرسة",
           "releaseFailed": "تعذر بدء الفهرسة",
           "viewChecks": "عرض فحوصات الموصل"
-        }
+        },
+        "title": "حالة الفهرسة"
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
@@ -2974,7 +2987,9 @@
           "indexed": "مفهرس",
           "synced": "متزامن",
           "removed": "تمت إزالتها",
-          "checksRun": "{count, plural, zero {لم يتم تشغيل أي فحص} one {تم تشغيل فحص واحد} two {تم تشغيل فحصين} few {تم تشغيل # فحوصات} many {تم تشغيل # فحصًا} other {تم تشغيل # فحص}}"
+          "checksRun": "{count, plural, zero {لم يتم تشغيل أي فحص} one {تم تشغيل فحص واحد} two {تم تشغيل فحصين} few {تم تشغيل # فحوصات} many {تم تشغيل # فحصًا} other {تم تشغيل # فحص}}",
+          "memberships": "عضويات",
+          "checks": "فحوصات تم تشغيلها"
         },
         "counts": {
           "newDocs": "{count, plural, one {مستند جديد واحد} other {# مستندات جديدة}}",
@@ -3019,7 +3034,8 @@
           "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
           "pastRuns": "{count, plural, one {عملية تشغيل سابقة واحدة} other {# عمليات تشغيل سابقة}}",
           "view": "عرض",
-          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}"
+          "viewAria": "{count, plural, one {عرض عملية التشغيل السابقة} other {عرض # عمليات تشغيل سابقة}}",
+          "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
         },
         "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
         "errorModal": {
@@ -3059,7 +3075,8 @@
         "groups": {
           "failures": "{count, plural, =0 {الإخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
           "errors": "{count, plural, =0 {الأخطاء} one {خطأ واحد} two {خطآن} few {# أخطاء} many {# خطأً} other {# خطأ}}",
-          "other": "أخرى"
+          "other": "أخرى",
+          "resolved": "{count, plural, zero {لا شيء تم حله} one {واحد تم حله} two {اثنان تم حلهما} few {# تم حلها} many {# تم حلها} other {# تم حلها}}"
         },
         "title": {
           "indexing": {
@@ -3133,7 +3150,8 @@
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
-          "resolved": "تم الحل"
+          "resolved": "تم الحل",
+          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}"
         },
         "more": "عرض المزيد",
         "empty": {
@@ -3152,9 +3170,11 @@
           "search": {
             "placeholder": "ابحث في المستندات…"
           },
-          "resolveAll": "حل الكل",
+          "resolveAll": "إعادة محاولة الكل",
           "resolveAllTooltip": "إعادة فهرسة كل المستندات الفاشلة في هذا التشغيل",
-          "resolveOne": "حل هذا المستند",
+          "resolveAllUnsupported": "لا يمكن لهذا الموصل إعادة فهرسة مستندات فردية. أعد فهرسة الموصل لإعادة المحاولة.",
+          "resolveOne": "إعادة محاولة هذا المستند",
+          "retry": "{count, plural, zero {إعادة محاولة # مستند} one {إعادة محاولة مستند واحد} two {إعادة محاولة مستندين} few {إعادة محاولة # مستندات} many {إعادة محاولة # مستندًا} other {إعادة محاولة # مستند}}",
           "more": "المزيد",
           "less": "أقل",
           "unknownDocument": "مستند غير معروف",
@@ -3164,7 +3184,8 @@
         },
         "trace": {
           "header": "تتبع المكدس • معرّف التشغيل: {id}",
-          "copy": "نسخ تتبع المكدس"
+          "copy": "نسخ تتبع المكدس",
+          "runId": "معرّف التشغيل: {id}"
         },
         "actions": {
           "resolve": "حل"
@@ -3175,6 +3196,9 @@
           "description": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
           "fleetDescription": "يضع هذا علامة «تم الحل» على {count, plural, zero {# عملية تشغيل} one {عملية تشغيل واحدة} two {عمليتي تشغيل} few {# عمليات تشغيل} many {# عملية تشغيل} other {# عملية تشغيل}} تطابق عامل التصفية الحالي، في الموصلات التي تديرها. تحتفظ بحالتها وتنتقل إلى قسم ما تم حله.",
           "confirm": "حل الكل"
+        },
+        "resolved": {
+          "label": "تم حلها"
         }
       },
       "stageDetails": {
@@ -5801,24 +5825,11 @@
           "description": "أضف تطبيقًا لإتاحته للجميع في مؤسستك.",
           "title": "لا توجد تطبيقات بعد"
         },
-        "panel": {
-          "blurb": "يُهيأ مرة واحدة للمؤسسة بأكملها. عدّل تطبيقًا لتعيين بيانات الاعتماد المشتركة وسياسات الإجراءات والمهارات المرتبطة."
-        },
         "tab": {
-          "label": "التطبيقات",
-          "labelWithCount": "التطبيقات · {count, number}"
+          "label": "التطبيقات"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "إجراءات {name}"
-        },
-        "availableInCraft": {
-          "label": "متاح في Craft"
-        },
-        "customTag": {
-          "label": "مخصص"
-        },
         "deleteAction": {
           "label": "حذف"
         },
@@ -5828,34 +5839,12 @@
           "submit": {
             "label": "حذف التطبيق"
           },
-          "submitting": {
-            "label": "جارٍ الحذف…"
-          },
           "title": "حذف “{name}”؟"
-        },
-        "editAction": {
-          "label": "تعديل"
         },
         "toasts": {
           "deleteFailed": "فشل حذف \"{name}\"",
-          "disableFailed": "فشل تعطيل \"{name}\"",
           "enableFailed": "فشل تفعيل \"{name}\""
-        },
-        "toggle": {
-          "disableAriaLabel": "تعطيل {name}",
-          "enableAriaLabel": "تفعيل {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# إجراء} other {# إجراءات}}",
-        "customSkills": "{count, plural, one {# مهارة مخصصة} other {# مهارات مخصصة}}",
-        "noCredentials": "بدون بيانات اعتماد",
-        "noCustomSkills": "بدون مهارات مخصصة",
-        "orgCredentialsSet": "بيانات اعتماد المؤسسة معيّنة",
-        "perUserCredentials": "بيانات اعتماد لكل مستخدم",
-        "providedByOnyx": "مقدَّم من Onyx",
-        "tools": "{count, plural, one {# أداة} other {# أدوات}}",
-        "upstreamPatterns": "{count, plural, one {# نمط منبع} other {# أنماط منبع}}"
       },
       "loading": {
         "label": "جارٍ التحميل…"
@@ -5863,33 +5852,16 @@
       "mcpServers": {
         "empty": {
           "description": "اربط خادمًا في الإجراءات، ثم فعّله هنا لمؤسستك.",
-          "openActionsButton": {
-            "label": "فتح الإجراءات"
-          },
           "title": "لا توجد خوادم MCP بعد"
         },
-        "manageInActionsButton": {
-          "label": "الإدارة في الإجراءات"
-        },
-        "panel": {
-          "blurb": "فعّل خادمًا للسماح للأعضاء الذين يملكون صلاحية الوصول إليه باستخدام أدواته في Craft. عدّله لتعيين سياسة الموافقة لكل أداة. تُدار اتصالات الخوادم وصلاحيات الوصول في الإجراءات."
-        },
         "tab": {
-          "label": "خوادم MCP",
-          "labelWithCount": "خوادم MCP · {count, number}"
+          "label": "خوادم MCP"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "إضافة تطبيق"
-        },
-        "backToCraftButton": {
-          "label": "العودة إلى Craft"
-        },
         "description": "أعدّ التطبيقات التي يمكن لوكيل Craft في مؤسستك استخدامها. يربط كل عضو حسابه الخاص من صفحة تطبيقات Craft."
       },
       "warnings": {
-        "invalidSkill": "مهارة غير صالحة",
         "providerUnavailable": "الموفر غير متاح"
       }
     },
@@ -9583,7 +9555,9 @@
         "pruned": "تم التقليم",
         "checking": "جارٍ الفحص",
         "passed": "مكتمل",
-        "failedToRun": "تعذر التشغيل"
+        "failedToRun": "تعذر التشغيل",
+        "completedWithErrors": "اكتملت مع أخطاء",
+        "error": "خطأ"
       }
     },
     "systemInfo": {
@@ -9906,6 +9880,9 @@
       "field": {
         "required": {
           "error": "{label} مطلوب"
+        },
+        "optional": {
+          "title": "{label} (اختياري)"
         }
       },
       "loadError": {
@@ -10734,7 +10711,9 @@
       "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
       "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
       "state": {
-        "inProgress": "عمليات التحقق قيد التنفيذ..."
+        "inProgress": "عمليات التحقق قيد التنفيذ...",
+        "completed": "اكتملت عمليات التحقق.",
+        "waiting": "بانتظار إعدادات الموصل..."
       },
       "advisory": {
         "title": "لن تتم فهرسة بعض المحتوى.",
@@ -10838,7 +10817,9 @@
           },
           "error": {
             "title": "الإعدادات غير صالحة"
-          }
+          },
+          "blocks": "فشلت الإعدادات الجديدة في التحقق. أصلحها قبل التطبيق.",
+          "warns": "فشلت بعض الفحوصات الاختيارية. لا يزال بإمكانك التطبيق."
         },
         "warnings": {
           "title": "تحذيرات"
@@ -14127,7 +14108,8 @@
       },
       "status": {
         "approved": "تمت الموافقة",
-        "rejected": "مرفوض"
+        "rejected": "مرفوض",
+        "expired": "انتهت الصلاحية"
       },
       "submit": {
         "errorFallback": "فشل إرسال القرار"
@@ -14290,51 +14272,25 @@
         "title": "جارٍ توصيل تطبيقك"
       },
       "page": {
-        "connectButton": "اتصال",
-        "connectingButton": "جارٍ إعادة التوجيه…",
-        "disconnectButton": "قطع الاتصال",
         "empty": {
           "description": "لم يتم إعداد أي تطبيقات أو خوادم MCP لمؤسستك بعد.",
           "title": "لا يوجد ما يمكن توصيله بعد"
         },
-        "errors": {
-          "disconnectFailed": "فشل قطع الاتصال",
-          "startAuthFailed": "فشل بدء التفويض"
-        },
         "header": {
           "description": "قم بتوصيل الأدوات التي يمكن لـ Onyx Craft استخدامها كسياق أثناء عمله.",
-          "manageButton": "إدارة التطبيقات",
-          "searchPlaceholder": "البحث في التطبيقات...",
           "title": "التطبيقات"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "تكاملات تدعمها Onyx مباشرةً. يأتي كل منها بمهارات تعلّم Craft كيفية استخدامه، ابدأ من هنا.",
-            "empty": "لم يتم إعداد أي تطبيقات لمؤسستك بعد.",
-            "emptyTitle": "لا توجد تطبيقات بعد",
-            "tabLabel": "التطبيقات · {count}"
-          },
-          "mcp": {
-            "blurb": "خوادم أتاحها مسؤول لاستخدامها في Craft. إذا كان الخادم يتطلب بيانات اعتماد شخصية، فاربط حسابك الخاص قبل استخدام أدواته.",
-            "empty": "لم تتم إتاحة أي خوادم MCP لـ Craft.",
-            "emptyTitle": "لا توجد خوادم MCP بعد",
-            "tabLabel": "خوادم MCP · {count}"
-          }
         },
         "loading": {
           "label": "جارٍ التحميل…"
         },
         "reviewSkillsButton": "مراجعة المهارات",
-        "search": {
-          "noMatchesDescription": "لا شيء هنا يطابق بحثك.",
-          "noMatchesTitle": "لا توجد نتائج مطابقة"
-        },
         "status": {
           "connected": "متصل",
           "connectedNeedsSkills": "متصل · ليست كل المهارات المرتبطة مفعّلة",
           "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين",
           "skillWarningAriaLabel": "مطلوب إعداد المهارات",
-          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح."
+          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح.",
+          "skillWarningSummary": "ليست كل المهارات المرتبطة مفعّلة."
         }
       },
       "policyEditor": {
@@ -14350,7 +14306,11 @@
           "description": "اختر ما يمكن للوكيل فعله. «اسأل» يطلب الموافقة قبل كل إجراء؛ و«الموافقة التلقائية» يشغّله دون سؤال.",
           "title": "الأذونات"
         },
-        "savingButton": "جارٍ الحفظ…"
+        "savingButton": "جارٍ الحفظ…",
+        "advanced": {
+          "description": "عيّن سياسة لكل إجراء على حدة.",
+          "title": "متقدم"
+        }
       },
       "skillsStep": {
         "description": "اختياري: اربط مهارات موجودة أو أنشئ واحدة لهذا التطبيق.",
@@ -15026,10 +14986,6 @@
             "label": "الاسم",
             "placeholder": "مثال: ملخص أسبوعي لتصعيدات العملاء"
           },
-          "preApproval": {
-            "description": "يمكن لـ Craft استخدام التطبيقات وخوادم MCP المحددة دون توقف عندما تعمل هذه المهمة دون إشراف. طلبات الموافقة الأخرى توقف التشغيل مؤقتًا وقد تتسبب في فشله.",
-            "label": "التطبيقات وخوادم MCP الموافَق عليها مسبقًا"
-          },
           "prompt": {
             "description": "تُرسل هذه الرسالة إلى Craft في كل مرة تنطلق فيها المهمة.",
             "label": "الموجّه",
@@ -15088,31 +15044,6 @@
       "newPage": {
         "description": "احفظ موجّهًا وجدولًا. سيشغّله Craft وفق مؤقّت.",
         "title": "مهمة مجدولة جديدة"
-      },
-      "preApproval": {
-        "appFallbackName": "التطبيق رقم {id}",
-        "appsGroupTitle": "التطبيقات",
-        "empty": {
-          "label": "لا توجد تطبيقات أو خوادم MCP متاحة في Craft بعد."
-        },
-        "errors": {
-          "loadFailed": "تعذّر تحميل التطبيقات وخوادم MCP. حدّث الصفحة للمحاولة مرة أخرى.",
-          "partialLoadFailed": "تعذّر تحميل بعض خيارات الموافقة المسبقة. حدّث الصفحة للمحاولة مرة أخرى."
-        },
-        "loading": {
-          "label": "جارٍ تحميل التطبيقات وخوادم MCP…"
-        },
-        "mcpGroupTitle": "خوادم MCP",
-        "mcpServerFallbackName": "خادم MCP رقم {id}",
-        "status": {
-          "connected": "متصل",
-          "connectionRequired": "الاتصال مطلوب",
-          "unavailable": "لم يعد متاحًا"
-        },
-        "summary": {
-          "partialLoadFailed": "تعذّر تحميل بعض تفاصيل الموافقة المسبقة. حدّث الصفحة للمحاولة مرة أخرى.",
-          "title": "التطبيقات وخوادم MCP الموافَق عليها مسبقًا"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15488,6 +15419,51 @@
       "viewPlans": {
         "label": "عرض الخطط"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "إعدادات الموافقة لـ {name}",
+      "title": "إعدادات الموافقة",
+      "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
+      "taskDescription": "تتوفر التطبيقات المفعّلة فقط لهذه المهمة. تنطبق التغييرات على هذه المهمة فقط.",
+      "newTaskDescription": "فعّل التطبيقات التي يمكن لهذه المهمة استخدامها. يبدأ كل تطبيق بإعدادات الإجراءات الحالية لديك.",
+      "workspace_disabled": "معطل لمساحة العمل",
+      "workspace_managed": "تديره مساحة العمل",
+      "userManagement": "السماح للمستخدمين بإدارة إعدادات الموافقة",
+      "userManagementDescription": "يمكن للمستخدمين تغيير إعدادات الموافقة للإجراءات المتاحة.",
+      "loading": "جارٍ تحميل إعدادات الموافقة…",
+      "loadError": "تعذّر تحميل إعدادات الموافقة.",
+      "retry": "إعادة المحاولة",
+      "save": "حفظ",
+      "saving": "جارٍ الحفظ…",
+      "cancel": "إلغاء",
+      "saveError": "تعذّر حفظ إعدادات الموافقة.",
+      "emptyActions": "لا توجد إجراءات معروفة. تتطلب الإجراءات غير المعروفة الموافقة.",
+      "emptyApps": "لا توجد تطبيقات متاحة.",
+      "expired": "انتهت مهلة الموافقة. لم يتم تنفيذ الإجراء.",
+      "rejected": "رُفض الطلب. لم يُنفذ هذا الطلب.",
+      "deadline": "الموافقة قبل {time}",
+      "agentPermissionRequired": "توقف هذا التشغيل لأن إجراءً احتاج إلى موافقة. راجع الأذونات ثم شغّل المهمة مجددًا.",
+      "enableForTask": "تفعيل لهذه المهمة",
+      "enableAppForTask": "تفعيل {app} لهذه المهمة",
+      "enabledForTask": "مفعّل لهذه المهمة",
+      "disabledForTask": "معطّل لهذه المهمة",
+      "externalApp": "تطبيق",
+      "mcpServer": "خادم MCP",
+      "taskAppsTitle": "التطبيقات وخوادم MCP",
+      "actionPolicies": "إعدادات الموافقة",
+      "policyCounts": "موافقة تلقائية {auto} · سؤال {ask} · معطّل {disabled}",
+      "manageActions": "إدارة الإجراءات",
+      "viewActions": "عرض الإجراءات",
+      "taskModalDescription": "تُطبّق التغييرات عند حفظ المهمة. تسري قيود مساحة العمل دائمًا.",
+      "searchActions": "البحث عن إجراءات",
+      "setPermissions": "تعيين الأذونات",
+      "applyMatching": "{count} من الإجراءات المطابقة القابلة للتعديل",
+      "noMatchingActions": "لا توجد إجراءات تطابق البحث.",
+      "close": "إغلاق",
+      "saveChanges": "حفظ التغييرات",
+      "resetDefaults": "إعادة تعيين الكل إلى الإعدادات الافتراضية",
+      "resetAll": "إعادة تعيين الكل إلى إعدادات مساحة العمل الافتراضية",
+      "workspaceDisabledTooltip": "عطّل مسؤول هذا الإجراء لمساحة العمل."
     }
   },
   "knowledge": {
@@ -16964,7 +16940,7 @@
           "title": "التعليمات"
         },
         "loadError": {
-          "description": "جرّب إغلاق المعاينة وفتحها مرة أخرى.",
+          "description": "تعذّر تحميل تعليمات هذه المهارة.",
           "title": "فشل تحميل المهارة"
         },
         "metadata": {

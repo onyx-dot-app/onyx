@@ -175,8 +175,8 @@
     "deepseek-ai/DeepSeek-V4.1-Flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.2,
+        "cache_read": 0.002,
+        "input": 0.15,
         "output": 0.65
       },
       "family": "deepseek",
@@ -457,6 +457,35 @@
       "temperature": true,
       "tool_call": true
     },
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nemotron 3.5 Super VL",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "openai/gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -513,11 +542,39 @@
       "temperature": true,
       "tool_call": true
     },
+    "reflection/Beam-1.0-501B-A23B": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 3
+      },
+      "family": "beam",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Beam 1.0",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-16",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "zai-org/GLM-5.2": {
       "attachment": false,
       "cost": {
         "cache_read": 0.14,
-        "input": 0.76,
+        "input": 0.62,
         "output": 2.42
       },
       "family": "glm",
@@ -541,10 +598,38 @@
       "temperature": true,
       "tool_call": true
     },
+    "zai-org/GLM-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.19,
+        "input": 1.2,
+        "output": 4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM 5.3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "zai-org/GLM-5.3-Flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
+        "cache_read": 0.02,
         "input": 0.15,
         "output": 0.5
       },

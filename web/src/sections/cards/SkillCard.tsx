@@ -3,8 +3,8 @@
 import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Button, InputSwitch, Tag, Tooltip } from "@opal/components";
-import { Content } from "@opal/layouts";
-import { SvgBlocks, SvgEdit, SvgPlug, SvgUser } from "@opal/icons";
+import { Content, Section } from "@opal/layouts";
+import { SvgBlocks, SvgEdit, SvgPlug, SvgTrash, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
@@ -50,6 +50,7 @@ export interface SkillCardProps {
   hasEnabledNameConflict?: boolean;
   onClick?: (item: SkillCardItem) => void;
   onEdit?: (item: CustomSkillCardItem) => void;
+  onDelete?: (item: CustomSkillCardItem) => void;
   onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
   enablementPending?: boolean;
 }
@@ -59,10 +60,12 @@ export default function SkillCard({
   hasEnabledNameConflict = false,
   onClick,
   onEdit,
+  onDelete,
   onEnabledChange,
   enablementPending = false,
 }: SkillCardProps) {
   const t = useTranslations("cards");
+  const skillCopy = useTranslations("skills");
   const { appName } = useSettings();
 
   const handleClick = useCallback(() => {
@@ -165,7 +168,14 @@ export default function SkillCard({
               }
               rightChildren={
                 item.source === "custom" && canEdit ? (
-                  <div className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100">
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    width="fit"
+                    height="auto"
+                    gap={1}
+                    className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
+                  >
                     <Button
                       prominence="secondary"
                       size="sm"
@@ -173,7 +183,21 @@ export default function SkillCard({
                       tooltip={t("skill.edit.tooltip")}
                       onClick={handleEditClick}
                     />
-                  </div>
+                    {onDelete && (
+                      <Button
+                        prominence="secondary"
+                        variant="danger"
+                        size="sm"
+                        icon={SvgTrash}
+                        tooltip={skillCopy("editor.delete.button.label")}
+                        aria-label={skillCopy("editor.delete.button.label")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDelete(item);
+                        }}
+                      />
+                    )}
+                  </Section>
                 ) : undefined
               }
             />

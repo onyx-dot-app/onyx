@@ -124,13 +124,7 @@
     },
     "addMcpModal": {
       "addHeader": {
-        "description": "Connectez un serveur MCP (Model Context Protocol) pour ajouter des actions personnalisées.",
         "title": "Ajouter un serveur MCP"
-      },
-      "authStatus": {
-        "apiTokenDescription": "Jeton d'API configuré",
-        "connectedDescription": "Connecté",
-        "title": "Authentifié et connecté"
       },
       "cancelButton": {
         "label": "Annuler"
@@ -140,16 +134,6 @@
         "suffix": "facultatif",
         "title": "Description"
       },
-      "disconnectButton": {
-        "tooltip": "Déconnecter le serveur"
-      },
-      "editConfigsButton": {
-        "label": "Paramètres de connexion"
-      },
-      "manageHeader": {
-        "description": "Mettez à jour la configuration de votre serveur MCP et gérez l'authentification.",
-        "title": "Gérer le serveur MCP"
-      },
       "name": {
         "placeholder": "p. ex. Linear",
         "required": "Le nom du serveur est obligatoire",
@@ -157,19 +141,13 @@
       },
       "serverUrl": {
         "invalid": "L'URL doit être valide",
-        "required": "L'URL du serveur est obligatoire",
         "title": "URL du serveur MCP"
       },
       "submitButton": {
-        "addLabel": "Ajouter le serveur",
-        "addingLabel": "Ajout en cours...",
         "saveLabel": "Enregistrer les modifications",
         "savingLabel": "Enregistrement..."
       },
       "toasts": {
-        "createFailed": "Échec de la création du serveur MCP",
-        "serverCreated": "Serveur MCP créé avec succès",
-        "serverUpdated": "Serveur MCP mis à jour avec succès",
         "updateFailed": "Échec de la mise à jour du serveur MCP"
       },
       "access": {
@@ -192,27 +170,13 @@
         "planTag": "Business",
         "planNote": "L’accès par groupe nécessite un forfait Business."
       },
-      "craft": {
-        "title": "Disponible dans Craft",
-        "description": "Permettez aux utilisateurs d’accéder à ce serveur MCP dans Craft."
-      },
       "defaultChat": {
-        "title": "Disponible dans le chat Onyx par défaut",
-        "description": "Si cette option est désactivée, les utilisateurs doivent ajouter ce serveur à un agent personnalisé pour l’utiliser dans le chat."
+        "title": "Disponible dans le chat Onyx par défaut"
       }
     },
     "addOpenApiModal": {
       "addHeader": {
-        "description": "Ajoutez un schéma OpenAPI pour ajouter des actions personnalisées.",
         "title": "Ajouter une action OpenAPI"
-      },
-      "authStatus": {
-        "configuredTitle": "Authentification configurée",
-        "enabledTitle": "Authentifié et activé",
-        "headersDescription": "En-têtes d'authentification personnalisés configurés",
-        "oauthDescription": "Authentification OAuth configurée",
-        "oauthNamedDescription": "OAuth connecté via {name}",
-        "passthroughDescription": "Transfert de l'authentification activé"
       },
       "cancelButton": {
         "label": "Annuler"
@@ -227,15 +191,10 @@
         "subDescription": "Indiquez un schéma OpenAPI qui définit les API que vous voulez rendre disponibles dans cette action. Vous pouvez utiliser les espaces réservés `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` et `USER_EMAIL` partout dans le schéma (par exemple l'URL du serveur, les chemins, les valeurs par défaut des paramètres) : ils seront remplacés par les valeurs de la requête en cours au moment de l'appel. En savoir plus sur les [actions OpenAPI]({docsUrl}).",
         "title": "Définition du schéma OpenAPI"
       },
-      "disableButton": {
-        "tooltip": "Désactiver l'action"
-      },
       "editConfigsButton": {
-        "disabledTooltip": "Seuls le créateur de l'action ou un administrateur peuvent gérer l'authentification",
-        "label": "Modifier les configurations"
+        "disabledTooltip": "Seuls le créateur de l'action ou un administrateur peuvent gérer l'authentification"
       },
       "editHeader": {
-        "description": "Mettez à jour le schéma OpenAPI de cette action.",
         "title": "Modifier l'action OpenAPI"
       },
       "empty": {
@@ -247,9 +206,6 @@
       },
       "method": {
         "noSummary": "Aucun résumé fourni"
-      },
-      "serverUrl": {
-        "description": "URL trouvée dans le schéma. Connectez-vous uniquement à des serveurs de confiance."
       },
       "submitButton": {
         "addLabel": "Ajouter l'action",
@@ -263,6 +219,15 @@
         "createFailed": "Échec de la création de l'action OpenAPI",
         "invalidJson": "Format JSON non valide dans la définition du schéma OpenAPI",
         "updateFailed": "Échec de la mise à jour de l'action OpenAPI"
+      },
+      "humanDescription": {
+        "title": "Description pour les utilisateurs",
+        "hint": "Affichée sur la carte du plugin et dans ses détails."
+      },
+      "agentDescription": {
+        "title": "Description pour les agents",
+        "hint": "Modifie info.description dans le schéma OpenAPI.",
+        "disabled": "Saisissez un schéma valide pour modifier ce champ."
       }
     },
     "cardHeader": {
@@ -322,18 +287,22 @@
       },
       "authType": {
         "apiToken": {
-          "label": "Clé d'API"
+          "label": "Clé d'API",
+          "description": "Utilisez une clé d'API individuelle par utilisateur ou une clé d'API partagée dans toute l'organisation."
         },
         "label": "Méthode d'authentification",
         "none": {
-          "label": "Sans authentification"
+          "label": "Sans authentification",
+          "description": "Non recommandé"
         },
         "oauth": {
-          "label": "OAuth"
+          "label": "OAuth",
+          "description": "Chaque utilisateur doit s'authentifier via OAuth avec ses propres identifiants."
         },
         "placeholder": "Sélectionner une méthode",
         "ptOauth": {
-          "label": "Transfert OAuth"
+          "label": "Transfert OAuth",
+          "description": "Transférez le jeton d'accès OAuth utilisé par l'utilisateur pour s'authentifier auprès de {appName}."
         },
         "required": "Le type d'authentification est obligatoire"
       },
@@ -364,7 +333,8 @@
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur OAuth est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez."
+        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
+        "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
       "header": {
         "defaultTitle": "Configurer l’authentification",
@@ -457,12 +427,16 @@
         "unreachableTitle": "Impossible de déterminer si la configuration automatique est disponible",
         "missingTitle": "Points de terminaison OAuth introuvables",
         "requiresClientTitle": "La configuration automatique est peut-être indisponible"
+      },
+      "advanced": {
+        "description": "Configurez un fournisseur OAuth connu avec des points de terminaison d'autorisation et de jeton explicites, au lieu de la découverte automatique.",
+        "title": "Avancé"
+      },
+      "knownProvider": {
+        "hint": "Le mode fournisseur connu exige la configuration des points de terminaison. Points de terminaison Google de référence : autorisation {authorizationEndpoint} et jeton {tokenEndpoint}."
       }
     },
     "mcpCard": {
-      "card": {
-        "ariaLabel": "Carte du serveur MCP {title}"
-      },
       "deleteModal": {
         "body": {
           "confirmation": "Voulez-vous vraiment supprimer ce serveur MCP ?",
@@ -472,27 +446,6 @@
           "label": "Supprimer"
         },
         "title": "Supprimer le serveur MCP"
-      },
-      "lastRefreshed": {
-        "label": "Outils actualisés {time}"
-      },
-      "refreshToolsButton": {
-        "ariaLabel": "Actualiser les outils",
-        "tooltip": "Actualiser les outils"
-      },
-      "setupIncomplete": {
-        "label": "Configuration incomplète.",
-        "actionHint": "Configuration incomplète. Cliquez pour la terminer."
-      },
-      "status": {
-        "ready": "Prêt · {count, plural, one {# outil} other {# outils}}",
-        "incomplete": "Configuration incomplète",
-        "loading": "Chargement des outils",
-        "disconnected": "Déconnecté"
-      },
-      "authenticationButton": {
-        "tooltip": "Configurer l’authentification",
-        "ariaLabel": "Configurer l’authentification de {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -554,25 +507,10 @@
       },
       "toasts": {
         "deleteFailed": "Échec de la suppression du serveur MCP",
-        "disableAllFailed": "Échec de la désactivation de tous les outils",
         "disconnectFailed": "Échec de la déconnexion du serveur MCP",
-        "enableAllFailed": "Échec de l'activation de tous les outils",
         "fetchToolsFailed": "Échec de la récupération des outils : {error}",
-        "noToolsToDisable": "Aucun outil à désactiver",
         "reconnectFailed": "Échec de la reconnexion du serveur MCP",
-        "refreshToolsFailed": "Échec de l'actualisation des outils",
-        "renameFailed": "Échec du renommage du serveur MCP",
-        "serverDeleted": "Serveur MCP supprimé avec succès",
-        "serverDisconnected": "Serveur MCP déconnecté avec succès",
-        "serverReconnected": "Serveur MCP reconnecté avec succès",
-        "serverRenamed": "Serveur MCP renommé avec succès",
-        "toolDisabled": "Outil désactivé avec succès",
-        "toolEnabled": "Outil activé avec succès",
-        "toolUpdateFailed": "Échec de la mise à jour de l'outil",
-        "toolsDisabled": "{count, plural, one {# outil désactivé avec succès} other {# outils désactivés avec succès}}",
-        "toolsEnabled": "{count, plural, one {# outil activé avec succès} other {# outils activés avec succès}}",
-        "toolsFetched": "Outils chargés",
-        "toolsRefreshed": "Outils actualisés avec succès"
+        "serverDeleted": "Serveur MCP supprimé avec succès"
       }
     },
     "openApiAuthModal": {
@@ -708,27 +646,15 @@
       "addButton": {
         "label": "Ajouter une action OpenAPI"
       },
-      "authModal": {
-        "authenticateTitle": "Authentifier {name}",
-        "defaultTitle": "Authentifier l'action OpenAPI",
-        "updateTitle": "Mettre à jour l'authentification de {name}"
-      },
       "empty": {
         "description": "Ajoutez des actions personnalisées à partir de schémas OpenAPI."
       },
       "toasts": {
-        "actionRenamed": "Action OpenAPI renommée avec succès",
-        "authHeadersSaved": "En-têtes d'authentification de {name} enregistrés avec succès.",
-        "authPassthroughSaved": "Transfert de l'authentification de {name} enregistré avec succès.",
         "authSaveFailed": "Échec de l'enregistrement des paramètres d'authentification.",
         "authSaved": "Authentification de {name} enregistrée avec succès.",
-        "authUpdated": "Authentification de {name} mise à jour avec succès.",
         "deleteFailed": "Échec de la suppression de l'outil.",
-        "deleteUnexpectedError": "Une erreur inattendue est survenue pendant la suppression de l'outil.",
         "disconnectFailed": "Échec de la déconnexion de l'action OpenAPI.",
-        "renameFailed": "Échec du renommage de l'action OpenAPI",
-        "toolDeleted": "{name} supprimé avec succès.",
-        "toolDisconnected": "{name} a été déconnecté."
+        "toolDeleted": "{name} supprimé avec succès."
       }
     },
     "perUserAuth": {
@@ -737,7 +663,9 @@
       },
       "credentials": {
         "perUserDescription": "Utilisez vos identifiants pour tester ce MCP et charger ses outils. Ils sont enregistrés uniquement dans votre compte.",
-        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation."
+        "sharedDescription": "Ces valeurs sont utilisées pour chaque utilisateur de votre organisation.",
+        "perUserTitle": "Uniquement pour votre propre compte",
+        "sharedTitle": "Valeurs partagées de l'organisation"
       },
       "headers": {
         "addButton": {
@@ -761,7 +689,7 @@
         "label": "Demander"
       },
       "deny": {
-        "label": "Refuser"
+        "label": "Désactivée"
       }
     },
     "switchList": {
@@ -986,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Applications Craft"
+        "external-app": "Application Craft"
       },
       "row": {
         "view": "Afficher {name}",
@@ -1009,7 +937,11 @@
         "craft": "Craft",
         "on": "Activé",
         "off": "Désactivé",
-        "unknown": "Inconnue"
+        "unknown": "Inconnue",
+        "disabledByAdmin": "Désactivé par l’administrateur",
+        "disabledByYou": "Désactivé par vous",
+        "agents": "Agents personnalisés",
+        "notAvailable": "Non disponible"
       },
       "state": {
         "loading": "Chargement des extensions",
@@ -1026,17 +958,15 @@
         "emptyDescription": "Essayez un autre filtre de connexion ou demandez à votre administrateur d’ajouter un plugin à votre espace de travail."
       },
       "detail": {
+        "issuesTitle": "Problèmes",
+        "readyDescription": "Vous pouvez commencer à utiliser ce plugin.",
         "connection": "Connexion",
-        "serverUrl": "URL du serveur",
         "tools": "Outils",
         "toolCount": "{count, plural, one {# outil} other {# outils}}",
-        "toolsDescription": "Outils disponibles dans cette extension de l'espace de travail.",
         "noTools": "Aucun outil visible n'est enregistré pour cette extension.",
         "connect": "Connecter un compte",
         "useInChat": "Utiliser dans Chat",
-        "chatDisabled": "Cette extension n'est pas activée pour le chat principal. Un administrateur de l'espace de travail peut modifier sa disponibilité.",
-        "chatUnknown": "La disponibilité dans le chat principal n'a pas pu être confirmée.",
-        "disconnect": "Déconnecter le compte",
+        "disconnect": "Déconnecter",
         "disconnectTitle": "Déconnecter {name} ?",
         "disconnectDescription": "Cette action supprime la connexion de votre compte. La disponibilité dans l'espace de travail reste identique.",
         "oauthDisconnectWarning": "Toutes les extensions et applications utilisant la même configuration OAuth partagent cette connexion de compte. La déconnexion supprime votre connexion à toutes ces extensions et applications.",
@@ -1081,18 +1011,20 @@
         "showAll": "Voir tous les plugins"
       },
       "defaults": {
-        "chat": "Activer dans le chat principal par défaut",
-        "craft": "Activer dans Craft par défaut",
-        "chatDescription": "S'applique au chat par défaut. Les agents personnalisés conservent leurs propres paramètres d'outils.",
-        "craftDescription": "Utiliser ce MCP dans vos sessions Craft.",
+        "chat": "Activer dans le Chat par défaut",
+        "craft": "Activer dans Craft",
+        "chatDescription": "Rendez ce plugin disponible dans vos conversations sans agent personnalisé.",
+        "craftDescription": "Rendez ce plugin disponible dans vos sessions Craft et vos tâches planifiées. Les autorisations des outils de votre organisation restent applicables.",
         "unavailable": "Votre administrateur a désactivé ce plugin pour {surface}.",
-        "saveFailed": "Impossible d'enregistrer vos paramètres de plugins. Réessayez."
+        "saveFailed": "Impossible d'enregistrer vos paramètres de plugins. Réessayez.",
+        "chatUnavailable": "Votre administrateur a désactivé ce plugin pour {surface}. Les agents personnalisés configurés avec ce plugin peuvent encore l’utiliser."
       },
       "openapi": {
         "chatOnly": "Chat uniquement",
         "chatOnlyDescription": "Ce plugin est disponible dans Chat, pas dans Craft."
       },
       "appSkills": {
+        "preview": "Aperçu",
         "search": "Rechercher des compétences",
         "count": "{count, plural, one {# compétence} other {# compétences}}",
         "empty": "Aucune compétence n’est associée à cette application.",
@@ -1105,7 +1037,8 @@
       "externalApp": {
         "description": "Utilisez votre compte dans Craft.",
         "craftOnly": "Craft uniquement",
-        "craftOnlyDescription": "Cette application est disponible dans Craft. Le chat principal ne la prend pas en charge."
+        "craftOnlyDescription": "Cette application est disponible dans Craft. Le chat principal ne la prend pas en charge.",
+        "craftDisabledDescription": "Cette application est désactivée dans Craft. Le chat principal ne la prend pas en charge."
       }
     },
     "plugins": {
@@ -1130,9 +1063,14 @@
         "manageAvailability": "Gérer la disponibilité dans l’espace de travail",
         "more": "Plus d’actions",
         "disableChat": "Désactiver pour le chat principal",
-        "enableChat": "Activer pour le chat principal",
+        "enableChat": "Activer dans le Chat par défaut",
         "disableCraft": "Désactiver pour Craft",
-        "enableCraft": "Activer pour Craft"
+        "enableCraft": "Activer pour Craft",
+        "chatDescription": "Rendre ce plugin disponible dans les conversations sans agent personnalisé. Les contrôles d’accès restent applicables.",
+        "defaultChatAdminOnly": "Seuls les administrateurs de l’espace de travail peuvent modifier la disponibilité dans le chat par défaut.",
+        "mcpCraftDescription": "Rendre ce plugin disponible dans Craft. Les contrôles d’accès et les autorisations des outils restent applicables.",
+        "craftAppDescription": "Rendre cette application disponible dans Craft. Les exigences de connexion et d’approbation restent applicables.",
+        "workspaceDescription": "Rendez ce plugin disponible dans Chat et les agents personnalisés. Les contrôles d’accès et les exigences d’authentification restent applicables."
       },
       "craftApp": {
         "tabs": {
@@ -1156,19 +1094,14 @@
           "viewTools": "Voir les outils",
           "saveToUpdate": "Enregistrez les modifications pour actualiser les outils."
         },
-        "reviewTitle": "Vérifier {name}",
         "createTitle": "Ajouter un plugin OpenAPI",
         "detailDescription": "Gérez cette API et les outils disponibles pour vos agents.",
-        "detailsTitle": "Détails du plugin",
+        "detailsTitle": "Configuration",
         "schemaTitle": "Schéma OpenAPI",
-        "editSchema": "Modifier le schéma",
         "notFound": "Plugin introuvable",
         "loadFailed": "Impossible de charger ce plugin",
         "unavailable": "Ce plugin a peut-être été supprimé ou vous n’y avez pas accès.",
         "readOnly": "Vous pouvez afficher ce plugin. Votre compte ne peut pas modifier ses paramètres.",
-        "disableTitle": "Désactiver {name} ?",
-        "disableDescription": "Les agents ne pourront plus utiliser ce plugin. Vous pourrez le réactiver.",
-        "deleteTitle": "Supprimer {name} ?",
         "deleteDescription": "Cette action supprime définitivement le plugin OpenAPI et sa configuration."
       },
       "title": "Plugins",
@@ -1217,6 +1150,7 @@
         }
       },
       "row": {
+        "externalAppKind": "Application Craft",
         "manage": {
           "label": "Gérer {name}"
         },
@@ -1295,31 +1229,22 @@
     },
     "mcpTools": {
       "title": "Outils",
-      "description": "Choisissez les outils disponibles et définissez leurs autorisations.",
       "enabledTab": "Outils disponibles",
-      "policiesTab": "Autorisations Craft",
-      "enabledDescription": "Choisissez les outils que les utilisateurs peuvent utiliser dans Onyx.",
-      "policiesDescription": "Choisissez quand Craft demande une autorisation avant d’utiliser chaque outil.",
-      "back": "Authentification",
+      "policiesTab": "Paramètres d’approbation",
       "refresh": "Actualiser les outils",
       "loadError": "Impossible de charger les outils",
       "saveError": "Impossible d’enregistrer les paramètres des outils",
       "refreshError": "Impossible d’actualiser les outils",
-      "search": "Rechercher des outils"
+      "search": "Rechercher des outils",
+      "enabledCount": "Outils activés : {enabled} sur {total}"
     },
     "mcpDetail": {
-      "configuration": "Configuration du serveur",
-      "editConfiguration": "Modifier la configuration du serveur",
+      "configuration": "Configuration",
       "authentication": "Authentification",
-      "editAuthentication": "Modifier l’authentification",
-      "availability": "Disponibilité",
-      "edit": "Modifier",
       "loadError": "Impossible de charger le serveur MCP",
       "notFound": "Serveur MCP introuvable",
       "unavailable": "Ce serveur a peut-être été supprimé, ou vous n’y avez pas accès.",
       "retry": "Réessayer",
-      "restrictedAccess": "{groups, plural, one {# groupe} other {# groupes}} · {users, plural, one {# utilisateur} other {# utilisateurs}}",
-      "authenticationIncomplete": "L’authentification n’est pas configurée.",
       "availabilitySaved": "Disponibilité mise à jour"
     }
   },
@@ -2498,6 +2423,7 @@
           "title": "Agent de code"
         },
         "description": "Outils et fonctionnalités que la discussion peut utiliser. Cela ne s'applique pas aux agents.",
+        "pluginsNote": "Configurez les serveurs MCP et les actions OpenAPI pour le chat par défaut dans [Plugins]({url}).",
         "imageGeneration": {
           "description": "Générez et modifiez des images à l'aide d'outils basés sur l'IA.",
           "disabledTooltip": "La génération d'images nécessite un modèle configuré. Configurez-en un dans Configuration > Génération d'images, ou demandez à un administrateur.",
@@ -2719,7 +2645,8 @@
         "reIndex": {
           "tooltip": {
             "indexing": "Impossible de réindexer pendant qu'une indexation est déjà en cours",
-            "invalid": "Corrigez la configuration du connecteur avant de réindexer"
+            "invalid": "Corrigez la configuration du connecteur avant de réindexer",
+            "paused": "Reprenez le connecteur avant de réindexer"
           }
         },
         "toggleStatus": {
@@ -2784,6 +2711,91 @@
           "postProcessing": {
             "label": "Post-traitement"
           }
+        },
+        "stages": {
+          "batchLoad": {
+            "label": "Chargement du lot"
+          },
+          "batchTotal": {
+            "label": "Total du lot"
+          },
+          "batchUnaccounted": {
+            "label": "Non attribué"
+          },
+          "checkpointLoad": {
+            "label": "Chargement du point de reprise"
+          },
+          "chunking": {
+            "label": "Segmentation"
+          },
+          "connectorFetch": {
+            "label": "Récupération par le connecteur"
+          },
+          "connectorValidation": {
+            "label": "Validation du connecteur"
+          },
+          "contextualRag": {
+            "label": "RAG contextuel"
+          },
+          "coordLockAcquireWait": {
+            "label": "Attente du verrou de coordination"
+          },
+          "coordinationUpdate": {
+            "label": "Mise à jour de la coordination"
+          },
+          "docBatchEnqueue": {
+            "label": "Mise en file du lot de documents"
+          },
+          "docBatchStore": {
+            "label": "Enregistrement du lot de documents"
+          },
+          "docDbPrepare": {
+            "label": "Préparation DB des documents"
+          },
+          "docLockAcquireWait": {
+            "label": "Attente du verrou de document"
+          },
+          "docprocessingSetup": {
+            "label": "Configuration du docprocessing"
+          },
+          "embedding": {
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "label": "Préparation de l'enrichissement"
+          },
+          "finalization": {
+            "label": "Finalisation"
+          },
+          "gcCollect": {
+            "label": "Garbage collection"
+          },
+          "hierarchyUpsert": {
+            "label": "Upsert de la hiérarchie"
+          },
+          "imageProcessing": {
+            "label": "Traitement des images"
+          },
+          "permissionValidation": {
+            "label": "Validation des autorisations"
+          },
+          "postIndexDbUpdate": {
+            "label": "Mise à jour DB après indexation"
+          },
+          "queueWait": {
+            "label": "Attente en file"
+          },
+          "vectorDbWrite": {
+            "label": "Écriture DB vectorielle"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Attente de la limite d'embedding",
+            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Attente de limitation du fournisseur",
+            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          }
         }
       },
       "statusCard": {
@@ -2815,7 +2827,8 @@
           "released": "Indexation démarrée",
           "releaseFailed": "Impossible de démarrer l'indexation",
           "viewChecks": "Voir les vérifications du connecteur"
-        }
+        },
+        "title": "État de l'indexation"
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
@@ -2974,7 +2987,9 @@
           "indexed": "indexés",
           "synced": "synchronisés",
           "removed": "supprimés",
-          "checksRun": "{count, plural, one {# vérification exécutée} other {# vérifications exécutées}}"
+          "checksRun": "{count, plural, one {# vérification exécutée} other {# vérifications exécutées}}",
+          "memberships": "adhésions",
+          "checks": "vérifications exécutées"
         },
         "counts": {
           "newDocs": "{count, plural, one {# nouveau document} other {# nouveaux documents}}",
@@ -3019,7 +3034,8 @@
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
           "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}"
+          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
+          "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
         "errorModal": {
@@ -3059,7 +3075,8 @@
         "groups": {
           "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
           "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
-          "other": "Autres"
+          "other": "Autres",
+          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
         },
         "title": {
           "indexing": {
@@ -3133,7 +3150,8 @@
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
-          "resolved": "Résolu"
+          "resolved": "Résolu",
+          "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}"
         },
         "more": "Afficher plus",
         "empty": {
@@ -3152,9 +3170,11 @@
           "search": {
             "placeholder": "Rechercher des documents…"
           },
-          "resolveAll": "Tout résoudre",
+          "resolveAll": "Tout réessayer",
           "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
-          "resolveOne": "Résoudre ce document",
+          "resolveAllUnsupported": "Ce connecteur ne peut pas réindexer des documents individuels. Réindexez le connecteur pour les réessayer.",
+          "resolveOne": "Réessayer ce document",
+          "retry": "{count, plural, one {Réessayer # document} other {Réessayer # documents}}",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
@@ -3164,7 +3184,8 @@
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",
-          "copy": "Copier la trace de la pile"
+          "copy": "Copier la trace de la pile",
+          "runId": "ID d'exécution : {id}"
         },
         "actions": {
           "resolve": "Résoudre"
@@ -3175,6 +3196,9 @@
           "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
           "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
           "confirm": "Tout résoudre"
+        },
+        "resolved": {
+          "label": "Résolues"
         }
       },
       "stageDetails": {
@@ -5801,24 +5825,11 @@
           "description": "Ajoutez une application pour la rendre disponible à toute votre organisation.",
           "title": "Aucune application pour l'instant"
         },
-        "panel": {
-          "blurb": "Configurée une seule fois pour toute l'organisation. Modifiez une application pour définir les identifiants partagés, les politiques d'action et les compétences associées."
-        },
         "tab": {
-          "label": "Applications",
-          "labelWithCount": "Applications · {count, number}"
+          "label": "Applications"
         }
       },
       "card": {
-        "actionsButton": {
-          "ariaLabel": "Actions de {name}"
-        },
-        "availableInCraft": {
-          "label": "Disponible dans Craft"
-        },
-        "customTag": {
-          "label": "Personnalisée"
-        },
         "deleteAction": {
           "label": "Supprimer"
         },
@@ -5828,34 +5839,12 @@
           "submit": {
             "label": "Supprimer l'application"
           },
-          "submitting": {
-            "label": "Suppression…"
-          },
           "title": "Supprimer “{name}” ?"
-        },
-        "editAction": {
-          "label": "Modifier"
         },
         "toasts": {
           "deleteFailed": "Échec de la suppression de \"{name}\"",
-          "disableFailed": "Échec de la désactivation de \"{name}\"",
           "enableFailed": "Échec de l'activation de \"{name}\""
-        },
-        "toggle": {
-          "disableAriaLabel": "Désactiver {name}",
-          "enableAriaLabel": "Activer {name}"
         }
-      },
-      "facts": {
-        "actions": "{count, plural, one {# action} other {# actions}}",
-        "customSkills": "{count, plural, one {# compétence personnalisée} other {# compétences personnalisées}}",
-        "noCredentials": "aucun identifiant",
-        "noCustomSkills": "aucune compétence personnalisée",
-        "orgCredentialsSet": "identifiants de l'organisation définis",
-        "perUserCredentials": "identifiants par utilisateur",
-        "providedByOnyx": "fourni par Onyx",
-        "tools": "{count, plural, one {# outil} other {# outils}}",
-        "upstreamPatterns": "{count, plural, one {# motif en amont} other {# motifs en amont}}"
       },
       "loading": {
         "label": "Chargement…"
@@ -5863,33 +5852,16 @@
       "mcpServers": {
         "empty": {
           "description": "Connectez un serveur dans Actions, puis activez-le ici pour votre organisation.",
-          "openActionsButton": {
-            "label": "Ouvrir Actions"
-          },
           "title": "Aucun serveur MCP pour l'instant"
         },
-        "manageInActionsButton": {
-          "label": "Gérer dans Actions"
-        },
-        "panel": {
-          "blurb": "Activez un serveur pour que les membres qui y ont accès puissent utiliser ses outils dans Craft. Modifiez-le pour définir la politique d'approbation de chaque outil. Les connexions aux serveurs et les accès se gèrent dans Actions."
-        },
         "tab": {
-          "label": "Serveurs MCP",
-          "labelWithCount": "Serveurs MCP · {count, number}"
+          "label": "Serveurs MCP"
         }
       },
       "page": {
-        "addAppButton": {
-          "label": "Ajouter une application"
-        },
-        "backToCraftButton": {
-          "label": "Retour à Craft"
-        },
         "description": "Configurez les applications que l'agent Craft de votre organisation peut utiliser. Chaque membre connecte son propre compte depuis la page Applications de Craft."
       },
       "warnings": {
-        "invalidSkill": "compétence non valide",
         "providerUnavailable": "fournisseur indisponible"
       }
     },
@@ -9583,7 +9555,9 @@
         "pruned": "Élagué",
         "checking": "Vérification",
         "passed": "Terminé",
-        "failedToRun": "Non exécuté"
+        "failedToRun": "Non exécuté",
+        "completedWithErrors": "Terminé avec des erreurs",
+        "error": "Erreur"
       }
     },
     "systemInfo": {
@@ -9906,6 +9880,9 @@
       "field": {
         "required": {
           "error": "{label} est obligatoire"
+        },
+        "optional": {
+          "title": "{label} (facultatif)"
         }
       },
       "loadError": {
@@ -10734,7 +10711,9 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "inProgress": "Vérifications en cours..."
+        "inProgress": "Vérifications en cours...",
+        "completed": "Vérifications terminées.",
+        "waiting": "En attente des paramètres du connecteur..."
       },
       "advisory": {
         "title": "Certains contenus ne seront pas indexés.",
@@ -10838,7 +10817,9 @@
           },
           "error": {
             "title": "Les paramètres ne sont pas valides"
-          }
+          },
+          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
+          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer."
         },
         "warnings": {
           "title": "Avertissements"
@@ -14127,7 +14108,8 @@
       },
       "status": {
         "approved": "Approuvé",
-        "rejected": "Rejeté"
+        "rejected": "Rejeté",
+        "expired": "Expirée"
       },
       "submit": {
         "errorFallback": "Échec de l'envoi de la décision"
@@ -14290,51 +14272,25 @@
         "title": "Connexion de votre app"
       },
       "page": {
-        "connectButton": "Connecter",
-        "connectingButton": "Redirection…",
-        "disconnectButton": "Déconnecter",
         "empty": {
           "description": "Aucune app ni serveur MCP n'est encore configuré pour votre organisation.",
           "title": "Rien à connecter pour le moment"
         },
-        "errors": {
-          "disconnectFailed": "Échec de la déconnexion",
-          "startAuthFailed": "Échec du démarrage de l'autorisation"
-        },
         "header": {
           "description": "Connectez les outils qu'Onyx Craft peut utiliser comme contexte pendant son travail.",
-          "manageButton": "Gérer les apps",
-          "searchPlaceholder": "Rechercher des apps...",
           "title": "Apps"
-        },
-        "kinds": {
-          "app": {
-            "blurb": "Intégrations prises en charge directement par Onyx. Chacune inclut des compétences qui apprennent à Craft à l'utiliser : commencez ici.",
-            "empty": "Aucune app n'est encore configurée pour votre organisation.",
-            "emptyTitle": "Aucune app pour le moment",
-            "tabLabel": "Apps · {count}"
-          },
-          "mcp": {
-            "blurb": "Serveurs rendus disponibles dans Craft par un administrateur. Si un serveur exige des identifiants personnels, connectez votre propre compte avant d’utiliser ses outils.",
-            "empty": "Aucun serveur MCP n'a été rendu disponible pour Craft.",
-            "emptyTitle": "Aucun serveur MCP pour le moment",
-            "tabLabel": "Serveurs MCP · {count}"
-          }
         },
         "loading": {
           "label": "Chargement…"
         },
         "reviewSkillsButton": "Vérifier les compétences",
-        "search": {
-          "noMatchesDescription": "Rien ici ne correspond à votre recherche.",
-          "noMatchesTitle": "Aucun résultat"
-        },
         "status": {
           "connected": "Connectée",
           "connectedNeedsSkills": "Connectée · toutes les compétences associées ne sont pas activées",
           "notAvailable": "Indisponible pour votre compte : contactez un administrateur",
           "skillWarningAriaLabel": "Configuration des compétences requise",
-          "skillWarningTooltip": "Toutes les compétences associées ne sont pas activées. Cette app peut ne pas fonctionner correctement."
+          "skillWarningTooltip": "Toutes les compétences associées ne sont pas activées. Cette app peut ne pas fonctionner correctement.",
+          "skillWarningSummary": "Toutes les compétences associées ne sont pas activées."
         }
       },
       "policyEditor": {
@@ -14350,7 +14306,11 @@
           "description": "Choisissez ce que l’agent peut faire. « Demander » exige une autorisation avant chaque action ; « Approbation automatique » l’exécute sans demander.",
           "title": "Autorisations"
         },
-        "savingButton": "Enregistrement…"
+        "savingButton": "Enregistrement…",
+        "advanced": {
+          "description": "Définissez une politique pour chaque action individuellement.",
+          "title": "Avancé"
+        }
       },
       "skillsStep": {
         "description": "Facultatif : associez des compétences existantes ou créez-en une pour cette app.",
@@ -15026,10 +14986,6 @@
             "label": "Nom",
             "placeholder": "p. ex. Synthèse hebdomadaire des escalades clients"
           },
-          "preApproval": {
-            "description": "Craft peut utiliser les apps et serveurs MCP sélectionnés sans pause lorsque cette tâche s'exécute sans surveillance. Les autres demandes d'approbation mettent l'exécution en pause et peuvent la faire échouer.",
-            "label": "Apps et serveurs MCP pré-approuvés"
-          },
           "prompt": {
             "description": "Ce message est envoyé à Craft à chaque déclenchement de la tâche.",
             "label": "Prompt",
@@ -15088,31 +15044,6 @@
       "newPage": {
         "description": "Enregistrez un prompt + une planification. Craft l'exécutera selon un minuteur.",
         "title": "Nouvelle tâche planifiée"
-      },
-      "preApproval": {
-        "appFallbackName": "App nº {id}",
-        "appsGroupTitle": "Apps",
-        "empty": {
-          "label": "Aucune app ni serveur MCP n'est encore disponible dans Craft."
-        },
-        "errors": {
-          "loadFailed": "Impossible de charger les apps et les serveurs MCP. Actualisez pour réessayer.",
-          "partialLoadFailed": "Certaines options de pré-approbation n'ont pas pu être chargées. Actualisez pour réessayer."
-        },
-        "loading": {
-          "label": "Chargement des apps et des serveurs MCP…"
-        },
-        "mcpGroupTitle": "Serveurs MCP",
-        "mcpServerFallbackName": "Serveur MCP nº {id}",
-        "status": {
-          "connected": "Connecté",
-          "connectionRequired": "Connexion requise",
-          "unavailable": "N'est plus disponible"
-        },
-        "summary": {
-          "partialLoadFailed": "Certains détails de pré-approbation n'ont pas pu être chargés. Actualisez pour réessayer.",
-          "title": "Apps et serveurs MCP pré-approuvés"
-        }
       },
       "runHistory": {
         "columns": {
@@ -15488,6 +15419,51 @@
       "viewPlans": {
         "label": "Voir les forfaits"
       }
+    },
+    "actionPolicies": {
+      "appTitle": "Paramètres d’approbation de {name}",
+      "title": "Paramètres d’approbation",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "taskDescription": "Seules les applications activées sont disponibles pour cette tâche. Les modifications concernent uniquement cette tâche.",
+      "newTaskDescription": "Activez les applications que cette tâche peut utiliser. Chaque application reprend vos paramètres d’action actuels.",
+      "workspace_disabled": "Désactivée pour cet espace de travail",
+      "workspace_managed": "Géré par votre espace de travail",
+      "userManagement": "Autoriser les utilisateurs à gérer les paramètres d’approbation",
+      "userManagementDescription": "Les utilisateurs peuvent modifier les approbations des actions disponibles.",
+      "loading": "Chargement des paramètres d’approbation…",
+      "loadError": "Impossible de charger les paramètres d’approbation.",
+      "retry": "Réessayer",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "cancel": "Annuler",
+      "saveError": "Impossible d’enregistrer les paramètres d’approbation.",
+      "emptyActions": "Aucune action connue. Les actions inconnues nécessitent une approbation.",
+      "emptyApps": "Aucune application disponible.",
+      "expired": "Le délai d’approbation a expiré. L’action n’a pas été exécutée.",
+      "rejected": "Demande rejetée. Cette demande n’a pas été exécutée.",
+      "deadline": "Approuver avant {time}",
+      "agentPermissionRequired": "Cette exécution s’est arrêtée car une action nécessitait une approbation. Vérifiez les autorisations, puis relancez la tâche.",
+      "enableForTask": "Activer pour cette tâche",
+      "enableAppForTask": "Activer {app} pour cette tâche",
+      "enabledForTask": "Activée pour cette tâche",
+      "disabledForTask": "Désactivée pour cette tâche",
+      "externalApp": "Application",
+      "mcpServer": "Serveur MCP",
+      "taskAppsTitle": "Applications et serveurs MCP",
+      "actionPolicies": "Paramètres d’approbation",
+      "policyCounts": "{auto} automatiques · {ask} demander · {disabled} désactivées",
+      "manageActions": "Gérer les actions",
+      "viewActions": "Voir les actions",
+      "taskModalDescription": "Les modifications s’appliquent lorsque vous enregistrez la tâche. Les restrictions de l’espace de travail s’appliquent toujours.",
+      "searchActions": "Rechercher des actions",
+      "setPermissions": "Définir les autorisations",
+      "applyMatching": "{count} actions modifiables correspondantes",
+      "noMatchingActions": "Aucune action ne correspond à votre recherche.",
+      "close": "Fermer",
+      "saveChanges": "Enregistrer",
+      "resetDefaults": "Tout rétablir par défaut",
+      "resetAll": "Tout réinitialiser aux valeurs de l’espace de travail",
+      "workspaceDisabledTooltip": "Un administrateur a désactivé cette action pour l’espace de travail."
     }
   },
   "knowledge": {
@@ -16964,7 +16940,7 @@
           "title": "Instructions"
         },
         "loadError": {
-          "description": "Essayez de fermer puis de rouvrir l'aperçu.",
+          "description": "Les instructions de cette compétence n’ont pas pu être chargées.",
           "title": "Échec du chargement de la compétence"
         },
         "metadata": {

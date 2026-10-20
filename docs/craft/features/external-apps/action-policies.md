@@ -1,4 +1,7 @@
-# External-App Action Policies — Plan
+# External-App Action Policies — Historical Plan
+
+This historical proposal predates the current storage model and personal and scheduled-task action policies.
+Use the [external-app feature map](../../../../.agents/feature-map/components/craft-external-apps.md) for current behavior and code contracts.
 
 > **Relationship to Approvals.** This plan owns the **policy layer** for
 > external apps: the per-action catalog, the admin-set `ALWAYS | ASK | DENY`
@@ -261,7 +264,7 @@ matchers alone is insufficient.
 ## Implementation Phases
 
 1. **Catalog + matcher primitives (code).** In `providers/base.py`: add
-   `EndpointPolicy` and `Risk` enums, the frozen `EndpointSpec`, the `MatchRule`
+   `ActionPolicy` and `Risk` enums, the frozen `EndpointSpec`, the `MatchRule`
    union, `endpoint_catalog` on `ProviderSpec` (default `[]`), and
    `extract_actions(normalized_request) -> list[Action]` on `ExternalAppProvider`
    (base default returns the generic fallback).

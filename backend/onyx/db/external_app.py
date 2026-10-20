@@ -8,15 +8,15 @@ from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    replace_workspace_action_policies,
+)
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     ExternalAppType,
     GatedAppKind,
     SkillSharePermission,
-)
-from onyx.db.gated_app import (
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
 )
 from onyx.db.models import (
     ExternalApp,
@@ -314,7 +314,8 @@ def create_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Create an external-app gateway row and its policy state.
 
@@ -331,6 +332,7 @@ def create_external_app(
             organization_credentials, upstream_url_patterns
         )
     app = ExternalApp(
+        enabled=enabled,
         name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
@@ -340,8 +342,7 @@ def create_external_app(
     db_session.add(app)
     # Policies key off the gated_app identity row, which needs app.id.
     db_session.flush()
-    if action_policies is not None:
-        _write_policies__no_commit(db_session, app, action_policies)
+    _write_policies__no_commit(db_session, app, action_policies or {})
     return app
 
 
@@ -594,7 +595,7 @@ def update_external_app(
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
-    action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
+    action_policies: dict[str, ActionPolicy] | UnsetType = UNSET,
 ) -> ExternalApp:
     """Partial-update external-app gateway state (flush only).
 
@@ -671,16 +672,16 @@ def set_external_app_organization_credentials(
 def _write_policies__no_commit(
     db_session: Session,
     app: ExternalApp,
-    policies: dict[str, EndpointPolicy],
+    policies: dict[str, ActionPolicy],
 ) -> None:
-    """Replace ``app``'s per-action policy rows with exactly ``policies``. No
+    """Replace ``app``'s action policy rows with exactly ``policies``. No
     commit — runs inside the caller's transaction. ``action_id`` validation is
     the caller's responsibility.
     """
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.EXTERNAL_APP, app.id
     )
-    replace_action_policies__no_commit(db_session, gated_app_id, policies)
+    replace_workspace_action_policies(db_session, gated_app_id, policies)
 
 
 def delete_external_app(

@@ -15,12 +15,14 @@ export type CredentialCapability =
   | "external_group_sync";
 
 /**
- * Outcome of one finished check. `indeterminate` is a transient or unknown
+ * Outcome of one finished check. `incomplete` is a transient or unknown
  * failure and must not be read as proof the credential is broken.
+ * `indeterminate` is its legacy value, still held by older stored results.
  */
 export type CapabilityCheckStatus =
   | "passed"
   | "failed"
+  | "incomplete"
   | "indeterminate"
   | "skipped";
 

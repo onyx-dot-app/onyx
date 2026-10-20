@@ -340,6 +340,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "meta-models/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.25,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "moonshotai/Kimi-K2.7-Code": {
       "attachment": false,
       "cost": {
@@ -419,6 +449,36 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-04",
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/Nemotron-3.5-Super-VL": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 0.3,
+        "output": 0.9
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nemotron 3.5 Super VL 120B A12B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -504,6 +564,34 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-01-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "reflection/beam": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 0.25,
+        "output": 1
+      },
+      "family": "beam",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Beam 1.0 501B A23B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

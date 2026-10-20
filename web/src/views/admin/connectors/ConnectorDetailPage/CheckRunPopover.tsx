@@ -10,7 +10,6 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgListCheck, SvgX } from "@opal/icons";
-import type { CapabilityCheckStatus } from "@/lib/connectors/checks/types";
 import type { CheckRunSnapshot } from "@/lib/connectors/types";
 import {
   NO_CHECKS,
@@ -60,19 +59,17 @@ export default function CheckRunPopoverContent({
   const format = useFormatter();
   // Zero counts are left out, as the checks card does.
   const parts = [
-    { status: "failed", label: "summary.failed" },
-    { status: "indeterminate", label: "summary.unverified" },
-    { status: "skipped", label: "summary.skipped" },
-    { status: "passed", label: "summary.successful" },
-  ] as const satisfies ReadonlyArray<{
-    status: CapabilityCheckStatus;
-    label: string;
-  }>;
+    { label: "summary.failed", count: checkCount(run, "failed") },
+    {
+      label: "summary.unverified",
+      count: checkCount(run, "incomplete") + checkCount(run, "indeterminate"),
+    },
+    { label: "summary.skipped", count: checkCount(run, "skipped") },
+    { label: "summary.successful", count: checkCount(run, "passed") },
+  ] as const;
   const labels: string[] = parts
-    .filter((part) => checkCount(run, part.status) > 0)
-    .map((part) =>
-      tChecks(part.label, { count: checkCount(run, part.status) })
-    );
+    .filter((part) => part.count > 0)
+    .map((part) => tChecks(part.label, { count: part.count }));
   const summary = format.list(labels, { type: "unit" });
   const stateCounts = { ...NO_CHECKS };
   for (const result of run.check_results) stateCounts[result.status] += 1;

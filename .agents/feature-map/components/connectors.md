@@ -324,7 +324,7 @@ range:
 |---|---|---|---|
 | Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has a `source_operations.py` gateway (`ConfluenceSourceOperations`) and registers named capability checks. |
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
-| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. `external_access` is assigned inline on yielded documents, not in a separate pass. |
+| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. The checks chain a `SlackApiError` to a `SourceApiError` (`slack_api_error_detail`) that carries the request and Slack's response body, so a check's Error Details show them. `external_access` is assigned inline on yielded documents, not in a separate pass. |
 
 ### 4.6.1 Outlook: one document per mail thread
 
@@ -442,6 +442,8 @@ under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. It
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
+Its `GitHubApiError` is a `SourceApiError` that carries the request and the
+response body, so a check's Error Details show them.
 
 ### 4.8 Capabilities and capability checks
 
@@ -457,7 +459,37 @@ instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
 sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
-`INDETERMINATE`, never to `FAILED`. `CapabilityCheckTrigger`
+`INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
+rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
+It also carries an `error_detail` (`models.py:check_error_detail`): the HTTP
+status, request and a bounded response excerpt of the first `SourceApiError`
+or `requests.HTTPError` in the exception chain, and a stack trace for a
+timeout, an unreachable source or an unexpected error. URL query strings and
+the run's credential values are removed from the excerpt and the trace.
+A source gateway's API error subclasses `exceptions.py:SourceApiError`.
+A result's row text is `summary` (a short line) and `description` (up to three
+lines). A check's `ValidationError` can carry both, and the runner falls back to
+a default for a timeout, a rate limit, an unreachable source or an unexpected
+error, and to the "Not run: …" line for a stopped check. `message` stays the
+full text. A passing check gives its line in `CheckOutput.summary`. Checks that
+share a `row_id` are one row on the form: the variants of a probe (token types,
+deployments) and a probe's discovery step.
+One exception: on a form run (a draft run or a pair dry run) a sign-in check
+that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
+source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
+as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
+`run_order` runs dependencies first. A dependency that `FAILED`, is
+`INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
+`not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
+`SKIPPED` too. A probe whose sample cannot decide raises
+`InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
+proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
+`not_run_reason: nothing_in_scope`, still a row). An empty scope fails the
+first check that reads it. A Find that found only some selected items returns
+`CheckOutput(partial=True)`: `INCOMPLETE`, and the checks after it still run. Creation runs its checks side by side, then applies the same rule
+(`stop_blocked_results`). `merge_capability_results` applies it again when a
+background run adds results to earlier ones. In a draft run, a check waits while a dependency
+waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`
@@ -472,7 +504,8 @@ For a source with named checks, a pairing at creation or credential swap
 `validate_connector_settings`/`validate_perm_sync` calls.
 `capability_checks/creation.py:validate_pairing_with_named_checks` runs the named
 checks instead and stores the full report. Only a required check that `FAILED`
-within the blocking budget blocks the pairing. Indexing and perm-sync attempts keep
+within the blocking budget blocks the pairing. A check whose dependency did not
+finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)

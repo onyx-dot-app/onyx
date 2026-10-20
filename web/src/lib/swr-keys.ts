@@ -263,8 +263,10 @@ export const SWR_KEYS = {
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
-  buildSessionLiveApprovals: (sessionId: string) =>
-    `/api/build/approvals/sessions/${sessionId}/live`,
+  buildSessionApprovalStatus: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/status`,
+  buildSessionApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -432,6 +434,14 @@ export const SWR_KEYS = {
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
+  personalActionPolicies: "/api/build/action-policies",
+  appActionPolicies: (
+    kind: "external_app" | "mcp_server",
+    targetId: number,
+    admin = false
+  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
+  taskActionPolicies: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
   scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
   scheduledTaskRuns: (taskId: string) =>
