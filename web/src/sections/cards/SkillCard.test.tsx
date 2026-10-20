@@ -254,3 +254,35 @@ describe("SkillCard", () => {
     expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
   });
 });
+
+test("invalid editable skills can be deleted without opening their preview", async () => {
+  const item = invalidCustom();
+  const onDelete = jest.fn();
+  const onClick = jest.fn();
+  render(<SkillCard item={item} onDelete={onDelete} onClick={onClick} />);
+  await setupUser().click(screen.getByRole("button", { name: "Delete skill" }));
+  expect(onDelete).toHaveBeenCalledWith(item);
+  expect(onClick).not.toHaveBeenCalled();
+});
+
+test.each(["OWNER", "EDITOR", "VIEWER"] as const)(
+  "delete follows %s permissions even when the skill is invalid",
+  (user_permission) => {
+    render(
+      <SkillCard
+        item={custom({ user_permission, is_valid: false })}
+        onDelete={jest.fn()}
+      />
+    );
+    const button = screen.queryByRole("button", { name: "Delete skill" });
+    if (user_permission === "VIEWER") expect(button).not.toBeInTheDocument();
+    else expect(button).toBeInTheDocument();
+  }
+);
+
+test("built-in skills never expose Delete", () => {
+  render(<SkillCard item={builtIn()} onDelete={jest.fn()} />);
+  expect(
+    screen.queryByRole("button", { name: "Delete skill" })
+  ).not.toBeInTheDocument();
+});

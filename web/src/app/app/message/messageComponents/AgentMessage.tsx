@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
-import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/interfaces";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";

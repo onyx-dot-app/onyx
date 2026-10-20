@@ -13,7 +13,7 @@ import {
   MessageRenderer,
   FullChatState,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { getToolName } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import {

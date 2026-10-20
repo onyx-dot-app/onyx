@@ -1825,3 +1825,27 @@ def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
     assert ancestors == {"crawled": [7, 1], "rebuilt": [42]}
     assert from_raw.call_args.kwargs["parent_hierarchy_raw_node_id"] == "folder-abc"
     assert from_node.call_args.kwargs["node_id"] == 42
+
+
+def test_content_hash_is_blind_to_tabular_content() -> None:
+    """A tabular document's hash never moves when its sheets change.
+
+    content_hash() walks TextSections and ImageSections only, so two workbooks
+    with different staged CSVs hash the same. This is why the tabular re-chunk
+    migration has to pass force_update: without it the content-hash gate skips
+    every spreadsheet and the migration is a silent no-op.
+    """
+
+    def _tabular_doc(csv_file_id: str) -> Document:
+        return Document(
+            id="book",
+            title="Book",
+            semantic_identifier="book.xlsx",
+            sections=[TabularSection(csv_file_id=csv_file_id, link="l")],
+            source=DocumentSource.FILE,
+            metadata={},
+        )
+
+    assert (
+        _tabular_doc("csv-v1").content_hash() == _tabular_doc("csv-v2").content_hash()
+    )

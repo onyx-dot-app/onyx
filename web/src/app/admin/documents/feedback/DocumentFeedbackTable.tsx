@@ -13,7 +13,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { DocumentBoostStatus } from "@/lib/types";
 import { updateHiddenStatus } from "../lib";
 import { numToDisplay } from "./constants";
-import { FiEye, FiEyeOff } from "react-icons/fi";
+import { SvgEye, SvgEyeOff } from "@opal/icons";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
 import { InputCheckbox } from "@opal/components";
@@ -73,11 +73,12 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto me-1" /> {t("visibility.unhide.label")}
+              <SvgEye className="my-auto me-1" size={12} />{" "}
+              {t("visibility.unhide.label")}
             </div>
           ) : (
             <div className="flex">
-              <FiEyeOff className="my-auto me-1" />
+              <SvgEyeOff className="my-auto me-1" size={12} />
               {t("visibility.hide.label")}
             </div>
           )}

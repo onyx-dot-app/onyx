@@ -1,10 +1,10 @@
 "use client";
 
+import { OverflowText } from "@opal/components";
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { ensureHrefProtocol } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -206,9 +206,14 @@ function PreviewStart({
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
-              <Truncated mainUiAction text04 nowrap>
+              <OverflowText
+                as="p"
+                textPosition="text-start"
+                font="main-ui-action"
+                color="text-04"
+              >
                 {applicationDisplayName || "Onyx"}
-              </Truncated>
+              </OverflowText>
             )}
           </div>
         </div>
