@@ -821,27 +821,32 @@ def _get_all_doc_ids(
             latest=str(end) if end is not None else None,
         )
 
+        # A thread's id is its root timestamp, which a broadcast reply carries as
+        # thread_ts, so a thread whose root the filter drops is still listed under
+        # the id the crawl gives it. History runs newest first, so the replies
+        # come before their root, and remembering the roots of broadcast replies
+        # (a sliver of a channel) keeps that root from listing a second time.
+        broadcast_roots: set[str] = set()
         for message_batch in channel_message_batches:
             slim_doc_batch: list[SlimDocument | HierarchyNode] = []
             for message in message_batch:
                 filter_reason = msg_filter_func(message)
                 if filter_reason:
                     continue
-
-                # The document id is the channel id and the ts of the first message in the thread
-                # Since we already have the first message of the thread, we dont have to
-                # fetch the thread for id retrieval, saving time and API calls
+                thread_ts = message.get("thread_ts") or message["ts"]
+                if thread_ts in broadcast_roots:
+                    continue
+                if thread_ts != message["ts"]:
+                    broadcast_roots.add(thread_ts)
 
                 slim_doc_batch.append(
                     SlimDocument(
-                        id=_build_doc_id(
-                            channel_id=channel_id, thread_ts=message["ts"]
-                        ),
+                        id=_build_doc_id(channel_id=channel_id, thread_ts=thread_ts),
                         external_access=external_access,
                         parent_hierarchy_raw_node_id=channel_id,
                         # Slack ts is the thread root's creation time (epoch seconds)
                         doc_created_at=datetime.fromtimestamp(
-                            float(message["ts"]), tz=timezone.utc
+                            float(thread_ts), tz=timezone.utc
                         ),
                     )
                 )
@@ -1206,7 +1211,6 @@ class SlackConnector(
         failure."""
         if self.slack_client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
-        self._ensure_workspace_metadata()
         # A channel enters the cache only once its access is known, so a failed
         # lookup is retried by the next target in that channel.
         channels: dict[str, tuple[ChannelType, ExternalAccess | None]] = {}
@@ -1227,6 +1231,8 @@ class SlackConnector(
         """The channel's node the first time the channel is seen, then the thread's document."""
         if self.slack_client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
+        # Resolved here, so a failed workspace lookup is one target's failure and the next target tries again.
+        self._ensure_workspace_metadata()
         channel_id, thread_ts = _split_doc_id(document_id)
         if channel_id not in channels:
             channel = _get_channel_by_id(self.slack_client, channel_id)
