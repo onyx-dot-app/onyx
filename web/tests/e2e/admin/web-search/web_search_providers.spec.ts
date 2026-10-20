@@ -191,11 +191,13 @@ test.describe("Web Search Provider Configuration", () => {
       });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
-      // Verify the API key input shows masked value
-      // InputPasswordTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      // The stored API key shows as a masked tag; the input stays empty.
       const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
-      await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
+      await expect(apiKeyInput).toHaveValue("");
+      await expect(
+        modalDialog.locator(".opal-input").filter({ has: apiKeyInput })
+      ).toContainText(/\*{2,}|•|\.\.\./);
 
       // Immediately click Connect without changing anything
       const modalConnectButton = modalDialog.getByRole("button", {
@@ -290,10 +292,10 @@ test.describe("Web Search Provider Configuration", () => {
       await searchEngineIdInput.clear();
       await searchEngineIdInput.fill("invalid-search-engine-id");
 
-      // Do NOT change the API key - keep the masked value
-      // InputPasswordTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      // Do NOT change the API key: the stored key stays as a masked tag,
+      // and the input stays empty.
       const apiKeyInput = modalDialog.getByLabel(/api key/i);
-      await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
+      await expect(apiKeyInput).toHaveValue("");
 
       // Click Connect - should fail because search engine ID doesn't match the stored API key
       const modalConnectButton = modalDialog.getByRole("button", {

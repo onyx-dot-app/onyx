@@ -100,9 +100,11 @@ export class AdminOpenApiPluginPage {
     await expect(
       dialog.getByLabel("OAuth Client ID", { exact: true })
     ).toHaveValue("********");
+    // The stored client secret shows as a tag; the input itself stays empty.
     await expect(
       dialog.getByLabel("OAuth Client Secret", { exact: true })
-    ).toHaveValue("********");
+    ).toHaveValue("");
+    await expect(dialog.getByText("********", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toBeHidden();
   }
