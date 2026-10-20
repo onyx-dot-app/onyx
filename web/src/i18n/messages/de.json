@@ -4840,6 +4840,7 @@
           "label": "Eingabepreis"
         },
         "model": {
+          "description": "Diese Preise ersetzen den integrierten Preis für dieses Modell.",
           "label": "Modell",
           "placeholder": "Modell auswählen"
         },

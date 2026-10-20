@@ -175,6 +175,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
           <InputHorizontal
             withLabel
             title={t("form.model.label")}
+            description={t("form.model.description")}
             fillInput
             center
           >
