@@ -155,9 +155,12 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	if compose == nil {
 		return result, nil
 	}
-	elsewhere, err := ownedElsewhere(registry, row)
-	if err != nil {
-		return result, err
+	elsewhere := false
+	if infra {
+		var err error
+		if elsewhere, err = ownedElsewhere(registry, row); err != nil {
+			return result, err
+		}
 	}
 	if infra && !elsewhere {
 		if err := compose(ctx, row.Project, opts.Volumes); err != nil {
@@ -236,8 +239,19 @@ func ownedElsewhere(registry *Registry, row StackRow) (bool, error) {
 		return false, nil
 	}
 	owner := readOwner(ownerPath(registry, row.Project))
-	if owner.Err != nil || owner.StateDir == row.StateDir || !pathExists(filepath.Join(owner.StateDir, stateFileName)) {
+	if errors.Is(owner.Err, os.ErrNotExist) {
 		return false, nil
+	}
+	if owner.Err != nil {
+		return false, fmt.Errorf("project %s: the owner record cannot be read (%w); repair or remove it, then run 'ods stack ls'", row.Project, owner.Err)
+	}
+	if owner.StateDir == row.StateDir {
+		return false, nil
+	}
+	if _, err := os.Stat(filepath.Join(owner.StateDir, stateFileName)); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("project %s: cannot check the owner state in %s: %w", row.Project, owner.StateDir, err)
 	}
 	st, err := (&Stack{StateDir: owner.StateDir}).ReadState()
 	if err != nil {

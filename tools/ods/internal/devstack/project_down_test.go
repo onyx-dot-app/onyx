@@ -180,3 +180,15 @@ func TestCleanupRowRefusesWhenTheOwnerStateIsUnreadable(t *testing.T) {
 		t.Fatalf("owner record removed: %v", err)
 	}
 }
+
+func TestCleanupRowRefusesWhenTheOwnerRecordIsUnreadable(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "corrupt-record")
+	if err := os.WriteFile(ownerPath(stack.Registry, stack.Project), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	secondary := StackRow{Project: stack.Project, Mode: Isolated, StateDir: t.TempDir(), Status: StatusOrphaned}
+	compose := &fakeCompose{}
+	if _, err := CleanupRow(context.Background(), stack.Registry, secondary, compose.down, ProjectOptions{LockWait: time.Second}); err == nil || len(compose.projects) != 0 {
+		t.Fatalf("err = %v, compose = %v", err, compose.projects)
+	}
+}
