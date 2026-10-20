@@ -50,8 +50,8 @@ function getProviderDisplayName(
     : allProvidersLabel;
 }
 
-// Negotiated rates go well below a cent per 1M tokens.
-const RATE_PRECISION = 6;
+// Rates are entered to the cent per 1M tokens.
+const RATE_PRECISION = 2;
 
 function formatRate(value: number, locale: string): string {
   return `$${value.toLocaleString(locale, {
