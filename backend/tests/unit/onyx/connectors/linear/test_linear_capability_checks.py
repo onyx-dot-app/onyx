@@ -1,6 +1,6 @@
 """Each Linear check maps the gateway's answer onto a validation outcome: a
-refused credential, a scope entry Linear does not answer for, a guest token,
-or an unreadable listing."""
+refused credential, a scope entry Linear does not answer for, or an empty
+scope."""
 
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
@@ -52,7 +52,9 @@ def _ops() -> MagicMock:
 
 def test_the_token_check_turns_a_refusal_into_a_credential_error() -> None:
     ops = _ops()
-    ops.get_viewer.side_effect = LinearAuthError("refused")
+    ops.get_viewer.side_effect = LinearAuthError(
+        "refused", status_code=401, body="refused"
+    )
     check = _check(build_linear_indexing_checks(), "linear_token")
 
     with pytest.raises(CredentialInvalidError):
@@ -72,10 +74,20 @@ def test_the_teams_check_names_the_missing_keys() -> None:
     ops.list_team_keys.return_value = {"ENG"}
     check = _check(build_linear_indexing_checks(), "linear_teams")
 
-    with pytest.raises(ConnectorValidationError, match="not found: DES"):
+    with pytest.raises(ConnectorValidationError) as error:
         check.run(_context(ops, {"team_keys": ["eng", "des"]}))
 
+    assert error.value.summary == "Team not found: DES"
     ops.list_team_keys.assert_called_once_with(keys=["DES", "ENG"])
+
+
+def test_the_teams_check_fails_when_no_team_is_found() -> None:
+    ops = _ops()
+    ops.list_team_keys.return_value = set()
+    check = _check(build_linear_indexing_checks(), "linear_teams")
+
+    with pytest.raises(ConnectorValidationError, match="not found: DES"):
+        check.run(_context(ops, {"team_keys": ["des"]}))
 
 
 def test_the_projects_check_names_the_missing_entries() -> None:
@@ -83,17 +95,20 @@ def test_the_projects_check_names_the_missing_entries() -> None:
     ops.list_projects.return_value = [LinearProject(name="Roadmap", slug_id="x")]
     check = _check(build_linear_indexing_checks(), "linear_projects")
 
-    with pytest.raises(ConnectorValidationError, match="not found: Gone"):
+    with pytest.raises(ConnectorValidationError) as error:
         check.run(_context(ops, {"projects": ["Roadmap", "Gone"]}))
+
+    assert error.value.summary == "Project not found: Gone"
 
 
 def test_the_issues_check_reads_one_scoped_page() -> None:
     ops = _ops()
-    ops.iterate_issues.return_value = iter([[]])
+    ops.iterate_issues.return_value = iter([[{"identifier": "ENG-1"}]])
     check = _check(build_linear_indexing_checks(), "linear_issues")
 
-    check.run(_context(ops, {"team_keys": ["ENG"]}))
+    output = check.run(_context(ops, {"team_keys": ["ENG"]}))
 
+    assert output is not None and output.summary == "Read issue ENG-1"
     ops.iterate_issues.assert_called_once_with(
         issue_filter={"updatedAt": {}, "team": {"key": {"in": ["ENG"]}}}, page_size=1
     )
