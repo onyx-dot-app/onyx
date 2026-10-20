@@ -138,6 +138,22 @@ describe("keyboard", () => {
     expect(expand).toHaveFocus();
   });
 
+  it("a caller's onKeyDown can keep focus on Escape", async () => {
+    const user = setupUser();
+    render(
+      <Tabs defaultValue="a">
+        <Tabs.List onKeyDown={(event) => event.preventDefault()}>
+          <Tabs.Trigger value="a">A</Tabs.Trigger>
+          <Tabs.Trigger value="b">B</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs>
+    );
+    const tab = screen.getByRole("tab", { name: "A" });
+    await user.click(tab);
+    await user.keyboard("{Escape}");
+    expect(tab).toHaveFocus();
+  });
+
   it("does not focus a tab on a right click or Ctrl-click", () => {
     render(<FilterTabs />);
     const mcp = screen.getByRole("tab", { name: "MCP" });

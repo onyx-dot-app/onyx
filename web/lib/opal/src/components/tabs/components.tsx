@@ -208,6 +208,7 @@ function TabsList({
         props.onKeyDown?.(event);
         if (
           event.key === "Escape" &&
+          !event.defaultPrevented &&
           event.target instanceof HTMLElement &&
           event.target.getAttribute("role") === "tab"
         ) {
