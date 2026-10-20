@@ -1,13 +1,16 @@
 """Two-step rows: the registry's link rules, the merged row rules, and each
 connector's links."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from ee.onyx.connectors.capability_checks import get_perm_sync_capability_checks
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks import stored_run_progress
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
     DraftRunStatus,
@@ -28,6 +31,9 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import run_capability_checks
+from onyx.connectors.capability_checks.stored_run_progress import (
+    StoredRunProgressRecorder,
+)
 from onyx.connectors.capability_checks.two_step import (
     two_step_row,
     two_step_rows_of_results,
@@ -35,6 +41,9 @@ from onyx.connectors.capability_checks.two_step import (
 )
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
+from onyx.db.models import CredentialCapabilityReportRow
+from onyx.server.documents.credential_capabilities import CapabilityReportSnapshot
 
 _STEP = CheckStep(
     step_of="parent",
@@ -389,3 +398,43 @@ def test_a_draft_snapshot_shows_counting_while_the_step_runs() -> None:
     (row,) = snapshot.two_step_rows
     assert _shows(row) == ("parent", True, "Spaces visible, counting…", None)
     assert snapshot.model_dump(mode="json")["two_step_rows"][0]["counting"] is True
+
+
+def test_a_running_stored_run_shows_counting_while_the_step_runs() -> None:
+    """The detail page reads the rows of a run in flight from its progress,
+    not from the last completed report."""
+    cache: dict[str, str] = {}
+    backend = MagicMock()
+    backend.set.side_effect = lambda key, value, ex: cache.__setitem__(key, value)  # noqa: ARG005
+    backend.get.side_effect = cache.get
+    run_id = uuid4()
+    parent = _Check("parent", summary="Spaces visible")
+    with patch.object(stored_run_progress, "get_cache_backend", return_value=backend):
+        recorder = StoredRunProgressRecorder(
+            run_id, [parent, _step()], prior_results=[], ttl=timedelta(minutes=5)
+        )
+        recorder.start()
+        recorder.on_result(
+            run_capability_checks(
+                [parent],
+                CapabilityCheckContext(
+                    source=DocumentSource.CONFLUENCE, credential_json={}
+                ),
+            )
+        )
+        row = CredentialCapabilityReportRow(
+            credential_id=1,
+            connector_id=2,
+            source=DocumentSource.CONFLUENCE,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            run_status=CapabilityReportRunStatus.RUNNING,
+            run_started_at=datetime.now(timezone.utc),
+            run_id=run_id,
+            connector_config_hash=None,
+            report=None,
+            time_updated=datetime.now(timezone.utc),
+        )
+        snapshot = CapabilityReportSnapshot.from_row(row)
+
+    (two_step,) = snapshot.two_step_rows
+    assert _shows(two_step) == ("parent", True, "Spaces visible, counting…", None)

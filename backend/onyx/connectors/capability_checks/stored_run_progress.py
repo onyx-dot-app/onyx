@@ -32,6 +32,8 @@ def _key(run_id: UUID) -> str:
 def _open_state(check: CapabilityCheck[Any]) -> DraftCheckState:
     return DraftCheckState(
         check_id=check.check_id,
+        row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         capability=check.capability,
         required=check.required,

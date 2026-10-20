@@ -531,7 +531,8 @@ deployments) and a probe's discovery step.
 A two-step row links its second check to the parent with `CheckStep`
 (`step_of`, the running line, the caveat when the step does not finish).
 `two_step.py:two_step_row` decides how the row shows, and draft snapshots,
-stored reports and run history return it as `two_step_rows`. The registry
+stored reports and run history return it as `two_step_rows`. While a stored
+run is in flight, its rows come from its progress, so a step counts. The registry
 validates the links (`validate_step_links`).
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
