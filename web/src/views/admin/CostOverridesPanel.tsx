@@ -105,6 +105,9 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const isEdit = existing !== undefined;
+  // The model list portals into the modal, inside its focus trap, so its
+  // search field can take focus.
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   // Editing shows the locked model in the selector. Providers load after
   // mount, so this resolves on render rather than in the initial values.
   const editModelConfigId = existing
@@ -149,7 +152,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
         if (!open) onClose();
       }}
     >
-      <Modal.Content width="md">
+      <Modal.Content width="md" ref={setContentEl}>
         <Formik
           initialValues={initialValues}
           validationSchema={overrideValidationSchema}
@@ -189,6 +192,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                       value={isEdit ? editModelConfigId : values.modelConfigId}
                       grouped={!hideProviderGrouping}
                       modelPaging={modelPaging}
+                      container={contentEl}
                       onChange={(modelConfigurationId) => {
                         const opt = findLlmOptionById(
                           llmProviders,
