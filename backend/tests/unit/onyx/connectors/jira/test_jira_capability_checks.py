@@ -14,7 +14,11 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
 from onyx.connectors.jira.models import JiraIssueIdPage
-from onyx.connectors.jira.source_operations import JiraApiError, JiraSourceOperations
+from onyx.connectors.jira.source_operations import (
+    JiraApiError,
+    JiraCloudIdError,
+    JiraSourceOperations,
+)
 
 _CLOUD_URL = "https://example.atlassian.net"
 _DC_URL = "https://jira.example.com"
@@ -188,7 +192,20 @@ def test_scoped_auth_fails_without_the_indexing_scope() -> None:
     assert result.error_type == "InsufficientPermissionsError"
 
 
-def test_scoped_auth_fails_when_tenant_info_is_not_json() -> None:
+def test_scoped_auth_fails_when_tenant_info_has_no_cloud_id() -> None:
+    gateway: MagicMock = _gateway(is_cloud=True)
+    gateway.list_projects.side_effect = JiraCloudIdError("No cloud id.")
+
+    result: CapabilityCheckResult = _run(
+        "jira_scoped_token_auth", gateway, _config(scoped_token=True)
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "cloud id" in result.message
+    assert result.summary == "Site returned no cloud ID"
+
+
+def test_auth_does_not_blame_the_cloud_id_for_other_bad_json() -> None:
     gateway: MagicMock = _gateway(is_cloud=True)
     gateway.list_projects.side_effect = requests.exceptions.JSONDecodeError(
         "Expecting value", "<html>", 0
@@ -199,7 +216,7 @@ def test_scoped_auth_fails_when_tenant_info_is_not_json() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "cloud id" in result.message
+    assert result.summary == "Site did not answer like Jira"
 
 
 def test_auth_is_incomplete_when_the_site_is_unreachable() -> None:
@@ -354,9 +371,10 @@ def test_jql_query_fails_with_the_jira_message() -> None:
 
 
 @pytest.mark.parametrize("is_cloud", [True, False], ids=["cloud", "server"])
-def test_jql_query_passes_with_an_advisory_when_it_matches_nothing(
+def test_jql_query_fails_when_it_matches_nothing(
     is_cloud: bool,
 ) -> None:
+    """An empty scope fails the first check that reads it."""
     gateway: MagicMock = _gateway(is_cloud=is_cloud)
     _match_nothing(gateway)
 
@@ -364,9 +382,8 @@ def test_jql_query_passes_with_an_advisory_when_it_matches_nothing(
         "jira_jql_query", gateway, _config(jql_query="project = EMPTY")
     )
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = _advisories(result)
-    assert "matched no issue" in advisory
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Query matches no issues"
 
 
 def test_jql_query_has_no_advisory_when_it_matches_an_issue() -> None:
@@ -452,9 +469,10 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
     [{"project_key": "AS"}, {"jql_query": "project = AS"}],
     ids=["project", "jql"],
 )
-def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
+def test_issue_read_fails_for_an_empty_scope(
     scope: dict[str, str], scoped_token: bool, hint: str
 ) -> None:
+    """An empty scope fails the first check that reads it."""
     gateway: MagicMock = _gateway(is_cloud=True)
     _match_nothing(gateway)
 
@@ -464,10 +482,9 @@ def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
         _config(scoped_token=scoped_token, **scope),
     )
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = _advisories(result)
-    assert "did not verify that issues are readable" in advisory
-    assert hint in advisory
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "No issues in the selected scope"
+    assert hint in result.message
     gateway.bulk_fetch_issues.assert_not_called()
 
 

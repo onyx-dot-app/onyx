@@ -8,9 +8,11 @@ from jira.exceptions import JIRAError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.jira import source_operations
 from onyx.connectors.jira.source_operations import (
     _JIRA_BULK_FETCH_LIMIT,
     JiraApiError,
+    JiraCloudIdError,
     JiraSourceOperations,
     is_cloud_credential,
     is_cloud_gateway,
@@ -235,3 +237,37 @@ def test_credential_selects_the_api_family(
 ) -> None:
     assert is_cloud_credential(credentials) is expected_cloud
     assert is_cloud_gateway(_gateway(credentials=credentials)) is expected_cloud
+
+
+@pytest.mark.parametrize(
+    "error,expected",
+    [
+        (KeyError("cloudId"), JiraCloudIdError),
+        (
+            requests.exceptions.JSONDecodeError("Expecting value", "<html>", 0),
+            ValueError,
+        ),
+    ],
+    ids=["no_cloud_id", "not_json"],
+)
+def test_scoped_api_url_keeps_a_non_json_answer_apart(
+    monkeypatch: pytest.MonkeyPatch, error: Exception, expected: type[Exception]
+) -> None:
+    def fail(_url: str, _product: str) -> str:
+        raise error
+
+    monkeypatch.setattr(source_operations, "scoped_url", fail)
+    gateway = JiraSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None,
+            DocumentSource.JIRA.value,
+            {"jira_user_email": "user@example.com", "jira_api_token": "token"},
+        ),
+        connector_specific_config={
+            "jira_base_url": "https://jira.example.com",
+            "scoped_token": True,
+        },
+    )
+
+    with pytest.raises(expected):
+        gateway._api_url()

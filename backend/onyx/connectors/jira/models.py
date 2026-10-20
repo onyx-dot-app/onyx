@@ -25,3 +25,5 @@ class JiraGroupMemberSample(BaseModel):
 
     members: list[dict[str, Any]]
     complete: bool
+    # The groups whose first page was read.
+    groups_read: int
