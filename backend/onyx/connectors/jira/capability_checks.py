@@ -24,15 +24,14 @@ from urllib.parse import urlparse
 
 import requests
 
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
-from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
     CheckRowText,
+    CredentialCapability,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -68,6 +67,8 @@ from onyx.connectors.jira.utils import (
 )
 from onyx.connectors.source_operations import SourceOperations
 
+_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
+_SITE_FIELDS = frozenset({"jira_base_url"})
 _ERROR_DETAIL_CHARS = 300
 _CLOUD_HOST_SUFFIX = ".atlassian.net"
 # Atlassian's text when a scoped token lacks the scope of an API.
@@ -218,12 +219,60 @@ def _raise_for_api_error(
     ) from error
 
 
+_SIGN_IN_CHECK_IDS = ("jira_auth", "jira_scoped_token_auth")
+_SCOPE_CHECK_IDS = (
+    "jira_projects_visible",
+    "jira_configured_project",
+    "jira_jql_query",
+)
+# check_id to the checks it runs after, in run order. A listed check that does
+# not apply (the other token type, a scope not in use) is left out.
+_DEPENDS_ON: dict[str, tuple[str, ...]] = {
+    "jira_projects_visible": _SIGN_IN_CHECK_IDS,
+    "jira_configured_project": ("jira_projects_visible",),
+    "jira_jql_query": ("jira_projects_visible",),
+    "jira_issue_read": _SCOPE_CHECK_IDS,
+    "jira_permission_scheme_read": _SCOPE_CHECK_IDS,
+    "jira_project_access_mappable": ("jira_permission_scheme_read",),
+    "jira_project_roles_read": ("jira_permission_scheme_read",),
+    # Not the roles check: a project with no role grants can still grant users.
+    "jira_permission_user_emails": ("jira_permission_scheme_read",),
+    "jira_group_listing": _SIGN_IN_CHECK_IDS,
+    "jira_group_listing_complete": ("jira_group_listing",),
+    "jira_group_membership": ("jira_group_listing",),
+    "jira_group_member_emails": ("jira_group_membership",),
+}
+
+
 class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
     config_class = JiraConnectorConfig
 
-    def __init__(self, *, check_id: str) -> None:
-        # Metadata and dependencies come from the Jira check graph.
-        self.init_from_graph(check_node(DocumentSource.JIRA, check_id))
+    def __init__(
+        self,
+        *,
+        check_id: str,
+        display_name: str,
+        remediation: str,
+        required: bool = True,
+        capability: CredentialCapability = CredentialCapability.INDEXING,
+        validates_binding: bool = False,
+        fails_when_unreachable: bool = False,
+        row_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            capability=capability,
+            check_id=check_id,
+            display_name=display_name,
+            row_id=row_id,
+            required=required,
+            requires_connector_instance=False,
+            requires_fields=_SITE_FIELDS,
+            remediation=remediation,
+            docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
+            fails_when_unreachable=fails_when_unreachable,
+            depends_on=_DEPENDS_ON.get(check_id, ()),
+        )
 
 
 def _is_cloud_site(config: JiraConnectorConfig) -> bool:
@@ -243,9 +292,31 @@ class _SiteAuthCheck(_JiraCheck):
     def __init__(self, *, scoped: bool) -> None:
         self._scoped = scoped
         if scoped:
-            super().__init__(check_id="jira_scoped_token_auth")
+            super().__init__(
+                check_id="jira_scoped_token_auth",
+                row_id="jira_auth",
+                validates_binding=True,
+                fails_when_unreachable=True,
+                display_name="Sign in to Jira",
+                remediation=(
+                    "Scoped API tokens work only with Jira Cloud. Enter the email "
+                    "of the token's Atlassian account with the token, check the "
+                    "site URL, and create a new token if it expired."
+                ),
+            )
         else:
-            super().__init__(check_id="jira_auth")
+            super().__init__(
+                check_id="jira_auth",
+                validates_binding=True,
+                fails_when_unreachable=True,
+                display_name="Sign in to Jira",
+                remediation=(
+                    "Jira Cloud: enter the email of the token's Atlassian account "
+                    "and an API token. Jira Data Center: leave the email empty and "
+                    "use a personal access token. Check the site URL, and create a "
+                    "new token if it expired."
+                ),
+            )
 
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         return form_state.config.scoped_token == self._scoped
@@ -404,7 +475,15 @@ class _SiteAuthCheck(_JiraCheck):
 
 class _ProjectsVisibleCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_projects_visible")
+        super().__init__(
+            check_id="jira_projects_visible",
+            validates_binding=True,
+            display_name="List projects",
+            remediation=(
+                "Give the token's account the Browse Projects permission on the "
+                "projects to index. Scoped API token: the `read:jira-work` scope."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -455,7 +534,14 @@ def _matching_project_keys(
 
 class _ConfiguredProjectCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_configured_project")
+        super().__init__(
+            check_id="jira_configured_project",
+            display_name="Find selected project",
+            remediation=(
+                "Use the project key, not the project name (e.g. `PROJ`), and give "
+                "the token's account Browse Projects on the project."
+            ),
+        )
 
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         config: JiraConnectorConfig = form_state.config
@@ -553,7 +639,14 @@ def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any]
 
 class _JqlQueryCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_jql_query")
+        super().__init__(
+            check_id="jira_jql_query",
+            display_name="Run JQL query",
+            remediation=(
+                "Test the query in Jira's issue search. Quote values that are "
+                'reserved JQL words (e.g. project = "AS"). Use no ORDER BY.'
+            ),
+        )
 
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         return bool(_jql(form_state.config))
@@ -605,7 +698,15 @@ class _IssueReadCheck(_JiraCheck):
     search the indexing run uses."""
 
     def __init__(self) -> None:
-        super().__init__(check_id="jira_issue_read")
+        super().__init__(
+            check_id="jira_issue_read",
+            display_name="Sample issues",
+            remediation=(
+                "Give the token's account Browse Projects on the projects to "
+                "index, and access to their issue security levels. Scoped API "
+                "token: the `read:jira-work` scope."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -899,7 +1000,14 @@ def _read_scheme_for_dependent_check(
 
 class _PermissionSchemeReadCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_permission_scheme_read")
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_permission_scheme_read",
+            display_name="Read permission schemes",
+            remediation=(
+                f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -925,7 +1033,17 @@ class _ProjectAccessMappableCheck(_JiraCheck):
     static Onyx equivalent (Reporter, Assignee, Project Lead, user fields)."""
 
     def __init__(self) -> None:
-        super().__init__(check_id="jira_project_access_mappable")
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_project_access_mappable",
+            display_name="Map project access",
+            required=False,
+            remediation=(
+                "Grant Browse Projects to users, groups or project roles. Onyx "
+                "cannot map Reporter, Assignee, Project Lead or user-field grants, "
+                "so those users get no access in Onyx."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1037,7 +1155,14 @@ def _is_public(scheme: dict[str, Any]) -> bool:
 
 class _ProjectRolesReadCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_project_roles_read")
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_project_roles_read",
+            display_name="Read project roles",
+            remediation=(
+                f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1092,7 +1217,15 @@ class _PermissionUserEmailsCheck(_JiraCheck):
     user hides the email. A partial sample is INCOMPLETE."""
 
     def __init__(self) -> None:
-        super().__init__(check_id="jira_permission_user_emails")
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="jira_permission_user_emails",
+            display_name="Read user emails",
+            remediation=(
+                "Make user emails visible to the token's account. "
+                f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1356,7 +1489,15 @@ def _sample_group_members(
 
 class _GroupListingCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_group_listing")
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_listing",
+            display_name="List groups",
+            remediation=(
+                f"{_GROUP_ACCESS_HINT} Scoped API token: the "
+                f"{_PERMISSION_SYNC_SCOPES} scopes."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1380,7 +1521,18 @@ class _GroupListingCompleteCheck(_JiraCheck):
     lower than the number of groups."""
 
     def __init__(self) -> None:
-        super().__init__(check_id="jira_group_listing_complete")
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_listing_complete",
+            row_id="jira_group_listing",
+            display_name="List groups",
+            required=False,
+            remediation=(
+                "Group sync skips the groups after the limit, so their members "
+                "lose access in Onyx. A Jira administrator can raise the "
+                "jira.ajax.autocomplete.limit setting (Data Center)."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1416,7 +1568,16 @@ class _GroupListingCompleteCheck(_JiraCheck):
 
 class _GroupMembershipCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_group_membership")
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_membership",
+            display_name="Read group members",
+            remediation=(
+                f"{_GROUP_ACCESS_HINT} Scoped API token: the `read:jira-user` "
+                "scope, or the granular `read:group:jira`, `read:user:jira` and "
+                "`read:avatar:jira` scopes."
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
@@ -1438,7 +1599,15 @@ class _GroupMembershipCheck(_JiraCheck):
 
 class _GroupMemberEmailsCheck(_JiraCheck):
     def __init__(self) -> None:
-        super().__init__(check_id="jira_group_member_emails")
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="jira_group_member_emails",
+            display_name="Read member emails",
+            remediation=(
+                "Make user emails visible to the token's account. "
+                f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
+            ),
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
