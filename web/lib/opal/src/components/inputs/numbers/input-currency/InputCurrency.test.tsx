@@ -8,14 +8,12 @@ import { InputCurrency, getCurrencyParts } from "@opal/components";
 describe("display", () => {
   it("pads to the currency's decimals and keeps sub-cent digits", () => {
     const { rerender } = render(
-      <InputCurrency value={3} onChange={() => {}} decimalPlaces={6} />
+      <InputCurrency value={3} onChange={() => {}} precision={6} />
     );
     expect(screen.getByLabelText("Whole amount")).toHaveValue("3");
     expect(screen.getByLabelText("Fractional amount")).toHaveValue("00");
 
-    rerender(
-      <InputCurrency value={0.075} onChange={() => {}} decimalPlaces={6} />
-    );
+    rerender(<InputCurrency value={0.075} onChange={() => {}} precision={6} />);
     expect(screen.getByLabelText("Whole amount")).toHaveValue("0");
     expect(screen.getByLabelText("Fractional amount")).toHaveValue("075");
   });
@@ -35,15 +33,24 @@ describe("typing", () => {
   it("jumps to the fraction on '.' and commits on Enter", async () => {
     const user = setupUser();
     const onChange = jest.fn();
-    render(
-      <InputCurrency value={null} onChange={onChange} decimalPlaces={6} />
-    );
+    render(<InputCurrency value={null} onChange={onChange} precision={6} />);
 
     await user.click(screen.getByLabelText("Whole amount"));
     await user.keyboard("3.075");
     expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(onChange).toHaveBeenCalledWith(3.075);
+  });
+
+  it("blocks fraction digits beyond the precision", async () => {
+    const user = setupUser();
+    const onChange = jest.fn();
+    render(<InputCurrency value={null} onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.keyboard("1.999");
+    expect(screen.getByLabelText("Fractional amount")).toHaveValue("99");
+    expect(onChange).toHaveBeenLastCalledWith(1.99);
   });
 
   it("splits a pasted amount across both segments", async () => {

@@ -11,7 +11,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 - Blur and Enter tidy the display (`3.5` becomes `3.50`).
 
 ```tsx
-<InputCurrency value={rate} onChange={setRate} decimalPlaces={6} />
+<InputCurrency value={rate} onChange={setRate} precision={6} />
 ```
 
 ## Props
@@ -21,7 +21,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | `value`         | `number \| null`                         | —                         | The amount (required, controlled). Negative values render empty.            |
 | `onChange`      | `(value: number \| null) => void`        | —                         | Fires on each edit, `null` when cleared                                      |
 | `currency`      | `string`                                 | `"USD"`                   | ISO 4217 code. Sets the symbol, its side and the default decimals.          |
-| `decimalPlaces` | `number`                                 | the currency's (USD `2`)  | Most digits the fraction takes. `0` hides the fraction segment.             |
+| `precision`     | `number`                                 | the currency's (USD `2`)  | Most fraction digits; typing more is blocked. `0` hides the fraction segment. |
 | `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |
 | `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
 | `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |
@@ -31,4 +31,4 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 
 Opal has no locale of its own. The host supplies `OpalStrings.inputCurrencyParts`, which the app's `OpalStringsBridge` builds with `getCurrencyParts(locale, currency)`. Without a provider, the field uses `en-US`.
 
-The display keeps the currency's usual decimals and trims extra trailing zeros: with `decimalPlaces={6}`, `3` shows `3.00` and `0.075` shows `0.075`.
+The display keeps the currency's usual decimals and trims extra trailing zeros: with `precision={6}`, `3` shows `3.00` and `0.075` shows `0.075`.

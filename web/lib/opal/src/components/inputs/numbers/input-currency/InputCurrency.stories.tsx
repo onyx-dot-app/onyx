@@ -38,7 +38,7 @@ export const SubCentRate: Story = {
     const [amount, setAmount] = useState<number | null>(0.075);
     return (
       <div className="w-60">
-        <InputCurrency value={amount} onChange={setAmount} decimalPlaces={6} />
+        <InputCurrency value={amount} onChange={setAmount} precision={6} />
       </div>
     );
   },

@@ -28,13 +28,13 @@ const DECIMAL_KEYS = [".", ","];
 // Negative, non-finite and exponent-sized values render empty.
 function toSegments(
   value: number | null,
-  decimalPlaces: number,
+  precision: number,
   minFractionDigits: number
 ): AmountSegments {
   if (value == null || !Number.isFinite(value) || value < 0 || value >= 1e21) {
     return EMPTY_SEGMENTS;
   }
-  const [whole = "", fraction = ""] = value.toFixed(decimalPlaces).split(".");
+  const [whole = "", fraction = ""] = value.toFixed(precision).split(".");
   // Trim trailing zeros, but keep the currency's usual decimals ("3" → "3.00").
   let end = fraction.length;
   while (end > minFractionDigits && fraction[end - 1] === "0") end--;
@@ -72,10 +72,11 @@ interface InputCurrencyProps {
   currency?: string;
 
   /**
-   * Most digits the fraction segment takes. Defaults to the currency's usual
-   * decimals (USD 2, JPY 0); raise it for sub-cent rates. 0 hides the segment.
+   * Most digits the fraction segment accepts; typing more is blocked. Defaults
+   * to the currency's usual decimals (USD and EUR 2, JPY 0). Raise it for
+   * sub-cent rates; 0 hides the segment.
    */
-  decimalPlaces?: number;
+  precision?: number;
 
   /** Placeholders of the whole and fraction segments. */
   placeholder?: { whole?: string; fraction?: string };
@@ -98,7 +99,7 @@ function InputCurrency({
   value,
   onChange,
   currency = "USD",
-  decimalPlaces,
+  precision,
   placeholder,
   error,
   disabled,
@@ -106,7 +107,7 @@ function InputCurrency({
 }: InputCurrencyProps) {
   const strings = useOpalStrings();
   const parts = strings.inputCurrencyParts(currency);
-  const maxFraction = Math.max(0, decimalPlaces ?? parts.fractionDigits);
+  const maxFraction = Math.max(0, precision ?? parts.fractionDigits);
   const minFraction = Math.min(parts.fractionDigits, maxFraction);
   const showFraction = maxFraction > 0;
   const wholePlaceholder = placeholder?.whole ?? "0";
@@ -229,6 +230,7 @@ function InputCurrency({
                 disabled={disabled}
                 ref={fractionRef}
                 aria-label={strings.inputCurrencyFraction}
+                maxLength={maxFraction}
                 placeholder={fractionPlaceholder}
                 value={segments.fraction}
                 style={{
