@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import InputNumber from "@opal/components/inputs/input-number/components";
+import InputNumber from "@opal/components/inputs/numbers/input-number/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputNumber> = {

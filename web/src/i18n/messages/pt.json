@@ -15794,6 +15794,11 @@
     "iconTooltip": {
       "label": "Mais informações"
     },
+    "inputCurrency": {
+      "amount": "Valor",
+      "fraction": "Parte decimal do valor",
+      "whole": "Parte inteira do valor"
+    },
     "input": {
       "day": "Dia",
       "hidePassword": "Ocultar senha",

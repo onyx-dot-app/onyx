@@ -1,0 +1,33 @@
+# InputCurrency
+
+**Import:** `import { InputCurrency } from "@opal/components";`
+
+Segmented currency amount field on the shared `.opal-input` chrome. Mono segments read `$ [whole] . [fraction]`. The host locale sets the symbol, the side it sits on (`3,00 €`) and the decimal separator.
+
+- Typing `.`, `,` or the locale separator in the whole segment jumps to the fraction.
+- Pasting `12.50` into the whole segment fills both segments.
+- Left/Right arrows cross segment edges, and Backspace in an empty fraction returns to the whole segment.
+- The field commits on blur or Enter. An empty field commits `null`.
+
+```tsx
+<InputCurrency value={rate} onChange={setRate} decimalPlaces={6} />
+```
+
+## Props
+
+| Prop            | Type                                     | Default                   | Description                                                                 |
+| --------------- | ---------------------------------------- | ------------------------- | --------------------------------------------------------------------------- |
+| `value`         | `number \| null`                         | —                         | The amount (required, controlled). Negative values render empty.            |
+| `onChange`      | `(value: number \| null) => void`        | —                         | Fires on commit, `null` when cleared                                        |
+| `currency`      | `string`                                 | `"USD"`                   | ISO 4217 code. Sets the symbol, its side and the default decimals.          |
+| `decimalPlaces` | `number`                                 | the currency's (USD `2`)  | Most digits the fraction takes. `0` hides the fraction segment.             |
+| `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |
+| `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
+| `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |
+| `id`            | `string`                                 | —                         | Applied to the whole segment for `<label htmlFor>`                          |
+
+## Locale
+
+Opal has no locale of its own. The host supplies `OpalStrings.inputCurrencyParts`, which the app's `OpalStringsBridge` builds with `getCurrencyParts(locale, currency)`. Without a provider, the field uses `en-US`.
+
+The display keeps the currency's usual decimals and trims extra trailing zeros: with `decimalPlaces={6}`, `3` shows `3.00` and `0.075` shows `0.075`.

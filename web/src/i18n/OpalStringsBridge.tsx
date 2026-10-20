@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { OpalStringsProvider, type OpalStrings } from "@opal/strings";
+import { getCurrencyParts } from "@opal/components";
 import { createLocaleIntegerParser } from "@/i18n/numbers";
 
 interface OpalStringsBridgeProps {
@@ -131,6 +132,10 @@ export default function OpalStringsBridge({
         t("keyValue.removePair", { label, index }),
       formatNumber: (value) => digits.format(value),
       parseNumber: createLocaleIntegerParser(digits),
+      inputCurrencyAmount: t("inputCurrency.amount"),
+      inputCurrencyWhole: t("inputCurrency.whole"),
+      inputCurrencyFraction: t("inputCurrency.fraction"),
+      inputCurrencyParts: (currency) => getCurrencyParts(locale, currency),
       showing: (range, total) =>
         t.rich("table.showing", { range: () => range, total: () => total }),
       rangeOfTotal: (range, total) =>
