@@ -41,7 +41,10 @@ from onyx.connectors.capability_checks.models import (
     aggregate_capability_verdict,
 )
 from onyx.connectors.capability_checks.runner import run_order
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential, User
@@ -579,3 +582,22 @@ def test_a_run_that_does_not_skip_a_check_clears_its_old_skip(
     assert _state(snapshot, _EXTRA).state == DraftCheckStateKind.INCOMPLETE
     ran, _ = _create(harness, monkeypatch, harness.user.id)
     assert _EXTRA in ran
+
+
+def test_a_rerun_of_a_fixed_check_runs_the_skipped_discovery_check(
+    harness: _Harness,
+) -> None:
+    """A discovery check skipped for a failed required check has no result of
+    its own, so a Re-run of the fixed check runs it again."""
+    harness.check(_SIGN_IN).error = ConnectorValidationError("bad token")
+    first = harness.run()
+    assert _state(first, _SIGN_IN).state == DraftCheckStateKind.FAILED
+    assert _state(first, _FIND).state == DraftCheckStateKind.SKIPPED
+
+    harness.check(_SIGN_IN).error = None
+    snapshot = harness.run(DraftCheckActions(check_ids=[_SIGN_IN]))
+
+    assert _FIND in harness.runs
+    found = _state(snapshot, _FIND)
+    assert found.state == DraftCheckStateKind.PASSED
+    assert found.from_cache is False

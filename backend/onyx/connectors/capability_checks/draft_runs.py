@@ -628,7 +628,8 @@ def kept_draft_state(
 ) -> DraftCheckState | None:
     """The check's result in ``prior``, the latest run of the draft key, for a
     run that does not run the check again. None when ``prior`` ran it on
-    another credential or form, or holds no result of its own for it."""
+    another credential or form, or holds no result of its own for it. A
+    SKIPPED discovery check runs again, as ``cache_draft_result`` drops it."""
     if prior is None or prior.result_cache_keys.get(check_state.check_id) != cache_key:
         return None
     for prior_state in prior.snapshot.checks:
@@ -637,6 +638,10 @@ def kept_draft_state(
             and prior_state.capability == check_state.capability
             and prior_state.state in _KEPT_STATES
             and prior_state.not_run_reason in (None, CheckNotRunReason.NOTHING_IN_SCOPE)
+            and not (
+                prior_state.discovery
+                and prior_state.state == DraftCheckStateKind.SKIPPED
+            )
         ):
             return prior_state.model_copy(update={"from_cache": True})
     return None
