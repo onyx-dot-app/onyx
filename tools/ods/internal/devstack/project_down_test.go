@@ -162,3 +162,21 @@ func TestDownProjectRemovesOwnerRecordWithoutState(t *testing.T) {
 		t.Fatalf("owner record remains: %v", err)
 	}
 }
+
+func TestCleanupRowRefusesWhenTheOwnerStateIsUnreadable(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "corrupt-owner")
+	if err := os.WriteFile(filepath.Join(stack.StateDir, stateFileName), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	secondary := StackRow{Project: stack.Project, Mode: Isolated, StateDir: t.TempDir(), Status: StatusOrphaned}
+	compose := &fakeCompose{}
+	if _, err := CleanupRow(context.Background(), stack.Registry, secondary, compose.down, ProjectOptions{LockWait: time.Second}); err == nil || !strings.Contains(err.Error(), "cannot be read") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(compose.projects) != 0 {
+		t.Fatal("cleanup stopped containers of an unreadable owner")
+	}
+	if _, err := os.Stat(ownerPath(stack.Registry, stack.Project)); err != nil {
+		t.Fatalf("owner record removed: %v", err)
+	}
+}

@@ -112,8 +112,8 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		defer release()
 	}
 	infra := compose != nil && row.Mode != Frontend && row.Project != ""
-	if infra && registry != nil {
-		lock := &Stack{StateDir: filepath.Join(registry.Dir, projectsDirName, ProjectName(row.Project))}
+	if lockDir := projectLockDir(registry, row, infra); lockDir != "" {
+		lock := &Stack{StateDir: lockDir}
 		release, err := lock.Lock(ctx, "stack down --project", opts.LockWait)
 		if err != nil {
 			return nil, err
@@ -155,7 +155,11 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	if compose == nil {
 		return result, nil
 	}
-	if infra && !ownedElsewhere(registry, row) {
+	elsewhere, err := ownedElsewhere(registry, row)
+	if err != nil {
+		return result, err
+	}
+	if infra && !elsewhere {
 		if err := compose(ctx, row.Project, opts.Volumes); err != nil {
 			return result, err
 		}
@@ -212,16 +216,32 @@ func removeOrphanOwner(registry *Registry, row StackRow) (bool, error) {
 	return true, nil
 }
 
+// projectLockDir is the project directory that guards row's owner record.
+func projectLockDir(registry *Registry, row StackRow, infra bool) string {
+	switch {
+	case registry == nil:
+		return ""
+	case infra:
+		return filepath.Join(registry.Dir, projectsDirName, ProjectName(row.Project))
+	case row.Project == "" && row.OwnerRecord != "":
+		return filepath.Dir(row.OwnerRecord)
+	}
+	return ""
+}
+
 // ownedElsewhere reports whether the project's owner record names another
-// state that still exists, so row must not stop the project's containers.
-func ownedElsewhere(registry *Registry, row StackRow) bool {
-	if registry == nil {
-		return false
+// state that still claims the project, so row must not stop its containers.
+func ownedElsewhere(registry *Registry, row StackRow) (bool, error) {
+	if registry == nil || row.Project == "" {
+		return false, nil
 	}
 	owner := readOwner(ownerPath(registry, row.Project))
-	if owner.Err != nil || owner.StateDir == row.StateDir {
-		return false
+	if owner.Err != nil || owner.StateDir == row.StateDir || !pathExists(filepath.Join(owner.StateDir, stateFileName)) {
+		return false, nil
 	}
 	st, err := (&Stack{StateDir: owner.StateDir}).ReadState()
-	return err == nil && st != nil && st.Project == row.Project
+	if err != nil {
+		return false, fmt.Errorf("project %s: the owner state in %s cannot be read (%w); repair or remove it, then run 'ods stack ls'", row.Project, owner.StateDir, err)
+	}
+	return st != nil && st.Project == row.Project, nil
 }
