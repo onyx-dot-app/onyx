@@ -4831,8 +4831,8 @@
         "editTitle": "Editar substituição de custo",
         "newTitle": "Nova substituição de custo",
         "cacheRate": {
-          "label": "Taxa de leitura de cache",
-          "placeholder": "usa a taxa de entrada por padrão"
+          "description": "Unidades em USD por 1M de tokens. Deixe vazio para cobrar leituras de cache pela taxa de entrada.",
+          "label": "Taxa de leitura de cache"
         },
         "cancelButton": {
           "label": "Cancelar"
@@ -4882,10 +4882,6 @@
         "saveFailed": "Falha ao salvar a substituição: {message}",
         "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

@@ -4831,8 +4831,8 @@
         "editTitle": "Editar anulación de costo",
         "newTitle": "Nueva anulación de costo",
         "cacheRate": {
-          "label": "Tarifa de lectura de caché",
-          "placeholder": "usa la tarifa de entrada"
+          "description": "Unidades en USD por 1M de tokens. Déjalo vacío para cobrar las lecturas de caché a la tarifa de entrada.",
+          "label": "Tarifa de lectura de caché"
         },
         "cancelButton": {
           "label": "Cancelar"
@@ -4882,10 +4882,6 @@
         "saveFailed": "No se pudo guardar la tarifa personalizada: {message}",
         "saved": "Tarifa guardada para {model}.",
         "unknownError": "Error desconocido"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
@@ -9,6 +9,7 @@ import {
   BasicModalFooter,
   Button,
   Card,
+  InputCurrency,
   InputTypeIn,
   MessageCard,
   Modal,
@@ -49,41 +50,14 @@ function getProviderDisplayName(
     : allProvidersLabel;
 }
 
-// Accepts integers/decimals only; "" is allowed mid-edit, validated on submit.
-function parseRate(raw: string): number | null {
-  if (raw.trim() === "") return null;
-  if (!/^\d*\.?\d+$/.test(raw.trim())) return null;
-  const value = Number(raw);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function toRateInput(value: number | null | undefined): string {
-  return value != null ? String(value) : "";
-}
+// Negotiated rates go well below a cent per 1M tokens.
+const RATE_PRECISION = 6;
 
 function formatRate(value: number, locale: string): string {
   return `$${value.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 20,
   })}`;
-}
-
-interface RateInputProps {
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-}
-
-function RateInput({ value, placeholder, onChange }: RateInputProps) {
-  return (
-    <InputTypeIn
-      value={value}
-      prefixText="$"
-      inputMode="decimal"
-      placeholder={placeholder}
-      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-    />
-  );
 }
 
 // Shared add/edit modal for the idempotent upsert. Mount it only while open,
@@ -103,14 +77,15 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
-  const [inputRate, setInputRate] = useState(
-    toRateInput(existing?.input_cost_per_mtok)
+  const [inputRate, setInputRate] = useState<number | null>(
+    existing?.input_cost_per_mtok ?? null
   );
-  const [outputRate, setOutputRate] = useState(
-    toRateInput(existing?.output_cost_per_mtok)
+  const [outputRate, setOutputRate] = useState<number | null>(
+    existing?.output_cost_per_mtok ?? null
   );
-  const [cacheRate, setCacheRate] = useState(
-    toRateInput(existing?.cache_read_cost_per_mtok)
+  // Empty (null) bills cache reads at the input rate.
+  const [cacheRate, setCacheRate] = useState<number | null>(
+    existing?.cache_read_cost_per_mtok ?? null
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -119,32 +94,22 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const [modelConfigId, setModelConfigId] = useState<number | null>(null);
 
   const isEdit = existing !== undefined;
-  const parsedInput = parseRate(inputRate);
-  const parsedOutput = parseRate(outputRate);
-  // Empty cache rate is valid (bill cache reads at the input rate); a non-empty
-  // but unparseable value must block submit, not silently drop to null.
-  const parsedCache = parseRate(cacheRate);
-  const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
   const modelLabel = model
     ? `${getProviderDisplayName(provider, t("allProviders.label"), providerNames)} · ${model}`
     : "";
   const canSubmit =
-    model.trim() !== "" &&
-    parsedInput !== null &&
-    parsedOutput !== null &&
-    cacheValid;
+    model.trim() !== "" && inputRate !== null && outputRate !== null;
 
   async function handleSubmit() {
-    if (!canSubmit || parsedInput === null || parsedOutput === null) return;
+    if (!canSubmit || inputRate === null || outputRate === null) return;
     setSubmitting(true);
     try {
       await upsertCostOverride({
         model: model.trim(),
         provider,
-        input_cost_per_mtok: parsedInput,
-        output_cost_per_mtok: parsedOutput,
-        // Empty cache rate => null (cache reads bill at the input rate).
-        cache_read_cost_per_mtok: parsedCache,
+        input_cost_per_mtok: inputRate,
+        output_cost_per_mtok: outputRate,
+        cache_read_cost_per_mtok: cacheRate,
       });
       await refreshCostOverrides(mutate);
       toast.success(t("toasts.saved", { model: model.trim() }));
@@ -211,10 +176,10 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
             fillInput
             center
           >
-            <RateInput
+            <InputCurrency
               value={inputRate}
-              placeholder={t("placeholders.inputCost")}
               onChange={setInputRate}
+              precision={RATE_PRECISION}
             />
           </InputHorizontal>
 
@@ -225,25 +190,25 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
             fillInput
             center
           >
-            <RateInput
+            <InputCurrency
               value={outputRate}
-              placeholder={t("placeholders.outputCost")}
               onChange={setOutputRate}
+              precision={RATE_PRECISION}
             />
           </InputHorizontal>
 
           <InputHorizontal
             withLabel
             title={t("form.cacheRate.label")}
-            description={t("form.units.description")}
+            description={t("form.cacheRate.description")}
             suffix="optional"
             fillInput
             center
           >
-            <RateInput
+            <InputCurrency
               value={cacheRate}
-              placeholder={t("form.cacheRate.placeholder")}
               onChange={setCacheRate}
+              precision={RATE_PRECISION}
             />
           </InputHorizontal>
         </Modal.Body>

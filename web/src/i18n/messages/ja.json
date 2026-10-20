@@ -4831,8 +4831,8 @@
         "editTitle": "コストの上書きを編集",
         "newTitle": "新しいコストの上書き",
         "cacheRate": {
-          "label": "キャッシュ読み取り単価",
-          "placeholder": "既定では入力単価を使用"
+          "description": "単位は 100 万 tokens あたりの USD です。空欄にすると、キャッシュ読み取りは入力単価で課金されます。",
+          "label": "キャッシュ読み取り単価"
         },
         "cancelButton": {
           "label": "キャンセル"
@@ -4882,10 +4882,6 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

@@ -4831,8 +4831,8 @@
         "editTitle": "Edit Cost Override",
         "newTitle": "New Cost Override",
         "cacheRate": {
-          "label": "Cache-read rate",
-          "placeholder": "defaults to input rate"
+          "description": "Units are in USD per 1M tokens. Leave empty to bill cache reads at the input rate.",
+          "label": "Cache-read rate"
         },
         "cancelButton": {
           "label": "Cancel"
@@ -4882,10 +4882,6 @@
         "saveFailed": "Failed to save override: {message}",
         "saved": "Saved rate for {model}.",
         "unknownError": "Unknown error"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

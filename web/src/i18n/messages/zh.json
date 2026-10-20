@@ -4831,8 +4831,8 @@
         "editTitle": "编辑成本覆盖",
         "newTitle": "新建成本覆盖",
         "cacheRate": {
-          "label": "缓存读取价格",
-          "placeholder": "默认与输入价格相同"
+          "description": "单位为每 100 万 tokens 美元。留空则按输入价格计费缓存读取。",
+          "label": "缓存读取价格"
         },
         "cancelButton": {
           "label": "取消"
@@ -4882,10 +4882,6 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

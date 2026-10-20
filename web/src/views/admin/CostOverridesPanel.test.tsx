@@ -116,6 +116,13 @@ jest.mock("@/lib/languageModels/components", () => {
   return { SimpleModelSelector };
 });
 
+// Rate rows in order: input (0), output (1), cache read (2).
+function wholeAmountField(index: number): HTMLElement {
+  const field = screen.getAllByRole("textbox", { name: "Whole amount" })[index];
+  if (!field) throw new Error(`No whole-amount field at ${index}`);
+  return field;
+}
+
 describe("CostOverridesPanel", () => {
   beforeEach(() => {
     mockRefreshCostOverrides.mockResolvedValue(undefined);
@@ -169,8 +176,8 @@ describe("CostOverridesPanel", () => {
       screen.getByRole("button", { name: "Choose shared-model" })
     );
 
-    await user.type(screen.getByPlaceholderText("3.00"), "3");
-    await user.type(screen.getByPlaceholderText("15.00"), "4");
+    await user.type(wholeAmountField(0), "3");
+    await user.type(wholeAmountField(1), "4");
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
@@ -198,8 +205,8 @@ describe("CostOverridesPanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Choose hidden-model" })
     );
-    await user.type(screen.getByPlaceholderText("3.00"), "1");
-    await user.type(screen.getByPlaceholderText("15.00"), "2");
+    await user.type(wholeAmountField(0), "1");
+    await user.type(wholeAmountField(1), "2");
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
@@ -227,8 +234,8 @@ describe("CostOverridesPanel", () => {
     await user.click(
       screen.getByRole("button", { name: "Choose shared-model" })
     );
-    await user.type(screen.getByPlaceholderText("3.00"), "3");
-    await user.type(screen.getByPlaceholderText("15.00"), "4");
+    await user.type(wholeAmountField(0), "3");
+    await user.type(wholeAmountField(1), "4");
     const submitButton = within(screen.getByRole("dialog")).getByRole(
       "button",
       {
