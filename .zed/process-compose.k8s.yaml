@@ -67,7 +67,7 @@ processes:
       -A onyx.background.celery.versioned_apps.light worker
       --pool=threads --concurrency=64 --prefetch-multiplier=8 --loglevel=INFO
       --hostname=light@%n
-      -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim
+      -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,index_reclaim,chat_ttl_deletion,capability_checks_draft
     working_dir: ${ONYX_ZED_ROOT}/backend
     env_file: ${ONYX_ZED_ROOT}/.vscode/.env.k8s
     environment: *celery_environment
@@ -80,7 +80,7 @@ processes:
       -A onyx.background.celery.versioned_apps.heavy worker
       --pool=threads --concurrency=4 --prefetch-multiplier=1 --loglevel=INFO
       --hostname=heavy@%n
-      -Q connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox
+      -Q connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox,connector_hierarchy_fetching,capability_checks
     working_dir: ${ONYX_ZED_ROOT}/backend
     env_file: ${ONYX_ZED_ROOT}/.vscode/.env.k8s
     environment: *celery_environment
