@@ -33,6 +33,7 @@ import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import {
   filterModelConfigurations,
   findLlmOptionById,
+  findModelConfigId,
 } from "@/lib/languageModels/options";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -104,6 +105,11 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const isEdit = existing !== undefined;
+  // Editing shows the locked model in the selector. Providers load after
+  // mount, so this resolves on render rather than in the initial values.
+  const editModelConfigId = existing
+    ? findModelConfigId(llmProviders, existing.provider, existing.model)
+    : null;
 
   const initialValues: OverrideFormValues = {
     model: existing?.model ?? "",
@@ -166,18 +172,21 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                   fillInput
                   center
                 >
-                  {isEdit ? (
+                  {isEdit && editModelConfigId === null ? (
+                    // An all-providers override, or a model no provider
+                    // configures any more, has no option to show.
                     <InputTypeIn
                       value={`${getProviderDisplayName(values.provider, t("allProviders.label"), providerNames)} · ${values.model}`}
                       variant="readOnly"
                     />
                   ) : (
                     <SimpleModelSelector
-                      nullable
+                      nullable={!isEdit}
+                      disabled={isEdit}
                       providers={filterModelConfigurations(llmProviders ?? [], {
                         visibleOnly: false,
                       })}
-                      value={values.modelConfigId}
+                      value={isEdit ? editModelConfigId : values.modelConfigId}
                       grouped={!hideProviderGrouping}
                       modelPaging={modelPaging}
                       onChange={(modelConfigurationId) => {

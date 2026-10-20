@@ -222,7 +222,7 @@ export function groupLlmOptions(
  * tracked as a descriptor rather than a stable ID.
  */
 export function findModelConfigId(
-  llmProviders: LLMProviderDescriptor[] | undefined,
+  llmProviders: ModelOptionProvider[] | undefined,
   provider: string,
   modelName: string
 ): number | null {
