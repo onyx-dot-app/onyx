@@ -157,7 +157,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         alignItems="stretch"
         justifyContent="start"
       >
-        <InputHorizontal title={t("form.model.label")} fillInput>
+        <InputHorizontal withLabel title={t("form.model.label")} fillInput>
           {isEdit ? (
             <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
