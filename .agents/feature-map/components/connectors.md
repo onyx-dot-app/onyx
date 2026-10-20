@@ -392,7 +392,8 @@ shape the table above does not cover:
   reads the mailbox oldest first from that time (`fetch_received_page`) and
   takes the `conversationId` of the first message with that key. To find a
   builder, it reads only `FIRST_MESSAGE_ARRIVAL_WINDOW` (7 days) after the
-  start; a writer's copy is read for at most `RECEIVED_SCAN_LIMIT` messages.
+  start; a writer's copy is read for at most `RECEIVED_SCAN_LIMIT` messages
+  per thread. Each mailbox is looked up once for all the threads it writes.
   Only messages in the walked folder tree are read
   (`_OutsideFolders`). An event is read by id through
   `get_default_calendar_event`, which refuses events outside the default

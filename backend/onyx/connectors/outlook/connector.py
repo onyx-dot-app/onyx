@@ -700,27 +700,6 @@ def _document_failure(
     )
 
 
-def _scan_ranges(
-    starts: list[datetime], window: timedelta | None
-) -> list[tuple[datetime, datetime | None]]:
-    """The received-time ranges that hold a message of each thread started
-    at ``starts``: one open range from the earliest without a window, else
-    each start's window, overlapping ones merged."""
-    if not starts:
-        return []
-    if window is None:
-        return [(min(starts) - THREAD_CLOCK_SKEW, None)]
-    ranges: list[tuple[datetime, datetime | None]] = []
-    for start in sorted(starts):
-        received_from, received_to = start - THREAD_CLOCK_SKEW, start + window
-        last_to = ranges[-1][1] if ranges else None
-        if last_to is not None and received_from <= last_to:
-            ranges[-1] = (ranges[-1][0], max(last_to, received_to))
-        else:
-            ranges.append((received_from, received_to))
-    return ranges
-
-
 class _OutsideFolders:
     """Every folder id outside a mailbox's walked folders. Passed where an
     excluded set goes, it keeps a by-id read to the messages the walk lists."""
@@ -2132,9 +2111,30 @@ class OutlookConnector(
         access = owner_access(mailbox) if include_permissions else None
         yield from self._hierarchy_nodes(mailbox, tree, access)
         outside = _OutsideFolders({folder.id for folder, _ in tree})
+        # One lookup for every thread the mailbox writes, so a thread it no
+        # longer holds is scanned for once, not once per thread.
+        try:
+            conversation_ids = (
+                self._conversation_ids(mailbox, set(threads), None) if threads else {}
+            )
+        except OutlookGraphError as e:
+            if e.fails_the_attempt:
+                raise
+            for document_id in (d for ids in threads.values() for d in ids):
+                yield _document_failure(
+                    document_id,
+                    f"Failed to look up threads in {mailbox.address}: {e}",
+                    e,
+                )
+            threads = {}
+            conversation_ids = {}
         for key, document_ids in threads.items():
             yield from self._reindex_thread(
-                mailbox, key, set(threads), document_ids, outside, include_permissions
+                mailbox,
+                conversation_ids.get(key),
+                document_ids,
+                outside,
+                include_permissions,
             )
         for document_id, event_id in events:
             yield self._reindex_event(
@@ -2144,17 +2144,15 @@ class OutlookConnector(
     def _reindex_thread(
         self,
         writer: OutlookMailbox,
-        key: str,
-        writer_keys: set[str],
+        conversation_id: str | None,
         document_ids: list[str],
         outside: _OutsideFolders,
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure, None, None]:
         """Builds the writer's copy of the thread as the walk does, from the
         messages of the folders it walks, and yields the documents asked for.
-        The writer's other threads are looked up in the same scan."""
+        No conversation id means the writer no longer holds the thread."""
         try:
-            conversation_id = self._conversation_ids(writer, writer_keys, None).get(key)
             rows: list[ThreadListing] = (
                 self._conversation_outline(writer, conversation_id, outside)
                 if conversation_id is not None
@@ -2238,8 +2236,9 @@ class OutlookConnector(
         its conversation index was made (``thread_started_at``), so the scan
         reads the mailbox oldest first from that moment. With ``window``, only
         messages that arrived within it of the thread's start are read, which
-        is enough to find a first message. Without it, the scan runs until
-        every thread is found or RECEIVED_SCAN_LIMIT messages are read."""
+        is enough to find a first message. Each thread not yet found gets its
+        own scan of at most RECEIVED_SCAN_LIMIT messages, oldest thread first,
+        and a scan records every asked-for thread it passes."""
         found: dict[str, str] = {
             key: self._thread_conversations[(mailbox.id, key)]
             for key in keys
@@ -2250,16 +2249,20 @@ class OutlookConnector(
             for key in keys - found.keys()
             if (started := thread_started_at(key)) is not None
         }
-        for received_from, received_to in _scan_ranges(list(starts.values()), window):
+        for key, started in sorted(starts.items(), key=lambda item: item[1]):
+            if key in found:
+                continue
+            received_from = started - THREAD_CLOCK_SKEW
+            received_to = started + window if window is not None else None
             for change in self._received(mailbox, received_from, received_to):
-                key = thread_key(change.conversation_index or "")
-                if key in starts and change.conversation_id and key not in found:
-                    found[key] = change.conversation_id
-                    self._thread_conversations[(mailbox.id, key)] = (
+                seen = thread_key(change.conversation_index or "")
+                if seen in starts and change.conversation_id and seen not in found:
+                    found[seen] = change.conversation_id
+                    self._thread_conversations[(mailbox.id, seen)] = (
                         change.conversation_id
                     )
-                if found.keys() >= starts.keys():
-                    return found
+                if key in found:
+                    break
         return found
 
     def _received(
@@ -2323,24 +2326,11 @@ class OutlookConnector(
     ) -> dict[str, OutlookMailbox]:
         """The builders of the threads whose first message the mailbox holds,
         by the rule ``plan_documents`` applies. A mailbox the run cannot read
-        decides none."""
+        decides none, and a conversation it cannot read decides only itself."""
         try:
             conversation_ids = self._conversation_ids(
                 holder, keys, FIRST_MESSAGE_ARRIVAL_WINDOW
             )
-            builders: dict[str, OutlookMailbox] = {}
-            for key, conversation_id in conversation_ids.items():
-                root = thread_root(
-                    self._conversation_outline(holder, conversation_id, set())
-                )
-                builder = (
-                    designated_builder(root, self._mailbox_available)
-                    if root is not None
-                    else None
-                )
-                if builder is not None:
-                    builders[key] = builder
-            return builders
         except OutlookGraphError as e:
             if e.fails_the_attempt:
                 raise
@@ -2350,3 +2340,28 @@ class OutlookConnector(
                 e.code,
             )
             return {}
+        builders: dict[str, OutlookMailbox] = {}
+        for key, conversation_id in conversation_ids.items():
+            try:
+                root = thread_root(
+                    self._conversation_outline(holder, conversation_id, set())
+                )
+                builder = (
+                    designated_builder(root, self._mailbox_available)
+                    if root is not None
+                    else None
+                )
+            except OutlookGraphError as e:
+                if e.fails_the_attempt:
+                    raise
+                logger.info(
+                    "Outlook: conversation %s in %s unreadable (%s), it decides "
+                    "no thread builder",
+                    conversation_id,
+                    holder.address,
+                    e.code,
+                )
+                continue
+            if builder is not None:
+                builders[key] = builder
+        return builders

@@ -2778,18 +2778,73 @@ def test_thread_start_is_read_from_either_documented_time_layout(
     assert thread_started_at("not-a-key") is None
 
 
-def test_scan_ranges_merge_overlapping_windows() -> None:
-    first = datetime(2026, 9, 1, tzinfo=timezone.utc)
-    near = first + timedelta(days=3)
-    far = first + timedelta(days=30)
-    skew = connector_module.THREAD_CLOCK_SKEW
-    window = timedelta(days=7)
+def test_each_thread_gets_its_own_scan_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connector_module, "RECEIVED_SCAN_LIMIT", 2)
+    old_key = _key_started_at(THREAD_START - timedelta(days=700), False)
+    new_key = _key_started_at(THREAD_START, False)
+    new_started = thread_started_at(new_key)
+    assert new_started is not None
+    new_index = base64.b64encode(base64.urlsafe_b64decode(new_key + "==")).decode()
 
-    assert connector_module._scan_ranges([far, first, near], window) == [
-        (first - skew, near + window),
-        (far - skew, far + window),
-    ]
-    assert connector_module._scan_ranges([far, first], None) == [(first - skew, None)]
+    def received(*, received_from: datetime, **_: Any) -> OutlookDeltaPage:
+        # Mail after the old thread's start never reaches the new thread
+        # within one budget, so only a scan from its own start finds it.
+        if received_from == new_started - connector_module.THREAD_CLOCK_SKEW:
+            return OutlookDeltaPage(
+                changes=[
+                    change(conversation_id="conv-new", conversation_index=new_index)
+                ]
+            )
+        return OutlookDeltaPage(
+            changes=[change(id="msg-filler", conversation_id="conv-filler")],
+            next_link="more",
+        )
+
+    gateway = _reindex_gateway()
+    gateway.fetch_received_page.side_effect = received
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    found = connector._conversation_ids(mailbox(), {old_key, new_key}, None)
+
+    assert found == {new_key: "conv-new"}
+    assert gateway.fetch_received_page.call_count == 3
+
+
+def test_a_refused_conversation_keeps_the_builders_already_found() -> None:
+    gateway = _reindex_gateway()
+    refused_index = conversation_index("conv-refused")
+
+    def received(**_: Any) -> OutlookDeltaPage:
+        return OutlookDeltaPage(
+            changes=[
+                change(),
+                change(
+                    id="msg-refused",
+                    conversation_id="conv-refused",
+                    conversation_index=refused_index,
+                ),
+            ]
+        )
+
+    readable = _outline_of(gateway)
+
+    def outline(*, conversation_id: str, **kwargs: Any) -> OutlookDeltaPage:
+        if conversation_id == "conv-refused":
+            raise graph_error(403)
+        return readable(conversation_id=conversation_id, **kwargs)
+
+    gateway.fetch_received_page.side_effect = received
+    gateway.fetch_conversation_outline_page.side_effect = outline
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    readable_id = thread_doc_id(CONVERSATION_ID)
+    refused_id = thread_doc_id("conv-refused")
+
+    docs, failures, _ = _reindex(connector, [readable_id, refused_id])
+
+    assert [d.id for d in docs] == [readable_id]
+    assert set(_failed(failures)) == {refused_id}
 
 
 def test_reindex_finds_the_thread_from_its_start_and_reads_that_conversation() -> None:
