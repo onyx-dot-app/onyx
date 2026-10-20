@@ -155,9 +155,9 @@ function InputCurrency({
 
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
-  // Enter steps through the segments like Tab. In the last segment it tidies
-  // the display and, since every draft is a valid amount, lets the keystroke
-  // reach a surrounding form so it submits.
+  // Inside a form, Enter tidies the display and submits from any segment, like
+  // any text input (every draft is a valid amount). Outside a form, Enter steps
+  // through the segments like Tab.
   function handleKeyDown(
     part: keyof AmountSegments,
     prevRef: React.RefObject<HTMLInputElement | null> | null,
@@ -167,7 +167,7 @@ function InputCurrency({
     return (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key !== "Enter") return shared(e);
       const next = nextRef?.current;
-      if (next) {
+      if (next && !e.currentTarget.form) {
         e.preventDefault();
         next.focus();
         next.select();

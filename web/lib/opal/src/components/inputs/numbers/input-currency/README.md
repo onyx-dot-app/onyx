@@ -10,7 +10,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 - The whole segment always resolves: leading zeros trim as soon as focus leaves it (`0007` becomes `7`, `0000` becomes `0`).
 - Left/Right arrows cross segment edges, and Backspace in an empty fraction returns to the whole segment.
 - Edits report through `onChange` as you type, so a form sees the amount at once. An empty field reports `null`.
-- Enter steps from the whole segment to the fraction, like Tab. In the last segment it tidies the display (`3.5` becomes `3.50`) and submits a surrounding form.
+- Inside a form, Enter tidies the display (`3.5` becomes `3.50`) and submits the form from either segment, like any text input. Outside a form, Enter steps from the whole segment to the fraction, like Tab.
 - Blur also tidies the display.
 
 ```tsx

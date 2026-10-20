@@ -42,7 +42,7 @@ describe("typing", () => {
     expect(onChange).toHaveBeenCalledWith(3.075);
   });
 
-  it("steps to the fraction on Enter, then submits the form", async () => {
+  it("submits a surrounding form on Enter from either segment", async () => {
     const user = setupUser();
     const onSubmit = jest.fn((e: React.FormEvent) => e.preventDefault());
     render(
@@ -54,11 +54,20 @@ describe("typing", () => {
 
     await user.click(screen.getByLabelText("Whole amount"));
     await user.keyboard("3{Enter}");
-    expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
-    expect(onSubmit).not.toHaveBeenCalled();
-
-    await user.keyboard("5{Enter}");
     expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByLabelText("Fractional amount"));
+    await user.keyboard("5{Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it("steps to the fraction on Enter outside a form", async () => {
+    const user = setupUser();
+    render(<InputCurrency value={null} onChange={() => {}} />);
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.keyboard("3{Enter}");
+    expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
   });
 
   it("trims leading zeros as soon as focus leaves the whole segment", async () => {
