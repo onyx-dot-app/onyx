@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft-Apps"
+        "external-app": "Craft-App"
       },
       "row": {
         "view": "{name} anzeigen",
@@ -954,13 +954,15 @@
         "emptyDescription": "Versuche einen anderen Verbindungsfilter oder bitte deinen Workspace-Admin, ein Plugin hinzuzufügen."
       },
       "detail": {
+        "issuesTitle": "Probleme",
+        "readyDescription": "Du kannst dieses Plugin jetzt verwenden.",
         "connection": "Verbindung",
         "tools": "Werkzeuge",
         "toolCount": "{count, plural, one {# Werkzeug} other {# Werkzeuge}}",
         "noTools": "Für dieses Plugin sind keine sichtbaren Werkzeuge gespeichert.",
         "connect": "Konto verbinden",
         "useInChat": "Im Chat verwenden",
-        "disconnect": "Konto trennen",
+        "disconnect": "Trennen",
         "disconnectTitle": "{name} trennen?",
         "disconnectDescription": "Dadurch wird Ihre Kontoverbindung entfernt. Die Workspace-Verfügbarkeit bleibt gleich.",
         "oauthDisconnectWarning": "Alle Plugins und Apps mit derselben OAuth-Konfiguration teilen diese Kontoverbindung. Beim Trennen wird Ihre Verbindung zu allen entfernt.",
@@ -1005,18 +1007,20 @@
         "showAll": "Alle Plugins anzeigen"
       },
       "defaults": {
-        "chat": "Standardmäßig im Hauptchat aktivieren",
-        "craft": "Standardmäßig in Craft aktivieren",
-        "chatDescription": "Gilt für den Standardchat. Benutzerdefinierte Agenten behalten ihre eigenen Tool-Einstellungen.",
-        "craftDescription": "Dieses MCP in Ihren Craft-Sitzungen verwenden.",
+        "chat": "Im Standard-Chat aktivieren",
+        "craft": "In Craft aktivieren",
+        "chatDescription": "Dieses Plugin in Ihren Chats ohne benutzerdefinierten Agenten verfügbar machen.",
+        "craftDescription": "Dieses Plugin in Ihren Craft-Sitzungen und geplanten Aufgaben verfügbar machen. Die Tool-Berechtigungen Ihrer Organisation gelten weiterhin.",
         "unavailable": "Ihr Admin hat dieses Plugin für {surface} deaktiviert.",
-        "saveFailed": "Ihre Plugin-Standardeinstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut."
+        "saveFailed": "Ihre Plugin-Standardeinstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.",
+        "chatUnavailable": "Ihr Admin hat dieses Plugin für {surface} deaktiviert. Benutzerdefinierte Agenten, die mit diesem Plugin konfiguriert sind, können es möglicherweise weiterhin verwenden."
       },
       "openapi": {
         "chatOnly": "Nur Chat",
         "chatOnlyDescription": "Dieses Plugin ist in Chat verfügbar, nicht in Craft."
       },
       "appSkills": {
+        "preview": "Vorschau",
         "search": "Skills suchen",
         "count": "{count, plural, one {# Skill} other {# Skills}}",
         "empty": "Mit dieser App sind keine Skills verknüpft.",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "Verbunden · nicht alle verknüpften Skills sind aktiviert",
           "notAvailable": "Für dein Konto nicht verfügbar: Frag einen Admin",
           "skillWarningAriaLabel": "Skill-Einrichtung erforderlich",
-          "skillWarningTooltip": "Nicht alle verknüpften Skills sind aktiviert. Diese App funktioniert möglicherweise nicht richtig."
+          "skillWarningTooltip": "Nicht alle verknüpften Skills sind aktiviert. Diese App funktioniert möglicherweise nicht richtig.",
+          "skillWarningSummary": "Nicht alle verknüpften Skills sind aktiviert."
         }
       },
       "policyEditor": {

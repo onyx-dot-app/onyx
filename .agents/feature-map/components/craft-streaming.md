@@ -37,7 +37,7 @@ background and continues rendering it live; it does not lose the turn, but it
 also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
-Connected app setup cards link to **App permissions**. This opens the approvals tab in plugin details, without delaying authentication.
+Connected app setup cards link to **App permissions**. This opens Tools > Approval settings in plugin details, without delaying authentication.
 The editor covers external apps and MCP servers. Workspace-disabled actions
 remain visible and locked. Task editors use the same action rows with
 independent saved choices.

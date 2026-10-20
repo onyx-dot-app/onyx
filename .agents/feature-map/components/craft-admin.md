@@ -49,6 +49,8 @@ The MCP tools editor retains its bulk selector; each tool defaults to Ask.
 MCP Configuration places the user approval-settings switch below workspace availability.
 It saves with server configuration. The Tools tab saves only tool availability and action policies.
 
+Member plugin details group Available tools and Approval settings under Tools when Craft approvals are available.
+External apps show approval settings directly in Tools and retain their Skills tab. Admin MCP Tools uses the same Approval settings label.
 Policy rows keep controls on the right. Names and descriptions wrap within the
 remaining width so the full text stays visible without hover or expansion.
 On Onyx Cloud, most built-in apps already have Onyx-managed OAuth

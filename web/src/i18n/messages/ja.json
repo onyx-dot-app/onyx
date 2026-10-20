@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft アプリ"
+        "external-app": "Craft用アプリ"
       },
       "row": {
         "view": "{name}を表示",
@@ -954,13 +954,15 @@
         "emptyDescription": "別の接続フィルターを試すか、ワークスペース管理者にプラグインの追加を依頼してください。"
       },
       "detail": {
+        "issuesTitle": "問題",
+        "readyDescription": "このプラグインを使い始めることができます。",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",
         "noTools": "このプラグインには表示できるツールが保存されていません。",
         "connect": "アカウントを接続",
         "useInChat": "チャットで使用",
-        "disconnect": "アカウントの接続を解除",
+        "disconnect": "接続を解除",
         "disconnectTitle": "{name}の接続を解除しますか？",
         "disconnectDescription": "アカウントの接続を削除します。ワークスペースでの利用可否は変わりません。",
         "oauthDisconnectWarning": "同じOAuth設定を使用するすべてのプラグインとアプリが、このアカウントの接続を共有しています。接続を解除すると、それらすべてから接続が削除されます。",
@@ -1005,18 +1007,20 @@
         "showAll": "すべてのプラグインを表示"
       },
       "defaults": {
-        "chat": "メインチャットでデフォルトで有効にする",
-        "craft": "Craft でデフォルトで有効にする",
-        "chatDescription": "デフォルトチャットに適用されます。カスタムエージェントは独自のツール設定を維持します。",
-        "craftDescription": "Craft セッションでこの MCP を使用します。",
+        "chat": "デフォルトのチャットで有効にする",
+        "craft": "Craft で有効にする",
+        "chatDescription": "カスタムエージェントを使用しないチャットで、このプラグインを利用できるようにします。",
+        "craftDescription": "Craft のセッションとスケジュールされたタスクで、このプラグインを利用できるようにします。組織のツール権限は引き続き適用されます。",
         "unavailable": "管理者が {surface} でこのプラグインを無効にしました。",
-        "saveFailed": "プラグインのデフォルト設定を保存できませんでした。もう一度お試しください。"
+        "saveFailed": "プラグインのデフォルト設定を保存できませんでした。もう一度お試しください。",
+        "chatUnavailable": "管理者が {surface} でこのプラグインを無効にしました。このプラグインが設定されたカスタムエージェントでは、引き続き使用できる場合があります。"
       },
       "openapi": {
         "chatOnly": "Chat のみ",
         "chatOnlyDescription": "このプラグインは Chat で利用でき、Craft では利用できません。"
       },
       "appSkills": {
+        "preview": "プレビュー",
         "search": "スキルを検索",
         "count": "{count, plural, one {# 件のスキル} other {# 件のスキル}}",
         "empty": "このアプリに関連付けられたスキルはありません。",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
           "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください",
           "skillWarningAriaLabel": "スキルの設定が必要です",
-          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。"
+          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。",
+          "skillWarningSummary": "一部の関連スキルが無効です。"
         }
       },
       "policyEditor": {

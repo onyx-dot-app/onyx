@@ -2,18 +2,34 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputTypeIn, Text } from "@opal/components";
-import { ContentAction } from "@opal/layouts";
+import {
+  Button,
+  InputSwitch,
+  InputTypeIn,
+  Text,
+  Tooltip,
+} from "@opal/components";
+import { ContentAction, Section } from "@opal/layouts";
 import useUserSkills from "@/hooks/useUserSkills";
+import type { Skill } from "@/lib/skills/types";
 
 interface MemberCraftAppSkillsProps {
   appId: number;
+  changes: Record<string, boolean>;
+  onChange: (skill: Skill, enabled: boolean) => void;
+  disabled: boolean;
+  onPreview: (skill: Skill) => void;
 }
 
 export default function MemberCraftAppSkills({
   appId,
+  changes,
+  onChange,
+  disabled,
+  onPreview,
 }: MemberCraftAppSkillsProps) {
   const t = useTranslations("actions.memberPlugins.appSkills");
+  const cards = useTranslations("cards.skill");
   const state = useTranslations("actions.memberPlugins.state");
   const { data, isLoading, error, refresh } = useUserSkills();
   const [search, setSearch] = useState("");
@@ -52,20 +68,19 @@ export default function MemberCraftAppSkills({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       {loadError}
-      <div className="flex items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <InputTypeIn
-            searchIcon
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("search")}
-            aria-label={t("search")}
-          />
-        </div>
-        <Text font="secondary-body" color="text-03">
-          {t("count", { count: visible.length })}
-        </Text>
-      </div>
+
+      <InputTypeIn
+        searchIcon
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder={t("search")}
+        aria-label={t("search")}
+      />
+
+      <Text font="secondary-body" color="text-03">
+        {t("count", { count: visible.length })}
+      </Text>
+
       {visible.length ? (
         <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
           {visible.map((skill) => (
@@ -79,9 +94,40 @@ export default function MemberCraftAppSkills({
                 description={skill.description}
                 descriptionMaxLines={2}
                 rightChildren={
-                  <Text font="secondary-body" color="text-03">
-                    {t(skill.enabled ? "enabled" : "disabled")}
-                  </Text>
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    alignItems="center"
+                    gap={3}
+                    width="auto"
+                    height="auto"
+                  >
+                    <Button
+                      prominence="secondary"
+                      size="sm"
+                      disabled={disabled}
+                      onClick={() => onPreview(skill)}
+                    >
+                      {t("preview")}
+                    </Button>
+                    <Tooltip tooltip={skill.unavailable_reason ?? undefined}>
+                      <InputSwitch
+                        checked={changes[skill.id] ?? skill.enabled}
+                        onCheckedChange={(enabled) => onChange(skill, enabled)}
+                        disabled={
+                          disabled ||
+                          !skill.can_toggle ||
+                          skill.is_valid === false
+                        }
+                        aria-label={cards(
+                          (changes[skill.id] ?? skill.enabled)
+                            ? "toggle.disable.ariaLabel"
+                            : "toggle.enable.ariaLabel",
+                          { name: skill.name }
+                        )}
+                      />
+                    </Tooltip>
+                  </Section>
                 }
               />
             </li>

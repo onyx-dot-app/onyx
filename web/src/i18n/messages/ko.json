@@ -914,7 +914,7 @@
       "kind": {
         "mcp": "MCP",
         "openapi": "OpenAPI",
-        "external-app": "Craft 앱"
+        "external-app": "Craft용 앱"
       },
       "row": {
         "view": "{name} 보기",
@@ -954,13 +954,15 @@
         "emptyDescription": "다른 연결 필터를 사용하거나 워크스페이스 관리자에게 플러그인 추가를 요청하세요."
       },
       "detail": {
+        "issuesTitle": "문제",
+        "readyDescription": "이 플러그인을 사용할 수 있습니다.",
         "connection": "연결",
         "tools": "도구",
         "toolCount": "{count, plural, other {도구 #개}}",
         "noTools": "이 플러그인에 표시할 수 있는 도구가 저장되어 있지 않습니다.",
         "connect": "계정 연결",
         "useInChat": "채팅에서 사용",
-        "disconnect": "계정 연결 해제",
+        "disconnect": "연결 해제",
         "disconnectTitle": "{name}의 연결을 해제할까요?",
         "disconnectDescription": "계정 연결이 삭제됩니다. 워크스페이스 사용 가능 여부는 유지됩니다.",
         "oauthDisconnectWarning": "동일한 OAuth 설정을 사용하는 모든 플러그인과 앱이 이 계정 연결을 공유합니다. 연결을 해제하면 모든 해당 플러그인과 앱에서 연결이 삭제됩니다.",
@@ -1005,18 +1007,20 @@
         "showAll": "모든 플러그인 보기"
       },
       "defaults": {
-        "chat": "메인 채팅에서 기본적으로 활성화",
-        "craft": "Craft에서 기본적으로 활성화",
-        "chatDescription": "기본 채팅에 적용됩니다. 사용자 지정 에이전트는 자체 도구 설정을 유지합니다.",
-        "craftDescription": "내 Craft 세션에서 이 MCP를 사용합니다.",
+        "chat": "기본 Chat에서 활성화",
+        "craft": "Craft에서 활성화",
+        "chatDescription": "사용자 지정 에이전트를 사용하지 않는 내 채팅에서 이 플러그인을 사용할 수 있게 합니다.",
+        "craftDescription": "내 Craft 세션과 예약된 작업에서 이 플러그인을 사용할 수 있게 합니다. 조직의 도구 권한은 계속 적용됩니다.",
         "unavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다.",
-        "saveFailed": "플러그인 기본 설정을 저장하지 못했습니다. 다시 시도하세요."
+        "saveFailed": "플러그인 기본 설정을 저장하지 못했습니다. 다시 시도하세요.",
+        "chatUnavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다. 이 플러그인이 설정된 사용자 지정 에이전트는 계속 사용할 수 있습니다."
       },
       "openapi": {
         "chatOnly": "Chat 전용",
         "chatOnlyDescription": "이 플러그인은 Chat에서 사용할 수 있으며 Craft에서는 사용할 수 없습니다."
       },
       "appSkills": {
+        "preview": "미리 보기",
         "search": "스킬 검색",
         "count": "{count, plural, one {스킬 #개} other {스킬 #개}}",
         "empty": "이 앱에 연결된 스킬이 없습니다.",
@@ -14279,7 +14283,8 @@
           "connectedNeedsSkills": "연결됨 · 일부 연결된 스킬이 비활성화되어 있습니다",
           "notAvailable": "회원님 계정에서는 사용할 수 없습니다. 관리자에게 문의하세요",
           "skillWarningAriaLabel": "스킬 설정 필요",
-          "skillWarningTooltip": "일부 연결된 스킬이 비활성화되어 있습니다. 이 앱이 올바르게 작동하지 않을 수 있습니다."
+          "skillWarningTooltip": "일부 연결된 스킬이 비활성화되어 있습니다. 이 앱이 올바르게 작동하지 않을 수 있습니다.",
+          "skillWarningSummary": "일부 연결된 스킬이 비활성화되어 있습니다."
         }
       },
       "policyEditor": {

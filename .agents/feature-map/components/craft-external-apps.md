@@ -185,10 +185,11 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 ### Action permission ownership
 
 Members manage app and MCP approval settings in the existing plugin detail modal at
-`/app/plugins` and `/craft/v1/plugins`. Connected Craft-capable plugins have an Approval settings tab.
+`/app/plugins` and `/craft/v1/plugins`. Connected Craft-capable MCP plugins have Available tools and Approval settings tabs under Tools. External apps show approval settings directly under Tools.
 OpenAPI plugins do not expose this tab: main Chat does not enforce Craft approval settings.
-Connecting an external app or Craft MCP server opens its approval settings after authentication succeeds.
-The Connection tab retains account controls and the existing default-use switches.
+Connecting an external app or Craft MCP server returns to its Connection tab after authentication succeeds.
+The Connection tab contains a status card and personal availability switches. Connected cards include readiness text. Disabled associated skills appear in a separate Issues card with a yellow dot. Its Review skills action opens the Skills tab. That tab supports instruction previews and per-user enable drafts, applied only on Save.
+Switches remain local drafts until Save. Cancel checks for unsaved changes.
 Admin, personal, and task forms share `web/src/sections/actions/PolicyEditor.tsx`.
 Search narrows visible actions.
 All shared approval editors show a plain tool count below search, including locked tools.
@@ -216,7 +217,7 @@ personal settings inherit the workspace default, while missing task settings ask
 `onyx/db/action_policy.py:resolve_action_policies` owns these rules.
 The same module owns shared app identity lookup, workspace policy storage, and batched policy reads.
 One-app modals use `GET /action-policies/{kind}/{target_id}` under the user or admin router.
-Personal approval tabs fetch a fresh snapshot on first opening. Each modal opening owns its request.
+Opening the plugin modal fetches a fresh personal approval snapshot, before Tools is selected. Each modal opening owns its request.
 MCP workspace editors also wait for current server data before creating their draft.
 Later refreshes do not replace that draft. Switching tabs preserves edits. Saving disables the user-management switch.
 Closing a linked permissions modal removes only its `actionPolicies` query parameter.
