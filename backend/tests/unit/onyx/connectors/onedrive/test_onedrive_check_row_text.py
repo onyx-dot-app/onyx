@@ -189,6 +189,48 @@ def test_some_missing_users_are_a_partial_find() -> None:
     assert results["onedrive_drive"].status == CapabilityCheckStatus.PASSED
 
 
+def _missing_or_locked(identifier: str) -> Any:
+    if identifier == "owner@example.com":
+        return _OWNER
+    if identifier.startswith("locked"):
+        raise MicrosoftGraphError(423, "resourceLocked", "")
+    return None
+
+
+def test_locked_users_are_not_reported_as_missing() -> None:
+    gateway = _gateway()
+    gateway.get_user.side_effect = _missing_or_locked
+
+    result = _run(
+        "onedrive_configured_users",
+        gateway,
+        {"users": ["owner@example.com", "gone@example.com", "locked@example.com"]},
+    )
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "2 of 3 users unavailable"
+    assert result.description == (
+        "Not found: gone@example.com.\nCorrect or remove them in Users.\n"
+        "Microsoft refused the lookup of: locked@example.com.\nRe-run the checks. "
+        "If it repeats, send the error details to support."
+    )
+
+
+def test_every_user_locked_is_incomplete() -> None:
+    gateway = _gateway()
+    gateway.get_user.side_effect = _missing_or_locked
+
+    result = _run(
+        "onedrive_configured_users",
+        gateway,
+        {"users": ["locked1@example.com", "locked2@example.com"]},
+    )
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "Selected users are locked"
+    assert "Not found" not in (result.description or "")
+
+
 def test_no_selected_user_found_fails_and_stops_the_drive_check() -> None:
     gateway = _gateway()
     gateway.get_user.return_value = None
