@@ -70,11 +70,6 @@ type registryFile struct {
 	Leases []Lease `json:"leases"`
 }
 
-// Lease is LeaseFor without a state directory.
-func (r *Registry) Lease(root string, requests []PortRequest) (map[string]int, error) {
-	return r.LeaseFor(root, "", requests)
-}
-
 // LeaseFor assigns a host port to every request for root, under the registry
 // lock, and records stateDir in its leases. A request keeps its existing
 // lease when the port is still free to bind (or Fixed) and no lower free port
