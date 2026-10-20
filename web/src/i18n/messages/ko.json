@@ -4840,7 +4840,7 @@
           "label": "입력 요금"
         },
         "model": {
-          "description": "이 요금은 이 모델의 기본 제공 가격을 대체합니다.",
+          "description": "선택한 이 모델에 비용 재정의를 적용합니다.",
           "label": "모델",
           "placeholder": "모델 선택"
         },

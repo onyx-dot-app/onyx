@@ -4840,7 +4840,7 @@
           "label": "Tarif d'entrée"
         },
         "model": {
-          "description": "Ces tarifs remplacent le prix intégré de ce modèle.",
+          "description": "Appliquer un remplacement de coût à ce modèle choisi.",
           "label": "Modèle",
           "placeholder": "Sélectionnez un modèle"
         },

@@ -4840,7 +4840,7 @@
           "label": "Input rate"
         },
         "model": {
-          "description": "These rates replace the built-in price for this model.",
+          "description": "Apply a cost override on this chosen model.",
           "label": "Model",
           "placeholder": "Select a model"
         },

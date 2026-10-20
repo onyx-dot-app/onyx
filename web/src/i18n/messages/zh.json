@@ -4840,7 +4840,7 @@
           "label": "输入价格"
         },
         "model": {
-          "description": "这些价格将替换此模型的内置价格。",
+          "description": "对所选的此模型应用成本覆盖。",
           "label": "模型",
           "placeholder": "选择模型"
         },

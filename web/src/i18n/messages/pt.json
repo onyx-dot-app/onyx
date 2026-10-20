@@ -4840,7 +4840,7 @@
           "label": "Taxa de entrada"
         },
         "model": {
-          "description": "Essas taxas substituem o preço integrado deste modelo.",
+          "description": "Aplique uma substituição de custo a este modelo escolhido.",
           "label": "Modelo",
           "placeholder": "Selecione um modelo"
         },

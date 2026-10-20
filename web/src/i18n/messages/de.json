@@ -4840,7 +4840,7 @@
           "label": "Eingabepreis"
         },
         "model": {
-          "description": "Diese Preise ersetzen den integrierten Preis für dieses Modell.",
+          "description": "Eine Kostenüberschreibung auf dieses ausgewählte Modell anwenden.",
           "label": "Modell",
           "placeholder": "Modell auswählen"
         },
