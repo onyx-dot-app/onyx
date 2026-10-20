@@ -6,6 +6,8 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 
 - Typing `.`, `,` or the locale separator in the whole segment jumps to the fraction.
 - Pasting `12.50` into the whole segment fills both segments.
+- `precision` governs the fraction: typing past it is blocked.
+- The whole segment always resolves: leading zeros trim as soon as focus leaves it (`0007` becomes `7`, `0000` becomes `0`).
 - Left/Right arrows cross segment edges, and Backspace in an empty fraction returns to the whole segment.
 - Edits report through `onChange` as you type, so a form sees the amount at once. An empty field reports `null`.
 - Enter steps from the whole segment to the fraction, like Tab. In the last segment it tidies the display (`3.5` becomes `3.50`) and submits a surrounding form.
