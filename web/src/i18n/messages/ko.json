@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "추가"
         },
-        "title": "비용 재정의",
+        "editTitle": "비용 재정의 편집",
+        "newTitle": "새 비용 재정의",
         "cacheRate": {
           "label": "캐시 읽기 요금",
           "placeholder": "기본값은 입력 요금입니다"

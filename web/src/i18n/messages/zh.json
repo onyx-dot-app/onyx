@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "添加"
         },
-        "title": "成本覆盖",
+        "editTitle": "编辑成本覆盖",
+        "newTitle": "新建成本覆盖",
         "cacheRate": {
           "label": "缓存读取价格",
           "placeholder": "默认与输入价格相同"

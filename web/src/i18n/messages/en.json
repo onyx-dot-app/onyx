@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "Add"
         },
-        "title": "Cost Override",
+        "editTitle": "Edit Cost Override",
+        "newTitle": "New Cost Override",
         "cacheRate": {
           "label": "Cache-read rate",
           "placeholder": "defaults to input rate"

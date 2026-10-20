@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "Adicionar"
         },
-        "title": "Substituição de custo",
+        "editTitle": "Editar substituição de custo",
+        "newTitle": "Nova substituição de custo",
         "cacheRate": {
           "label": "Taxa de leitura de cache",
           "placeholder": "usa a taxa de entrada por padrão"

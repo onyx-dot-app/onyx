@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "Ajouter"
         },
-        "title": "Remplacement de coût",
+        "editTitle": "Modifier le remplacement de coût",
+        "newTitle": "Nouveau remplacement de coût",
         "cacheRate": {
           "label": "Tarif de lecture du cache",
           "placeholder": "par défaut : tarif d'entrée"

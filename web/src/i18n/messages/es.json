@@ -4827,7 +4827,8 @@
         "addButton": {
           "label": "Agregar"
         },
-        "title": "Anulación de costo",
+        "editTitle": "Editar anulación de costo",
+        "newTitle": "Nueva anulación de costo",
         "cacheRate": {
           "label": "Tarifa de lectura de caché",
           "placeholder": "usa la tarifa de entrada"
