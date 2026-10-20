@@ -729,9 +729,11 @@ test("shows OAuth fields without opening advanced settings and preserves masked 
   expect(
     screen.getByLabelText(copy.clientId.label, { exact: false })
   ).toBeVisible();
+  // The stored secret shows as a tag; the input itself stays empty.
   expect(
     screen.getByLabelText(copy.clientSecret.label, { exact: false })
-  ).toHaveValue("********");
+  ).toHaveValue("");
+  expect(screen.getByText("********")).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: copy.providerMode.placeholder })
   ).toBeVisible();
