@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { FullAgent } from "@/lib/agents/types";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
@@ -33,6 +33,11 @@ import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
+import { filterOutStagedViewerFiles } from "./agentViewerFileUtils";
+import {
+  getFinalLLM,
+  modelSupportsImageInput,
+} from "@/lib/languageModels/utils";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
@@ -132,16 +137,94 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
+  const { setCurrentMessageFiles, beginUpload } = useProjectsContext();
+  // Files uploaded in the viewer are staged in the app-wide provider so the
+  // chat this modal hands off to can pick them up. Track their ids so a close
+  // without sending can remove exactly those files again.
+  const stagedFileIdsRef = useRef<Set<string>>(new Set());
+  const isActiveRef = useRef(true);
+  const handedOffRef = useRef(false);
 
   // This send navigates in order to send, so the configuration is left where
-  // that page will find it rather than travelling with the call. Closing the
-  // viewer without sending leaves nothing behind.
+  // that page will find it rather than travelling with the call. Releasing
+  // the staged ids here marks the handoff as done, so the unmount cleanup
+  // leaves the uploaded files in place for the chat that is about to open.
   const submit = useCallback(
     (message: string) => {
+      handedOffRef.current = true;
+      stagedFileIdsRef.current.clear();
       toolConfiguration.handOffToNewChatWith(agent.id);
       onSubmit(message);
     },
     [toolConfiguration, agent.id, onSubmit]
+  );
+
+  // A close without sending must not leak the staged uploads into the next
+  // chat: remove exactly the files this input staged. After a send this is a
+  // no-op because submit already released the staged ids.
+  useEffect(() => {
+    isActiveRef.current = true;
+    return () => {
+      isActiveRef.current = false;
+      if (handedOffRef.current) return;
+      // Capture IDs before scheduling React's state updater: clearing the
+      // mutable ref first must not make the queued cleanup a no-op.
+      const stagedIds = new Set(stagedFileIdsRef.current);
+      stagedFileIdsRef.current.clear();
+      if (stagedIds.size === 0) return;
+      setCurrentMessageFiles((prev) =>
+        filterOutStagedViewerFiles(prev, stagedIds)
+      );
+    };
+  }, [setCurrentMessageFiles]);
+
+  // Mirrors the chat page's upload path (useChatController's
+  // handleMessageSpecificFileUpload): vision-gate images, upload through the
+  // shared projects provider, and stage the results in the global
+  // currentMessageFiles so the chat the modal hands off to picks them up.
+  const handleFileUpload = useCallback(
+    async (acceptedFiles: File[]) => {
+      // While providers are still loading the model lookup below resolves
+      // against an empty selection and would report every image as
+      // unsupported. Wait for the real model settings instead.
+      if (llmManager.isLoadingProviders) {
+        toast.error(
+          "Model settings are still loading — please try again in a moment."
+        );
+        return;
+      }
+
+      const [_, llmModel] = getFinalLLM(
+        llmManager.llmProviders || [],
+        agent,
+        llmManager.currentLlm
+      );
+      const llmAcceptsImages = modelSupportsImageInput(
+        llmManager.llmProviders || [],
+        llmModel
+      );
+
+      const imageFiles = acceptedFiles.filter((file) =>
+        file.type.startsWith("image/")
+      );
+
+      if (imageFiles.length > 0 && !llmAcceptsImages) {
+        toast.error(
+          "The current model does not support image input. Please select a model with Vision support."
+        );
+        return;
+      }
+
+      const uploadedMessageFiles = await beginUpload(acceptedFiles, null);
+      // A picker can resolve after the modal closes (or after handoff).
+      // Never attach those files to an unrelated subsequent chat.
+      if (!isActiveRef.current || handedOffRef.current) return;
+      uploadedMessageFiles.forEach((file) =>
+        stagedFileIdsRef.current.add(file.id)
+      );
+      setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
+    },
+    [llmManager, agent, beginUpload, setCurrentMessageFiles]
   );
 
   return (
@@ -154,7 +237,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       chatState="input"
       activeAgent={agent}
       stopGenerating={() => {}}
-      handleFileUpload={() => {}}
+      handleFileUpload={handleFileUpload}
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
