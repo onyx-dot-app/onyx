@@ -78,10 +78,19 @@ export function makeSegmentKeyDownHandler<S extends { [K in keyof S]: string }>(
         return;
       }
 
-      // Arrows only cross a segment edge with a collapsed caret, so
-      // Shift+Arrow selection and mid-segment caret moves stay native.
+      // Only a plain arrow with a collapsed caret crosses a segment edge.
+      // Modified arrows (selection, word jumps, Alt+Arrow history) and
+      // mid-segment caret moves stay native.
       const { selectionStart, selectionEnd, value } = e.currentTarget;
-      if (e.shiftKey || selectionStart !== selectionEnd) return;
+      if (
+        e.shiftKey ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        selectionStart !== selectionEnd
+      ) {
+        return;
+      }
       if (
         e.key === "ArrowLeft" &&
         selectionStart === 0 &&
