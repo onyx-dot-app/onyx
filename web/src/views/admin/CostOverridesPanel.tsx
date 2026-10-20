@@ -172,7 +172,12 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
           onClose={onClose}
         />
         <Modal.Body alignItems="stretch">
-          <InputHorizontal withLabel title={t("form.model.label")} fillInput>
+          <InputHorizontal
+            withLabel
+            title={t("form.model.label")}
+            fillInput
+            center
+          >
             {isEdit ? (
               <InputTypeIn value={modelLabel} variant="readOnly" />
             ) : (
@@ -202,6 +207,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
             title={t("form.inputRate.label")}
             description={t("form.units.description")}
             fillInput
+            center
           >
             <RateInput
               value={inputRate}
@@ -215,6 +221,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
             title={t("form.outputRate.label")}
             description={t("form.units.description")}
             fillInput
+            center
           >
             <RateInput
               value={outputRate}
@@ -229,6 +236,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
             description={t("form.units.description")}
             suffix="optional"
             fillInput
+            center
           >
             <RateInput
               value={cacheRate}
