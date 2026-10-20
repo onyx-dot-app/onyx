@@ -15,7 +15,14 @@ import {
   Text,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
+import {
+  SvgCheck,
+  SvgEdit,
+  SvgPlus,
+  SvgTrash,
+  SvgWallet,
+  SvgX,
+} from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { getProvider } from "@/lib/languageModels/utils";
@@ -167,7 +174,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
     >
       <Modal.Content width="md">
         <Modal.Header
-          icon={isEdit ? SvgEdit : SvgPlus}
+          icon={SvgWallet}
           title={isEdit ? t("form.editTitle") : t("form.addTitle")}
           onClose={onClose}
         />
