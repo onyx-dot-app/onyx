@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.40
+version: 0.8.41
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,12 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: security
-      description: Default Onyx workloads to the RuntimeDefault seccomp profile and
-        allowPrivilegeEscalation false.
-    - kind: security
-      description: Warn after install when the default PostgreSQL or Redis passwords
-        are in use.
+    - kind: added
+      description: Add the TABULAR_RECHUNK_ENABLED setting. It runs a one-time
+        migration that re-chunks already indexed tabular documents with the current
+        chunker, without re-crawling the source.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

@@ -119,6 +119,7 @@ KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
+KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -540,6 +541,7 @@ class OnyxRedisLocks:
         "da_lock:check_connector_external_group_sync_beat"
     )
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
+    TABULAR_RECHUNK_LOCK = "da_lock:tabular_rechunk"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     SECURITY_SETTINGS = "da_lock:security_settings"
@@ -753,6 +755,8 @@ class OnyxCeleryTask:
     MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
         "migrate_chunks_from_vespa_to_opensearch_task"
     )
+
+    TABULAR_RECHUNK_TASK = "tabular_rechunk_task"
 
 
 # this needs to correspond to the matching entry in supervisord

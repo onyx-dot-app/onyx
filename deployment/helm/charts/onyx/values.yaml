@@ -1723,6 +1723,10 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # Re-chunk tabular documents indexed by an older chunking strategy, in place
+  # and without re-crawling the source; "" = false. Only arms the migration: a
+  # stored record stops it once done, so it is safe to leave set.
+  TABULAR_RECHUNK_ENABLED: ""
   # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
   PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""

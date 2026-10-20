@@ -49,6 +49,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    FileRecord,
     KGEntity,
     KGRelationship,
     User,
@@ -61,6 +62,7 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -308,6 +310,106 @@ def get_document_ids_for_cc_pair_batch(
     if up_to_doc_id is not None:
         stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
     return list(db_session.execute(stmt).scalars().all())
+
+
+class TabularRechunkTarget(NamedTuple):
+    document: DbDocument
+    connector_id: int
+    credential_id: int
+    # MIME type of the stored raw file. Names the format when the document's
+    # own name carries no extension, as Drive-sourced spreadsheets often do.
+    file_type: str | None
+
+
+def get_oversized_tabular_documents(
+    db_session: Session,
+    *,
+    chunk_count_above: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """An ordered page of tabular documents still holding more chunks than the
+    current chunker could produce for one, with the cc-pair to re-index under.
+
+    Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
+    `> after_doc_id` ascending, capped at `limit`. Every page is an ordered
+    document_pkey scan, so the migration costs one pass of the table over its
+    whole life rather than a sort per run.
+
+    Left out: documents whose raw file was never stored, because only a crawl
+    can rebuild their sections, documents whose cc-pairs are all DELETING, and
+    hidden documents, whose head `id_based_retrieval` will not return.
+    """
+    # One row per document, lowest cc-pair winning, as any of them would write
+    # the same chunks. A LATERAL, not DISTINCT ON: that would order the join by
+    # (id, connector_id, credential_id) and lose the ordered scan.
+    cc_pair = (
+        select(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+        .order_by(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .limit(1)
+        .lateral("cc_pair")
+    )
+
+    stmt = (
+        select(
+            DbDocument,
+            cc_pair.c.connector_id,
+            cc_pair.c.credential_id,
+            FileRecord.file_type,
+        )
+        .select_from(DbDocument)
+        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
+        # Inner: a document whose cc-pairs are all DELETING yields no row.
+        .join(cc_pair, true())
+        .where(
+            DbDocument.chunk_count > chunk_count_above,
+            DbDocument.file_id.isnot(None),
+            DbDocument.hidden.is_(False),
+            or_(
+                # A Drive sheet's name often has no extension; its type does.
+                FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
+                *[
+                    func.lower(DbDocument.semantic_id).like(f"%{extension}")
+                    for extension in sorted(OnyxFileExtensions.TABULAR_EXTENSIONS)
+                ],
+            ),
+        )
+        .order_by(DbDocument.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DbDocument.id > after_doc_id)
+
+    return [
+        TabularRechunkTarget(
+            document=document,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            file_type=file_type,
+        )
+        for document, connector_id, credential_id, file_type in db_session.execute(
+            stmt
+        ).all()
+    ]
 
 
 class PortedScope(NamedTuple):
