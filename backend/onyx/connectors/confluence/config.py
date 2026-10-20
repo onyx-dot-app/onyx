@@ -163,7 +163,8 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
     @classmethod
     def _page_id_is_a_number(cls, value: str) -> str:
         page_id = value.strip()
-        if page_id and not page_id.isdigit():
+        # isdigit alone accepts digits such as "²".
+        if page_id and not (page_id.isascii() and page_id.isdigit()):
             raise field_format_error(PAGE_ID_FORMAT_ERROR)
         return value
 

@@ -54,6 +54,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
         ),
         (
             DocumentSource.CONFLUENCE,
+            {**_CONFLUENCE_FORM, "page_id": "12\u00b2"},
+            "page_id",
+            PAGE_ID_FORMAT_ERROR,
+        ),
+        (
+            DocumentSource.CONFLUENCE,
             {
                 **_CONFLUENCE_FORM,
                 "cql_query": "space = ENG AND lastModified > now('-7d')",
