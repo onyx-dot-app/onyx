@@ -397,6 +397,7 @@ def run_draft_capability_checks_task(
             check_ids=frozenset(check.check_id for check in pending),
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
             required_check_failed=required_check_failed(snapshot),
+            form_run=True,
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)

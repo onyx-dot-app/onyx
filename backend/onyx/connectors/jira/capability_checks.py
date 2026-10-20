@@ -36,7 +36,9 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    RateLimitedValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
@@ -154,7 +156,7 @@ def _raise_for_api_error(
     if status == 400 and bad_request is not None:
         raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
     if status == _RATE_LIMITED_STATUS:
-        raise UnexpectedValidationError(
+        raise RateLimitedValidationError(
             "Jira rate limited the check. Run the checks again in a minute."
         ) from error
     raise UnexpectedValidationError(
@@ -174,6 +176,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         validates_binding: bool = False,
+        fails_when_unreachable: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -185,6 +188,7 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
+            fails_when_unreachable=fails_when_unreachable,
         )
 
 
@@ -208,6 +212,7 @@ class _SiteAuthCheck(_JiraCheck):
             super().__init__(
                 check_id="jira_scoped_token_auth",
                 validates_binding=True,
+                fails_when_unreachable=True,
                 display_name="Scoped API token signs in to the site",
                 remediation=(
                     "Scoped API tokens work only with Jira Cloud. Enter the email "
@@ -219,6 +224,7 @@ class _SiteAuthCheck(_JiraCheck):
             super().__init__(
                 check_id="jira_auth",
                 validates_binding=True,
+                fails_when_unreachable=True,
                 display_name="Credential signs in to the site",
                 remediation=(
                     "Jira Cloud: enter the email of the token's Atlassian account "
@@ -242,7 +248,7 @@ class _SiteAuthCheck(_JiraCheck):
         except requests.HTTPError as e:
             # Only the scoped token's tenant_info call raises a raw HTTPError.
             # tenant_info needs no auth: a 4xx means the URL is not a Cloud
-            # site. 429 and 5xx fall through as INDETERMINATE.
+            # site. 429 and 5xx fall through as INCOMPLETE.
             response: requests.Response | None = e.response
             config: JiraConnectorConfig = self.config(context)
             if (
@@ -260,7 +266,7 @@ class _SiteAuthCheck(_JiraCheck):
                 f"Unexpected response from {config.jira_base_url}: {e}"
             ) from e
         except (requests.ConnectionError, requests.Timeout) as e:
-            raise UnexpectedValidationError(
+            raise UnreachableValidationError(
                 f"Onyx cannot connect to {self.config(context).jira_base_url}. "
                 "Check the site URL."
             ) from e

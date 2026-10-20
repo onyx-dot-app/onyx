@@ -166,7 +166,7 @@ def test_a_read_check_applies_only_to_configured_types(
     assert applying == applies
 
 
-def test_an_optional_check_reports_a_refused_listing_as_indeterminate() -> None:
+def test_an_optional_check_reports_a_refused_listing_as_incomplete() -> None:
     """The read check already fails for the refused type, so the associations
     check adds no second failed row."""
     gateway: MagicMock = _gateway()

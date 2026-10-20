@@ -338,7 +338,7 @@ def test_empty_credential_decrypts_nothing_and_emits_no_audit(
     emit.assert_not_called()
 
 
-def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
+def test_hung_instantiation_is_bounded_and_surfaces_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verifies the instantiation guard: a hang cannot outlive its budget.
@@ -360,7 +360,7 @@ def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
 
     # Postcondition.
     # The supplied-config timeout surfaces on the instance-requiring check as
-    # INDETERMINATE, per the check contract.
+    # INCOMPLETE, per the check contract.
     (result,) = report.check_results
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert result.error_type == "TimeoutError"

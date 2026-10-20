@@ -21,6 +21,14 @@ from onyx.connectors.capability_checks.form_state import (
     FormState,
     validate_form_state,
 )
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+    RateLimitedValidationError,
+    UnreachableValidationError,
+)
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
@@ -147,13 +155,70 @@ class CapabilityCheckStatus(str, Enum):
     PASSED = "passed"
     # A ``ConnectorValidationError``-family failure: real and actionable.
     FAILED = "failed"
-    # Transient or unknown failure (``UnexpectedValidationError`` or any
-    # unrecognized exception). Mirrors the contract that such errors must never
-    # be treated as proof the credential is broken.
+    # The check started but did not finish, or it could not decide: a timeout,
+    # a rate limit, an unexpected response (``UnexpectedValidationError`` or
+    # any unrecognized exception). Never proof that the credential is broken.
+    INCOMPLETE = "incomplete"
+    # Legacy: INCOMPLETE before it had its own value. Stored reports and run
+    # history still hold it; no check result is written with it.
     INDETERMINATE = "indeterminate"
     # The check needs state (connector instance or config) that was not
     # supplied.
     SKIPPED = "skipped"
+
+
+INCOMPLETE_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
+    {CapabilityCheckStatus.INCOMPLETE, CapabilityCheckStatus.INDETERMINATE}
+)
+
+
+class CheckErrorKind(str, Enum):
+    """Why a check FAILED or is INCOMPLETE, for the form to show the right
+    detail without reading the message."""
+
+    # The source rejected the credential.
+    REJECTED = "rejected"
+    # The credential signs in, but lacks a permission or scope.
+    PERMISSION = "permission"
+    # Any other actionable failure: a setting or the source rules it out.
+    INVALID = "invalid"
+    RATE_LIMITED = "rate_limited"
+    TIMEOUT = "timeout"
+    UNREACHABLE = "unreachable"
+    # An error the check does not know.
+    UNEXPECTED = "unexpected"
+
+
+# Kinds that say nothing lasting about the credential: running the check again
+# can give a different result.
+TRANSIENT_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {
+        CheckErrorKind.RATE_LIMITED,
+        CheckErrorKind.TIMEOUT,
+        CheckErrorKind.UNREACHABLE,
+        CheckErrorKind.UNEXPECTED,
+    }
+)
+_UNREACHABLE_ERROR_KINDS: frozenset[CheckErrorKind] = frozenset(
+    {CheckErrorKind.TIMEOUT, CheckErrorKind.UNREACHABLE}
+)
+
+
+def check_error_kind(error: Exception) -> CheckErrorKind:
+    """The kind of a check's exception, per the check exception contract."""
+    if isinstance(error, (CredentialExpiredError, CredentialInvalidError)):
+        return CheckErrorKind.REJECTED
+    if isinstance(error, InsufficientPermissionsError):
+        return CheckErrorKind.PERMISSION
+    if isinstance(error, ConnectorValidationError):
+        return CheckErrorKind.INVALID
+    if isinstance(error, RateLimitedValidationError):
+        return CheckErrorKind.RATE_LIMITED
+    if isinstance(error, TimeoutError):
+        return CheckErrorKind.TIMEOUT
+    if isinstance(error, UnreachableValidationError):
+        return CheckErrorKind.UNREACHABLE
+    return CheckErrorKind.UNEXPECTED
 
 
 class CapabilityVerdict(str, Enum):
@@ -266,6 +331,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         docs_link: str | None = None,
         validates_binding: bool = False,
         discovery: bool = False,
+        fails_when_unreachable: bool = False,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -294,7 +360,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         )
         # Per-check hang guard in seconds; None falls back to the
         # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
-        # INDETERMINATE, never FAILED.
+        # INCOMPLETE, except as ``fails_when_unreachable`` says.
         self.timeout_seconds = timeout_seconds
         # True for synthesized wrappers around the legacy validation blobs
         # (``validate_connector_settings`` / ``validate_perm_sync``) rather than
@@ -303,6 +369,22 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.remediation = remediation
         self.docs_link = docs_link
         self.validates_binding = validates_binding
+        # A sign-in check: on a form run, a timeout or an unreachable source
+        # FAILS it, because Onyx cannot use the account. Other runs keep it
+        # INCOMPLETE, so a slow source never holds indexing.
+        self.fails_when_unreachable = fails_when_unreachable
+
+    def outcome_status(
+        self, error_kind: CheckErrorKind, form_run: bool
+    ) -> CapabilityCheckStatus:
+        """The status of a check that raised an error of ``error_kind``."""
+        if error_kind not in TRANSIENT_ERROR_KINDS or (
+            form_run
+            and self.fails_when_unreachable
+            and error_kind in _UNREACHABLE_ERROR_KINDS
+        ):
+            return CapabilityCheckStatus.FAILED
+        return CapabilityCheckStatus.INCOMPLETE
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
@@ -362,6 +444,8 @@ class CapabilityCheckResult(BaseModel):
     message: str = ""
     # Exception class name, for support diagnosis.
     error_type: str | None = None
+    # Why a FAILED or INCOMPLETE check did not pass.
+    error_kind: CheckErrorKind | None = None
     is_fallback: bool = False
     remediation: str | None = None
     docs_link: str | None = None
@@ -466,9 +550,9 @@ def aggregate_capability_verdict(
     """Rolls the per-check results of one capability up into a single verdict.
 
     Pure function, evaluated in strict precedence order. Required checks gate
-    the verdict: a required FAILED is FAILED, and a required INDETERMINATE or
+    the verdict: a required FAILED is FAILED, and a required INCOMPLETE or
     SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
-    made. Non-required failures and indeterminates only downgrade to
+    made. Non-required failures and incomplete checks only downgrade to
     PASSED_WITH_WARNINGS (partial capability); non-required skips do not
     downgrade at all. Checks that do not apply are left out. An empty result
     list aggregates to SKIPPED: a capability is never PASSED on the basis of
@@ -485,8 +569,7 @@ def aggregate_capability_verdict(
     ):
         return CapabilityVerdict.FAILED
     if any(
-        result.status == CapabilityCheckStatus.INDETERMINATE and result.required
-        for result in results
+        result.status in INCOMPLETE_STATUSES and result.required for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
     if any(
@@ -495,8 +578,8 @@ def aggregate_capability_verdict(
     ):
         return CapabilityVerdict.SKIPPED
     if any(
-        result.status
-        in (CapabilityCheckStatus.FAILED, CapabilityCheckStatus.INDETERMINATE)
+        result.status == CapabilityCheckStatus.FAILED
+        or result.status in INCOMPLETE_STATUSES
         for result in results
     ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS

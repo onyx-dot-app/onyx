@@ -1127,7 +1127,7 @@ def test_onedrive_drive_count_stops_at_the_cap() -> None:
     assert gateway.list_users.call_count == 2
 
 
-def test_onedrive_drive_count_is_indeterminate_when_the_listing_does_not_end() -> None:
+def test_onedrive_drive_count_is_incomplete_when_the_listing_does_not_end() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_users.return_value = OneDriveUserPage(users=[], next_link="next")
 

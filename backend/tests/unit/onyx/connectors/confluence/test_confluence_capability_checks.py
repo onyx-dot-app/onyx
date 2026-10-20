@@ -273,7 +273,7 @@ def test_auth_with_no_visible_space_leaves_it_to_the_spaces_check() -> None:
     _run("confluence_auth", _context(gateway, _form()))
 
 
-def test_scoped_auth_tenant_info_server_error_is_indeterminate() -> None:
+def test_scoped_auth_tenant_info_server_error_is_incomplete() -> None:
     gateway = _gateway()
     gateway.probe_site.side_effect = _http_error(
         503, url="https://acme.atlassian.net/_edge/tenant_info"
@@ -297,7 +297,7 @@ def test_scoped_auth_tenant_info_failure_names_the_cloud_id() -> None:
         )
 
 
-def test_auth_connection_error_is_indeterminate() -> None:
+def test_auth_connection_error_is_incomplete() -> None:
     gateway = _gateway()
     gateway.probe_site.side_effect = requests.ConnectionError("dns")
 
@@ -586,7 +586,7 @@ def test_content_read_without_body_fails() -> None:
 
 
 @pytest.mark.parametrize("overrides", [{}, {"space": "KB"}])
-def test_content_read_with_an_empty_scope_is_indeterminate(
+def test_content_read_with_an_empty_scope_is_incomplete(
     overrides: dict[str, Any],
 ) -> None:
     gateway = _gateway()
@@ -717,7 +717,7 @@ def test_attachments_listing_403_names_the_scope() -> None:
         )
 
 
-def test_attachments_download_retries_exhausted_is_indeterminate() -> None:
+def test_attachments_download_retries_exhausted_is_incomplete() -> None:
     gateway = _gateway()
     gateway.search_attachments.side_effect = lambda **_: _attachments(10)
     gateway.download_attachment.side_effect = ConfluenceRetriesExhaustedError(
@@ -756,7 +756,7 @@ def test_unknown_user_name_fails() -> None:
         requests.Timeout("slow"),
     ],
 )
-def test_user_name_lookup_errors_are_indeterminate(error: Exception) -> None:
+def test_user_name_lookup_errors_are_incomplete(error: Exception) -> None:
     gateway = _gateway()
     gateway.lookup_user_display_name.side_effect = error
 

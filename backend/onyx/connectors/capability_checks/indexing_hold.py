@@ -9,8 +9,8 @@ no hold applies. The hold reads the pair's connector-scoped report (credential
 - A dead run holds: FAILED_TO_RUN, or a RUNNING mark past the stale cutoff
   (the sweep retires it to FAILED_TO_RUN). The admin re-runs the checks. A
   stored report that cannot be read holds the same way.
-- A required, applicable check that FAILED holds. INDETERMINATE and SKIPPED
-  do not.
+- A required, applicable check that FAILED holds. INCOMPLETE (or the legacy
+  INDETERMINATE) and SKIPPED do not.
 - A finished report that ran with another config (e.g. an edit's proposed
   config that apply rejected) counts as no report.
 
