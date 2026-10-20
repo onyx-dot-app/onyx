@@ -247,6 +247,8 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+          # A PR test image does not ship; build on the public bases if dhi.io is down.
+          dhi-required: "false"
 
   build-devcontainer-image:
     needs: changes

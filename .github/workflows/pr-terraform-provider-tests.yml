@@ -231,6 +231,24 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: terraform-provider-onyx/go.sum
 
+      # Without TF_ACC_TERRAFORM_PATH, terraform-plugin-testing asks
+      # checkpoint-api.hashicorp.com for the latest CLI and downloads it on
+      # every resource.Test, and one bad response exits the whole test binary.
+      # Install one exact version here and point the tests at it. 1.11 is the
+      # floor for the write-only attribute tests.
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # ratchet:hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+
+      - name: Point the acceptance tests at the installed Terraform CLI
+        run: |
+          set -euo pipefail
+          tf_path="$(command -v terraform)"
+          "${tf_path}" version
+          echo "TF_ACC_TERRAFORM_PATH=${tf_path}" >> "$GITHUB_ENV"
+
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:

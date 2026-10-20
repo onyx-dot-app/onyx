@@ -200,6 +200,8 @@ jobs:
         with:
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+          # A PR test image does not ship; build on the public bases if dhi.io is down.
+          required: "false"
 
       # SKIP_TYPE_CHECK cuts the build time of this image. Types are still checked
       # by the `typescript-check` prek hook in the Quality Checks PR workflow.
@@ -338,6 +340,8 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+          # A PR test image does not ship; build on the public bases if dhi.io is down.
+          dhi-required: "false"
 
   airgap-health:
     needs: [changes, build-backend-image, build-model-server-image]

@@ -37,6 +37,12 @@ inputs:
     description: "Docker Hub token"
     required: false
     default: ""
+  dhi-required:
+    description: >-
+      "true" fails the build when the dhi.io login fails. "false" builds on the
+      public bases with a warning instead. Passed to the dhi-base-images action.
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -70,6 +76,7 @@ runs:
       with:
         docker-username: ${{ inputs.docker-username }}
         docker-token: ${{ inputs.docker-token }}
+        required: ${{ inputs.dhi-required }}
 
     - name: Build and push Model Server Docker image
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v6
