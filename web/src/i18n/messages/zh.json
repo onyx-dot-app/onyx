@@ -4828,24 +4828,27 @@
           "label": "添加覆盖"
         },
         "cacheRate": {
-          "label": "缓存读取价格（每 100 万 tokens 美元，可选）",
+          "label": "缓存读取价格",
           "placeholder": "默认与输入价格相同"
         },
         "cancelButton": {
           "label": "取消"
         },
         "inputRate": {
-          "label": "输入价格（每 100 万 tokens 美元）"
+          "label": "输入价格"
         },
         "model": {
           "label": "模型",
           "placeholder": "选择模型"
         },
         "outputRate": {
-          "label": "输出价格（每 100 万 tokens 美元）"
+          "label": "输出价格"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "单位为每 100 万 tokens 美元"
         }
       },
       "panel": {

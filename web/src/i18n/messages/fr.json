@@ -4828,24 +4828,27 @@
           "label": "Ajouter un remplacement"
         },
         "cacheRate": {
-          "label": "Tarif de lecture du cache (USD par million de jetons, facultatif)",
+          "label": "Tarif de lecture du cache",
           "placeholder": "par défaut : tarif d'entrée"
         },
         "cancelButton": {
           "label": "Annuler"
         },
         "inputRate": {
-          "label": "Tarif d'entrée (USD par million de jetons)"
+          "label": "Tarif d'entrée"
         },
         "model": {
           "label": "Modèle",
           "placeholder": "Sélectionnez un modèle"
         },
         "outputRate": {
-          "label": "Tarif de sortie (USD par million de jetons)"
+          "label": "Tarif de sortie"
         },
         "saveButton": {
           "label": "Enregistrer"
+        },
+        "units": {
+          "description": "Unité : USD par million de jetons"
         }
       },
       "panel": {

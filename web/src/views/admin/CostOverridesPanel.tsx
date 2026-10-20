@@ -3,7 +3,7 @@
 import { ChangeEvent, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, toast } from "@opal/layouts";
+import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
 import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -49,11 +49,33 @@ function parseRate(raw: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function toRateInput(value: number | null | undefined): string {
+  return value != null ? String(value) : "";
+}
+
 function formatRate(value: number, locale: string): string {
   return `$${value.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 20,
   })}`;
+}
+
+interface RateInputProps {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}
+
+function RateInput({ value, placeholder, onChange }: RateInputProps) {
+  return (
+    <InputTypeIn
+      value={value}
+      prefixText="$"
+      inputMode="decimal"
+      placeholder={placeholder}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+    />
+  );
 }
 
 // Shared add/edit form for the idempotent upsert.
@@ -73,15 +95,13 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(
-    existing ? String(existing.input_cost_per_mtok) : ""
+    toRateInput(existing?.input_cost_per_mtok)
   );
   const [outputRate, setOutputRate] = useState(
-    existing ? String(existing.output_cost_per_mtok) : ""
+    toRateInput(existing?.output_cost_per_mtok)
   );
   const [cacheRate, setCacheRate] = useState(
-    existing?.cache_read_cost_per_mtok != null
-      ? String(existing.cache_read_cost_per_mtok)
-      : ""
+    toRateInput(existing?.cache_read_cost_per_mtok)
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -137,10 +157,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         alignItems="stretch"
         justifyContent="start"
       >
-        <div className="flex flex-col gap-1">
-          <Text font="secondary-action" color="text-03">
-            {t("form.model.label")}
-          </Text>
+        <InputHorizontal title={t("form.model.label")} fillInput>
           {isEdit ? (
             <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
@@ -163,53 +180,47 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
               }}
             />
           )}
-        </div>
+        </InputHorizontal>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="flex flex-col gap-1">
-            <Text font="secondary-action" color="text-03">
-              {t("form.inputRate.label")}
-            </Text>
-            <InputTypeIn
-              value={inputRate}
-              prefixText="$"
-              inputMode="decimal"
-              placeholder={t("placeholders.inputCost")}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setInputRate(e.target.value)
-              }
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Text font="secondary-action" color="text-03">
-              {t("form.outputRate.label")}
-            </Text>
-            <InputTypeIn
-              value={outputRate}
-              prefixText="$"
-              inputMode="decimal"
-              placeholder={t("placeholders.outputCost")}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setOutputRate(e.target.value)
-              }
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Text font="secondary-action" color="text-03">
-            {t("form.cacheRate.label")}
-          </Text>
-          <InputTypeIn
-            value={cacheRate}
-            prefixText="$"
-            inputMode="decimal"
-            placeholder={t("form.cacheRate.placeholder")}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setCacheRate(e.target.value)
-            }
+        <InputHorizontal
+          withLabel
+          title={t("form.inputRate.label")}
+          description={t("form.units.description")}
+          fillInput
+        >
+          <RateInput
+            value={inputRate}
+            placeholder={t("placeholders.inputCost")}
+            onChange={setInputRate}
           />
-        </div>
+        </InputHorizontal>
+
+        <InputHorizontal
+          withLabel
+          title={t("form.outputRate.label")}
+          description={t("form.units.description")}
+          fillInput
+        >
+          <RateInput
+            value={outputRate}
+            placeholder={t("placeholders.outputCost")}
+            onChange={setOutputRate}
+          />
+        </InputHorizontal>
+
+        <InputHorizontal
+          withLabel
+          title={t("form.cacheRate.label")}
+          description={t("form.units.description")}
+          suffix="optional"
+          fillInput
+        >
+          <RateInput
+            value={cacheRate}
+            placeholder={t("form.cacheRate.placeholder")}
+            onChange={setCacheRate}
+          />
+        </InputHorizontal>
 
         <div className="flex flex-row gap-2 justify-end">
           <Button prominence="tertiary" onClick={onDone} disabled={submitting}>
@@ -246,6 +257,11 @@ function OverrideRow({ override }: OverrideRowProps) {
     t("allProviders.label"),
     providerNames
   );
+  const rates = {
+    provider: providerDisplayName,
+    input: formatRate(override.input_cost_per_mtok, locale),
+    output: formatRate(override.output_cost_per_mtok, locale),
+  };
 
   async function handleDelete() {
     setDeleting(true);
@@ -282,19 +298,13 @@ function OverrideRow({ override }: OverrideRowProps) {
             <Text font="secondary-body" color="text-03">
               {override.cache_read_cost_per_mtok != null
                 ? t("row.ratesWithCache", {
-                    provider: providerDisplayName,
-                    input: formatRate(override.input_cost_per_mtok, locale),
-                    output: formatRate(override.output_cost_per_mtok, locale),
+                    ...rates,
                     cache: formatRate(
                       override.cache_read_cost_per_mtok,
                       locale
                     ),
                   })
-                : t("row.rates", {
-                    provider: providerDisplayName,
-                    input: formatRate(override.input_cost_per_mtok, locale),
-                    output: formatRate(override.output_cost_per_mtok, locale),
-                  })}
+                : t("row.rates", rates)}
             </Text>
             {override.updated_at && (
               <Text font="secondary-body" color="text-02">

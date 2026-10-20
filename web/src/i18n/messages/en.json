@@ -4828,24 +4828,27 @@
           "label": "Add override"
         },
         "cacheRate": {
-          "label": "Cache-read rate (USD per 1M tokens, optional)",
+          "label": "Cache-read rate",
           "placeholder": "defaults to input rate"
         },
         "cancelButton": {
           "label": "Cancel"
         },
         "inputRate": {
-          "label": "Input rate (USD per 1M tokens)"
+          "label": "Input rate"
         },
         "model": {
           "label": "Model",
           "placeholder": "Select a model"
         },
         "outputRate": {
-          "label": "Output rate (USD per 1M tokens)"
+          "label": "Output rate"
         },
         "saveButton": {
           "label": "Save"
+        },
+        "units": {
+          "description": "Units are in USD per 1M tokens"
         }
       },
       "panel": {

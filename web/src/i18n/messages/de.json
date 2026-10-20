@@ -4828,24 +4828,27 @@
           "label": "Überschreibung hinzufügen"
         },
         "cacheRate": {
-          "label": "Preis für Cache-Lesevorgänge (USD pro 1 Mio. Token, optional)",
+          "label": "Preis für Cache-Lesevorgänge",
           "placeholder": "standardmäßig der Eingabepreis"
         },
         "cancelButton": {
           "label": "Abbrechen"
         },
         "inputRate": {
-          "label": "Eingabepreis (USD pro 1 Mio. Token)"
+          "label": "Eingabepreis"
         },
         "model": {
           "label": "Modell",
           "placeholder": "Modell auswählen"
         },
         "outputRate": {
-          "label": "Ausgabepreis (USD pro 1 Mio. Token)"
+          "label": "Ausgabepreis"
         },
         "saveButton": {
           "label": "Speichern"
+        },
+        "units": {
+          "description": "Einheit: USD pro 1 Mio. Token"
         }
       },
       "panel": {

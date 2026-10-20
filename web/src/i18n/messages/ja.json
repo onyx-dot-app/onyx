@@ -4828,24 +4828,27 @@
           "label": "オーバーライドを追加"
         },
         "cacheRate": {
-          "label": "キャッシュ読み取り単価（100 万 tokens あたりの USD、任意）",
+          "label": "キャッシュ読み取り単価",
           "placeholder": "既定では入力単価を使用"
         },
         "cancelButton": {
           "label": "キャンセル"
         },
         "inputRate": {
-          "label": "入力単価（100 万 tokens あたりの USD）"
+          "label": "入力単価"
         },
         "model": {
           "label": "モデル",
           "placeholder": "モデルを選択"
         },
         "outputRate": {
-          "label": "出力単価（100 万 tokens あたりの USD）"
+          "label": "出力単価"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "単位は 100 万 tokens あたりの USD です"
         }
       },
       "panel": {

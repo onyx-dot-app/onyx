@@ -4828,24 +4828,27 @@
           "label": "Adicionar substituição"
         },
         "cacheRate": {
-          "label": "Taxa de leitura de cache (USD por 1M de tokens, opcional)",
+          "label": "Taxa de leitura de cache",
           "placeholder": "usa a taxa de entrada por padrão"
         },
         "cancelButton": {
           "label": "Cancelar"
         },
         "inputRate": {
-          "label": "Taxa de entrada (USD por 1M de tokens)"
+          "label": "Taxa de entrada"
         },
         "model": {
           "label": "Modelo",
           "placeholder": "Selecione um modelo"
         },
         "outputRate": {
-          "label": "Taxa de saída (USD por 1M de tokens)"
+          "label": "Taxa de saída"
         },
         "saveButton": {
           "label": "Salvar"
+        },
+        "units": {
+          "description": "Unidades em USD por 1M de tokens"
         }
       },
       "panel": {

@@ -4828,24 +4828,27 @@
           "label": "재정의 추가"
         },
         "cacheRate": {
-          "label": "캐시 읽기 요금(100만 token당 USD, 선택 사항)",
+          "label": "캐시 읽기 요금",
           "placeholder": "기본값은 입력 요금입니다"
         },
         "cancelButton": {
           "label": "취소"
         },
         "inputRate": {
-          "label": "입력 요금(100만 token당 USD)"
+          "label": "입력 요금"
         },
         "model": {
           "label": "모델",
           "placeholder": "모델 선택"
         },
         "outputRate": {
-          "label": "출력 요금(100만 token당 USD)"
+          "label": "출력 요금"
         },
         "saveButton": {
           "label": "저장"
+        },
+        "units": {
+          "description": "단위는 100만 token당 USD입니다"
         }
       },
       "panel": {

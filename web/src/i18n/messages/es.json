@@ -4828,24 +4828,27 @@
           "label": "Añadir tarifa personalizada"
         },
         "cacheRate": {
-          "label": "Tarifa de lectura de caché (USD por 1M de tokens, opcional)",
+          "label": "Tarifa de lectura de caché",
           "placeholder": "usa la tarifa de entrada"
         },
         "cancelButton": {
           "label": "Cancelar"
         },
         "inputRate": {
-          "label": "Tarifa de entrada (USD por 1M de tokens)"
+          "label": "Tarifa de entrada"
         },
         "model": {
           "label": "Modelo",
           "placeholder": "Selecciona un modelo"
         },
         "outputRate": {
-          "label": "Tarifa de salida (USD por 1M de tokens)"
+          "label": "Tarifa de salida"
         },
         "saveButton": {
           "label": "Guardar"
+        },
+        "units": {
+          "description": "Unidades en USD por 1M de tokens"
         }
       },
       "panel": {
