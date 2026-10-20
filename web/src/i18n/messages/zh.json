@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "项目与任务跟踪"
         },
+        "clickupDocs": {
+          "description": "文档与维基"
+        },
         "wikipedia": {
           "description": "公开知识库"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "获取任务评论",
               "description": "勾选后，还会获取并索引每个任务的所有评论。"
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "配置 ClickUp Docs 连接器",
+          "fields": {
+            "connector_type": {
+              "label": "连接器类型",
+              "options": {
+                "doc": "文档",
+                "list": "列表",
+                "folder": "文件夹",
+                "space": "空间",
+                "workspace": "工作区"
+              }
+            },
+            "connector_ids": {
+              "label": "连接器 ID",
+              "description": "指定 0 个或多个要索引的 ID。"
             }
           }
         },

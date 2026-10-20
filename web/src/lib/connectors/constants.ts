@@ -122,6 +122,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Discourse]: "sources.discourse.description",
   [ValidSources.Axero]: "sources.axero.description",
   [ValidSources.Clickup]: "sources.clickup.description",
+  [ValidSources.ClickupDocs]: "sources.clickupDocs.description",
   [ValidSources.Wikipedia]: "sources.wikipedia.description",
   [ValidSources.Mediawiki]: "sources.mediawiki.description",
   [ValidSources.Asana]: "sources.asana.description",
@@ -401,6 +402,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgClickUp,
     displayName: "ClickUp",
     category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
+  },
+  clickup_docs: {
+    icon: SvgClickUp,
+    displayName: "ClickUp Docs",
+    category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
   },
   productboard: {

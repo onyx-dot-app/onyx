@@ -1653,6 +1653,47 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  clickup_docs: {
+    description: "connectors.clickup_docs.description",
+    values: [
+      {
+        type: "select",
+        label: "connectors.clickup_docs.fields.connector_type.label",
+        name: "connector_type",
+        optional: false,
+        options: [
+          {
+            name: "connectors.clickup_docs.fields.connector_type.options.doc",
+            value: "doc",
+          },
+          {
+            name: "connectors.clickup_docs.fields.connector_type.options.list",
+            value: "list",
+          },
+          {
+            name: "connectors.clickup_docs.fields.connector_type.options.folder",
+            value: "folder",
+          },
+          {
+            name: "connectors.clickup_docs.fields.connector_type.options.space",
+            value: "space",
+          },
+          {
+            name: "connectors.clickup_docs.fields.connector_type.options.workspace",
+            value: "workspace",
+          },
+        ],
+      },
+      {
+        type: "list",
+        label: "connectors.clickup_docs.fields.connector_ids.label",
+        name: "connector_ids",
+        description: "connectors.clickup_docs.fields.connector_ids.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   google_sites: {
     description: "connectors.google_sites.description",
     values: [

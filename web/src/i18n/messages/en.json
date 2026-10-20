@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "Project & task tracker"
         },
+        "clickupDocs": {
+          "description": "Docs & wikis"
+        },
         "wikipedia": {
           "description": "Public knowledge base"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "Retrieve Task Comments",
               "description": "If checked, then all the comments for each task will also be retrieved and indexed."
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "Configure ClickUp Docs connector",
+          "fields": {
+            "connector_type": {
+              "label": "Connector Type",
+              "options": {
+                "doc": "doc",
+                "list": "list",
+                "folder": "folder",
+                "space": "space",
+                "workspace": "workspace"
+              }
+            },
+            "connector_ids": {
+              "label": "Connector IDs",
+              "description": "Specify 0 or more id(s) to index from."
             }
           }
         },

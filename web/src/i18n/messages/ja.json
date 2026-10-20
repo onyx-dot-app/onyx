@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "プロジェクトとタスクの管理"
         },
+        "clickupDocs": {
+          "description": "ドキュメントと Wiki"
+        },
         "wikipedia": {
           "description": "公開ナレッジベース"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "タスクコメントを取得",
               "description": "オンにすると、各タスクのすべてのコメントも取得してインデックスします。"
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "ClickUp Docs コネクターを設定",
+          "fields": {
+            "connector_type": {
+              "label": "コネクタータイプ",
+              "options": {
+                "doc": "ドキュメント",
+                "list": "リスト",
+                "folder": "フォルダー",
+                "space": "スペース",
+                "workspace": "ワークスペース"
+              }
+            },
+            "connector_ids": {
+              "label": "コネクター ID",
+              "description": "インデックス元の ID を 0 個以上指定します。"
             }
           }
         },

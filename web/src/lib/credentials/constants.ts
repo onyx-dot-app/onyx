@@ -453,6 +453,13 @@ export const CREDENTIAL_SPECS = {
       clickup_team_id: text("teamId"),
     },
   }),
+  clickup_docs: defineCredentialSpec({
+    brandName: "ClickUp",
+    fields: {
+      clickup_api_token: secret("apiToken"),
+      clickup_team_id: text("teamId"),
+    },
+  }),
   s3: defineCredentialSpec({
     brandName: "AWS",
     fields: {

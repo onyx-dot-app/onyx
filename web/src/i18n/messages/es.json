@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "Gestor de proyectos y tareas"
         },
+        "clickupDocs": {
+          "description": "Documentos y wikis"
+        },
         "wikipedia": {
           "description": "Base de conocimiento pública"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "Obtener comentarios de tareas",
               "description": "Si está marcado, también se obtendrán e indexarán todos los comentarios de cada tarea."
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "Configurar conector de ClickUp Docs",
+          "fields": {
+            "connector_type": {
+              "label": "Tipo de conector",
+              "options": {
+                "doc": "documento",
+                "list": "lista",
+                "folder": "carpeta",
+                "space": "espacio",
+                "workspace": "espacio de trabajo"
+              }
+            },
+            "connector_ids": {
+              "label": "IDs del conector",
+              "description": "Especifica 0 o más IDs desde los que indexar."
             }
           }
         },

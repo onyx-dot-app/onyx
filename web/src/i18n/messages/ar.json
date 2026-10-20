@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "متتبع المشاريع والمهام"
         },
+        "clickupDocs": {
+          "description": "المستندات والويكي"
+        },
         "wikipedia": {
           "description": "قاعدة معرفة عامة"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "جلب تعليقات المهام",
               "description": "عند التحديد، ستُجلب أيضًا جميع تعليقات كل مهمة وتُفهرس."
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "تهيئة موصل ClickUp Docs",
+          "fields": {
+            "connector_type": {
+              "label": "نوع الموصل",
+              "options": {
+                "doc": "مستند",
+                "list": "قائمة",
+                "folder": "مجلد",
+                "space": "مساحة",
+                "workspace": "مساحة عمل"
+              }
+            },
+            "connector_ids": {
+              "label": "معرّفات الموصل",
+              "description": "حدّد 0 أو أكثر من المعرّفات للفهرسة منها."
             }
           }
         },

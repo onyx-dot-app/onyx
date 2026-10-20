@@ -1403,6 +1403,9 @@
         "clickup": {
           "description": "프로젝트 및 작업 트래커"
         },
+        "clickupDocs": {
+          "description": "문서 및 위키"
+        },
         "wikipedia": {
           "description": "공개 지식 베이스"
         },
@@ -4481,6 +4484,25 @@
             "retrieve_task_comments": {
               "label": "작업 댓글 가져오기",
               "description": "선택하면 각 작업의 모든 댓글도 함께 가져와 인덱싱합니다."
+            }
+          }
+        },
+        "clickup_docs": {
+          "description": "ClickUp Docs 커넥터 구성",
+          "fields": {
+            "connector_type": {
+              "label": "커넥터 유형",
+              "options": {
+                "doc": "문서",
+                "list": "목록",
+                "folder": "폴더",
+                "space": "스페이스",
+                "workspace": "워크스페이스"
+              }
+            },
+            "connector_ids": {
+              "label": "커넥터 ID",
+              "description": "인덱싱할 ID를 0개 이상 지정하세요."
             }
           }
         },

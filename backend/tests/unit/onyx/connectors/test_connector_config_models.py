@@ -18,6 +18,7 @@ from onyx.connectors.web.config import WebConnectorConfig
 _NARROWED_FIELD_TYPES: set[tuple[str, str]] = {
     ("BlobStorageConnector", "bucket_type"),
     ("ClickupConnector", "connector_type"),
+    ("ClickupDocsConnector", "connector_type"),
     ("HubSpotConnector", "object_types"),
     ("LocalFileConnector", "file_locations"),
     ("WebConnector", "web_connector_type"),
