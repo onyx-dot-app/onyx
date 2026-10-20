@@ -1,6 +1,9 @@
 from typing import NotRequired
 
+from pydantic import BaseModel
 from typing_extensions import TypedDict
+
+from onyx.connectors.capability_checks.models import CheckRowText
 
 
 class ChannelTopicPurposeType(TypedDict):
@@ -96,3 +99,27 @@ class MessageType(TypedDict):
 
 # list of messages in a thread
 ThreadType = list[MessageType]
+
+
+class Rejection(BaseModel):
+    message: str
+    row: CheckRowText
+
+
+class GridTeam(BaseModel):
+    id: str
+    name: str | None
+
+
+class HistoryRows(BaseModel):
+    history_denied: str
+    history_denied_row: CheckRowText
+    replies_denied: str
+    replies_denied_row: CheckRowText
+
+
+class ChannelPattern(BaseModel):
+    pattern: str
+    # How the message and the row name the pattern's field.
+    label: str
+    line: str

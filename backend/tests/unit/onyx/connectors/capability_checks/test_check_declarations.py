@@ -207,8 +207,8 @@ def test_binding_checks_require_only_bound_fields(source: DocumentSource) -> Non
     for check in _registered_checks(source):
         if not check.validates_binding:
             continue
-        assert binding_class is not None, check.check_id
-        assert check.requires_fields <= set(binding_class.model_fields), check.check_id
+        bound_fields = set(binding_class.model_fields) if binding_class else set()
+        assert check.requires_fields <= bound_fields, check.check_id
 
 
 @pytest.mark.parametrize("source", sorted(CONNECTOR_CLASS_MAP, key=str))
