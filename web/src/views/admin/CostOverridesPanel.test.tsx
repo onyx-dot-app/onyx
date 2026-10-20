@@ -138,8 +138,9 @@ describe("CostOverridesPanel", () => {
 
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText("In $0.001 · Out $2.00")).toBeInTheDocument();
-    expect(screen.getByText("In $3.00 · Out $4.00")).toBeInTheDocument();
+    for (const rate of ["In $0.001", "Out $2.00", "In $3.00", "Out $4.00"]) {
+      expect(screen.getByText(rate)).toBeInTheDocument();
+    }
     expect(
       screen.getByRole("button", {
         name: "Edit Anthropic override for shared-model",

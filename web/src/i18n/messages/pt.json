@@ -4873,6 +4873,7 @@
         "title": "Substituições de custo"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Excluir a substituição de {provider} para {model}"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "Editar a substituição de {provider} para {model}"
         },
-        "rates": "Entrada {input} · Saída {output}",
-        "ratesWithCache": "Entrada {input} · Saída {output} · Cache {cache}"
+        "input": "Entrada {value}",
+        "output": "Saída {value}"
       },
       "toasts": {
         "removeFailed": "Falha ao remover a substituição: {message}",

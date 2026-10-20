@@ -4873,6 +4873,7 @@
         "title": "Kostenüberschreibungen"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} löschen"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} bearbeiten"
         },
-        "rates": "Ein {input} · Aus {output}",
-        "ratesWithCache": "Ein {input} · Aus {output} · Cache {cache}"
+        "input": "Ein {value}",
+        "output": "Aus {value}"
       },
       "toasts": {
         "removeFailed": "Die Überschreibung konnte nicht entfernt werden: {message}",

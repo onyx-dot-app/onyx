@@ -4873,6 +4873,7 @@
         "title": "Tarifas personalizadas"
       },
       "row": {
+        "cache": "Caché {value}",
         "deleteButton": {
           "ariaLabel": "Eliminar la tarifa personalizada de {provider} para {model}"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "Editar la tarifa personalizada de {provider} para {model}"
         },
-        "rates": "Entrada {input} · Salida {output}",
-        "ratesWithCache": "Entrada {input} · Salida {output} · Caché {cache}"
+        "input": "Entrada {value}",
+        "output": "Salida {value}"
       },
       "toasts": {
         "removeFailed": "No se pudo quitar la tarifa personalizada: {message}",

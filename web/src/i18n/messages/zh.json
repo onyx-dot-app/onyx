@@ -4873,6 +4873,7 @@
         "title": "费用覆盖"
       },
       "row": {
+        "cache": "缓存 {value}",
         "deleteButton": {
           "ariaLabel": "删除 {model} 的 {provider} 覆盖"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "编辑 {model} 的 {provider} 覆盖"
         },
-        "rates": "输入 {input} · 输出 {output}",
-        "ratesWithCache": "输入 {input} · 输出 {output} · 缓存 {cache}"
+        "input": "输入 {value}",
+        "output": "输出 {value}"
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",

@@ -271,17 +271,19 @@ function OverrideRow({ override }: OverrideRowProps) {
     t("allProviders.label"),
     providerNames
   );
-  const rates = {
-    input: formatRate(override.input_cost_per_mtok, locale),
-    output: formatRate(override.output_cost_per_mtok, locale),
-  };
-  const rateSummary =
-    override.cache_read_cost_per_mtok != null
-      ? t("row.ratesWithCache", {
-          ...rates,
-          cache: formatRate(override.cache_read_cost_per_mtok, locale),
-        })
-      : t("row.rates", rates);
+  const rateParts = [
+    t("row.input", { value: formatRate(override.input_cost_per_mtok, locale) }),
+    t("row.output", {
+      value: formatRate(override.output_cost_per_mtok, locale),
+    }),
+    ...(override.cache_read_cost_per_mtok != null
+      ? [
+          t("row.cache", {
+            value: formatRate(override.cache_read_cost_per_mtok, locale),
+          }),
+        ]
+      : []),
+  ];
   const description = override.updated_at
     ? t("row.description", {
         provider: providerDisplayName,
@@ -384,10 +386,23 @@ function OverrideRow({ override }: OverrideRowProps) {
                 </div>
               }
             />
-            <div className="ps-5">
-              <Text font="secondary-mono" color="text-03">
-                {rateSummary}
-              </Text>
+            {/* Lines up under the description: ContentAction padding (0.5rem) plus
+                the main-ui description indent (1.375rem). */}
+            <div className="ps-[1.875rem] pb-2">
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                alignItems="center"
+                width="fit"
+                height="fit"
+                gap={3}
+              >
+                {rateParts.map((part) => (
+                  <Text key={part} font="secondary-mono" color="text-03">
+                    {part}
+                  </Text>
+                ))}
+              </Section>
             </div>
           </Section>
         </SelectCard>

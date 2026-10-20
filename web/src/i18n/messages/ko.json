@@ -4873,6 +4873,7 @@
         "title": "비용 재정의"
       },
       "row": {
+        "cache": "캐시 {value}",
         "deleteButton": {
           "ariaLabel": "{model}의 {provider} 재정의 삭제"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "{model}의 {provider} 재정의 편집"
         },
-        "rates": "입력 {input} · 출력 {output}",
-        "ratesWithCache": "입력 {input} · 출력 {output} · 캐시 {cache}"
+        "input": "입력 {value}",
+        "output": "출력 {value}"
       },
       "toasts": {
         "removeFailed": "재정의를 제거하지 못했습니다: {message}",

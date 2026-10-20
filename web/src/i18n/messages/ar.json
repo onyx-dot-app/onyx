@@ -4873,6 +4873,7 @@
         "title": "تجاوزات التكلفة"
       },
       "row": {
+        "cache": "ذاكرة مؤقتة {value}",
         "deleteButton": {
           "ariaLabel": "حذف تجاوز {provider} للنموذج {model}"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "تعديل تجاوز {provider} للنموذج {model}"
         },
-        "rates": "إدخال {input} · إخراج {output}",
-        "ratesWithCache": "إدخال {input} · إخراج {output} · ذاكرة مؤقتة {cache}"
+        "input": "إدخال {value}",
+        "output": "إخراج {value}"
       },
       "toasts": {
         "removeFailed": "فشلت إزالة التجاوز: {message}",

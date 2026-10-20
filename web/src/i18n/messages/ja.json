@@ -4873,6 +4873,7 @@
         "title": "コストオーバーライド"
       },
       "row": {
+        "cache": "キャッシュ {value}",
         "deleteButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを削除"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを編集"
         },
-        "rates": "入力 {input} · 出力 {output}",
-        "ratesWithCache": "入力 {input} · 出力 {output} · キャッシュ {cache}"
+        "input": "入力 {value}",
+        "output": "出力 {value}"
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",

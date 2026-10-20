@@ -4873,6 +4873,7 @@
         "title": "Remplacements de tarifs"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Supprimer le remplacement {provider} pour {model}"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "Modifier le remplacement {provider} pour {model}"
         },
-        "rates": "Entrée {input} · Sortie {output}",
-        "ratesWithCache": "Entrée {input} · Sortie {output} · Cache {cache}"
+        "input": "Entrée {value}",
+        "output": "Sortie {value}"
       },
       "toasts": {
         "removeFailed": "Échec de la suppression du remplacement : {message}",

@@ -4873,6 +4873,7 @@
         "title": "Cost Overrides"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Delete {provider} override for {model}"
         },
@@ -4880,8 +4881,8 @@
         "editButton": {
           "ariaLabel": "Edit {provider} override for {model}"
         },
-        "rates": "In {input} · Out {output}",
-        "ratesWithCache": "In {input} · Out {output} · Cache {cache}"
+        "input": "In {value}",
+        "output": "Out {value}"
       },
       "toasts": {
         "removeFailed": "Failed to remove override: {message}",
