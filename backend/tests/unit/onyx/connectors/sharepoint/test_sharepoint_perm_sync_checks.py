@@ -567,17 +567,39 @@ def test_an_empty_library_proves_only_the_library_read() -> None:
 
 
 def test_document_permissions_stop_after_the_first_libraries() -> None:
-    """Ten empty libraries prove the library read only: INCOMPLETE, which
+    """Twenty empty libraries prove the library read only: INCOMPLETE, which
     does not hold indexing."""
     gateway: MagicMock = healthy_gateway()
-    gateway.list_drives.return_value = [DRIVE] * 11
+    gateway.list_drives.return_value = [DRIVE] * 21
     gateway.get_delta_page.return_value = delta_result()
 
-    with pytest.raises(InconclusiveValidationError, match="first 10 libraries"):
+    with pytest.raises(
+        InconclusiveValidationError, match="first 20 libraries, on 1 site,"
+    ):
         _run("sharepoint_document_permissions_read", _context(gateway, _config()))
 
-    assert gateway.get_delta_page.call_count == 10
-    assert gateway.list_role_assignments.call_count == 10
+    assert gateway.get_delta_page.call_count == 20
+    assert gateway.list_role_assignments.call_count == 20
+
+
+def test_document_permissions_read_past_listed_sites_without_a_file() -> None:
+    """Tenants often list empty sites first: the probe reads listed sites in
+    turn until one holds a file."""
+    gateway: MagicMock = healthy_gateway()
+    site_urls: list[str] = [f"{SITE_URL}{n}" for n in range(10)]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=site_urls, complete=True
+    )
+    gateway.list_drives.side_effect = lambda site_url: [
+        DRIVE.model_copy(update={"id": site_url})
+    ]
+    gateway.get_delta_page.side_effect = lambda drive_id, **_: (
+        delta_result(ITEM_JSON) if drive_id == site_urls[6] else delta_result()
+    )
+
+    _run("sharepoint_document_permissions_read", _context(gateway, _config(sites=[])))
+
+    assert gateway.list_drives.call_count == 7
 
 
 def test_an_item_without_a_list_item_id_is_incomplete() -> None:
