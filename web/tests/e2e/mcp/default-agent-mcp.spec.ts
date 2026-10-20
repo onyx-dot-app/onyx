@@ -152,20 +152,18 @@ test.describe("Default Agent MCP Integration", () => {
     await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
 
-    // Exercise the card-level tool toggle: disable then re-enable a tool.
+    // Exercise global tool availability: disable then re-enable a tool.
     await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
     await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
   });
 
-  test("Admin adds MCP tools to the default agent via chat preferences", async ({
-    page,
-  }) => {
+  test("Admin enables an MCP plugin in default Chat", async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.goto();
-    await chatPrefs.enableServerTools(serverName);
+    const adminMcp = new AdminMcpServersPage(page);
+    await adminMcp.openConfiguration(serverName);
+    await adminMcp.setDefaultChatEnabled(true);
   });
 
   test("Basic user can toggle an MCP plugin in the default agent", async ({
@@ -221,30 +219,23 @@ test.describe("Default Agent MCP Integration", () => {
     await expectMcpToolNotInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
   });
 
-  test("Admin can modify MCP tools in the default agent and changes persist", async ({
+  test("Admin default Chat availability persists in plugin Configuration", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.goto();
-    await chatPrefs.expandServerCard(serverName);
+    const adminMcp = new AdminMcpServersPage(page);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).toBeChecked();
+    await adminMcp.setDefaultChatEnabled(false);
 
-    const toolSwitch = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
-    await expect(toolSwitch).toBeVisible();
-    const initialChecked = await toolSwitch.getAttribute("aria-checked");
-    await chatPrefs.toggleTool(MCP_ASSERTED_TOOL_NAME);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).not.toBeChecked();
+    await adminMcp.setDefaultChatEnabled(true);
 
-    // Reload and confirm the new state persisted.
-    await page.reload();
-    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
-    await chatPrefs.expandServerCard(serverName);
-
-    const toolSwitchAfter = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
-    await expect(toolSwitchAfter).toBeVisible();
-    const expected = initialChecked === "true" ? "false" : "true";
-    await expect(toolSwitchAfter).toHaveAttribute("aria-checked", expected);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).toBeChecked();
   });
 
   test("Default agent instructions persist when saved via chat preferences", async ({
