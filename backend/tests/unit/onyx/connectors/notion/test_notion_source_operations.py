@@ -91,6 +91,36 @@ def test_error_responses_leave_as_gateway_errors(status: int, code: str) -> None
     assert not raised.value.is_rate_limited
 
 
+def test_an_api_error_carries_the_request_and_body() -> None:
+    gateway = _gateway()
+
+    with mock.patch.object(
+        source_operations.rl_requests,
+        "get",
+        return_value=_response(404, _error_body(404, "object_not_found")),
+    ):
+        with pytest.raises(NotionApiError) as raised:
+            gateway.get_page(page_id="p1")
+
+    assert raised.value.method == "GET"
+    assert raised.value.url == "https://api.notion.com/v1/pages/p1"
+    assert raised.value.body is not None
+    assert "object_not_found" in raised.value.body
+
+
+def test_a_request_timeout_is_marked() -> None:
+    gateway = _gateway()
+
+    with mock.patch.object(
+        source_operations.requests, "request", side_effect=requests.ReadTimeout("slow")
+    ):
+        with pytest.raises(NotionApiError) as raised:
+            gateway.get_bot_user(fast=True)
+
+    assert raised.value.status_code is None
+    assert raised.value.timed_out
+
+
 def test_an_error_without_a_json_body_keeps_its_status() -> None:
     gateway = _gateway()
 
