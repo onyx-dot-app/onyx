@@ -97,6 +97,9 @@ JiraIssue = dict[str, Any]
 # Jira issue keys: a project key (uppercase letter first) and a number.
 _ISSUE_KEY_RE = re.compile(r"[A-Z][A-Z0-9_]*-[0-9]+")
 
+# Unauthorized, forbidden, rate limited.
+_RUN_FAILING_STATUS_CODES = frozenset({401, 403, 429})
+
 
 def _perform_jql_search(
     source_operations: JiraSourceOperations,
@@ -315,6 +318,18 @@ def _perform_jql_search_v2(
         raise  # Explicitly re-raise for type checker, should never reach here
 
     yield from issues
+
+
+def _fails_the_whole_run(error: Exception) -> bool:
+    """True for errors that every issue would hit: bad credentials, missing
+    permissions, or a rate limit the client could not wait out. The Cloud bulk
+    fetch raises these as a raw ``JiraApiError``."""
+    if isinstance(error, (CredentialExpiredError, InsufficientPermissionsError)):
+        return True
+    return (
+        isinstance(error, JiraApiError)
+        and error.status_code in _RUN_FAILING_STATUS_CODES
+    )
 
 
 def _issue_key(issue: JiraIssue) -> str:
@@ -845,7 +860,8 @@ class JiraConnector(
     ) -> tuple[list[JiraIssue], dict[str, Exception]]:
         """Fetches the issues in one JQL search per batch. When a batch fails,
         fetches its keys one by one so one bad key does not fail the rest.
-        Credential and permission errors fail the whole run, as in the crawl.
+        Credential, permission and rate-limit errors fail the whole run, as in
+        the crawl.
         """
         issues: list[JiraIssue] = []
         errors_by_key: dict[str, Exception] = {}
@@ -853,9 +869,9 @@ class JiraConnector(
             try:
                 issues.extend(self._search_issues_by_key(batch))
                 continue
-            except (CredentialExpiredError, InsufficientPermissionsError):
-                raise
-            except Exception:
+            except Exception as e:
+                if _fails_the_whole_run(e):
+                    raise
                 logger.warning(
                     "Jira batch fetch of %s issues failed; fetching them one by one",
                     len(batch),
@@ -864,9 +880,9 @@ class JiraConnector(
             for key in batch:
                 try:
                     issues.extend(self._search_issues_by_key([key]))
-                except (CredentialExpiredError, InsufficientPermissionsError):
-                    raise
                 except Exception as e:
+                    if _fails_the_whole_run(e):
+                        raise
                     errors_by_key[key] = e
         return issues, errors_by_key
 

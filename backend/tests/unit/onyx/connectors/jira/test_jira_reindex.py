@@ -10,6 +10,7 @@ import pytest
 
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.models import JiraIssueIdPage
 from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
 
@@ -82,3 +83,25 @@ def test_credential_error_fails_the_run(
 
     with pytest.raises(CredentialExpiredError):
         list(jira_connector.reindex(_failures([f"{jira_base_url}/browse/TEST-1"])))
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 429])
+def test_cloud_bulk_fetch_account_error_fails_the_run(
+    jira_connector: JiraConnector,
+    mock_source_operations: MagicMock,
+    jira_base_url: str,
+    status_code: int,
+) -> None:
+    mock_source_operations._is_cloud.return_value = True
+    mock_source_operations.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["10001", "10002"], next_page_token=None
+    )
+    mock_source_operations.bulk_fetch_issues.side_effect = JiraApiError(
+        "account error", status_code=status_code, body=None
+    )
+    doc_ids = [f"{jira_base_url}/browse/{key}" for key in ("TEST-1", "TEST-2")]
+
+    with pytest.raises(JiraApiError):
+        list(jira_connector.reindex(_failures(doc_ids)))
+    # The batch error stops the run; no per-key retries.
+    assert mock_source_operations.bulk_fetch_issues.call_count == 1
