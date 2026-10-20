@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from simple_salesforce.exceptions import (
     SalesforceAuthenticationFailed,
+    SalesforceGeneralError,
     SalesforceMalformedRequest,
 )
 
@@ -29,6 +30,8 @@ BROKEN_ACCOUNT_ID = "001000000000003AAA"
 CONTACT_ID = "003000000000001AAA"
 USER_ID = "005000000000001AAA"
 UNKNOWN_PREFIX_ID = "zzz000000000001AAA"
+
+_BIG_OBJECT_RELATIONSHIPS = ("PendingOrderSummaries", "Archives__r")
 
 _WHERE_ID = re.compile(r"WHERE Id = '([A-Za-z0-9]+)'")
 
@@ -51,8 +54,29 @@ _DESCRIBES: dict[str, dict[str, Any]] = {
                 "childSObject": "Contact",
                 "relationshipName": "Contacts",
                 "field": "AccountId",
-            }
+            },
+            # big objects reject the ORDER BY of the child window subquery
+            {
+                "childSObject": "PendingOrderSummary",
+                "relationshipName": "PendingOrderSummaries",
+                "field": "AccountId",
+            },
+            {
+                "childSObject": "Archive__b",
+                "relationshipName": "Archives__r",
+                "field": "Account__c",
+            },
         ],
+    },
+    "PendingOrderSummary": {
+        "queryable": True,
+        "fields": [_field("Id", "id"), _field("LastModifiedDate", "datetime")],
+        "childRelationships": [],
+    },
+    "Archive__b": {
+        "queryable": True,
+        "fields": [_field("Id", "id"), _field("LastModifiedDate", "datetime")],
+        "childRelationships": [],
     },
     "Contact": {
         "queryable": True,
@@ -99,6 +123,9 @@ class _FakeSalesforce(OnyxSalesforce):
         self.queries.append(query)
         if self.fail_auth:
             raise SalesforceAuthenticationFailed("INVALID_LOGIN", "bad creds")
+        if any(rel in query for rel in _BIG_OBJECT_RELATIONSHIPS):
+            # what the live API answers for an ordered big object subquery
+            raise SalesforceGeneralError("url", 500, "query", b"UNKNOWN_EXCEPTION")
         match = _WHERE_ID.search(query)
         if match is None:
             raise AssertionError(f"unexpected query {query}")
@@ -190,6 +217,21 @@ def test_reindex_rebuilds_parent_with_children() -> None:
     ]
     assert doc.primary_owners is not None
     assert doc.primary_owners[0].email == "ada@example.com"
+
+
+def test_reindex_skips_big_object_child_relationships() -> None:
+    fake = _FakeSalesforce()
+    target = f"{ID_PREFIX}{ACCOUNT_ID}"
+
+    results = list(_connector(fake).reindex(_failures([target])))
+
+    assert [r.id for r in results if isinstance(r, Document)] == [target]
+    child_queries = [q for q in fake.queries if "(SELECT" in q]
+    assert child_queries
+    for query in child_queries:
+        assert "FROM Contacts" in query
+        for relationship in _BIG_OBJECT_RELATIONSHIPS:
+            assert f"FROM {relationship}" not in query
 
 
 def test_reindex_keeps_input_id_format() -> None:
