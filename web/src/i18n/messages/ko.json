@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "판단 모델",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "clear": "해제",
+        "notConfigured": "설정되지 않음",
+        "saved": "판단 모델이 업데이트되었습니다",
+        "saveFailed": "판단 모델을 업데이트하지 못했습니다"
+      },
+      "header": {
+        "title": "판단 모델",
+        "description": "판단 모델 제공업체를 관리하고 선택적으로 모델을 선택합니다."
+      },
+      "providers": {
+        "title": "제공업체",
+        "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
+        "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
+        "edit": "구성",
+        "connect": "연결"
+      },
+      "loadFailed": "판단 모델을 불러올 수 없습니다.",
+      "retry": "다시 시도",
+      "saveFailed": "연결을 저장할 수 없습니다.",
+      "cancel": "취소",
+      "save": "저장",
+      "zoom": {
+        "title": "Zoom AI Decisions 연결",
+        "description": "저장된 Zoom Scribe 연결의 자격 증명을 재사용합니다.",
+        "connection": "Zoom Scribe 연결",
+        "selectConnection": "Zoom Scribe 연결 선택",
+        "noConnections": "Zoom AI Decisions를 연결하기 전에 Zoom Scribe 연결을 설정하세요.",
+        "setupVoice": "음성 설정"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "판단 모델",
-        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
-        "clear": "해제",
-        "notConfigured": "설정되지 않음",
-        "saved": "판단 모델이 업데이트되었습니다",
-        "saveFailed": "판단 모델을 업데이트하지 못했습니다"
-      },
       "chatNaming": {
         "description": "채팅 세션의 이름을 생성하는 모델입니다. 기본적으로 각 세션의 모델을 사용합니다.",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "언어 모델"
+        },
+        "decisionModels": {
+          "label": "판단 모델"
         },
         "llmGateway": {
           "label": "LLM 게이트웨이"

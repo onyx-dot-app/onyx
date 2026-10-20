@@ -68,6 +68,7 @@ export const testApiKeyHelper = async (
   }
 
   const payload = {
+    model_configuration_scope: formValues.model_configuration_scope,
     api_key: apiKey ?? formValues?.api_key,
     api_base: finalApiBase,
     api_version: finalApiVersion,
@@ -169,6 +170,12 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   const finalValues = {
     ...rest,
+    ...(values.model_configuration_scope === "decision" && {
+      is_auto_mode: false,
+      model_configurations: values.model_configurations
+        .filter((model) => model.supports_decisions && model.is_visible)
+        .map((model) => ({ ...model, is_visible: false })),
+    }),
     name: nameForRequest,
     api_base: normalizedApiBase,
     api_key: apiKeyForRequest,
@@ -231,7 +238,11 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   }
 
   // ── Set as default ──────────────────────────────────────────────────
-  if (shouldMarkAsDefault && testModelName) {
+  if (
+    shouldMarkAsDefault &&
+    testModelName &&
+    !values.model_configuration_scope
+  ) {
     try {
       const newLlmProvider: LLMProviderView = await response.json();
       if (

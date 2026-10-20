@@ -62,6 +62,7 @@ export interface ModelConfiguration {
 
 export enum LLMProviderName {
   TYPESAFE = "typesafe",
+  ZOOM_AI = "zoom_ai",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
@@ -103,6 +104,7 @@ export interface LLMModelDescriptor {
 
 export interface LLMProviderView {
   id: number;
+  zoom_voice_provider_id?: number | null;
   name: string | null;
   provider: string;
   api_key: string | null;
@@ -210,6 +212,7 @@ export interface LLMProviderResponse<T> {
 export type LLMModalVariant = "onboarding" | "llm-configuration";
 
 export interface LLMProviderFormProps {
+  modelScope?: "decision";
   variant?: LLMModalVariant;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
@@ -331,6 +334,8 @@ export interface VercelAIGatewayFetchParams {
 }
 
 export interface VercelAIGatewayModelResponse {
+  supports_chat?: boolean;
+  supports_decisions?: boolean;
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -481,6 +486,7 @@ export interface CostOverrideUpsert {
 export type ProviderCopyKey = "custom" | "openAICompatible";
 
 export interface ProviderEntry {
+  decisionOnly?: boolean;
   icon: IconFunctionComponent;
   /** A brand name, or the provider key when `copyKey` holds its names. */
   productName: string;

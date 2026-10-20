@@ -49,6 +49,7 @@ LLM_PROVIDER_MODEL_PAGE_SIZE = 50
 
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.TYPESAFE,
+    LlmProviderNames.ZOOM_AI,
     LlmProviderNames.OPENAI,
     LlmProviderNames.ANTHROPIC,
     LlmProviderNames.VERTEX_AI,

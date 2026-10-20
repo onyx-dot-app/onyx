@@ -11,7 +11,6 @@ import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import type { DefaultModel } from "@/lib/languageModels/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import {
   deleteDefaultChatNamingModel,
   deleteDefaultSearchSelectionModel,
@@ -265,7 +264,6 @@ export default function ChatTaskModelSettings() {
             />
           </Section>
         </InputHorizontal>
-        <DecisionModelSetting />
       </Section>
     </Card>
   );

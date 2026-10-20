@@ -1,4 +1,5 @@
 import math
+from collections.abc import Callable
 
 import httpx
 from pydantic import JsonValue
@@ -149,10 +150,14 @@ class DecisionClient:
         api_base: str | None = None,
         timeout: float = 30.0,
         extra_headers: dict[str, str] | None = None,
+        api_key_resolver: Callable[[], str] | None = None,
     ) -> None:
         self.provider = provider
+        self._api_key_resolver = api_key_resolver
         self.model = model
         base, path = _ENDPOINTS[provider]
+        if provider == DecisionProvider.ZOOM_AI and api_base:
+            raise ValueError("Zoom Decisions uses its fixed hosted endpoint")
         base = (api_base or base).rstrip("/")
         if provider == DecisionProvider.OPENROUTER and base.endswith("/v1"):
             base = base.removesuffix("/v1") + "/alpha"
@@ -183,7 +188,10 @@ class DecisionClient:
             input_messages=body,
         ) as span:
             with httpx.Client(timeout=self.timeout) as client:
-                result = client.post(self.url, json=body, headers=self._headers)
+                headers = dict(self._headers)
+                if self._api_key_resolver:
+                    headers["Authorization"] = f"Bearer {self._api_key_resolver()}"
+                result = client.post(self.url, json=body, headers=headers)
                 result.raise_for_status()
             if system_one:
                 response = _system_one_response(result.json())

@@ -770,7 +770,12 @@ export function ModelSelectionField({
   // otherwise models can't be deselected and "Select All" stays disabled.
   const isAutoMode =
     shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
-  const models = formikProps.values.model_configurations;
+  const allModels = formikProps.values.model_configurations;
+  const decisionScope =
+    formikProps.values.model_configuration_scope === "decision";
+  const models = decisionScope
+    ? allModels.filter((model) => model.supports_decisions)
+    : allModels;
 
   // Snapshot the original model visibility so we can restore it when
   // toggling auto mode back on.
@@ -783,22 +788,28 @@ export function ModelSelectionField({
 
   useEffect(() => {
     const testModel = models.find(
-      (m) => testModelScope === "all" || m.is_visible
+      (m) => decisionScope || testModelScope === "all" || m.is_visible
     )?.name;
     if (testModel !== formikProps.values.test_model_name) {
       formikProps.setFieldValue("test_model_name", testModel);
     }
-  }, [models, testModelScope]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    allModels,
+    decisionScope,
+    formikProps.setFieldValue,
+    formikProps.values.test_model_name,
+    testModelScope,
+  ]);
 
   function setVisibility(modelName: string, visible: boolean) {
-    const updated = models.map((m) =>
+    const updated = allModels.map((m) =>
       m.name === modelName ? { ...m, is_visible: visible } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
   }
 
   function setModelSettings(modelName: string, patch: ModelSettingsPatch) {
-    const updated = models.map((m) =>
+    const updated = allModels.map((m) =>
       m.name === modelName ? { ...m, ...patch } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
@@ -810,7 +821,7 @@ export function ModelSelectionField({
   }
 
   function setCustomDisplayName(modelName: string, value: string | undefined) {
-    const updated = models.map((m) =>
+    const updated = allModels.map((m) =>
       m.name === modelName
         ? { ...m, custom_display_name: value || undefined }
         : m
@@ -842,9 +853,10 @@ export function ModelSelectionField({
 
   function handleToggleSelectAll() {
     const nextVisible = !allSelected;
-    const updated = models.map((m) => ({
+    const updated = allModels.map((m) => ({
       ...m,
-      is_visible: nextVisible,
+      is_visible:
+        !decisionScope || m.supports_decisions ? nextVisible : m.is_visible,
     }));
     formikProps.setFieldValue("model_configurations", updated);
   }
@@ -915,8 +927,11 @@ export function ModelSelectionField({
                       onSettingsChange={(patch) =>
                         setModelSettings(model.name, patch)
                       }
-                      isDefaultModel={model.name === defaultModelName}
+                      isDefaultModel={
+                        !decisionScope && model.name === defaultModelName
+                      }
                       onSetDefaultModel={
+                        !decisionScope &&
                         providerId != null &&
                         model.is_visible &&
                         model.supports_chat !== false
@@ -1091,8 +1106,42 @@ function ModalWrapperInner({
       values.model_configurations.length === 0
     ) {
       setFieldValue("model_configurations", modelConfigurations);
+    } else if (values.model_configuration_scope === "decision") {
+      const knownModels = new Map(
+        modelConfigurations?.map((model) => [model.name, model])
+      );
+      const updatedModels = values.model_configurations.map((model) =>
+        knownModels.get(model.name)?.supports_decisions &&
+        !model.supports_decisions
+          ? { ...model, supports_decisions: true }
+          : model
+      );
+      const configuredNames = new Set(
+        values.model_configurations.map((model) => model.name)
+      );
+      const addedModels =
+        modelConfigurations?.filter(
+          (model) =>
+            model.supports_decisions && !configuredNames.has(model.name)
+        ) ?? [];
+      if (
+        addedModels.length > 0 ||
+        updatedModels.some(
+          (model, index) => model !== values.model_configurations[index]
+        )
+      ) {
+        setFieldValue("model_configurations", [
+          ...updatedModels,
+          ...addedModels,
+        ]);
+      }
     }
-  }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    modelConfigurations,
+    setFieldValue,
+    values.model_configuration_scope,
+    values.model_configurations,
+  ]);
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;

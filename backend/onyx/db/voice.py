@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, VoiceProvider
+from onyx.db.models import LLMProvider, User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.voice.interface import normalize_provider_type
@@ -134,8 +134,18 @@ def upsert_voice_provider(
 
 def delete_voice_provider(db_session: Session, provider_id: int) -> None:
     """Delete a voice provider by ID."""
-    provider = fetch_voice_provider_by_id(db_session, provider_id)
+    provider = fetch_voice_provider_by_id(db_session, provider_id, for_update=True)
     if provider:
+        linked = db_session.scalar(
+            select(LLMProvider.id)
+            .where(LLMProvider.zoom_voice_provider_id == provider_id)
+            .limit(1)
+        )
+        if linked is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "This Zoom connection is used by Decision Models. Remove or change that decision provider before deleting it.",
+            )
         db_session.delete(provider)
         db_session.flush()
 

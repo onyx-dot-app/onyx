@@ -35,10 +35,9 @@ policy, and file-size limits. Nothing here is per-user; every toggle applies to
 every chat that uses the default agent (a persona picked by the user still
 carries its own prompt and tools, see [[agents-personas]]).
 
-The optional **Decision model** row starts at **Not configured**. It lists only
-configured models with decision API support and has an explicit **Clear** action.
-The selection does not affect any current workflow. Its storage and client are
-described in [[llm-providers]]. `DecisionModelSetting.tsx` owns this row.
+Decision-model setup and the optional decision-model selection live on the
+separate **Admin > Decision Models** page. Chat Preferences does not configure a
+decision provider or model. No product workflow consumes the selected model yet.
 
 **A user**, at `/app/settings/chat-preferences` and the neighboring "General"
 tab, sets things that describe themselves to the model: their preferred name

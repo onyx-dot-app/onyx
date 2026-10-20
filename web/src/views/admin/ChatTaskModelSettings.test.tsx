@@ -12,6 +12,7 @@ import { NextIntlClientProvider } from "next-intl";
 import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import frenchMessages from "@/i18n/messages/fr.json";
 import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
+import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -198,7 +199,7 @@ describe("ChatTaskModelSettings", () => {
       </NextIntlClientProvider>
     );
 
-    expect(await screen.findAllByText("(Facultatif)")).toHaveLength(3);
+    expect(await screen.findAllByText("(Facultatif)")).toHaveLength(2);
     expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
   });
 
@@ -270,7 +271,7 @@ describe("ChatTaskModelSettings", () => {
 
   test("opts into a decision model and clears it without a chat fallback", async () => {
     const user = setupUser();
-    await renderTaskModels();
+    render(<DecisionModelSetting />);
     const input = await screen.findByPlaceholderText("Not configured");
     expect(
       screen.queryByRole("button", { name: "Clear" })

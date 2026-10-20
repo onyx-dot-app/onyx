@@ -883,6 +883,8 @@ export const fetchVercelAIGatewayModels = async (
 
     const data: VercelAIGatewayModelResponse[] = await response.json();
     const models: ModelConfiguration[] = data.map((modelData) => ({
+      supports_chat: modelData.supports_chat,
+      supports_decisions: modelData.supports_decisions,
       name: modelData.name,
       display_name: modelData.display_name,
       is_visible: true,

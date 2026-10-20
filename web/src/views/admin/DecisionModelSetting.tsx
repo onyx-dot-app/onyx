@@ -12,7 +12,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import type { DefaultModel } from "@/lib/languageModels/types";
 
 export default function DecisionModelSetting() {
-  const t = useTranslations("admin.chatPreferences");
+  const t = useTranslations("admin.decisionModels");
   const { model, providers, error, refetch } = useDecisionModel();
   const settings = useSettings();
   const [pending, setPending] = useState(false);
@@ -49,10 +49,10 @@ export default function DecisionModelSetting() {
       {error ? (
         <MessageCard
           variant="error"
-          title={t("taskModels.loadFailed")}
+          title={t("loadFailed")}
           rightChildren={
             <Button prominence="secondary" onClick={() => void refetch()}>
-              {t("taskModels.retry.label")}
+              {t("retry")}
             </Button>
           }
         />
@@ -90,7 +90,7 @@ export default function DecisionModelSetting() {
                 (config) => config.id === id
               );
               if (!provider || !selected) {
-                toast.error(t("toasts.providerResolveFailed"));
+                toast.error(t("saveFailed"));
                 return;
               }
               void save({

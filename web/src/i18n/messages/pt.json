@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "Modelo de decisão",
+        "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
+        "description": "Selecione um modelo para futuros recursos de classificação e revisão. O Onyx ainda não usa este modelo.",
+        "clear": "Limpar",
+        "notConfigured": "Não configurado",
+        "saved": "Modelo de decisão atualizado",
+        "saveFailed": "Não foi possível atualizar o modelo de decisão"
+      },
+      "header": {
+        "title": "Modelos de decisão",
+        "description": "Gerencie os provedores e escolha um modelo de decisão opcional."
+      },
+      "providers": {
+        "title": "Provedores",
+        "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
+        "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
+        "edit": "Configurar",
+        "connect": "Conectar"
+      },
+      "loadFailed": "Não foi possível carregar os modelos de decisão.",
+      "retry": "Tentar novamente",
+      "saveFailed": "Não foi possível salvar a conexão.",
+      "cancel": "Cancelar",
+      "save": "Salvar",
+      "zoom": {
+        "title": "Conectar Zoom AI Decisions",
+        "description": "Reutilize as credenciais de uma conexão salva do Zoom Scribe.",
+        "connection": "Conexão Zoom Scribe",
+        "selectConnection": "Selecione uma conexão Zoom Scribe",
+        "noConnections": "Configure uma conexão Zoom Scribe antes de conectar o Zoom AI Decisions.",
+        "setupVoice": "Configurar Voz"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "Modelo de decisão",
-        "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
-        "description": "Selecione um modelo para futuros recursos de classificação e revisão. O Onyx ainda não usa este modelo.",
-        "clear": "Limpar",
-        "notConfigured": "Não configurado",
-        "saved": "Modelo de decisão atualizado",
-        "saveFailed": "Não foi possível atualizar o modelo de decisão"
-      },
       "chatNaming": {
         "description": "Modelo usado para nomear sessões de chat. Por padrão, usa o modelo de cada sessão.",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "Modelos de linguagem"
+        },
+        "decisionModels": {
+          "label": "Modelos de decisão"
         },
         "llmGateway": {
           "label": "LLM Gateway"

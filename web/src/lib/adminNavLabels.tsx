@@ -19,6 +19,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       webSearch: t("adminNav.items.webSearch.label"),
       imageGeneration: t("adminNav.items.imageGeneration.label"),
       voice: t("adminNav.items.voice.label"),
+      decisionModels: t("adminNav.items.decisionModels.label"),
       codeInterpreter: t("adminNav.items.codeInterpreter.label"),
       chatPreferences: t("adminNav.items.chatPreferences.label"),
       llmGateway: t("adminNav.items.llmGateway.label"),

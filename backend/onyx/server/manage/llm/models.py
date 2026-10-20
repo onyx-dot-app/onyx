@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -69,7 +69,9 @@ class TestLLMRequest(BaseModel):
     provider: str
     model: str
     supports_decisions: bool = False
+    model_configuration_scope: Literal["decision"] | None = None
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -156,6 +158,7 @@ class LLMProvider(BaseModel):
     name: str | None = None
     provider: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -177,6 +180,7 @@ class LLMProviderUpsertRequest(LLMProvider):
     # this set, models absent from the request are left alone and the request
     # only adds or updates.
     keep_existing_models: bool = False
+    model_configuration_scope: Literal["decision"] | None = None
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
     @model_validator(mode="after")
@@ -256,6 +260,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=api_key,
+            zoom_voice_provider_id=llm_provider_model.zoom_voice_provider_id,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -785,6 +790,7 @@ class ModelConfigurationPage(BaseModel):
 class DecisionModelResponse(BaseModel):
     model: DefaultModel | None
     providers: list[LLMProviderView]
+    supported_providers: list[str]
 
 
 class SyncModelEntry(BaseModel):

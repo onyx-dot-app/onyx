@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "Modelo de decisiones",
+        "openAiDecisionsModelName": "Decisiones de OpenAI (GPT-6 Luna)",
+        "description": "Selecciona un modelo para futuras funciones de clasificación y revisión. Onyx aún no utiliza este modelo.",
+        "clear": "Borrar",
+        "notConfigured": "Sin configurar",
+        "saved": "Modelo de decisiones actualizado",
+        "saveFailed": "No se pudo actualizar el modelo de decisiones"
+      },
+      "header": {
+        "title": "Modelos de decisión",
+        "description": "Gestiona los proveedores y selecciona un modelo de decisión opcional."
+      },
+      "providers": {
+        "title": "Proveedores",
+        "description": "Conecta un proveedor o gestiona sus modelos de decisión.",
+        "clearBeforeRemoval": "Borra el modelo de decisión seleccionado antes de eliminar este proveedor.",
+        "edit": "Configurar",
+        "connect": "Conectar"
+      },
+      "loadFailed": "No se pudieron cargar los modelos de decisión.",
+      "retry": "Reintentar",
+      "saveFailed": "No se pudo guardar la conexión.",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "zoom": {
+        "title": "Conectar Zoom AI Decisions",
+        "description": "Reutiliza las credenciales de una conexión guardada de Zoom Scribe.",
+        "connection": "Conexión de Zoom Scribe",
+        "selectConnection": "Selecciona una conexión de Zoom Scribe",
+        "noConnections": "Configura una conexión de Zoom Scribe antes de conectar Zoom AI Decisions.",
+        "setupVoice": "Configurar Voz"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "Modelo de decisiones",
-        "openAiDecisionsModelName": "Decisiones de OpenAI (GPT-6 Luna)",
-        "description": "Selecciona un modelo para futuras funciones de clasificación y revisión. Onyx aún no utiliza este modelo.",
-        "clear": "Borrar",
-        "notConfigured": "Sin configurar",
-        "saved": "Modelo de decisiones actualizado",
-        "saveFailed": "No se pudo actualizar el modelo de decisiones"
-      },
       "chatNaming": {
         "description": "Modelo para nombrar las sesiones de chat. Por defecto, usa el modelo de cada sesión.",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "Modelos de lenguaje"
+        },
+        "decisionModels": {
+          "label": "Modelos de decisión"
         },
         "llmGateway": {
           "label": "LLM Gateway"

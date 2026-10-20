@@ -80,11 +80,13 @@ function OpenRouterModalInternals({
 
       <InputDivider />
       <ModelSelectionField
-        shouldShowAutoUpdateToggle={true}
+        shouldShowAutoUpdateToggle={
+          !formikProps.values.model_configuration_scope
+        }
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
       />
 
-      {!isOnboarding && (
+      {!isOnboarding && !formikProps.values.model_configuration_scope && (
         <>
           <InputDivider />
           <ModelAccessField />
@@ -101,6 +103,7 @@ export default function OpenRouterModal({
   onOpenChange,
   onSuccess,
   analyticsSource,
+  modelScope,
 }: LLMProviderFormProps) {
   const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
@@ -112,7 +115,8 @@ export default function OpenRouterModal({
     ...useInitialValues(
       isOnboarding,
       LLMProviderName.OPENROUTER,
-      existingLlmProvider
+      existingLlmProvider,
+      modelScope
     ),
     api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
   } as OpenRouterModalValues;

@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "判断モデル",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
+        "clear": "解除",
+        "notConfigured": "未設定",
+        "saved": "判断モデルを更新しました",
+        "saveFailed": "判断モデルを更新できませんでした"
+      },
+      "header": {
+        "title": "判断モデル",
+        "description": "判断モデルのプロバイダーを管理し、必要に応じてモデルを選択します。"
+      },
+      "providers": {
+        "title": "プロバイダー",
+        "description": "プロバイダーを接続するか、判断モデルを管理します。",
+        "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
+        "edit": "設定",
+        "connect": "接続"
+      },
+      "loadFailed": "判断モデルを読み込めませんでした。",
+      "retry": "再試行",
+      "saveFailed": "接続を保存できませんでした。",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "zoom": {
+        "title": "Zoom AI Decisions を接続",
+        "description": "保存済みの Zoom Scribe 接続の認証情報を再利用します。",
+        "connection": "Zoom Scribe 接続",
+        "selectConnection": "Zoom Scribe 接続を選択",
+        "noConnections": "Zoom AI Decisions を接続する前に Zoom Scribe 接続を設定してください。",
+        "setupVoice": "音声を設定"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "判断モデル",
-        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
-        "clear": "解除",
-        "notConfigured": "未設定",
-        "saved": "判断モデルを更新しました",
-        "saveFailed": "判断モデルを更新できませんでした"
-      },
       "chatNaming": {
         "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "言語モデル"
+        },
+        "decisionModels": {
+          "label": "判断モデル"
         },
         "llmGateway": {
           "label": "LLM ゲートウェイ"

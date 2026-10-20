@@ -134,6 +134,16 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  DECISION_MODELS: {
+    path: "/admin/decision-models",
+    icon: SvgUserCheck,
+    title: "Decision Models",
+    sidebarLabel: "Decision Models",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: null,
+    visibleWhen: null,
+  },
   CODE_INTERPRETER: {
     path: "/admin/code-interpreter",
     icon: SvgTerminal,

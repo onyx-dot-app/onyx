@@ -53,7 +53,10 @@ from onyx.llm.constants import (
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
 )
-from onyx.llm.decisions.client import DecisionClient
+from onyx.llm.decisions.factory import (
+    build_decision_client,
+    validate_zoom_voice_provider,
+)
 from onyx.llm.decisions.models import (
     DecisionProvider,
     DecisionRequest,
@@ -470,10 +473,53 @@ def fetch_llm_provider_options(
     raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Provider {provider_name} not found")
 
 
+def _validate_zoom_decision_connection(
+    *,
+    provider: str,
+    zoom_voice_provider_id: int | None,
+    existing_provider: LLMProviderModel | None,
+    api_key: str | None,
+    api_base: str | None,
+    custom_config: dict[str, str] | None,
+    user: User,
+    db_session: Session,
+) -> None:
+    has_existing_link = (
+        existing_provider is not None
+        and existing_provider.zoom_voice_provider_id is not None
+    )
+    if zoom_voice_provider_id is not None or has_existing_link:
+        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    if zoom_voice_provider_id is not None and provider != LlmProviderNames.ZOOM_AI:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Only Zoom Decisions can link a Zoom Scribe connection",
+        )
+    if provider == LlmProviderNames.ZOOM_AI:
+        if api_base or custom_config:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Zoom Decisions uses its fixed hosted endpoint and does not accept custom configuration",
+            )
+        if zoom_voice_provider_id is not None:
+            if api_key:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Linked Zoom connections use the saved Scribe credentials. Remove the API key",
+                )
+            try:
+                validate_zoom_voice_provider(
+                    db_session, zoom_voice_provider_id, for_update=True
+                )
+            except ValueError as error:
+                raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(error)) from error
+
+
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -482,6 +528,7 @@ def test_llm_configuration(
 
     test_api_key = test_llm_request.api_key
     test_custom_config = test_llm_request.custom_config
+    existing_provider = None
     if test_llm_request.id:
         existing_provider = fetch_existing_llm_provider_by_id(
             id=test_llm_request.id, db_session=db_session
@@ -516,6 +563,23 @@ def test_llm_configuration(
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
 
+    zoom_voice_provider_id = test_llm_request.zoom_voice_provider_id
+    if (
+        existing_provider
+        and "zoom_voice_provider_id" not in test_llm_request.model_fields_set
+    ):
+        zoom_voice_provider_id = existing_provider.zoom_voice_provider_id
+    _validate_zoom_decision_connection(
+        provider=test_llm_request.provider,
+        zoom_voice_provider_id=zoom_voice_provider_id,
+        existing_provider=existing_provider,
+        api_key=test_api_key,
+        api_base=test_llm_request.api_base,
+        custom_config=test_custom_config,
+        user=user,
+        db_session=db_session,
+    )
+
     test_custom_config = _validate_and_normalize_vertex_auth(
         provider=test_llm_request.provider,
         custom_config=test_custom_config,
@@ -525,12 +589,15 @@ def test_llm_configuration(
         check_typesafe_connection(test_api_key, test_llm_request.model)
         return
 
-    decision_only = model_supports_decisions(
+    decision_capable = model_supports_decisions(
         test_llm_request.provider, test_llm_request.model
-    ) and not model_supports_chat(test_llm_request.provider, test_llm_request.model)
-    if (
-        test_llm_request.provider == "openrouter"
-        and test_llm_request.supports_decisions
+    )
+    decision_only = decision_capable and not model_supports_chat(
+        test_llm_request.provider, test_llm_request.model
+    )
+    if test_llm_request.provider == "openrouter" and (
+        test_llm_request.supports_decisions
+        or test_llm_request.model_configuration_scope == "decision"
     ):
         discovered = _get_openrouter_models_response(
             test_llm_request.api_base or "https://openrouter.ai/api/v1",
@@ -544,9 +611,15 @@ def test_llm_configuration(
             and not details.supports_chat
             for item in discovered.get("data", [])
         )
-    if (
-        test_llm_request.provider == LlmProviderNames.VERCEL_AI_GATEWAY
-        and test_llm_request.supports_decisions
+        decision_capable = any(
+            (details := OpenRouterModelDetails.model_validate(item)).id
+            == test_llm_request.model
+            and details.supports_decisions
+            for item in discovered.get("data", [])
+        )
+    if test_llm_request.provider == LlmProviderNames.VERCEL_AI_GATEWAY and (
+        test_llm_request.supports_decisions
+        or test_llm_request.model_configuration_scope == "decision"
     ):
         discovered = _get_vercel_ai_gateway_decision_models(
             api_base=test_llm_request.api_base,
@@ -555,13 +628,22 @@ def test_llm_configuration(
             db_session=db_session,
         )
         decision_only = test_llm_request.model in discovered
+        decision_capable = decision_only
+    if test_llm_request.model_configuration_scope == "decision":
+        if not decision_capable:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "The selected model does not support decisions",
+            )
+        decision_only = True
     if decision_only:
         try:
-            DecisionClient(
-                provider=DecisionProvider(test_llm_request.provider),
+            build_decision_client(
+                provider=test_llm_request.provider,
                 model=test_llm_request.model,
                 api_key=test_api_key or "",
                 api_base=test_llm_request.api_base,
+                zoom_voice_provider_id=zoom_voice_provider_id,
             ).decide(
                 DecisionRequest(
                     input="The sky is blue.",
@@ -574,7 +656,7 @@ def test_llm_configuration(
                 flow=LLMFlow.MODEL_VALIDATION,
             )
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("Decision model validation failed", exc_info=True)
+            logger.warning("Decision model validation failed")
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 "Decision model validation failed. Check the provider credentials and model.",
@@ -772,6 +854,16 @@ def update_model_routing(
     return settings
 
 
+def _restore_decision_provider_settings(
+    request: LLMProviderUpsertRequest, existing: LLMProviderModel
+) -> None:
+    if request.model_configuration_scope == "decision":
+        if "api_base" not in request.model_fields_set:
+            request.api_base = existing.api_base
+        if "api_version" not in request.model_fields_set:
+            request.api_version = existing.api_version
+
+
 @admin_router.put("/provider")
 def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
@@ -801,6 +893,29 @@ def put_llm_provider(
             OnyxErrorCode.NOT_FOUND,
             f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
+
+    if existing_provider:
+        _restore_decision_provider_settings(
+            llm_provider_upsert_request, existing_provider
+        )
+
+    if (
+        existing_provider
+        and "zoom_voice_provider_id" not in llm_provider_upsert_request.model_fields_set
+    ):
+        llm_provider_upsert_request.zoom_voice_provider_id = (
+            existing_provider.zoom_voice_provider_id
+        )
+    _validate_zoom_decision_connection(
+        provider=llm_provider_upsert_request.provider,
+        zoom_voice_provider_id=llm_provider_upsert_request.zoom_voice_provider_id,
+        existing_provider=existing_provider,
+        api_key=llm_provider_upsert_request.api_key,
+        api_base=llm_provider_upsert_request.api_base,
+        custom_config=llm_provider_upsert_request.custom_config,
+        user=user,
+        db_session=db_session,
+    )
 
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
@@ -849,6 +964,10 @@ def put_llm_provider(
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
+    if llm_provider_upsert_request.zoom_voice_provider_id is not None:
+        llm_provider_upsert_request.api_key = None
+        llm_provider_upsert_request.custom_config = None
+
     llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
         provider=llm_provider_upsert_request.provider,
         custom_config=llm_provider_upsert_request.custom_config,
@@ -863,8 +982,10 @@ def put_llm_provider(
         )
 
     # Check if we're transitioning to Auto mode
-    transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
-        not existing_provider or not existing_provider.is_auto_mode
+    transitioning_to_auto_mode = (
+        llm_provider_upsert_request.model_configuration_scope is None
+        and llm_provider_upsert_request.is_auto_mode
+        and (not existing_provider or not existing_provider.is_auto_mode)
     )
 
     # When transitioning to auto mode, preserve existing model configurations
@@ -1096,6 +1217,7 @@ def get_decision_model_configuration(
             fetch_default_model(db_session, LLMModelFlowType.DECISION)
         ),
         providers=providers,
+        supported_providers=[provider.value for provider in DecisionProvider],
     )
 
 
@@ -2816,7 +2938,7 @@ def _discover_decision_models(
             model.name: False for model in fetch_typesafe_models(request.api_key or "")
         }
 
-    has_decision_models = any(
+    has_decision_models = request.model_configuration_scope == "decision" or any(
         model.supports_decisions for model in request.model_configurations
     )
     if request.provider == LlmProviderNames.OPENROUTER and has_decision_models:
@@ -2883,7 +3005,6 @@ def get_vercel_ai_gateway_available_models(
         try:
             model_id = model.get("id", "")
             model_type = model.get("type")
-            # Gateway uses "evaluation" for its typed decision models.
             if not model_id or model_type not in {"language", "evaluation"}:
                 continue
 

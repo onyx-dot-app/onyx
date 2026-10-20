@@ -416,6 +416,102 @@ def _model_protocol_flows(
     }
 
 
+def _validate_provider_model_defaults(
+    *,
+    existing_by_name: dict[str, ModelConfiguration],
+    defaults_by_model_id: dict[int, set[LLMModelFlowType]],
+    removed_ids: list[int],
+    requested_visibility: dict[str, bool],
+    merged_capabilities: dict[str, set[LLMModelFlowType]],
+    decision_scope: bool,
+    models_to_exist: set[str],
+) -> None:
+    for name, mc in existing_by_name.items():
+        held_flows = defaults_by_model_id.get(mc.id)
+        if not held_flows:
+            continue
+        held = ", ".join(sorted(flow.value for flow in held_flows))
+        if (
+            decision_scope
+            and name not in models_to_exist
+            and LLMModelFlowType.DECISION in held_flows
+        ):
+            raise ValueError(
+                f"Clear the selected decision model '{name}' before removing it"
+            )
+        if mc.id in removed_ids:
+            raise ValueError(
+                f"Cannot remove the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before removing."
+            )
+        if (
+            held_flows
+            - {
+                LLMModelFlowType.CHAT_NAMING,
+                LLMModelFlowType.SEARCH_SELECTION,
+                LLMModelFlowType.DECISION,
+            }
+            and mc.is_visible
+            and not requested_visibility.get(name, True)
+        ):
+            raise ValueError(
+                f"Cannot hide the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before hiding."
+            )
+        for capability_flow in (
+            LLMModelFlowType.CHAT,
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
+            LLMModelFlowType.DECISION,
+        ):
+            if (
+                capability_flow in held_flows
+                and name in merged_capabilities
+                and capability_flow not in merged_capabilities[name]
+            ):
+                raise ValueError(
+                    f"Cannot disable {capability_flow.value} support on '{name}'. "
+                    f"It is the deployment's {capability_flow.value} default "
+                    "model. Please change that default first."
+                )
+
+
+def _provider_model_capabilities(
+    request: LLMProviderUpsertRequest,
+    existing_by_name: dict[str, ModelConfiguration],
+    discovered_decision_models: dict[str, bool] | None,
+) -> tuple[dict[str, set[LLMModelFlowType]], dict[str, bool]]:
+    decision_scope = request.model_configuration_scope == "decision"
+    capabilities: dict[str, set[LLMModelFlowType]] = {}
+    visibility = {mc.name: mc.is_visible for mc in request.model_configurations}
+    for mc_request in request.model_configurations:
+        existing = existing_by_name.get(mc_request.name)
+        stored_flows = set(existing.llm_model_flow_types) if existing else set()
+        merged = _model_protocol_flows(
+            request.provider, mc_request.name, stored_flows, discovered_decision_models
+        )
+        if decision_scope:
+            if LLMModelFlowType.DECISION not in merged or (
+                discovered_decision_models is not None
+                and mc_request.name not in discovered_decision_models
+            ):
+                raise ValueError(
+                    f"Model '{mc_request.name}' does not support decisions"
+                )
+            merged |= stored_flows
+            if existing and LLMModelFlowType.CHAT in stored_flows:
+                visibility[mc_request.name] = existing.is_visible
+        for capability_flow, sent in (
+            (LLMModelFlowType.VISION, mc_request.supports_image_input),
+            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
+        ):
+            keeps = sent if sent is not None else capability_flow in stored_flows
+            if keeps:
+                merged.add(capability_flow)
+        capabilities[mc_request.name] = merged
+    return capabilities, visibility
+
+
 def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
@@ -460,11 +556,23 @@ def upsert_llm_provider(
     )
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
+    if (
+        "zoom_voice_provider_id" in llm_provider_upsert_request.model_fields_set
+        or existing_llm_provider.id is None
+    ):
+        existing_llm_provider.zoom_voice_provider_id = (
+            llm_provider_upsert_request.zoom_voice_provider_id
+        )
     existing_llm_provider.custom_config = custom_config
 
-    existing_llm_provider.is_public = llm_provider_upsert_request.is_public
-    existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
-    existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
+    decision_scope = llm_provider_upsert_request.model_configuration_scope == "decision"
+    preserve_provider_settings = decision_scope and existing_llm_provider.id is not None
+    if not preserve_provider_settings:
+        existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+        existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
+        existing_llm_provider.deployment_name = (
+            llm_provider_upsert_request.deployment_name
+        )
 
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
@@ -479,34 +587,9 @@ def upsert_llm_provider(
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
-    # Build a lookup of requested visibility by model name
-    requested_visibility = {
-        mc.name: mc.is_visible
-        for mc in llm_provider_upsert_request.model_configurations
-    }
-
-    # supports_image_input and supports_reasoning are optional, so an omitted one
-    # used to read as false and drop the flow — taking any deployment default that
-    # flow carried with it. Merge them against what is stored, the same way the
-    # reasoning and temperature fields below are merged.
-    merged_capabilities: dict[str, set[LLMModelFlowType]] = {}
-    for mc_request in llm_provider_upsert_request.model_configurations:
-        existing_mc = existing_by_name.get(mc_request.name)
-        stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
-        merged = _model_protocol_flows(
-            llm_provider_upsert_request.provider,
-            mc_request.name,
-            stored_flows,
-            discovered_decision_models,
-        )
-        for capability_flow, sent in (
-            (LLMModelFlowType.VISION, mc_request.supports_image_input),
-            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
-        ):
-            keeps = sent if sent is not None else capability_flow in stored_flows
-            if keeps:
-                merged.add(capability_flow)
-        merged_capabilities[mc_request.name] = merged
+    merged_capabilities, requested_visibility = _provider_model_capabilities(
+        llm_provider_upsert_request, existing_by_name, discovered_decision_models
+    )
 
     # Delete removed models, unless the caller asked to keep what it did not send
     removed_ids = (
@@ -516,6 +599,10 @@ def upsert_llm_provider(
             mc.id
             for name, mc in existing_by_name.items()
             if name not in models_to_exist
+            and (
+                not decision_scope
+                or set(mc.llm_model_flow_types) == {LLMModelFlowType.DECISION}
+            )
         ]
     )
 
@@ -527,48 +614,31 @@ def upsert_llm_provider(
     # unrelated edits such as an API key rotation.
     defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
-    for name, mc in existing_by_name.items():
-        held_flows = defaults_by_model_id.get(mc.id)
-        if not held_flows:
-            continue
-        held = ", ".join(sorted(flow.value for flow in held_flows))
-        if mc.id in removed_ids:
-            raise ValueError(
-                f"Cannot remove the default model '{name}'. It is the default for: "
-                f"{held}. Please change those defaults before removing."
-            )
-        if (
-            held_flows
-            - {
-                LLMModelFlowType.CHAT_NAMING,
-                LLMModelFlowType.SEARCH_SELECTION,
-                LLMModelFlowType.DECISION,
-            }
-            and mc.is_visible
-            and not requested_visibility.get(name, True)
-        ):
-            raise ValueError(
-                f"Cannot hide the default model '{name}'. It is the default for: "
-                f"{held}. Please change those defaults before hiding."
-            )
-        # Dropping a capability deletes the flow row that represents it, so a
-        # model holding that flow's default must keep it.
-        for capability_flow in (
-            LLMModelFlowType.CHAT,
-            LLMModelFlowType.VISION,
-            LLMModelFlowType.REASONING,
-            LLMModelFlowType.DECISION,
-        ):
-            if (
-                capability_flow in held_flows
-                and name in merged_capabilities
-                and capability_flow not in merged_capabilities[name]
-            ):
-                raise ValueError(
-                    f"Cannot disable {capability_flow.value} support on '{name}'. "
-                    f"It is the deployment's {capability_flow.value} default "
-                    "model. Please change that default first."
+    _validate_provider_model_defaults(
+        existing_by_name=existing_by_name,
+        defaults_by_model_id=defaults_by_model_id,
+        removed_ids=removed_ids,
+        requested_visibility=requested_visibility,
+        merged_capabilities=merged_capabilities,
+        decision_scope=decision_scope,
+        models_to_exist=models_to_exist,
+    )
+
+    if decision_scope and not llm_provider_upsert_request.keep_existing_models:
+        detached_ids = [
+            mc.id
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist
+            and mc.id not in removed_ids
+            and LLMModelFlowType.DECISION in mc.llm_model_flow_types
+        ]
+        if detached_ids:
+            db_session.execute(
+                delete(LLMModelFlow).where(
+                    LLMModelFlow.model_configuration_id.in_(detached_ids),
+                    LLMModelFlow.llm_model_flow_type == LLMModelFlowType.DECISION,
                 )
+            )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -581,6 +651,18 @@ def upsert_llm_provider(
         supported_flows = list(merged_capabilities[model_config.name])
 
         existing = existing_by_name.get(model_config.name)
+        if (
+            decision_scope
+            and existing
+            and LLMModelFlowType.CHAT in existing.llm_model_flow_types
+        ):
+            if LLMModelFlowType.DECISION not in existing.llm_model_flow_types:
+                create_new_flow_mapping__no_commit(
+                    db_session=db_session,
+                    model_configuration_id=existing.id,
+                    flow_type=LLMModelFlowType.DECISION,
+                )
+            continue
         if existing:
             # An omitted field keeps the stored value. Validate the merged
             # policy, not just what was sent.
@@ -624,7 +706,11 @@ def upsert_llm_provider(
                 NewModelConfiguration(
                     name=model_config.name,
                     supported_flows=supported_flows,
-                    is_visible=model_config.is_visible,
+                    is_visible=(
+                        False
+                        if decision_scope and LLMModelFlowType.CHAT in supported_flows
+                        else model_config.is_visible
+                    ),
                     max_input_tokens=_stored_max_input_tokens(
                         provider=llm_provider_upsert_request.provider,
                         model_name=model_config.name,
@@ -645,16 +731,17 @@ def upsert_llm_provider(
     )
 
     # Make sure the relationship table stays up to date
-    update_group_llm_provider_relationships__no_commit(
-        llm_provider_id=existing_llm_provider.id,
-        group_ids=llm_provider_upsert_request.groups,
-        db_session=db_session,
-    )
-    update_llm_provider_persona_relationships__no_commit(
-        db_session=db_session,
-        llm_provider_id=existing_llm_provider.id,
-        persona_ids=llm_provider_upsert_request.personas,
-    )
+    if not preserve_provider_settings:
+        update_group_llm_provider_relationships__no_commit(
+            llm_provider_id=existing_llm_provider.id,
+            group_ids=llm_provider_upsert_request.groups,
+            db_session=db_session,
+        )
+        update_llm_provider_persona_relationships__no_commit(
+            db_session=db_session,
+            llm_provider_id=existing_llm_provider.id,
+            persona_ids=llm_provider_upsert_request.personas,
+        )
 
     try:
         db_session.commit()

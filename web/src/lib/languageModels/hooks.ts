@@ -26,9 +26,13 @@ import type {
 } from "@/lib/languageModels/types";
 
 export function useDecisionModel() {
-  const t = useTranslations("admin.chatPreferences.decisionModel");
+  const t = useTranslations("admin.decisionModels.decisionModel");
   const { data, error, mutate } = useSWR<
-    { model: DefaultModel | null; providers: RawLLMProviderView[] },
+    {
+      model: DefaultModel | null;
+      providers: RawLLMProviderView[];
+      supported_providers: string[];
+    },
     Error
   >(SWR_KEYS.decisionModel, errorHandlingFetcher);
   const openAiDecisionName = t("openAiDecisionsModelName");
@@ -39,7 +43,13 @@ export function useDecisionModel() {
         : undefined,
     [data, openAiDecisionName]
   );
-  return { model: data?.model ?? null, providers, error, refetch: mutate };
+  return {
+    model: data?.model ?? null,
+    providers,
+    supportedProviders: data?.supported_providers ?? [],
+    error,
+    refetch: mutate,
+  };
 }
 
 // ---------------------------------------------------------------------------

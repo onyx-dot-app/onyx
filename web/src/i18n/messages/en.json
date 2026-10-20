@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "Decision model",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
+        "clear": "Clear",
+        "notConfigured": "Not configured",
+        "saved": "Decision model updated",
+        "saveFailed": "Failed to update decision model"
+      },
+      "header": {
+        "title": "Decision Models",
+        "description": "Manage decision model providers and choose an optional model."
+      },
+      "providers": {
+        "title": "Providers",
+        "description": "Connect a provider or manage its decision models.",
+        "clearBeforeRemoval": "Clear the selected decision model before removing this provider.",
+        "edit": "Configure",
+        "connect": "Connect"
+      },
+      "loadFailed": "Could not load decision models.",
+      "retry": "Try again",
+      "saveFailed": "Could not save the connection.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "zoom": {
+        "title": "Connect Zoom AI Decisions",
+        "description": "Reuse the credentials from a saved Zoom Scribe connection.",
+        "connection": "Zoom Scribe connection",
+        "selectConnection": "Select a Zoom Scribe connection",
+        "noConnections": "Set up a Zoom Scribe connection before connecting Zoom AI Decisions.",
+        "setupVoice": "Set up Voice"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "Decision model",
-        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
-        "clear": "Clear",
-        "notConfigured": "Not configured",
-        "saved": "Decision model updated",
-        "saveFailed": "Failed to update decision model"
-      },
       "chatNaming": {
         "description": "Model used to name chat sessions. Defaults to each session's model.",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "Language Models"
+        },
+        "decisionModels": {
+          "label": "Decision Models"
         },
         "llmGateway": {
           "label": "LLM Gateway"

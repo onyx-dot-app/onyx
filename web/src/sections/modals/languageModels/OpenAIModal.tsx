@@ -29,6 +29,7 @@ export default function OpenAIModal({
   onOpenChange,
   onSuccess,
   analyticsSource,
+  modelScope,
 }: LLMProviderFormProps) {
   const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
@@ -39,7 +40,8 @@ export default function OpenAIModal({
   const initialValues = useInitialValues(
     isOnboarding,
     LLMProviderName.OPENAI,
-    existingLlmProvider
+    existingLlmProvider,
+    modelScope
   );
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
@@ -94,9 +96,9 @@ export default function OpenAIModal({
       )}
 
       <InputDivider />
-      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
+      <ModelSelectionField shouldShowAutoUpdateToggle={!modelScope} />
 
-      {!isOnboarding && (
+      {!isOnboarding && !modelScope && (
         <>
           <InputDivider />
           <ModelAccessField />

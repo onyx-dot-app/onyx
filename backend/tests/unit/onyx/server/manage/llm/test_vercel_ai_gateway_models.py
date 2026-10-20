@@ -23,8 +23,6 @@ from onyx.server.manage.llm.models import (
     VercelAIGatewayModelsRequest,
 )
 
-# Trimmed catalog payload: chat models, a decision-only model, and entries
-# outside the model surfaces Onyx supports.
 _SAMPLE = {
     "object": "list",
     "data": [

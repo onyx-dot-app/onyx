@@ -6,6 +6,7 @@ jest.mock("swr", () => ({
   default: () => ({
     data: [
       { name: "typesafe", known_models: [] },
+      { name: "zoom_ai", known_models: [] },
       { name: "openai", known_models: [] },
     ],
     error: undefined,

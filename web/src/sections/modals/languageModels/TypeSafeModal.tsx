@@ -59,13 +59,15 @@ export default function TypeSafeModal({
   onOpenChange,
   onSuccess,
   analyticsSource,
+  modelScope,
 }: LLMProviderFormProps) {
   const t = useTranslations("admin.languageModels.modals");
   const { mutate } = useSWRConfig();
   const providerValues = useInitialValues(
     false,
     LLMProviderName.TYPESAFE,
-    existingLlmProvider
+    existingLlmProvider,
+    modelScope
   );
   const initialValues = {
     ...providerValues,

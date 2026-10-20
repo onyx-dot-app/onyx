@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "决策模型",
+        "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
+        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
+        "clear": "清除",
+        "notConfigured": "未配置",
+        "saved": "决策模型已更新",
+        "saveFailed": "无法更新决策模型"
+      },
+      "header": {
+        "title": "决策模型",
+        "description": "管理决策模型提供商并选择可选的决策模型。"
+      },
+      "providers": {
+        "title": "提供商",
+        "description": "连接提供商或管理其决策模型。",
+        "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
+        "edit": "配置",
+        "connect": "连接"
+      },
+      "loadFailed": "无法加载决策模型。",
+      "retry": "重试",
+      "saveFailed": "无法保存连接。",
+      "cancel": "取消",
+      "save": "保存",
+      "zoom": {
+        "title": "连接 Zoom AI Decisions",
+        "description": "复用已保存的 Zoom Scribe 连接凭据。",
+        "connection": "Zoom Scribe 连接",
+        "selectConnection": "选择 Zoom Scribe 连接",
+        "noConnections": "连接 Zoom AI Decisions 前，请先设置 Zoom Scribe 连接。",
+        "setupVoice": "设置语音"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "决策模型",
-        "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
-        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
-        "clear": "清除",
-        "notConfigured": "未配置",
-        "saved": "决策模型已更新",
-        "saveFailed": "无法更新决策模型"
-      },
       "chatNaming": {
         "description": "用于为对话会话命名的模型。默认使用各会话自身的模型。",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "语言模型"
+        },
+        "decisionModels": {
+          "label": "决策模型"
         },
         "llmGateway": {
           "label": "LLM 网关"

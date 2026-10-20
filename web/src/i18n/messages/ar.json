@@ -1224,6 +1224,41 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "decisionModel": {
+        "title": "نموذج القرار",
+        "openAiDecisionsModelName": "قرارات OpenAI (GPT-6 Luna)",
+        "description": "اختر نموذجًا لميزات التصنيف والمراجعة المستقبلية. لا يستخدم Onyx هذا النموذج بعد.",
+        "clear": "مسح",
+        "notConfigured": "غير مُعدّ",
+        "saved": "تم تحديث نموذج القرار",
+        "saveFailed": "تعذّر تحديث نموذج القرار"
+      },
+      "header": {
+        "title": "نماذج القرار",
+        "description": "أدر موفري نماذج القرار واختر نموذجًا اختياريًا."
+      },
+      "providers": {
+        "title": "الموفرون",
+        "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
+        "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
+        "edit": "تكوين",
+        "connect": "ربط"
+      },
+      "loadFailed": "تعذر تحميل نماذج القرار.",
+      "retry": "إعادة المحاولة",
+      "saveFailed": "تعذر حفظ الاتصال.",
+      "cancel": "إلغاء",
+      "save": "حفظ",
+      "zoom": {
+        "title": "ربط Zoom AI Decisions",
+        "description": "أعد استخدام بيانات اعتماد اتصال Zoom Scribe محفوظ.",
+        "connection": "اتصال Zoom Scribe",
+        "selectConnection": "اختر اتصال Zoom Scribe",
+        "noConnections": "أنشئ اتصال Zoom Scribe قبل ربط Zoom AI Decisions.",
+        "setupVoice": "إعداد الصوت"
+      }
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -2163,15 +2198,6 @@
       }
     },
     "chatPreferences": {
-      "decisionModel": {
-        "title": "نموذج القرار",
-        "openAiDecisionsModelName": "قرارات OpenAI (GPT-6 Luna)",
-        "description": "اختر نموذجًا لميزات التصنيف والمراجعة المستقبلية. لا يستخدم Onyx هذا النموذج بعد.",
-        "clear": "مسح",
-        "notConfigured": "غير مُعدّ",
-        "saved": "تم تحديث نموذج القرار",
-        "saveFailed": "تعذّر تحديث نموذج القرار"
-      },
       "chatNaming": {
         "description": "النموذج المستخدم لتسمية جلسات المحادثة. يستخدم نموذج كل جلسة افتراضيًا.",
         "resetButton": {
@@ -16401,6 +16427,9 @@
         },
         "languageModels": {
           "label": "نماذج اللغة"
+        },
+        "decisionModels": {
+          "label": "نماذج القرار"
         },
         "llmGateway": {
           "label": "بوابة LLM"

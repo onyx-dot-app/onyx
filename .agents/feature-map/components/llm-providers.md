@@ -31,11 +31,14 @@ the configured API key. Models remain excluded from chat and auto mode.
 Provider configuration rows show a Decision tag for decision-capable models.
 Its tooltip distinguishes decision-only models, which do not appear in chat,
 from models that support both chat and decision tasks.
-Chat Preferences also has an optional **Decision model** selection. It starts
-unset and never inherits a chat model. No product workflow consumes it yet.
-TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions
-use the separate client in `backend/onyx/llm/decisions/`. Vercel AI Gateway
-uses its OpenAI-compatible `/v1/decisions` endpoint. Its model catalog reports
+**Admin > Decision Models** owns the optional decision-model selection and
+decision-capable provider setup. The selection starts unset and does not inherit
+a chat model. No product workflow consumes it yet. The page reuses the LLM
+provider and model records. Decision-scoped edits preserve chat settings and
+visibility. TypeSafe System One, Zoom AI Services, OpenAI Decisions, OpenRouter
+Decisions, and Vercel AI Gateway use the separate client in
+`backend/onyx/llm/decisions/`. Zoom links to an existing Zoom Scribe connection
+and uses its current credentials to sign each request. Vercel AI Gateway reports
 decision models as `evaluation`; Onyx keeps these separate from chat models.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
@@ -72,7 +75,7 @@ Admin router, prefix `/admin/llm`:
 | POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
 | POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
-| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Explicit selection only. GET includes all eligible configured models without pagination. |
+| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Decision Models page selection. Explicit opt-in only. GET includes all eligible configured models without pagination. |
 | POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Requires a chat-capable model; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
@@ -123,10 +126,22 @@ see §9.
 ### Admin UI
 
 `web/src/app/admin/language-models/page.tsx` is the provider list and
-edit surface. It is a thin client over the endpoints above.
+edit surface. `web/src/app/admin/decision-models/page.tsx` is the decision
+provider and model selection surface. It reuses provider modal forms with a
+decision scope so model records remain shared without changing chat visibility,
+defaults, or provider access. Zoom Decisions links to a Zoom VoiceProvider
+record; deleting a linked connection is rejected until the link is removed.
+Decision-only providers have a delete action on this page. An admin must clear
+the selected decision model before deleting its provider. Shared providers keep
+their connection and manage the DECISION flow through their configuration form.
 
 `web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration and the
 default chat model. Model selection for naming and search lives in Chat Preferences.
+`web/src/views/admin/DecisionModelsPage.tsx` owns decision-provider setup and the
+optional decision model. OpenAI, OpenRouter, Vercel, and TypeSafe reuse their
+existing LLM connections. Zoom reuses a selected Zoom Scribe connection through
+`LLMProvider.zoom_voice_provider_id`; the encrypted Scribe key and secret are not
+copied into the LLM provider record.
 `web/src/views/admin/ChatTaskModelSettings.tsx` renders Chat naming model and
 Search selection model inside the always-visible Model selection section.
 Its provider fetch starts on page load; the section has no disclosure control.
@@ -477,6 +492,14 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 8. **Decision selection is strictly opt-in.** Neither provider creation nor
    chat defaults select a decision model. Clearing it returns the factory to
    `None`. A request cannot grant decision capability to an arbitrary model.
+9. **Decision-scoped provider edits preserve shared configuration.** They may
+   add or remove only the DECISION flow. They must not alter chat visibility,
+   provider access, model settings, or defaults. New shared models stay hidden
+   from chat.
+10. **Zoom Decisions use a linked Zoom Scribe connection.** Do not copy its
+    credentials into the LLM provider row or accept a custom destination. Each
+    request reads the linked credentials and signs a fresh token. Only full
+    admins can test or change a linked connection.
 
 ---
 
@@ -609,6 +632,9 @@ See `backend/AGENTS.md` for authoritative commands and required env
   whenever it is available; a stale `model_configuration_id` falls back to
   the default LLM rather than attempting a name-based lookup, specifically to
   avoid picking a different same-named provider.
+- **A Zoom Scribe connection linked to Decision Models cannot be deleted.**
+  Remove or change the decision provider link first. The foreign key uses
+  `ON DELETE RESTRICT` to prevent dangling credential references.
 - **The tracing admin API and DB-backed tracing config are unavailable under
   `MULTI_TENANT`.** Env vars are the only configuration surface on cloud;
   `_reject_if_multi_tenant` enforces this at the endpoint level.

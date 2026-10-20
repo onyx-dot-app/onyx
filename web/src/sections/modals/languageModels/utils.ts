@@ -41,7 +41,8 @@ function buildModelConfigurations(
 export function useInitialValues(
   isOnboarding: boolean,
   providerName: LLMProviderName,
-  existingLlmProvider?: LLMProviderView
+  existingLlmProvider?: LLMProviderView,
+  modelScope?: "decision"
 ) {
   const { wellKnownLLMProvider } = useWellKnownLLMProvider(providerName);
 
@@ -53,8 +54,18 @@ export function useInitialValues(
   const testModelName =
     modelConfigurations.find((m) => m.is_visible)?.name ??
     wellKnownLLMProvider?.recommended_default_model?.name;
+  const knownModels = new Map(
+    wellKnownLLMProvider?.known_models.map((model) => [model.name, model])
+  );
+  const storedModels = new Map(
+    existingLlmProvider?.model_configurations.map((model) => [
+      model.name,
+      model,
+    ])
+  );
 
   return {
+    model_configuration_scope: modelScope,
     id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,
     name: isOnboarding
@@ -66,7 +77,17 @@ export function useInitialValues(
     is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
     groups: existingLlmProvider?.groups ?? [],
     personas: existingLlmProvider?.personas ?? [],
-    model_configurations: modelConfigurations,
+    model_configurations: modelScope
+      ? modelConfigurations.map((model) => ({
+          ...model,
+          supports_decisions:
+            model.supports_decisions ||
+            knownModels.get(model.name)?.supports_decisions,
+          is_visible: existingLlmProvider
+            ? storedModels.get(model.name)?.supports_decisions === true
+            : model.supports_decisions === true,
+        }))
+      : modelConfigurations,
     test_model_name: testModelName,
   };
 }
@@ -127,6 +148,7 @@ export function buildValidationSchema(
 
 /** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
+  model_configuration_scope?: "decision";
   id?: number;
   name?: string;
   api_key?: string;

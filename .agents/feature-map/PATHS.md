@@ -196,8 +196,9 @@ so verify the callers rather than a single component.
 | `web/src/views/admin/ChatPreferencesPage.tsx` | chat-preferences |
 | `web/src/app/admin/language-models/` | llm-providers |
 | `web/src/views/admin/LanguageModelsPage.tsx` | llm-providers |
+| `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/sections/modals/languageModels/ZoomDecisionModal.tsx` | llm-providers |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
-| `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | chat-preferences, llm-providers |
+| `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `admin/openapi-actions/` | mcp-and-custom-tools |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | mcp-and-custom-tools |
 | `web/src/sections/actions/`, `web/src/lib/mcp/` | mcp-and-custom-tools |

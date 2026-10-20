@@ -18,7 +18,7 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DecisionClient
-from onyx.llm.decisions.models import DecisionProvider
+from onyx.llm.decisions.factory import build_decision_client
 from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
@@ -451,11 +451,12 @@ def get_decision_client(
             tenant_id=get_current_tenant_id(),
             llm_provider_api_key=api_key,
         )
-        return DecisionClient(
-            provider=DecisionProvider(provider.provider),
+        return build_decision_client(
+            provider=provider.provider,
             model=model.name,
             api_key=api_key,
             api_base=provider.api_base,
+            zoom_voice_provider_id=provider.zoom_voice_provider_id,
             extra_headers={
                 **build_llm_extra_headers(additional_headers),
                 **_build_provider_extra_headers(

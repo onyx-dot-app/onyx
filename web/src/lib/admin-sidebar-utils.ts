@@ -22,6 +22,7 @@ export type AdminNavItemId =
   | "webSearch"
   | "imageGeneration"
   | "voice"
+  | "decisionModels"
   | "codeInterpreter"
   | "chatPreferences"
   | "llmGateway"
@@ -80,6 +81,7 @@ export const NAV_ITEM_IDS: Record<
   WEB_SEARCH: "webSearch",
   IMAGE_GENERATION: "imageGeneration",
   VOICE: "voice",
+  DECISION_MODELS: "decisionModels",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",
   LLM_GATEWAY: "llmGateway",
