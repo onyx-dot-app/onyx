@@ -1254,9 +1254,8 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
         named: list[SiteDescriptor] = [
             site for site in _descriptors(_config(context)) if site.drive_name
         ]
-        scoped: list[SiteDescriptor] = _found_sites(
-            _gateway(context), named[:_PROBE_SITES]
-        )
+        probed: list[SiteDescriptor] = named[:_PROBE_SITES]
+        scoped: list[SiteDescriptor] = _found_sites(_gateway(context), probed)
         if not scoped:
             _raise_row(
                 NothingToCheckError,
@@ -1270,13 +1269,13 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
             problem for site in scoped if (problem := self._probe(context, site))
         ]
         if not problems:
-            if len(named) > len(scoped):
+            if len(named) > len(probed):
                 return CheckOutput(
-                    summary=f"First {len(scoped)} of {len(named)} libraries found",
+                    summary=f"First {len(probed)} of {len(named)} libraries checked",
                     advisories=[
                         CheckAdvisory(
                             message=(
-                                f"Only the first {len(scoped)} site URLs that name "
+                                f"Only the first {len(probed)} site URLs that name "
                                 "a library were checked."
                             )
                         )

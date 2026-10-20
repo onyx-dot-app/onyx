@@ -439,6 +439,39 @@ def test_a_second_library_the_site_lacks_is_a_partial_find() -> None:
     gateway.resolve_folder.assert_not_called()
 
 
+def test_a_missing_site_is_not_reported_as_a_probe_cap() -> None:
+    """Find selected sites reports the missing site; this row counts only
+    found libraries and adds no cap advisory."""
+    gateway: MagicMock = _gateway()
+    gateway.get_site_id.side_effect = ["site-id", _refusal(404, "itemNotFound")]
+    config: dict[str, Any] = _config(
+        sites=[f"{SITE_URL}/Shared Documents", f"{OTHER_SITE_URL}/Shared Documents"]
+    )
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_configured_libraries"]], _context(gateway, config)
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    assert result.summary == "1 selected library found"
+    assert not result.advisories
+
+
+def test_more_than_five_libraries_pass_with_a_caveat() -> None:
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(
+        sites=[f"{SITE_URL}{n}/Shared Documents" for n in range(7)]
+    )
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_configured_libraries"]], _context(gateway, config)
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    assert result.summary == "First 5 of 7 libraries checked"
+    assert result.advisories
+
+
 def test_unknown_library_fails_with_its_segment() -> None:
     gateway: MagicMock = _gateway()
     config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive/Plans"])
