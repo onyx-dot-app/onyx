@@ -4851,7 +4851,7 @@
           "label": "Enregistrer"
         },
         "units": {
-          "description": "Unité : *USD* par `1M` de jetons."
+          "description": "Unité : USD par 1M de jetons."
         }
       },
       "panel": {

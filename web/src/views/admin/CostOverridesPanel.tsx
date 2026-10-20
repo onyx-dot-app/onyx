@@ -206,7 +206,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
           <InputHorizontal
             withLabel
             title={t("form.inputRate.label")}
-            description={markdown(t("form.units.description"))}
+            description={t("form.units.description")}
             fillInput
             center
           >
@@ -220,7 +220,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
           <InputHorizontal
             withLabel
             title={t("form.outputRate.label")}
-            description={markdown(t("form.units.description"))}
+            description={t("form.units.description")}
             fillInput
             center
           >
@@ -234,7 +234,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
           <InputHorizontal
             withLabel
             title={t("form.cacheRate.label")}
-            description={markdown(t("form.units.description"))}
+            description={t("form.units.description")}
             suffix="optional"
             fillInput
             center
