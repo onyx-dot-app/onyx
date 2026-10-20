@@ -17,7 +17,7 @@ from ee.onyx.external_permissions.canvas.group_sync import (
 )
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.client import CanvasApiClient, CanvasUnsafeUrlError
 from onyx.connectors.canvas.connector import (
     CanvasAnnouncement,
     CanvasAnnouncementSection,
@@ -2142,3 +2142,82 @@ class TestReindexListingParity:
         assert isinstance(results[0], ConnectorFailure)
         assert results[0].failed_document is not None
         assert results[0].failed_document.document_id == doc_id
+
+
+# ---------------------------------------------------------------------------
+# reindex: which errors fail one target and which stop the run
+# ---------------------------------------------------------------------------
+
+_API_PREFIX = f"{FAKE_BASE_URL}/api/v1"
+_BAD_PAGE_ID = "canvas-page-1-10"
+_GOOD_PAGE_ID = "canvas-page-1-11"
+
+
+def _reindex_pages(bad_page_response: MagicMock, users_self_status: int) -> list[Any]:
+    """Reindex a bad page, then a good page. users/self answers with the given status."""
+    connector = _build_connector()
+
+    def _dispatcher(url: str, **_kwargs: Any) -> MagicMock:
+        if url == f"{_API_PREFIX}/courses":
+            return _mock_response(json_data=[_mock_course()])
+        if url == f"{_API_PREFIX}/users/self":
+            return _mock_response(users_self_status, {"id": 1})
+        if url == f"{_API_PREFIX}/courses/1/pages/10":
+            return bad_page_response
+        return _mock_response(json_data={**_mock_page(page_id=11), "published": True})
+
+    failures = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=doc_id),
+            failure_message="synthetic",
+        )
+        for doc_id in (_BAD_PAGE_ID, _GOOD_PAGE_ID)
+    ]
+    with patch("onyx.connectors.canvas.client.rl_requests") as mock_requests:
+        mock_requests.get.side_effect = _dispatcher
+        return list(connector.reindex(failures))
+
+
+def _assert_bad_failed_good_indexed(results: list[Any]) -> None:
+    assert len(results) == 2
+    assert isinstance(results[0], ConnectorFailure)
+    assert results[0].failed_document is not None
+    assert results[0].failed_document.document_id == _BAD_PAGE_ID
+    assert isinstance(results[1], Document)
+    assert results[1].id == _GOOD_PAGE_ID
+
+
+class TestReindexErrorScope:
+    @pytest.mark.parametrize("status_code", [401, 403])
+    def test_item_denied_with_valid_token_fails_one_target(
+        self, status_code: int
+    ) -> None:
+        denied = _mock_response(
+            status_code, {"errors": [{"message": "user not authorized"}]}
+        )
+
+        _assert_bad_failed_good_indexed(_reindex_pages(denied, users_self_status=200))
+
+    def test_rejected_token_stops_the_run(self) -> None:
+        rejected = _mock_response(
+            401, {"errors": [{"message": "Invalid access token."}]}
+        )
+
+        with pytest.raises(CredentialExpiredError):
+            _reindex_pages(rejected, users_self_status=401)
+
+    def test_invalid_json_fails_one_target(self) -> None:
+        malformed = _mock_response()
+        malformed.json.side_effect = ValueError("not json")
+
+        _assert_bad_failed_good_indexed(
+            _reindex_pages(malformed, users_self_status=200)
+        )
+
+    def test_off_host_redirect_stops_the_run(self) -> None:
+        redirect = _mock_response(302)
+        redirect.headers = {"Location": "https://evil.example.com/steal"}
+        redirect.url = f"{_API_PREFIX}/courses/1/pages/10"
+
+        with pytest.raises(CanvasUnsafeUrlError):
+            _reindex_pages(redirect, users_self_status=200)

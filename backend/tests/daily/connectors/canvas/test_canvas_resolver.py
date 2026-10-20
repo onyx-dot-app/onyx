@@ -172,6 +172,34 @@ def test_reindex_entity_failures_are_skipped(
     assert list(canvas_connector.reindex([entity])) == []
 
 
+@pytest.mark.secrets(TestSecret.CANVAS_STUDENT_ACCESS_TOKEN)
+def test_reindex_items_the_user_cannot_read_fail_one_by_one(
+    test_secrets: dict[TestSecret, str],
+    crawled_docs: dict[str, Document],
+) -> None:
+    """The student may not read some section- or user-restricted items that the
+    teacher crawl returns. Canvas denies each one alone; the run must go on."""
+    student_connector = CanvasConnector(canvas_base_url=CANVAS_BASE_URL)
+    student_connector.load_credentials(
+        {"canvas_access_token": test_secrets[TestSecret.CANVAS_STUDENT_ACCESS_TOKEN]}
+    )
+    student_course_ids = {
+        str(course.id) for course in student_connector._list_courses()
+    }
+    targets = [
+        doc.id
+        for doc in crawled_docs.values()
+        if doc.metadata["course_id"] in student_course_ids
+    ]
+
+    docs, failures = _split(list(student_connector.reindex(_build_failures(targets))))
+
+    failed_ids = [f.failed_document.document_id for f in failures if f.failed_document]
+    assert docs, "Student should read some items"
+    assert failed_ids, "Student should be denied some restricted items"
+    assert sorted([doc.id for doc in docs] + failed_ids) == sorted(targets)
+
+
 @pytest.mark.usefixtures("enable_ee")
 def test_reindex_with_permissions_matches_slim_access(
     canvas_connector: CanvasConnector,

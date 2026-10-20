@@ -17,7 +17,7 @@ from onyx.connectors.canvas.access import (
     get_assignment_permissions,
     get_page_permissions,
 )
-from onyx.connectors.canvas.client import CanvasApiClient
+from onyx.connectors.canvas.client import CanvasApiClient, CanvasUnsafeUrlError
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -986,6 +986,15 @@ class CanvasConnector(
             return CanvasAssignment.from_api(payload, course_id=course_id)
         return CanvasAnnouncement.from_api(payload, course_id=course_id)
 
+    def _raise_if_token_rejected(self) -> None:
+        """Raise CredentialExpiredError if Canvas rejects the token itself.
+        Every valid token can read its own user."""
+        try:
+            self.canvas_client.get("users/self")
+        except OnyxError as e:
+            if e.status_code == 401:
+                _handle_canvas_api_error(e)  # NoReturn — always raises
+
     @override
     def reindex(
         self,
@@ -1039,13 +1048,13 @@ class CanvasConnector(
             try:
                 item = self._fetch_item(stage, course_id, item_id)
                 yield self._item_to_document(item, include_permissions)
+            except CanvasUnsafeUrlError:
+                raise
             except OnyxError as e:
-                # Same rules as the crawl: host/scheme errors and auth
-                # errors stop the whole run.
-                if e._status_code_override is None:
-                    raise
+                # Canvas also answers 401/403 for one item the user may not
+                # read, so only a rejected token stops the whole run.
                 if e.status_code in (401, 403):
-                    _handle_canvas_api_error(e)  # NoReturn — always raises
+                    self._raise_if_token_rejected()
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(document_id=doc_id),
                     failure_message=f"Failed to reindex Canvas document {doc_id}: {e}",
