@@ -92,6 +92,7 @@ frontend changes a new connector requires.
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
 | POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. A Microsoft `.pfx` certificate travels in `credential_json` as base64 text, the form the private-key upload stores; `resolve_form_credential` checks it as PKCS#12 (`private_key_types.validate_pkcs12_credential_value`). The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. A run starts only when the credential use rule (§4.9) allows the form's config. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
+| GET | `/admin/connector-checks/graph` | A source's registered checks as a DAG: each check's static metadata, whether it is `conditional` (has an `applies` predicate) or a fallback, and edges from each prerequisite to its dependent. Built once per process. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
 Every connector run on a cc-pair (index, prune, hierarchy fetch, targeted reindex,
@@ -477,7 +478,13 @@ deployments) and a probe's discovery step.
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
 source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
-as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
+as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`. For a source with a
+check graph file (loaded by `backend/onyx/connectors/capability_checks/graph.py`; Jira so
+far, `backend/onyx/connectors/jira/check_graph.json`, with its EE permission-sync nodes in
+`backend/ee/onyx/external_permissions/jira/check_graph.json`), that file is the source of truth for
+the check metadata and `depends_on`: check classes read their node with
+`init_from_graph`, and the file is validated (unique ids, known dependencies, no
+cycle) when first loaded;
 `run_order` runs dependencies first. A dependency that `FAILED`, is
 `INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
 `not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is

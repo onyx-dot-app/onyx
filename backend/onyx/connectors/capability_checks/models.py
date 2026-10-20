@@ -25,6 +25,7 @@ from onyx.connectors.capability_checks.form_state import (
     FormState,
     validate_form_state,
 )
+from onyx.connectors.capability_checks.graph import CheckNode
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -484,7 +485,8 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
     """
     A named probe of one permission/capability assumption a connector makes.
 
-    Concrete checks pass their metadata to ``__init__`` and implement ``run``,
+    Concrete checks pass their metadata to ``__init__`` (or, for a source with
+    a check graph, read it with ``init_from_graph``) and implement ``run``,
     which raises a ``ValidationError``-family exception on failure and returns
     nothing or a ``CheckOutput`` on success; the runner maps exceptions to
     statuses.
@@ -582,6 +584,31 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         # variants of a probe (token types, deployments) and a probe's
         # discovery step. Defaults to the check_id.
         self.row_id = row_id or check_id
+
+    def init_from_graph(self, node: CheckNode) -> None:
+        """Sets the check's metadata from its node in the source's check graph
+        (``graph.py``), the source of truth for named checks."""
+        CapabilityCheck.__init__(
+            self,
+            capability=node.capability,
+            check_id=node.id,
+            display_name=node.display_name,
+            required=node.required,
+            requires_connector_instance=node.requires_connector_instance,
+            requires_connector_config=node.requires_connector_config,
+            requires_fields=frozenset(node.requires_fields),
+            access_types=(
+                frozenset(node.access_types) if node.access_types is not None else None
+            ),
+            timeout_seconds=node.timeout_seconds,
+            remediation=node.remediation,
+            docs_link=node.docs_link,
+            validates_binding=node.validates_binding,
+            discovery=node.discovery,
+            fails_when_unreachable=node.fails_when_unreachable,
+            depends_on=node.depends_on,
+            row_id=node.row_id,
+        )
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool

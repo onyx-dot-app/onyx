@@ -28,7 +28,9 @@ from onyx.connectors.capability_checks.draft_runs import (
 from onyx.connectors.capability_checks.findings_setting import (
     hide_findings_if_disabled,
 )
+from onyx.connectors.capability_checks.graph import CheckGraph
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.registry import get_check_graph
 from onyx.connectors.capability_checks.stored_run_progress import (
     StoredRunProgress,
     load_stored_run_progress,
@@ -554,6 +556,20 @@ def plan_draft_checks(
         access_type=request.access_type,
         form_values=request.form_state,
     )
+
+
+@router.get("/admin/connector-checks/graph")
+def get_connector_check_graph(
+    source: DocumentSource,
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> CheckGraph:
+    """The source's checks as a DAG: each check's static metadata and the
+    checks it runs after. Static for the life of the process, so the page can
+    cache it. Whether a ``conditional`` check applies to a form comes from the
+    plan endpoint."""
+    return get_check_graph(source)
 
 
 class DraftCheckRunRequest(BaseModel):
