@@ -38,33 +38,20 @@ func NewStackCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stack",
 		Short: "Run the local dev stack of this worktree",
-		Long: `Run the local Onyx dev stack from a source checkout: Compose infrastructure,
-migrations, and the application services from .vscode/launch.json as
-background processes.
+		Long: `Run the local Onyx dev stack of a source checkout: Compose infrastructure,
+migrations, and the application services from .vscode/launch.json.
 
-By default, worktrees share infrastructure and one active application checkout.
-Running "up" from another checkout stops the previous app before migrations.
-Use --isolated for separate infrastructure. Use "ods web dev" for a frontend
-against an existing healthy API, or "ods backend api" for an interactive API.
-All entry points share service planning and process launchers. Lifecycle locks keep
-concurrent commands safe. Port leases live in ` + filepath.Join(paths.DataDir(), "stack") + `.
-
-Profiles:
-  minimal  Web Server and API Server
-  default  minimal plus the primary, light, beat, docfetching, docprocessing
-           and user_file_processing Celery workers
-  full     every service in the "Run All Onyx Services" compound
-
-The model server comes from Compose; --local-model-server runs it from the
-checkout instead, for model server changes.
-
-Examples:
-  ods stack up
-  ods stack up --profile full --json
-  ods stack status --json
-  ods stack logs api --follow
-  ods stack stop
-  ods stack down`,
+Start with "ods stack status" for this worktree, or "ods stack ls" for every
+stack on this machine. Each command prints the next command to run.
+Worktrees share infrastructure by default; add --isolated for separate data.
+See tools/ods/README.md for profiles, ports and ownership.`,
+		Example: `  ods stack status
+  ods stack ls
+  ods stack up --profile minimal
+  ods stack down --project NAME`,
+	}
+	for _, group := range []struct{ id, title string }{{"find", "Find stacks:"}, {"run", "Run this worktree's stack:"}, {"clean", "Clean up:"}} {
+		cmd.AddGroup(&cobra.Group{ID: group.id, Title: group.title})
 	}
 
 	cmd.AddCommand(newStackLifecycleCommand("up", "Set up the worktree, start infrastructure, migrate and start the services"))
@@ -73,8 +60,20 @@ Examples:
 	cmd.AddCommand(newStackStopCommand("stop", "Stop the services, keep the infrastructure"))
 	cmd.AddCommand(newStackStopCommand("down", "Stop the services and the infrastructure (volumes are kept)"))
 	cmd.AddCommand(newStackStatusCommand())
+	cmd.AddCommand(newStackLsCommand())
+	cmd.AddCommand(newStackPruneCommand())
 	cmd.AddCommand(newStackLogsCommand())
 	cmd.AddCommand(newStackPlanCommand())
+	groups := map[string]string{
+		"status": "find", "ls": "find", "logs": "find", "plan": "find",
+		"up": "run", "start": "run", "restart": "run", "stop": "run", "down": "run",
+		"prune": "clean",
+	}
+	for _, child := range cmd.Commands() {
+		child.GroupID = groups[child.Name()]
+	}
+	cmd.SetHelpCommandGroupID("find")
+	cmd.SetCompletionCommandGroupID("find")
 	return cmd
 }
 
@@ -137,11 +136,22 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 
 func newStackStopCommand(name, short string) *cobra.Command {
 	opts := &stackOptions{}
+	var force bool
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: short,
-		Args:  cobra.NoArgs,
+		Long: short + `.
+
+With --project NAME, the command resolves the project from its owner record,
+its saved state, or its Docker labels, so it works from any directory and
+when the checkout is gone. It refuses a stack that still runs in an existing
+worktree unless --force is set.`,
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
+			if project := flagProjectName(); project != "" && !projectInCheckout(project) {
+				runProjectLifecycle(name, project, devstack.ProjectOptions{StopTimeout: opts.StopTimeout, LockWait: opts.LockWait, Force: force})
+				return
+			}
 			stack, provider := openStack(cmd)
 			var err error
 			if name == "down" {
@@ -157,6 +167,7 @@ func newStackStopCommand(name, short string) *cobra.Command {
 	}
 	cmd.Flags().DurationVar(&opts.StopTimeout, "timeout", 20*time.Second, "Grace period before a service is killed")
 	cmd.Flags().DurationVar(&opts.LockWait, "lock-wait", 10*time.Minute, "How long to wait for another lifecycle command on this worktree")
+	cmd.Flags().BoolVar(&force, "force", false, "With --project, also stop a stack that runs in an existing worktree")
 	return cmd
 }
 
@@ -176,7 +187,7 @@ func newStackStatusCommand() *cobra.Command {
 				if asJSON {
 					fmt.Println("null")
 				} else {
-					log.Infof("No dev stack has been started in %s", stack.Root)
+					log.Infof("No dev stack has been started in %s; run 'ods stack up' to start one, or 'ods stack ls' to find stacks on this machine", stack.Root)
 				}
 				os.Exit(1)
 			}

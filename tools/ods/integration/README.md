@@ -46,6 +46,18 @@ When `MOCK_LLM_SERVER_URL` is set, setup also makes the scripted mock LLM the de
 Use the mock provider for an enabled chat input and the real backend chat-persistence check.
 Do not run two browser commands with this configuration concurrently; they share an output directory.
 
+Validate orphaned stack discovery and cleanup with one disposable worktree:
+
+```sh
+cd "$(git rev-parse --show-toplevel)/tools/ods"
+go test -tags integration ./integration -run TestStackLiveOrphanedWorktree -count=1 -timeout 45m -v
+```
+
+The test needs `ODS_STACK_LIVE_BINARY` and `ODS_STACK_LIVE_ROOT_A`. It adds a temporary
+worktree of `ODS_STACK_LIVE_ROOT_A`, starts an isolated minimal stack there, and deletes the
+worktree directory. Then it checks that `stack ls --orphaned` lists the stack, and that
+`stack down --project` stops its processes and containers and releases its port leases.
+
 After browser tests, validate real Celery processing with the default profile:
 
 ```sh

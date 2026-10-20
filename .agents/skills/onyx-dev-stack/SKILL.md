@@ -82,7 +82,7 @@ Repeat the profile and local-model flag with `start` or `restart`. Use `up` to c
 - Legacy datasets are preserved. If several exist at first shared startup, select the intended one with `--project`; never choose by timestamps. Stop its legacy stack with `--isolated` before adoption.
 - Legacy discovery reads saved `ods stack` state. Compose-only setups need their previous `--project NAME` explicitly. Use `ods --project NAME stack up` to save that shared selection before using the default commands.
 - Project ownership is durable. An explicit project collision fails, including in isolated mode. Select a different project for independent infrastructure.
-- ODS persists port assignments and changes them only when necessary. Read status again after a restart.
+- ODS keeps a stack's ports while it runs. `stop` releases the application ports (web, API, MCP, model, metrics) and keeps the infrastructure ports. `down` releases all of them. Another stack can reclaim the ports of a stopped stack, and a stopped stack moves back to the lowest free port. Read status again after a restart or start.
 - The selected stack lock coordinates lifecycle changes. Shared handoffs serialize; isolated stacks can start independently.
 - Foreground services and full stacks use the same service specifications and process launchers. A full stack replaces a same-checkout preview and retains its port.
 - Database operations target exact project containers and use state/project locks. Do not work around a target conflict or another checkout's ownership guard.
@@ -101,6 +101,8 @@ Use shared mode for sequential development and frontend previews. Use isolated m
 ```
 
 Inspect the reported phase, failed services, and logs when startup is incomplete. Re-run `up` to recover a partial start. Preserve healthy services and report optional integrations that remain unavailable.
+
+If the stack starts on unexpected ports, or Docker resources run low, run `"$ODS" stack ls --all` to see the other stacks on the machine.
 
 Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs in a background terminal when continued observation is needed.
 
@@ -131,3 +133,10 @@ Stop the worktree's application processes and infrastructure:
 Normal shutdown preserves volumes. Delete database, index, or object-store data only when the user explicitly requests a reset.
 
 After shutdown, inspect status to confirm the targeted stack stopped. Check that another running worktree remains available when testing isolation.
+
+## Find and stop old stacks
+
+Run `"$ODS" stack ls` from any directory. It lists every stack on the machine and prints the command that stops each one. Add `--all` for stopped stacks, `--json` for the same rows with a `next` field. Run `"$ODS" stack ls --help` for the statuses.
+
+Stop `orphaned` stacks; no worktree owns them. Run the printed command, or confirm with the user before you stop a stack that another agent may still use.
+Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks.
