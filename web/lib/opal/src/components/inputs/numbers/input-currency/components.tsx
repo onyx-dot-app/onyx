@@ -150,6 +150,28 @@ function InputCurrency({
 
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
+  // Enter steps through the segments like Tab. In the last segment it tidies
+  // the display and, since every draft is a valid amount, lets the keystroke
+  // reach a surrounding form so it submits.
+  function handleKeyDown(
+    part: keyof AmountSegments,
+    prevRef: React.RefObject<HTMLInputElement | null> | null,
+    nextRef: React.RefObject<HTMLInputElement | null> | null
+  ) {
+    const shared = handleSegmentKeyDown(part, prevRef, nextRef);
+    return (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== "Enter") return shared(e);
+      const next = nextRef?.current;
+      if (next) {
+        e.preventDefault();
+        next.focus();
+        next.select();
+      } else {
+        commit(segments);
+      }
+    };
+  }
+
   // The whole segment splits on a decimal separator, so typing "." jumps to
   // the fraction and pasting "3.50" fills both segments.
   function handleWholeChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -215,7 +237,7 @@ function InputCurrency({
             value={segments.whole}
             style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
             onChange={handleWholeChange}
-            onKeyDown={handleSegmentKeyDown(
+            onKeyDown={handleKeyDown(
               "whole",
               null,
               showFraction ? fractionRef : null
@@ -237,7 +259,7 @@ function InputCurrency({
                   width: segmentWidth(segments.fraction, fractionPlaceholder),
                 }}
                 onChange={handleFractionChange}
-                onKeyDown={handleSegmentKeyDown("fraction", wholeRef)}
+                onKeyDown={handleKeyDown("fraction", wholeRef, null)}
               />
             </>
           )}

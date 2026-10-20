@@ -1,5 +1,5 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import { InputCurrency, getCurrencyParts } from "@opal/components";
+import { Button, InputCurrency, getCurrencyParts } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Display
@@ -40,6 +40,25 @@ describe("typing", () => {
     expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(onChange).toHaveBeenCalledWith(3.075);
+  });
+
+  it("steps to the fraction on Enter, then submits the form", async () => {
+    const user = setupUser();
+    const onSubmit = jest.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <InputCurrency value={null} onChange={() => {}} />
+        <Button type="submit">Save</Button>
+      </form>
+    );
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.keyboard("3{Enter}");
+    expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.keyboard("5{Enter}");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it("blocks fraction digits beyond the precision", async () => {
