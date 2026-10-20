@@ -745,7 +745,39 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
             if denied
             else ""
         )
+        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
+        # One line for each kind of failure, so the row names every repository.
+        mixed_row: CheckRowText | None = (
+            CheckRowText(
+                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
+                description="\n".join(
+                    line
+                    for line in (
+                        _not_found_line(missing, token) if missing else "",
+                        denied_line,
+                        f"Unreadable files: {_names(unreadable)}. Index attempts "
+                        "reject these."
+                        if unreadable
+                        else "",
+                    )
+                    if line
+                ),
+            )
+            if failure_kinds > 1
+            else None
+        )
         if len(problems) + len(content_problems) == len(names):
+            if mixed_row is not None:
+                error_class: type[ConnectorValidationError] = (
+                    ConnectorValidationError
+                    if missing
+                    else InsufficientPermissionsError
+                )
+                raise error_class(
+                    message,
+                    summary=mixed_row.summary,
+                    description=mixed_row.description,
+                )
             if not missing:
                 raise InsufficientPermissionsError(
                     message,
@@ -771,24 +803,8 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                     f"{_not_found_line(missing, token)}"
                 ),
             )
-        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
-        if failure_kinds > 1:
-            # One line for each kind of failure, so the row names every repository.
-            row: CheckRowText = CheckRowText(
-                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
-                description="\n".join(
-                    line
-                    for line in (
-                        _not_found_line(missing, token) if missing else "",
-                        denied_line,
-                        f"Unreadable files: {_names(unreadable)}. Index attempts "
-                        "reject these."
-                        if unreadable
-                        else "",
-                    )
-                    if line
-                ),
-            )
+        if mixed_row is not None:
+            row: CheckRowText = mixed_row
         elif missing:
             row = CheckRowText(
                 summary=f"{len(missing)} of {len(names)} repositories not found",
