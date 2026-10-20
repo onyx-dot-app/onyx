@@ -12,7 +12,7 @@ import base64
 import binascii
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from onyx.connectors.outlook.models import (
     DocumentPlan,
@@ -101,33 +101,29 @@ def parse_thread_document_id(document_id: str) -> ThreadDocumentRef | None:
     )
 
 
-# Graph writes ids in base64 with "-" for "/" and "_" for "+".
-_GRAPH_ID_ALPHABET = str.maketrans("-_", "/+")
-_BASE64_TO_GRAPH_ID = str.maketrans("/+", "-_")
-# Exchange's conversation id ends with the GUID of the thread's conversation
-# index, which follows its reserved byte and five time bytes.
-_CONVERSATION_GUID = slice(6, _ROOT_BYTES)
-_GUID_BYTES = 16
+# The header's five time bytes, after its reserved byte 0x01 ([MS-OXOMSG]
+# 2.2.1.3, PidTagConversationIndex). The spec stores FILETIME bits 63..24.
+# Outlook clients and older Exchange store bits 55..16 instead (Appendix A,
+# note 2), which drops the top byte. That byte is 0x01 for every date from
+# 1829 to 2057, so a first time byte of 0x01 marks the spec layout.
+_HEADER_TIME = slice(1, 6)
+_FILETIME_TOP_BYTE = 0x01
+_FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
 
 
-def conversation_id_for(sample_conversation_id: str, key: str) -> str | None:
-    """The Graph conversation id of a thread in the mailbox another of its
-    conversation ids comes from. The id carries the mailbox's own prefix,
-    then the GUID the thread's conversation index holds, so threads that
-    share a GUID share the id. None for a malformed sample or key."""
+def thread_started_at(key: str) -> datetime | None:
+    """When the thread's conversation index was made, to the second or
+    better. Every message of the thread arrives at or after it. None when
+    the key is not one."""
     root = _key_bytes(key)
     if root is None:
         return None
-    try:
-        sample = base64.b64decode(
-            sample_conversation_id.translate(_GRAPH_ID_ALPHABET), validate=True
-        )
-    except (binascii.Error, ValueError):
-        return None
-    if len(sample) <= _GUID_BYTES:
-        return None
-    rebuilt = sample[:-_GUID_BYTES] + root[_CONVERSATION_GUID]
-    return base64.b64encode(rebuilt).decode().translate(_BASE64_TO_GRAPH_ID)
+    stored = int.from_bytes(root[_HEADER_TIME], "big")
+    if root[_HEADER_TIME.start] == _FILETIME_TOP_BYTE:
+        filetime = stored << 24
+    else:
+        filetime = (_FILETIME_TOP_BYTE << 56) | (stored << 16)
+    return _FILETIME_EPOCH + timedelta(microseconds=filetime // 10)
 
 
 def copy_document_id(key: str, mailbox: OutlookMailbox) -> str:

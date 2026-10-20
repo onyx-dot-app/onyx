@@ -385,10 +385,15 @@ shape the table above does not cover:
   with `_build_conversation`, so ids, text and readers match the walk. An own
   document names its writer. A thread or copy document goes to the builder,
   found from the first message in the copy document's mailbox, else in the
-  walked mailboxes, a few at a time. A thread's Graph `conversationId` is
-  rebuilt from a sample id of the mailbox and the GUID in the thread key
-  (`threads.py:conversation_id_for`), since Graph cannot filter on
-  `conversationIndex`. Only messages in the walked folder tree are read
+  walked mailboxes, a few at a time. Graph cannot filter on
+  `conversationIndex`, so a thread is found by its start time: the key's
+  header holds the time its conversation index was made
+  (`threads.py:thread_started_at`, [MS-OXOMSG] 2.2.1.3). `_conversation_ids`
+  reads the mailbox oldest first from that time (`fetch_received_page`) and
+  takes the `conversationId` of the first message with that key. To find a
+  builder, it reads only `FIRST_MESSAGE_ARRIVAL_WINDOW` (7 days) after the
+  start; a writer's copy is read for at most `RECEIVED_SCAN_LIMIT` messages.
+  Only messages in the walked folder tree are read
   (`_OutsideFolders`). An event is read by id through
   `get_default_calendar_event`, which refuses events outside the default
   calendar. Occurrences, cancelled, private and confidential events fail, as

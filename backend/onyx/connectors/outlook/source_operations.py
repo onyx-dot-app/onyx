@@ -158,9 +158,8 @@ EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 # which calendar an event sits in from app-only callers, so the two are compared.
 FOLDER_ENTRY_ID_PROPERTY = "Binary 0x0FFF"
 PARENT_ENTRY_ID_PROPERTY = "Binary 0x0E09"
-# Pages a conversation lookup reads before it stops: the conversations named
-# so far are found, any others are reported as not held.
-CONVERSATION_LOOKUP_PAGE_LIMIT = 20
+# Messages per page of a received-time scan, which reads headers only.
+RECEIVED_SCAN_PAGE_SIZE = 500
 
 # Graph may answer a collection request with an empty page and a next link.
 # Lookups that want a single item follow at most this many of them.
@@ -1005,54 +1004,35 @@ class OutlookSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         untested=(
-            "Reads one message's conversation id on the mailbox-wide route the "
-            "mail-read check proves with read_any_message."
+            "Lists the mailbox-wide route the mail-read check proves with "
+            "read_any_message, with the CHANGE_SELECT fields the delta walk reads."
         ),
     )
-    def sample_conversation_id(self, *, mailbox_id: str) -> str | None:
-        """The conversation id of any message in the mailbox, None when it
-        holds none. Every conversation id of a mailbox shares its prefix."""
-        raw = self._first_item(
-            f"{self._user_url(mailbox_id)}/messages",
-            {"$select": "conversationId", "$top": "1"},
+    def fetch_received_page(
+        self,
+        *,
+        mailbox_id: str,
+        received_from: datetime,
+        received_to: datetime | None = None,
+        next_link: str | None = None,
+    ) -> OutlookDeltaPage:
+        """One page of the mailbox's messages received in the range, oldest
+        first, the CHANGE_SELECT fields only."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            received = f"receivedDateTime ge {_graph_timestamp(received_from)}"
+            if received_to is not None:
+                received += f" and receivedDateTime le {_graph_timestamp(received_to)}"
+            params = {
+                "$filter": received,
+                "$orderby": "receivedDateTime asc",
+                "$select": CHANGE_SELECT,
+                "$top": str(RECEIVED_SCAN_PAGE_SIZE),
+            }
+        data = self._get(url, params)
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
         )
-        return raw.get("conversationId") if raw else None
-
-    @source_operation(
-        capabilities={CredentialCapability.INDEXING},
-        consumes=OperationConsumes.CREDENTIAL,
-        untested=(
-            "Needs conversation ids, which only the delta walk produces. The "
-            "mail-read check proves the mailbox-wide route."
-        ),
-    )
-    def held_conversation_ids(
-        self, *, mailbox_id: str, conversation_ids: list[str]
-    ) -> set[str]:
-        """Which of the conversations have a message in the mailbox, read in
-        one filtered listing of conversation ids only."""
-        wanted = set(conversation_ids)
-        if not wanted:
-            return set()
-        url: str | None = f"{self._user_url(mailbox_id)}/messages"
-        params: dict[str, str] | None = {
-            "$filter": " or ".join(
-                f"conversationId eq '{_odata_quote(conversation_id)}'"
-                for conversation_id in sorted(wanted)
-            ),
-            "$select": "conversationId",
-            "$top": str(MESSAGES_PAGE_SIZE),
-        }
-        held: set[str] = set()
-        for _ in range(CONVERSATION_LOOKUP_PAGE_LIMIT):
-            if url is None or held >= wanted:
-                break
-            data = self._get(url, params)
-            params = None
-            held.update(
-                raw["conversationId"]
-                for raw in data.get("value", [])
-                if raw.get("conversationId") in wanted
-            )
-            url = data.get("@odata.nextLink")
-        return held

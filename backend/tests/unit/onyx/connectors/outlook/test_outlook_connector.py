@@ -82,10 +82,10 @@ from onyx.connectors.outlook.models import (
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from onyx.connectors.outlook.threads import (
     MAX_MESSAGES_PER_CONVERSATION,
-    conversation_id_for,
     copy_document_id,
     own_document_id,
     thread_key,
+    thread_started_at,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.process_isolation import IsolatedProcessError
@@ -2705,26 +2705,33 @@ def test_plain_walks_carry_no_readership() -> None:
 
 # Targeted reindex.
 
-# A Graph conversation id of the shape Exchange writes: a mailbox prefix, then
-# the 16-byte GUID of the thread's conversation index.
-_CONVERSATION_PREFIX = b"\x00\x04$\x00mailbox-guid\x00\x10\x00"
-SAMPLE_CONVERSATION_ID = (
-    base64.b64encode(_CONVERSATION_PREFIX + bytes(16))
-    .decode()
-    .translate(str.maketrans("/+", "-_"))
-)
 OUTSIDE_TREE_ID = "folder-outside-tree"
+THREAD_START = datetime(2026, 10, 13, 7, 45, 52, tzinfo=timezone.utc)
 
 
-def _held(*, mailbox_id: str, conversation_ids: list[str]) -> set[str]:
-    del mailbox_id
-    return set(conversation_ids)
+def _key_started_at(started: datetime, outlook_layout: bool) -> str:
+    """A thread key whose header holds ``started`` in one of the two layouts
+    [MS-OXOMSG] documents: FILETIME bits 63..24, or bits 55..16."""
+    filetime = int(
+        (started - datetime(1601, 1, 1, tzinfo=timezone.utc)).total_seconds() * 10**7
+    )
+    stored = (filetime >> 16) & (2**40 - 1) if outlook_layout else filetime >> 24
+    header = bytes([0x01]) + stored.to_bytes(5, "big") + bytes(range(16))
+    key = thread_key(base64.b64encode(header).decode())
+    assert key is not None
+    return key
+
+
+def _received_page(**_: Any) -> OutlookDeltaPage:
+    """A received-time scan that meets another thread, then the test's."""
+    return OutlookDeltaPage(
+        changes=[change(id="msg-other", conversation_id="conv-other"), change()]
+    )
 
 
 def _reindex_gateway() -> MagicMock:
     gateway = _happy_gateway()
-    gateway.sample_conversation_id.return_value = SAMPLE_CONVERSATION_ID
-    gateway.held_conversation_ids.side_effect = _held
+    gateway.fetch_received_page.side_effect = _received_page
     return gateway
 
 
@@ -2760,14 +2767,63 @@ def _key() -> str:
     return key
 
 
-def test_conversation_id_keeps_the_mailbox_prefix_and_takes_the_threads_guid() -> None:
-    rebuilt = conversation_id_for(SAMPLE_CONVERSATION_ID, _key())
+@pytest.mark.parametrize("outlook_layout", [False, True])
+def test_thread_start_is_read_from_either_documented_time_layout(
+    outlook_layout: bool,
+) -> None:
+    decoded = thread_started_at(_key_started_at(THREAD_START, outlook_layout))
 
-    assert rebuilt is not None
-    raw = base64.b64decode(rebuilt.translate(str.maketrans("-_", "/+")))
-    assert raw[: len(_CONVERSATION_PREFIX)] == _CONVERSATION_PREFIX
-    assert raw[-16:] == base64.b64decode(conversation_index(CONVERSATION_ID))[6:22]
-    assert conversation_id_for("not base64!", _key()) is None
+    assert decoded is not None
+    assert abs(decoded - THREAD_START) < timedelta(seconds=2)
+    assert thread_started_at("not-a-key") is None
+
+
+def test_scan_ranges_merge_overlapping_windows() -> None:
+    first = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    near = first + timedelta(days=3)
+    far = first + timedelta(days=30)
+    skew = connector_module.THREAD_CLOCK_SKEW
+    window = timedelta(days=7)
+
+    assert connector_module._scan_ranges([far, first, near], window) == [
+        (first - skew, near + window),
+        (far - skew, far + window),
+    ]
+    assert connector_module._scan_ranges([far, first], None) == [(first - skew, None)]
+
+
+def test_reindex_finds_the_thread_from_its_start_and_reads_that_conversation() -> None:
+    gateway = _reindex_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures and [d.id for d in docs] == [thread_doc_id(CONVERSATION_ID)]
+    started = thread_started_at(_key())
+    assert started is not None
+    scans = gateway.fetch_received_page.call_args_list
+    assert scans[0].kwargs["received_from"] == (
+        started - connector_module.THREAD_CLOCK_SKEW
+    )
+    read = {
+        c.kwargs["conversation_id"]
+        for c in gateway.fetch_conversation_outline_page.call_args_list
+    }
+    assert read == {CONVERSATION_ID}
+
+
+def test_reindex_fails_a_thread_the_scan_does_not_meet() -> None:
+    gateway = _reindex_gateway()
+    gateway.fetch_received_page.side_effect = None
+    gateway.fetch_received_page.return_value = OutlookDeltaPage(changes=[])
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID), own_id])
+
+    assert not docs
+    assert set(_failed(failures)) == {thread_doc_id(CONVERSATION_ID), own_id}
+    gateway.fetch_conversation_outline_page.assert_not_called()
 
 
 def test_reindex_rebuilds_a_thread_like_the_walk_does() -> None:
@@ -2904,7 +2960,7 @@ def test_reindex_fails_the_targets_of_a_refused_mailbox() -> None:
 
 def test_reindex_raises_when_graph_throttles() -> None:
     gateway = _reindex_gateway()
-    gateway.sample_conversation_id.side_effect = graph_error(429, "TooManyRequests")
+    gateway.fetch_received_page.side_effect = graph_error(429, "TooManyRequests")
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
     with pytest.raises(RateLimitTriedTooManyTimesError):
