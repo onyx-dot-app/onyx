@@ -4851,7 +4851,7 @@
           "label": "Speichern"
         },
         "units": {
-          "description": "Einheit: USD pro 1 Mio. Token"
+          "description": "Einheit: *USD* pro `1 Mio.` Token."
         }
       },
       "panel": {

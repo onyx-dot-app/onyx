@@ -4851,7 +4851,7 @@
           "label": "保存"
         },
         "units": {
-          "description": "単位は 100 万 tokens あたりの USD です"
+          "description": "単位は `100 万` tokens あたりの *USD* です。"
         }
       },
       "panel": {

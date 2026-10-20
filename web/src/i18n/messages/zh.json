@@ -4851,7 +4851,7 @@
           "label": "保存"
         },
         "units": {
-          "description": "单位为每 100 万 tokens 美元"
+          "description": "单位为每 `100 万` tokens *美元*。"
         }
       },
       "panel": {

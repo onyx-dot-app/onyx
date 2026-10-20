@@ -4851,7 +4851,7 @@
           "label": "Save"
         },
         "units": {
-          "description": "Units are in USD per 1M tokens"
+          "description": "Units are in *USD* per `1M` tokens."
         }
       },
       "panel": {

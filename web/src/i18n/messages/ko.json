@@ -4851,7 +4851,7 @@
           "label": "저장"
         },
         "units": {
-          "description": "단위는 100만 token당 USD입니다"
+          "description": "단위는 `100만` token당 *USD*입니다."
         }
       },
       "panel": {
