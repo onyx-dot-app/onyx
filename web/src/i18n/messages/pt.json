@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Adicionar substituição"
         },
+        "addTitle": "Adicionar substituição de custo",
         "cacheRate": {
           "label": "Taxa de leitura de cache",
           "placeholder": "usa a taxa de entrada por padrão"
@@ -4834,6 +4835,7 @@
         "cancelButton": {
           "label": "Cancelar"
         },
+        "editTitle": "Editar substituição de custo",
         "inputRate": {
           "label": "Taxa de entrada"
         },

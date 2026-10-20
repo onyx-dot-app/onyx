@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "إضافة تجاوز"
         },
+        "addTitle": "إضافة تجاوز للتكلفة",
         "cacheRate": {
           "label": "سعر قراءة الذاكرة المؤقتة",
           "placeholder": "الافتراضي هو سعر الإدخال"
@@ -4834,6 +4835,7 @@
         "cancelButton": {
           "label": "إلغاء"
         },
+        "editTitle": "تعديل تجاوز التكلفة",
         "inputRate": {
           "label": "سعر الإدخال"
         },

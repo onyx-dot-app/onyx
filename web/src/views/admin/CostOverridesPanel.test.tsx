@@ -1,4 +1,10 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 import type { CostOverride } from "@/lib/languageModels/types";
 
@@ -165,9 +171,12 @@ describe("CostOverridesPanel", () => {
 
     await user.type(screen.getByPlaceholderText("3.00"), "3");
     await user.type(screen.getByPlaceholderText("15.00"), "4");
-    const submitButton = screen.getAllByRole("button", {
-      name: "Add override",
-    })[1] as HTMLElement;
+    const submitButton = within(screen.getByRole("dialog")).getByRole(
+      "button",
+      {
+        name: "Add override",
+      }
+    );
     await user.click(submitButton);
 
     await waitFor(() => {
@@ -191,9 +200,12 @@ describe("CostOverridesPanel", () => {
     );
     await user.type(screen.getByPlaceholderText("3.00"), "1");
     await user.type(screen.getByPlaceholderText("15.00"), "2");
-    const submitButton = screen.getAllByRole("button", {
-      name: "Add override",
-    })[1] as HTMLElement;
+    const submitButton = within(screen.getByRole("dialog")).getByRole(
+      "button",
+      {
+        name: "Add override",
+      }
+    );
     await user.click(submitButton);
 
     await waitFor(() => {
@@ -217,9 +229,12 @@ describe("CostOverridesPanel", () => {
     );
     await user.type(screen.getByPlaceholderText("3.00"), "3");
     await user.type(screen.getByPlaceholderText("15.00"), "4");
-    const submitButton = screen.getAllByRole("button", {
-      name: "Add override",
-    })[1] as HTMLElement;
+    const submitButton = within(screen.getByRole("dialog")).getByRole(
+      "button",
+      {
+        name: "Add override",
+      }
+    );
     expect(submitButton).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Clear model" }));

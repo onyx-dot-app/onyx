@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "オーバーライドを追加"
         },
+        "addTitle": "コストの上書きを追加",
         "cacheRate": {
           "label": "キャッシュ読み取り単価",
           "placeholder": "既定では入力単価を使用"
@@ -4834,6 +4835,7 @@
         "cancelButton": {
           "label": "キャンセル"
         },
+        "editTitle": "コストの上書きを編集",
         "inputRate": {
           "label": "入力単価"
         },

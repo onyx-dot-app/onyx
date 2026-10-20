@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "Add override"
         },
+        "addTitle": "Add cost override",
         "cacheRate": {
           "label": "Cache-read rate",
           "placeholder": "defaults to input rate"
@@ -4834,6 +4835,7 @@
         "cancelButton": {
           "label": "Cancel"
         },
+        "editTitle": "Edit cost override",
         "inputRate": {
           "label": "Input rate"
         },

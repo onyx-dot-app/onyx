@@ -4827,6 +4827,7 @@
         "addButton": {
           "label": "添加覆盖"
         },
+        "addTitle": "添加成本覆盖",
         "cacheRate": {
           "label": "缓存读取价格",
           "placeholder": "默认与输入价格相同"
@@ -4834,6 +4835,7 @@
         "cancelButton": {
           "label": "取消"
         },
+        "editTitle": "编辑成本覆盖",
         "inputRate": {
           "label": "输入价格"
         },

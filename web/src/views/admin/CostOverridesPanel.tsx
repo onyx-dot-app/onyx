@@ -5,7 +5,15 @@ import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
-import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  BasicModalFooter,
+  Button,
+  Card,
+  InputTypeIn,
+  MessageCard,
+  Modal,
+  Text,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -78,15 +86,16 @@ function RateInput({ value, placeholder, onChange }: RateInputProps) {
   );
 }
 
-// Shared add/edit form for the idempotent upsert.
+// Shared add/edit modal for the idempotent upsert. Mount it only while open,
+// so each open starts from fresh form state.
 
-interface OverrideFormProps {
+interface OverrideModalProps {
   // Editing an existing row locks the model name (it's the upsert key).
   existing?: CostOverride;
-  onDone: () => void;
+  onClose: () => void;
 }
 
-function OverrideForm({ existing, onDone }: OverrideFormProps) {
+function OverrideModal({ existing, onClose }: OverrideModalProps) {
   const t = useTranslations("admin.costOverrides");
   const providerNames = useProviderNames();
   const { mutate } = useSWRConfig();
@@ -139,7 +148,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
       });
       await refreshCostOverrides(mutate);
       toast.success(t("toasts.saved", { model: model.trim() }));
-      onDone();
+      onClose();
     } catch (e) {
       console.error("Failed to save cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
@@ -150,92 +159,110 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   }
 
   return (
-    <Card border="solid" rounding={4}>
-      <GeneralLayouts.Section
-        gap={3}
-        height="fit"
-        alignItems="stretch"
-        justifyContent="start"
-      >
-        <InputHorizontal withLabel title={t("form.model.label")} fillInput>
-          {isEdit ? (
-            <InputTypeIn value={modelLabel} variant="readOnly" />
-          ) : (
-            <SimpleModelSelector
-              nullable
-              providers={filterModelConfigurations(llmProviders ?? [], {
-                visibleOnly: false,
-              })}
-              value={modelConfigId}
-              grouped={!hideProviderGrouping}
-              modelPaging={modelPaging}
-              onChange={(modelConfigurationId) => {
-                const opt = findLlmOptionById(
-                  llmProviders,
-                  modelConfigurationId
-                );
-                setModel(opt?.modelName ?? "");
-                setProvider(opt?.provider ?? "");
-                setModelConfigId(modelConfigurationId);
-              }}
-            />
-          )}
-        </InputHorizontal>
+    <Modal
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Content width="md">
+        <Modal.Header
+          icon={isEdit ? SvgEdit : SvgPlus}
+          title={isEdit ? t("form.editTitle") : t("form.addTitle")}
+          onClose={onClose}
+        />
+        <Modal.Body alignItems="stretch">
+          <InputHorizontal withLabel title={t("form.model.label")} fillInput>
+            {isEdit ? (
+              <InputTypeIn value={modelLabel} variant="readOnly" />
+            ) : (
+              <SimpleModelSelector
+                nullable
+                providers={filterModelConfigurations(llmProviders ?? [], {
+                  visibleOnly: false,
+                })}
+                value={modelConfigId}
+                grouped={!hideProviderGrouping}
+                modelPaging={modelPaging}
+                onChange={(modelConfigurationId) => {
+                  const opt = findLlmOptionById(
+                    llmProviders,
+                    modelConfigurationId
+                  );
+                  setModel(opt?.modelName ?? "");
+                  setProvider(opt?.provider ?? "");
+                  setModelConfigId(modelConfigurationId);
+                }}
+              />
+            )}
+          </InputHorizontal>
 
-        <InputHorizontal
-          withLabel
-          title={t("form.inputRate.label")}
-          description={t("form.units.description")}
-          fillInput
-        >
-          <RateInput
-            value={inputRate}
-            placeholder={t("placeholders.inputCost")}
-            onChange={setInputRate}
-          />
-        </InputHorizontal>
-
-        <InputHorizontal
-          withLabel
-          title={t("form.outputRate.label")}
-          description={t("form.units.description")}
-          fillInput
-        >
-          <RateInput
-            value={outputRate}
-            placeholder={t("placeholders.outputCost")}
-            onChange={setOutputRate}
-          />
-        </InputHorizontal>
-
-        <InputHorizontal
-          withLabel
-          title={t("form.cacheRate.label")}
-          description={t("form.units.description")}
-          suffix="optional"
-          fillInput
-        >
-          <RateInput
-            value={cacheRate}
-            placeholder={t("form.cacheRate.placeholder")}
-            onChange={setCacheRate}
-          />
-        </InputHorizontal>
-
-        <div className="flex flex-row gap-2 justify-end">
-          <Button prominence="tertiary" onClick={onDone} disabled={submitting}>
-            {t("form.cancelButton.label")}
-          </Button>
-          <Button
-            icon={SvgCheck}
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
+          <InputHorizontal
+            withLabel
+            title={t("form.inputRate.label")}
+            description={t("form.units.description")}
+            fillInput
           >
-            {isEdit ? t("form.saveButton.label") : t("form.addButton.label")}
-          </Button>
-        </div>
-      </GeneralLayouts.Section>
-    </Card>
+            <RateInput
+              value={inputRate}
+              placeholder={t("placeholders.inputCost")}
+              onChange={setInputRate}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            withLabel
+            title={t("form.outputRate.label")}
+            description={t("form.units.description")}
+            fillInput
+          >
+            <RateInput
+              value={outputRate}
+              placeholder={t("placeholders.outputCost")}
+              onChange={setOutputRate}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            withLabel
+            title={t("form.cacheRate.label")}
+            description={t("form.units.description")}
+            suffix="optional"
+            fillInput
+          >
+            <RateInput
+              value={cacheRate}
+              placeholder={t("form.cacheRate.placeholder")}
+              onChange={setCacheRate}
+            />
+          </InputHorizontal>
+        </Modal.Body>
+        <Modal.Footer>
+          <BasicModalFooter
+            cancel={
+              <Button
+                prominence="secondary"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                {t("form.cancelButton.label")}
+              </Button>
+            }
+            submit={
+              <Button
+                icon={SvgCheck}
+                onClick={handleSubmit}
+                disabled={!canSubmit || submitting}
+              >
+                {isEdit
+                  ? t("form.saveButton.label")
+                  : t("form.addButton.label")}
+              </Button>
+            }
+          />
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }
 
@@ -277,71 +304,70 @@ function OverrideRow({ override }: OverrideRowProps) {
     }
   }
 
-  if (editing) {
-    return (
-      <OverrideForm existing={override} onDone={() => setEditing(false)} />
-    );
-  }
-
   return (
-    <Hoverable.Root group="OverrideRow">
-      <Card border="solid" rounding={4} padding={2}>
-        <div className="flex flex-row items-center justify-between gap-2 p-2">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <Text
-              font="main-ui-action"
-              color="text-04"
-              wordWrap="whitespace-nowrap"
-            >
-              {override.model}
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              {override.cache_read_cost_per_mtok != null
-                ? t("row.ratesWithCache", {
-                    ...rates,
-                    cache: formatRate(
-                      override.cache_read_cost_per_mtok,
-                      locale
-                    ),
-                  })
-                : t("row.rates", rates)}
-            </Text>
-            {override.updated_at && (
-              <Text font="secondary-body" color="text-02">
-                {t("row.updated", {
-                  time: new Date(override.updated_at).toLocaleString(locale),
-                })}
+    <>
+      {editing && (
+        <OverrideModal existing={override} onClose={() => setEditing(false)} />
+      )}
+      <Hoverable.Root group="OverrideRow">
+        <Card border="solid" rounding={4} padding={2}>
+          <div className="flex flex-row items-center justify-between gap-2 p-2">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <Text
+                font="main-ui-action"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
+                {override.model}
               </Text>
-            )}
-          </div>
+              <Text font="secondary-body" color="text-03">
+                {override.cache_read_cost_per_mtok != null
+                  ? t("row.ratesWithCache", {
+                      ...rates,
+                      cache: formatRate(
+                        override.cache_read_cost_per_mtok,
+                        locale
+                      ),
+                    })
+                  : t("row.rates", rates)}
+              </Text>
+              {override.updated_at && (
+                <Text font="secondary-body" color="text-02">
+                  {t("row.updated", {
+                    time: new Date(override.updated_at).toLocaleString(locale),
+                  })}
+                </Text>
+              )}
+            </div>
 
-          <div className="flex flex-row">
-            <Button
-              icon={SvgEdit}
-              prominence="tertiary"
-              aria-label={t("row.editButton.ariaLabel", {
-                provider: providerDisplayName,
-                model: override.model,
-              })}
-              disabled={deleting}
-              onClick={() => setEditing(true)}
-            />
-            <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
+            <div className="flex flex-row">
               <Button
-                icon={SvgTrash}
+                icon={SvgEdit}
                 prominence="tertiary"
-                aria-label={t("row.deleteButton.ariaLabel", {
+                aria-label={t("row.editButton.ariaLabel", {
                   provider: providerDisplayName,
                   model: override.model,
                 })}
                 disabled={deleting}
-                onClick={handleDelete}
+                onClick={() => setEditing(true)}
               />
-            </Hoverable.Item>
+              <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
+                <Button
+                  icon={SvgTrash}
+                  prominence="tertiary"
+                  aria-label={t("row.deleteButton.ariaLabel", {
+                    provider: providerDisplayName,
+                    model: override.model,
+                  })}
+                  disabled={deleting}
+                  onClick={handleDelete}
+                />
+              </Hoverable.Item>
+            </div>
           </div>
-        </div>
-      </Card>
-    </Hoverable.Root>
+        </Card>
+      </Hoverable.Root>
+    </>
   );
 }
 
@@ -368,7 +394,6 @@ export default function CostOverridesPanel() {
           <Button
             icon={SvgPlus}
             prominence="secondary"
-            disabled={adding}
             onClick={() => setAdding(true)}
           >
             {t("panel.addButton.label")}
@@ -376,7 +401,7 @@ export default function CostOverridesPanel() {
         }
       />
 
-      {adding && <OverrideForm onDone={() => setAdding(false)} />}
+      {adding && <OverrideModal onClose={() => setAdding(false)} />}
 
       {error ? (
         <MessageCard
@@ -396,13 +421,11 @@ export default function CostOverridesPanel() {
           ))}
         </div>
       ) : (
-        !adding && (
-          <MessageCard
-            variant="info"
-            title={t("empty.title")}
-            description={t("empty.description")}
-          />
-        )
+        <MessageCard
+          variant="info"
+          title={t("empty.title")}
+          description={t("empty.description")}
+        />
       )}
     </GeneralLayouts.Section>
   );
