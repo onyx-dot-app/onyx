@@ -95,7 +95,7 @@ class TestCeleryGetBrokerClient:
         self, mock_redis_cls: MagicMock, mock_redis_pool_cls: MagicMock
     ) -> None:
         sentinel_pool = MagicMock()
-        mock_redis_pool_cls._create_sentinel_pool.return_value = sentinel_pool
+        mock_redis_pool_cls.create_pool.return_value = sentinel_pool
         mock_client = MagicMock()
         mock_redis_cls.return_value = mock_client
 
@@ -107,7 +107,7 @@ class TestCeleryGetBrokerClient:
         assert result is mock_client
         mock_redis_cls.from_url.assert_not_called()
         mock_redis_cls.assert_called_once_with(connection_pool=sentinel_pool)
-        pool_kwargs = mock_redis_pool_cls._create_sentinel_pool.call_args.kwargs
+        pool_kwargs = mock_redis_pool_cls.create_pool.call_args.kwargs
         assert pool_kwargs["db"] == celery_redis.REDIS_DB_NUMBER_CELERY
         assert pool_kwargs["replica"] is False
 
@@ -125,7 +125,7 @@ class TestCeleryGetBrokerClient:
         app = _make_mock_app("redis://override-host:6379/15")
         celery_redis.celery_get_broker_client(app)
 
-        mock_redis_pool_cls._create_sentinel_pool.assert_not_called()
+        mock_redis_pool_cls.create_pool.assert_not_called()
         assert (
             mock_redis_cls.from_url.call_args[0][0] == "redis://override-host:6379/15"
         )

@@ -60,7 +60,7 @@ def celery_get_broker_client(app: Celery) -> Redis:
         # through the same Sentinel config the app Redis pool uses.
         if REDIS_SENTINEL_HOSTS and url.startswith("sentinel://"):
             _broker_client = Redis(
-                connection_pool=RedisPool._create_sentinel_pool(
+                connection_pool=RedisPool.create_pool(
                     db=REDIS_DB_NUMBER_CELERY,
                     max_connections=REDIS_POOL_MAX_CONNECTIONS,
                     replica=False,
