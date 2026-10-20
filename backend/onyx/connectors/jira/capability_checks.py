@@ -69,7 +69,7 @@ from onyx.connectors.jira.utils import (
     SUPPORTED_STATIC_HOLDER_TYPES,
     get_issue_field,
 )
-from onyx.connectors.models import CheckRowText
+from onyx.connectors.models import CheckRowText, counted
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
@@ -549,7 +549,9 @@ class _ProjectsVisibleCheck(_JiraCheck):
                 summary="No projects visible",
                 description=f"The account can see no Jira project.\n{need}",
             )
-        return CheckOutput(summary=f"{len(projects)} projects visible")
+        return CheckOutput(
+            summary=f"{counted(len(projects), 'project', 'projects')} visible"
+        )
 
 
 def _matching_project_keys(
@@ -1047,7 +1049,12 @@ class _PermissionSchemeReadCheck(_JiraCheck):
                     f"to this account.\n{_ADMIN_NEED}"
                 ),
             )
-        return CheckOutput(summary=f"{len(holders)} Browse grants in {project_key}")
+        return CheckOutput(
+            summary=(
+                f"{counted(len(holders), 'Browse grant', 'Browse grants')} in "
+                f"{project_key}"
+            )
+        )
 
 
 class _ProjectAccessMappableCheck(_JiraCheck):
@@ -1085,7 +1092,13 @@ class _ProjectAccessMappableCheck(_JiraCheck):
                     "groups or project roles instead."
                 ),
             )
-        return CheckOutput(summary=f"All {len(holders)} grants map to users")
+        return CheckOutput(
+            summary=(
+                "The grant maps to users"
+                if len(holders) == 1
+                else f"All {len(holders)} grants map to users"
+            )
+        )
 
 
 def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
@@ -1217,7 +1230,10 @@ class _ProjectRolesReadCheck(_JiraCheck):
                 ),
             )
         return CheckOutput(
-            summary=f"Read {role.get('name') or 'a role'}: {len(actors)} members"
+            summary=(
+                f"Read {role.get('name') or 'a role'}: "
+                f"{counted(len(actors), 'member', 'members')}"
+            )
         )
 
 
@@ -1536,7 +1552,9 @@ class _GroupListingCheck(_JiraCheck):
                     f"{_GROUP_ACCESS_NEED}"
                 ),
             )
-        return CheckOutput(summary=f"{len(group_names)} groups listed")
+        return CheckOutput(
+            summary=f"{counted(len(group_names), 'group', 'groups')} listed"
+        )
 
 
 class _GroupListingCompleteCheck(_JiraCheck):
@@ -1591,7 +1609,11 @@ class _GroupListingCompleteCheck(_JiraCheck):
                     "lose access."
                 ),
             )
-        return CheckOutput(summary=f"All {page.total} groups listed")
+        return CheckOutput(
+            summary="1 group listed"
+            if page.total == 1
+            else f"All {page.total} groups listed"
+        )
 
 
 class _GroupMembershipCheck(_JiraCheck):

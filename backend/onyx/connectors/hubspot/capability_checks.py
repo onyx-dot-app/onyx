@@ -53,7 +53,11 @@ from onyx.connectors.hubspot.source_operations import (
     HubSpotConnectionError,
     HubSpotSourceOperations,
 )
-from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    CheckRowText,
+    ConnectorMissingCredentialError,
+    counted,
+)
 from onyx.connectors.source_operations import SourceOperations
 from onyx.utils.logger import setup_logger
 
@@ -134,11 +138,6 @@ def _read_scope(object_type: HubSpotObjectType) -> str:
 
 def _noun(object_type: HubSpotObjectType) -> str:
     return HUBSPOT_OBJECT_SPECS[object_type].document_noun
-
-
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 ticket", "3 tickets", "100+ users"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
 
 
 def _need(scope: str) -> str:
@@ -451,7 +450,7 @@ class _RecordsReadableCheck(_HubSpotCheck):
             return CheckOutput(summary=f"Read {object_type.value}")
         return CheckOutput(
             summary=(
-                f"Found {_counted(search.total, _noun(object_type), object_type.value)}"
+                f"Found {counted(search.total, _noun(object_type), object_type.value)}"
             )
         )
 
@@ -617,7 +616,7 @@ class _UsersCheck(_HubSpotCheck):
         count: int | str = (
             f"{len(page.items)}+" if page.next_after is not None else len(page.items)
         )
-        return CheckOutput(summary=f"{_counted(count, 'user', 'users')} found")
+        return CheckOutput(summary=f"{counted(count, 'user', 'users')} found")
 
 
 class _RecordViewersCheck(_HubSpotCheck):
@@ -653,7 +652,7 @@ class _RecordViewersCheck(_HubSpotCheck):
         count: int = len(viewers.get(record.id, set()))
         return CheckOutput(
             summary=(
-                f"{_counted(count, 'user', 'users')} can view a sample "
+                f"{counted(count, 'user', 'users')} can view a sample "
                 f"{_noun(object_type)}"
             )
         )

@@ -79,7 +79,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
     is_public_login_name,
     resolve_group_id,
 )
-from onyx.connectors.models import CheckRowText, fit_summary
+from onyx.connectors.models import CheckRowText, counted, fit_summary
 from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.sharepoint.connector import (
@@ -263,10 +263,6 @@ def _graph_api_base(config: SharepointConnectorConfig) -> str:
 def _site_name(site_url: str) -> str:
     """The short name of a site, the last part of its URL."""
     return site_url.rstrip("/").rsplit("/", 1)[-1]
-
-
-def _counted(count: int, noun: str, plural: str) -> str:
-    return f"{count} {noun if count == 1 else plural}"
 
 
 def _row(summary: str, description: str) -> CheckRowText:
@@ -1111,7 +1107,7 @@ def _sites_output(
                 ],
             )
         return CheckOutput(
-            summary=f"{_counted(len(probed), 'selected site', 'selected sites')} found"
+            summary=f"{counted(len(probed), 'selected site', 'selected sites')} found"
         )
     message: str = "; ".join(problem.message for problem in problems)
     first: SiteProblem = problems[0]
@@ -1204,7 +1200,7 @@ class _SitesVisibleCheck(_SharepointCheck):
                 ),
             )
         return CheckOutput(
-            summary=f"{_counted(len(site_urls), 'site', 'sites')} visible"
+            summary=f"{counted(len(site_urls), 'site', 'sites')} visible"
         )
 
 
@@ -1288,7 +1284,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
                 )
             return CheckOutput(
                 summary=(
-                    _counted(len(scoped), "selected library", "selected libraries")
+                    counted(len(scoped), "selected library", "selected libraries")
                     + " found"
                 )
             )
@@ -1587,7 +1583,7 @@ class _SitePermissionsCheck(_SharepointCheck):
         for site in sites:
             _site_assignments(gateway, site)
         return CheckOutput(
-            summary=f"Read permissions of {_counted(len(sites), 'site', 'sites')}"
+            summary=f"Read permissions of {counted(len(sites), 'site', 'sites')}"
         )
 
 

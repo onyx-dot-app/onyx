@@ -61,7 +61,11 @@ from onyx.connectors.github.source_operations import (
     GitHubSourceOperations,
 )
 from onyx.connectors.github.utils import parse_repository_names
-from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    CheckRowText,
+    ConnectorMissingCredentialError,
+    counted,
+)
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
@@ -584,7 +588,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
                 else str(len(repositories))
             )
             return CheckOutput(
-                summary=f"{_counted(count, 'repository', 'repositories')} visible"
+                summary=f"{counted(count, 'repository', 'repositories')} visible"
             )
         if is_organization:
             raise InsufficientPermissionsError(
@@ -645,12 +649,6 @@ def _raise_unless_denied(error: GitHubApiError, *, denied: str) -> None:
     repository: a bad token, a rate limit, or a GitHub outage."""
     if isinstance(error, GitHubRateLimitError) or error.status_code not in (403, 404):
         _raise_for_api_error(error, denied=denied)
-
-
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 repository", "3 repositories", "100+
-    repositories"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
 
 
 def _names(names: list[str]) -> str:
@@ -971,7 +969,7 @@ class _BranchCheck(_GitHubCheck):
                 "index each repository's default branch.",
                 summary=(
                     "Branch not found in "
-                    f"{_counted(len(missing), 'repository', 'repositories')}"
+                    f"{counted(len(missing), 'repository', 'repositories')}"
                 ),
                 description=(
                     "Indexing would stop at the first repository without this "
@@ -982,7 +980,7 @@ class _BranchCheck(_GitHubCheck):
         return CheckOutput(
             summary=(
                 f"Found {branch} in "
-                f"{_counted(len(repositories), 'repository', 'repositories')}"
+                f"{counted(len(repositories), 'repository', 'repositories')}"
             )
         )
 
@@ -1221,7 +1219,7 @@ class _FilesCheck(_GitHubCheck):
             _raise_for_api_error(e, denied=denied, denied_row=denied_row)
         return CheckOutput(
             summary=(
-                f"{_counted(len(paths), 'document', 'documents')} found in "
+                f"{counted(len(paths), 'document', 'documents')} found in "
                 f"{repository.full_name}"
             )
         )
@@ -1484,7 +1482,7 @@ class _CollaboratorsCheck(_GitHubCheck):
         logins: list[str] = _read_collaborators(context, repository, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
                 f"in {repository.full_name}"
             )
         )
@@ -1580,7 +1578,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
         logins: list[str] = _read_members(context, org_login, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
                 f"{org_login}"
             )
         )
