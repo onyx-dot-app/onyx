@@ -134,9 +134,13 @@ _SIGN_IN_CHECK_ID = "outlook_token_auth"
 _LISTING_CHECK_ID = "outlook_mailbox_listing"
 _CONFIGURED_MAILBOXES_CHECK_ID = "outlook_configured_mailboxes"
 _CONFIGURED_GROUPS_CHECK_ID = "outlook_configured_groups"
-# Not the selected mailboxes and groups: those need a config, and a
-# config-less run still samples a tenant mailbox.
-_SAMPLE_DEPENDS_ON: tuple[str, ...] = (_LISTING_CHECK_ID,)
+# The selected mailboxes and groups too, so one unreachable scope fails one
+# row. A check that does not apply does not stop the samples.
+_SAMPLE_DEPENDS_ON: tuple[str, ...] = (
+    _LISTING_CHECK_ID,
+    _CONFIGURED_MAILBOXES_CHECK_ID,
+    _CONFIGURED_GROUPS_CHECK_ID,
+)
 # check_id to the checks it runs after, in run order.
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _LISTING_CHECK_ID: (_SIGN_IN_CHECK_ID,),

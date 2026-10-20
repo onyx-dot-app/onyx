@@ -207,6 +207,28 @@ def test_no_selected_mailbox_found_fails() -> None:
     assert result.summary == "No selected mailbox found"
 
 
+def test_no_selected_mailbox_found_fails_one_row_only() -> None:
+    gateway = _healthy()
+    gateway.resolve_mailbox.return_value = None
+
+    results = _run_all(
+        [
+            "outlook_configured_mailboxes",
+            "outlook_mail_read",
+            "outlook_calendar_read",
+        ],
+        gateway,
+        {"mailboxes": ["a@contoso.com"], "include_calendar": True},
+    )
+
+    assert results["outlook_configured_mailboxes"].status == (
+        CapabilityCheckStatus.FAILED
+    )
+    for check_id in ("outlook_mail_read", "outlook_calendar_read"):
+        assert results[check_id].status == CapabilityCheckStatus.SKIPPED
+        assert results[check_id].blocked_by == "outlook_configured_mailboxes"
+
+
 def test_a_group_that_matches_nothing_names_it() -> None:
     gateway = _healthy()
     gateway.resolve_groups.return_value = []
