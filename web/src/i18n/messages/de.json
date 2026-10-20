@@ -4838,7 +4838,7 @@
         "editTitle": "Kostenüberschreibung bearbeiten",
         "newTitle": "Neue Kostenüberschreibung",
         "cacheRate": {
-          "description": "Einheit: USD pro 1 Mio. Token. Leer lassen, um Cache-Lesevorgänge zum Eingabepreis abzurechnen.",
+          "description": "Einheit: USD pro 1 Mio. Token. Standardmäßig der Eingabepreis.",
           "label": "Preis für Cache-Lesevorgänge"
         },
         "cancelButton": {

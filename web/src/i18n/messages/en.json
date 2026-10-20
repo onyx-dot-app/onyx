@@ -4838,7 +4838,7 @@
         "editTitle": "Edit Cost Override",
         "newTitle": "New Cost Override",
         "cacheRate": {
-          "description": "Units are in USD per 1M tokens. Leave empty to bill cache reads at the input rate.",
+          "description": "Units are in USD per 1M tokens. Defaults to the input rate.",
           "label": "Cache-read rate"
         },
         "cancelButton": {

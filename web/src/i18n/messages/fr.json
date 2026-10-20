@@ -4838,7 +4838,7 @@
         "editTitle": "Modifier le remplacement de coût",
         "newTitle": "Nouveau remplacement de coût",
         "cacheRate": {
-          "description": "Unité : USD par 1M de jetons. Laissez vide pour facturer les lectures du cache au tarif d'entrée.",
+          "description": "Unité : USD par 1M de jetons. Par défaut, le tarif d'entrée.",
           "label": "Tarif de lecture du cache"
         },
         "cancelButton": {

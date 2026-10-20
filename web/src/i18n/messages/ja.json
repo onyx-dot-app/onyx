@@ -4838,7 +4838,7 @@
         "editTitle": "コストの上書きを編集",
         "newTitle": "新しいコストの上書き",
         "cacheRate": {
-          "description": "単位は 100 万 tokens あたりの USD です。空欄にすると、キャッシュ読み取りは入力単価で課金されます。",
+          "description": "単位は 100 万 tokens あたりの USD です。既定では入力単価を使用します。",
           "label": "キャッシュ読み取り単価"
         },
         "cancelButton": {

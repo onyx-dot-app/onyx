@@ -4838,7 +4838,7 @@
         "editTitle": "编辑成本覆盖",
         "newTitle": "新建成本覆盖",
         "cacheRate": {
-          "description": "单位为每 100 万 tokens 美元。留空则按输入价格计费缓存读取。",
+          "description": "单位为每 100 万 tokens 美元。默认与输入价格相同。",
           "label": "缓存读取价格"
         },
         "cancelButton": {

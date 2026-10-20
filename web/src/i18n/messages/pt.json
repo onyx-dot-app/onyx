@@ -4838,7 +4838,7 @@
         "editTitle": "Editar substituição de custo",
         "newTitle": "Nova substituição de custo",
         "cacheRate": {
-          "description": "Unidades em USD por 1M de tokens. Deixe vazio para cobrar leituras de cache pela taxa de entrada.",
+          "description": "Unidades em USD por 1M de tokens. Usa a taxa de entrada por padrão.",
           "label": "Taxa de leitura de cache"
         },
         "cancelButton": {

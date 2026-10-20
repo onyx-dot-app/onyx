@@ -4838,7 +4838,7 @@
         "editTitle": "비용 재정의 편집",
         "newTitle": "새 비용 재정의",
         "cacheRate": {
-          "description": "단위는 100만 token당 USD입니다. 비워 두면 캐시 읽기에 입력 요금이 적용됩니다.",
+          "description": "단위는 100만 token당 USD입니다. 기본값은 입력 요금입니다.",
           "label": "캐시 읽기 요금"
         },
         "cancelButton": {

@@ -4838,7 +4838,7 @@
         "editTitle": "Editar anulación de costo",
         "newTitle": "Nueva anulación de costo",
         "cacheRate": {
-          "description": "Unidades en USD por 1M de tokens. Déjalo vacío para cobrar las lecturas de caché a la tarifa de entrada.",
+          "description": "Unidades en USD por 1M de tokens. Por defecto, la tarifa de entrada.",
           "label": "Tarifa de lectura de caché"
         },
         "cancelButton": {
