@@ -6,6 +6,7 @@ downloads the whole org and is too slow for this test."""
 import os
 
 import pytest
+from simple_salesforce.exceptions import SalesforceAuthenticationFailed
 
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -31,13 +32,20 @@ def salesforce_connector(
     test_secrets: dict[TestSecret, str],
 ) -> SalesforceConnector:
     connector = SalesforceConnector(requested_objects=_PARENT_TYPES)
-    connector.load_credentials(
-        {
-            "sf_username": os.environ["SF_USERNAME"],
-            "sf_password": test_secrets[TestSecret.SF_PASSWORD],
-            "sf_security_token": test_secrets[TestSecret.SF_SECURITY_TOKEN],
-        }
-    )
+    try:
+        connector.load_credentials(
+            {
+                "sf_username": os.environ["SF_USERNAME"],
+                "sf_password": test_secrets[TestSecret.SF_PASSWORD],
+                "sf_security_token": test_secrets[TestSecret.SF_SECURITY_TOKEN],
+            }
+        )
+    except SalesforceAuthenticationFailed:
+        # same reason the other Salesforce daily tests are skipped
+        pytest.skip(
+            "Salesforce test credentials are expired or invalid; "
+            "credentials change over time."
+        )
     return connector
 
 
