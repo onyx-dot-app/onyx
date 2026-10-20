@@ -20,7 +20,7 @@ import { pluginDetailHref, withPluginSearchParams } from "@/lib/plugins/routes";
 import { useSWRConfig } from "swr";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
-import { updateCustomTool, updateToolStatus } from "@/lib/tools/svc";
+import { updateCustomTool } from "@/lib/tools/svc";
 import {
   extractMethodSpecsFromDefinition,
   getActionIcon,
@@ -131,20 +131,15 @@ export default function OpenAPIPluginDetailPage({
       (values.name !== undefined && values.name !== currentTool.name) ||
       (values.description !== undefined &&
         values.description !== currentTool.description);
-    const availabilityChanged =
-      values.enabled !== undefined && values.enabled !== currentTool.enabled;
+    const availabilityChanged = values.defaultChatEnabled !== undefined;
     if (
       (metadataChanged && !can(currentTool, "edit")) ||
-      (availabilityChanged && !can(currentTool, "toggle"))
+      (availabilityChanged &&
+        (!defaultChat.canEdit || !can(currentTool, "edit")))
     ) {
       throw new Error(t("addOpenApiModal.toasts.updateFailed"));
     }
-    if (
-      availabilityChanged &&
-      values.enabled &&
-      defaultChat.canEdit &&
-      (!defaultChat.data || defaultChat.error)
-    ) {
+    if (availabilityChanged && (!defaultChat.data || defaultChat.error)) {
       throw new Error(t("addOpenApiModal.toasts.updateFailed"));
     }
     if (metadataChanged) {
@@ -161,12 +156,10 @@ export default function OpenAPIPluginDetailPage({
           response.error ?? t("addOpenApiModal.toasts.updateFailed")
         );
     }
-    if (availabilityChanged) {
-      if (values.enabled && defaultChat.canEdit)
-        await defaultChat.updateTools([currentTool.id], true);
-      await updateToolStatus(
-        currentTool.id,
-        values.enabled ?? currentTool.enabled
+    if (values.defaultChatEnabled !== undefined) {
+      await defaultChat.updateTools(
+        [currentTool.id],
+        values.defaultChatEnabled
       );
     }
     await mutateOpenApiTools();
@@ -223,7 +216,7 @@ export default function OpenAPIPluginDetailPage({
   const methods = extractMethodSpecsFromDefinition(tool?.definition);
   const serverUrl = tool?.definition?.servers?.[0]?.url ?? "";
   const filteredMethods = methods.filter((method) =>
-    `${method.name} ${method.summary ?? ""} ${method.path}`
+    `${method.name} ${method.summary}`
       .toLowerCase()
       .includes(toolSearch.trim().toLowerCase())
   );
@@ -325,6 +318,15 @@ export default function OpenAPIPluginDetailPage({
                         key={tool.id}
                         presentation="inline"
                         existingTool={tool}
+                        defaultChatEnabled={
+                          defaultChat.data?.tool_ids.includes(tool.id) ??
+                          tool.default_chat_enabled ??
+                          false
+                        }
+                        canManageDefaultChat={defaultChat.canEdit && canEdit}
+                        defaultChatReady={
+                          Boolean(defaultChat.data) && !defaultChat.error
+                        }
                         active={tab === "server"}
                         footerTarget={footerTarget}
                         onBusyChange={setBusy}
@@ -398,6 +400,11 @@ export default function OpenAPIPluginDetailPage({
                       placeholder={t("mcpTools.search")}
                       aria-label={t("mcpTools.search")}
                     />
+                    <Text font="secondary-body" color="text-03">
+                      {t("memberPlugins.detail.toolCount", {
+                        count: filteredMethods.length,
+                      })}
+                    </Text>
                     {filteredMethods.length ? (
                       <OpenAPIEndpointList methods={filteredMethods} />
                     ) : (

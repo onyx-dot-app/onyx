@@ -1067,6 +1067,7 @@
         "disableCraft": "Craft에서 비활성화",
         "enableCraft": "Craft에서 활성화",
         "chatDescription": "사용자 지정 에이전트가 없는 채팅에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어는 계속 적용됩니다.",
+        "defaultChatAdminOnly": "워크스페이스 관리자만 기본 채팅에서의 사용 가능 여부를 변경할 수 있습니다.",
         "mcpCraftDescription": "Craft에서 이 플러그인을 사용할 수 있게 합니다. 액세스 제어와 도구 권한은 계속 적용됩니다.",
         "craftAppDescription": "Craft에서 이 앱을 사용할 수 있게 합니다. 연결 및 승인 요구 사항은 계속 적용됩니다.",
         "workspaceDescription": "Chat 및 사용자 지정 에이전트에서 이 플러그인을 사용할 수 있도록 합니다. 액세스 제어 및 인증 요구 사항은 계속 적용됩니다."
@@ -2422,6 +2423,7 @@
           "title": "코딩 에이전트"
         },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
+        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 작업은 [플러그인]({url})에서 설정하세요.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
           "disabledTooltip": "이미지 생성에는 설정된 모델이 필요합니다. 구성 > 이미지 생성에서 모델을 설정하거나 관리자에게 문의하세요.",

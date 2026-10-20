@@ -48,8 +48,8 @@ resource "onyx_custom_tool" "billing" {
   passthrough_auth = true
 }
 
-# An action can be turned off without being deleted, which leaves it configured
-# but stops any assistant from calling it.
+# Keep this action out of default Chat. Custom agents can still use it
+# when they have the action configured.
 resource "onyx_custom_tool" "legacy_lookup" {
   name       = "legacy-lookup"
   definition = file("${path.module}/openapi/legacy.json")

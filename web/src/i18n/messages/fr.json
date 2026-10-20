@@ -1067,6 +1067,7 @@
         "disableCraft": "Désactiver pour Craft",
         "enableCraft": "Activer pour Craft",
         "chatDescription": "Rendre ce plugin disponible dans les conversations sans agent personnalisé. Les contrôles d’accès restent applicables.",
+        "defaultChatAdminOnly": "Seuls les administrateurs de l’espace de travail peuvent modifier la disponibilité dans le chat par défaut.",
         "mcpCraftDescription": "Rendre ce plugin disponible dans Craft. Les contrôles d’accès et les autorisations des outils restent applicables.",
         "craftAppDescription": "Rendre cette application disponible dans Craft. Les exigences de connexion et d’approbation restent applicables.",
         "workspaceDescription": "Rendez ce plugin disponible dans Chat et les agents personnalisés. Les contrôles d’accès et les exigences d’authentification restent applicables."
@@ -2422,6 +2423,7 @@
           "title": "Agent de code"
         },
         "description": "Outils et fonctionnalités que la discussion peut utiliser. Cela ne s'applique pas aux agents.",
+        "pluginsNote": "Configurez les serveurs MCP et les actions OpenAPI pour le chat par défaut dans [Plugins]({url}).",
         "imageGeneration": {
           "description": "Générez et modifiez des images à l'aide d'outils basés sur l'IA.",
           "disabledTooltip": "La génération d'images nécessite un modèle configuré. Configurez-en un dans Configuration > Génération d'images, ou demandez à un administrateur.",

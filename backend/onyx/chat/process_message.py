@@ -120,6 +120,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -913,7 +914,11 @@ def build_chat_turn(
     # construct_tools skips disabled tools, and a forced id it did not build fails
     # the whole message. Callers name the forced tool from the persona's attached
     # tools, which stay attached when an admin disables one.
-    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
+    if forced_tool_id in {
+        tool.id
+        for tool in all_tools
+        if not is_tool_available_for_persona(tool, persona.id)
+    }:
         forced_tool_id = None
 
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.

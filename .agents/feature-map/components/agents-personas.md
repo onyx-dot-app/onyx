@@ -64,6 +64,10 @@ keep theirs. The default Chat tool editor updates the same availability flag whe
 its last selected server tool is removed. Discovery adds new tools for enabled
 servers without restoring existing tools the admin deselected.
 
+OpenAPI plugin settings control default Chat selection separately from custom agents.
+Turning off default Chat removes its attachment without changing custom-agent attachments.
+Legacy disabled plugins remain off in default Chat until explicitly selected; see §4.5.
+
 ---
 
 ## 2. Surfaces
@@ -264,8 +268,10 @@ level-only change.
 `onyx/tools/tool_constructor.py:construct_tools` (via `_construct_tools_impl`)
 turns `persona.tools` into a live tool dict, keyed by `Tool.id`:
 
-- Skips any `Persona__Tool` row where `Tool.enabled` is `False`, and any tool
-  not in the caller's `allowed_tool_ids` whitelist when one is supplied.
+- Skips disabled MCP and built-in tools. Legacy OpenAPI `enabled=False` blocks
+  default Chat but does not block custom agents. The shared
+  `is_tool_available_for_persona` predicate applies this distinction.
+- Skips tools outside the caller's `allowed_tool_ids` whitelist when one is supplied.
 - For the built-in search tool, builds `PersonaSearchInfo` from
   `persona.document_sets`, `persona.search_start_date`,
   `persona.attached_documents`, and `persona.hierarchy_nodes`
@@ -306,8 +312,16 @@ its `tool_ids` and `system_prompt` (`db/persona.py:update_default_assistant_conf
 explicitly not display priority or built-in status (`upsert_persona`'s own
 docstring repeats this limit for the general update path).
 
+Default-assistant configuration reads omit legacy OpenAPI rows with `enabled=False`,
+even if they retain an attachment. This prevents unrelated full-list saves from
+reactivating them. Explicitly including an OpenAPI tool in `tool_ids` sets its
+stored `enabled` flag to true in the same transaction as the attachment update.
+Removing it only changes default Chat selection. Custom agents ignore the legacy
+flag but still require access and authentication. No migration rewrites existing rows.
+See [[mcp-and-custom-tools]] §4.5 for the plugin API contract.
+
 Frontend `useDefaultAssistantConfiguration` sequences complete replacement
-writes per SWR cache. Row menus, details, and Chat Preferences share that queue
+writes per SWR cache. Plugin forms and the default-assistant editor share that queue
 without copying configuration data. A failed write rolls back before the next
 operation reads the cache. Separate browsers still need backend concurrency
 control for simultaneous edits.
@@ -352,11 +366,11 @@ underlying counts at finer grain for the admin panel.
 
 ## 5. Contracts and invariants
 
-1. **A `Persona__Tool` row records availability, not usability.** Disabling a
-   `Tool` (`Tool.enabled = False`) does not remove the association row.
-   `construct_tools` must keep filtering on `enabled` at construction time; a
-   persona's stale tool attachment must never resurrect a disabled tool into a
-   live turn. See [[tools-framework]] §5.
+1. **A `Persona__Tool` row records availability, not usability.** Disabling an
+   MCP or built-in tool does not remove its association rows. Construction must
+   exclude these disabled tools. Legacy disabled OpenAPI tools remain excluded
+   from default Chat, but custom agents ignore that flag. Access and authentication
+   still apply. See [[tools-framework]] §5 and §4.5 above.
 2. **`search_start_date` is a floor, never negotiable downward.** Any new
    caller-supplied date filter must be intersected with it, not replace it.
    [[internal-search]] enforces this on the retrieval side; this component
@@ -473,8 +487,9 @@ Relevant existing e2e coverage: `web/tests/e2e/agents/create_and_edit_agent.spec
 
 - The agent's prompt and knowledge scope are both visibly in effect in chat,
   not just saved in the admin form.
-- A disabled or removed tool never becomes callable through a persona that
-  still lists it.
+- Disabled MCP and built-in tools remain uncallable despite retained attachments.
+  Legacy disabled OpenAPI tools stay off in default Chat but work in configured
+  custom agents, subject to access and authentication.
 - Sharing changes take effect for the intended audience only; an unshared
   user cannot fetch the agent by id.
 

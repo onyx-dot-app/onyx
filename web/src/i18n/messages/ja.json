@@ -1067,6 +1067,7 @@
         "disableCraft": "Craftで無効にする",
         "enableCraft": "Craftで有効にする",
         "chatDescription": "カスタムエージェントを使わないチャットでこのプラグインを利用可能にします。アクセス制御は引き続き適用されます。",
+        "defaultChatAdminOnly": "デフォルトのチャットでの利用可否を変更できるのは、ワークスペースの管理者のみです。",
         "mcpCraftDescription": "Craft でこのプラグインを利用可能にします。アクセス制御とツールの権限は引き続き適用されます。",
         "craftAppDescription": "Craft でこのアプリを利用可能にします。接続と承認の要件は引き続き適用されます。",
         "workspaceDescription": "このプラグインをChatとカスタムエージェントで利用可能にします。アクセス制御と認証要件は引き続き適用されます。"
@@ -2422,6 +2423,7 @@
           "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
+        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI アクションは、[プラグイン]({url})で設定できます。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",

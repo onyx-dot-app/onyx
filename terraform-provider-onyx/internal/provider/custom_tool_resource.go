@@ -134,8 +134,9 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
-				MarkdownDescription: "Whether assistants may call the action. A disabled action keeps its " +
-					"configuration but never runs.",
+				MarkdownDescription: "Whether the action is available in default Chat (without a custom agent). " +
+					"Defaults to true. Custom agents keep their own tool settings. This does not disable " +
+					"the action globally. Changing this setting requires a workspace admin.",
 			},
 			"display_name": schema.StringAttribute{
 				Computed:            true,
@@ -276,12 +277,13 @@ func (r *customToolResource) writeFromModel(
 	}
 
 	return client.CustomToolWrite{
-		Name:            model.Name.ValueString(),
-		Description:     model.Description.ValueString(),
-		Definition:      definition,
-		CustomHeaders:   headers,
-		PassthroughAuth: model.PassthroughAuth.ValueBool(),
-		OAuthConfigID:   oauthConfigID,
+		DefaultChatEnabled: model.Enabled.ValueBool(),
+		Name:               model.Name.ValueString(),
+		Description:        model.Description.ValueString(),
+		Definition:         definition,
+		CustomHeaders:      headers,
+		PassthroughAuth:    model.PassthroughAuth.ValueBool(),
+		OAuthConfigID:      oauthConfigID,
 	}, true
 }
 
@@ -316,13 +318,18 @@ func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, 
 	model.Description = types.StringValue(remote.Description)
 	model.Definition = definition
 	model.PassthroughAuth = types.BoolValue(remote.PassthroughAuth)
-	model.Enabled = types.BoolValue(remote.Enabled)
 	model.DisplayName = types.StringValue(remote.DisplayName)
 	if remote.OAuthConfigID == nil {
 		model.OAuthConfigID = types.StringNull()
 	} else {
 		model.OAuthConfigID = types.StringValue(strconv.FormatInt(*remote.OAuthConfigID, 10))
 	}
+	if remote.DefaultChatEnabled == nil {
+		diags.AddError("Onyx server does not report default Chat availability",
+			"The action response is missing default_chat_enabled. Upgrade the Onyx server before managing enabled with this provider. The legacy global enabled field cannot represent default Chat selection.")
+		return false
+	}
+	model.Enabled = types.BoolValue(*remote.DefaultChatEnabled)
 	return true
 }
 
@@ -409,21 +416,10 @@ func (r *customToolResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// New actions are enabled. Disabling is a follow-up call, reported after
-	// the state is written so a failure never loses track of the action.
-	if !plan.Enabled.ValueBool() {
-		if err := r.client.SetCustomToolEnabled(ctx, remote.ID, false); err != nil {
-			if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {
-				return
-			}
-			resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-			resp.Diagnostics.AddError("Failed to disable the new Onyx action", err.Error())
-			return
-		}
-		remote.Enabled = false
-	}
-
 	if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {
+		// Keep the created ID even when an older server omits availability.
+		plan.ID = types.StringValue(strconv.FormatInt(remote.ID, 10))
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -507,15 +503,6 @@ func (r *customToolResource) Update(ctx context.Context, req resource.UpdateRequ
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx action", err.Error())
 		return
-	}
-
-	// enabled has its own endpoint, so it is only touched when it changes.
-	if plan.Enabled.ValueBool() != remote.Enabled {
-		if err := r.client.SetCustomToolEnabled(ctx, id, plan.Enabled.ValueBool()); err != nil {
-			resp.Diagnostics.AddError("Failed to change whether the Onyx action is enabled", err.Error())
-			return
-		}
-		remote.Enabled = plan.Enabled.ValueBool()
 	}
 
 	if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {

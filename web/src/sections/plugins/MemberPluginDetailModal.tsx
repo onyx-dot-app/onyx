@@ -487,8 +487,8 @@ export function MemberPluginDetailContent({
       : [];
   const endpointQuery = endpointSearch.trim().toLocaleLowerCase();
   const visibleEndpoints = endpoints.filter((endpoint) =>
-    [endpoint.name, endpoint.summary, endpoint.path, endpoint.method].some(
-      (value) => value.toLocaleLowerCase().includes(endpointQuery)
+    [endpoint.name, endpoint.summary].some((value) =>
+      value.toLocaleLowerCase().includes(endpointQuery)
     )
   );
   const hasTabs =

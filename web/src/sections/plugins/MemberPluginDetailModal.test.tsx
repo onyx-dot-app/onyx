@@ -639,10 +639,10 @@ test("OpenAPI details share MCP navigation and render schema endpoints, not the 
   expect(screen.queryByText("getUser")).not.toBeInTheDocument();
   await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
   expect(screen.getByText("getUser")).toBeVisible();
-  expect(screen.getByText("GET")).toBeVisible();
-  expect(screen.getByText("/user")).toBeVisible();
+  expect(screen.queryByText("GET")).not.toBeInTheDocument();
+  expect(screen.getByText("Fetch the current user")).toBeVisible();
   expect(screen.getByText("createRepo")).toBeVisible();
-  expect(screen.getByText("POST")).toBeVisible();
+  expect(screen.getByText("Create a repository")).toBeVisible();
   expect(screen.getByText("2 tools")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Disconnect" })
@@ -654,7 +654,7 @@ test("OpenAPI details share MCP navigation and render schema endpoints, not the 
   ).toHaveLength(0);
 });
 
-test("OpenAPI endpoint search matches method, path, and summary and reports no results", async () => {
+test("OpenAPI tools search matches name and description and reports no results", async () => {
   show({
     kind: "openapi",
     tool: memberTool({
@@ -680,7 +680,7 @@ test("OpenAPI endpoint search matches method, path, and summary and reports no r
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Tools" }));
   const search = screen.getByRole("textbox", { name: "Search tools" });
-  for (const query of ["post", "/deployments", "Schedule"]) {
+  for (const query of ["createDeployment", "Schedule"]) {
     await user.clear(search);
     await user.type(search, query);
     expect(screen.getByText("createDeployment")).toBeVisible();

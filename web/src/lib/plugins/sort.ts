@@ -35,7 +35,7 @@ export function installedPluginStatus(
     plugin.kind === "external-app"
       ? plugin.app.enabled
       : plugin.kind === "openapi"
-        ? plugin.tool.enabled
+        ? plugin.tool.default_chat_enabled
         : plugin.server.default_chat_enabled ||
           (craftAvailable && plugin.server.available_in_craft);
   return enabled ? "active" : "inactive";
