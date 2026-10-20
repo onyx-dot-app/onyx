@@ -242,6 +242,44 @@ def test_typed_error_keeps_its_class_over_its_http_status(
     assert result.summary == summary
 
 
+def _suppressed(error: Exception, context: Exception) -> Exception:
+    error.__context__ = context
+    error.__suppress_context__ = True
+    return error
+
+
+@pytest.mark.parametrize(
+    ("error", "http_status"),
+    [
+        # A source error without response data passes to the error it wraps.
+        (_wrapped(SourceApiError("wrapped", status_code=None), _http_error(401)), 401),
+        # A source error with response data stops the walk, as Error Details does.
+        (
+            _wrapped(
+                SourceApiError(
+                    "no status", status_code=None, url="https://api.example.com"
+                ),
+                _http_error(401),
+            ),
+            None,
+        ),
+        # A suppressed context is not in the traceback, so it gives no status.
+        (_suppressed(RuntimeError("boom"), _http_error(401)), None),
+    ],
+)
+def test_row_status_is_the_error_details_status(
+    error: Exception, http_status: int | None
+) -> None:
+    # Under test.
+    result = _run(error)
+
+    # Postcondition.
+    detail_status = result.error_detail.status_code if result.error_detail else None
+    assert detail_status == http_status
+    assert result.description is not None
+    assert ("(HTTP 401)" in result.description) == (http_status == 401)
+
+
 def test_unreachable_source_fails_on_a_form_run_only() -> None:
     # Under test and postcondition.
     error = requests.ConnectionError("connection refused")
