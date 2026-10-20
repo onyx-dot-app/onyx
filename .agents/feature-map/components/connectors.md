@@ -587,7 +587,10 @@ A draft run or a pair dry run (`/admin/cc-pair/{cc_pair_id}/edit/checks`) also
 takes per-check actions (`capability_checks/models.py:DraftCheckActions`). `check_ids` runs
 only those checks, without their cached results. Every other check keeps its
 cached result or its result in the latest run of the draft key, and runs only
-when it has none, for example after a dependency that now runs.
+when it has none, for example after a dependency that now runs. A discovery
+check skipped in the latest run runs again. A kept or cached result whose
+dependency now stops it is "Not run" too, once all its dependencies have a
+result (`draft_runs.py:stop_blocked_draft_checks`).
 `skip_check_ids` do not run: an optional check is `SKIPPED`
 (`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
 (`stopped_by_user`), which is no pass and holds Create. Their dependents are

@@ -53,6 +53,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import (
     decide_check_readiness,
+    dependency_not_run_result,
     run_order,
 )
 from onyx.connectors.capability_checks.two_step import (
@@ -207,27 +208,65 @@ class DraftCheckRunSnapshot(BaseModel):
         )
 
 
+def _settled_result(check: DraftCheckState) -> CapabilityCheckResult:
+    return CapabilityCheckResult(
+        capability=check.capability,
+        check_id=check.check_id,
+        row_id=check.row_id,
+        display_name=check.display_name,
+        required=check.required,
+        status=_result_status(check.state),
+        message=check.message,
+        summary=check.summary,
+        error_kind=check.error_kind,
+        not_run_reason=check.not_run_reason,
+        blocked_by=check.blocked_by,
+        partial=check.partial,
+        applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+        discovery=check.discovery,
+    )
+
+
 def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResult]:
     """The run's checks that are not PENDING or RUNNING, as result rows. A
     waiting check has not verified anything, so it is SKIPPED."""
     return [
-        CapabilityCheckResult(
-            capability=check.capability,
-            check_id=check.check_id,
-            row_id=check.row_id,
-            display_name=check.display_name,
-            required=check.required,
-            status=_result_status(check.state),
-            error_kind=check.error_kind,
-            not_run_reason=check.not_run_reason,
-            blocked_by=check.blocked_by,
-            partial=check.partial,
-            applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
-            discovery=check.discovery,
-        )
+        _settled_result(check)
         for check in snapshot.checks
         if check.state not in _UNFINISHED_STATES
     ]
+
+
+def stop_blocked_draft_checks(
+    snapshot: DraftCheckRunSnapshot, checks: Sequence[CapabilityCheck[Any]]
+) -> None:
+    """Makes a settled check not run when a dependency stops it, as
+    ``stop_blocked_results`` does for a stored run. This reaches the results
+    the run reused from the cache or the latest run, which no runner decided.
+    A check is left until all its dependencies settled, so an any-of group is
+    decided on every member. The admin's own skips and stops stay. ``checks``
+    are the source's registered checks."""
+    state_by_key: dict[tuple[str, CredentialCapability], DraftCheckState] = {
+        (state.check_id, state.capability): state for state in snapshot.checks
+    }
+    unfinished_ids: set[str] = {
+        state.check_id for state in snapshot.checks if state.state in _UNFINISHED_STATES
+    }
+    result_by_check_id: dict[str, CapabilityCheckResult] = {}
+    for check in run_order(checks):
+        state = state_by_key.get((check.check_id, check.capability))
+        if state is None or state.state in _UNFINISHED_STATES:
+            continue
+        if (
+            # A check SKIPPED for its own reason keeps its result.
+            _result_status(state.state) != CapabilityCheckStatus.SKIPPED
+            and state.not_run_reason not in _USER_SKIP_REASONS
+            and unfinished_ids.isdisjoint((*check.depends_on, *check.depends_on_any))
+            and (not_run := dependency_not_run_result(check, result_by_check_id))
+        ):
+            apply_check_result(state, not_run)
+            state.from_cache = False
+        result_by_check_id[check.check_id] = _settled_result(state)
 
 
 class StoredDraftRun(BaseModel):
