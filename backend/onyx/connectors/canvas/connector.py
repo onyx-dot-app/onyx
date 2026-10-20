@@ -991,6 +991,8 @@ class CanvasConnector(
         Every valid token can read its own user."""
         try:
             self.canvas_client.get("users/self")
+        except CanvasUnsafeUrlError:
+            raise
         except OnyxError as e:
             if e.status_code == 401:
                 _handle_canvas_api_error(e)  # NoReturn — always raises

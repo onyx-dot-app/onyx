@@ -2153,15 +2153,20 @@ _BAD_PAGE_ID = "canvas-page-1-10"
 _GOOD_PAGE_ID = "canvas-page-1-11"
 
 
-def _reindex_pages(bad_page_response: MagicMock, users_self_status: int) -> list[Any]:
-    """Reindex a bad page, then a good page. users/self answers with the given status."""
+def _reindex_pages(
+    bad_page_response: MagicMock,
+    users_self_status: int,
+    users_self_response: MagicMock | None = None,
+) -> list[Any]:
+    """Reindex a bad page, then a good page. users/self answers with
+    users_self_response if given, else with users_self_status."""
     connector = _build_connector()
 
     def _dispatcher(url: str, **_kwargs: Any) -> MagicMock:
         if url == f"{_API_PREFIX}/courses":
             return _mock_response(json_data=[_mock_course()])
         if url == f"{_API_PREFIX}/users/self":
-            return _mock_response(users_self_status, {"id": 1})
+            return users_self_response or _mock_response(users_self_status, {"id": 1})
         if url == f"{_API_PREFIX}/courses/1/pages/10":
             return bad_page_response
         return _mock_response(json_data={**_mock_page(page_id=11), "published": True})
@@ -2221,3 +2226,14 @@ class TestReindexErrorScope:
 
         with pytest.raises(CanvasUnsafeUrlError):
             _reindex_pages(redirect, users_self_status=200)
+
+    def test_off_host_redirect_on_token_probe_stops_the_run(self) -> None:
+        denied = _mock_response(403, {"errors": [{"message": "user not authorized"}]})
+        probe_redirect = _mock_response(302)
+        probe_redirect.headers = {"Location": "https://evil.example.com/steal"}
+        probe_redirect.url = f"{_API_PREFIX}/users/self"
+
+        with pytest.raises(CanvasUnsafeUrlError):
+            _reindex_pages(
+                denied, users_self_status=200, users_self_response=probe_redirect
+            )
