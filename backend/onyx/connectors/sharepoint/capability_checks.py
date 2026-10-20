@@ -14,7 +14,7 @@ some are missing they are INCOMPLETE, and the checks after them run on the
 sites and libraries they found.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import NoReturn
 
 from onyx.connectors.capability_checks.form_state import FormState
@@ -43,7 +43,10 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     ValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import format_date
+from onyx.connectors.microsoft_utils.check_text import (
+    credential_rejected_row,
+    format_date,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaItem,
@@ -1564,6 +1567,14 @@ class _CertificateAuthCheck(_SharepointCheck):
             )
         if not_after is None:
             return CheckOutput(summary="Signed in with a certificate")
+        if not_after < datetime.now(timezone.utc):
+            _raise_row(
+                CredentialInvalidError,
+                f"The certificate expired on {format_date(not_after)}.",
+                credential_rejected_row(
+                    _ACCOUNT_LABELS, certificate=True, certificate_not_after=not_after
+                ),
+            )
         return CheckOutput(summary=f"Certificate valid until {format_date(not_after)}")
 
 

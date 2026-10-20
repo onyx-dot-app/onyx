@@ -454,6 +454,20 @@ def test_a_client_secret_stops_the_permission_checks() -> None:
     gateway.list_role_assignments.assert_not_called()
 
 
+def test_an_expired_certificate_fails_the_certificate_row() -> None:
+    gateway = _healthy()
+    gateway.get_certificate_not_after.return_value = datetime(
+        2020, 5, 1, tzinfo=timezone.utc
+    )
+
+    result = _run("sharepoint_certificate_auth", gateway)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_kind == CheckErrorKind.REJECTED
+    assert result.summary == "Secret or certificate was rejected"
+    assert "expired on 2020/05/01" in (result.description or "")
+
+
 @pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_throttled_listing_stops_the_run() -> None:
     gateway = _healthy()
