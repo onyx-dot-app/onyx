@@ -499,9 +499,10 @@ class HubSpotConnector(
         ]
 
     def _batch_read(
-        self, variant: str, ids: list[str], properties: list[str]
+        self, variant: str, ids: list[str], properties: list[str], strict: bool
     ) -> list[HubSpotRecord]:
-        """Reads with one retry and logs the dropped ids when both attempts fail."""
+        """Reads with one retry. When both attempts fail, logs the dropped ids,
+        or raises the last error when strict."""
         last_exc: Exception | None = None
         for attempt in range(2):
             try:
@@ -518,6 +519,8 @@ class HubSpotConnector(
                         e,
                     )
                     time.sleep(1)
+        if strict and last_exc is not None:
+            raise last_exc
         logger.warning(
             "Failed to batch-fetch %s %s %s after retry: %s",
             len(ids),
@@ -685,7 +688,9 @@ class HubSpotConnector(
         object_type: HubSpotObjectType,
         record: HubSpotRecord,
         to_object_type: HubSpotObjectType,
+        strict: bool,
     ) -> list[HubSpotRecord]:
+        """Errors are logged and read as no associations, or raised when strict."""
         try:
             object_ids: list[str] | None = self._extract_inline_association_ids(
                 record, to_object_type
@@ -701,10 +706,13 @@ class HubSpotConnector(
                         to_object_type.value,
                         chunk,
                         ASSOC_PROPERTIES[to_object_type.value],
+                        strict,
                     )
                 )
             return associated_objects
         except Exception as e:
+            if strict:
+                raise
             logger.warning(
                 "Failed to get associations from %s to %s: %s",
                 object_type,
@@ -714,8 +722,9 @@ class HubSpotConnector(
             return []
 
     def _get_associated_notes(
-        self, object_type: HubSpotObjectType, object_id: str
+        self, object_type: HubSpotObjectType, object_id: str, strict: bool
     ) -> list[HubSpotRecord]:
+        """Errors are logged and read as no notes, or raised when strict."""
         try:
             note_ids: list[str] = self._list_association_ids(
                 object_type, object_id, NOTES_OBJECT_TYPE
@@ -724,11 +733,16 @@ class HubSpotConnector(
             for chunk in batch_generator(note_ids, HUBSPOT_PAGE_SIZE):
                 associated_notes.extend(
                     self._batch_read(
-                        NOTES_OBJECT_TYPE, chunk, ASSOC_PROPERTIES[NOTES_OBJECT_TYPE]
+                        NOTES_OBJECT_TYPE,
+                        chunk,
+                        ASSOC_PROPERTIES[NOTES_OBJECT_TYPE],
+                        strict,
                     )
                 )
             return associated_notes
         except Exception as e:
+            if strict:
+                raise
             logger.warning(
                 "Failed to get notes for %s %s: %s", object_type, object_id, e
             )
@@ -748,11 +762,12 @@ class HubSpotConnector(
         record: HubSpotRecord,
         sections: list[TextSection],
         metadata: dict[str, str | list[str]],
+        strict: bool,
     ) -> None:
         """Note ids stay out of the metadata, only record ids are listed."""
         for to_object_type in ASSOCIATED_TYPES[object_type]:
             associated: list[HubSpotRecord] = self._get_associated_objects(
-                object_type, record, to_object_type
+                object_type, record, to_object_type, strict
             )
             sections.extend(
                 self._create_object_section(obj, to_object_type.value)
@@ -763,19 +778,22 @@ class HubSpotConnector(
                 metadata[f"associated_{noun}_ids"] = [obj.id for obj in associated]
         sections.extend(
             self._create_object_section(note, NOTES_OBJECT_TYPE)
-            for note in self._get_associated_notes(object_type, record.id)
+            for note in self._get_associated_notes(object_type, record.id, strict)
         )
 
     def _build_document(
-        self, object_type: HubSpotObjectType, record: HubSpotRecord
+        self, object_type: HubSpotObjectType, record: HubSpotRecord, strict: bool
     ) -> Document:
+        """The crawl skips an association it cannot read. A targeted reindex
+        passes strict, so the read error fails the target instead of resolving
+        it with missing sections."""
         spec: HubSpotObjectSpec = HUBSPOT_OBJECT_SPECS[object_type]
         parts: HubSpotDocumentParts = _DOCUMENT_PARTS[object_type](record)
         sections: list[TextSection] = [
             TextSection(link=self._record_url(object_type, record.id), text=parts.text)
         ]
         metadata: dict[str, str | list[str]] = dict(parts.metadata)
-        self._add_associations(object_type, record, sections, metadata)
+        self._add_associations(object_type, record, sections, metadata, strict)
         return Document(
             id=hubspot_document_id(object_type, record.id),
             sections=cast(list[TextSection | ImageSection], sections),
@@ -802,7 +820,7 @@ class HubSpotConnector(
         for record in self._iter_records(
             object_type, INDEXED_PROPERTIES[object_type], start, end
         ):
-            yield self._build_document(object_type, record)
+            yield self._build_document(object_type, record, strict=False)
 
     def _process(
         self,
@@ -946,6 +964,23 @@ class HubSpotConnector(
         if not targets:
             return
 
+        # Record URLs and the permission reader both need the portal id. Read
+        # it once here, so a failure fails each target and not only the first.
+        try:
+            _ = self.portal_id
+        except Exception as e:
+            if _fails_the_whole_run(e):
+                raise
+            logger.exception("Failed to read the HubSpot portal id")
+            for document_ids in targets.values():
+                for document_id in document_ids.values():
+                    yield _target_failure(
+                        document_id,
+                        f"Failed to read the HubSpot portal id: {e}",
+                        e,
+                    )
+            return
+
         reader: HubSpotPermissionReader | None = (
             self._permission_reader() if include_permissions else None
         )
@@ -1022,7 +1057,9 @@ class HubSpotConnector(
                 )
                 continue
             try:
-                document: Document = self._build_document(object_type, record)
+                document: Document = self._build_document(
+                    object_type, record, strict=True
+                )
                 if reader is not None:
                     document.external_access = reader.access_for(viewers[record_id])
             except Exception as e:

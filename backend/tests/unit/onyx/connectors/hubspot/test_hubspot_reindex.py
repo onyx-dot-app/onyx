@@ -1,14 +1,19 @@
 """Targeted reindex yields only records the crawl would index: configured
-object types, unarchived records, and the exact id that was asked for."""
+object types, unarchived records, and the exact id that was asked for. It
+never yields a document with sections it could not read."""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
 from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import HubSpotConnector
-from onyx.connectors.hubspot.models import HubSpotPage, HubSpotRecord
+from onyx.connectors.hubspot.models import (
+    HubSpotAssociationIds,
+    HubSpotPage,
+    HubSpotRecord,
+)
 from onyx.connectors.hubspot.source_operations import (
     HubSpotApiError,
     HubSpotSourceOperations,
@@ -111,3 +116,70 @@ def test_other_read_error_fails_only_its_targets() -> None:
     results = _run(connector, ["hubspot_company_1", "hubspot_company_2"])
 
     assert _failed_ids(results) == {"hubspot_company_1", "hubspot_company_2"}
+
+
+def test_failed_note_read_fails_the_target() -> None:
+    connector, ops = _connector()
+    ops.read_records.return_value = [_record("1")]
+    ops.list_associations.side_effect = HubSpotApiError("notes", 500, {}, "boom")
+
+    results = _run(connector, ["hubspot_company_1"])
+
+    assert not any(isinstance(r, Document) for r in results)
+    assert _failed_ids(results) == {"hubspot_company_1"}
+
+
+def test_failed_association_record_read_fails_the_target() -> None:
+    connector, ops = _connector()
+    company = _record("1")
+    company.associations = {
+        "contacts": HubSpotAssociationIds(ids=["7"], has_more=False)
+    }
+    # The company reads; the associated contact read fails on both attempts.
+    ops.read_records.side_effect = [
+        [company],
+        HubSpotApiError("contacts batch read", 500, {}, "boom"),
+        HubSpotApiError("contacts batch read", 500, {}, "boom"),
+    ]
+
+    with patch("onyx.connectors.hubspot.connector.time.sleep"):
+        results = _run(connector, ["hubspot_company_1"])
+
+    assert not any(isinstance(r, Document) for r in results)
+    assert _failed_ids(results) == {"hubspot_company_1"}
+
+
+def test_rejected_token_on_a_note_read_ends_the_run() -> None:
+    connector, ops = _connector()
+    ops.read_records.return_value = [_record("1")]
+    ops.list_associations.side_effect = HubSpotApiError("notes", 401, {}, "nope")
+
+    with pytest.raises(HubSpotApiError):
+        _run(connector, ["hubspot_company_1"])
+
+
+def test_failed_portal_id_read_fails_every_target() -> None:
+    connector, ops = _connector()
+    connector._portal_id = None
+    ops.get_portal_id.side_effect = HubSpotApiError("portal info", 500, {}, "boom")
+
+    results = list(
+        connector.reindex(
+            _failures(["hubspot_company_1", "hubspot_deal_2"]),
+            include_permissions=True,
+        )
+    )
+
+    assert _failed_ids(
+        [r for r in results if isinstance(r, (Document, ConnectorFailure))]
+    ) == {"hubspot_company_1", "hubspot_deal_2"}
+    ops.read_records.assert_not_called()
+
+
+def test_rejected_token_on_the_portal_id_read_ends_the_run() -> None:
+    connector, ops = _connector()
+    connector._portal_id = None
+    ops.get_portal_id.side_effect = HubSpotApiError("portal info", 401, {}, "nope")
+
+    with pytest.raises(HubSpotApiError):
+        _run(connector, ["hubspot_company_1"])
