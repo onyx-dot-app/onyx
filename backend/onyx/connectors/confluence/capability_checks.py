@@ -82,7 +82,9 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     RateLimitedValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
@@ -689,7 +691,7 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
                 ),
             )
         except ConfluenceRetriesExhaustedError as e:
-            raise UnexpectedValidationError(
+            raise InconclusiveValidationError(
                 f"Confluence did not return the space `{space_key}`: it refused "
                 "or rate limited every try. Run the checks again.",
                 summary=_REFUSED_ROW.summary,
@@ -848,8 +850,9 @@ class _CqlQueryCheck(_ConfluenceCheck):
                 ),
             )
         if not results:
-            # Not FAILED: the scope can be empty on purpose (pages come later).
-            raise UnexpectedValidationError(
+            # An empty scope fails the first check that reads it: the
+            # connector would index nothing.
+            raise ConnectorValidationError(
                 "The CQL query matches no page that this credential can read, so "
                 "Onyx cannot verify it. Check the query if pages exist.",
                 summary="No pages match the query",
@@ -933,8 +936,9 @@ class _ContentReadCheck(_ConfluenceCheck):
                 ),
             )
         if page is None:
-            # Not FAILED: the scope can be empty on purpose (pages come later).
-            raise UnexpectedValidationError(
+            # An empty scope fails the first check that reads it: the
+            # connector would index nothing.
+            raise ConnectorValidationError(
                 "The indexing scope has no page that this credential can read, so "
                 f"Onyx cannot verify that page content is readable. {hint}",
                 summary="No pages in the selected scope",
@@ -1004,9 +1008,14 @@ class _CommentsReadCheck(_ConfluenceCheck):
                     ),
                 ),
             )
-        return CheckOutput(
-            summary="Read comments on a page" if comment is not None else None
-        )
+        if comment is None:
+            raise InconclusiveValidationError(
+                "The sampled page has no comments, so Onyx cannot verify that "
+                "comments are readable.",
+                summary="No comments found to test",
+                description="The sample page has no comments.",
+            )
+        return CheckOutput(summary="Read comments on a page")
 
 
 def _file_size(size_bytes: int) -> str:
@@ -1065,12 +1074,13 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
             oauth_scope="readonly:content.attachment:confluence",
             user_permission="view permission on the page attachments",
         )
+        found_unsuitable = False
         try:
             pages = _sample_pages(context, config, "version")
             for _ in range(_SAMPLE_PAGES):
                 page = next(pages, None)
                 if page is None:
-                    return CheckOutput()
+                    break
                 page_id = str(page["id"])
                 attachments = _take(
                     gateway.search_attachments(
@@ -1084,7 +1094,8 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
                     continue
                 attachment = _probe_attachment(attachments)
                 if attachment is None:
-                    return CheckOutput()
+                    found_unsuitable = True
+                    continue
                 content = gateway.download_attachment(
                     attachment=attachment, parent_content_id=page_id
                 )
@@ -1103,13 +1114,27 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
                 ),
             )
         except ConfluenceRetriesExhaustedError as e:
-            raise UnexpectedValidationError(
+            raise InconclusiveValidationError(
                 "The attachment download did not finish: Confluence refused or "
                 f"rate limited every try. {hint}",
                 summary=_REFUSED_ROW.summary,
                 description=_REFUSED_ROW.description,
             ) from e
-        return CheckOutput()
+        if found_unsuitable:
+            raise InconclusiveValidationError(
+                "No sampled attachment has a known size small enough to "
+                "download, so Onyx listed attachments but did not read one.",
+                summary="No attachment small enough to test",
+                description=(
+                    "No attachment on the sample pages is small enough to download."
+                ),
+            )
+        raise InconclusiveValidationError(
+            f"The first {_SAMPLE_PAGES} pages in scope have no attachments, so "
+            "Onyx cannot verify that attachments are readable.",
+            summary="No attachments found to test",
+            description=f"The first {_SAMPLE_PAGES} pages in scope have no attachments.",
+        )
 
 
 def _author_id(page: dict[str, Any]) -> str | None:
@@ -1169,7 +1194,12 @@ class _UserNamesCheck(_ConfluenceCheck):
             return CheckOutput()
         user_id = _author_id(page)
         if user_id is None:
-            return CheckOutput()
+            raise InconclusiveValidationError(
+                "The sampled page names no author, so Onyx cannot verify that "
+                "user names are readable.",
+                summary="No page author found to test",
+                description="The sample page names no author.",
+            )
         try:
             name = _gateway(context).lookup_user_display_name(user_id=user_id)
         except HTTPError as e:
@@ -1185,7 +1215,7 @@ class _UserNamesCheck(_ConfluenceCheck):
                 ),
             )
         except ConfluenceRetriesExhaustedError as e:
-            raise UnexpectedValidationError(
+            raise InconclusiveValidationError(
                 "Confluence rate limited or refused every user lookup. Run the "
                 "checks again.",
                 summary=_REFUSED_ROW.summary,
@@ -1320,7 +1350,7 @@ def _read_cloud_space_permissions(
             ),
         ) from e
     except ConfluenceRetriesExhaustedError as e:
-        raise UnexpectedValidationError(
+        raise InconclusiveValidationError(
             f"Confluence refused or rate limited every try to read the "
             f"permissions of the space `{space_key}`. {_SPACE_ADMIN_HINT}",
             summary=_REFUSED_ROW.summary,
@@ -1515,17 +1545,19 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
                 ),
                 _SAMPLE_PAGES,
             )
-        except Confcloud77618Error as e:
-            raise ConnectorValidationError(
-                "Confluence cannot read the restrictions of a parent page "
-                "(CONFCLOUD-77618), so permission sync reads the parent pages "
-                "of each page one at a time. Sync is slower but correct.",
+        except Confcloud77618Error:
+            # Permission sync falls back to reading each page's parents.
+            return CheckOutput(
                 summary="Reads parent pages one at a time",
-                description=(
-                    "A draft or trashed parent page blocks fast read. Sync is "
-                    "slower but correct."
-                ),
-            ) from e
+                advisories=[
+                    CheckAdvisory(
+                        message=(
+                            "A draft or trashed parent page blocks fast read "
+                            "(CONFCLOUD-77618). Sync is slower but correct."
+                        )
+                    )
+                ],
+            )
         except HTTPError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read page restrictions, so this check cannot run. "
@@ -1738,7 +1770,12 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
         else:
             with_email, sampled = self._sample_dc(context, space_key)
         if not sampled:
-            return CheckOutput()
+            raise NothingToCheckError(
+                f"The permissions of the space `{space_key}` name no user, only "
+                "groups, so there is no email to check.",
+                summary="No users in space permissions",
+                description="The space grants access only to groups.",
+            )
         if not with_email:
             raise InsufficientPermissionsError(
                 f"No user in the permissions of the space `{space_key}` has a "
@@ -2020,7 +2057,7 @@ class _GroupMembershipCheck(_GroupSyncCheck):
             )
         # The reads succeeded: the sampled users can have no groups, and group
         # sync reads every user.
-        raise UnexpectedValidationError(
+        raise InconclusiveValidationError(
             "The first listed users are in no group, so Onyx cannot verify that "
             f"group memberships are readable. {hint}",
             summary=f"First {_SAMPLE_PERMISSION_USERS} users are in no group",
@@ -2045,14 +2082,23 @@ class _GroupUserEmailsCheck(_GroupSyncCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
         gateway = _gateway(context)
-        people = [
-            user
-            for user in _sample_users(context, config, self._is_cloud)
-            if user.type != _APP_USER_TYPE
-        ]
+        users = _sample_users(context, config, self._is_cloud)
+        people = [user for user in users if user.type != _APP_USER_TYPE]
+        if not people and len(users) >= _SAMPLE_USERS:
+            # The sample stopped at its cap, so people can come later.
+            raise InconclusiveValidationError(
+                f"The first {len(users)} listed users are apps, so Onyx found no "
+                "person whose email it can check.",
+                summary=f"First {len(users)} users are apps",
+                description="The sampled users are all apps, so no email was checked.",
+            )
         if not people:
-            # confluence_user_listing reports an empty listing.
-            return CheckOutput()
+            raise NothingToCheckError(
+                "Confluence listed no people, only apps, so there is no email "
+                "to check.",
+                summary="No users to test",
+                description="Confluence listed no people.",
+            )
         if self._is_cloud or CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE:
             # The listing carries the emails, so every listed person costs
             # nothing extra.

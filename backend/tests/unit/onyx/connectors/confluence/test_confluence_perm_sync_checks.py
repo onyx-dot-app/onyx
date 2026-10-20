@@ -42,7 +42,9 @@ from onyx.connectors.confluence.source_operations import (
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.db.enums import AccessType
@@ -321,7 +323,8 @@ def test_confcloud_77618_passes_with_the_per_page_fallback() -> None:
     assert expands[-1] == ",".join(PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
 
 
-def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
+def test_confcloud_77618_passes_with_a_caveat() -> None:
+    """Sync reads parent pages one at a time: slower, but correct."""
     gateway = _gateway()
     gateway.search_pages_with_restrictions.side_effect = _fail_fast_expand
     context = _context(gateway)
@@ -330,9 +333,9 @@ def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
 
     by_id = {result.check_id: result for result in results}
     batch = by_id["confluence_restrictions_batch_read"]
-    assert batch.status == CapabilityCheckStatus.FAILED
-    assert not batch.required
-    assert "CONFCLOUD-77618" in batch.message
+    assert batch.status == CapabilityCheckStatus.PASSED
+    assert batch.summary == "Reads parent pages one at a time"
+    assert "CONFCLOUD-77618" in batch.advisories[0].message
     assert (
         by_id["confluence_page_restrictions_read"].status
         == CapabilityCheckStatus.PASSED
@@ -341,8 +344,7 @@ def test_confcloud_77618_is_a_warning_not_a_failure() -> None:
         {CredentialCapability.DOC_PERMISSION_SYNC}, results
     )
     assert (
-        verdicts[CredentialCapability.DOC_PERMISSION_SYNC]
-        == CapabilityVerdict.PASSED_WITH_WARNINGS
+        verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == CapabilityVerdict.PASSED
     )
 
 
@@ -718,6 +720,22 @@ def test_cloud_group_users_without_emails_fail() -> None:
     gateway.list_users.side_effect = lambda **_: iter([_APP, hidden])
 
     with pytest.raises(InsufficientPermissionsError, match="has an email"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_capped_app_sample_is_inconclusive() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 100)
+
+    with pytest.raises(InconclusiveValidationError, match="are apps"):
+        _run("confluence_group_user_emails", _context(gateway))
+
+
+def test_group_user_emails_full_app_listing_has_nothing_to_check() -> None:
+    gateway = _gateway()
+    gateway.list_users.side_effect = lambda **_: iter([_APP] * 3)
+
+    with pytest.raises(NothingToCheckError, match="only apps"):
         _run("confluence_group_user_emails", _context(gateway))
 
 
