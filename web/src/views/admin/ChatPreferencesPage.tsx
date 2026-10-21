@@ -957,13 +957,16 @@ export default function ChatPreferencesPage() {
                     justifyContent="between"
                     alignItems="center"
                     gap={1}
+                    wrap
                   >
-                    <Content
-                      title={t("connectors.title")}
-                      description={t("connectors.description")}
-                      sizePreset="main-content"
-                      variant="section"
-                    />
+                    <Section width="fit" alignItems="start">
+                      <Content
+                        title={t("connectors.title")}
+                        description={t("connectors.description")}
+                        sizePreset="main-content"
+                        variant="section"
+                      />
+                    </Section>
                     {uniqueSources.length > 0 && (
                       <Button
                         href="/admin/indexing-status"
