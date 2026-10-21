@@ -318,7 +318,8 @@ def get_latest_message_time(thread: ThreadType) -> datetime:
     return datetime.fromtimestamp(max_ts, tz=timezone.utc)
 
 
-def _build_doc_id(channel_id: str, thread_ts: str) -> str:
+def build_slack_doc_id(channel_id: str, thread_ts: str) -> str:
+    """Id of the Onyx document made from a Slack thread."""
     return f"{channel_id}__{thread_ts}"
 
 
@@ -389,7 +390,7 @@ def thread_to_doc(
     channel_name = channel["name"]
 
     return Document(
-        id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
+        id=build_slack_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
             TextSection(
                 link=get_message_link(
@@ -878,7 +879,7 @@ def _get_all_doc_ids(
 
                 slim_doc_batch.append(
                     SlimDocument(
-                        id=_build_doc_id(
+                        id=build_slack_doc_id(
                             channel_id=channel_id, thread_ts=message["ts"]
                         ),
                         external_access=external_access,
@@ -952,7 +953,7 @@ def _process_message(
             filter_reason=None,
             failure=ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=_build_doc_id(
+                    document_id=build_slack_doc_id(
                         channel_id=channel["id"], thread_ts=thread_or_message_ts
                     ),
                     document_link=get_message_link(
