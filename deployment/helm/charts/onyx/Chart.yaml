@@ -24,6 +24,10 @@ annotations:
       description: The api server and the legacy MinIO copy Job wait for the
         bundled object store to answer before they start, so they no longer
         crash-loop while SeaweedFS starts.
+    - kind: fixed
+      description: Setting minio.enabled to false keeps the MinIO PVC and marks
+        it helm.sh/resource-policy keep, also after upgrades with
+        --reuse-values, so retiring MinIO needs no manual annotation.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
