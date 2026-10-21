@@ -796,6 +796,25 @@ def get_connector_credential_pair_from_id(
     return result.scalar_one_or_none()
 
 
+def lock_connector_credential_pair_row(
+    db_session: Session, cc_pair_id: int
+) -> ConnectorCredentialPair | None:
+    """Row-locks the pair (FOR UPDATE) and reloads it. The lock holds until the
+    caller commits or rolls back.
+
+    Lock order: the Redis attempt-creation lock (when taken), then this row,
+    then the pair's index attempt rows. Attempt creation and status changes
+    that stop indexing (pause, delete) take this lock, so they run one after
+    the other."""
+    return db_session.execute(
+        select(ConnectorCredentialPair)
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+        .with_for_update()
+        # Read the locked row, not a stale copy from the identity map.
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+
+
 def get_connector_credential_pairs_for_source(
     db_session: Session,
     source: DocumentSource,
