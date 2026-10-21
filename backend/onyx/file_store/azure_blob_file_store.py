@@ -19,8 +19,10 @@ from onyx.db.engine.sql_engine import (
 from onyx.db.file_record import (
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
+    get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    rename_filerecord,
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
@@ -350,7 +352,9 @@ class AzureBlobBackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id_optional(
+                # The lock makes a concurrent rename either finish first (the
+                # record is then gone here) or wait until this delete commits.
+                file_record = get_filerecord_by_file_id_for_update(
                     file_id=file_id, db_session=db_session
                 )
                 if file_record is None:
@@ -359,6 +363,7 @@ class AzureBlobBackedFileStore(FileStore):
                             f"File by id {file_id} does not exist or was deleted"
                         )
                     return
+                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 if not file_record.bucket_name:
                     logger.error(
                         "File record %s with key %s "  # noqa: S608 - log message, not SQL
@@ -366,7 +371,6 @@ class AzureBlobBackedFileStore(FileStore):
                         file_id,
                         file_record.object_key,
                     )
-                    delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
                     return
 
@@ -396,7 +400,6 @@ class AzureBlobBackedFileStore(FileStore):
                         file_record.object_key,
                     )
 
-                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 db_session.commit()
 
             except Exception:
@@ -408,7 +411,7 @@ class AzureBlobBackedFileStore(FileStore):
         old_file_id: str,
         new_file_id: str,
         db_session: Session | None = None,
-    ) -> None:
+    ) -> bool:
         """Rename a file by repointing its DB record at the existing blob.
 
         The blob is not moved — only file_id changes — and reads resolve via
@@ -417,32 +420,12 @@ class AzureBlobBackedFileStore(FileStore):
         it has been renamed (the new write would overwrite the renamed blob).
         """
         if old_file_id == new_file_id:
-            return
+            return True
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                old_file_record = get_filerecord_by_file_id(
-                    file_id=old_file_id, db_session=db_session
-                )
-                file_metadata = cast(
-                    dict[Any, Any] | None, old_file_record.file_metadata
-                )
-
-                # Reuse the old record's bucket/object_key — the blob stays put.
-                upsert_filerecord(
-                    file_id=new_file_id,
-                    display_name=old_file_record.display_name,
-                    file_origin=old_file_record.file_origin,
-                    file_type=old_file_record.file_type,
-                    bucket_name=old_file_record.bucket_name,
-                    object_key=old_file_record.object_key,
-                    db_session=db_session,
-                    file_metadata=file_metadata,
-                    file_size=old_file_record.file_size,
-                )
-
-                delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
-
+                renamed = rename_filerecord(old_file_id, new_file_id, db_session)
                 db_session.commit()
+                return renamed
 
             except Exception as e:
                 db_session.rollback()

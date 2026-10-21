@@ -98,6 +98,43 @@ def get_filerecord_by_prefix(
     )
 
 
+def get_filerecord_by_file_id_for_update(
+    file_id: str,
+    db_session: Session,
+) -> FileRecord | None:
+    """Locks the record's row until the transaction ends. A concurrent delete or
+    rename of the same file waits for it, then sees the row as gone."""
+    return db_session.scalars(
+        select(FileRecord).where(FileRecord.file_id == file_id).with_for_update()
+    ).first()
+
+
+def rename_filerecord(old_file_id: str, new_file_id: str, db_session: Session) -> bool:
+    """Points a new record at the old record's object and deletes the old record.
+    Returns False when the old record is gone. Caller commits."""
+    old_record = get_filerecord_by_file_id_for_update(old_file_id, db_session)
+    if old_record is None:
+        return False
+    # The object keeps its key; only file_id changes.
+    upsert_filerecord(
+        file_id=new_file_id,
+        display_name=old_record.display_name,
+        file_origin=old_record.file_origin,
+        file_type=old_record.file_type,
+        bucket_name=old_record.bucket_name,
+        object_key=old_record.object_key,
+        db_session=db_session,
+        file_metadata=(
+            old_record.file_metadata
+            if isinstance(old_record.file_metadata, dict)
+            else None
+        ),
+        file_size=old_record.file_size,
+    )
+    delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
+    return True
+
+
 def delete_filerecord_by_file_id(
     file_id: str,
     db_session: Session,
