@@ -6,7 +6,7 @@
 | ------ | ---------- |
 | `PageLoader` | A page or route that is loading: the Onyx mark with a label, centered. |
 | `CardLoader` | A card that has not loaded: a bordered card with a shimmering icon, title and description. |
-| `DropdownLoader` | A select or combo box that has not loaded: a shimmering block in the input's shape. |
+| `DropdownLoader` | A select or combo box that has not loaded: the input's chrome with a shimmering icon and label. |
 | `LineLoader` | Lines of text that have not loaded: shimmering rectangles. |
 | `TextLoader` | Real text for a status still in progress: the text itself shimmers. |
 | `IconLoader` | An inline spinner, e.g. beside a label or in a row. |
@@ -29,7 +29,7 @@ Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it for
 <DropdownLoader />
 ```
 
-No props. As tall (36px) and as rounded as an input, with its border, and fills its column, so in an `InputHorizontal` give the row `fillInput`.
+No props. The input's resting chrome (border, background, radius, padding) holding a shimmering icon and label and a static chevron icon, laid out like a select's trigger, so it is as tall as the input; it fills its column, so in an `InputHorizontal` give the row `fillInput`.
 
 ## LineLoader
 
