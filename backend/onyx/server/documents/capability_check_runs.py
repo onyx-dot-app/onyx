@@ -28,16 +28,21 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRunStatus,
     StoredDraftRun,
     apply_cached_result,
+    cache_user_skip,
     cc_pair_draft_key,
     clear_latest_draft_run,
+    clear_user_skip,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
     get_cached_draft_result,
     is_superseded,
+    kept_draft_state,
     load_draft_run,
+    load_latest_draft_run,
     save_draft_run,
     set_latest_draft_run,
+    skip_draft_check,
     wait_for_dependencies,
 )
 from onyx.connectors.capability_checks.form_state import (
@@ -47,6 +52,7 @@ from onyx.connectors.capability_checks.form_state import (
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    DraftCheckActions,
 )
 from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
@@ -312,6 +318,49 @@ def plan_draft_capability_checks(
     )
 
 
+def validate_draft_check_actions(
+    actions: DraftCheckActions,
+    checks: list[CapabilityCheck[Any]],
+    rerun: DraftRerunMode,
+) -> None:
+    """Rejects actions that name a check the source does not have, or that
+    contradict each other.
+
+    Raises:
+        OnyxError: INVALID_INPUT, with the reason.
+    """
+    run_ids = set(actions.check_ids or ())
+    skip_ids = set(actions.skip_check_ids)
+    named = run_ids | skip_ids
+    if actions.start_check_id is not None:
+        named.add(actions.start_check_id)
+    unknown = named - {check.check_id for check in checks}
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown capability checks: {', '.join(sorted(unknown))}.",
+        )
+    if actions.check_ids is not None and not run_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "check_ids must name at least one check."
+        )
+    if both := run_ids & skip_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Checks to run and to skip at once: {', '.join(sorted(both))}.",
+        )
+    if actions.start_check_id in skip_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The check to start now is skipped: {actions.start_check_id}.",
+        )
+    if actions.check_ids is not None and rerun != DraftRerunMode.NONE:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "check_ids picks the checks to run again; send it without rerun.",
+        )
+
+
 def start_draft_capability_check_run(
     db_session: Session,
     *,
@@ -323,6 +372,7 @@ def start_draft_capability_check_run(
     draft_key: str,
     form_values: dict[str, Any],
     rerun: DraftRerunMode = DraftRerunMode.NONE,
+    actions: DraftCheckActions | None = None,
     pair_scope: DraftRunPairScope | None = None,
 ) -> DraftCheckRunSnapshot:
     """Decides every check's draft state, fills results from the cache, and
@@ -336,13 +386,21 @@ def start_draft_capability_check_run(
     result is run again, so a fix made at the source since the last run shows;
     with ALL, every check runs again. Fresh results still go to the cache.
 
+    ``actions`` are the admin's per-check actions (``DraftCheckActions``);
+    None runs every check. A skip applies to a check that could run. The
+    user's skips are cached apart from the shared results, so creation by the
+    same user on the same form honors them; a check the run does not skip
+    drops its earlier skip.
+
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
             is stored as FAILED_TO_RUN.
-        OnyxError: The user may not use the credential with this config, or a
-            concurrent start of the same draft key held the start lock for too
-            long.
+        OnyxError: The actions are not valid, the user may not use the
+            credential with this config, or a concurrent start of the same
+            draft key held the start lock for too long.
     """
+    actions = actions or DraftCheckActions()
+    validate_draft_check_actions(actions, get_capability_checks(source), rerun)
     user_id = user.id
     plan = _plan_draft(
         config_is_complete=pair_scope is not None,
@@ -370,8 +428,18 @@ def start_draft_capability_check_run(
             else None
         ),
     )
+    run_ids: set[str] | None = (
+        set(actions.check_ids) if actions.check_ids is not None else None
+    )
+    skip_ids = set(actions.skip_check_ids)
+    # A run of chosen checks keeps the other results of the latest run.
+    prior = load_latest_draft_run(user_id, draft_key) if run_ids is not None else None
     checks: list[DraftCheckState] = []
     result_cache_keys: dict[str, str] = {}
+    # Saved once this run is the latest, see ``cache_run_result``.
+    user_skips: list[tuple[str, DraftCheckState]] = []
+    # Checks this run does not skip: their earlier skip no longer holds.
+    unskipped_keys: list[str] = []
     for check, check_state in plan.checks:
         checks.append(check_state)
         if check_state.state != DraftCheckStateKind.PENDING:
@@ -387,6 +455,14 @@ def start_draft_capability_check_run(
             ),
             cc_pair_id=pair_scope.cc_pair_id if pair_scope is not None else None,
         )
+        result_cache_keys[check.check_id] = cache_key
+        if check.check_id in skip_ids:
+            skip_draft_check(check_state)
+            user_skips.append((cache_key, check_state))
+            continue
+        unskipped_keys.append(cache_key)
+        if run_ids is not None and check.check_id in run_ids:
+            continue
         cached = (
             None if rerun == DraftRerunMode.ALL else get_cached_draft_result(cache_key)
         )
@@ -395,8 +471,11 @@ def start_draft_capability_check_run(
             and cached.state == DraftCheckStateKind.FAILED
         ):
             apply_cached_result(check_state, cached)
-        else:
-            result_cache_keys[check.check_id] = cache_key
+            continue
+        if run_ids is not None and (
+            kept := kept_draft_state(prior, check_state, cache_key)
+        ):
+            checks[-1] = kept
 
     has_pending = any(check.state == DraftCheckStateKind.PENDING for check in checks)
     run = StoredDraftRun(
@@ -413,6 +492,7 @@ def start_draft_capability_check_run(
             checks=checks,
         ),
         result_cache_keys=result_cache_keys,
+        first_check_id=actions.start_check_id,
         pair_scope=pair_scope,
     )
     if has_pending:
@@ -428,6 +508,10 @@ def start_draft_capability_check_run(
     try:
         save_draft_run(run)
         set_latest_draft_run(run)
+        for cache_key, check_state in user_skips:
+            cache_user_skip(user_id, cache_key, check_state)
+        for cache_key in unskipped_keys:
+            clear_user_skip(user_id, cache_key)
     finally:
         start_lock.release()
     if not has_pending:
@@ -470,6 +554,7 @@ def start_cc_pair_draft_check_run(
     access_type: AccessType,
     connector_specific_config: dict[str, Any],
     rerun: DraftRerunMode = DraftRerunMode.NONE,
+    actions: DraftCheckActions | None = None,
 ) -> DraftCheckRunSnapshot:
     """Starts a dry run of the capability checks for a proposed state of an
     existing pair. Like a create-form draft run, it never writes a stored
@@ -507,6 +592,7 @@ def start_cc_pair_draft_check_run(
         draft_key=cc_pair_draft_key(cc_pair_id),
         form_values=connector_specific_config,
         rerun=rerun,
+        actions=actions,
         pair_scope=DraftRunPairScope(
             cc_pair_id=cc_pair_id,
             connector_id=connector.id,
