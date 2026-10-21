@@ -134,10 +134,14 @@ beforeEach(() => {
       return new Response(JSON.stringify([{ id: 42 }]));
     if (url === "/api/admin/default-assistant/configuration")
       return new Response(JSON.stringify({ tool_ids: defaultToolIds }));
-    if (url === "/api/admin/default-assistant") {
+    if (url === "/api/admin/default-assistant/tools") {
       const payload: unknown = JSON.parse(String(init?.body));
       savedRequests.push({ url, method: init?.method, payload });
-      return new Response(String(init?.body));
+      const others = defaultToolIds.filter((id) => id !== 42);
+      const enabled = String(init?.body).includes('"enabled":true');
+      return new Response(
+        JSON.stringify({ tool_ids: enabled ? [...others, 42] : others })
+      );
     }
     if (url.startsWith("/api/admin/mcp/server")) {
       savedRequests.push({
@@ -421,8 +425,8 @@ describe("inline server configuration", () => {
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
     expect(savedRequests).toContainEqual(
       expect.objectContaining({
-        url: "/api/admin/default-assistant",
-        payload: { tool_ids: [99] },
+        url: "/api/admin/default-assistant/tools",
+        payload: { tool_ids: [42], enabled: false },
       })
     );
     expect(savedRequests).toContainEqual(

@@ -115,7 +115,7 @@ function CreationStory({ scenario = "ready" }: CreationStoryProps) {
       if (!path.startsWith("/api/")) return originalFetch(input, init);
       if (path === "/api/admin/default-assistant/configuration")
         return json({ tool_ids: [99] });
-      if (path === "/api/admin/default-assistant")
+      if (path === "/api/admin/default-assistant/tools")
         return json({ tool_ids: [99, tool.id] });
       if (path === "/api/tool/openapi") return json(saved ? [tool] : []);
       if (path === "/api/admin/tool/custom/validate") {

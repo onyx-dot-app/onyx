@@ -20,6 +20,7 @@ from onyx.db.models import Tool, User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.persona import (
     get_tool_ids_on_editable_personas,
+    lock_default_assistant__no_commit,
     set_default_chat_tool__no_commit,
 )
 from onyx.db.tools import (
@@ -227,6 +228,17 @@ def _validate_default_chat_permission(enabled: bool | None, user: User) -> None:
         )
 
 
+def _lock_default_chat_selection(enabled: bool | None, db_session: Session) -> None:
+    """Lock the default assistant before any tool row write. Every writer of
+    its tool list takes this lock first, so the locks cannot deadlock."""
+    if enabled is None:
+        return
+    try:
+        lock_default_assistant__no_commit(db_session)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(error)) from error
+
+
 def _apply_default_chat_selection(
     enabled: bool | None, tool: Tool, db_session: Session
 ) -> None:
@@ -251,6 +263,7 @@ def create_custom_tool(
     _validate_auth_settings(tool_data, user)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
     custom_headers = _resolve_masked_headers(tool_data.custom_headers, None)
+    _lock_default_chat_selection(tool_data.default_chat_enabled, db_session)
     tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
@@ -289,6 +302,7 @@ def update_custom_tool(
         user,
         current_oauth_config_id=existing_tool.oauth_config_id,
     )
+    _lock_default_chat_selection(tool_data.default_chat_enabled, db_session)
     updated_tool = update_tool(
         tool_id=tool_id,
         name=tool_data.name,
