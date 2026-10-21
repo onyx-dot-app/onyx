@@ -2,7 +2,14 @@
 
 import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, InputSwitch, Tag, Tooltip } from "@opal/components";
+import {
+  Button,
+  Card,
+  InputSwitch,
+  Tag,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgBlocks,
@@ -12,8 +19,6 @@ import {
   SvgTrash,
   SvgUser,
 } from "@opal/icons";
-import { CardItemLayout } from "@/layouts/general-layouts";
-import { Interactive } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
@@ -152,153 +157,155 @@ export default function SkillCard({
 
   return (
     <Tooltip tooltip={tooltip} side="top">
-      <Interactive.Simple
-        role="button"
-        tabIndex={0}
-        aria-label={item.name}
+      <Card
         onClick={handleClick}
-        onKeyDown={(event) => {
-          if (
-            event.target === event.currentTarget &&
-            (event.key === "Enter" || event.key === " ")
-          ) {
-            event.preventDefault();
-            handleClick();
-          }
-        }}
-        group="group/SkillCard"
+        className="group/SkillCard cursor-pointer"
+        disabled={
+          isInvalid ||
+          isBuiltinUnavailable ||
+          (isDependencyUnavailable && !item.enabled)
+        }
+        color={isInactive ? "transparent" : "background-tint-00"}
+        border="solid"
+        rounding={4}
+        padding={0}
+        height="full"
       >
-        <Card
-          disabled={
-            isInvalid ||
-            isBuiltinUnavailable ||
-            (isDependencyUnavailable && !item.enabled)
-          }
-          color={isInactive ? "transparent" : "background-tint-00"}
-          border="solid"
-          rounding={4}
-          padding={0}
-          height="full"
+        <Section
+          height={6}
+          gap={1}
+          padding={1}
+          alignItems="stretch"
+          justifyContent="start"
+          className={cn(isSelectedDependencyUnavailable && "opacity-50")}
         >
-          <div
-            className={cn(
-              "flex self-stretch h-24",
-              isSelectedDependencyUnavailable && "opacity-50"
-            )}
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            height="auto"
+            gap={1}
           >
-            <CardItemLayout
+            <Button
+              prominence="internal"
               icon={SvgBlocks}
-              title={item.name}
-              description={
-                isInvalid ? t("skill.invalid.description") : item.description
-              }
-              rightChildren={
-                item.source === "custom" && canEdit ? (
-                  <Section
-                    flexDirection="row"
-                    justifyContent="start"
-                    width="fit"
-                    height="auto"
-                    gap={1}
-                    className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
-                  >
-                    {onShare && (
-                      <Button
-                        prominence="secondary"
-                        size="sm"
-                        icon={SvgShare}
-                        tooltip={skillCopy(
-                          "editor.management.sharing.edit.label"
-                        )}
-                        aria-label={skillCopy(
-                          "editor.management.sharing.edit.label"
-                        )}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onShare(item);
-                        }}
-                      />
+              aria-label={item.name}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleClick();
+              }}
+            >
+              {item.name}
+            </Button>
+            {item.source === "custom" && canEdit ? (
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                width="fit"
+                height="auto"
+                gap={1}
+                className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
+              >
+                {onShare && (
+                  <Button
+                    prominence="secondary"
+                    size="sm"
+                    icon={SvgShare}
+                    tooltip={skillCopy("editor.management.sharing.edit.label")}
+                    aria-label={skillCopy(
+                      "editor.management.sharing.edit.label"
                     )}
-                    <Button
-                      prominence="secondary"
-                      size="sm"
-                      icon={SvgEdit}
-                      tooltip={t("skill.edit.tooltip")}
-                      onClick={handleEditClick}
-                    />
-                    {onDelete && (!isRequired || isAdmin) && (
-                      <Button
-                        prominence="secondary"
-                        variant="danger"
-                        size="sm"
-                        icon={SvgTrash}
-                        tooltip={skillCopy("editor.delete.button.label")}
-                        aria-label={skillCopy("editor.delete.button.label")}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onDelete(item);
-                        }}
-                      />
-                    )}
-                  </Section>
-                ) : undefined
-              }
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onShare(item);
+                    }}
+                  />
+                )}
+                <Button
+                  prominence="secondary"
+                  size="sm"
+                  icon={SvgEdit}
+                  tooltip={t("skill.edit.tooltip")}
+                  aria-label={t("skill.edit.tooltip")}
+                  onClick={handleEditClick}
+                />
+                {onDelete && (!isRequired || isAdmin) && (
+                  <Button
+                    prominence="secondary"
+                    variant="danger"
+                    size="sm"
+                    icon={SvgTrash}
+                    tooltip={skillCopy("editor.delete.button.label")}
+                    aria-label={skillCopy("editor.delete.button.label")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(item);
+                    }}
+                  />
+                )}
+              </Section>
+            ) : undefined}
+          </Section>
+          <Section padding={2} gap={0} height="auto" alignItems="stretch">
+            <Text
+              font="secondary-body"
+              color="text-03"
+              maxLines={2}
+              wordWrap="wrap-break-word"
+            >
+              {isInvalid ? t("skill.invalid.description") : item.description}
+            </Text>
+          </Section>
+        </Section>
+
+        <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
+          <div className="py-1 px-2 min-w-0 flex-1">
+            <Content
+              icon={dependency ? SvgPlug : SvgUser}
+              title={dependencyStatus ?? authorTitle}
+              sizePreset="secondary"
+              variant="body"
+              color="muted"
             />
           </div>
-
-          <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
-            <div className="py-1 px-2 min-w-0 flex-1">
-              <Content
-                icon={dependency ? SvgPlug : SvgUser}
-                title={dependencyStatus ?? authorTitle}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
+          <div className="p-0.5 pe-1.5 flex items-center gap-1">
+            {isRequired && (
+              <Tag
+                title={skillCopy("modals.share.installation.required")}
+                tooltip={t("skill.tags.required.tooltip")}
+                color="blue"
               />
-            </div>
-            <div className="p-0.5 pe-1.5 flex items-center gap-1">
-              {isRequired && (
-                <Tag
-                  title={skillCopy("modals.share.installation.required")}
-                  tooltip={t("skill.tags.required.tooltip")}
-                  color="blue"
+            )}
+            {item.can_toggle && (
+              <div
+                role="presentation"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <InputSwitch
+                  checked={item.enabled}
+                  onCheckedChange={handleEnabledChange}
+                  disabled={enablementPending || isInvalid}
+                  aria-label={toggleAriaLabel}
                 />
-              )}
-              {item.can_toggle && (
-                <div
-                  role="presentation"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <InputSwitch
-                    checked={item.enabled}
-                    onCheckedChange={handleEnabledChange}
-                    disabled={enablementPending || isInvalid}
-                    aria-label={toggleAriaLabel}
-                  />
-                </div>
-              )}
-              {item.source === "builtin" ? (
-                item.is_available ? (
-                  <Tag title={t("skill.tags.builtin.label")} color="blue" />
-                ) : (
-                  <Tag
-                    title={t("skill.tags.unavailable.label")}
-                    color="amber"
-                  />
-                )
-              ) : isInvalid ? (
-                <Tag title={t("skill.tags.invalid.label")} color="amber" />
-              ) : dependency ? (
-                <Tag title={t("skill.tags.appSkill.label")} color="blue" />
-              ) : item.is_personal ? (
-                <Tag title={t("skill.tags.personal.label")} color="purple" />
+              </div>
+            )}
+            {item.source === "builtin" ? (
+              item.is_available ? (
+                <Tag title={t("skill.tags.builtin.label")} color="blue" />
               ) : (
-                <Tag title={t("skill.tags.custom.label")} color="gray" />
-              )}
-            </div>
+                <Tag title={t("skill.tags.unavailable.label")} color="amber" />
+              )
+            ) : isInvalid ? (
+              <Tag title={t("skill.tags.invalid.label")} color="amber" />
+            ) : dependency ? (
+              <Tag title={t("skill.tags.appSkill.label")} color="blue" />
+            ) : item.is_personal ? (
+              <Tag title={t("skill.tags.personal.label")} color="purple" />
+            ) : (
+              <Tag title={t("skill.tags.custom.label")} color="gray" />
+            )}
           </div>
-        </Card>
-      </Interactive.Simple>
+        </div>
+      </Card>
     </Tooltip>
   );
 }

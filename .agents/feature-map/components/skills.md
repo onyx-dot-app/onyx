@@ -65,6 +65,7 @@ Policies apply to everyone with access, including invited users and group member
 Permission rows reflow on narrow screens. Default installation
 respects saved user choices. Required skills show a badge instead of a toggle.
 Users can preview required skills by clicking their card or using the keyboard.
+The skill name is a preview button. Sharing, editing, deletion, and switches are separate controls.
 The Required tag explains the admin requirement on hover.
 Users cannot disable required skills; only admins can delete them.
 

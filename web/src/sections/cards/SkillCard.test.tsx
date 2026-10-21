@@ -101,6 +101,51 @@ describe("SkillCard", () => {
     expect(onClick).toHaveBeenCalledWith(item);
   });
 
+  it("keeps management controls outside the preview button", async () => {
+    const user = setupUser();
+    const item = custom();
+    const onClick = jest.fn();
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    const onEnabledChange = jest.fn();
+    render(
+      <SkillCard
+        item={item}
+        onClick={onClick}
+        onShare={jest.fn()}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onEnabledChange={onEnabledChange}
+      />
+    );
+
+    const preview = screen.getByRole("button", { name: item.name });
+    for (const control of [
+      ...screen.getAllByRole("button"),
+      screen.getByRole("switch"),
+    ]) {
+      if (control !== preview) {
+        expect(preview).not.toContainElement(control);
+      }
+    }
+
+    preview.focus();
+    await user.keyboard(" ");
+    expect(onClick).toHaveBeenCalledTimes(1);
+    onClick.mockClear();
+
+    await user.click(screen.getByRole("button", { name: /edit skill/i }));
+    expect(onEdit).toHaveBeenCalledWith(item);
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDelete).toHaveBeenCalledWith(item);
+    await user.click(screen.getByRole("switch"));
+    expect(onEnabledChange).toHaveBeenCalledWith(item, false);
+    expect(onClick).not.toHaveBeenCalled();
+
+    await user.click(screen.getByText(item.description));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
   it("explains the admin requirement when hovering over the Required tag", async () => {
     const user = setupUser();
     render(
