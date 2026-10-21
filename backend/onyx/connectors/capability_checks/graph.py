@@ -30,7 +30,10 @@ class CheckNode(BaseModel):
 
     id: str
     display_name: str
-    capability: CredentialCapability = CredentialCapability.INDEXING
+    # Usually one. A probe shared by several capabilities (e.g. one roles read
+    # for doc sync and group sync) is one node: the runner runs it once and
+    # gives each capability the outcome.
+    capabilities: tuple[CredentialCapability, ...] = (CredentialCapability.INDEXING,)
     required: bool = True
     requires_connector_instance: bool = True
     requires_connector_config: bool = False
@@ -111,6 +114,13 @@ def _graph_paths(source: DocumentSource) -> list[Path]:
 
 
 def _validate(source: DocumentSource, nodes: list[CheckNode]) -> None:
+    for node in nodes:
+        if not node.capabilities or len(set(node.capabilities)) != len(
+            node.capabilities
+        ):
+            raise CheckGraphError(
+                f"{source.value}: {node.id} needs one or more distinct capabilities"
+            )
     ids = [node.id for node in nodes]
     duplicates = sorted({check_id for check_id in ids if ids.count(check_id) > 1})
     if duplicates:

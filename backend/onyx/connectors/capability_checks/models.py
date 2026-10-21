@@ -585,12 +585,29 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         # discovery step. Defaults to the check_id.
         self.row_id = row_id or check_id
 
-    def init_from_graph(self, node: CheckNode) -> None:
+    def init_from_graph(
+        self, node: CheckNode, capability: CredentialCapability | None = None
+    ) -> None:
         """Sets the check's metadata from its node in the source's check graph
-        (``graph.py``), the source of truth for named checks."""
+        (``graph.py``), the source of truth for named checks. A node with
+        several capabilities backs one check per capability, so each names
+        its ``capability``.
+
+        Raises:
+            ValueError: ``capability`` is missing for a node with several, or
+                is not one of the node's.
+        """
+        if capability is None:
+            if len(node.capabilities) != 1:
+                raise ValueError(
+                    f"{node.id} has several capabilities; name the check's"
+                )
+            capability = node.capabilities[0]
+        elif capability not in node.capabilities:
+            raise ValueError(f"{node.id} has no capability {capability.value}")
         CapabilityCheck.__init__(
             self,
-            capability=node.capability,
+            capability=capability,
             check_id=node.id,
             display_name=node.display_name,
             required=node.required,

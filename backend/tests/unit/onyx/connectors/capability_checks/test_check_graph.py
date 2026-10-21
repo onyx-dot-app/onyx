@@ -102,6 +102,6 @@ def test_a_source_without_a_file_has_no_nodes(
 def test_a_source_without_named_checks_serves_its_fallback_node() -> None:
     nodes = get_check_graph(DocumentSource.BITBUCKET).nodes
 
-    indexing = [node for node in nodes if node.capability.value == "indexing"]
+    indexing = [node for node in nodes if "indexing" in [c.value for c in node.capabilities]]
     assert [node.id for node in indexing] == ["bitbucket_connector_settings"]
     assert indexing[0].is_fallback
