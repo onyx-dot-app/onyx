@@ -162,11 +162,10 @@ def test_an_optional_check_samples_past_a_denied_type() -> None:
 
     _run("hubspot_associations", _context(gateway))
 
-    gateway.list_associations.assert_called_once_with(
+    gateway.read_associations.assert_called_once_with(
         object_type=HubSpotObjectType.COMPANIES,
-        object_id="1",
         to_object_type="contacts",
-        limit=1,
+        cursors={"1": None},
     )
 
 
@@ -218,22 +217,21 @@ def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
         _run(check_id, _context(gateway))
 
     assert gateway.list_records.call_count == len(HubSpotObjectType)
-    gateway.list_associations.assert_not_called()
+    gateway.read_associations.assert_not_called()
     gateway.get_record_viewers.assert_not_called()
 
 
 def test_a_record_without_notes_is_inconclusive() -> None:
     gateway: MagicMock = healthy_gateway()
-    gateway.list_associations.return_value = HubSpotPage(items=[])
+    gateway.read_associations.return_value = {}
 
     with pytest.raises(InconclusiveValidationError):
         _run("hubspot_notes", _context(gateway))
 
-    gateway.list_associations.assert_called_once_with(
+    gateway.read_associations.assert_called_once_with(
         object_type=HubSpotObjectType.TICKETS,
-        object_id="1",
         to_object_type="notes",
-        limit=1,
+        cursors={"1": None},
     )
     gateway.read_records.assert_not_called()
 

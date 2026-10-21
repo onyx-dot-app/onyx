@@ -494,11 +494,10 @@ class _AssociationsCheck(_HubSpotCheck):
         to_object_type: HubSpotObjectType = ASSOCIATED_TYPES[object_type][0]
         to_scope: str = _read_scope(to_object_type)
         try:
-            _gateway(context).list_associations(
+            _gateway(context).read_associations(
                 object_type=object_type,
-                object_id=record.id,
                 to_object_type=to_object_type.value,
-                limit=_PROBE_LIMIT,
+                cursors={record.id: None},
             )
         except _GATEWAY_ERRORS as error:
             _raise_for_error(
@@ -535,16 +534,16 @@ class _NotesCheck(_HubSpotCheck):
         object_type, record = _first_readable_record(context)
         gateway: HubSpotSourceOperations = _gateway(context)
         try:
-            notes: HubSpotPage[str] = gateway.list_associations(
+            notes: HubSpotPage[str] | None = gateway.read_associations(
                 object_type=object_type,
-                object_id=record.id,
                 to_object_type=NOTES_OBJECT_TYPE,
-                limit=_PROBE_LIMIT,
-            )
-            if notes.items:
+                cursors={record.id: None},
+            ).get(record.id)
+            note_ids: list[str] = notes.items[:_PROBE_LIMIT] if notes else []
+            if note_ids:
                 gateway.read_records(
                     variant=NOTES_OBJECT_TYPE,
-                    ids=notes.items,
+                    ids=note_ids,
                     properties=[_NOTE_BODY_PROPERTY],
                 )
         except _GATEWAY_ERRORS as error:
@@ -560,7 +559,7 @@ class _NotesCheck(_HubSpotCheck):
                     ),
                 ),
             )
-        if not notes.items:
+        if not note_ids:
             raise InconclusiveValidationError(
                 f"The sample HubSpot {_noun(object_type)} has no notes, so Onyx "
                 "could not read one.",
