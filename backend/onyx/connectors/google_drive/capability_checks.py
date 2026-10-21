@@ -50,7 +50,9 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.connectors.google_drive.config import (
     GoogleDriveConnectorConfig,
@@ -79,11 +81,13 @@ from onyx.connectors.google_drive.models import (
     GoogleSharedDrive,
 )
 from onyx.connectors.google_drive.source_operations import (
+    GOOGLE_CONNECTION_ERRORS,
     DriveCorpus,
     ExportSizeThresholdExceeded,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
+    is_google_timeout,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -100,6 +104,14 @@ _DOCS_LINK = SCOPE_DOC_URL
 _TIMEOUT_TEXT = CheckRowText(
     summary="Timed out",
     description="The check ran past its time limit.\nRe-run the checks.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Google Drive")
+_UNREACHABLE_TEXT = CheckRowText(
+    summary="Cannot reach Google Drive",
+    description=(
+        "The connection to Google failed.\nRe-run the checks. If it repeats, "
+        "check that the server can reach googleapis.com."
+    ),
 )
 
 _DRIVE_API = "Google Drive API"
@@ -217,12 +229,25 @@ def _google_errors(
     denied_row: CheckRowText | None = None,
     not_found: str | None = None,
     not_found_row: CheckRowText | None = None,
+    timeout_row: CheckRowText = _TIMEOUT_TEXT,
 ) -> Iterator[None]:
     """Maps the gateway's errors onto the validation-exception family.
     ``api`` names the Google API the probe calls; ``denied`` explains a 403.
     Each ``*_row`` is the row text of that outcome."""
     try:
         yield
+    except GOOGLE_CONNECTION_ERRORS as e:
+        if is_google_timeout(e):
+            raise TimedOutValidationError(
+                f"Google did not answer in time: {_detail(e)}",
+                summary=timeout_row.summary,
+                description=timeout_row.description,
+            ) from e
+        raise UnreachableValidationError(
+            f"Onyx cannot reach Google: {_detail(e)}",
+            summary=_UNREACHABLE_TEXT.summary,
+            description=_UNREACHABLE_TEXT.description,
+        ) from e
     except (GoogleDriveRefreshError, GoogleDriveHttpError, PermissionError) as e:
         _raise_google_error(
             context,
@@ -510,6 +535,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         credential_kind: GoogleCredentialKind | None = None,
         discovery: bool = False,
         step: CheckStep | None = None,
+        fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
@@ -530,6 +556,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             docs_link=_DOCS_LINK,
             discovery=discovery,
             step=step,
+            fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
         self._credential_kind = credential_kind
@@ -563,7 +590,8 @@ class _AuthCheck(_GoogleDriveCheck):
                 "OAuth: connect Google Drive again. Turn on the Google Drive API "
                 "in the Google Cloud project of the credential."
             ),
-            timeout_text=sign_in_timeout_text("Google Drive"),
+            fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -582,6 +610,7 @@ class _AuthCheck(_GoogleDriveCheck):
                     "primary admin's files. (HTTP 403)"
                 ),
             ),
+            timeout_row=_SIGN_IN_TIMEOUT_TEXT,
         ):
             auth: GoogleDriveAuth = ops.authenticate()
             next(
