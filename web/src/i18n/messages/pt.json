@@ -3014,7 +3014,7 @@
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
         "search": {
-          "placeholder": "Pesquisar execuções de indexação…"
+          "placeholder": "Pesquisar erros de execuções…"
         },
         "window": {
           "label": "Período",

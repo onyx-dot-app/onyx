@@ -3014,7 +3014,7 @@
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
         "search": {
-          "placeholder": "Search indexing runs…"
+          "placeholder": "Search run errors…"
         },
         "window": {
           "label": "Time range",

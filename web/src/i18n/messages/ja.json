@@ -3014,7 +3014,7 @@
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
-          "placeholder": "インデックス実行を検索…"
+          "placeholder": "実行エラーを検索…"
         },
         "window": {
           "label": "期間",

@@ -3014,7 +3014,7 @@
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
         "search": {
-          "placeholder": "搜索索引运行…"
+          "placeholder": "搜索运行错误…"
         },
         "window": {
           "label": "时间范围",

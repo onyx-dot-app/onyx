@@ -3014,7 +3014,7 @@
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
-          "placeholder": "인덱싱 실행 검색…"
+          "placeholder": "실행 오류 검색…"
         },
         "window": {
           "label": "기간",

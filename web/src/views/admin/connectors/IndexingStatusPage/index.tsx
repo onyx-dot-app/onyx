@@ -22,6 +22,15 @@ import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/Th
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
+// Tailwind's lg breakpoint, from which the history panel sits beside the list.
+const SIDE_BY_SIDE_QUERY = "(min-width: 1024px)";
+
+/** Stacked on a narrow screen, the history opens above the list and out of view, so it scrolls there as it mounts. */
+export function revealHistory(panel: HTMLDivElement | null) {
+  if (panel === null || window.matchMedia(SIDE_BY_SIDE_QUERY).matches) return;
+  panel.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
 interface PairActivityPanelProps {
   row: IndexingConnectorRow;
   onClose: () => void;
@@ -48,6 +57,7 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
       onClose={onClose}
       sticky
       className="max-lg:order-first"
+      ref={revealHistory}
     />
   );
 }
@@ -151,6 +161,7 @@ export default function IndexingStatusPage() {
               range={range}
               sticky
               className="max-lg:order-first"
+              ref={revealHistory}
             />
           ) : (
             history !== null && (
