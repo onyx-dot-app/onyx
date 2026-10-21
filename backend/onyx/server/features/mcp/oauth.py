@@ -101,7 +101,7 @@ def _refresh_lock_name(connection_config_id: int) -> str:
 class MCPRefreshLogContext(TypedDict):
     mcp_server_id: int | None
     mcp_server_name: str
-    connection_config_id: int
+    connection_config_id: int | None
     transport: str
     oauth_provider_mode: str
     oauth_cimd_enabled: bool
@@ -123,7 +123,7 @@ class MCPReauthenticationRequired(OAuthFlowError):
 
 
 def _refresh_log_context(
-    mcp_server: MCPServer | MCPServerConnection, connection_config_id: int
+    mcp_server: MCPServer | MCPServerConnection, connection_config_id: int | None
 ) -> MCPRefreshLogContext:
     return {
         "mcp_server_id": mcp_server.id,
@@ -702,6 +702,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         *,
         refresh_log_context: MCPRefreshLogContext,
         authorization_request_handler: AuthorizationRequestHandler | None = None,
+        authorization_state_factory: Callable[[], str] = generate_authorization_state,
     ) -> None:
         super().__init__(
             server_url=server_url,
@@ -713,6 +714,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         )
         self.refresh_log_context = refresh_log_context
         self.authorization_request_handler = authorization_request_handler
+        self.authorization_state_factory = authorization_state_factory
         self.refresh_attempt_id: str | None = None
         self.token_expiry_before_refresh: float | None = None
         # The refresh token the in-flight refresh attempt redeemed; guards the
@@ -799,7 +801,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             )
         )
         pkce = PKCEParameters.generate()
-        state = generate_authorization_state()
+        state = self.authorization_state_factory()
         authorization_params = {
             "response_type": "code",
             "client_id": client_info.client_id,
@@ -1085,6 +1087,25 @@ def make_oauth_provider(
             expected_client_information_fingerprint
         ),
     )
+    provider = make_oauth_provider_with_storage(
+        mcp_server,
+        storage,
+        connection_config_id=connection_config_id,
+        authorization_request_handler=authorization_request_handler,
+    )
+    storage.bind_oauth_context(provider.context)
+    return provider
+
+
+def make_oauth_provider_with_storage(
+    mcp_server: MCPServer | MCPServerConnection,
+    storage: TokenStorage,
+    *,
+    connection_config_id: int | None = None,
+    authorization_request_handler: AuthorizationRequestHandler | None = None,
+    authorization_state_factory: Callable[[], str] = generate_authorization_state,
+) -> OnyxOAuthClientProvider:
+    """Build the shared provider for persisted or pending connections."""
     client_metadata_url = (
         validated_mcp_oauth_client_metadata_url()
         if mcp_server.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
@@ -1092,7 +1113,7 @@ def make_oauth_provider(
         else None
     )
     provider = OnyxOAuthClientProvider(
-        refresh_log_context=refresh_log_context,
+        refresh_log_context=_refresh_log_context(mcp_server, connection_config_id),
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
@@ -1105,15 +1126,9 @@ def make_oauth_provider(
         storage=storage,
         client_metadata_url=client_metadata_url,
         authorization_request_handler=authorization_request_handler,
+        authorization_state_factory=authorization_state_factory,
     )
 
-    # A fresh provider per tool call starts with an empty context, so the SDK
-    # can't silently refresh without two hydrated fields: an absolute token
-    # expiry (else `is_token_valid()` stays True and refresh never fires) and,
-    # for known providers, the real OAuth metadata (else refresh hits the wrong
-    # `<server-origin>/token`). Expiry is bound through storage so it rides the
-    # config read `get_tokens` already does.
-    storage.bind_oauth_context(provider.context)
     known_metadata = _known_provider_oauth_metadata(mcp_server)
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata

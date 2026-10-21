@@ -1261,3 +1261,10 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   a client that tries to shortcut the flow by POSTing arbitrary
   `code`/`server_id` values without a matching stored attempt gets rejected
   at the fingerprint/connection-config-id checks (§4.4 step 3).
+
+### Staged OAuth support
+
+`setup_oauth.py` supplies transient token storage for proposed MCP connections.
+Setup attempts use credential encryption when Enterprise Edition has an encryption key configured.
+Otherwise their payload is Base64-encoded. Attempts expire after ten minutes and are bound to their owner and tenant.
+Each attempt can be consumed once. Provider and discovery helpers also support transient storage.
