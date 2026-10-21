@@ -28,10 +28,8 @@ This file provides guidance to AI agents when working with code in this reposito
   Rebase if the branch has merge conflicts with main.
   Rebase if the branch is stale: more than 3 days since it diverged from or last synced with main.
   Keeping a branch current prevents a much more involved conflict resolution later.
-  Claude Code and Codex run this check at session start and on later prompts.
-  The hook is `.agents/hooks/ensure_latest_main.py`. It fetches at most once an hour.
-  It is silent unless a rebase is needed.
-  Other agents: run `git fetch origin +refs/heads/main:refs/remotes/origin/main`.
+  The Onyx agent context hooks run this check at session start (see "Onyx agent context").
+  Without them, run `git fetch origin +refs/heads/main:refs/remotes/origin/main`.
   Check for conflicts with `git merge-tree --write-tree HEAD origin/main`.
   Exit status 1 means conflicts. Other non-zero codes are errors, not conflicts.
   Check the age with `git show -s --format=%cr $(git merge-base HEAD origin/main)`.
@@ -67,27 +65,24 @@ there:
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
 
-### Feature Map
-
-`.agents/feature-map/` maps the product: every surface, what it does, the code behind
-it, and how the parts connect. Use it before you change a product surface, when you
-review a diff or PR, and when you need to know what a feature does or what a change
-can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
-procedure.
-
-- Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
-- The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
-- Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
-  `.agents/feature-map/GLOSSARY.md` before trusting a name.
-
-If you change behaviour a component document describes, update that document in the
-same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
-map cites is renamed or deleted.
-
 ### Skills
 
 Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills` and
 `.codex/skills` are symlinks to it, so add or edit skills only in `.agents/skills/`.
+
+### Onyx agent context
+
+Onyx staff keep a private `onyx-agent-context` repo with more skills and knowledge for agents.
+Look for a folder that has its `AGENTS.md`, in this order:
+
+1. The path in `$ONYX_AGENT_CONTEXT`. When it is set, do not look anywhere else.
+2. `onyx-agent-context/` next to the main onyx checkout. The main checkout is the first path that
+   `git worktree list` prints, so this works from a worktree too.
+3. `.agent-context/` at the root of this checkout, then at the root of the main checkout.
+
+If you find it, read its `AGENTS.md` and follow it. If you do not find it, continue without it.
+It holds the feature map and the agent session hooks. When its hooks are set up, the session
+starts with a line that begins with `[agent-context]`.
 
 ## Code Quality
 
@@ -100,15 +95,8 @@ pre-commit run --all-files
 pre-commit run --files <path> [<path> ...]
 ```
 
-Claude Code and Codex also run pre-commit on the files you changed in a turn when
-you end it (`.agents/hooks/pre_commit_on_stop.py`, wired as `UserPromptSubmit` and
-`Stop` hooks in `.claude/settings.json` and `.codex/hooks.json`). Files that were
-already dirty when the turn started are skipped unless you change them. Codex runs
-the hooks only after you trust the project `.codex/` layer. If pre-commit fails, fix
-the reported problems before you finish. When the repo has the feature map
-(`.agents/feature-map/stale_docs.py`), the same hook also names any feature-map
-component whose code the turn changed but whose document the branch did not. Update
-the document if your change alters what it states.
+Before you finish, run pre-commit on the files you changed and fix what it reports.
+The Onyx agent context hooks do this automatically when they are set up.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 

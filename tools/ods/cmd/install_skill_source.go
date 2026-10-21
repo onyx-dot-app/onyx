@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// agentContextSkill is one skill directory of onyx-infra's agent-context/, parsed enough to
-// install it for any agent.
+// agentContextSkill is one skill directory of the agent context, parsed enough
+// to install it for any agent.
 type agentContextSkill struct {
 	// Directory name, which is also the skill's invocation name.
 	Name string
@@ -26,10 +26,9 @@ type agentContextSkill struct {
 	Enforced bool
 }
 
-// discoverAgentContextSkills reads the enforced/ and skills/ tiers of the
-// agent-context/ directory of an onyx-infra checkout. A source with no
-// agent-context/ directory is treated as the root of an old onyx-llm-context
-// checkout. A missing tier directory is not an error.
+// discoverAgentContextSkills reads the enforced/ and skills/ tiers of an
+// onyx-agent-context checkout, or of the agent-context/ directory when source
+// is an onyx-infra checkout. A missing tier directory is not an error.
 func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	// The Claude installer builds symlinks and @imports from these paths, so a
 	// relative --source must not leak into them.
@@ -41,7 +40,7 @@ func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 		source = filepath.Join(source, agentContextDir)
 	} else if !hasSkillTier(source) {
 		return nil, fmt.Errorf(
-			"no %s/ directory found in %s\n  Update the checkout (git pull) or re-run with --clone",
+			"no skills/, enforced/, or %s/ directory found in %s\n  Update the checkout (git pull) or re-run with --clone",
 			agentContextDir, source,
 		)
 	}
@@ -130,4 +129,72 @@ func parseSkillMarkdown(content string) (description string, body string, err er
 		return "", "", fmt.Errorf("invalid frontmatter: %w", err)
 	}
 	return parsed.Description, strings.TrimLeft(body, "\n"), nil
+}
+
+// agentContextSource is where install-skill reads from when --source is not
+// given.
+type agentContextSource struct {
+	path string
+	// An older checkout under the home directory, used only when no
+	// onyx-agent-context checkout exists.
+	legacy bool
+	// Nothing was found; path is the default location next to the main checkout.
+	missing bool
+}
+
+// findAgentContextSource looks for the agent context in the order AGENTS.md
+// documents: $ONYX_AGENT_CONTEXT, then onyx-agent-context/ next to the main
+// checkout, then .agent-context/ in this checkout or the main one. A candidate
+// counts only when it holds AGENTS.md. Older checkouts under home come next.
+// When nothing exists, the path is the default location next to the main
+// checkout, and --clone picks the actual destination with cloneDestination.
+func findAgentContextSource(repoRoot, mainRoot, home string) agentContextSource {
+	if explicit := strings.TrimSpace(os.Getenv(agentContextEnv)); explicit != "" {
+		if rest, ok := strings.CutPrefix(explicit, "~/"); ok {
+			explicit = filepath.Join(home, rest)
+		}
+		return agentContextSource{path: explicit}
+	}
+	for _, candidate := range []string{
+		filepath.Join(filepath.Dir(mainRoot), agentContextRepoName),
+		filepath.Join(repoRoot, inRepoAgentContextDir),
+		filepath.Join(mainRoot, inRepoAgentContextDir),
+	} {
+		if info, err := os.Stat(filepath.Join(candidate, agentContextEntryFile)); err == nil && !info.IsDir() {
+			return agentContextSource{path: candidate}
+		}
+	}
+	for _, older := range []string{onyxInfraSkillSource, legacySkillSource} {
+		path := filepath.Join(home, older)
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			return agentContextSource{path: path, legacy: true}
+		}
+	}
+	return agentContextSource{
+		path:    filepath.Join(filepath.Dir(mainRoot), agentContextRepoName),
+		missing: true,
+	}
+}
+
+// cloneDestination is next to the main checkout, or inside it when that folder
+// is the filesystem root or not writable: the devcontainer mounts only the
+// checkout, at /workspace, and nothing outside it survives a rebuild. It is
+// never inside a linked worktree, which `git worktree remove` would delete.
+func cloneDestination(mainRoot string) string {
+	parent := filepath.Dir(mainRoot)
+	if filepath.Dir(parent) != parent && dirWritable(parent) {
+		return filepath.Join(parent, agentContextRepoName)
+	}
+	return filepath.Join(mainRoot, inRepoAgentContextDir)
+}
+
+func dirWritable(dir string) bool {
+	probe, err := os.CreateTemp(dir, ".ods-write-check-*")
+	if err != nil {
+		return false
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return true
 }

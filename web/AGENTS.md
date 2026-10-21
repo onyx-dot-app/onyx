@@ -37,8 +37,8 @@ oxlint enforces the import, icon and raw-element rules. Files that broke them wh
 landed are in the design-system baseline in `.oxlintrc.json`, where they only warn. Files with
 layout divs when `opal/no-layout-div` landed are in the layout baseline. Remove a file
 from the baseline once it is clean. Never add one. `opal/no-replaced-refresh-import` warns on each
-refresh-components import that Opal replaces. Migrate a file to Opal when you edit it. The
-`.agents/hooks/opal_migrate_on_edit.py` hook reports these problems to the agent after each edit.
+refresh-components import that Opal replaces. Migrate a file to Opal when you edit it. Run
+`cd web && bun run lint <files>` after you edit to see these warnings.
 
 ## Rules with a reason
 

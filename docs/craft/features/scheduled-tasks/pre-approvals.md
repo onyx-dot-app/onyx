@@ -9,5 +9,3 @@ Task-disabled apps and workspace-disabled actions remain blocked. When users can
 Approve once and Approve for session remain available. Session approval covers specific actions and cannot override Disabled. The proxy waits up to 180 seconds; it does not durably pause execution. Expired and rejected requests remain visible in session approval history.
 
 The migration converts known actions only in apps a task previously pre-approved. It creates no settings for other apps. Some actions that previously ran automatically may now require approval. The old grant table and runtime cache are removed.
-
-See the [scheduled-task feature map](../../../../.agents/feature-map/components/craft-scheduled-tasks.md) for the API, storage, enforcement rules, and tests.

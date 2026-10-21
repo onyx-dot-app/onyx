@@ -63,7 +63,10 @@ plans
 
 # Added context for LLMs
 .claude/CLAUDE.md
+# Private agent context cloned inside the checkout (see AGENTS.md)
+/.agent-context/
 .claude/settings.local.json
+.codex/hooks.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
