@@ -26,7 +26,7 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
-{{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
+{{- $serverUrl := include "onyx.sandboxApiUrl" . }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $netAdminLockdown := eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}

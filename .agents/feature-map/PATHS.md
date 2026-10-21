@@ -233,6 +233,7 @@ so verify the callers rather than a single component.
 | `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
 | `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
+| `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
 
 ---

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.19
+version: 0.9.20
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,10 +20,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Add the LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT setting. The API
-        server waits on startup until the model server loads the self-hosted
-        embedding model, which includes a download if it is not cached.
+    - kind: changed
+      description: Default Craft sandbox API callbacks to the chart's internal
+        API Service, while preserving explicit ONYX_SERVER_URL overrides.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
