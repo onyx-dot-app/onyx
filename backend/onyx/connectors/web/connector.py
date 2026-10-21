@@ -36,7 +36,7 @@ from onyx.connectors.web.config import (
 )
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
+from onyx.server.security.models import SSRFProtectionLevel, connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import reap_zombie_children
@@ -161,7 +161,7 @@ def protected_url_check(url: str) -> None:
     """
     # The web connector is only guarded at the most restrictive SSRF level; at
     # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
-    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
+    if not connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -293,7 +293,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     # rather than a wrapped sitemap-parse failure.
     protected_url_check(sitemap_url)
     level = get_security_settings().ssrf_protection_level
-    allow_private_network = not web_connector_ssrf_enforced(level)
+    allow_private_network = not connector_ssrf_enforced(level)
     allow_loopback = level == SSRFProtectionLevel.DISABLED
 
     # Note: brotli compression is handled automatically by the requests library
@@ -473,7 +473,7 @@ class WebConnector(LoadConnector, SlimConnector):
             initial_url,
             headers=DEFAULT_HEADERS,
             timeout=REQUEST_TIMEOUT_SECONDS,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             block_loopback_and_link_local=level != SSRFProtectionLevel.DISABLED,
             block_link_local_only=True,
             stream=True,
@@ -504,7 +504,7 @@ class WebConnector(LoadConnector, SlimConnector):
         page = session_ctx.playwright_context.new_page()
         install_ssrf_guard(
             page,
-            allow_private_network=not web_connector_ssrf_enforced(level),
+            allow_private_network=not connector_ssrf_enforced(level),
             allow_loopback=level == SSRFProtectionLevel.DISABLED,
             authorization_header=session_ctx.authorization_header,
             authorization_url=self.authorization_url,

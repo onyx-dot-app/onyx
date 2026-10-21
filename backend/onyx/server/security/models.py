@@ -69,10 +69,11 @@ def outbound_allow_private_network(level: SSRFProtectionLevel) -> bool:
     return level == SSRFProtectionLevel.DISABLED
 
 
-def web_connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
-    """Whether the web connector validates crawl targets. Only the most
-    restrictive level guards connectors; at VALIDATE_LLM admin-configured
-    connectors may still reach private IPs."""
+def connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
+    """The shared SSRF policy for admin-configured connector endpoints (web
+    crawl targets, self-hosted server URLs, SharePoint sites). Only the most
+    restrictive level guards connectors; at VALIDATE_LLM and above they may
+    reach private IPs."""
     return level == SSRFProtectionLevel.VALIDATE_ALL
 
 

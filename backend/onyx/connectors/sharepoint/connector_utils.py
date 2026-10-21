@@ -9,6 +9,8 @@ from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermission
 from onyx.connectors.models import ExternalAccess
 from onyx.connectors.sharepoint.config import is_site_url_well_formed
 from onyx.db.enums import HierarchyNodeType
+from onyx.server.security.models import connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -154,15 +156,24 @@ def validate_content_types(
 def validate_site_url(
     site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
 ) -> None:
-    """A full site URL, safe to request, on the tenant's host."""
+    """A full site URL, on the tenant's host, that the shared connector SSRF
+    policy lets the server call."""
     if not is_site_url_well_formed(site_url):
         raise SiteUrlFormatError(
             f"`{site_url}` is not a full SharePoint or OneDrive site URL "
             "(https://tenant.sharepoint.com/sites/name or /teams/name, "
             "https://tenant-my.sharepoint.com/personal/name)."
         )
+    enforced: bool = connector_ssrf_enforced(
+        get_security_settings().ssrf_protection_level
+    )
     try:
-        validate_outbound_http_url(site_url, https_only=True)
+        validate_outbound_http_url(
+            site_url,
+            https_only=True,
+            allow_private_network=not enforced,
+            block_link_local_only=not enforced,
+        )
     except (SSRFException, ValueError) as e:
         raise SiteUrlBlockedError(f"Invalid site URL '{site_url}': {e}") from e
     validate_site_url_host(site_url, sharepoint_domain_suffix, tenant_domain)
