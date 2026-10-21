@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "すべてのプロバイダー"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "*{model}* の上書きを削除"
+      },
       "empty": {
         "description": "モデルに交渉済みの単価（100 万 tokens あたりの USD）を適用するには、追加してください。",
         "title": "コストオーバーライドは設定されていません。"
       },
       "form": {
         "addButton": {
-          "label": "オーバーライドを追加"
+          "label": "追加"
         },
+        "description": "モデルの交渉済み単価を設定します。利用コストの計算で組み込み価格の代わりに使われます。",
+        "editTitle": "コストの上書きを編集",
+        "newTitle": "新しいコストの上書き",
         "cacheRate": {
-          "label": "キャッシュ読み取り単価（100 万 tokens あたりの USD、任意）",
-          "placeholder": "既定では入力単価を使用"
+          "description": "単位は 100 万 tokens あたりの USD です。既定では入力単価を使用します。",
+          "label": "キャッシュ読み取り単価"
         },
         "cancelButton": {
           "label": "キャンセル"
         },
         "inputRate": {
-          "label": "入力単価（100 万 tokens あたりの USD）"
+          "label": "入力単価"
         },
         "model": {
+          "description": "選択したこのモデルにコストの上書きを適用します。",
           "label": "モデル",
           "placeholder": "モデルを選択"
         },
         "outputRate": {
-          "label": "出力単価（100 万 tokens あたりの USD）"
+          "label": "出力単価"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "単位は 100 万 tokens あたりの USD です。"
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "コストオーバーライド"
       },
       "row": {
+        "cache": "キャッシュ {value}",
         "deleteButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを削除"
         },
+        "description": "{provider} · 更新 {time}",
         "editButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを編集"
         },
-        "rates": "{provider} · 入力 {input} · 出力 {output} · 100 万 tokens あたりの USD",
-        "ratesWithCache": "{provider} · 入力 {input} · 出力 {output} · キャッシュ {cache} · 100 万 tokens あたりの USD",
-        "updated": "更新 {time}"
+        "input": "入力 {value}",
+        "output": "出力 {value}"
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "所有提供方"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 *{model}* 的覆盖"
+      },
       "empty": {
         "description": "添加一项，为某个模型应用协商价格（每 100 万 tokens 的美元价格）。",
         "title": "尚未设置费用覆盖。"
       },
       "form": {
         "addButton": {
-          "label": "添加覆盖"
+          "label": "添加"
         },
+        "description": "为模型设置协商价格。它会在使用成本计算中替换内置价格。",
+        "editTitle": "编辑成本覆盖",
+        "newTitle": "新建成本覆盖",
         "cacheRate": {
-          "label": "缓存读取价格（每 100 万 tokens 美元，可选）",
-          "placeholder": "默认与输入价格相同"
+          "description": "单位为每 100 万 tokens 美元。默认与输入价格相同。",
+          "label": "缓存读取价格"
         },
         "cancelButton": {
           "label": "取消"
         },
         "inputRate": {
-          "label": "输入价格（每 100 万 tokens 美元）"
+          "label": "输入价格"
         },
         "model": {
+          "description": "对所选的此模型应用成本覆盖。",
           "label": "模型",
           "placeholder": "选择模型"
         },
         "outputRate": {
-          "label": "输出价格（每 100 万 tokens 美元）"
+          "label": "输出价格"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "单位为每 100 万 tokens 美元。"
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "费用覆盖"
       },
       "row": {
+        "cache": "缓存 {value}",
         "deleteButton": {
           "ariaLabel": "删除 {model} 的 {provider} 覆盖"
         },
+        "description": "{provider} · 更新于 {time}",
         "editButton": {
           "ariaLabel": "编辑 {model} 的 {provider} 覆盖"
         },
-        "rates": "{provider} · 输入 {input} · 输出 {output} · 每 100 万 tokens 美元",
-        "ratesWithCache": "{provider} · 输入 {input} · 输出 {output} · 缓存 {cache} · 每 100 万 tokens 美元",
-        "updated": "更新于 {time}"
+        "input": "输入 {value}",
+        "output": "输出 {value}"
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

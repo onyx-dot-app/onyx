@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "Todos os provedores"
       },
+      "deleteModal": {
+        "description": "O uso de **{model}** ({provider}) voltará a ser cobrado pelo preço integrado.",
+        "submit": {
+          "label": "Excluir"
+        },
+        "title": "Excluir substituição de *{model}*"
+      },
       "empty": {
         "description": "Adicione uma para aplicar uma taxa negociada (USD por 1M de tokens) a um modelo.",
         "title": "Nenhuma substituição de custo definida."
       },
       "form": {
         "addButton": {
-          "label": "Adicionar substituição"
+          "label": "Adicionar"
         },
+        "description": "Defina uma taxa negociada para um modelo. Ela substitui o preço integrado nos cálculos de custo de uso.",
+        "editTitle": "Editar substituição de custo",
+        "newTitle": "Nova substituição de custo",
         "cacheRate": {
-          "label": "Taxa de leitura de cache (USD por 1M de tokens, opcional)",
-          "placeholder": "usa a taxa de entrada por padrão"
+          "description": "Unidades em USD por 1M de tokens. Usa a taxa de entrada por padrão.",
+          "label": "Taxa de leitura de cache"
         },
         "cancelButton": {
           "label": "Cancelar"
         },
         "inputRate": {
-          "label": "Taxa de entrada (USD por 1M de tokens)"
+          "label": "Taxa de entrada"
         },
         "model": {
+          "description": "Aplique uma substituição de custo a este modelo escolhido.",
           "label": "Modelo",
           "placeholder": "Selecione um modelo"
         },
         "outputRate": {
-          "label": "Taxa de saída (USD por 1M de tokens)"
+          "label": "Taxa de saída"
         },
         "saveButton": {
           "label": "Salvar"
+        },
+        "units": {
+          "description": "Unidades em USD por 1M de tokens."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "Substituições de custo"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Excluir a substituição de {provider} para {model}"
         },
+        "description": "{provider} · Atualizado {time}",
         "editButton": {
           "ariaLabel": "Editar a substituição de {provider} para {model}"
         },
-        "rates": "{provider} · Entrada {input} · Saída {output} · USD por 1M de tokens",
-        "ratesWithCache": "{provider} · Entrada {input} · Saída {output} · Cache {cache} · USD por 1M de tokens",
-        "updated": "Atualizado {time}"
+        "input": "Entrada {value}",
+        "output": "Saída {value}"
       },
       "toasts": {
         "removeFailed": "Falha ao remover a substituição: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "Falha ao salvar a substituição: {message}",
         "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

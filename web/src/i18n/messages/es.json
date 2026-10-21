@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "Todos los proveedores"
       },
+      "deleteModal": {
+        "description": "El uso de **{model}** ({provider}) volverá a calcularse con el precio integrado.",
+        "submit": {
+          "label": "Eliminar"
+        },
+        "title": "Eliminar la anulación de *{model}*"
+      },
       "empty": {
         "description": "Añade uno para aplicar una tarifa negociada (USD por 1M de tokens) a un modelo.",
         "title": "No hay tarifas personalizadas definidas."
       },
       "form": {
         "addButton": {
-          "label": "Añadir tarifa personalizada"
+          "label": "Agregar"
         },
+        "description": "Establece una tarifa negociada para un modelo. Reemplaza el precio integrado en los cálculos del costo de uso.",
+        "editTitle": "Editar anulación de costo",
+        "newTitle": "Nueva anulación de costo",
         "cacheRate": {
-          "label": "Tarifa de lectura de caché (USD por 1M de tokens, opcional)",
-          "placeholder": "usa la tarifa de entrada"
+          "description": "Unidades en USD por 1M de tokens. Por defecto, la tarifa de entrada.",
+          "label": "Tarifa de lectura de caché"
         },
         "cancelButton": {
           "label": "Cancelar"
         },
         "inputRate": {
-          "label": "Tarifa de entrada (USD por 1M de tokens)"
+          "label": "Tarifa de entrada"
         },
         "model": {
+          "description": "Aplica una anulación de costo a este modelo elegido.",
           "label": "Modelo",
           "placeholder": "Selecciona un modelo"
         },
         "outputRate": {
-          "label": "Tarifa de salida (USD por 1M de tokens)"
+          "label": "Tarifa de salida"
         },
         "saveButton": {
           "label": "Guardar"
+        },
+        "units": {
+          "description": "Unidades en USD por 1M de tokens."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "Tarifas personalizadas"
       },
       "row": {
+        "cache": "Caché {value}",
         "deleteButton": {
           "ariaLabel": "Eliminar la tarifa personalizada de {provider} para {model}"
         },
+        "description": "{provider} · Actualizado {time}",
         "editButton": {
           "ariaLabel": "Editar la tarifa personalizada de {provider} para {model}"
         },
-        "rates": "{provider} · Entrada {input} · Salida {output} · USD por 1M de tokens",
-        "ratesWithCache": "{provider} · Entrada {input} · Salida {output} · Caché {cache} · USD por 1M de tokens",
-        "updated": "Actualizado {time}"
+        "input": "Entrada {value}",
+        "output": "Salida {value}"
       },
       "toasts": {
         "removeFailed": "No se pudo quitar la tarifa personalizada: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "No se pudo guardar la tarifa personalizada: {message}",
         "saved": "Tarifa guardada para {model}.",
         "unknownError": "Error desconocido"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

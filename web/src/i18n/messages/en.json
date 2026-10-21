@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "All providers"
       },
+      "deleteModal": {
+        "description": "Usage of **{model}** ({provider}) will be priced at the built-in rate again.",
+        "submit": {
+          "label": "Delete"
+        },
+        "title": "Delete *{model}* override"
+      },
       "empty": {
         "description": "Add one to apply a negotiated rate (USD per 1M tokens) for a model.",
         "title": "No cost overrides set."
       },
       "form": {
         "addButton": {
-          "label": "Add override"
+          "label": "Add"
         },
+        "description": "Set a negotiated rate for a model. It replaces the built-in price in usage cost calculations.",
+        "editTitle": "Edit Cost Override",
+        "newTitle": "New Cost Override",
         "cacheRate": {
-          "label": "Cache-read rate (USD per 1M tokens, optional)",
-          "placeholder": "defaults to input rate"
+          "description": "Units are in USD per 1M tokens. Defaults to the input rate.",
+          "label": "Cache-read rate"
         },
         "cancelButton": {
           "label": "Cancel"
         },
         "inputRate": {
-          "label": "Input rate (USD per 1M tokens)"
+          "label": "Input rate"
         },
         "model": {
+          "description": "Apply a cost override on this chosen model.",
           "label": "Model",
           "placeholder": "Select a model"
         },
         "outputRate": {
-          "label": "Output rate (USD per 1M tokens)"
+          "label": "Output rate"
         },
         "saveButton": {
           "label": "Save"
+        },
+        "units": {
+          "description": "Units are in USD per 1M tokens."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "Cost Overrides"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "Delete {provider} override for {model}"
         },
+        "description": "{provider} · Updated {time}",
         "editButton": {
           "ariaLabel": "Edit {provider} override for {model}"
         },
-        "rates": "{provider} · In {input} · Out {output} · USD per 1M tokens",
-        "ratesWithCache": "{provider} · In {input} · Out {output} · Cache {cache} · USD per 1M tokens",
-        "updated": "Updated {time}"
+        "input": "In {value}",
+        "output": "Out {value}"
       },
       "toasts": {
         "removeFailed": "Failed to remove override: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "Failed to save override: {message}",
         "saved": "Saved rate for {model}.",
         "unknownError": "Unknown error"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

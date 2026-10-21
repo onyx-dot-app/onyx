@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "جميع الموفرين"
       },
+      "deleteModal": {
+        "description": "سيُحتسب استخدام **{model}** ({provider}) بالسعر المدمج مرة أخرى.",
+        "submit": {
+          "label": "حذف"
+        },
+        "title": "حذف تجاوز *{model}*"
+      },
       "empty": {
         "description": "أضف تجاوزًا لتطبيق سعر متفاوض عليه (دولار لكل مليون رمز) لنموذج.",
         "title": "لا توجد تجاوزات تكلفة معيّنة."
       },
       "form": {
         "addButton": {
-          "label": "إضافة تجاوز"
+          "label": "إضافة"
         },
+        "description": "عيّن سعرًا متفاوضًا عليه لنموذج. يحل محل السعر المدمج في حسابات تكلفة الاستخدام.",
+        "editTitle": "تعديل تجاوز التكلفة",
+        "newTitle": "تجاوز تكلفة جديد",
         "cacheRate": {
-          "label": "سعر قراءة الذاكرة المؤقتة (دولار لكل مليون رمز، اختياري)",
-          "placeholder": "الافتراضي هو سعر الإدخال"
+          "description": "الوحدة: دولار لكل مليون رمز. القيمة الافتراضية هي سعر الإدخال.",
+          "label": "سعر قراءة الذاكرة المؤقتة"
         },
         "cancelButton": {
           "label": "إلغاء"
         },
         "inputRate": {
-          "label": "سعر الإدخال (دولار لكل مليون رمز)"
+          "label": "سعر الإدخال"
         },
         "model": {
+          "description": "طبّق تجاوزًا للتكلفة على هذا النموذج المحدد.",
           "label": "النموذج",
           "placeholder": "اختر نموذجًا"
         },
         "outputRate": {
-          "label": "سعر الإخراج (دولار لكل مليون رمز)"
+          "label": "سعر الإخراج"
         },
         "saveButton": {
           "label": "حفظ"
+        },
+        "units": {
+          "description": "الوحدة: دولار لكل مليون رمز."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "تجاوزات التكلفة"
       },
       "row": {
+        "cache": "ذاكرة مؤقتة {value}",
         "deleteButton": {
           "ariaLabel": "حذف تجاوز {provider} للنموذج {model}"
         },
+        "description": "{provider} · آخر تحديث {time}",
         "editButton": {
           "ariaLabel": "تعديل تجاوز {provider} للنموذج {model}"
         },
-        "rates": "{provider} · إدخال {input} · إخراج {output} · دولار لكل مليون رمز",
-        "ratesWithCache": "{provider} · إدخال {input} · إخراج {output} · ذاكرة مؤقتة {cache} · دولار لكل مليون رمز",
-        "updated": "حُدّث {time}"
+        "input": "إدخال {value}",
+        "output": "إخراج {value}"
       },
       "toasts": {
         "removeFailed": "فشلت إزالة التجاوز: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "فشل حفظ التجاوز: {message}",
         "saved": "حُفظ السعر للنموذج {model}.",
         "unknownError": "خطأ غير معروف"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

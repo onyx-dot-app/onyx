@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "Alle Anbieter"
       },
+      "deleteModal": {
+        "description": "Die Nutzung von **{model}** ({provider}) wird wieder zum integrierten Preis berechnet.",
+        "submit": {
+          "label": "Löschen"
+        },
+        "title": "Überschreibung für *{model}* löschen"
+      },
       "empty": {
         "description": "Fügen Sie eine hinzu, um einen ausgehandelten Preis (USD pro 1 Mio. Token) für ein Modell anzuwenden.",
         "title": "Keine Kostenüberschreibungen festgelegt."
       },
       "form": {
         "addButton": {
-          "label": "Überschreibung hinzufügen"
+          "label": "Hinzufügen"
         },
+        "description": "Legen Sie einen ausgehandelten Preis für ein Modell fest. Er ersetzt den integrierten Preis bei der Berechnung der Nutzungskosten.",
+        "editTitle": "Kostenüberschreibung bearbeiten",
+        "newTitle": "Neue Kostenüberschreibung",
         "cacheRate": {
-          "label": "Preis für Cache-Lesevorgänge (USD pro 1 Mio. Token, optional)",
-          "placeholder": "standardmäßig der Eingabepreis"
+          "description": "Einheit: USD pro 1 Mio. Token. Standardmäßig der Eingabepreis.",
+          "label": "Preis für Cache-Lesevorgänge"
         },
         "cancelButton": {
           "label": "Abbrechen"
         },
         "inputRate": {
-          "label": "Eingabepreis (USD pro 1 Mio. Token)"
+          "label": "Eingabepreis"
         },
         "model": {
+          "description": "Eine Kostenüberschreibung auf dieses ausgewählte Modell anwenden.",
           "label": "Modell",
           "placeholder": "Modell auswählen"
         },
         "outputRate": {
-          "label": "Ausgabepreis (USD pro 1 Mio. Token)"
+          "label": "Ausgabepreis"
         },
         "saveButton": {
           "label": "Speichern"
+        },
+        "units": {
+          "description": "Einheit: USD pro 1 Mio. Token."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "Kostenüberschreibungen"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} löschen"
         },
+        "description": "{provider} · Aktualisiert {time}",
         "editButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} bearbeiten"
         },
-        "rates": "{provider} · Ein {input} · Aus {output} · USD pro 1 Mio. Token",
-        "ratesWithCache": "{provider} · Ein {input} · Aus {output} · Cache {cache} · USD pro 1 Mio. Token",
-        "updated": "Aktualisiert {time}"
+        "input": "Ein {value}",
+        "output": "Aus {value}"
       },
       "toasts": {
         "removeFailed": "Die Überschreibung konnte nicht entfernt werden: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "Die Überschreibung konnte nicht gespeichert werden: {message}",
         "saved": "Preis für {model} gespeichert.",
         "unknownError": "Unbekannter Fehler"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {

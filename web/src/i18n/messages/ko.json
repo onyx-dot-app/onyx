@@ -4819,33 +4819,47 @@
       "allProviders": {
         "label": "모든 제공업체"
       },
+      "deleteModal": {
+        "description": "**{model}**({provider}) 사용량은 다시 기본 제공 가격으로 계산됩니다.",
+        "submit": {
+          "label": "삭제"
+        },
+        "title": "*{model}* 재정의 삭제"
+      },
       "empty": {
         "description": "모델에 협상된 요금(100만 token당 USD)을 적용하려면 재정의를 추가하세요.",
         "title": "설정된 비용 재정의가 없습니다."
       },
       "form": {
         "addButton": {
-          "label": "재정의 추가"
+          "label": "추가"
         },
+        "description": "모델의 협상된 요금을 설정합니다. 사용 비용 계산에서 기본 제공 가격을 대체합니다.",
+        "editTitle": "비용 재정의 편집",
+        "newTitle": "새 비용 재정의",
         "cacheRate": {
-          "label": "캐시 읽기 요금(100만 token당 USD, 선택 사항)",
-          "placeholder": "기본값은 입력 요금입니다"
+          "description": "단위는 100만 token당 USD입니다. 기본값은 입력 요금입니다.",
+          "label": "캐시 읽기 요금"
         },
         "cancelButton": {
           "label": "취소"
         },
         "inputRate": {
-          "label": "입력 요금(100만 token당 USD)"
+          "label": "입력 요금"
         },
         "model": {
+          "description": "선택한 이 모델에 비용 재정의를 적용합니다.",
           "label": "모델",
           "placeholder": "모델 선택"
         },
         "outputRate": {
-          "label": "출력 요금(100만 token당 USD)"
+          "label": "출력 요금"
         },
         "saveButton": {
           "label": "저장"
+        },
+        "units": {
+          "description": "단위는 100만 token당 USD입니다."
         }
       },
       "panel": {
@@ -4859,15 +4873,16 @@
         "title": "비용 재정의"
       },
       "row": {
+        "cache": "캐시 {value}",
         "deleteButton": {
           "ariaLabel": "{model}의 {provider} 재정의 삭제"
         },
+        "description": "{provider} · 업데이트 {time}",
         "editButton": {
           "ariaLabel": "{model}의 {provider} 재정의 편집"
         },
-        "rates": "{provider} · 입력 {input} · 출력 {output} · 100만 token당 USD",
-        "ratesWithCache": "{provider} · 입력 {input} · 출력 {output} · 캐시 {cache} · 100만 token당 USD",
-        "updated": "{time}에 업데이트됨"
+        "input": "입력 {value}",
+        "output": "출력 {value}"
       },
       "toasts": {
         "removeFailed": "재정의를 제거하지 못했습니다: {message}",
@@ -4875,10 +4890,6 @@
         "saveFailed": "재정의를 저장하지 못했습니다: {message}",
         "saved": "{model}의 요금을 저장했습니다.",
         "unknownError": "알 수 없는 오류"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
