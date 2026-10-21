@@ -1,10 +1,12 @@
 name: Run Integration Tests v2
 concurrency:
-  group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
-  cancel-in-progress: true
+  # Pushes to main share a group and queue: one run in progress and the
+  # newest one pending, so a burst of merges runs at most twice and every
+  # run finishes (cancelling would starve main while merges keep landing).
+  group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
-  merge_group:
   pull_request:
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
@@ -12,6 +14,9 @@ on:
     # workflow can race the real workflow's same-named status check under
     # branch protection.
   push:
+    # A push to main runs the full EE + MIT matrix after each merge.
+    branches:
+      - main
     tags:
       - "v*.*.*"
   schedule:
@@ -51,9 +56,10 @@ env:
 
 jobs:
   changes:
-    # Decides whether the integration test matrix runs. On pull_request /
-    # merge_group we use paths-filter; on push (tags) we default to `true` so
-    # everything runs.
+    # Decides whether the integration test matrix runs. On pull_request
+    # we use paths-filter; on push (main, tags) we default to `true` so
+    # everything runs. Cancelled main runs skip commits, so a diff of one push
+    # is not enough.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
@@ -64,25 +70,25 @@ jobs:
       integration: ${{ steps.filter.outputs.integration || 'true' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
       # The live Slack suite shares its workspaces' rate limits across all CI runs,
-      # so PRs run it only for related changes. Merge queue and tag runs include it
+      # so PRs run it only for related changes. Main and tag runs include it
       # whenever the integration suite runs.
       slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
       # The live OneDrive suite indexes one shared Microsoft tenant, and Graph
       # throttles it when many PRs run at once. Same rule as Slack.
       onedrive: ${{ github.event_name == 'pull_request' && steps.filter.outputs.onedrive || 'true' }}
       # The reindex port suite is slow (each test waits for a full re-embed and
-      # swap). PRs and the merge queue run it only for related changes; the
+      # swap). PRs run it only for related changes, and main runs skip it; the
       # daily run and tag runs always include it.
-      reindex_port: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && steps.filter.outputs.reindex_port || 'true' }}
+      reindex_port: ${{ github.event_name == 'pull_request' && steps.filter.outputs.reindex_port || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'false' || 'true' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             integration:
@@ -210,7 +216,7 @@ jobs:
       - name: Determine editions to test
         id: set-editions
         run: |
-          # On PRs, only run EE tests. On merge_group and tags, run both EE and MIT.
+          # On PRs, only run EE tests. On other events, run both EE and MIT.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo 'editions=["ee"]' >> $GITHUB_OUTPUT
           else

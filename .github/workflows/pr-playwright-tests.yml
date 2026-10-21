@@ -1,10 +1,12 @@
 name: Run Playwright Tests
 concurrency:
-  group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
-  cancel-in-progress: true
+  # Pushes to main share a group and queue: one run in progress and the
+  # newest one pending, so a burst of merges runs at most twice and every
+  # run finishes (cancelling would starve main while merges keep landing).
+  group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
-  merge_group:
   pull_request:
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
@@ -14,8 +16,10 @@ on:
   push:
     tags:
       - "v*.*.*"
-    # TODO: Remove this if we enable merge-queues for release branches.
     branches:
+      # A push to main runs the full suite and updates the S3 baselines.
+      - main
+      # TODO: Remove this if we enable merge-queues for release branches.
       - "release/**"
 
 permissions:
@@ -42,10 +46,10 @@ env:
   # writes aren't clobbered by a workflow-level definition. The playwright-tests
   # job always uses the self-hosted mock OIDC IdP
   # (deployment/docker_compose/docker-compose.mcp-oauth-test.yml): no secrets,
-  # deterministic, fork-safe, and gates every PR + merge_group. The
+  # deterministic, fork-safe, and gates every PR. The
   # playwright-tests-oauth-okta job additionally exercises the real Okta org when
-  # OAuth-relevant paths change — required on same-repo PRs, informational on
-  # merge_group.
+  # OAuth-relevant paths change on same-repo PRs (required), and on every push
+  # to main (informational).
   MOCK_OIDC_PORT: 8090
   MCP_OAUTH_AUDIENCE: api://mcp
   MCP_OAUTH_REQUIRED_SCOPES: mcp:use
@@ -78,8 +82,8 @@ env:
 
 jobs:
   changes:
-    # Decides whether the playwright matrix runs. On pull_request / merge_group
-    # we use paths-filter; on push (tags, release branches) we default to
+    # Decides whether the playwright matrix runs. On pull_request we use
+    # paths-filter; on push (main, tags, release branches) we default to
     # `true` so everything runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -92,17 +96,18 @@ jobs:
       airgap: ${{ steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
-      # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
-      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || 'false' }}
+      # the mock IdP. A push to main always runs it; other events without the
+      # filter default to 'false'.
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             playwright:
@@ -574,8 +579,8 @@ jobs:
           fi
 
       # The main suite always runs the OAuth spec against the self-hosted mock
-      # OIDC IdP — deterministic, fork-safe, and the gate for every PR +
-      # merge_group. The real Okta org is validated separately by the
+      # OIDC IdP — deterministic, fork-safe, and the gate for every PR.
+      # The real Okta org is validated separately by the
       # playwright-tests-oauth-okta job. Written to $GITHUB_ENV (not the
       # workflow-level env:) so that job can set its own values without a
       # workflow-level definition clobbering them. getMcpOAuthConfig() requires
@@ -653,16 +658,16 @@ jobs:
 
   # Validates the MCP OAuth spec against the REAL Okta org (the mock IdP run in
   # playwright-tests is a deterministic stand-in). Runs only when OAuth-relevant
-  # paths change AND the secrets are reachable: always on merge_group, and on
-  # same-repo PRs (forks can't read secrets, so they rely on the mock-IdP run).
+  # paths change on same-repo PRs (forks can't read secrets, so they rely on the
+  # mock-IdP run), and on every push to main.
   # Gating: this job's result is REQUIRED on pull_request and INFORMATIONAL on
-  # merge_group — see the playwright-required job.
+  # push — see the playwright-required job.
   playwright-tests-oauth-okta:
     needs: [changes, build-web-image, build-backend-image, build-model-server-image]
     if: >-
       needs.changes.outputs.playwright == 'true' &&
       needs.changes.outputs.mcp_oauth == 'true' && (
-        github.event_name == 'merge_group' || (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') || (
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
         )
@@ -1012,7 +1017,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           GH_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -1029,9 +1033,6 @@ jobs:
                 echo "rev=main" >> "$GITHUB_OUTPUT"
                 ;;
             esac
-          elif [ "${EVENT_NAME}" = "merge_group" ]; then
-            # Merge queue compares against the target branch (e.g. refs/heads/main -> main)
-            echo "rev=${MERGE_GROUP_BASE_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
           elif [[ "${GH_REF}" == refs/tags/* ]]; then
             # Tag builds compare against the tag name
             echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -1051,7 +1052,7 @@ jobs:
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
-      # PR-only: PR_NUMBER is empty on push/merge_group events, which would write
+      # PR-only: PR_NUMBER is empty on push events, which would write
       # the report under a junk `reports/pr-/...` key. Baselines (updated below)
       # are the meaningful artifact on those events, not this PR-scoped report.
       - name: Upload visual diff report to S3
@@ -1104,13 +1105,7 @@ jobs:
           needs.playwright-tests.result == 'success' && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/heads/release/') ||
-            startsWith(github.ref, 'refs/tags/v') ||
-            (
-              github.event_name == 'merge_group' && (
-                github.event.merge_group.base_ref == 'refs/heads/main' ||
-                startsWith(github.event.merge_group.base_ref, 'refs/heads/release/')
-              )
-            )
+            startsWith(github.ref, 'refs/tags/v')
           )
         env:
           PROJECT: ${{ matrix.project }}
@@ -1272,9 +1267,9 @@ jobs:
             exit 1
           fi
           # The real-Okta OAuth job gates pull_request runs (blocks the PR), but
-          # is informational on merge_group so a flaky Okta run can't wedge the
-          # serialized merge queue. `skipped` means it wasn't applicable (no OAuth
-          # paths changed, or a fork PR) and is always acceptable.
+          # is informational on push to main, after the merge. `skipped` means it
+          # wasn't applicable (no OAuth paths changed, or a fork PR) and is always
+          # acceptable.
           if [ "${EVENT_NAME}" = "pull_request" ] && \
              [ "${OKTA_RESULT}" != "success" ] && [ "${OKTA_RESULT}" != "skipped" ]; then
             echo "Okta OAuth job result (required on PRs): ${OKTA_RESULT}"

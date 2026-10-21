@@ -4,7 +4,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
   push:
     tags:
@@ -45,8 +44,8 @@ jobs:
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
       # Diff against the PR's own base so a stacked PR only lists its own chart
-      # changes. `github.base_ref` is empty outside pull_request, so merge_group,
-      # tag pushes, and manual runs fall back to the default branch.
+      # changes. `github.base_ref` is empty outside pull_request, so
+      # tag pushes and manual runs fall back to the default branch.
       - name: Run chart-testing (list-changed)
         id: list-changed
         env:
