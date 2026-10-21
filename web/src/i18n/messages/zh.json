@@ -11907,6 +11907,9 @@
         "personal": {
           "label": "个人"
         },
+        "required": {
+          "tooltip": "你的组织管理员要求你拥有此技能。"
+        },
         "unavailable": {
           "label": "不可用 - 点击了解更多"
         }
@@ -16770,21 +16773,11 @@
         "title": "技能不可用"
       },
       "management": {
-        "description": "控制谁可以使用此技能。",
-        "externalApp": {
-          "manage": {
-            "label": "在应用设置中管理"
-          },
-          "readyDescription": "此技能使用应用“{appName}”。",
-          "title": "外部应用"
-        },
         "sharing": {
           "edit": {
             "label": "编辑共享"
-          },
-          "title": "共享"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存前请添加描述。",
@@ -16794,21 +16787,6 @@
         "noPermission": "您没有编辑此技能详情的权限。",
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "组织中的所有人都可以使用和编辑此技能。",
-          "title": "组织",
-          "viewerDescription": "组织中的所有人都可以使用此技能。"
-        },
-        "personal": {
-          "description": "只有您可以使用此技能。",
-          "title": "个人"
-        },
-        "shares": {
-          "description": "只有选定的用户和群组可以使用此技能。",
-          "title": "{count, plural, one {# 个共享} other {# 个共享}}"
-        }
       },
       "toasts": {
         "created": "已创建“{name}”",
@@ -16989,7 +16967,6 @@
         },
         "externalAppNotice": "只要此技能与应用“{appName}”关联，就必须开放全组织的查看权限。",
         "header": {
-          "title": "共享 *{name}*",
           "transferTitle": "转移 *{name}*"
         },
         "loading": {
@@ -17001,7 +16978,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "更新 {name} 的访问权限"
+          "ariaLabel": "更新 {name} 的访问权限",
+          "canUse": "可使用",
+          "canEdit": "可编辑"
         },
         "saveButton": {
           "label": "保存"
@@ -17023,7 +17002,23 @@
         },
         "transferredToast": {
           "message": "所有权已转移。"
-        }
+        },
+        "installation": {
+          "title": "安装",
+          "available": "可供安装",
+          "default": "默认安装",
+          "required": "必需",
+          "availableDescription": "用户可以随时安装或卸载。",
+          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
+          "requiredDescription": "自动安装。用户无法禁用或卸载。",
+          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+        },
+        "description": "选择谁可以使用此技能及其安装方式。",
+        "accessTitle": "谁可以访问",
+        "peopleTitle": "有访问权限的人员",
+        "manageIndividualAccess": "管理单独访问权限",
+        "individualAccessTitle": "单独访问权限",
+        "ownershipTitle": "所有权"
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"

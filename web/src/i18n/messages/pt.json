@@ -11907,6 +11907,9 @@
         "personal": {
           "label": "Pessoal"
         },
+        "required": {
+          "tooltip": "O administrador da sua organização exige que você tenha esta habilidade."
+        },
         "unavailable": {
           "label": "Indisponível - clique para saber mais"
         }
@@ -16770,21 +16773,11 @@
         "title": "Habilidade indisponível"
       },
       "management": {
-        "description": "Controle quem pode usar esta habilidade.",
-        "externalApp": {
-          "manage": {
-            "label": "Gerenciar nas configurações do aplicativo"
-          },
-          "readyDescription": "Esta habilidade usa o aplicativo “{appName}”.",
-          "title": "Aplicativo externo"
-        },
         "sharing": {
           "edit": {
             "label": "Editar compartilhamento"
-          },
-          "title": "Compartilhamento"
-        },
-        "title": "Gerenciamento"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Adicione uma descrição antes de salvar.",
@@ -16794,21 +16787,6 @@
         "noPermission": "Você não tem permissão para editar os detalhes desta habilidade.",
         "savingChanges": "Salvando as alterações...",
         "savingSkill": "Salvando a habilidade..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Todos na sua organização podem usar e editar esta habilidade.",
-          "title": "Organização",
-          "viewerDescription": "Todos na sua organização podem usar esta habilidade."
-        },
-        "personal": {
-          "description": "Apenas você pode usar esta habilidade.",
-          "title": "Pessoal"
-        },
-        "shares": {
-          "description": "Apenas usuários e grupos selecionados podem usar esta habilidade.",
-          "title": "{count, plural, one {# compartilhamento} other {# compartilhamentos}}"
-        }
       },
       "toasts": {
         "created": "\"{name}\" criada",
@@ -16989,7 +16967,6 @@
         },
         "externalAppNotice": "É necessário acesso de visualização para toda a organização enquanto esta habilidade estiver associada ao aplicativo “{appName}”.",
         "header": {
-          "title": "Compartilhar *{name}*",
           "transferTitle": "Transferir *{name}*"
         },
         "loading": {
@@ -17001,7 +16978,9 @@
         },
         "ownerLabel": "Proprietário",
         "permissionMenu": {
-          "ariaLabel": "Atualizar o acesso de {name}"
+          "ariaLabel": "Atualizar o acesso de {name}",
+          "canUse": "Pode usar",
+          "canEdit": "Pode editar"
         },
         "saveButton": {
           "label": "Salvar"
@@ -17023,7 +17002,23 @@
         },
         "transferredToast": {
           "message": "Propriedade transferida."
-        }
+        },
+        "installation": {
+          "title": "Instalação",
+          "available": "Disponível para instalar",
+          "default": "Instalado por padrão",
+          "required": "Obrigatório",
+          "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
+          "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
+          "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
+          "description": "Escolha como esta habilidade é instalada para quem tem acesso."
+        },
+        "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
+        "accessTitle": "Quem pode acessar",
+        "peopleTitle": "Pessoas com acesso",
+        "manageIndividualAccess": "Gerenciar acesso individual",
+        "individualAccessTitle": "Acesso individual",
+        "ownershipTitle": "Propriedade"
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"

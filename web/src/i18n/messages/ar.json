@@ -11907,6 +11907,9 @@
         "personal": {
           "label": "شخصية"
         },
+        "required": {
+          "tooltip": "يفرض مسؤول مؤسستك أن تكون هذه المهارة لديك."
+        },
         "unavailable": {
           "label": "غير متاحة - انقر لمعرفة المزيد"
         }
@@ -16770,21 +16773,11 @@
         "title": "المهارة غير متاحة"
       },
       "management": {
-        "description": "تحكم في من يمكنه استخدام هذه المهارة.",
-        "externalApp": {
-          "manage": {
-            "label": "الإدارة في إعدادات التطبيق"
-          },
-          "readyDescription": "تستخدم هذه المهارة التطبيق “{appName}”.",
-          "title": "تطبيق خارجي"
-        },
         "sharing": {
           "edit": {
             "label": "تعديل المشاركة"
-          },
-          "title": "المشاركة"
-        },
-        "title": "الإدارة"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "أضف وصفًا قبل الحفظ.",
@@ -16794,21 +16787,6 @@
         "noPermission": "ليست لديك صلاحية تعديل تفاصيل هذه المهارة.",
         "savingChanges": "جارٍ حفظ التغييرات...",
         "savingSkill": "جارٍ حفظ المهارة..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "يمكن لجميع أعضاء مؤسستك استخدام هذه المهارة وتعديلها.",
-          "title": "المؤسسة",
-          "viewerDescription": "يمكن لجميع أعضاء مؤسستك استخدام هذه المهارة."
-        },
-        "personal": {
-          "description": "أنت وحدك من يمكنه استخدام هذه المهارة.",
-          "title": "شخصي"
-        },
-        "shares": {
-          "description": "يمكن فقط للمستخدمين والمجموعات المحددة استخدام هذه المهارة.",
-          "title": "{count, plural, one {# مشاركة} other {# مشاركات}}"
-        }
       },
       "toasts": {
         "created": "تم إنشاء \"{name}\"",
@@ -16989,7 +16967,6 @@
         },
         "externalAppNotice": "يلزم منح صلاحية عرض على مستوى المؤسسة ما دامت هذه المهارة مرتبطة بالتطبيق “{appName}”.",
         "header": {
-          "title": "مشاركة *{name}*",
           "transferTitle": "نقل *{name}*"
         },
         "loading": {
@@ -17001,7 +16978,9 @@
         },
         "ownerLabel": "مالك",
         "permissionMenu": {
-          "ariaLabel": "تحديث صلاحية الوصول لـ {name}"
+          "ariaLabel": "تحديث صلاحية الوصول لـ {name}",
+          "canUse": "يمكنه الاستخدام",
+          "canEdit": "يمكنه التعديل"
         },
         "saveButton": {
           "label": "حفظ"
@@ -17023,7 +17002,23 @@
         },
         "transferredToast": {
           "message": "تم نقل الملكية."
-        }
+        },
+        "installation": {
+          "title": "التثبيت",
+          "available": "متاح للتثبيت",
+          "default": "مثبت افتراضيًا",
+          "required": "إلزامي",
+          "availableDescription": "يمكن للمستخدمين التثبيت أو إلغاء التثبيت في أي وقت.",
+          "defaultDescription": "يتم التثبيت تلقائيًا. يمكن للمستخدمين التعطيل أو إلغاء التثبيت في أي وقت.",
+          "requiredDescription": "يتم التثبيت تلقائيًا. لا يمكن للمستخدمين التعطيل أو إلغاء التثبيت.",
+          "description": "اختر كيفية تثبيت هذه المهارة لكل من لديه حق الوصول."
+        },
+        "description": "اختر من يمكنه استخدام هذه المهارة وكيفية تثبيتها.",
+        "accessTitle": "من يمكنه الوصول",
+        "peopleTitle": "الأشخاص الذين لديهم حق الوصول",
+        "manageIndividualAccess": "إدارة الوصول الفردي",
+        "individualAccessTitle": "الوصول الفردي",
+        "ownershipTitle": "الملكية"
       },
       "placeholders": {
         "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"

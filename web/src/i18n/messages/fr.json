@@ -11907,6 +11907,9 @@
         "personal": {
           "label": "Personnelle"
         },
+        "required": {
+          "tooltip": "L’administrateur de votre organisation exige que vous disposiez de cette compétence."
+        },
         "unavailable": {
           "label": "Indisponible - cliquez pour en savoir plus"
         }
@@ -16770,21 +16773,11 @@
         "title": "Compétence indisponible"
       },
       "management": {
-        "description": "Contrôlez qui peut utiliser cette compétence.",
-        "externalApp": {
-          "manage": {
-            "label": "Gérer dans les paramètres de l'application"
-          },
-          "readyDescription": "Cette compétence utilise l'application « {appName} ».",
-          "title": "Application externe"
-        },
         "sharing": {
           "edit": {
             "label": "Modifier le partage"
-          },
-          "title": "Partage"
-        },
-        "title": "Gestion"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Ajoutez une description avant d'enregistrer.",
@@ -16794,21 +16787,6 @@
         "noPermission": "Vous n'avez pas l'autorisation de modifier les détails de cette compétence.",
         "savingChanges": "Enregistrement des modifications...",
         "savingSkill": "Enregistrement de la compétence..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Tous les membres de votre organisation peuvent utiliser et modifier cette compétence.",
-          "title": "Organisation",
-          "viewerDescription": "Tous les membres de votre organisation peuvent utiliser cette compétence."
-        },
-        "personal": {
-          "description": "Vous seul pouvez utiliser cette compétence.",
-          "title": "Personnel"
-        },
-        "shares": {
-          "description": "Seuls les utilisateurs et groupes sélectionnés peuvent utiliser cette compétence.",
-          "title": "{count, plural, one {# partage} other {# partages}}"
-        }
       },
       "toasts": {
         "created": "« {name} » créée",
@@ -16989,7 +16967,6 @@
         },
         "externalAppNotice": "L'accès en lecture pour toute l'organisation est obligatoire tant que cette compétence est associée à l'application “{appName}”.",
         "header": {
-          "title": "Partager *{name}*",
           "transferTitle": "Transférer *{name}*"
         },
         "loading": {
@@ -17001,7 +16978,9 @@
         },
         "ownerLabel": "Propriétaire",
         "permissionMenu": {
-          "ariaLabel": "Mettre à jour l'accès de {name}"
+          "ariaLabel": "Mettre à jour l'accès de {name}",
+          "canUse": "Peut utiliser",
+          "canEdit": "Peut modifier"
         },
         "saveButton": {
           "label": "Enregistrer"
@@ -17023,7 +17002,23 @@
         },
         "transferredToast": {
           "message": "Propriété transférée."
-        }
+        },
+        "installation": {
+          "title": "Installation",
+          "available": "Disponible à l’installation",
+          "default": "Installé par défaut",
+          "required": "Obligatoire",
+          "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
+          "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
+          "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
+          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
+        },
+        "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
+        "accessTitle": "Qui peut accéder",
+        "peopleTitle": "Personnes ayant accès",
+        "manageIndividualAccess": "Gérer les accès individuels",
+        "individualAccessTitle": "Accès individuels",
+        "ownershipTitle": "Propriété"
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"

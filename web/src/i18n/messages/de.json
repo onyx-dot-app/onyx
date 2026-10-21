@@ -11907,6 +11907,9 @@
         "personal": {
           "label": "Persönlich"
         },
+        "required": {
+          "tooltip": "Der Administrator Ihrer Organisation schreibt diesen Skill für Sie vor."
+        },
         "unavailable": {
           "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
         }
@@ -16770,21 +16773,11 @@
         "title": "Skill nicht verfügbar"
       },
       "management": {
-        "description": "Steuern Sie, wer diesen Skill verwenden kann.",
-        "externalApp": {
-          "manage": {
-            "label": "In App-Einstellungen verwalten"
-          },
-          "readyDescription": "Dieser Skill verwendet die App „{appName}“.",
-          "title": "Externe App"
-        },
         "sharing": {
           "edit": {
             "label": "Freigabe bearbeiten"
-          },
-          "title": "Freigabe"
-        },
-        "title": "Verwaltung"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Fügen Sie vor dem Speichern eine Beschreibung hinzu.",
@@ -16794,21 +16787,6 @@
         "noPermission": "Sie haben keine Berechtigung, die Details dieses Skills zu bearbeiten.",
         "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden und bearbeiten.",
-          "title": "Organisation",
-          "viewerDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden."
-        },
-        "personal": {
-          "description": "Nur Sie können diesen Skill verwenden.",
-          "title": "Persönlich"
-        },
-        "shares": {
-          "description": "Nur ausgewählte Benutzer und Gruppen können diesen Skill verwenden.",
-          "title": "{count, plural, one {# Freigabe} other {# Freigaben}}"
-        }
       },
       "toasts": {
         "created": "„{name}“ erstellt",
@@ -16989,7 +16967,6 @@
         },
         "externalAppNotice": "Organisationsweiter Lesezugriff ist erforderlich, solange dieser Skill mit der App “{appName}” verknüpft ist.",
         "header": {
-          "title": "*{name}* teilen",
           "transferTitle": "*{name}* übertragen"
         },
         "loading": {
@@ -17001,7 +16978,9 @@
         },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
-          "ariaLabel": "Zugriff für {name} aktualisieren"
+          "ariaLabel": "Zugriff für {name} aktualisieren",
+          "canUse": "Kann verwenden",
+          "canEdit": "Kann bearbeiten"
         },
         "saveButton": {
           "label": "Speichern"
@@ -17023,7 +17002,23 @@
         },
         "transferredToast": {
           "message": "Eigentum übertragen."
-        }
+        },
+        "installation": {
+          "title": "Installation",
+          "available": "Zur Installation verfügbar",
+          "default": "Standardmäßig installiert",
+          "required": "Erforderlich",
+          "availableDescription": "Nutzer können jederzeit installieren oder deinstallieren.",
+          "defaultDescription": "Automatisch installiert. Nutzer können jederzeit deaktivieren oder deinstallieren.",
+          "requiredDescription": "Automatisch installiert. Nutzer können nicht deaktivieren oder deinstallieren.",
+          "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird."
+        },
+        "description": "Wählen Sie, wer diesen Skill nutzen kann und wie er installiert wird.",
+        "accessTitle": "Wer hat Zugriff",
+        "peopleTitle": "Personen mit Zugriff",
+        "manageIndividualAccess": "Individuellen Zugriff verwalten",
+        "individualAccessTitle": "Individueller Zugriff",
+        "ownershipTitle": "Eigentümerschaft"
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
