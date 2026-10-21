@@ -267,6 +267,7 @@ describe("pasting", () => {
     ["whole", "1.2", "1", "2"],
     ["fraction", "1.2", "1", "2"],
     ["whole", "$1,234.56", "1234", "56"],
+    ["whole", "\u200F12.50 $", "12", "50"],
   ] as const)(
     "into the %s segment, %s reads as %s . %s",
     async (segment, text, whole, fraction) => {

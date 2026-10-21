@@ -325,7 +325,9 @@ function InputCurrency({
           (rest, token) => rest.split(token).join(""),
           toAsciiDigits(e.clipboardData.getData("text"))
         )
-        .replace(/\s/g, "");
+        // Whitespace, and the invisible direction marks some locales put
+        // around amounts (Arabic's "\u200F١٢٫٥٠ US$").
+        .replace(/[\s\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
       const pieces = text.split(parts.decimal);
       if (
         pieces.length > 2 ||
