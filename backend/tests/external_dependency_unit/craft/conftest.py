@@ -56,6 +56,7 @@ from tests.common.craft.skill_table_isolation import (
     snapshot_skill_tables,
 )
 from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -318,6 +319,9 @@ def seeded_skill(
             file_type="application/zip",
         )
         bundle_file_ids.append(bundle_file_id)
+
+        if author_user_id is None and not public:
+            author_user_id = make_user(db_session, standard_account=True).id
 
         skill = Skill(
             id=uuid4(),
