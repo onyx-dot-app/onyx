@@ -7,6 +7,7 @@ from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.cache.interface import CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
@@ -34,7 +35,7 @@ SNAPSHOT_INTERVAL_DIVISOR = 4
 
 def _check_cleanup_lease(lock: RedisLock) -> None:
     if not lock.owned():
-        raise RuntimeError("Sandbox cleanup lease lost")
+        raise CacheLockLostError("Sandbox cleanup lease lost")
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

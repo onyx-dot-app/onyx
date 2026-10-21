@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.db.sandbox import (
@@ -101,6 +102,8 @@ def reconcile_sandbox_resources(
                 )
         except SandboxProvisionContentionError:
             continue
+        except CacheLockLostError:
+            raise
         except Exception:
             cache.set(retry_key, "retry", ex=RESOURCE_RETRY_SECONDS)
             logger.exception("Failed to reconcile sandbox resource %s", resource.name)

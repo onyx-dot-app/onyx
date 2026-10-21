@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.cache.interface import CacheLockLostError
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -186,7 +187,7 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     monkeypatch.setattr(lifecycle, "create_session_snapshot_keep_latest", snapshot)
 
     if not lease_owned:
-        with pytest.raises(RuntimeError, match="Sandbox cleanup lease lost"):
+        with pytest.raises(CacheLockLostError, match="Sandbox cleanup lease lost"):
             tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
         sleep.assert_not_called()
         snapshot.assert_not_called()
@@ -251,3 +252,21 @@ def test_lost_claim_stops_deletion(
         manager, "tenant-a", time.monotonic() + 60, lambda: None
     )
     manager.delete_resource.assert_not_called()
+
+
+def test_cleanup_lease_loss_on_last_resource_aborts_without_retry(
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, cache = collector
+    manager.iter_resources.return_value = iter([_resource()])
+    monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
+    check_ownership = MagicMock(
+        side_effect=[None, CacheLockLostError("Sandbox cleanup lease lost")]
+    )
+    with pytest.raises(CacheLockLostError, match="Sandbox cleanup lease lost"):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, check_ownership
+        )
+    manager.delete_resource.assert_not_called()
+    cache.set.assert_not_called()
