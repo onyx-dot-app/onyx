@@ -320,7 +320,14 @@ def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str,
     body: dict[str, Any] = response.json()
     errors: list[dict[str, Any]] | None = body.get("errors")
     if errors:
-        if _RATE_LIMITED_CODE in _error_codes(errors):
+        codes: set[str] = _error_codes(errors)
+        if _AUTHENTICATION_ERROR_CODE in codes:
+            raise LinearAuthError(
+                f"Linear refused the credential: {errors}",
+                status_code=response.status_code,
+                body=json.dumps({"errors": errors}),
+            )
+        if _RATE_LIMITED_CODE in codes:
             raise LinearRateLimitError(
                 f"Linear rate limited the request: {errors}",
                 status_code=response.status_code,

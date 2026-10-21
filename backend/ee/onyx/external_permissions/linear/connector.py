@@ -3,7 +3,10 @@ who may read each issue. Every line here exists only to sync Linear
 permissions, so it lives in EE on top of the Community Edition connector's
 indexing, credentials and gateway."""
 
+from typing import Any
+
 from ee.onyx.external_permissions.linear.access import SharedAccessIndex, issue_access
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.factory import build_connector_kwargs
@@ -14,7 +17,10 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.linear.models import IssueAccess
-from onyx.connectors.linear.source_operations import ACCESS_PAGE_SIZE
+from onyx.connectors.linear.source_operations import (
+    ACCESS_PAGE_SIZE,
+    LinearSourceOperations,
+)
 from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -34,6 +40,27 @@ def _beat(callback: IndexingHeartbeatInterface | None, amount: int) -> None:
     if callback.should_stop():
         raise RuntimeError("Linear permission sync stopped on the heartbeat's signal")
     callback.progress("linear_perm_sync", amount)
+
+
+def issue_access_by_id(
+    ops: LinearSourceOperations, issue_filter: dict[str, Any]
+) -> dict[str, ExternalAccess]:
+    """Who may read each issue the filter matches, for a targeted reindex.
+    Ancestors outside the filter are read on demand for inherited sharing."""
+    shares: SharedAccessIndex = SharedAccessIndex(
+        lambda issue_id: ops.get_issue_share(issue_id=issue_id)
+    )
+    issues: list[IssueAccess] = []
+    organization_id: str = ""
+    for page in ops.iterate_issue_access(issue_filter=issue_filter):
+        organization_id = page.organization_id
+        for issue in page.issues:
+            shares.record(issue.id, issue.share)
+            issues.append(issue)
+    return {
+        issue.id: issue_access(issue.team, organization_id, shares.emails_for(issue.id))
+        for issue in issues
+    }
 
 
 class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
