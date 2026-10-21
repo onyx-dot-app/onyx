@@ -733,6 +733,10 @@ describe("inline server configuration", () => {
       expect(
         screen.getByRole("button", { name: "Save Changes" })
       ).toBeDisabled();
+      expect(endpoint).toHaveAttribute("aria-invalid", "true");
+      expect(endpoint).toHaveAccessibleDescription(
+        messages.actions.addMcpModal.serverUrl.invalid
+      );
       expect(savedRequests).toHaveLength(0);
     }
   );

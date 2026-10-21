@@ -85,6 +85,7 @@ export default function MCPServerDetailsPage({
   onDirtyChange,
 }: MCPServerDetailsPageProps) {
   const formId = useId();
+  const serverUrlErrorId = useId();
   const formRef = useRef<FormikProps<MCPServerDetailsValues>>(null);
   const t = useTranslations("actions");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -344,6 +345,18 @@ export default function MCPServerDetailsPage({
                     <InputTypeIn
                       id="server_url"
                       name="server_url"
+                      aria-invalid={
+                        !!(
+                          formikProps.touched.server_url &&
+                          formikProps.errors.server_url
+                        )
+                      }
+                      aria-describedby={
+                        formikProps.touched.server_url &&
+                        formikProps.errors.server_url
+                          ? serverUrlErrorId
+                          : undefined
+                      }
                       value={formikProps.values.server_url}
                       onChange={formikProps.handleChange}
                       onBlur={formikProps.handleBlur}
@@ -358,7 +371,11 @@ export default function MCPServerDetailsPage({
                     />
                     {formikProps.touched.server_url &&
                       formikProps.errors.server_url && (
-                        <Text font="secondary-body" color="status-error-05">
+                        <Text
+                          id={serverUrlErrorId}
+                          font="secondary-body"
+                          color="status-error-05"
+                        >
                           {formikProps.errors.server_url}
                         </Text>
                       )}
