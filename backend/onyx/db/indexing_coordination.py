@@ -123,20 +123,6 @@ class IndexingCoordination:
         return attempt.cancellation_requested if attempt else False
 
     @staticmethod
-    def request_cancellation(
-        db_session: Session,
-        index_attempt_id: int,
-    ) -> None:
-        """
-        Request cancellation of an indexing attempt.
-        This replaces Redis termination signals.
-        """
-        IndexingCoordination.request_cancellation__no_commit(
-            db_session, index_attempt_id
-        )
-        db_session.commit()
-
-    @staticmethod
     def request_cancellation__no_commit(
         db_session: Session,
         index_attempt_id: int,
