@@ -1086,7 +1086,9 @@ class DockerSandboxManager(SandboxManager):
                 container.remove(force=True, v=False)
                 logger.info("Removed sandbox container %s.", container.name)
             except NotFound:
-                pass
+                logger.warning(
+                    "Sandbox container %s disappeared during removal.", container.name
+                )
             except Exception as e:
                 errors.append(e)
 

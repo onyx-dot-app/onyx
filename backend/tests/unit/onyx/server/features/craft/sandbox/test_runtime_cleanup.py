@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -98,3 +99,20 @@ def test_docker_cleanup_accepts_already_missing_resources(
     monkeypatch.setattr(manager, "_get_container", lambda _sandbox_id: None)
     monkeypatch.setattr(manager, "_close_all_sandbox_buses", lambda _sandbox_id: None)
     manager.terminate(uuid4())
+
+
+def test_docker_cleanup_logs_container_disappearing_during_removal(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = object.__new__(DockerSandboxManager)
+    manager._docker = MagicMock()
+    container = MagicMock()
+    container.name = "sandbox-test"
+    container.remove.side_effect = NotFound("missing")
+    monkeypatch.setattr(manager, "_get_container", lambda _sandbox_id: container)
+    monkeypatch.setattr(manager, "_close_all_sandbox_buses", lambda _sandbox_id: None)
+
+    with caplog.at_level(logging.WARNING):
+        manager.terminate(uuid4())
+
+    assert "Sandbox container sandbox-test disappeared during removal." in caplog.text
