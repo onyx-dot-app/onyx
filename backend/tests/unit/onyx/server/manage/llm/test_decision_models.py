@@ -151,7 +151,7 @@ def test_openrouter_discovery_rejects_other_provider(
 def test_ordinary_openrouter_validation_does_not_fetch_decision_catalog() -> None:
     with (
         patch.object(api, "_get_openrouter_models_response") as discover,
-        patch.object(api, "DecisionClient") as decision_client,
+        patch.object(api, "build_decision_client") as decision_client,
         patch.object(api, "get_llm") as get_llm,
         patch.object(api, "test_llm", return_value=None) as probe,
     ):
@@ -185,7 +185,7 @@ def test_openrouter_validation_uses_authoritative_capabilities(
             "_get_openrouter_models_response",
             return_value={"data": [_catalog_model("vendor/model", catalog_modalities)]},
         ) as discover,
-        patch.object(api, "DecisionClient") as decision_client,
+        patch.object(api, "build_decision_client") as decision_client,
         patch.object(api, "get_llm") as get_llm,
         patch.object(api, "test_llm", return_value=None) as probe,
     ):
@@ -211,6 +211,7 @@ def test_openrouter_validation_uses_authoritative_capabilities(
             model="vendor/model",
             api_key="test-key",
             api_base=None,
+            zoom_voice_provider_id=None,
         )
         decision_client.return_value.decide.assert_called_once_with(
             DecisionRequest(

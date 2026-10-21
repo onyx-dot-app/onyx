@@ -69,6 +69,7 @@ class TestLLMRequest(BaseModel):
     provider: str
     model: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -155,6 +156,7 @@ class LLMProvider(BaseModel):
     name: str | None = None
     provider: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -171,6 +173,7 @@ class DecisionProviderConnection(BaseModel):
     name: str | None = None
     provider: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_key_changed: bool = False
     api_base: str | None = None
     api_version: str | None = None
@@ -276,6 +279,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=api_key,
+            zoom_voice_provider_id=llm_provider_model.zoom_voice_provider_id,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,

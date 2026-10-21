@@ -8,3 +8,11 @@ test("Decision Models has its own admin page and keeps selection opt-in", async 
   await decisionModels.openFromChatPreferences();
   await decisionModels.expectUnsetModel();
 });
+
+test("Zoom setup provides shared credentials directly on Decision Models", async ({
+  page,
+}) => {
+  const decisionModels = new AdminDecisionModelsPage(page);
+  await decisionModels.openFromChatPreferences();
+  await decisionModels.openZoomSetup();
+});

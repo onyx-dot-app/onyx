@@ -1,4 +1,5 @@
 import math
+from collections.abc import Callable
 
 import httpx
 from pydantic import JsonValue
@@ -11,11 +12,13 @@ from onyx.llm.decisions.models import (
     DecisionProvider,
     DecisionRequest,
     DecisionResponse,
+    DecisionUsage,
     PredicateAnswer,
     ScoreAnswer,
     ScoreProbability,
     ScoreQuestion,
     SystemOneResponse,
+    ZoomResponse,
 )
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
@@ -23,6 +26,7 @@ from onyx.tracing.llm_utils import traced_llm_call
 
 _ENDPOINTS = {
     DecisionProvider.TYPESAFE: ("https://api.typesafe.ai/v1", "systemone"),
+    DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
 }
@@ -142,10 +146,14 @@ class DecisionClient:
         api_base: str | None = None,
         timeout: float = 30.0,
         extra_headers: dict[str, str] | None = None,
+        api_key_resolver: Callable[[], str] | None = None,
     ) -> None:
         self.provider = provider
+        self._api_key_resolver = api_key_resolver
         self.model = model
         base, path = _ENDPOINTS[provider]
+        if provider == DecisionProvider.ZOOM_AI and api_base:
+            raise ValueError("Zoom Decisions uses its fixed hosted endpoint")
         base = (api_base or base).rstrip("/")
         if provider == DecisionProvider.OPENROUTER and base.endswith("/v1"):
             base = base.removesuffix("/v1") + "/alpha"
@@ -176,10 +184,27 @@ class DecisionClient:
             input_messages=body,
         ) as span:
             with httpx.Client(timeout=self.timeout) as client:
-                result = client.post(self.url, json=body, headers=self._headers)
+                headers = dict(self._headers)
+                if self._api_key_resolver:
+                    headers["Authorization"] = f"Bearer {self._api_key_resolver()}"
+                result = client.post(self.url, json=body, headers=headers)
                 result.raise_for_status()
             if system_one:
                 response = _system_one_response(result.json())
+            elif self.provider == DecisionProvider.ZOOM_AI:
+                zoom = ZoomResponse.model_validate(result.json())
+                response = DecisionResponse(
+                    model=zoom.model,
+                    answers=zoom.answers,
+                    usage=(
+                        DecisionUsage(
+                            input_tokens=zoom.usage.input_units,
+                            output_tokens=zoom.usage.output_units,
+                        )
+                        if zoom.usage and zoom.usage.unit_type == "tokens"
+                        else None
+                    ),
+                )
             else:
                 response = DecisionResponse.model_validate(result.json())
             response = _validate_answers(request, response)

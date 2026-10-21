@@ -513,6 +513,7 @@ def upsert_decision_provider(
     provider.api_base = request.api_base
     provider.api_version = request.api_version
     provider.custom_config = request.custom_config
+    provider.zoom_voice_provider_id = request.zoom_voice_provider_id
     for name, model in existing.items():
         has_decision = LLMModelFlowType.DECISION in model.llm_model_flow_types
         if has_decision and name not in selected_names:
@@ -601,6 +602,13 @@ def upsert_llm_provider(
     )
     existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
+    if (
+        "zoom_voice_provider_id" in llm_provider_upsert_request.model_fields_set
+        or existing_llm_provider.id is None
+    ):
+        existing_llm_provider.zoom_voice_provider_id = (
+            llm_provider_upsert_request.zoom_voice_provider_id
+        )
     existing_llm_provider.custom_config = custom_config
 
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
@@ -1182,6 +1190,16 @@ def fetch_existing_llm_provider(
     )
 
     return provider_model
+
+
+def fetch_llm_provider_by_zoom_voice_provider_id(
+    db_session: Session, zoom_voice_provider_id: int
+) -> LLMProviderModel | None:
+    return db_session.scalar(
+        select(LLMProviderModel).where(
+            LLMProviderModel.zoom_voice_provider_id == zoom_voice_provider_id
+        )
+    )
 
 
 def fetch_existing_llm_provider_by_id(

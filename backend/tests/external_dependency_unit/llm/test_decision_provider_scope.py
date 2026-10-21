@@ -1,5 +1,6 @@
 from collections.abc import Generator
-from unittest.mock import patch
+from typing import Literal
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -14,12 +15,18 @@ from onyx.db.llm import (
     upsert_decision_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.db.models import LLMProvider, ModelConfiguration, VoiceProvider
+from onyx.db.voice import delete_voice_provider, upsert_voice_provider
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.api import _validate_zoom_decision_connection
 from onyx.server.manage.llm.models import (
     DecisionProviderUpsertRequest,
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from onyx.server.manage.voice.api import upsert_voice_provider_endpoint
+from onyx.server.manage.voice.models import VoiceProviderUpsertRequest
 
 
 @pytest.fixture
@@ -137,6 +144,221 @@ def test_provider_setup_does_not_select_decision_model_or_enable_chat(
         LLMModelFlowType.CHAT,
         LLMModelFlowType.DECISION,
     }
+
+
+def test_selected_shared_zoom_connection_cannot_be_deleted(
+    transaction: Session,
+) -> None:
+    voice = upsert_voice_provider(
+        db_session=transaction,
+        provider_id=None,
+        name=f"zoom-link-{uuid4().hex}",
+        provider_type="zoom",
+        api_key="key",
+        api_key_changed=True,
+        api_secret="secret",
+        api_secret_changed=True,
+        link_decision_provider=True,
+    )
+    provider = transaction.scalar(
+        select(LLMProvider).where(LLMProvider.zoom_voice_provider_id == voice.id)
+    )
+    assert provider is not None
+    saved = transaction.get(LLMProvider, provider.id)
+    assert saved is not None
+    assert saved.zoom_voice_provider_id == voice.id
+    assert saved.api_key is None
+    assert saved.custom_config is None
+    update_default_model(
+        transaction, provider.id, "zoom-decisions", LLMModelFlowType.DECISION
+    )
+    with pytest.raises(OnyxError) as error:
+        delete_voice_provider(transaction, voice.id)
+    assert error.value.error_code == OnyxErrorCode.RESOURCE_IN_USE
+    assert "selected decision model" in error.value.detail
+    assert transaction.get(VoiceProvider, voice.id) is not None
+
+
+def test_shared_zoom_setup_rotation_and_deletion(transaction: Session) -> None:
+    clear_decision_model(transaction)
+    name = f"zoom-shared-{uuid4().hex}"
+    voice = upsert_voice_provider(
+        db_session=transaction,
+        provider_id=None,
+        name=name,
+        provider_type="zoom",
+        api_key="first-key",
+        api_key_changed=True,
+        api_secret="first-secret",
+        api_secret_changed=True,
+        link_decision_provider=True,
+    )
+    voice_id = voice.id
+    linked = transaction.scalar(
+        select(LLMProvider).where(LLMProvider.zoom_voice_provider_id == voice.id)
+    )
+    assert linked is not None
+    linked_id = linked.id
+    models = transaction.scalars(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == linked.id
+        )
+    ).all()
+    assert {model.name for model in models} == {"zoom-decisions", "zoom-decisions-pro"}
+    assert all(
+        not model.is_visible
+        and model.llm_model_flow_types == [LLMModelFlowType.DECISION]
+        for model in models
+    )
+    assert fetch_default_model(transaction, LLMModelFlowType.DECISION) is None
+    assert not voice.is_default_stt and not voice.is_default_tts
+    upsert_voice_provider(
+        db_session=transaction,
+        provider_id=voice_id,
+        name=name,
+        provider_type="zoom",
+        api_key="rotated-key",
+        api_key_changed=True,
+        api_secret="rotated-secret",
+        api_secret_changed=True,
+    )
+    transaction.expire_all()
+    assert (
+        len(
+            transaction.scalars(
+                select(LLMProvider).where(
+                    LLMProvider.zoom_voice_provider_id == voice_id
+                )
+            ).all()
+        )
+        == 1
+    )
+    saved = transaction.get(VoiceProvider, voice_id)
+    assert (
+        saved is not None and saved.api_key is not None and saved.api_secret is not None
+    )
+    assert saved.api_key.get_value(apply_mask=False) == "rotated-key"
+    assert saved.api_secret.get_value(apply_mask=False) == "rotated-secret"
+    delete_voice_provider(transaction, voice_id)
+    transaction.expire_all()
+    assert transaction.get(VoiceProvider, voice_id) is None
+    assert transaction.get(LLMProvider, linked_id) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["voice", "decision"])
+async def test_only_decision_setup_links_zoom_decisions(
+    transaction: Session, mode: Literal["voice", "decision"]
+) -> None:
+    clear_decision_model(transaction)
+    with (
+        patch(
+            "onyx.voice.providers.zoom.ZoomVoiceProvider.validate_credentials",
+            new_callable=AsyncMock,
+        ) as scribe,
+        patch(
+            "onyx.server.manage.voice.api._validate_decision_credentials",
+            new_callable=AsyncMock,
+        ) as decisions,
+        patch("onyx.server.manage.voice.api.invalidate_provider_listing_cache"),
+    ):
+        saved = await upsert_voice_provider_endpoint(
+            VoiceProviderUpsertRequest(
+                name=f"zoom-{mode}-{uuid4().hex}",
+                provider_type="zoom",
+                validation_mode=mode,
+                api_key="key",
+                api_secret="secret",
+            ),
+            MagicMock(),
+            transaction,
+        )
+    assert scribe.await_count == int(mode == "voice")
+    assert decisions.await_count == int(mode == "decision")
+    assert not saved.is_default_stt and not saved.is_default_tts
+    linked = transaction.scalar(
+        select(LLMProvider.id).where(LLMProvider.zoom_voice_provider_id == saved.id)
+    )
+    assert (linked is not None) is (mode == "decision")
+    assert fetch_default_model(transaction, LLMModelFlowType.DECISION) is None
+
+
+@pytest.mark.asyncio
+async def test_failed_decision_validation_rolls_back_both_records(
+    transaction: Session,
+) -> None:
+    name = f"zoom-failure-{uuid4().hex}"
+    with patch(
+        "onyx.server.manage.voice.api._validate_decision_credentials",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("failure"),
+    ):
+        with pytest.raises(OnyxError, match="Connection test failed"):
+            await upsert_voice_provider_endpoint(
+                VoiceProviderUpsertRequest(
+                    name=name,
+                    provider_type="zoom",
+                    validation_mode="decision",
+                    api_key="key",
+                    api_secret="secret",
+                ),
+                MagicMock(),
+                transaction,
+            )
+    assert (
+        transaction.scalar(select(VoiceProvider.id).where(VoiceProvider.name == name))
+        is None
+    )
+    assert (
+        transaction.scalar(select(LLMProvider.id).where(LLMProvider.name == name))
+        is None
+    )
+
+
+def test_zoom_link_validation_rejects_relink_and_duplicate_link(
+    transaction: Session,
+) -> None:
+    voices = [
+        upsert_voice_provider(
+            db_session=transaction,
+            provider_id=None,
+            name=f"zoom-relink-{uuid4().hex}",
+            provider_type="zoom",
+            api_key="key",
+            api_key_changed=True,
+            api_secret="secret",
+            api_secret_changed=True,
+            link_decision_provider=True,
+        )
+        for _ in range(2)
+    ]
+    linked = transaction.scalar(
+        select(LLMProvider).where(LLMProvider.zoom_voice_provider_id == voices[0].id)
+    )
+    assert linked is not None
+
+    def validate(voice_id: int | None, existing: LLMProvider | None) -> None:
+        _validate_zoom_decision_connection(
+            provider="zoom_ai",
+            zoom_voice_provider_id=voice_id,
+            existing_provider=existing,
+            api_key=None,
+            api_base=None,
+            custom_config=None,
+            user=MagicMock(),
+            db_session=transaction,
+        )
+
+    with patch("onyx.server.manage.llm.api.has_global_permission", return_value=True):
+        validate(voices[0].id, linked)
+        for voice_id in (None, voices[1].id):
+            with pytest.raises(OnyxError, match="cannot change"):
+                validate(voice_id, linked)
+        with pytest.raises(OnyxError, match="requires a Zoom connection"):
+            validate(None, None)
+        with pytest.raises(OnyxError) as error:
+            validate(voices[0].id, None)
+    assert error.value.error_code == OnyxErrorCode.CONFLICT
 
 
 def test_scope_rejects_unverified_decision_flag(transaction: Session) -> None:

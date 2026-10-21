@@ -34,6 +34,7 @@ import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import DecisionProviderModal from "@/sections/modals/languageModels/DecisionProviderModal";
+import ZoomDecisionModal from "@/sections/modals/languageModels/ZoomDecisionModal";
 
 interface DecisionProviderCardProps {
   providerName: string;
@@ -136,14 +137,22 @@ function DecisionProviderCard({
               }
             />
           )}
-          {open && (!provider || fullProvider) && (
-            <DecisionProviderModal
-              providerName={providerName}
-              existingLlmProvider={fullProvider ?? undefined}
-              onOpenChange={setOpen}
-              onSuccess={() => refreshLlmProviderCaches(mutate)}
-            />
-          )}
+          {open &&
+            (!provider || fullProvider) &&
+            (providerName === "zoom_ai" ? (
+              <ZoomDecisionModal
+                existingLlmProvider={fullProvider ?? undefined}
+                onOpenChange={setOpen}
+                onSuccess={() => refreshLlmProviderCaches(mutate)}
+              />
+            ) : (
+              <DecisionProviderModal
+                providerName={providerName}
+                existingLlmProvider={fullProvider ?? undefined}
+                onOpenChange={setOpen}
+                onSuccess={() => refreshLlmProviderCaches(mutate)}
+              />
+            ))}
         </Section>
       </Card>
       {provider && deleteModal.isOpen && (

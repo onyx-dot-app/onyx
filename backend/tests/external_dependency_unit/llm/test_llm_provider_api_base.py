@@ -539,7 +539,7 @@ def test_upload_with_custom_config_then_change(
                     custom_config_changed=True,
                     custom_config=custom_config,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -571,7 +571,7 @@ def test_upload_with_custom_config_then_change(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -741,7 +741,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                         "vertex_location": "us-central1",
                     },
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -815,7 +815,7 @@ def test_vertex_workload_identity_provider_create(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -915,7 +915,7 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 

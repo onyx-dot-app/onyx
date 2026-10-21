@@ -1273,7 +1273,14 @@
       "retry": "Réessayer",
       "saveFailed": "Impossible d’enregistrer la connexion.",
       "cancel": "Annuler",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "zoom": {
+        "title": "Connecter Zoom AI Services",
+        "description": "Utilisez une connexion pour Zoom Scribe et Zoom AI Decisions. Les modifications s’appliquent aux deux.",
+        "connection": "Connexion Zoom",
+        "selectConnection": "Sélectionner une connexion Zoom",
+        "removeDescription": "Cela supprime la connexion Zoom partagée de Voix et Modèles de décision."
+      }
     },
     "addConnector": {
       "categories": {
@@ -10503,7 +10510,7 @@
           "required": "La clé d'API est obligatoire"
         },
         "apiSecret": {
-          "description": "Collez votre [secret d'API]({url}) de {provider} pour accéder à Scribe.",
+          "description": "Collez votre [secret API]({url}) de {provider} pour accéder à Zoom AI Services.",
           "label": "Secret d'API",
           "placeholder": "Secret d'API",
           "required": "Le secret d'API est obligatoire"

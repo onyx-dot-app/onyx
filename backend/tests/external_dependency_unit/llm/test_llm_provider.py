@@ -110,7 +110,7 @@ class TestLLMConfigurationEndpoint:
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -154,7 +154,7 @@ class TestLLMConfigurationEndpoint:
                             custom_config_changed=False,
                             model="gpt-4o-mini",
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -200,7 +200,7 @@ class TestLLMConfigurationEndpoint:
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -249,7 +249,7 @@ class TestLLMConfigurationEndpoint:
                         custom_config_changed=False,
                         model="gpt-4o-mini",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -311,7 +311,7 @@ class TestLLMConfigurationEndpoint:
                         custom_config_changed=False,  # Using existing config
                         model="gpt-4o-mini",
                     ),
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -351,7 +351,7 @@ class TestLLMConfigurationEndpoint:
                             custom_config_changed=False,
                             model=model_name,
                         ),
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 

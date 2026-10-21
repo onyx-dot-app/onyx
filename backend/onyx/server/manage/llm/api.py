@@ -24,6 +24,7 @@ from onyx.db.llm import (
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
     fetch_existing_models,
+    fetch_llm_provider_by_zoom_voice_provider_id,
     fetch_llm_providers_with_router_models,
     fetch_model_configuration_by_id,
     fetch_model_configurations_page,
@@ -54,7 +55,10 @@ from onyx.llm.constants import (
     WELL_KNOWN_PROVIDER_NAMES,
     LlmProviderNames,
 )
-from onyx.llm.decisions.client import DecisionClient
+from onyx.llm.decisions.factory import (
+    build_decision_client,
+    validate_zoom_voice_provider,
+)
 from onyx.llm.decisions.models import (
     DecisionProvider,
     DecisionRequest,
@@ -526,10 +530,76 @@ def fetch_llm_provider_options(
     raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Provider {provider_name} not found")
 
 
+def _validate_zoom_decision_connection(
+    *,
+    provider: str,
+    zoom_voice_provider_id: int | None,
+    existing_provider: LLMProviderModel | None,
+    api_key: str | None,
+    api_base: str | None,
+    custom_config: dict[str, str] | None,
+    user: User,
+    db_session: Session,
+) -> None:
+    has_existing_link = (
+        existing_provider is not None
+        and existing_provider.zoom_voice_provider_id is not None
+    )
+    if zoom_voice_provider_id is not None or has_existing_link:
+        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    if (
+        has_existing_link
+        and existing_provider is not None
+        and zoom_voice_provider_id != existing_provider.zoom_voice_provider_id
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "A linked Zoom provider cannot change its Zoom Scribe connection",
+        )
+    if zoom_voice_provider_id is not None and provider != LlmProviderNames.ZOOM_AI:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Only Zoom Decisions can link a Zoom Scribe connection",
+        )
+    if provider == LlmProviderNames.ZOOM_AI:
+        if zoom_voice_provider_id is None:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Zoom Decisions requires a Zoom connection. Connect Zoom from Decision Models",
+            )
+        if api_base or custom_config:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Zoom Decisions uses its fixed hosted endpoint and does not accept custom configuration",
+            )
+        if api_key:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Linked Zoom connections use the saved Scribe credentials. Remove the API key",
+            )
+        try:
+            validate_zoom_voice_provider(
+                db_session, zoom_voice_provider_id, for_update=True
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(error)) from error
+        linked = fetch_llm_provider_by_zoom_voice_provider_id(
+            db_session, zoom_voice_provider_id
+        )
+        if linked is not None and (
+            existing_provider is None or linked.id != existing_provider.id
+        ):
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "This Zoom connection is already linked to another provider.",
+            )
+
+
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -572,6 +642,23 @@ def test_llm_configuration(
             )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
+
+    zoom_voice_provider_id = test_llm_request.zoom_voice_provider_id
+    if (
+        existing_provider
+        and "zoom_voice_provider_id" not in test_llm_request.model_fields_set
+    ):
+        zoom_voice_provider_id = existing_provider.zoom_voice_provider_id
+    _validate_zoom_decision_connection(
+        provider=test_llm_request.provider,
+        zoom_voice_provider_id=zoom_voice_provider_id,
+        existing_provider=existing_provider,
+        api_key=test_api_key,
+        api_base=test_llm_request.api_base,
+        custom_config=test_custom_config,
+        user=user,
+        db_session=db_session,
+    )
 
     test_custom_config = _validate_and_normalize_vertex_auth(
         provider=test_llm_request.provider,
@@ -776,7 +863,7 @@ def update_model_routing(
 
 
 def _resolve_decision_connection(
-    request: DecisionProviderConnection, db_session: Session
+    request: DecisionProviderConnection, db_session: Session, user: User
 ) -> None:
     if request.provider not in DecisionProvider:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Unsupported decision provider")
@@ -797,6 +884,8 @@ def _resolve_decision_connection(
             request.api_base = existing.api_base
         if "api_version" not in request.model_fields_set:
             request.api_version = existing.api_version
+        if "zoom_voice_provider_id" not in request.model_fields_set:
+            request.zoom_voice_provider_id = existing.zoom_voice_provider_id
         request.custom_config = _restore_masked_custom_config_values(
             existing_custom_config=existing.custom_config,
             new_custom_config=request.custom_config,
@@ -822,7 +911,20 @@ def _resolve_decision_connection(
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR, "TypeSafe AI uses its hosted System One API"
         )
-    if not (request.api_key or "").strip():
+    _validate_zoom_decision_connection(
+        provider=request.provider,
+        zoom_voice_provider_id=request.zoom_voice_provider_id,
+        existing_provider=existing,
+        api_key=request.api_key,
+        api_base=request.api_base,
+        custom_config=request.custom_config,
+        user=user,
+        db_session=db_session,
+    )
+    if (
+        request.provider != LlmProviderNames.ZOOM_AI
+        and not (request.api_key or "").strip()
+    ):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR, "Decision providers require an API key"
         )
@@ -856,7 +958,7 @@ def put_decision_provider(
     user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
-    _resolve_decision_connection(request, db_session)
+    _resolve_decision_connection(request, db_session, user)
     try:
         result = upsert_decision_provider(
             request, db_session, _decision_provider_catalog(request)
@@ -883,10 +985,10 @@ def put_decision_provider(
 @admin_router.post("/decision-provider/test")
 def test_decision_provider(
     request: TestDecisionProviderRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    user: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    _resolve_decision_connection(request, db_session)
+    _resolve_decision_connection(request, db_session, user)
     catalog = _decision_provider_catalog(request)
     if not (
         request.model in catalog
@@ -898,11 +1000,12 @@ def test_decision_provider(
             "The selected model does not support decisions",
         )
     try:
-        DecisionClient(
-            provider=DecisionProvider(request.provider),
+        build_decision_client(
+            provider=request.provider,
             model=request.model,
             api_key=request.api_key or "",
             api_base=request.api_base,
+            zoom_voice_provider_id=request.zoom_voice_provider_id,
         ).decide(
             DecisionRequest(
                 input="The sky is blue.",
@@ -951,6 +1054,24 @@ def put_llm_provider(
             f"LLM Provider with name {llm_provider_upsert_request.name} and id={llm_provider_upsert_request.id} does not exist",
         )
 
+    if (
+        existing_provider
+        and "zoom_voice_provider_id" not in llm_provider_upsert_request.model_fields_set
+    ):
+        llm_provider_upsert_request.zoom_voice_provider_id = (
+            existing_provider.zoom_voice_provider_id
+        )
+    _validate_zoom_decision_connection(
+        provider=llm_provider_upsert_request.provider,
+        zoom_voice_provider_id=llm_provider_upsert_request.zoom_voice_provider_id,
+        existing_provider=existing_provider,
+        api_key=llm_provider_upsert_request.api_key,
+        api_base=llm_provider_upsert_request.api_base,
+        custom_config=llm_provider_upsert_request.custom_config,
+        user=user,
+        db_session=db_session,
+    )
+
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
         if (
@@ -997,6 +1118,10 @@ def put_llm_provider(
         )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
+
+    if llm_provider_upsert_request.zoom_voice_provider_id is not None:
+        llm_provider_upsert_request.api_key = None
+        llm_provider_upsert_request.custom_config = None
 
     llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
         provider=llm_provider_upsert_request.provider,

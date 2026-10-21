@@ -1273,7 +1273,14 @@
       "retry": "再試行",
       "saveFailed": "接続を保存できませんでした。",
       "cancel": "キャンセル",
-      "save": "保存"
+      "save": "保存",
+      "zoom": {
+        "title": "Zoom AI Services に接続",
+        "description": "Zoom Scribe と Zoom AI Decisions に同じ接続を使用します。変更は両方に適用されます。",
+        "connection": "Zoom 接続",
+        "selectConnection": "Zoom 接続を選択",
+        "removeDescription": "音声と決定モデルから共有 Zoom 接続を削除します。"
+      }
     },
     "addConnector": {
       "categories": {
@@ -10503,7 +10510,7 @@
           "required": "API キーは必須です"
         },
         "apiSecret": {
-          "description": "Scribe にアクセスするには、{provider} の [API シークレット]({url}) を貼り付けてください。",
+          "description": "{provider} の [API シークレット]({url}) を貼り付けて Zoom AI Services にアクセスします。",
           "label": "API シークレット",
           "placeholder": "API シークレット",
           "required": "API シークレットは必須です"
