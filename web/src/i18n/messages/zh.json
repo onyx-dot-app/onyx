@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "添加 OpenAPI 操作"
+        "title": "添加 OpenAPI 插件"
       },
       "cancelButton": {
         "label": "取消"
@@ -188,14 +188,14 @@
         "invalidJson": "JSON 格式无效",
         "placeholder": "在此输入您的 OpenAPI 架构",
         "required": "必须填写 OpenAPI 架构定义",
-        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此操作一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 操作]({docsUrl})。",
+        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
       "editConfigsButton": {
-        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证"
+        "disabledTooltip": "只有该插件的创建者或管理员才能管理身份验证"
       },
       "editHeader": {
-        "title": "编辑 OpenAPI 操作"
+        "title": "编辑 OpenAPI 插件"
       },
       "empty": {
         "description": "提供 OpenAPI 架构后即可在此预览操作。",
@@ -208,17 +208,17 @@
         "noSummary": "未提供摘要"
       },
       "submitButton": {
-        "addLabel": "添加操作",
+        "addLabel": "添加插件",
         "addingLabel": "正在添加...",
         "saveLabel": "保存更改",
         "savingLabel": "正在保存..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI 操作创建成功",
-        "actionUpdated": "OpenAPI 操作更新成功",
-        "createFailed": "创建 OpenAPI 操作失败",
+        "actionCreated": "OpenAPI 插件创建成功",
+        "actionUpdated": "OpenAPI 插件更新成功",
+        "createFailed": "创建 OpenAPI 插件失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
-        "updateFailed": "更新 OpenAPI 操作失败"
+        "updateFailed": "更新 OpenAPI 插件失败"
       },
       "humanDescription": {
         "title": "面向用户的描述",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "加载现有 OAuth 配置失败。请重新输入详细信息以更新配置。"
       },
       "header": {
-        "description": "验证连接身份后即可开始使用 OpenAPI 操作。"
+        "description": "验证连接身份后即可开始使用 OpenAPI 插件。"
       },
       "headers": {
         "addButton": {
           "label": "添加请求头"
         },
-        "description": "为发送到此操作 API 端点的所有请求指定自定义请求头。",
+        "description": "为发送到此插件 API 端点的所有请求指定自定义请求头。",
         "keyRequired": "必须填写请求头名称",
         "keyTitle": "请求头",
         "minRequired": "请至少添加一个身份验证请求头",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "删除"
         },
-        "title": "删除 OpenAPI 操作"
+        "title": "删除 OpenAPI 插件"
       },
       "method": {
         "noSummary": "未提供摘要"
@@ -764,7 +764,7 @@
           "tooltip": "配置图像生成"
         },
         "openapi": {
-          "tooltip": "管理 OpenAPI 操作"
+          "tooltip": "管理 OpenAPI 插件"
         },
         "webSearch": {
           "tooltip": "配置网络搜索"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "添加",
         "mcp": "添加自定义 MCP 服务器",
-        "openapi": "添加 OpenAPI 操作"
+        "openapi": "添加 OpenAPI 插件"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "无法加载 MCP 服务器。",
         "listErrorDescription": "无法加载此插件列表。请稍后重试。",
-        "openapiError": "无法加载 OpenAPI 操作。",
+        "openapiError": "无法加载 OpenAPI 插件。",
         "retry": {
           "label": "重试"
         },
@@ -2423,7 +2423,7 @@
           "title": "编程智能体"
         },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
-        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 操作。",
+        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",
