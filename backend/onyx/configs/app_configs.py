@@ -1673,6 +1673,13 @@ TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
     1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
 )
 
+# Arms the one-time migration that re-chunks tabular documents indexed with the
+# previous strategy. Only arms it: the KV record decides whether work remains,
+# so leaving this true across restarts does not re-run a finished migration.
+TABULAR_RECHUNK_ENABLED = (
+    os.environ.get("TABULAR_RECHUNK_ENABLED", "").lower() == "true"
+)
+
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
 # or hang); this is the timeout before the subprocess is killed and pypdf runs.
 PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
