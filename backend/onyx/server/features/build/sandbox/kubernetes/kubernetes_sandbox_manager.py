@@ -1323,13 +1323,15 @@ class KubernetesSandboxManager(SandboxManager):
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def iter_resources(
-        self, tenant_id: str, deadline: float
+        self, tenant_id: str, deadline: float, sandbox_id: UUID | None = None
     ) -> Iterator[SandboxResource]:
         selector = (
             f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX},"
             f"{LABEL_TENANT_ID}={tenant_id},"
             f"{LABEL_K8S_COMPONENT} in ({LABEL_K8S_COMPONENT_SANDBOX},{LABEL_K8S_COMPONENT_AUTH})"
         )
+        if sandbox_id is not None:
+            selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
         for kind, list_resources in (
             (SandboxResourceKind.POD, self._core_api.list_namespaced_pod),
             (SandboxResourceKind.SERVICE, self._core_api.list_namespaced_service),

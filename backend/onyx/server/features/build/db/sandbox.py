@@ -300,9 +300,22 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
     return sandbox
 
 
-def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
+def get_running_sandboxes(
+    db_session: Session,
+    *,
+    after_id: UUID | None = None,
+    limit: int | None = None,
+) -> list[Sandbox]:
     """Get all RUNNING sandboxes (the sweep task's working set)."""
-    stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
+    stmt = (
+        select(Sandbox)
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .order_by(Sandbox.id)
+    )
+    if after_id is not None:
+        stmt = stmt.where(Sandbox.id > after_id)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(db_session.execute(stmt).scalars().all())
 
 

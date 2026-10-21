@@ -52,8 +52,9 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID
 
@@ -68,6 +69,8 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     PromptAttachment,
     SandboxInfo,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
@@ -180,6 +183,7 @@ class StubSandboxManager(SandboxManager):
 
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
+        self.resources_returns: list[SandboxResource] | None = None
         self.workspace_storage_exists_returns: bool = True
         self.runtime_exists_returns: bool = True
         self.workspace_storage_identity_returns: str | None = "stub-workspace"
@@ -329,6 +333,42 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,  # noqa: ARG002
     ) -> str | None:
         return self.workspace_storage_identity_returns
+
+    def iter_resources(
+        self,
+        tenant_id: str,
+        deadline: float,  # noqa: ARG002
+        sandbox_id: UUID | None = None,  # noqa: ARG002
+    ) -> Iterator[SandboxResource]:
+        if self.resources_returns is None:
+            return iter(
+                []
+                if sandbox_id is None
+                else [
+                    SandboxResource(
+                        kind=SandboxResourceKind.POD,
+                        name=f"stub-{sandbox_id}",
+                        instance_id=f"stub-{sandbox_id}",
+                        sandbox_id=sandbox_id,
+                        tenant_id=tenant_id,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                ]
+            )
+        return iter(
+            r
+            for r in self.resources_returns
+            if r.tenant_id == tenant_id
+            and (sandbox_id is None or r.sandbox_id == sandbox_id)
+        )
+
+    def terminate_observed_resources(
+        self,
+        sandbox_id: UUID,
+        resources: list[SandboxResource],  # noqa: ARG002
+        deadline: float,  # noqa: ARG002
+    ) -> None:
+        self.terminate(sandbox_id)
 
     def setup_session_workspace(
         self,

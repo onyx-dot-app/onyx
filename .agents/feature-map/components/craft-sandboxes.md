@@ -513,6 +513,19 @@ for retry and do not prevent independent resource cleanup.
 Inventory failures stop reconciliation but do not skip snapshots or idle cleanup
 while the cleanup lease remains owned. Losing that lease aborts the task.
 
+The sweep renews the 720-second session-flow lease through `CacheBackend`.
+Its application deadline remains 6000 seconds.
+It checks ownership between operations and before idle termination. RUNNING
+rows use batches of 100 with a tenant-scoped cursor. Each sweep continues
+through pages until it reaches the end or its deadline. It processes rows in UUID
+order and advances the cursor after each attempt, including failed attempts.
+A slow failing row cannot pin later rows to the same page. Failed resources have a
+retry delay so repeated errors do not consume every sweep's deletion budget.
+Idle cleanup captures resource identities before checkpointing and compares
+them again under the provisioning lock before deletion. It deletes only those
+observed instances. Confirmed missing storage skips checkpoint calls, while
+unready, stopped, or unreachable storage still requires a successful checkpoint.
+
 Reap = `sleep_sandbox` (§4.5, step 1), run from `cleanup_idle_sandboxes_task`.
 Idle is `last_heartbeat` (falling back to `created_at`) older than
 `SANDBOX_IDLE_TIMEOUT_SECONDS` (`sandbox_lifecycle.py:is_sandbox_idle`). On
@@ -545,6 +558,9 @@ and session ports remain allocated until termination succeeds.
 labels. Kubernetes uses namespace-scoped, paginated lists of Pods, Services, and
 Secrets. New auth Secrets carry tenant and attempt labels. Docker scopes containers
 and volumes by sandbox network, with a Compose project fallback for older resources.
+Host-run legacy containers can prove ownership through their network attachment.
+Their mounted volumes must have matching full sandbox and tenant labels.
+Idle cleanup refuses to report sleep when existing storage has no owned inventory.
 Resources without enough ownership metadata require operator inspection.
 `delete_resource` checks the observed identity again. Kubernetes also requires
 the component label to be `sandbox` or `sandbox-opencode-auth` before deletion.
