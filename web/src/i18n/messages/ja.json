@@ -14977,7 +14977,8 @@
         "missingTaskId": "タスク ID がありません。",
         "pauseButton": "一時停止",
         "resumeButton": "再開",
-        "runNowButton": "今すぐ実行",
+        "runHistoryTab": "実行履歴",
+        "runNowButton": "1回実行",
         "toasts": {
           "deleteFailed": "タスクを削除できませんでした",
           "deleted": "「{name}」を削除しました。",
@@ -15072,7 +15073,7 @@
           "trigger": "トリガー"
         },
         "empty": {
-          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「今すぐ実行」も使えます。"
+          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「1回実行」も使えます。"
         },
         "errors": {
           "loadFailed": "実行履歴を読み込めませんでした。",
@@ -15091,19 +15092,20 @@
           "notOpenableAriaLabel": "開けません"
         },
         "trigger": {
-          "runNow": "今すぐ実行",
+          "runNow": "1回実行",
           "schedule": "スケジュール"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "時刻にはローカルのタイムゾーンを使用します。",
         "dailyWeekly": {
-          "atLabel": "時刻:",
-          "daysLabel": "実行する曜日",
+          "atLabel": "時刻",
+          "daysLabel": "曜日",
           "runsEveryDay": "毎日実行されます",
           "runsOn": "{days} に実行されます"
         },
         "interval": {
-          "everyLabel": "実行間隔:"
+          "everyLabel": "繰り返し間隔"
         },
         "intervalUnits": {
           "days": "日",
@@ -15442,8 +15444,8 @@
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクでは有効なアプリのみ使用できます。変更はこのタスクのみに適用されます。",
-      "newTaskDescription": "このタスクで使用するアプリを有効にしてください。各アプリは現在のアクション設定から開始します。",
+      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
+      "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
       "workspace_disabled": "ワークスペースで無効",
       "workspace_managed": "ワークスペースで管理",
       "userManagement": "ユーザーによる承認設定の管理を許可",
@@ -15467,7 +15469,9 @@
       "disabledForTask": "このタスクで無効",
       "externalApp": "アプリ",
       "mcpServer": "MCPサーバー",
-      "taskAppsTitle": "アプリとMCPサーバー",
+      "taskAppsTitle": "プラグイン",
+      "taskAccessTitle": "プラグインへのアクセス",
+      "noEnabledApps": "このタスクで有効なプラグインはありません。",
       "actionPolicies": "承認設定",
       "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",

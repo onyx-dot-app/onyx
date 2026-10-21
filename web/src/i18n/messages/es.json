@@ -14977,7 +14977,8 @@
         "missingTaskId": "Falta el id de la tarea.",
         "pauseButton": "Pausar",
         "resumeButton": "Reanudar",
-        "runNowButton": "Ejecutar ahora",
+        "runHistoryTab": "Historial de ejecuciones",
+        "runNowButton": "Ejecutar una vez",
         "toasts": {
           "deleteFailed": "No se pudo eliminar la tarea",
           "deleted": "«{name}» eliminada.",
@@ -15072,7 +15073,7 @@
           "trigger": "Origen"
         },
         "empty": {
-          "label": "Aún no hay ejecuciones. La tarea creará una cada vez que se dispare, o usa Ejecutar ahora arriba."
+          "label": "Aún no hay ejecuciones. La tarea creará una cada vez que se dispare, o usa Ejecutar una vez arriba."
         },
         "errors": {
           "loadFailed": "No se pudo cargar el historial de ejecuciones.",
@@ -15091,19 +15092,20 @@
           "notOpenableAriaLabel": "No se puede abrir"
         },
         "trigger": {
-          "runNow": "Ejecutar ahora",
+          "runNow": "Ejecutar una vez",
           "schedule": "Programación"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Las horas usan tu zona horaria local.",
         "dailyWeekly": {
-          "atLabel": "A las",
-          "daysLabel": "En estos días",
+          "atLabel": "Hora",
+          "daysLabel": "Días",
           "runsEveryDay": "Se ejecuta todos los días",
           "runsOn": "Se ejecuta los {days}"
         },
         "interval": {
-          "everyLabel": "Cada"
+          "everyLabel": "Repetir cada"
         },
         "intervalUnits": {
           "days": "días",
@@ -15442,8 +15444,8 @@
       "appTitle": "Ajustes de aprobación de {name}",
       "title": "Ajustes de aprobación",
       "personalDescription": "Estos ajustes determinan si las acciones se ejecutan automáticamente o requieren aprobación en las conversaciones de Craft y las tareas nuevas; las tareas existentes conservan sus propios ajustes.",
-      "taskDescription": "Solo las aplicaciones activadas están disponibles para esta tarea. Los cambios solo se aplican a esta tarea.",
-      "newTaskDescription": "Activa las aplicaciones que puede usar esta tarea. Cada aplicación comienza con tu configuración de acciones actual.",
+      "taskDescription": "Elige los plugins que puede usar esta tarea y qué acciones se ejecutan automáticamente. Los cambios solo afectan a esta tarea.",
+      "newTaskDescription": "Activa un plugin para comenzar con tu configuración actual de acciones.",
       "workspace_disabled": "Desactivada para el espacio de trabajo",
       "workspace_managed": "Administrado por tu espacio de trabajo",
       "userManagement": "Permitir que los usuarios administren las ajustes de aprobación",
@@ -15467,7 +15469,9 @@
       "disabledForTask": "Desactivada para esta tarea",
       "externalApp": "Aplicación",
       "mcpServer": "Servidor MCP",
-      "taskAppsTitle": "Aplicaciones y servidores MCP",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Acceso a plugins",
+      "noEnabledApps": "No hay plugins activados para esta tarea.",
       "actionPolicies": "Ajustes de aprobación",
       "policyCounts": "{auto} automáticas · {ask} preguntar · {disabled} desactivadas",
       "manageActions": "Gestionar acciones",

@@ -36,6 +36,24 @@ separate "run detail" screen. If a run needs an approval the task wasn't
 configured to grant, or if it fails outright, the user gets a notification.
 Scheduled runs never clutter the normal Craft session sidebar.
 
+The task detail page shows a brief, expandable prompt and the enabled plugins as passive labels.
+Run history follows this compact summary on the same page. There are no tabs or plugin configuration controls.
+Edit opens the task editor for prompt, schedule, and plugin changes.
+The standard settings header shows Edit, Run once, Pause or Resume, and Delete beside the task title.
+Pause or Resume is the primary action.
+The task editor groups schedule choices in a panel with interval and daily/weekly modes.
+The Plugins section uses a card grid with task enable switches and action settings buttons.
+Clicking a connected plugin card opens action settings, even when disabled for the task.
+Clicking a disconnected card opens its connection dialog. The toggle only changes task enablement.
+Plugins that need a connection show an orange dot after the name and an outlined plug button.
+Their plug button replaces the enable switch and opens the shared connection dialog.
+The enable switch returns after connection.
+Connected, enabled cards use a white surface; disabled or disconnected cards use the gray page surface.
+Unknown connection data cannot enable a plugin.
+The editor owns drafts and dialog selection; `TaskPluginCard` only displays state and emits user actions.
+`TaskActionPoliciesSummary` owns the read-only access list. `TaskAppActionsModal` owns unsaved action edits.
+The first action edit or enable snapshots personal defaults, including untouched actions.
+
 Deleting from the task detail page removes the task from the cached overview
 and replaces the detail URL with `/craft/v1/tasks`. Browser Back does not
 return to that deleted detail entry. A failed deletion keeps the detail page
