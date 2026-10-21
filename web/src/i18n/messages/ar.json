@@ -16613,7 +16613,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "الأعمال"
+        "businessTag": "الأعمال",
+        "betaTag": "تجريبي"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

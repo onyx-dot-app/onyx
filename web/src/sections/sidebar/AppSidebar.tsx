@@ -662,7 +662,15 @@ export default function AppSidebar() {
                         title={t("appSidebar.craft.businessTag")}
                         color="blue"
                       />
-                    ) : undefined
+                    ) : (
+                      // Passive tag: let clicks fall through to the row link.
+                      <div className="pointer-events-none">
+                        <Tag
+                          title={t("appSidebar.craft.betaTag")}
+                          color="blue"
+                        />
+                      </div>
+                    )
                   }
                 >
                   {t("appSidebar.craft.label")}

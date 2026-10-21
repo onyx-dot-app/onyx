@@ -16613,7 +16613,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business"
+        "businessTag": "Business",
+        "betaTag": "베타"
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"

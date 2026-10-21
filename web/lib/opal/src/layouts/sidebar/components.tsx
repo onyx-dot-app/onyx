@@ -337,7 +337,7 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 
 interface SidebarSectionProps {
   title?: string | RichStr;
-  /** Optional tag beside the title, e.g. a Beta tag. */
+  /** Optional tag at the end of the header, in line with tab `rightChildren`. */
   tag?: TagProps;
   /** Optional action shown on hover, e.g. a "+" button. */
   action?: React.ReactNode;
@@ -364,8 +364,12 @@ function SidebarSection({
                 <Text font="secondary-body" color="text-02">
                   {title}
                 </Text>
-                {tag && <Tag {...tag} />}
               </div>
+              {tag && (
+                <div className="opal-sidebar-section__tag">
+                  <Tag {...tag} />
+                </div>
+              )}
               {action && (
                 <Hoverable.Item group="sidebar-section">
                   {action}

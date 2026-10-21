@@ -16613,7 +16613,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "商业版"
+        "businessTag": "商业版",
+        "betaTag": "测试版"
       },
       "exploreAgents": {
         "label": "探索智能体"

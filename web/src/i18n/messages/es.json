@@ -16613,7 +16613,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business"
+        "businessTag": "Business",
+        "betaTag": "Beta"
       },
       "exploreAgents": {
         "label": "Explorar agentes"
