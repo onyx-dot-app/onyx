@@ -47,6 +47,11 @@ export interface Toast extends ToastOptions {
    * the stack moves up, in one motion.
    */
   collapsing?: boolean;
+  /**
+   * True for a toast closed while in the pile: it leaves out of sight, rather
+   * than sliding off from a slot.
+   */
+  leavingFromPile?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +228,10 @@ function setTimersPaused(paused: boolean): void {
 }
 
 function markLeaving(id: string): void {
-  toasts = toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t));
+  const fromPile = !shownToasts(toasts).some((t) => t.id === id);
+  toasts = toasts.map((t) =>
+    t.id === id ? { ...t, leaving: true, leavingFromPile: fromPile } : t
+  );
   notify();
 }
 

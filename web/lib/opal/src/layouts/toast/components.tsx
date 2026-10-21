@@ -19,6 +19,8 @@ import { Section } from "@opal/layouts/general/components";
 
 // How long a toast lingers after the user expands it. Long enough to read a
 // multi-line stack trace or API error without forcing a manual dismiss.
+// Piled layers that peek out as edges; deeper ones are out of sight.
+const MAX_PILE_DEPTH_SHOWN = 2;
 const EXPANDED_DURATION_MS = 30000;
 
 function buildDescription(
@@ -114,7 +116,11 @@ function ToastCard({
       className="opal-toast"
       data-leaving={t.leaving || undefined}
       data-pile={
-        pileDepth === undefined ? undefined : pileDepth > 2 ? "deep" : pileDepth
+        pileDepth === undefined
+          ? undefined
+          : pileDepth > MAX_PILE_DEPTH_SHOWN
+            ? "deep"
+            : pileDepth
       }
       inert={pileDepth !== undefined}
       style={{ zIndex: layer }}
@@ -189,13 +195,16 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   // ones pile below. A leaving toast holds its slot until its space starts to
   // close, so the next one rises out of the pile as the stack moves up.
   const shownIds = new Set(shownToasts(allToasts).map((t) => t.id));
-  const piled = allToasts.filter((t) => !shownIds.has(t.id));
-  const pileCount = piled.filter((t) => !t.leaving).length;
+  // A leaving toast keeps the place it left from until it is gone: one that
+  // slid off a slot never joins the pile, so the pile's layers hold still.
+  const piled = allToasts.filter((t) => !t.leaving && !shownIds.has(t.id));
+  const pileCount = piled.length;
   // Each piled toast's layer, newest first: the newest piled toast sits just
   // behind the stack.
   const pileDepths = new Map(
     [...piled].reverse().map((t, index) => [t.id, index + 1])
   );
+  const DEEP = MAX_PILE_DEPTH_SHOWN + 1;
   const [pileOpen, setPileOpen] = useState(false);
 
   // An empty pile closes, and an open pile holds every timer for reading.
@@ -255,7 +264,15 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
             // Layered by place, top highest: piling and rising never change
             // the order, so a card stays behind the one above it throughout.
             layer={allToasts.length - index}
-            pileDepth={pileOpen ? undefined : pileDepths.get(t.id)}
+            pileDepth={
+              pileOpen
+                ? undefined
+                : t.leaving
+                  ? t.leavingFromPile
+                    ? DEEP
+                    : undefined
+                  : pileDepths.get(t.id)
+            }
             errorAppendix={errorAppendix}
             expanded={expandedIds.has(t.id)}
             onToggle={handleToggle}
