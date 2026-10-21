@@ -21,6 +21,7 @@ import {
 } from "@/sections/actions/mcpChatEnableIntent";
 
 let mockUserId = "admin-user";
+let mockSavedServer: MCPServer | undefined;
 jest.mock("@/providers/UserProvider", () => {
   const actual = jest.requireActual<typeof import("@/providers/UserProvider")>(
     "@/providers/UserProvider"
@@ -91,7 +92,7 @@ jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
           disabled={readOnly}
           onClick={() => {
             onDirtyChange(false);
-            void onSaved(server);
+            void onSaved(mockSavedServer ?? server);
           }}
         >
           Save server draft
@@ -103,10 +104,12 @@ jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
 jest.mock("@/sections/actions/modals/MCPAuthenticationPage", () => ({
   __esModule: true,
   default: function MockAuth({
+    mcpServer,
     onDirtyChange,
     onTriggerFetchTools,
     onComplete,
   }: {
+    mcpServer: MCPServer;
     onDirtyChange: (dirty: boolean) => void;
     onTriggerFetchTools: (serverId: number) => Promise<void>;
     onComplete: () => void;
@@ -115,6 +118,9 @@ jest.mock("@/sections/actions/modals/MCPAuthenticationPage", () => ({
       <div>
         <input
           aria-label="Authentication draft"
+          data-server-url={mcpServer.server_url}
+          data-server-status={mcpServer.status}
+          data-has-credentials={!!mcpServer.admin_credentials}
           onChange={() => onDirtyChange(true)}
         />
         <button
@@ -177,6 +183,7 @@ const discoveredTool: ToolSnapshot = {
 beforeEach(() => {
   sessionStorage.clear();
   mockUserId = "admin-user";
+  mockSavedServer = undefined;
   jest.clearAllMocks();
   mockFullAdmin = true;
   mockSearchParams = new URLSearchParams();
@@ -646,4 +653,40 @@ test("saving server configuration keeps the editor open and clears its draft gua
     })
   ).not.toBeInTheDocument();
   expect(mockPush).not.toHaveBeenCalled();
+});
+
+test("uses returned endpoint and cleared credentials when reload after URL save fails", async () => {
+  const user = setupUser();
+  jest
+    .mocked(global.fetch)
+    .mockResolvedValue(
+      json({ ...server, admin_credentials: { api_key: "old-token" } })
+    );
+  render(<MCPServerDetailPage serverId={7} />);
+  await screen.findByRole("textbox", { name: "Server draft" });
+  mockSavedServer = {
+    ...server,
+    server_url: "https://new.example.com/mcp",
+    status: MCPServerStatus.AWAITING_AUTH,
+    admin_credentials: undefined,
+  };
+  jest.mocked(global.fetch).mockImplementation(async () => {
+    throw new Error("Reload unavailable");
+  });
+  await user.click(screen.getByRole("button", { name: "Save server draft" }));
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+  );
+  const auth = await screen.findByRole("textbox", {
+    name: "Authentication draft",
+  });
+  expect(auth).toHaveAttribute(
+    "data-server-url",
+    "https://new.example.com/mcp"
+  );
+  expect(auth).toHaveAttribute(
+    "data-server-status",
+    MCPServerStatus.AWAITING_AUTH
+  );
+  expect(auth).toHaveAttribute("data-has-credentials", "false");
 });

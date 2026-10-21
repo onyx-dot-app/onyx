@@ -352,11 +352,14 @@ including hard links and OAuth returns. Closing returns to Plugins, not browser 
 `web/src/sections/actions/MCPServerDetailPage.tsx` has three filled tabs:
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
 retain drafts, and route navigation asks before discarding any unsaved edits.
-The `tab` query parameter links directly to each section. Saving server details
-stays on that tab. Authentication saves configuration, then runs the existing
+The `tab` query parameter links directly to each section. Saving server metadata
+stays on that tab; changing the URL opens Authentication. Authentication saves configuration, then runs the existing
 connection and tool-loading flow before opening Tools. Workspace availability and
-deletion stay in the directory. Saved details show the URL beneath the name and
-do not offer an endpoint input; creation still accepts a URL.
+deletion stay in the directory. Saved configuration shows the server URL beneath the name. Users with edit permission
+can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
+Saving a changed URL opens Authentication to reconnect and discover tools. The page
+updates cached server data with the returned response before reloading, even if the reload fails.
+Metadata-only saves omit the URL.
 Metadata-only saves preserve existing access grants, including after a plan downgrade.
 Changing restricted access still requires the applicable plan and permissions.
 
@@ -388,7 +391,9 @@ A real MCP initialization or authentication challenge completes contact. Authent
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
 fails that row. Unreachable servers fail contact and leave authentication pending.
 Closing the stream cancels its probe task. The first setup page places access controls and Chat/Craft availability below a divider, before authentication.
-Authentication method and connection transport rows render immediately with pending spinners. They stay visible during URL entry, debounce, and detection before Continue. Failed probes stop pending spinners. The modal discards
+Server Name receives focus when setup opens and when returning from authentication to the first page.
+Delayed focus leaves an already-focused Server input unchanged.
+Authentication method and connection transport rows show neutral minus icons during URL entry and the 700-millisecond debounce. Spinners start only when a valid URL probe starts. Clearing or changing the URL resets both rows immediately. Failed probes stop pending spinners. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
 then tries compatible SSE. It uses the shared SSRF guard, bounded timeouts, and
@@ -397,6 +402,7 @@ Anonymous success recommends no authentication. OAuth metadata from a challenge
 recommends individual OAuth, with automatic client setup when supported.
 Recommended tags identify detected authentication and supported automatic client setup.
 The tags remain on those defaults when the admin selects another option.
+OAuth pass-through appears whenever Onyx OAuth login is available, including when Connection settings is collapsed.
 Unknown authentication leaves the method unselected until the admin chooses it.
 Connection failures keep the first form open without creating a server. Retry
 checks the URL again. Configure manually lets an admin supply headers or transport
