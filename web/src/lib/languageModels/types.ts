@@ -223,6 +223,8 @@ export interface BedrockFetchParams {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_bearer_token_bedrock?: string;
+  aws_role_name?: string;
+  aws_external_id?: string;
   provider_id?: number;
 }
 

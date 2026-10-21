@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "AWS 액세스 키 ID"
           },
+          "assumeRoleField": {
+            "description": "다른 AWS 계정의 Bedrock 역할을 사용합니다. {appName}은(는) 위의 자격 증명으로 이 역할을 수임합니다.",
+            "title": "수임할 역할 ARN"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "AWS 이외의 환경용",
@@ -7490,6 +7494,10 @@
               "label": "장기 API 키"
             },
             "title": "인증 방식"
+          },
+          "externalIdField": {
+            "description": "역할의 신뢰 정책에서 요구하는 경우에만 입력하세요.",
+            "title": "외부 ID"
           },
           "iamNotice": {
             "title": "{appName}는 실행 중인 환경에 연결된 IAM 역할을 사용해 인증합니다."

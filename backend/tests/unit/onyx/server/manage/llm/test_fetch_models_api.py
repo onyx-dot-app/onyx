@@ -1793,6 +1793,66 @@ class TestGetBedrockAvailableModels:
 
         assert mock_session.client.call_args.kwargs["config"] is None
 
+    def test_role_assumed_with_base_credentials(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """A role ARN is assumed with the submitted credentials, and models
+        are listed with the temporary credentials of that role."""
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        base_session = MagicMock()
+        sts_client = base_session.client.return_value
+        sts_client.assume_role.return_value = {
+            "Credentials": {
+                "AccessKeyId": "ASIATEMP",
+                "SecretAccessKey": "temp-secret",
+                "SessionToken": "temp-token",
+            }
+        }
+        role_session = MagicMock()
+        role_session.client.return_value = mock_bedrock_client
+
+        with patch(
+            "onyx.server.manage.llm.api.boto3.Session",
+            side_effect=[base_session, role_session],
+        ) as mock_session_cls:
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_access_key_id="AKIAEXAMPLE",
+                aws_secret_access_key="secret",
+                aws_role_name="arn:aws:iam::123456789012:role/bedrock",
+                aws_external_id="ext-id",
+            )
+            results = get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        base_session.client.assert_called_once_with("sts", region_name="us-west-2")
+        sts_client.assume_role.assert_called_once_with(
+            RoleArn="arn:aws:iam::123456789012:role/bedrock",
+            RoleSessionName="onyx-bedrock-model-fetch",
+            ExternalId="ext-id",
+        )
+        assert mock_session_cls.call_args_list[1].kwargs == {
+            "aws_access_key_id": "ASIATEMP",
+            "aws_secret_access_key": "temp-secret",
+            "aws_session_token": "temp-token",
+            "region_name": "us-west-2",
+        }
+        assert [r.name for r in results] == ["anthropic.claude-opus-4-7"]
+
+    @patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
+    def test_role_rejected_in_multi_tenant(self) -> None:
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        with patch("onyx.server.manage.llm.api.boto3.Session") as mock_session_cls:
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_role_name="arn:aws:iam::123456789012:role/bedrock",
+            )
+            with pytest.raises(OnyxError):
+                get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        mock_session_cls.assert_not_called()
+
     def test_masked_bearer_token_resolved_from_existing_provider(
         self, mock_bedrock_client: MagicMock
     ) -> None:

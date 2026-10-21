@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "AWS 访问密钥 ID"
           },
+          "assumeRoleField": {
+            "description": "使用其他 AWS 账户中的 Bedrock 角色。{appName} 使用上述凭证代入此角色。",
+            "title": "要代入的角色 ARN"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "适用于非 AWS 环境",
@@ -7490,6 +7494,10 @@
               "label": "长期 API 密钥"
             },
             "title": "身份验证方式"
+          },
+          "externalIdField": {
+            "description": "仅当角色的信任策略要求时填写。",
+            "title": "外部 ID"
           },
           "iamNotice": {
             "title": "{appName} 将使用其运行环境所附加的 IAM 角色进行身份验证。"

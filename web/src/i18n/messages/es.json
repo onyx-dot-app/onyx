@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "ID de clave de acceso de AWS"
           },
+          "assumeRoleField": {
+            "description": "Use un rol de Bedrock en otra cuenta de AWS. {appName} asume este rol con las credenciales anteriores.",
+            "title": "ARN del rol que se asumirá"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "Para entornos ajenos a AWS",
@@ -7490,6 +7494,10 @@
               "label": "Clave de API de larga duración"
             },
             "title": "Método de autenticación"
+          },
+          "externalIdField": {
+            "description": "Solo si la política de confianza del rol lo requiere.",
+            "title": "ID externo"
           },
           "iamNotice": {
             "title": "{appName} usará el rol de IAM asociado al entorno en el que se ejecuta para autenticarse."

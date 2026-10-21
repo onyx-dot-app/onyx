@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "AWS アクセスキー ID"
           },
+          "assumeRoleField": {
+            "description": "別の AWS アカウントの Bedrock ロールを使用します。{appName} は上記の認証情報でこのロールを引き受けます。",
+            "title": "引き受けるロールの ARN"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "AWS 以外の環境向け",
@@ -7490,6 +7494,10 @@
               "label": "長期 API キー"
             },
             "title": "認証方法"
+          },
+          "externalIdField": {
+            "description": "ロールの信頼ポリシーで必要な場合のみ。",
+            "title": "外部 ID"
           },
           "iamNotice": {
             "title": "{appName} は実行環境に割り当てられた IAM ロールを使用して認証します。"

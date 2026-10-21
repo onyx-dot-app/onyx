@@ -540,6 +540,9 @@ class BedrockModelsRequest(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
+    # Cross-account: role to assume (via the credentials above) before listing
+    aws_role_name: str | None = None
+    aws_external_id: str | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 

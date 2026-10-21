@@ -134,7 +134,10 @@ designation and endpoints have been removed.
 - **`LLMProvider`** (`db/models.py`): one row per configured connection.
   `provider`, encrypted `api_key` (`EncryptedString`), `api_base`, `api_version`,
   `custom_config` (JSONB, for provider-specific fields like Bedrock's access
-  keys), `deployment_name`, `is_public`, `is_auto_mode`. Four columns are
+  keys), `deployment_name`, `is_public`, `is_auto_mode`. Bedrock's optional
+  `AWS_ROLE_NAME` / `AWS_EXTERNAL_ID` make LiteLLM and the model fetch assume a
+  role in another AWS account; `_reject_assume_role_in_multi_tenant` blocks
+  them under `MULTI_TENANT`. Four columns are
   **deprecated in favour of `LLMModelFlow`** and kept only for back-compat
   reads: `default_model_name`, `is_default_provider`, `is_default_vision_provider`,
   `default_vision_model`. Do not write to them for new behavior; see §9.

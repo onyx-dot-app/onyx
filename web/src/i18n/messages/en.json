@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "AWS Access Key ID"
           },
+          "assumeRoleField": {
+            "description": "Use a Bedrock role in a different AWS account. {appName} assumes this role with the credentials above.",
+            "title": "Role ARN to assume"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "For non-AWS environments",
@@ -7490,6 +7494,10 @@
               "label": "Long-term API Key"
             },
             "title": "Authentication Method"
+          },
+          "externalIdField": {
+            "description": "Only if the role's trust policy requires one.",
+            "title": "External ID"
           },
           "iamNotice": {
             "title": "{appName} will use the IAM role attached to the environment it’s running in to authenticate."

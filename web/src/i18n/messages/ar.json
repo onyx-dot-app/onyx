@@ -7475,6 +7475,10 @@
           "accessKeyIdField": {
             "title": "معرّف مفتاح وصول AWS"
           },
+          "assumeRoleField": {
+            "description": "استخدم دور Bedrock في حساب AWS آخر. يتولى {appName} هذا الدور باستخدام بيانات الاعتماد أعلاه.",
+            "title": "ARN الدور المراد توليه"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "لبيئات خارج AWS",
@@ -7490,6 +7494,10 @@
               "label": "مفتاح API طويل الأمد"
             },
             "title": "طريقة المصادقة"
+          },
+          "externalIdField": {
+            "description": "فقط إذا كانت سياسة الثقة للدور تتطلب ذلك.",
+            "title": "المعرّف الخارجي"
           },
           "iamNotice": {
             "title": "سيستخدم {appName} دور IAM المرتبط بالبيئة التي يعمل فيها للمصادقة."
