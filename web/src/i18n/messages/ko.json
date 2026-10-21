@@ -10276,7 +10276,7 @@
         "copyButton": {
           "label": "비밀번호 복사"
         },
-        "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다.",
+        "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다. 모든 세션에서 로그아웃되고 개인 액세스 token이 해지됩니다.",
         "doneButton": {
           "label": "완료"
         },
@@ -15956,6 +15956,7 @@
         "currentPassword": {
           "title": "현재 비밀번호"
         },
+        "description": "다른 세션은 로그아웃되고 개인 액세스 token이 해지됩니다.",
         "newPassword": {
           "title": "새 비밀번호"
         },

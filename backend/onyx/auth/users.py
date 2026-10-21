@@ -139,7 +139,7 @@ from onyx.db.engine.sql_engine import (
 )
 from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
-from onyx.db.pat import resolve_pat
+from onyx.db.pat import resolve_pat, revoke_all_pats_for_user
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
@@ -1484,7 +1484,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
-        await self.revoke_sessions(user)
+        await self.revoke_credentials(user)
         emit_audit_event(
             AuditAction.PASSWORD_RESET,
             AuditOutcome.SUCCESS,
@@ -1630,11 +1630,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def reset_password_as_admin(self, user_id: uuid.UUID) -> str:
         """Admin-only. Generate a random password for a user, sign out all of
-        their sessions, and return the password."""
+        their sessions, revoke their PATs, and return the password."""
         user = await self.get(user_id)
         new_password = generate_password()
         await self._update(user, {"password": new_password})
-        await self.revoke_sessions(user)
+        await self.revoke_credentials(user)
         return new_password
 
     async def change_password_if_old_matches(
@@ -1646,7 +1646,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> None:
         """
         For normal users to change password if they know the old one. Signs
-        out the user's other sessions; ``keep_token`` is the caller's session.
+        out the user's other sessions and revokes their PATs; ``keep_token`` is
+        the caller's session.
         Raises 400 if old password doesn't match.
         """
         verified, updated_password_hash = self.password_helper.verify_and_update(
@@ -1661,6 +1662,24 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Now apply and validate the new password
         await self._update(user, {"password": new_password})
+        await self.revoke_credentials(user, keep_token=keep_token)
+
+    async def revoke_credentials(
+        self, user: User, keep_token: str | None = None
+    ) -> None:
+        """
+        Run after every password reset or change: revokes all of ``user``'s
+        PATs and signs out their sessions except ``keep_token``. API keys
+        belong to service accounts and are not affected.
+        """
+        revoked_pat_count = await revoke_all_pats_for_user(
+            self.user_db.session, user.id
+        )
+        logger.info(
+            "Revoked %d personal access token(s) for user %s after a password change",
+            revoked_pat_count,
+            user.id,
+        )
         await self.revoke_sessions(user, keep_token=keep_token)
 
     async def revoke_sessions(self, user: User, keep_token: str | None = None) -> None:

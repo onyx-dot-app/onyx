@@ -10276,7 +10276,7 @@
         "copyButton": {
           "label": "Copy password"
         },
-        "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately.",
+        "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately. They will be signed out of all sessions, and their personal access tokens will be revoked.",
         "doneButton": {
           "label": "Done"
         },
@@ -15956,6 +15956,7 @@
         "currentPassword": {
           "title": "Current Password"
         },
+        "description": "Your other sessions will be signed out, and your personal access tokens will be revoked.",
         "newPassword": {
           "title": "New Password"
         },

@@ -207,3 +207,26 @@ def revoke_pat(
     pat.is_revoked = True
     db_session.flush()
     return True
+
+
+async def revoke_all_pats_for_user(
+    async_db_session: AsyncSession, user_id: UUID
+) -> int:
+    """Revoke every active PAT of a user (all types) and commit.
+
+    Returns the number of PATs revoked.
+    """
+    now = datetime.now(timezone.utc)
+    result = await async_db_session.execute(
+        update(PersonalAccessToken)
+        .where(PersonalAccessToken.user_id == user_id)
+        .where(
+            (PersonalAccessToken.expires_at.is_(None))
+            | (PersonalAccessToken.expires_at > now)
+        )
+        .values(expires_at=now, is_revoked=True)
+        .returning(PersonalAccessToken.id)
+    )
+    revoked_count = len(result.scalars().all())
+    await async_db_session.commit()
+    return revoked_count
