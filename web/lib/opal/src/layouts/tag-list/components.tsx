@@ -35,7 +35,7 @@ interface TagListProps {
  */
 function TagList({
   items,
-  size,
+  size = "md",
   onRemove,
   maxVisible,
   overflowIcon,

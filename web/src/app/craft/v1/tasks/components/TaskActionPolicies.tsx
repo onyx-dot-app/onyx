@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -116,7 +116,8 @@ function AppActionPolicyGroups({
   onChange,
 }: AppActionPolicyGroupsProps) {
   const t = useTranslations("craft.actionPolicies");
-  const { plugins, refresh } = useMemberPlugins({ surface: "craft" });
+  const tPlugins = useTranslations("actions.memberPlugins.state");
+  const { plugins, refresh, errors } = useMemberPlugins({ surface: "craft" });
   const [dialog, setDialog] = useState<{
     kind: "actions" | "connection";
     appId: number;
@@ -133,6 +134,16 @@ function AppActionPolicyGroups({
   const editingApp = dialog?.kind === "actions" ? activeApp : undefined;
   return (
     <>
+      {(errors.apps || errors.servers) && (
+        <Section height="auto" alignItems="start" gap={2}>
+          <Text font="secondary-body" color="status-error-05">
+            {tPlugins(errors.apps ? "appsError" : "serversError")}
+          </Text>
+          <Button prominence="secondary" onClick={() => void refresh()}>
+            {t("retry")}
+          </Button>
+        </Section>
+      )}
       <div className={styles.grid}>
         {apps.map((app) => {
           const plugin = findTaskPlugin(app, plugins);

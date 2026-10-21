@@ -13,6 +13,8 @@ jest.mock("next/navigation", () => ({
 
 let mockConnected = true;
 let mockCatalogAvailable = true;
+let mockConnectionError: Error | undefined;
+const mockRefresh = jest.fn();
 
 jest.mock("@/lib/plugins/member", () => ({
   ...jest.requireActual("@/lib/plugins/member"),
@@ -36,7 +38,8 @@ jest.mock("@/lib/plugins/member", () => ({
               : { kind: "oauth" },
           },
         ],
-    refresh: jest.fn(),
+    refresh: mockRefresh,
+    errors: { apps: mockConnectionError },
   }),
 }));
 
@@ -110,6 +113,8 @@ function Form({ taskId = null }: { taskId?: string | null }) {
 beforeEach(() => {
   mockConnected = true;
   mockCatalogAvailable = true;
+  mockConnectionError = undefined;
+  mockRefresh.mockClear();
   mockData = initialData;
   mockError = undefined;
   mockIsValidating = false;
@@ -622,5 +627,30 @@ it("retains untouched personal defaults when editing actions before enabling", a
       enabled: true,
       action_policies: { send: "ASK", delete: "DENY", read: "ALWAYS" },
     },
+  ]);
+});
+
+it("allows an enabled plugin to be edited and disabled when connection data fails", async () => {
+  mockCatalogAvailable = false;
+  mockConnectionError = new Error("offline");
+  mockData = initialData.map((app) => ({ ...app, enabled: true }));
+  const user = setupUser();
+  render(<Form taskId="task" />);
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(mockRefresh).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("group", { name: "Slack" }));
+  expect(screen.getByRole("group", { name: "Send messages" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  const toggle = screen.getByRole("switch", {
+    name: "Enable Slack for this task",
+  });
+  expect(toggle).toBeChecked();
+  await user.click(toggle);
+  expect(toggle).not.toBeChecked();
+  expect(toggle).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("button", { name: "Manage actions" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenCalledWith([
+    { gated_app_id: 1, enabled: false, action_policies: { send: "ALWAYS" } },
   ]);
 });

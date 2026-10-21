@@ -35,6 +35,7 @@ export default function TaskPluginCard({
   const tStatus = useTranslations("actions.memberPlugins.status");
   const connectionKnown = connection !== undefined;
   const needsConnection = connectionKnown && connection.kind !== "connected";
+  const unavailable = !connectionKnown && !enabled;
   const counts = { auto: 0, ask: 0, disabled: 0 };
   for (const action of app.actions) {
     const policy = action.editable
@@ -50,7 +51,7 @@ export default function TaskPluginCard({
       state={
         enabled && connectionKnown && !needsConnection ? "filled" : "empty"
       }
-      disabled={!connectionKnown}
+      disabled={unavailable}
       onClick={() => {
         if (needsConnection) onConnect();
         else onEdit();
@@ -114,10 +115,10 @@ export default function TaskPluginCard({
                     icon={SvgSettings}
                     size="sm"
                     prominence="tertiary"
-                    disabled={!connectionKnown || needsConnection}
+                    disabled={unavailable || needsConnection}
                     aria-label={t("manageActions")}
                     tooltip={
-                      !connectionKnown
+                      unavailable
                         ? tStatus("unavailable")
                         : needsConnection
                           ? tConnection("connect", { name: app.name })
@@ -141,7 +142,7 @@ export default function TaskPluginCard({
                   ) : (
                     <InputSwitch
                       checked={enabled}
-                      disabled={!connectionKnown}
+                      disabled={unavailable}
                       aria-label={t("enableAppForTask", {
                         app: app.name,
                       })}
