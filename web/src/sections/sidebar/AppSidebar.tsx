@@ -663,13 +663,7 @@ export default function AppSidebar() {
                         color="blue"
                       />
                     ) : (
-                      // Passive tag: let clicks fall through to the row link.
-                      <div className="pointer-events-none">
-                        <Tag
-                          title={t("appSidebar.craft.betaTag")}
-                          color="blue"
-                        />
-                      </div>
+                      <Tag title={t("appSidebar.craft.betaTag")} color="blue" />
                     )
                   }
                 >

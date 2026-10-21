@@ -107,13 +107,8 @@ export default function AdminSidebar() {
   };
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
-  // Passive tag: let clicks fall through to the row link underneath.
   const itemTag = (beta: boolean | undefined) =>
-    beta ? (
-      <div className="pointer-events-none">
-        <Tag {...betaTag} />
-      </div>
-    ) : undefined;
+    beta ? <Tag {...betaTag} /> : undefined;
 
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(
