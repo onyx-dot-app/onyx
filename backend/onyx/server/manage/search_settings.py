@@ -477,8 +477,7 @@ def _check_embedding_model_target(
         request.provider_type is None
         and request.reduced_dimension is not None
         and not (
-            is_present_model
-            and request.reduced_dimension == present.reduced_dimension
+            is_present_model and request.reduced_dimension == present.reduced_dimension
         )
     ):
         raise OnyxError(
