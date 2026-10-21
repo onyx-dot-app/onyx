@@ -168,6 +168,81 @@ def _prepare_failed_resource_cleanup(
     return True
 
 
+def _prepare_failed_resource_cleanup(
+    manager: SandboxManager,
+    owner: Sandbox,
+    tenant_id: str,
+    deadline: float,
+    claim: CacheLock,
+    check_ownership: Callable[[], None],
+) -> bool:
+    sandbox_id = owner.id
+    user_id = owner.user_id
+    attempt_number = owner.provisioning_attempt_number
+    checkpoint_heartbeat = owner.last_heartbeat
+    checkpoint_proof = (
+        SandboxCleanupCheckpoint.model_validate(owner.cleanup_checkpoint)
+        if owner.cleanup_checkpoint is not None
+        else None
+    )
+    current_resources = list(manager.iter_resources(tenant_id, deadline, sandbox_id))
+    runtimes = [
+        r
+        for r in current_resources
+        if r.kind in {SandboxResourceKind.POD, SandboxResourceKind.CONTAINER}
+    ]
+    needs_checkpoint = any(
+        r.provisioning_attempt_number != attempt_number for r in runtimes
+    ) or any(r.kind == SandboxResourceKind.VOLUME for r in current_resources)
+    storage_identity = manager.workspace_storage_identity(sandbox_id, tenant_id)
+    resume_deletion = (
+        checkpoint_proof is not None
+        and checkpoint_proof.provisioning_attempt_number == attempt_number
+        and checkpoint_proof.storage_identity == storage_identity
+        and checkpoint_proof.last_heartbeat == checkpoint_heartbeat
+        and not manager.runtime_exists(sandbox_id, tenant_id)
+    )
+    if needs_checkpoint and not resume_deletion:
+        _checkpoint_failed_runtime(
+            manager,
+            sandbox_id,
+            user_id,
+            tenant_id,
+            lambda: _check_resource_claim(claim, check_ownership),
+        )
+        _check_resource_claim(claim, check_ownership)
+        if (
+            manager.workspace_storage_identity(sandbox_id, tenant_id)
+            != storage_identity
+        ):
+            return False
+        if storage_identity is not None:
+            with get_session_with_current_tenant() as db_session:
+                if not record_cleanup_checkpoint__no_commit(
+                    db_session,
+                    sandbox_id,
+                    SandboxCleanupCheckpoint(
+                        provisioning_attempt_number=attempt_number,
+                        storage_identity=storage_identity,
+                        last_heartbeat=checkpoint_heartbeat,
+                    ),
+                    expected_status=SandboxStatus.FAILED,
+                ):
+                    db_session.rollback()
+                    return False
+                db_session.commit()
+    with get_session_with_current_tenant() as db_session:
+        current = get_sandbox_by_id(db_session, sandbox_id)
+        if (
+            current is None
+            or current.status != SandboxStatus.FAILED
+            or current.provisioning_attempt_number != attempt_number
+            or current.last_heartbeat != checkpoint_heartbeat
+        ):
+            return False
+    return True
+
+
 def reconcile_sandbox_resources(
     manager: SandboxManager,
     tenant_id: str,
