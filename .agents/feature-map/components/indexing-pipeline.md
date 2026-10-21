@@ -490,6 +490,19 @@ sitting in `DocumentBatchStorage` for the cc-pair is re-issued as a fresh
 `docprocessing` task under the new attempt's ID, and the new attempt's batch
 numbering picks up after the reissued + already-completed count.
 
+The failed attempt's `docprocessing` tasks can still run during the reissue. Each
+task increments `completed_batches` and then deletes its batch. So
+`reissue_old_batches` moves the batches first and then reads the old attempt's
+`completed_batches` again from the database. Every old batch is then moved,
+counted, or both (both only leaves an unused batch number). The sum is the next
+batch number. The count can come from a later attempt that failed before it
+fetched anything, so the next number is also kept above every moved batch. The
+new attempt starts with `completed_batches` = next batch number - moved batches,
+set before the reissued tasks go out, so completion still fires at
+`completed_batches >= total_batches`. A batch that a task deleted before the
+move is skipped (`change_file_id` returns `False`), and `store_batch` refuses
+to overwrite an existing batch.
+
 `check_checkpoint_size` enforces a 200MB cap on the serialized checkpoint
 (`deep_getsizeof`), raising rather than silently truncating a runaway checkpoint
 (e.g., a Slack connector accumulating too much per-channel cache state).

@@ -160,6 +160,17 @@ class IndexingCoordination:
             )
 
     @staticmethod
+    def get_completed_batches(db_session: Session, index_attempt_id: int) -> int:
+        """Reads the count from the database. A column query skips the
+        session's identity map, so an attempt loaded earlier cannot make it stale."""
+        completed = db_session.scalar(
+            select(IndexAttempt.completed_batches).where(
+                IndexAttempt.id == index_attempt_id
+            )
+        )
+        return completed or 0
+
+    @staticmethod
     def update_batch_completion_and_docs(
         db_session: Session,
         index_attempt_id: int,
