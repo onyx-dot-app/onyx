@@ -123,6 +123,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const status = useMemo(() => {
     if (isComplete) {
       if (error) {
+        if (error.status_code === null)
+          return t("customTool.blockedStatus.text", { toolName });
         return error.is_auth_error
           ? t("customTool.authFailedStatus.text", {
               toolName,
@@ -268,8 +270,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  // Auth error: always render FULL with error surface
-  if (error?.is_auth_error) {
+  // Blocked destination or auth error: always render FULL with error surface
+  if (error && (error.status_code === null || error.is_auth_error)) {
     return children([
       {
         icon,
