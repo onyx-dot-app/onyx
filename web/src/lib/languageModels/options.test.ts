@@ -189,11 +189,8 @@ describe("filterModelConfigurations", () => {
   const ids = (list: ModelOptionProvider[]) =>
     list.flatMap((p) => p.model_configurations.map((mc) => mc.id));
 
-  test("drops hidden models by default and keeps them on request", () => {
+  test("drops hidden models", () => {
     expect(ids(filterModelConfigurations(providers))).toEqual([11, 21]);
-    expect(
-      ids(filterModelConfigurations(providers, { visibleOnly: false }))
-    ).toEqual([11, 12, 21]);
   });
 
   test("keeps only image-input models and drops providers left empty", () => {

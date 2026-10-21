@@ -155,7 +155,8 @@ Control and Hide Provider Grouping switches. Model selection for naming and
 search lives in Chat Preferences.
 `web/src/views/admin/ChatTaskModelSettings.tsx` renders the Chat Naming Model
 row (chat card) and the Search Selection Model row (search card).
-Both selectors offer hidden models without changing visibility. Each starts
+Neither selector offers hidden models; a hidden current value stays listed.
+Each starts
 with a Global Default row, described by the default model's name; picking it
 deletes that designation. Each selector stays disabled during its own save,
 without blocking the other setting.
@@ -601,8 +602,8 @@ See `backend/AGENTS.md` for authoritative commands and required env
 ### What "working" looks like
 
 - Chat Preferences shows Chat Naming Model in the chat card and Search
-  Selection Model in the search card. Selecting a hidden model saves only its
-  task default without changing CHAT or visibility.
+  Selection Model in the search card. Neither offers hidden models. Selecting
+  a model saves only its task default without changing CHAT or visibility.
   Language Models has no task-model controls. Configuring CHAT_NAMING alone
   must not change query rewrites or selection; setting SEARCH_SELECTION must
   change only selection and relevance classification.

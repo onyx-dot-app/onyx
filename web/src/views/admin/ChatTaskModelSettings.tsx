@@ -125,7 +125,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
           description: findDefaultModelDisplayName(llmProviders, defaultText),
         }}
         providers={filterModelConfigurations(llmProviders, {
-          visibleOnly: false,
           keep: modelConfigId,
         })}
         value={modelConfigId}

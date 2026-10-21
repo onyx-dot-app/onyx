@@ -278,13 +278,12 @@ export function findDefaultModelDisplayName(
 
 /**
  * Trims each provider's model list for a picker, dropping providers left
- * empty. The pure counterpart of the chat picker's own filtering, for a
+ * empty. Models an admin hid never show, except the current value (`keep`). The pure counterpart of the chat picker's own filtering, for a
  * dumb select that renders whatever it is given.
  */
 export function filterModelConfigurations<T extends ModelOptionProvider>(
   providers: T[],
   {
-    visibleOnly = true,
     imageInput = false,
     keep = null,
     includeDecisionOnly = false,
@@ -297,8 +296,7 @@ export function filterModelConfigurations<T extends ModelOptionProvider>(
         (mc) =>
           (includeDecisionOnly || mc.supports_chat !== false) &&
           ((keep !== null && mc.id === keep) ||
-            ((!visibleOnly || mc.is_visible) &&
-              (!imageInput || mc.supports_image_input)))
+            (mc.is_visible && (!imageInput || mc.supports_image_input)))
       ),
     }))
     .filter((provider) => provider.model_configurations.length > 0);

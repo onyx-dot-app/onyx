@@ -53,6 +53,16 @@ const providers: LLMProviderView[] = [
         name: "gpt-4o-mini",
         display_name: "GPT-4o Mini",
         effectiveDisplayName: "GPT-4o Mini",
+        is_visible: true,
+        max_input_tokens: null,
+        supports_image_input: false,
+        supports_reasoning: false,
+      },
+      {
+        id: 13,
+        name: "gpt-legacy",
+        display_name: "GPT Legacy",
+        effectiveDisplayName: "GPT Legacy",
         is_visible: false,
         max_input_tokens: null,
         supports_image_input: false,
@@ -81,7 +91,7 @@ providers.push({
       name: "search-mini",
       display_name: "Search Mini",
       effectiveDisplayName: "Search Mini",
-      is_visible: false,
+      is_visible: true,
       max_input_tokens: null,
       supports_image_input: false,
       supports_reasoning: false,
@@ -296,7 +306,29 @@ describe("ChatTaskModelSettings", () => {
     expect(defaultSearchSelection).toBeNull();
   });
 
-  test("saves a hidden model without changing model visibility", async () => {
+  test("does not offer hidden models", async () => {
+    const user = setupUser();
+    await renderTaskModels();
+
+    await user.click(taskSelector(0));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search" }),
+      "GPT Legacy"
+    );
+
+    expect(
+      screen.queryByRole("option", { name: /GPT Legacy/ })
+    ).not.toBeInTheDocument();
+  });
+
+  test("keeps a hidden current model listed", async () => {
+    defaultChatNaming = { provider_id: 7, model_name: "gpt-legacy" };
+    await renderTaskModels();
+
+    expect(await screen.findByDisplayValue("GPT Legacy")).toBeInTheDocument();
+  });
+
+  test("saves a chat naming model", async () => {
     const user = setupUser();
     await renderTaskModels();
     await screen.findByText("Chat Naming Model");
@@ -364,7 +396,7 @@ describe("ChatTaskModelSettings", () => {
     );
   });
 
-  test("saving a hidden search model leaves naming and chat defaults unchanged", async () => {
+  test("saving a search model leaves the naming default unchanged", async () => {
     defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
     const user = setupUser();
     await renderTaskModels();
@@ -388,8 +420,5 @@ describe("ChatTaskModelSettings", () => {
       }
     );
     expect(toast.success).not.toHaveBeenCalled();
-    expect(providers[1]?.model_configurations[0]?.is_visible).toBe(false);
-
-    expect(providers[0]?.model_configurations[1]?.is_visible).toBe(false);
   });
 });

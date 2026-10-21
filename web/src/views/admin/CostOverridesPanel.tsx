@@ -188,7 +188,7 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                       nullable={!isEdit}
                       disabled={isEdit}
                       providers={filterModelConfigurations(llmProviders ?? [], {
-                        visibleOnly: false,
+                        keep: editModelConfigId,
                         includeDecisionOnly: true,
                       })}
                       value={isEdit ? editModelConfigId : values.modelConfigId}
