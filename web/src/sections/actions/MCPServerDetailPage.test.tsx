@@ -367,6 +367,21 @@ test("guards modal close for tool drafts and allows canceling discard", async ()
   expect(mockPush).not.toHaveBeenCalled();
 });
 
+test("completed setup opens Tools without repeating discovery", async () => {
+  mockSearchParams = new URLSearchParams("tab=tools");
+  render(<MCPServerDetailPage serverId={7} />);
+  expect(
+    await screen.findByRole("tab", { name: messages.actions.mcpTools.title })
+  ).toHaveAttribute("aria-selected", "true");
+  expect(
+    screen.getByRole("button", { name: "Draft tool change" })
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("textbox", { name: "Server draft" })
+  ).not.toBeInTheDocument();
+  expect(refreshMCPServerTools).not.toHaveBeenCalled();
+});
+
 test("loads tools once after OAuth return and preserves other query values", async () => {
   mockSearchParams = new URLSearchParams(
     "trigger_fetch=true&message=oauth_connected&filter=one&filter=two"
@@ -381,6 +396,9 @@ test("loads tools once after OAuth return and preserves other query values", asy
     )
   );
   expect(refreshMCPServerTools).toHaveBeenCalledTimes(1);
+  expect(
+    screen.getByRole("tab", { name: messages.actions.mcpTools.title })
+  ).toHaveAttribute("aria-selected", "true");
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
 
