@@ -8,10 +8,11 @@ import contextvars
 import threading
 import time
 from collections.abc import Callable, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.run_docfetching import reissue_old_batches
@@ -25,7 +26,7 @@ from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
 )
-from onyx.file_store.file_store import S3BackedFileStore
+from onyx.file_store.file_store import S3BackedFileStore, get_default_file_store
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -203,20 +204,23 @@ def test_batch_done_between_listing_and_move(
     assert next_batch_num == _OLD_BATCH_COUNT
 
 
-def _wait_until_blocked_or_done(thread: threading.Thread) -> None:
-    """Returns when the thread ends or a session waits on a row lock."""
+def _wait_until_lock_wait(thread: threading.Thread, pids: set[int]) -> None:
+    """Returns when one of the thread's connections waits on a lock. Fails the
+    test if the thread ends or the deadline passes first."""
     deadline = time.monotonic() + _LOCK_WAIT_TIMEOUT_S
     while thread.is_alive() and time.monotonic() < deadline:
         with get_session_with_current_tenant() as session:
             waiting = session.scalar(
                 text(
                     "SELECT count(*) FROM pg_stat_activity "
-                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
-                )
+                    "WHERE pid = ANY(:pids) AND wait_event_type = 'Lock'"
+                ),
+                {"pids": list(pids)},
             )
         if waiting:
             return
         time.sleep(0.05)
+    pytest.fail("The re-issue did not wait on the lock the delete holds")
 
 
 def test_batch_deleted_while_being_moved(
@@ -227,6 +231,9 @@ def test_batch_deleted_while_being_moved(
 ) -> None:
     """The re-issue lists and moves a batch while an old task deletes it. The
     moved record must not point at an object the delete removed."""
+    # The delete is paused through an S3BackedFileStore method.
+    if not isinstance(get_default_file_store(), S3BackedFileStore):
+        pytest.skip("Needs the S3 file store backend")
     old_attempt, new_attempt, old_storage, new_storage = attempts
     app = MagicMock()
     result: list[int] = []
@@ -240,6 +247,22 @@ def test_batch_deleted_while_being_moved(
     reissue_thread = threading.Thread(
         target=contextvars.copy_context().run, args=(run_reissue,)
     )
+    reissue_pids: set[int] = set()
+
+    def record_reissue_pid(
+        dbapi_connection: Any,
+        _connection_record: Any,
+        _connection_proxy: Any,
+    ) -> None:
+        if threading.current_thread() is not reissue_thread:
+            return
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SELECT pg_backend_pid()")
+            reissue_pids.add(cursor.fetchone()[0])
+        finally:
+            cursor.close()
+
     delete_legacy_object: Callable[[S3BackedFileStore, str, str], None] = (
         S3BackedFileStore._delete_legacy_object
     )
@@ -247,16 +270,21 @@ def test_batch_deleted_while_being_moved(
     # The delete has read the batch's record and is about to remove its object.
     def reissue_during_delete(store: S3BackedFileStore, bucket: str, key: str) -> None:
         reissue_thread.start()
-        _wait_until_blocked_or_done(reissue_thread)
+        _wait_until_lock_wait(reissue_thread, reissue_pids)
         delete_legacy_object(store, bucket, key)
 
-    with patch.object(
-        S3BackedFileStore,
-        "_delete_legacy_object",
-        autospec=True,
-        side_effect=reissue_during_delete,
-    ):
-        _old_task_finishes(old_storage, 1)
+    engine = db_session.get_bind()
+    event.listen(engine, "checkout", record_reissue_pid)
+    try:
+        with patch.object(
+            S3BackedFileStore,
+            "_delete_legacy_object",
+            autospec=True,
+            side_effect=reissue_during_delete,
+        ):
+            _old_task_finishes(old_storage, 1)
+    finally:
+        event.remove(engine, "checkout", record_reissue_pid)
     reissue_thread.join(timeout=_LOCK_WAIT_TIMEOUT_S)
     assert not reissue_thread.is_alive()
 
