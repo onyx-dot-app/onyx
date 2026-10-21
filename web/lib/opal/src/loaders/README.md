@@ -29,7 +29,7 @@ Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it for
 <LineLoader lines={3} width="2/3" />
 ```
 
-Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" | "1/2" | "1/3" | "1/4"`, default `"full"`).
+Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" | "1/2" | "1/3" | "1/4"`, default `"full"`), `height` of each line as a `LineHeight` step (`3 | 4 | 5 | 6 | 7 | 8 | 9 | 12`, default `5`, 20px). Each bar keeps its own height and sits centred in its line, so the loader is as tall as what it replaces: `height={9}` (36px) stands in for a select.
 
 ## TextLoader
 
