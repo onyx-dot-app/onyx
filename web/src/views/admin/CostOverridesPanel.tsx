@@ -185,10 +185,12 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                     />
                   ) : (
                     <SimpleModelSelector
+                      includeDecisionOnly
                       nullable={!isEdit}
                       disabled={isEdit}
                       providers={filterModelConfigurations(llmProviders ?? [], {
                         visibleOnly: false,
+                        includeDecisionOnly: true,
                       })}
                       value={isEdit ? editModelConfigId : values.modelConfigId}
                       grouped={!hideProviderGrouping}

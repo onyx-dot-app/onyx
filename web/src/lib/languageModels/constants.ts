@@ -45,6 +45,7 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 
 export const PROVIDERS: Record<string, ProviderEntry> = {
   [LLMProviderName.TYPESAFE]: {
+    decisionOnly: true,
     icon: SvgTypeSafe,
     productName: "System One",
     companyName: "TypeSafe AI",
@@ -188,6 +189,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
 // ─── Model icons ─────────────────────────────────────────────────────────────
 
 export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
+  [LLMProviderName.TYPESAFE]: SvgTypeSafe,
   [LLMProviderName.OPENAI]: SvgOpenAI,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,

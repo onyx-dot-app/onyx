@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import sync_model_configurations
+from onyx.db.llm import _model_protocol_flows, sync_model_configurations
 from onyx.server.manage.llm.models import SyncModelEntry
 
 
@@ -17,8 +17,97 @@ def _make_existing_model(name: str, flow_types: list[LLMModelFlowType]) -> Magic
     return model
 
 
+@pytest.mark.parametrize("stored", [None, {LLMModelFlowType.CHAT}])
+def test_custom_name_does_not_remove_chat_capability(
+    stored: set[LLMModelFlowType] | None,
+) -> None:
+    assert _model_protocol_flows("ollama", "instructor-chat", stored) == {
+        LLMModelFlowType.CHAT
+    }
+
+
+@pytest.mark.parametrize("provider", ["openrouter", "vercel_ai_gateway"])
+def test_unselected_discovered_model_does_not_gain_chat_on_save(provider: str) -> None:
+    assert _model_protocol_flows(provider, "vendor/evaluation", set()) == set()
+
+
+def test_decision_discovery_does_not_select_model() -> None:
+    assert _model_protocol_flows(
+        "openrouter",
+        "vendor/decision",
+        {LLMModelFlowType.CHAT},
+    ) == {LLMModelFlowType.CHAT}
+
+
 class TestSyncModelConfigurations:
     """Tests for sync_model_configurations function."""
+
+    def test_discovery_adds_chat_to_existing_decision_model(self) -> None:
+        provider = MagicMock()
+        provider.id = 1
+        provider.provider = "openrouter"
+        provider.model_configurations = [
+            _make_existing_model("vendor/dual", [LLMModelFlowType.DECISION])
+        ]
+        session = MagicMock()
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=provider
+        ):
+            result = sync_model_configurations(
+                session,
+                1,
+                [
+                    SyncModelEntry(
+                        name="vendor/dual",
+                        display_name="Dual",
+                        supports_chat=True,
+                        supports_decisions=True,
+                    )
+                ],
+            )
+        assert result == 0
+        assert session.execute.call_count == 1
+        assert session.execute.call_args.args[0].compile().params == {
+            "model_configuration_id": 42,
+            "llm_model_flow_type": LLMModelFlowType.CHAT,
+            "is_default": False,
+        }
+        session.commit.assert_called_once()
+
+    def test_keeps_chat_capability_when_model_holds_chat_default(self) -> None:
+        provider = MagicMock()
+        provider.id = 1
+        provider.provider = "openrouter"
+        provider.model_configurations = [
+            _make_existing_model("vendor/decision", [LLMModelFlowType.CHAT])
+        ]
+        session = MagicMock()
+        with (
+            patch(
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=provider,
+            ),
+            patch(
+                "onyx.db.llm.fetch_default_flows_by_model_id",
+                return_value={42: {LLMModelFlowType.CHAT}},
+            ),
+        ):
+            result = sync_model_configurations(
+                session,
+                1,
+                [
+                    SyncModelEntry(
+                        name="vendor/decision",
+                        display_name="Decision",
+                        supports_chat=False,
+                        supports_decisions=True,
+                    )
+                ],
+            )
+
+        assert result == 0
+        session.execute.assert_not_called()
+        session.commit.assert_not_called()
 
     def test_inserts_new_models(self) -> None:
         """Test that new models are inserted."""

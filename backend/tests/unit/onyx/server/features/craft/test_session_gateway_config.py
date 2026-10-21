@@ -95,6 +95,36 @@ def _mock_recommendations() -> Iterator[None]:
         yield
 
 
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) -> None:
+    provider = _provider(
+        3,
+        "openai",
+        [
+            ModelConfigurationView(
+                name="gpt-6-luna",
+                is_visible=True,
+                supports_image_input=False,
+                supports_chat=supports_chat,
+                supports_decisions=True,
+            )
+        ],
+    )
+    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    expected = (3, "gpt-6-luna") if supports_chat else None
+
+    assert llm_config._select_gateway_default([provider], selection) == expected
+    assert llm_config._select_gateway_default([provider], None, [selection]) == expected
+    assert llm_config._select_gateway_default([provider], None) == expected
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
+        config = llm_config.build_onyx_gateway_config([provider], selection)
+    if supports_chat:
+        assert config is not None
+        assert config.model_name == "3/gpt-6-luna"
+    else:
+        assert config is None
+
+
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
     direct = _provider(
         3,

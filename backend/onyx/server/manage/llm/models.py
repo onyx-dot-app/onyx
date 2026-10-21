@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -165,6 +165,27 @@ class LLMProvider(BaseModel):
     deployment_name: str | None = None
 
 
+class DecisionProviderConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: int | None = None
+    name: str | None = None
+    provider: str
+    api_key: str | None = None
+    api_key_changed: bool = False
+    api_base: str | None = None
+    api_version: str | None = None
+    custom_config: dict[str, str] | None = None
+    custom_config_changed: bool = False
+
+
+class DecisionProviderUpsertRequest(DecisionProviderConnection):
+    selected_model_names: list[str]
+
+
+class TestDecisionProviderRequest(DecisionProviderConnection):
+    model: str
+
+
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
@@ -181,7 +202,7 @@ class LLMProviderUpsertRequest(LLMProvider):
     @model_validator(mode="after")
     def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:
         if self.provider == LlmProviderNames.TYPESAFE:
-            if self.model_configurations or self.keep_existing_models:
+            if any(model.supports_chat is True for model in self.model_configurations):
                 raise ValueError(
                     "TypeSafe AI does not support chat model configuration"
                 )
@@ -281,6 +302,8 @@ class LLMProviderView(LLMProvider):
 class ModelConfigurationUpsertRequest(BaseModel):
     name: str
     is_visible: bool
+    supports_decisions: bool | None = None
+    supports_chat: bool | None = None
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
     supports_reasoning: bool | None = None
@@ -361,6 +384,8 @@ class ModelConfigurationView(BaseModel):
     id: int | None = None
     name: str
     is_visible: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
     max_input_tokens: int | None = None
     # The persisted override/source value, before static-provider capability
     # enrichment. Internal consumers use this to distinguish an intentional
@@ -421,6 +446,10 @@ class ModelConfigurationView(BaseModel):
             return cls(
                 id=model_configuration_model.id,
                 name=model_configuration_model.name,
+                supports_decisions=LLMModelFlowType.DECISION
+                in model_configuration_model.llm_model_flow_types,
+                supports_chat=LLMModelFlowType.CHAT
+                in model_configuration_model.llm_model_flow_types,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
@@ -488,6 +517,10 @@ class ModelConfigurationView(BaseModel):
         return cls(
             id=model_configuration_model.id,
             name=model_configuration_model.name,
+            supports_decisions=LLMModelFlowType.DECISION
+            in model_configuration_model.llm_model_flow_types,
+            supports_chat=LLMModelFlowType.CHAT
+            in model_configuration_model.llm_model_flow_types,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
                 model_configuration_model.max_input_tokens
@@ -617,6 +650,11 @@ class OllamaModelDetails(BaseModel):
 
 
 # OpenRouter dynamic models fetch
+class TypeSafeModelsRequest(BaseModel):
+    api_key: str | None = None
+    provider_id: int | None = None
+
+
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
@@ -638,6 +676,18 @@ class OpenRouterModelDetails(BaseModel):
     architecture: dict[str, Any] = {}  # Contains 'input_modalities' key
     # Router entries bill at the routed upstream's rate, reported as "-1".
     pricing: dict[str, Any] | None = None
+
+    @property
+    def supports_decisions(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities", [])
+        return isinstance(output_modalities, list) and "decisions" in output_modalities
+
+    @property
+    def supports_chat(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities")
+        if output_modalities is None:
+            return True
+        return isinstance(output_modalities, list) and "text" in output_modalities
 
     @property
     def supports_image_input(self) -> bool:
@@ -666,6 +716,8 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
     is_router: bool = False
 
 
@@ -753,10 +805,18 @@ class ModelConfigurationPage(BaseModel):
         )
 
 
+class DecisionModelResponse(BaseModel):
+    model: DefaultModel | None
+    providers: list[LLMProviderView]
+    supported_providers: list[str]
+
+
 class SyncModelEntry(BaseModel):
     """Typed model for syncing fetched models to the DB."""
 
     name: str
+    supports_decisions: bool = False
+    supports_chat: bool = True
     display_name: str
     max_input_tokens: int | None = None
     supports_image_input: bool = False

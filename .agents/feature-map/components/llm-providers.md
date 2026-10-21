@@ -26,11 +26,19 @@ then marks one model as the default for chat, and optionally separate defaults
 for vision, contextual RAG, chat naming, search selection, and Craft.
 The selected chat model still answers and rewrites queries.
 
-TypeSafe AI has a dedicated credential setup card. Saving a new key tests
-System One with `jev-latest` through its native decision API. The provider stores
-no model configurations and cannot become a chat or task default. Auto mode is
-disabled. No current workflow consumes its credentials. Decision model selection
-will be added separately.
+TypeSafe AI has a dedicated setup card that discovers System One models using
+the configured API key. Models remain excluded from chat and auto mode.
+Provider configuration rows show a Decision tag for decision-capable models.
+Its tooltip distinguishes decision-only models, which do not appear in chat,
+from models that support both chat and decision tasks.
+**Admin > Decision Models** manages decision providers and an optional model.
+It starts unset and never inherits a chat model. No workflow consumes it yet.
+TypeSafe appears only on this page; shared OpenAI and OpenRouter connections
+remain available on Language Models. Dedicated decision-provider saves preserve shared
+chat settings, defaults, visibility, and access. New shared models stay hidden
+from chat. Clear the selected decision model before removing its model or provider.
+TypeSafe System One, OpenAI Decisions, and OpenRouter Decisions use the separate
+client in `backend/onyx/llm/decisions/`.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -60,13 +68,16 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/provider/{id}` | `get_llm_provider` | |
 | PUT | `/admin/llm/provider` | `put_llm_provider` | Create or update. Restores masked credential fields via `_restore_masked_custom_config_values`. |
 | DELETE | `/admin/llm/provider/{id}` | `delete_llm_provider` | |
-| POST | `/admin/llm/test` | `test_llm_configuration` | Fires one real call before saving. TypeSafe uses its native System One API. Saved credentials cannot be tested against another provider. |
+| POST | `/admin/llm/test` | `test_llm_configuration` | Tests chat before saving. Saved credentials cannot be tested against another provider. |
+| PUT | `/admin/llm/decision-provider` | `put_decision_provider` | Saves credentials and explicit selected model names. Preserves shared settings and access. |
+| POST | `/admin/llm/decision-provider/test` | `test_decision_provider` | Validates catalog capability and tests the decision protocol. |
 | POST | `/admin/llm/test/default` | `test_default_provider` | Tests the currently configured default. |
 | POST | `/admin/llm/default` | `set_provider_as_default` | Sets the CHAT default. |
 | POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
 | POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
-| POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Craft has no capability check; see §9. |
+| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Explicit selection only. GET includes all eligible configured models without pagination. |
+| POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Requires a chat-capable model; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
 | GET | `/admin/llm/auto-config` | `get_auto_config` | |
@@ -80,7 +91,7 @@ Non-admin router, prefix `/llm`:
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/llm/provider` | `list_llm_provider_basics` | Providers visible to the caller, credentials stripped. |
-| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id`). |
+| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id` and `flow_type`). Chat pickers filter CHAT before pagination; admin configuration lists all models. Non-admin requests always filter CHAT. |
 | GET | `/llm/persona/{persona_id}/providers` | `list_llm_providers_for_persona` | The providers/models a given assistant may use, group- and persona-filtered. |
 
 Every provider view returned by any of the above masks `api_key` and sensitive
@@ -117,6 +128,15 @@ see §9.
 
 `web/src/app/admin/language-models/page.tsx` is the provider list and
 edit surface. It is a thin client over the endpoints above.
+
+`web/src/app/admin/decision-models/page.tsx` renders `DecisionModelsPage`.
+It manages decision providers and an optional model selection. Shared provider
+modals use dedicated decision-provider requests for saves and tests.
+These saves preserve chat settings, defaults, model visibility, and provider access.
+Shared model settings link to Language Models instead of offering edits here.
+TypeSafe uses `decisionOnly` metadata to appear only on Decision Models.
+Decision-only provider cards have deletion controls. Clear the selected decision
+model before removing its provider, including through the provider API.
 
 `web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration and the
 default chat model. Model selection for naming and search lives in Chat Preferences.
@@ -166,7 +186,7 @@ designation and endpoints have been removed.
     one default per flow across the whole table, not per provider. It does not
     guarantee that a default exists. Seed a default separately.
 - **`LLMModelFlowType`** (`db/enums.py`): `CHAT`, `VISION`, `CONTEXTUAL_RAG`,
-  `REASONING`, `CHAT_NAMING`, `SEARCH_SELECTION`, `CRAFT`. Stored on `llm_model_flow` as
+  `REASONING`, `CHAT_NAMING`, `SEARCH_SELECTION`, `DECISION`, `CRAFT`. Stored on `llm_model_flow` as
   `Enum(LLMModelFlowType, native_enum=False)`, which SQLAlchemy renders as a
   plain `VARCHAR` column with **no `CHECK` constraint**
   (`alembic/versions/f220515df7b4_add_flow_mapping_table.py:upgrade`,
@@ -253,7 +273,7 @@ the same transaction, so the partial unique index is never violated mid-write.
 Chat callers pass `LLMModelFlowType.CHAT` directly. `update_default_vision_provider`
 checks `model_supports_image_input` before updating the default.
 Naming, selection, and Craft callers use `update_default_pointer_model` with
-an explicit flow type. This function validates the selected model and creates its pointer mapping through
+an explicit flow type. This function requires a chat-capable model and creates its pointer mapping through
 `create_new_flow_mapping__no_commit`. `fetch_existing_models(db_session, flow_types)`
 returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
 flow type in the list.
@@ -280,6 +300,28 @@ Migration `c92b67e56ec4` converts draft FAST mappings into CHAT_NAMING mappings.
 Existing canonical naming defaults take precedence. Duplicate mappings merge,
 and model visibility remains unchanged. The downgrade does not reverse the
 merge because original and converted naming rows cannot be distinguished.
+
+### Decision client
+
+`factory.py:get_decision_client` resolves only the selected `DECISION` row and
+returns `None` when unset. The internal `is_default` column stores this optional
+selection. Selection requires an existing capability row and preserves visibility.
+Provider edits preserve the selection. A selected model cannot be removed until
+the selection is cleared. Deleting its provider removes the selection.
+
+`model_catalog.py:model_supports_decisions` reads explicit provider-scoped metadata.
+OpenRouter discovery also requests `output_modalities=decisions` and derives
+capabilities from the returned modalities. Decision-only models lack `CHAT` and
+do not appear in chat selectors. Models can support both protocols.
+Dedicated decision-provider saves validate selected names and create DECISION mappings.
+General saves preserve stored mappings. Discovery never selects additional models.
+
+`decisions/client.py:DecisionClient.decide` accepts text input and typed predicate,
+choice, or score questions. It requires an operation `LLMFlow` and validates the
+provider response. It preserves probabilities, confidence, scores, and refusals.
+TypeSafe and OpenRouter use the System One request shape. OpenAI uses question
+arrays. Requests have a finite timeout and no automatic retries.
+Image input and product use cases are outside this implementation.
 
 ### 4.4 The LiteLLM wrapper: `LitellmLLM`
 
@@ -448,6 +490,13 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
    logged or returned by an endpoint.** Every provider view returned by
    `server/manage/llm/api.py` masks `api_key` and sensitive `custom_config`
    entries via `_mask_provider_credentials`.
+8. **Decision selection is strictly opt-in.** Neither provider creation nor
+   chat defaults select a decision model. Clearing it returns the factory to
+   `None`. A request cannot grant decision capability to an arbitrary model.
+9. **Decision-provider edits preserve shared chat state.** Keep chat capabilities,
+   settings, defaults, visibility, and provider access. New shared models stay
+   hidden from chat. Loading a catalog must not select additional decision models
+   on an existing connection.
 
 ---
 
@@ -498,13 +547,16 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 1. Admin > LLM > Add Provider, or `PUT /admin/llm/provider` directly.
 2. Use `POST /admin/llm/test` to fire one real call against the draft config
    before saving; it exercises the same `llm_from_provider` path a live turn
-   would. TypeSafe instead calls `well_known_providers/typesafe.py` with a
-   fixed System One endpoint and validates the returned decision.
+   would. Decision providers use `/admin/llm/decision-provider/test` and validate
+   the returned decision through the dedicated decision client.
 3. Set it as a flow default (`POST /admin/llm/default` etc.) and send a real
    chat message to confirm `get_llm_for_persona` picks it up.
 
-For TypeSafe, verify that the saved provider has no model rows and auto mode is
-off. It appears in the admin list, but not in chat or onboarding options.
+For TypeSafe, refresh models with the saved key, select a discovered model,
+and save. Its model rows have only the DECISION flow and auto mode is off.
+The provider appears in the admin list, but not in chat or onboarding options.
+In Decision Models, select and clear the decision model across page reloads.
+Refreshing provider models after clearing must leave the decision model unset.
 Skip step 3 because TypeSafe has no chat default. Adding TypeSafe must not change
 the first-provider or last-provider behavior for chat providers.
 
@@ -566,7 +618,7 @@ See `backend/AGENTS.md` for authoritative commands and required env
   populated. Craft in particular is what `db/llm.py:update_default_pointer_model`
   calls a "pointer flow, not a capability": nothing populates a CRAFT
   `LLMModelFlow` row automatically, so it must be created explicitly before it
-  can be defaulted.
+  can be defaulted. The selected model must also have a CHAT flow.
 - **Retry semantics are asymmetric before and after the first chunk.** Before
   any content streams, a transient error retries transparently. After even
   one chunk has reached the caller, the same error propagates as a hard

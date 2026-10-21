@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,14 +31,10 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     recommended_default_model: SimpleKnownModel | None = None
 
 
-class TypeSafeDecisionAnswer(BaseModel):
-    type: Literal["noul"]
-    noul: float = Field(ge=0, le=1)
+class TypeSafeModel(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
 
 
-class TypeSafeDecisionAnswers(BaseModel):
-    connection_test: TypeSafeDecisionAnswer
-
-
-class TypeSafeDecisionResponse(BaseModel):
-    answers: TypeSafeDecisionAnswers
+class TypeSafeModelsResponse(BaseModel):
+    models: list[TypeSafeModel]

@@ -206,7 +206,7 @@ def resolve_gateway_model(
         (
             model
             for model in provider.model_configurations
-            if model.is_visible and model.name == model_name
+            if model.is_visible and model.supports_chat and model.name == model_name
         ),
         None,
     )

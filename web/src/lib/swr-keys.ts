@@ -92,6 +92,7 @@ export const SWR_KEYS = {
   llmProviderModels: (providerId: number) =>
     `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  decisionModel: "/api/admin/llm/decision-model",
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,

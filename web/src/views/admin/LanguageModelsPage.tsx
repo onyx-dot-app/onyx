@@ -454,7 +454,6 @@ export default function LanguageModelsPage() {
           LLMProviderName.VERTEX_AI,
           LLMProviderName.BEDROCK,
           LLMProviderName.AZURE,
-          LLMProviderName.TYPESAFE,
         ],
       },
       {
@@ -487,14 +486,15 @@ export default function LanguageModelsPage() {
     return <PageLoader />;
   }
 
-  const hasProviders = existingLlmProviders.length > 0;
-  const chatProviderCount = existingLlmProviders.filter(
-    (provider) => provider.provider !== LLMProviderName.TYPESAFE
-  ).length;
+  const chatProviders = existingLlmProviders.filter(
+    (provider) => !getProvider(provider.provider).decisionOnly
+  );
+  const hasProviders = chatProviders.length > 0;
+  const chatProviderCount = chatProviders.length;
   const isFirstProvider = chatProviderCount === 0;
 
   // Pre-sort providers so the default appears first
-  const sortedProviders = [...existingLlmProviders].sort((a, b) => {
+  const sortedProviders = [...chatProviders].sort((a, b) => {
     const aIsDefault = defaultText?.provider_id === a.id;
     const bIsDefault = defaultText?.provider_id === b.id;
     if (aIsDefault && !bIsDefault) return -1;
@@ -503,7 +503,7 @@ export default function LanguageModelsPage() {
   });
 
   // Pre-filter to providers that have at least one visible model
-  const providersWithVisibleModels = existingLlmProviders
+  const providersWithVisibleModels = chatProviders
     .map((provider) => ({
       provider,
       visibleModels: provider.model_configurations.filter((m) => m.is_visible),
@@ -737,10 +737,7 @@ export default function LanguageModelsPage() {
                     key={provider.id}
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
-                    isLastProvider={
-                      provider.provider !== LLMProviderName.TYPESAFE &&
-                      chatProviderCount === 1
-                    }
+                    isLastProvider={chatProviderCount === 1}
                   />
                 ))}
               </div>

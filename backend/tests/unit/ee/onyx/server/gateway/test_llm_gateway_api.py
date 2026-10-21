@@ -169,6 +169,31 @@ class _ChunkStreamLLM(_ConfigOnlyLLM):
         yield from self._chunks
 
 
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_resolve_decision_model_requires_chat_capability(supports_chat: bool) -> None:
+    model = ModelConfigurationView(
+        name="gpt-6-luna",
+        supports_chat=supports_chat,
+        supports_decisions=True,
+        is_visible=True,
+        supports_image_input=False,
+    )
+    provider = _provider(23, "openai", [model])
+    db_session = cast(Session, MagicMock(spec=Session))
+    user = cast(User, MagicMock(spec=User))
+    with patch.object(
+        gateway_api, "fetch_accessible_llm_provider_by_id", return_value=provider
+    ):
+        if supports_chat:
+            assert gateway_api.resolve_gateway_model(
+                db_session, user, "23/gpt-6-luna"
+            ) == (provider, model)
+        else:
+            with pytest.raises(OnyxError) as exc_info:
+                gateway_api.resolve_gateway_model(db_session, user, "23/gpt-6-luna")
+            assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
 def test_resolve_model_preserves_slashes_after_provider_id() -> None:
     model = _model("anthropic/claude-3.5-sonnet")
     provider = _provider(23, "openrouter", [model])

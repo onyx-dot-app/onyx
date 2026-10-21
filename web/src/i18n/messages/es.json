@@ -1247,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "Administrar los ajustes de chat en Modelos de lenguaje",
+      "decisionModel": {
+        "title": "Modelo de decisiones",
+        "openAiDecisionsModelName": "Decisiones de OpenAI (GPT-6 Luna)",
+        "description": "Selecciona un modelo para futuras funciones de clasificación y revisión. Onyx aún no utiliza este modelo.",
+        "clear": "Borrar",
+        "notConfigured": "Sin configurar",
+        "saved": "Modelo de decisiones actualizado",
+        "saveFailed": "No se pudo actualizar el modelo de decisiones"
+      },
+      "header": {
+        "title": "Modelos de decisión",
+        "description": "Gestiona los proveedores y selecciona un modelo de decisión opcional."
+      },
+      "providers": {
+        "title": "Proveedores",
+        "description": "Conecta un proveedor o gestiona sus modelos de decisión.",
+        "clearBeforeRemoval": "Borra el modelo de decisión seleccionado antes de eliminar este proveedor.",
+        "edit": "Configurar",
+        "connect": "Conectar"
+      },
+      "loadFailed": "No se pudieron cargar los modelos de decisión.",
+      "retry": "Reintentar",
+      "saveFailed": "No se pudo guardar la conexión.",
+      "cancel": "Cancelar",
+      "save": "Guardar"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7706,10 +7734,16 @@
             "label": "Más modelos"
           },
           "refetch": {
+            "label": "Actualizar modelos",
             "errorToast": "No se pudieron obtener los modelos"
           },
           "row": {
             "defaultLabel": "Modelo predeterminado",
+            "decisionTag": {
+              "label": "Decisión",
+              "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
+              "chatAndDecision": "Admite tareas de chat y de decisiones."
+            },
             "renameButton": {
               "tooltip": "Renombrar"
             },
@@ -16463,6 +16497,9 @@
         },
         "languageModels": {
           "label": "Modelos de lenguaje"
+        },
+        "decisionModels": {
+          "label": "Modelos de decisión"
         },
         "llmGateway": {
           "label": "LLM Gateway"
