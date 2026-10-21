@@ -38,13 +38,15 @@ def _startup_warnings(
         caplog.at_level(logging.WARNING, logger="onyx.utils.logger"),
     ):
         importlib.reload(app_configs)
-    # Back to the process env so later tests see the real constants.
-    importlib.reload(app_configs)
-    return [
+    warnings = [
         record.getMessage()
         for record in caplog.records
         if "legacy MinIO" in record.getMessage()
     ]
+    # Back to the process env so later tests see the real constants. Collected
+    # above because this reload warns too when the process env points at MinIO.
+    importlib.reload(app_configs)
+    return warnings
 
 
 def test_only_the_bundled_minio_endpoint_on_the_s3_backend_is_flagged() -> None:
