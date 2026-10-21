@@ -230,7 +230,7 @@ export default function MCPServerDetailPage({
   const saveDetails = async (saved: MCPServer) => {
     await mutateServer(
       (current) =>
-        current
+        current && current.server_url === saved.server_url
           ? {
               ...current,
               name: saved.name,

@@ -137,6 +137,16 @@ export default function MCPServerDetailsPage({
   const validationSchema = Yup.object().shape({
     name: Yup.string().required(t("addMcpModal.name.required")),
     description: Yup.string(),
+    server_url: Yup.string()
+      .required(t("addMcpModal.serverUrl.invalid"))
+      .test("http-url", t("addMcpModal.serverUrl.invalid"), (value) => {
+        try {
+          const url = new URL(value ?? "");
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }),
   });
 
   const initialValues: MCPServerDetailsValues = {
@@ -176,8 +186,12 @@ export default function MCPServerDetailsPage({
     const chatChanged =
       values.enabled_in_chat !== undefined &&
       values.enabled_in_chat !== chatEnabled;
+    const serverUrl = values.server_url.trim();
+    const urlChanged = serverUrl !== baseline.server_url.trim();
     const needsAuthentication =
-      chatChanged && values.enabled_in_chat && authenticationRequired;
+      chatChanged &&
+      values.enabled_in_chat &&
+      (authenticationRequired || urlChanged);
     if (
       readOnly ||
       !authorityReady ||
@@ -192,6 +206,7 @@ export default function MCPServerDetailsPage({
     setIsSubmitting(true);
 
     const payload: MCPServerUpdateRequest = {};
+    if (urlChanged) payload.server_url = serverUrl;
     if (values.name !== baseline.name) payload.name = values.name;
     if (values.description !== baseline.description)
       payload.description = values.description;
@@ -230,7 +245,13 @@ export default function MCPServerDetailsPage({
       }
       await onSaved(savedServer);
       await refreshMemberPluginCaches(mutate);
-      helpers.resetForm({ values: { ...values, enabled_in_chat: undefined } });
+      helpers.resetForm({
+        values: {
+          ...values,
+          server_url: serverUrl,
+          enabled_in_chat: undefined,
+        },
+      });
       if (intent) {
         router.push(
           withPluginSearchParams(
@@ -242,6 +263,8 @@ export default function MCPServerDetailsPage({
             }
           )
         );
+        onAuthenticate?.();
+      } else if (urlChanged) {
         onAuthenticate?.();
       }
     } catch (error) {
@@ -312,6 +335,33 @@ export default function MCPServerDetailsPage({
                       placeholder={t("addMcpModal.name.placeholder")}
                       ref={focusOnMount}
                     />
+                  </InputVertical>
+
+                  <InputVertical
+                    withLabel="server_url"
+                    title={t("addMcpModal.serverUrl.title")}
+                  >
+                    <InputTypeIn
+                      id="server_url"
+                      name="server_url"
+                      value={formikProps.values.server_url}
+                      onChange={formikProps.handleChange}
+                      onBlur={formikProps.handleBlur}
+                      variant={
+                        readOnly
+                          ? "readOnly"
+                          : formikProps.touched.server_url &&
+                              formikProps.errors.server_url
+                            ? "error"
+                            : "primary"
+                      }
+                    />
+                    {formikProps.touched.server_url &&
+                      formikProps.errors.server_url && (
+                        <Text font="secondary-body" color="status-error-05">
+                          {formikProps.errors.server_url}
+                        </Text>
+                      )}
                   </InputVertical>
 
                   <InputVertical

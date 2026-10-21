@@ -352,11 +352,14 @@ including hard links and OAuth returns. Closing returns to Plugins, not browser 
 `web/src/sections/actions/MCPServerDetailPage.tsx` has three filled tabs:
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
 retain drafts, and route navigation asks before discarding any unsaved edits.
-The `tab` query parameter links directly to each section. Saving server details
-stays on that tab. Authentication saves configuration, then runs the existing
+The `tab` query parameter links directly to each section. Saving server metadata
+stays on that tab; changing the URL opens Authentication. Authentication saves configuration, then runs the existing
 connection and tool-loading flow before opening Tools. Workspace availability and
-deletion stay in the directory. Saved details show the URL beneath the name and
-do not offer an endpoint input; creation still accepts a URL.
+deletion stay in the directory. Saved configuration shows the server URL beneath the name. Users with edit permission
+can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
+Saving a changed URL opens Authentication to reconnect and discover tools. The returned
+server replaces cached credentials before reloading, even if the reload fails.
+Metadata-only saves omit the URL.
 Metadata-only saves preserve existing access grants, including after a plan downgrade.
 Changing restricted access still requires the applicable plan and permissions.
 
