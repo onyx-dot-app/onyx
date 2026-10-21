@@ -1,4 +1,4 @@
-import { type Page, type Locator, expect } from "@playwright/test";
+import { type Page, type Locator, type Route, expect } from "@playwright/test";
 import * as yup from "yup";
 import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
 
@@ -151,15 +151,31 @@ export class AdminMcpServersPage {
   }
 
   async connectAndWaitForSetup(): Promise<void> {
-    const responsePromise = this.page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/admin/mcp/setup" &&
-        response.request().method() === "POST"
-    );
-    await this.clickConnect();
-    const response = await responsePromise;
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const body: unknown = await response.json();
+    const setupRoute = "**/api/admin/mcp/setup";
+    let responseText = "";
+    const captureResponse = async (route: Route): Promise<void> => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      responseText = await response.text();
+      await route.fulfill({ response, body: responseText });
+    };
+    await this.page.route(setupRoute, captureResponse);
+    try {
+      const responsePromise = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/admin/mcp/setup" &&
+          response.request().method() === "POST"
+      );
+      await this.clickConnect();
+      const response = await responsePromise;
+      expect(response.ok(), responseText).toBeTruthy();
+    } finally {
+      await this.page.unroute(setupRoute, captureResponse);
+    }
+    const body: unknown = JSON.parse(responseText);
     const { status } = yup
       .object({
         status: yup
