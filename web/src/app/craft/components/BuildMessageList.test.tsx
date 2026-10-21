@@ -91,7 +91,7 @@ const savedAssistantMessage: BuildMessage = {
   },
 };
 
-test("shows working after refresh with only completed tools until the turn settles", () => {
+test("shows a cursor after refresh with only completed tools until the turn settles", () => {
   const streamItems: StreamItem[] = [
     {
       type: "tool_call",
@@ -115,14 +115,24 @@ test("shows working after refresh with only completed tools until the turn settl
     autoScrollEnabled: false,
   };
   const { rerender } = render(<BuildMessageList {...props} isStreaming />);
-  expect(screen.getByText("Working")).toBeInTheDocument();
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
   rerender(<BuildMessageList {...props} isStreaming={false} />);
-  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
-test("shows working when a live turn has only saved history", () => {
+test("uses the text cursor without adding a second progress cursor", () => {
+  renderList({
+    isStreaming: true,
+    streamItems: [
+      { type: "text", id: "text-1", content: "Writing", isStreaming: true },
+    ],
+  });
+  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+});
+
+test("shows a cursor when a live turn has only saved history", () => {
   renderList({ messages: [savedAssistantMessage], isStreaming: true });
-  expect(screen.getByText("Working")).toBeInTheDocument();
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
 });
 
 // Output ownership follows settled turns, independently of assistant prose.

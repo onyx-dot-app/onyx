@@ -57,7 +57,8 @@ The displayed approval deadline comes from the server; a browser does not own th
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.
-An active turn also shows a persistent Working indicator, including after refresh during a quiet tool call.
+An active turn keeps the existing flashing cursor visible, including after refresh during a quiet tool call.
+Streaming text owns its cursor; the message list adds one only when no text cursor is active.
 Failed active-turn reads use session-load recovery instead of treating the turn as idle.
 Typing and submission remain disabled until recovery succeeds.
 
