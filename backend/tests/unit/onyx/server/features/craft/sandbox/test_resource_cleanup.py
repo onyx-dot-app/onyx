@@ -684,6 +684,35 @@ def test_mismatched_tenant_context_stops_inventory(
     manager.delete_resource.assert_not_called()
 
 
+def test_volume_retry_does_not_delay_another_volume_created_at_the_same_time(
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, cache = collector
+    resources = [
+        _resource(
+            kind=SandboxResourceKind.VOLUME,
+            name=name,
+            instance_id="2026-10-20T10:00:00Z",
+        )
+        for name in ("volume-a", "volume-b")
+    ]
+    manager.iter_resources.return_value = iter(resources)
+    manager.delete_resource.side_effect = [RuntimeError("volume in use"), None]
+    values: dict[str, str] = {}
+    cache.get.side_effect = values.get
+
+    def remember(key: str, value: str, *, ex: int) -> None:  # noqa: ARG001
+        values[key] = value
+
+    cache.set.side_effect = remember
+    monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
+    cleanup.reconcile_sandbox_resources(
+        manager, "tenant-a", time.monotonic() + 60, lambda: None
+    )
+    assert manager.delete_resource.call_count == 2
+
+
 def test_cleanup_lease_loss_on_last_resource_aborts_without_retry(
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,

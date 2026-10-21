@@ -211,9 +211,7 @@ def reconcile_sandbox_resources(
             verified_owners.add(resource.sandbox_id)
         if resource.tenant_id != tenant_id or resource.created_at > grace_cutoff:
             continue
-        retry_key = (
-            f"sandbox_cleanup_retry:{resource.kind.value}:{resource.instance_id}"
-        )
+        retry_key = f"sandbox_cleanup_retry:{resource.kind.value}:{resource.name}:{resource.instance_id}"
         if cache.get(retry_key) is not None:
             continue
         try:

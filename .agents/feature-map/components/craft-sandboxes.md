@@ -539,6 +539,8 @@ through pages until it reaches the end or its deadline. It processes rows in UUI
 order and advances the cursor after each attempt, including failed attempts.
 A slow failing row cannot pin later rows to the same page. Failed resources have a
 retry delay so repeated errors do not consume every sweep's deletion budget.
+Retry keys include resource names because Docker volume creation timestamps
+can match across distinct volumes.
 Idle cleanup captures resource identities before checkpointing and compares
 them again under the provisioning lock before deletion. It deletes only those
 observed instances. Confirmed missing storage skips checkpoint calls, while
