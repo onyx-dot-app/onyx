@@ -64,6 +64,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if eq (include "onyx.objectStore.enabled" .) "true" }}
+      initContainers:
+        {{- include "onyx.objectStore.waitInitContainer" (dict "ctx" . "resources" .Values.api.resources "securityContext" .Values.api.securityContext) | nindent 8 }}
+      {{- end }}
       containers:
         - name: api-server
           securityContext:
