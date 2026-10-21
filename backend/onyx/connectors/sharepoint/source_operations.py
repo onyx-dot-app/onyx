@@ -8,7 +8,7 @@ the permission reads from ``sharepoint_rest``. This is the only file under
 """
 
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime
 from typing import Any
 
@@ -63,7 +63,11 @@ from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_token_for_rest,
 )
-from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_MAX_RETRIES,
+    GraphApiClient,
+    sleep_and_retry,
+)
 from onyx.connectors.microsoft_utils.graph_env import (
     MicrosoftGraphEnvironment,
     resolve_microsoft_environment,
@@ -132,6 +136,17 @@ def _drive(drive: Drive) -> SharepointDrive:
     )
 
 
+def _execute_with_retry(build: Callable[[], Any], label: str) -> Any:
+    """Runs an office365 SDK read with the shared Graph back-off: 429 and 503
+    wait for Retry-After, or back off with jitter, up to
+    ``GRAPH_API_MAX_RETRIES`` times. ``build`` makes the query again for each
+    retry. A refusal raises ``MicrosoftGraphError``."""
+    with raise_microsoft_errors():
+        return sleep_and_retry(
+            build(), label, max_retries=GRAPH_API_MAX_RETRIES, rebuild=build
+        )
+
+
 def _read_site_listing(sites: SitesWithRoot, max_pages: int | None) -> SiteUrlListing:
     site_urls: list[str] = []
     pages: int = 0
@@ -143,7 +158,7 @@ def _read_site_listing(sites: SitesWithRoot, max_pages: int | None) -> SiteUrlLi
         pages += 1
         if not sites.has_next or (max_pages is not None and pages >= max_pages):
             break
-        sites = sites._get_next().execute_query()
+        sites = _execute_with_retry(sites._get_next, "list_site_urls")
     return SiteUrlListing(site_urls=site_urls, complete=not sites or not sites.has_next)
 
 
@@ -238,8 +253,9 @@ class SharepointSourceOperations(SourceOperations):
             self._tenant_domain_cache = from_sites
             return from_sites
         logger.info("No site URLs available; resolving tenant domain from root site")
-        with raise_microsoft_errors():
-            root_site: Site = self._graph_client().sites.root.get().execute_query()
+        root_site: Site = _execute_with_retry(
+            lambda: self._graph_client().sites.root.get(), "get_root_site"
+        )
         hostname: str | None = root_site.site_collection.hostname
         if not hostname:
             raise ConnectorValidationError(
@@ -346,20 +362,19 @@ class SharepointSourceOperations(SourceOperations):
     def list_site_urls(self, *, max_pages: int | None = None) -> SiteUrlListing:
         """Site collections in the tenant, by web URL: every one, or the first
         ``max_pages`` listing pages for a probe."""
-        with raise_microsoft_errors():
-            sites: SitesWithRoot = (
-                self._graph_client().sites.get_all_sites().execute_query()
-            )
-            return _read_site_listing(sites, max_pages)
+        sites: SitesWithRoot = _execute_with_retry(
+            lambda: self._graph_client().sites.get_all_sites(), "list_site_urls"
+        )
+        return _read_site_listing(sites, max_pages)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_site_id(self, *, site_url: str) -> str:
-        with raise_microsoft_errors():
-            site: Site = self._graph_client().sites.get_by_url(site_url)
-            site.execute_query()
+        site: Site = _execute_with_retry(
+            lambda: self._graph_client().sites.get_by_url(site_url), "get_site_id"
+        )
         if not site.id:
             raise RuntimeError(f"Graph answered site {site_url} without an id")
         return site.id
@@ -369,14 +384,18 @@ class SharepointSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_drives(self, *, site_url: str) -> list[SharepointDrive]:
-        with raise_microsoft_errors():
+
+        def build_query() -> Any:
             site: Site = self._graph_client().sites.get_by_url(site_url)
-            drives: EntityCollection[Drive] = (
+            return (
                 site.drives.select(DRIVE_SELECT_FIELDS)
                 .expand(DRIVE_EXPAND_FIELDS)
                 .get_all(page_loaded=lambda _: None)
-                .execute_query()
             )
+
+        drives: EntityCollection[Drive] = _execute_with_retry(
+            build_query, "list_drives"
+        )
         return [_drive(drive) for drive in drives]
 
     @source_operation(

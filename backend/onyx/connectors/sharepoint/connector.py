@@ -283,6 +283,14 @@ def _validate_credential_fields(credentials: dict[str, Any]) -> None:
         )
 
 
+def _raise_if_throttled(error: Exception) -> None:
+    """Graph still throttles after the gateway's retries. Fail the attempt so
+    the next one resumes from the checkpoint, instead of skipping the site or
+    drive."""
+    if isinstance(error, MicrosoftGraphError) and error.is_throttled:
+        raise error
+
+
 def _create_document_failure(
     driveitem: DriveItemData,
     error_message: str,
@@ -1721,6 +1729,7 @@ class SharepointConnector(
                     )
 
             except Exception as e:
+                _raise_if_throttled(e)
                 logger.error(
                     "Failed to initialize drives for site: %s: %s",
                     checkpoint.current_site_descriptor.url,
@@ -1786,6 +1795,7 @@ class SharepointConnector(
                     include_permissions=include_permissions,
                 )
             except Exception as e:
+                _raise_if_throttled(e)
                 logger.error(
                     "Failed to retrieve items from drive '%s' in site: %s: %s",
                     checkpoint.current_drive.display_name,
@@ -1828,6 +1838,7 @@ class SharepointConnector(
                         ),
                     )
                 except Exception as e:
+                    _raise_if_throttled(e)
                     logger.error(
                         "Failed to fetch delta page for drive '%s': %s",
                         current_drive.display_name,
@@ -1874,6 +1885,7 @@ class SharepointConnector(
                         include_permissions,
                     )
             except Exception as e:
+                _raise_if_throttled(e)
                 logger.exception(
                     "Failed mid-iteration for drive '%s' in site '%s'",
                     current_drive.display_name,
@@ -1991,6 +2003,7 @@ class SharepointConnector(
                     site_descriptor.url,
                 )
             except Exception as e:
+                _raise_if_throttled(e)
                 # Broadened from per-site Graph 4xx to any Exception:
                 # _fetch_site_pages failures skip the site-pages stage
                 # instead of failing the attempt. Per-page errors are

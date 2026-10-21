@@ -95,6 +95,10 @@ class MicrosoftGraphError(SourceApiError):
         return is_permanent_refusal_status(self.status)
 
     @property
+    def is_throttled(self) -> bool:
+        return self.status == 429
+
+    @property
     def fails_the_attempt(self) -> bool:
         return self.status is None or self.status in (401, 429) or self.status >= 500
 
