@@ -58,6 +58,52 @@ def _drives_client(answers: list[object]) -> MagicMock:
     return sdk
 
 
+class _SingleUseQuery:
+    """Behaves like an SDK query: once sent, it drops its request, so running
+    it again sends nothing and answers an empty collection."""
+
+    def __init__(self, answer: object) -> None:
+        self._answer: object = answer
+        self.sends: int = 0
+
+    def execute_query(self) -> object:
+        self.sends += 1
+        if self.sends > 1:
+            return []
+        if isinstance(self._answer, Exception):
+            raise self._answer
+        return self._answer
+
+
+def test_retry_sends_a_new_query_and_returns_its_data(sleeps: list[float]) -> None:
+    drive = MagicMock(properties={})
+    drive.id = "drive-1"
+    drive.name = "Documents"
+    drive.web_url = f"{SITE_URL}/Shared%20Documents"
+    drive.drive_type = "documentLibrary"
+    queries: list[_SingleUseQuery] = [
+        _SingleUseQuery(_sdk_error(429, "activityLimitReached", "3")),
+        _SingleUseQuery([drive]),
+    ]
+    pending: list[_SingleUseQuery] = list(queries)
+
+    def site_by_url(_url: str) -> MagicMock:
+        site = MagicMock()
+        site.drives.select.return_value.expand.return_value.get_all.return_value = (
+            pending.pop(0)
+        )
+        return site
+
+    sdk = MagicMock()
+    sdk.sites.get_by_url.side_effect = site_by_url
+
+    drives = fake_gateway(sdk_client=sdk).list_drives(site_url=SITE_URL)
+
+    assert [d.id for d in drives] == ["drive-1"]
+    assert [query.sends for query in queries] == [1, 1]
+    assert sleeps == [3.0]
+
+
 def test_429_waits_for_retry_after_then_succeeds(sleeps: list[float]) -> None:
     sdk = _drives_client([_sdk_error(429, "activityLimitReached", "7"), []])
 

@@ -284,9 +284,9 @@ def _validate_credential_fields(credentials: dict[str, Any]) -> None:
 
 
 def _raise_if_throttled(error: Exception) -> None:
-    """Graph still throttles after the gateway's retries. Fail the attempt so
-    the next one resumes from the checkpoint, instead of skipping the site or
-    drive."""
+    """Graph still answers 429 or 503 after the gateway's retries. Fail the
+    attempt so the next one resumes from the checkpoint, instead of skipping
+    the site or drive."""
     if isinstance(error, MicrosoftGraphError) and error.is_throttled:
         raise error
 

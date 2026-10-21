@@ -270,15 +270,19 @@ def test_drive_init_failure_yields_the_next_site_node(
     assert final_checkpoint.current_site_descriptor.url == next_site_url
 
 
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(429, "activityLimitReached"), (503, "serviceNotAvailable")],
+)
 def test_drive_init_throttling_fails_the_attempt(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, status: int, code: str
 ) -> None:
     """Graph still throttles after the gateway's retries: the attempt fails
     and resumes from its checkpoint, instead of skipping the site."""
     connector = _setup_connector()
 
     def throttled_get_drives(_site_url: str) -> list[SiteDrive]:
-        raise MicrosoftGraphError(429, "activityLimitReached", "throttled")
+        raise MicrosoftGraphError(status, code, "throttled")
 
     monkeypatch.setattr(connector, "_get_drives_for_site", throttled_get_drives)
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
@@ -294,7 +298,7 @@ def test_drive_init_throttling_fails_the_attempt(
             )
         )
 
-    assert raised.value.status == 429
+    assert raised.value.status == status
 
 
 # ---------------------------------------------------------------------------

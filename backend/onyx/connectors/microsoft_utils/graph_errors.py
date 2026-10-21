@@ -96,7 +96,8 @@ class MicrosoftGraphError(SourceApiError):
 
     @property
     def is_throttled(self) -> bool:
-        return self.status == 429
+        """Graph throttles with 429, and with 503 under service load."""
+        return self.status in (429, 503)
 
     @property
     def fails_the_attempt(self) -> bool:
