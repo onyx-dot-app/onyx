@@ -177,11 +177,17 @@ def record_cleanup_checkpoint__no_commit(
             Sandbox.status == SandboxStatus.RUNNING,
             Sandbox.provisioning_attempt_number
             == checkpoint.provisioning_attempt_number,
+            Sandbox.last_heartbeat.is_not_distinct_from(checkpoint.last_heartbeat),
         )
         .values(
             cleanup_checkpoint={
                 "provisioning_attempt_number": checkpoint.provisioning_attempt_number,
                 "storage_identity": checkpoint.storage_identity,
+                "last_heartbeat": (
+                    checkpoint.last_heartbeat.isoformat()
+                    if checkpoint.last_heartbeat is not None
+                    else None
+                ),
             }
         )
     )
@@ -269,6 +275,7 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
+    sandbox.cleanup_checkpoint = None
     db_session.flush()
     return sandbox
 

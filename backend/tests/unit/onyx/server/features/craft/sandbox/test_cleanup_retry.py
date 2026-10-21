@@ -5,10 +5,13 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
+from onyx.db.models import BuildSession, Sandbox
+from onyx.server.features.build.db import build_session as session_db
+from onyx.server.features.build.db import sandbox as sandbox_db
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker import docker_sandbox_manager as dsm
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
+from onyx.server.features.build.session import manager as session_manager
 from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
 
 
@@ -48,7 +51,7 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
     )
     monkeypatch.setattr(docker, "_close_all_sandbox_buses", lambda _sandbox_id: None)
     db_session = MagicMock()
-    proof: dict[str, int | str] = {}
+    proof: dict[str, int | str | None] = {}
 
     def record(
         _db_session: object, _sandbox_id: object, checkpoint: SandboxCleanupCheckpoint
@@ -56,6 +59,9 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
         proof.update(
             provisioning_attempt_number=checkpoint.provisioning_attempt_number,
             storage_identity=checkpoint.storage_identity,
+            last_heartbeat=checkpoint.last_heartbeat.isoformat()
+            if checkpoint.last_heartbeat
+            else None,
         )
         return True
 
@@ -95,6 +101,7 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
 
     retry = _sandbox()
     retry.id, retry.user_id = sandbox.id, sandbox.user_id
+    retry.last_heartbeat = sandbox.last_heartbeat
     retry.cleanup_checkpoint = dict(proof)
     second = manager()
     lifecycle.sleep_sandbox(db_session, second, retry, "tenant-a", MagicMock())
@@ -105,7 +112,7 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
     assert db_session.commit.call_count == 2
 
 
-@pytest.mark.parametrize("mismatch", ["attempt", "storage", "runtime"])
+@pytest.mark.parametrize("mismatch", ["attempt", "storage", "runtime", "heartbeat"])
 def test_retry_requires_matching_attempt_storage_and_absent_runtime(
     mismatch: str,
 ) -> None:
@@ -113,6 +120,11 @@ def test_retry_requires_matching_attempt_storage_and_absent_runtime(
     sandbox.cleanup_checkpoint = {
         "provisioning_attempt_number": 0 if mismatch == "attempt" else 1,
         "storage_identity": "old-volume" if mismatch == "storage" else "volume-v1",
+        "last_heartbeat": (
+            sandbox.last_heartbeat.isoformat()
+            if mismatch != "heartbeat" and sandbox.last_heartbeat is not None
+            else None
+        ),
     }
     manager = MagicMock(spec=SandboxManager)
     manager.workspace_storage_exists.return_value = True
@@ -146,3 +158,99 @@ def test_checkpoint_commit_failure_aborts_deletion(
             db_session, manager, _sandbox(), "tenant-a", MagicMock()
         )
     manager.terminate.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["upload", "delete"])
+def test_activity_invalidates_failed_cleanup_before_filesystem_write(
+    operation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _sandbox()
+    backend, db_session = MagicMock(spec=SandboxManager), MagicMock()
+    backend.workspace_storage_exists.return_value = True
+    backend.workspace_storage_identity.return_value = "volume-v1"
+    backend.supports_opencode_history_persistence = False
+    backend.list_session_workspaces.return_value = []
+    backend.terminate.side_effect = RuntimeError("container removal failed")
+    monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
+
+    def record(
+        _db_session: object, _sandbox_id: object, checkpoint: SandboxCleanupCheckpoint
+    ) -> bool:
+        sandbox.cleanup_checkpoint = checkpoint.model_dump(mode="json")
+        return True
+
+    monkeypatch.setattr(lifecycle, "record_cleanup_checkpoint__no_commit", record)
+    with pytest.raises(RuntimeError, match="container removal failed"):
+        lifecycle.sleep_sandbox(db_session, backend, sandbox, "tenant-a", MagicMock())
+    assert sandbox.cleanup_checkpoint is not None
+
+    session = BuildSession(id=uuid4(), user_id=sandbox.user_id)
+    manager = object.__new__(session_manager.SessionManager)
+    manager._db_session, manager._sandbox_manager = db_session, backend
+    monkeypatch.setattr(
+        manager, "_require_session_and_sandbox", lambda *_args: (session, sandbox)
+    )
+    monkeypatch.setattr(manager, "get_upload_stats", lambda *_args: (0, 0))
+    monkeypatch.setattr(sandbox_db, "get_sandbox_by_id", lambda *_args: sandbox)
+    events: list[str] = []
+    db_session.commit.side_effect = lambda: events.append("commit")
+
+    def lock_session(*_args: object, **_kwargs: object) -> BuildSession:
+        events.append("lock")
+        return session
+
+    monkeypatch.setattr(session_manager, "get_build_session", lock_session)
+
+    def mutate(**_kwargs: object) -> None:
+        assert sandbox.cleanup_checkpoint is None
+        assert events == (["commit", "lock"] if operation == "upload" else ["commit"])
+        raise RuntimeError("worker died after file write")
+
+    with pytest.raises(RuntimeError, match="worker died after file write"):
+        if operation == "upload":
+            backend.upload_file.side_effect = mutate
+            manager.upload_file(session.id, sandbox.user_id, "new.txt", b"new")
+        else:
+            backend.delete_file.side_effect = mutate
+            manager.delete_file(session.id, sandbox.user_id, "old.txt")
+
+    backend.runtime_exists.return_value = False
+    backend.list_session_workspaces.side_effect = RuntimeError("runtime missing")
+    with pytest.raises(RuntimeError, match="runtime missing"):
+        lifecycle.sleep_sandbox(db_session, backend, sandbox, "tenant-a", MagicMock())
+    backend.terminate.assert_called_once()
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_both_heartbeat_helpers_clear_cleanup_proof(
+    legacy: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox = _sandbox()
+    sandbox.cleanup_checkpoint = {
+        "provisioning_attempt_number": 1,
+        "storage_identity": "old-volume",
+        "last_heartbeat": None,
+    }
+    db_session = MagicMock()
+    monkeypatch.setattr(sandbox_db, "get_sandbox_by_id", lambda *_args: sandbox)
+    db_session.query.return_value.filter.return_value.one_or_none.return_value = sandbox
+    if legacy:
+        session_db.update_sandbox_heartbeat(sandbox.id, db_session)
+    else:
+        sandbox_db.update_sandbox_heartbeat(db_session, sandbox.id)
+    assert sandbox.cleanup_checkpoint is None
+
+
+def test_failed_heartbeat_fence_prevents_deletion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend, db_session = MagicMock(spec=SandboxManager), MagicMock()
+    backend.workspace_storage_exists.return_value = True
+    backend.workspace_storage_identity.return_value = "volume-v1"
+    backend.supports_opencode_history_persistence = False
+    backend.list_session_workspaces.return_value = []
+    db_session.execute.return_value.rowcount = 0
+    monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
+    lifecycle.sleep_sandbox(db_session, backend, _sandbox(), "tenant-a", MagicMock())
+    backend.terminate.assert_not_called()
+    db_session.commit.assert_not_called()

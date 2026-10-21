@@ -840,6 +840,7 @@ def sleep_sandbox(
         checkpoint is not None
         and checkpoint.provisioning_attempt_number == initial_attempt
         and checkpoint.storage_identity == storage_identity
+        and checkpoint.last_heartbeat == sandbox.last_heartbeat
         and not sandbox_manager.runtime_exists(sandbox_id, tenant_id)
     )
     needs_checkpoint = storage_exists and not resume_deletion
@@ -969,6 +970,7 @@ def sleep_sandbox(
                 SandboxCleanupCheckpoint(
                     provisioning_attempt_number=sleep_attempt_number,
                     storage_identity=storage_identity,
+                    last_heartbeat=sandbox.last_heartbeat,
                 ),
             ):
                 db_session.rollback()

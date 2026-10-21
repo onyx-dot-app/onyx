@@ -75,6 +75,7 @@ class SandboxCleanupCheckpoint(BaseModel):
 
     provisioning_attempt_number: int
     storage_identity: str
+    last_heartbeat: datetime | None
 
 
 class DirectoryListing(BaseModel):
