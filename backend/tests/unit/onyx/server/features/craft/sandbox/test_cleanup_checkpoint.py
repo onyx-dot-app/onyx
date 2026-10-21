@@ -99,3 +99,51 @@ def test_kubernetes_verified_empty_workspace_inventory(
         ksm, "k8s_stream", lambda *_args, **_kwargs: "\nONYX_WORKSPACE_LIST_COMPLETE\n"
     )
     assert manager.list_session_workspaces(uuid4()) == []
+
+
+def test_missing_storage_retries_partial_deletion_without_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox = Sandbox(
+        id=uuid4(),
+        user_id=uuid4(),
+        status=SandboxStatus.RUNNING,
+        last_heartbeat=datetime.now(timezone.utc) - timedelta(days=1),
+        provisioning_attempt_number=1,
+    )
+    manager, db_session, lock = MagicMock(), MagicMock(), MagicMock()
+    manager.supports_opencode_history_persistence = True
+    manager.workspace_storage_exists.side_effect = [True, False]
+    manager.list_session_workspaces.return_value = []
+    manager.terminate.side_effect = [RuntimeError("secret deletion failed"), None]
+    monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
+    monkeypatch.setattr(
+        lifecycle, "sleep_running_sandbox__no_commit", lambda *_args: True
+    )
+    monkeypatch.setattr(lifecycle, "clear_nextjs_ports_for_user", lambda *_args: 0)
+    monkeypatch.setattr(
+        lifecycle, "mark_user_sessions_idle__no_commit", lambda *_args: 0
+    )
+    with pytest.raises(RuntimeError, match="secret deletion failed"):
+        lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
+    db_session.commit.assert_not_called()
+
+    lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
+
+    manager.create_opencode_history_snapshot.assert_called_once()
+    assert manager.list_session_workspaces.call_count == 2
+    assert manager.terminate.call_count == 2
+    db_session.commit.assert_called_once()
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_kubernetes_missing_storage_requires_not_found(status: int) -> None:
+    manager = object.__new__(KubernetesSandboxManager)
+    manager._namespace = "sandbox-test"
+    manager._core_api = MagicMock()
+    manager._core_api.read_namespaced_pod.side_effect = ApiException(status=status)
+    if status == 404:
+        assert not manager.workspace_storage_exists(uuid4(), "tenant-a")
+    else:
+        with pytest.raises(ApiException):
+            manager.workspace_storage_exists(uuid4(), "tenant-a")
