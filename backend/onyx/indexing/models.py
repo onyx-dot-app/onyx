@@ -294,4 +294,5 @@ class IndexingBatchAdapter(Protocol):
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
         index_to_secondary: bool,
+        failed_document_ids: set[str],
     ) -> None: ...
