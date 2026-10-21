@@ -192,7 +192,7 @@
         "title": "Définition du schéma OpenAPI"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Seuls le créateur de l'action ou un administrateur peuvent gérer l'authentification"
+        "disabledTooltip": "Seuls le créateur du plugin ou un administrateur peuvent gérer l'authentification"
       },
       "editHeader": {
         "title": "Modifier le plugin OpenAPI"

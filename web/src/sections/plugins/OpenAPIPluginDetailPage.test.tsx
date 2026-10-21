@@ -783,7 +783,7 @@ describe.each(["metadata", "schema", "authentication"] as const)(
         expect(
           await screen.findByText(
             editor === "authentication"
-              ? "Only the action's creator or an admin can manage authentication"
+              ? "Only the plugin's creator or an admin can manage authentication"
               : "Failed to update OpenAPI plugin"
           )
         ).toBeVisible();

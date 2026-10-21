@@ -192,7 +192,7 @@
         "title": "OpenAPI 스키마 정의"
       },
       "editConfigsButton": {
-        "disabledTooltip": "액션을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
+        "disabledTooltip": "플러그인을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
       },
       "editHeader": {
         "title": "OpenAPI 플러그인 편집"

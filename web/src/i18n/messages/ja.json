@@ -192,7 +192,7 @@
         "title": "OpenAPI スキーマ定義"
       },
       "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
+        "disabledTooltip": "認証を管理できるのは、プラグインの作成者または管理者のみです"
       },
       "editHeader": {
         "title": "OpenAPI プラグインを編集"

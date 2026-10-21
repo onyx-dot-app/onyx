@@ -188,11 +188,11 @@
         "invalidJson": "El formato JSON no es válido",
         "placeholder": "Introduce aquí tu esquema de OpenAPI",
         "required": "La definición del esquema de OpenAPI es obligatoria",
-        "subDescription": "Especifica un esquema de OpenAPI que defina las API que quieres poner a disposición como parte de este plugin. Puedes usar los marcadores de posición `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` y `USER_EMAIL` en cualquier parte del esquema (p. ej., la URL del servidor, las rutas o los valores predeterminados de los parámetros) y se sustituirán por los valores de la solicitud actual en el momento de la llamada. Más información sobre las [plugins OpenAPI]({docsUrl}).",
+        "subDescription": "Especifica un esquema de OpenAPI que defina las API que quieres poner a disposición como parte de este plugin. Puedes usar los marcadores de posición `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` y `USER_EMAIL` en cualquier parte del esquema (p. ej., la URL del servidor, las rutas o los valores predeterminados de los parámetros) y se sustituirán por los valores de la solicitud actual en el momento de la llamada. Más información sobre los [plugins OpenAPI]({docsUrl}).",
         "title": "Definición del esquema de OpenAPI"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Solo el creador de la acción o un administrador pueden gestionar la autenticación"
+        "disabledTooltip": "Solo el creador del plugin o un administrador pueden gestionar la autenticación"
       },
       "editHeader": {
         "title": "Editar el plugin OpenAPI"

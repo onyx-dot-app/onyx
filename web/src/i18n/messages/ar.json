@@ -192,7 +192,7 @@
         "title": "تعريف مخطط OpenAPI"
       },
       "editConfigsButton": {
-        "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة"
+        "disabledTooltip": "يمكن لمنشئ الإضافة أو المسؤول فقط إدارة المصادقة"
       },
       "editHeader": {
         "title": "تعديل إضافة OpenAPI"

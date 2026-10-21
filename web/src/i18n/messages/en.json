@@ -192,7 +192,7 @@
         "title": "OpenAPI Schema Definition"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Only the action's creator or an admin can manage authentication"
+        "disabledTooltip": "Only the plugin's creator or an admin can manage authentication"
       },
       "editHeader": {
         "title": "Edit OpenAPI plugin"

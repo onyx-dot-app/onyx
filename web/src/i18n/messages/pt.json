@@ -192,7 +192,7 @@
         "title": "Definição do esquema OpenAPI"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Somente o criador da ação ou um administrador pode gerenciar a autenticação"
+        "disabledTooltip": "Somente o criador do plugin ou um administrador pode gerenciar a autenticação"
       },
       "editHeader": {
         "title": "Editar plugin OpenAPI"

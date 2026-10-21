@@ -192,7 +192,7 @@
         "title": "OpenAPI 架构定义"
       },
       "editConfigsButton": {
-        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证"
+        "disabledTooltip": "只有该插件的创建者或管理员才能管理身份验证"
       },
       "editHeader": {
         "title": "编辑 OpenAPI 插件"
