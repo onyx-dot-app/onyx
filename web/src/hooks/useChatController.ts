@@ -68,6 +68,7 @@ import {
   selectedSourcesFrom,
 } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -137,6 +138,8 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
+  /** Puts a message and its files back after a send fails before it starts. */
+  restoreInputBar: (message: string, files: ProjectFile[]) => void;
 }
 
 async function stopChatSession(
@@ -168,7 +171,9 @@ export default function useChatController({
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
+  restoreInputBar,
 }: UseChatControllerProps) {
+  const t = useTranslations("chat.app");
   // The chat's search filters ride the tool configuration, resolved against
   // the sources the active agent can reach. An explicit selection resolves
   // only against a complete roster — `settled` allows stale data (a failed
@@ -573,13 +578,22 @@ export default function useChatController({
       if (isNewSession) {
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
-        currChatSessionId = await createChatSession(
-          incognito ? 0 : activeAgent?.id || 0,
-          searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null,
-          incognito,
-          incognito ? incognitoSessionId : null
-        );
+        // The caller already cleared the input bar, so a failure here must
+        // give the message back instead of dropping it.
+        try {
+          currChatSessionId = await createChatSession(
+            incognito ? 0 : activeAgent?.id || 0,
+            searchParamBasedChatSessionName,
+            projectId ? parseInt(projectId) : null,
+            incognito,
+            incognito ? incognitoSessionId : null
+          );
+        } catch (error) {
+          console.error("Failed to create chat session:", error);
+          toast.error(t("createSessionFailed.toast"));
+          restoreInputBar(message, currentMessageFiles);
+          return;
+        }
 
         // This send is what created the chat, so the configuration chosen for
         // it moves onto the session before the id reaches the composer.
@@ -1547,6 +1561,8 @@ export default function useChatController({
       selectedDocuments,
       searchParams,
       resetInputBar,
+      restoreInputBar,
+      t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,

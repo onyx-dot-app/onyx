@@ -12002,6 +12002,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "تعذّر بدء محادثة جديدة. حاول مرة أخرى."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {فشل ملف وتمت إزالته: {names}} other {فشلت ملفات وتمت إزالتها: {names}}}"
       },

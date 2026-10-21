@@ -79,6 +79,8 @@ import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
+  /** Puts back a message that failed to send. */
+  restore: (message: string) => void;
   focus: () => void;
 }
 
@@ -318,6 +320,10 @@ const AppInputBar = React.memo(
           clearMessage();
           clearChatDraft();
         }
+      },
+      restore: (text: string) => {
+        setMessage(text);
+        setCursorToEnd();
       },
       focus: () => {
         inputRef.current?.focus();

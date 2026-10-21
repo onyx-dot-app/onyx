@@ -12002,6 +12002,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "新しいチャットを開始できませんでした。もう一度お試しください。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
       },

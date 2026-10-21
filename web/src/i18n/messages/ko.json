@@ -12002,6 +12002,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "새 채팅을 시작할 수 없습니다. 다시 시도하세요."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
       },
