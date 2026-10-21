@@ -174,9 +174,9 @@ celery==5.5.1 \
     --hash=sha256:2af9109a10fe28155044f4c387ce0e5e7f1fc89f9584cfb4b0df94f99a5fedc7 \
     --hash=sha256:9f4f9e57e36000c097c1b6f7a8ab29814b82771e5439836f83915823809729c8
     # via sentry-sdk
-certifi==2025.11.12 \
-    --hash=sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b \
-    --hash=sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316
+certifi==2026.10.19 \
+    --hash=sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae \
+    --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
     # via
     #   google-cloud-aiplatform
     #   httpcore
