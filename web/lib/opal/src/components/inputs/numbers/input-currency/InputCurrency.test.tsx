@@ -18,6 +18,33 @@ describe("display", () => {
     expect(screen.getByLabelText("Fractional amount")).toHaveValue("075");
   });
 
+  it("keeps the number left to right on a right-to-left page", () => {
+    render(
+      <div dir="rtl">
+        <InputCurrency value={12.5} onChange={() => {}} />
+      </div>
+    );
+    expect(
+      screen.getByLabelText("Whole amount").closest("[dir]")
+    ).toHaveAttribute("dir", "ltr");
+  });
+
+  it("rebuilds the segments when the precision drops", async () => {
+    const user = setupUser();
+    const onChange = jest.fn();
+    const { rerender } = render(
+      <InputCurrency value={1.25} onChange={onChange} precision={2} />
+    );
+    rerender(<InputCurrency value={1.25} onChange={onChange} precision={0} />);
+    expect(screen.getByLabelText("Whole amount")).toHaveValue("1");
+    expect(screen.queryByLabelText("Fractional amount")).toBeNull();
+
+    // The hidden ".25" no longer counts toward the amount.
+    await user.clear(screen.getByLabelText("Whole amount"));
+    await user.type(screen.getByLabelText("Whole amount"), "2");
+    expect(onChange).toHaveBeenLastCalledWith(2);
+  });
+
   it("hides the fraction segment for a zero-decimal currency", () => {
     render(<InputCurrency value={1200} onChange={() => {}} currency="JPY" />);
     expect(screen.getByLabelText("Whole amount")).toHaveValue("1200");
@@ -89,6 +116,28 @@ describe("typing", () => {
     await user.keyboard("1.999");
     expect(screen.getByLabelText("Fractional amount")).toHaveValue("99");
     expect(onChange).toHaveBeenLastCalledWith(1.99);
+  });
+
+  it("keeps a pasted fraction out of a zero-decimal amount", async () => {
+    const user = setupUser();
+    const onChange = jest.fn();
+    render(<InputCurrency value={null} onChange={onChange} currency="JPY" />);
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.paste("12.50");
+    expect(screen.getByLabelText("Whole amount")).toHaveValue("12");
+    expect(onChange).toHaveBeenLastCalledWith(12);
+  });
+
+  it("reads Arabic-Indic digits", async () => {
+    const user = setupUser();
+    const onChange = jest.fn();
+    render(<InputCurrency value={null} onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("Whole amount"));
+    await user.keyboard("\u0661\u0662");
+    expect(screen.getByLabelText("Whole amount")).toHaveValue("12");
+    expect(onChange).toHaveBeenLastCalledWith(12);
   });
 
   it("splits a pasted amount across both segments", async () => {

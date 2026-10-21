@@ -3,3 +3,9 @@
 .opal-input-currency .opal-input-segment {
   text-align: start;
 }
+
+/* Whole, separator and fraction: one left-to-right run on every page. */
+.opal-input-currency-amount {
+  @apply flex items-center;
+  direction: ltr;
+}

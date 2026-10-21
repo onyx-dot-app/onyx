@@ -41,6 +41,14 @@ function toSegments(
   return { whole, fraction: fraction.slice(0, end) };
 }
 
+// Arabic-Indic (U+0660) and Extended Arabic-Indic (U+06F0) digits, which the
+// Arabic locale types, read as their ASCII digits.
+function toAsciiDigits(text: string): string {
+  return text.replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) =>
+    String((digit.charCodeAt(0) - 0x0660) % 0x90)
+  );
+}
+
 // "0007" reads "7" and "0000" reads "0": leading zeros never change the amount.
 function trimLeadingZeros(whole: string): string {
   return whole.replace(/^0+(?=\d)/, "");
@@ -131,11 +139,17 @@ function InputCurrency({
   const wholeRef = React.useRef<HTMLInputElement>(null);
   const fractionRef = React.useRef<HTMLInputElement>(null);
 
-  // Resync only when the value differs from the draft, so the echo of our own
-  // onChange never reformats the segment being typed in.
+  // Resync when the value differs from the draft, so the echo of our own
+  // onChange never reformats the segment being typed in. A precision change
+  // always rebuilds: the draft may hold digits the new precision hides.
+  const precisionRef = React.useRef({ maxFraction, minFraction });
   React.useEffect(() => {
+    const precisionChanged =
+      precisionRef.current.maxFraction !== maxFraction ||
+      precisionRef.current.minFraction !== minFraction;
+    precisionRef.current = { maxFraction, minFraction };
     setSegments((prev) =>
-      parseSegments(prev) === value
+      !precisionChanged && parseSegments(prev) === value
         ? prev
         : toSegments(value, maxFraction, minFraction)
     );
@@ -180,10 +194,19 @@ function InputCurrency({
   // The whole segment splits on a decimal separator, so typing "." jumps to
   // the fraction and pasting "3.50" fills both segments.
   function handleWholeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value;
+    const raw = toAsciiDigits(e.target.value);
+    if (!showFraction) {
+      // No fraction to fill: drop everything from the decimal separator, so
+      // "12.50" stays 12 rather than becoming 1250. Grouping ("1,200") goes
+      // with the other non-digits.
+      const decimalAt = raw.indexOf(parts.decimal);
+      const whole = decimalAt < 0 ? raw : raw.slice(0, decimalAt);
+      update({ ...segments, whole: whole.replace(/\D/g, "") });
+      return;
+    }
     const separators = [parts.decimal, ...DECIMAL_KEYS];
     const index = Math.max(...separators.map((sep) => raw.indexOf(sep)));
-    if (index < 0 || !showFraction) {
+    if (index < 0) {
       update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
@@ -198,7 +221,9 @@ function InputCurrency({
   }
 
   function handleFractionChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const fraction = e.target.value.replace(/\D/g, "").slice(0, maxFraction);
+    const fraction = toAsciiDigits(e.target.value)
+      .replace(/\D/g, "")
+      .slice(0, maxFraction);
     update({ ...segments, fraction });
   }
 
@@ -230,52 +255,56 @@ function InputCurrency({
           aria-label={strings.inputCurrencyAmount}
         >
           {!parts.symbolAfter && symbol}
-          {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
-          <input
-            {...SEGMENT_INPUT_PROPS}
-            inputMode={showFraction ? "decimal" : "numeric"}
-            disabled={disabled}
-            ref={wholeRef}
-            // Tidy the whole segment as soon as focus leaves it, not only when
-            // focus leaves the field.
-            onBlur={() =>
-              setSegments((prev) => ({
-                ...prev,
-                whole: trimLeadingZeros(prev.whole),
-              }))
-            }
-            id={id}
-            aria-label={strings.inputCurrencyWhole}
-            placeholder={wholePlaceholder}
-            value={segments.whole}
-            style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
-            onChange={handleWholeChange}
-            onKeyDown={handleKeyDown(
-              "whole",
-              null,
-              showFraction ? fractionRef : null
+          {/* The number reads left to right on every page, like the digits it
+              holds; the symbol outside it keeps the page's side. */}
+          <span className="opal-input-currency-amount" dir="ltr">
+            {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
+            <input
+              {...SEGMENT_INPUT_PROPS}
+              inputMode={showFraction ? "decimal" : "numeric"}
+              disabled={disabled}
+              ref={wholeRef}
+              // Tidy the whole segment as soon as focus leaves it, not only when
+              // focus leaves the field.
+              onBlur={() =>
+                setSegments((prev) => ({
+                  ...prev,
+                  whole: trimLeadingZeros(prev.whole),
+                }))
+              }
+              id={id}
+              aria-label={strings.inputCurrencyWhole}
+              placeholder={wholePlaceholder}
+              value={segments.whole}
+              style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
+              onChange={handleWholeChange}
+              onKeyDown={handleKeyDown(
+                "whole",
+                null,
+                showFraction ? fractionRef : null
+              )}
+            />
+            {showFraction && (
+              <>
+                <SegmentSeparator>{parts.decimal}</SegmentSeparator>
+                {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
+                <input
+                  {...SEGMENT_INPUT_PROPS}
+                  disabled={disabled}
+                  ref={fractionRef}
+                  aria-label={strings.inputCurrencyFraction}
+                  maxLength={maxFraction}
+                  placeholder={fractionPlaceholder}
+                  value={segments.fraction}
+                  style={{
+                    width: segmentWidth(segments.fraction, fractionPlaceholder),
+                  }}
+                  onChange={handleFractionChange}
+                  onKeyDown={handleKeyDown("fraction", wholeRef, null)}
+                />
+              </>
             )}
-          />
-          {showFraction && (
-            <>
-              <SegmentSeparator>{parts.decimal}</SegmentSeparator>
-              {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
-              <input
-                {...SEGMENT_INPUT_PROPS}
-                disabled={disabled}
-                ref={fractionRef}
-                aria-label={strings.inputCurrencyFraction}
-                maxLength={maxFraction}
-                placeholder={fractionPlaceholder}
-                value={segments.fraction}
-                style={{
-                  width: segmentWidth(segments.fraction, fractionPlaceholder),
-                }}
-                onChange={handleFractionChange}
-                onKeyDown={handleKeyDown("fraction", wholeRef, null)}
-              />
-            </>
-          )}
+          </span>
           {parts.symbolAfter && symbol}
         </div>
       </div>
