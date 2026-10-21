@@ -202,6 +202,7 @@ def test_a_sign_in_timeout_says_so() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Sign-in timed out"
+    assert result.error_kind == CheckErrorKind.TIMEOUT
 
 
 def test_a_busy_refresh_lock_is_incomplete() -> None:

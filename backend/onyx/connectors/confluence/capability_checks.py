@@ -42,6 +42,7 @@ from onyx.connectors.capability_checks.models import (
     CheckStep,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.confluence.config import (
     ConfluenceConnectorConfig,
@@ -86,6 +87,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -94,6 +96,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/confluence"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "Request timed out after {time_limit}. Unable to confirm access.\n"
+        "Re-run, or check the site's status."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Confluence")
 _SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
 _SPACE_FIELD = "space"
 
@@ -372,6 +382,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         fails_when_unreachable: bool = False,
         row_id: str | None = None,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -388,6 +399,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             fails_when_unreachable=fails_when_unreachable,
             depends_on=_DEPENDS_ON.get(check_id, ()),
             step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -407,6 +419,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 row_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Confluence",
                 remediation=(
                     "Scoped API tokens work only with Confluence Cloud. Check the "
@@ -418,6 +431,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
                 check_id="confluence_auth",
                 validates_binding=True,
                 fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
                 display_name="Sign in to Confluence",
                 remediation=(
                     "Check the site URL and the Cloud setting. For an API token, "
@@ -502,7 +516,13 @@ class _SiteAuthCheck(_ConfluenceCheck):
                     ),
                 ),
             )
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"{config.wiki_base} did not answer the sign-in in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base}. Check the site URL.",
                 summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",
@@ -1189,7 +1209,16 @@ class _UserNamesCheck(_ConfluenceCheck):
                 summary=_REFUSED_ROW.summary,
                 description=_REFUSED_ROW.description,
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"{config.wiki_base} did not answer the user lookup in time: {e}",
+                summary="Timed out",
+                description=(
+                    "Confluence did not answer the user lookup in time.\n"
+                    "Re-run the checks."
+                ),
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 f"Onyx cannot connect to {config.wiki_base} to read user details.",
                 summary=f"Cannot reach {urlparse(config.wiki_base).hostname}",

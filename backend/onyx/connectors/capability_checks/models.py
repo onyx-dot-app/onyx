@@ -33,6 +33,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     RateLimitedValidationError,
     SourceApiError,
+    TimedOutValidationError,
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
@@ -377,12 +378,28 @@ def check_error_detail(
 
 
 class CheckRowText(BaseModel):
-    """A row's line and description."""
+    """A row's line and description. In a hang-guard text,
+    ``TIME_LIMIT_PLACEHOLDER`` in the description gives the guard's time
+    limit, e.g. "10 minutes"."""
 
     model_config = ConfigDict(frozen=True)
 
     summary: str
     description: str
+
+
+TIME_LIMIT_PLACEHOLDER = "{time_limit}"
+
+
+def sign_in_timeout_text(source_name: str) -> CheckRowText:
+    """The row text of a sign-in that the source did not answer in time."""
+    return CheckRowText(
+        summary="Sign-in timed out",
+        description=(
+            f"{source_name} did not answer the sign-in in time.\nRe-run, or "
+            f"check that {source_name} is reachable from Onyx."
+        ),
+    )
 
 
 class CheckNotRunReason(str, Enum):
@@ -433,7 +450,7 @@ def check_error_kind(error: Exception) -> CheckErrorKind:
         return CheckErrorKind.RATE_LIMITED
     if isinstance(error, InconclusiveValidationError):
         return CheckErrorKind.INCONCLUSIVE
-    if isinstance(error, TimeoutError):
+    if isinstance(error, (TimeoutError, TimedOutValidationError)):
         return CheckErrorKind.TIMEOUT
     if isinstance(error, UnreachableValidationError):
         return CheckErrorKind.UNREACHABLE
@@ -567,6 +584,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         depends_on: tuple[str, ...] = (),
         row_id: str | None = None,
         step: CheckStep | None = None,
+        timeout_text: CheckRowText | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -620,6 +638,9 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.row_id = row_id or (step.step_of if step is not None else check_id)
         # Set on the second step of a two-step row.
         self.step = step
+        # The row text when the hang guard stops the check. None gives the
+        # runner's default.
+        self.timeout_text = timeout_text
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool
