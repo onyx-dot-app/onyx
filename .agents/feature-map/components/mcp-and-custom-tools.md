@@ -359,6 +359,9 @@ deletion stay in the directory. Saved configuration shows the server URL beneath
 can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
 Saving a changed URL opens Authentication to reconnect and discover tools. The page
 updates cached server data with the returned response before reloading, even if the reload fails.
+Tool discovery maps confirmed upstream HTTP 401 responses to a sanitized authentication error,
+including responses nested in transport exception groups. Runtime calls retain their original
+exceptions so rejected credentials can still be marked for replacement.
 Metadata-only saves omit the URL.
 Metadata-only saves preserve existing access grants, including after a plan downgrade.
 Changing restricted access still requires the applicable plan and permissions.
@@ -629,6 +632,7 @@ inline, not a broken turn.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
+| POST | `/admin/mcp/setup` | `setup_mcp_server` | Validate proposed settings and discover tools before publishing a new or existing server. OAuth returns an authorization URL. |
 | POST | `/admin/mcp/probe` | `stream_admin_mcp_probe` | Credential-free MCP setup check for `MANAGE_ACTIONS`, including scoped managers. Streams NDJSON progress, then one result: public, OAuth, unknown authentication, or unreachable. No database writes. |
 | POST | `/admin/mcp/oauth/discover` | `discover_admin_oauth` | Read-only public metadata probe for a manageable server. Returns metadata status, automatic registration support, and discovered endpoints. |
 | POST | `/admin/mcp/servers/create` | `upsert_mcp_server` (calls `_upsert_mcp_server`) | Create, or edit when the body has `existing_server_id`. An edit can rotate admin credentials, OAuth client, transport, and access list. A new server defaults `is_public=True`. |
@@ -1268,3 +1272,9 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
 Setup attempts use credential encryption when Enterprise Edition has an encryption key configured.
 Otherwise their payload is Base64-encoded. Attempts expire after ten minutes and are bound to their owner and tenant.
 Each attempt can be consumed once. Provider and discovery helpers also support transient storage.
+
+The staged setup API publishes settings, credentials, tools, and requested surface choices in one transaction.
+Failed authentication or discovery leaves the saved connection unchanged. OAuth callbacks validate before publication.
+A configuration fingerprint prevents an old OAuth attempt from replacing newer edits.
+Publication locks shared policy and Chat rows before checking the fingerprint and holds them until commit.
+A valid OAuth grant, including one without a declared expiry, can validate edits without another sign-in.
