@@ -430,8 +430,11 @@ consent (GET, POST) | grants | grants/{id} | introspect   server/oauth_provider/
 `OnyxOAuthProvider` (`server/oauth_provider/provider.py`) subclasses fastmcp's
 `OAuthProvider`; the MCP SDK handlers do request validation and PKCE checks.
 Grants and tokens live in each tenant's schema (`OAuthProviderGrant`,
-`OAuthProviderToken`); registered clients live in the catalog
-(`OAuthProviderClient`). Short-lived state lives in `CacheBackend`
+`OAuthProviderToken`); registered clients (`OAuthProviderClient`) live in the
+shared `public` catalog on cloud and in `POSTGRES_DEFAULT_SCHEMA` on self-hosted
+installations. Revision `e38f8193dd32` moves existing self-hosted registrations
+from `public` to the configured schema, preserving their IDs and metadata.
+Short-lived state lives in `CacheBackend`
 (`oauth_provider/attempts.py`), so the flow works on Redis and on the PostgreSQL
 cache. Only the pre-sign-in state is shared (`get_shared_cache_backend`): the
 pending request, which holds client-supplied fields only, and a claim naming the

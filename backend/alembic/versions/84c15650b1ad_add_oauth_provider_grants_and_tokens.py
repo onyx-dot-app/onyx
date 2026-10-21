@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 
 # revision identifiers, used by Alembic.
@@ -38,13 +38,13 @@ def upgrade() -> None:
                 server_default=sa.func.now(),
                 nullable=False,
             ),
-            schema="public",
+            schema=POSTGRES_DEFAULT_SCHEMA,
         )
         op.create_index(
             "ix_oauth_provider_client_last_used_at",
             "oauth_provider_client",
             ["last_used_at"],
-            schema="public",
+            schema=POSTGRES_DEFAULT_SCHEMA,
         )
     op.create_table(
         "oauth_provider_grant",
@@ -104,4 +104,9 @@ def downgrade() -> None:
     op.drop_table("oauth_provider_token")
     op.drop_table("oauth_provider_grant")
     if not MULTI_TENANT:
-        op.drop_table("oauth_provider_client", schema="public")
+        schema = POSTGRES_DEFAULT_SCHEMA
+        if not sa.inspect(op.get_bind()).has_table(
+            "oauth_provider_client", schema=schema
+        ):
+            schema = "public"
+        op.drop_table("oauth_provider_client", schema=schema)

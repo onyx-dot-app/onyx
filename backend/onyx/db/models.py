@@ -140,6 +140,7 @@ from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.special_types import JSON_ro
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.enums import EmbeddingProvider
 
 # TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
@@ -5876,6 +5877,8 @@ class PublicBase(DeclarativeBase):
     Access these only through `get_catalog_session()`. A tenant-scoped session lands on
     whichever database that tenant lives on — the same one today, but the wrong one
     once the tenant has been moved to another shard.
+
+    OAuthProviderClient uses POSTGRES_DEFAULT_SCHEMA on single-tenant installations.
     """
 
     __abstract__ = True
@@ -5883,7 +5886,9 @@ class PublicBase(DeclarativeBase):
 
 class OAuthProviderClient(PublicBase):
     __tablename__ = "oauth_provider_client"
-    __table_args__ = ({"schema": "public"},)
+    __table_args__ = (
+        {"schema": "public" if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA},
+    )
 
     client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     client_metadata: Mapped[dict[str, Any]] = mapped_column(
