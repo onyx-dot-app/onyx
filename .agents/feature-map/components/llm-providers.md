@@ -26,6 +26,12 @@ then marks one model as the default for chat, and optionally separate defaults
 for vision, contextual RAG, chat naming, search selection, and Craft.
 The selected chat model still answers and rewrites queries.
 
+TypeSafe AI has a dedicated credential setup card. Saving a new key tests
+System One with `jev-latest` through its native decision API. The provider stores
+no model configurations and cannot become a chat or task default. Auto mode is
+disabled. No current workflow consumes its credentials. Decision model selection
+will be added separately.
+
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
 model, the user experience is the same: streamed tokens, and (if the provider
@@ -54,7 +60,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/provider/{id}` | `get_llm_provider` | |
 | PUT | `/admin/llm/provider` | `put_llm_provider` | Create or update. Restores masked credential fields via `_restore_masked_custom_config_values`. |
 | DELETE | `/admin/llm/provider/{id}` | `delete_llm_provider` | |
-| POST | `/admin/llm/test` | `test_llm_configuration` | Fires one real call against the given config before it is saved. |
+| POST | `/admin/llm/test` | `test_llm_configuration` | Fires one real call before saving. TypeSafe uses its native System One API. Saved credentials cannot be tested against another provider. |
 | POST | `/admin/llm/test/default` | `test_default_provider` | Tests the currently configured default. |
 | POST | `/admin/llm/default` | `set_provider_as_default` | Sets the CHAT default. |
 | POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
@@ -489,9 +495,15 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 1. Admin > LLM > Add Provider, or `PUT /admin/llm/provider` directly.
 2. Use `POST /admin/llm/test` to fire one real call against the draft config
    before saving; it exercises the same `llm_from_provider` path a live turn
-   would.
+   would. TypeSafe instead calls `well_known_providers/typesafe.py` with a
+   fixed System One endpoint and validates the returned decision.
 3. Set it as a flow default (`POST /admin/llm/default` etc.) and send a real
    chat message to confirm `get_llm_for_persona` picks it up.
+
+For TypeSafe, verify that the saved provider has no model rows and auto mode is
+off. It appears in the admin list, but not in chat or onboarding options.
+Skip step 3 because TypeSafe has no chat default. Adding TypeSafe must not change
+the first-provider or last-provider behavior for chat providers.
 
 ### Confirming a new call site is tagged
 

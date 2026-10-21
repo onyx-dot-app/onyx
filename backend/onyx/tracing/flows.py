@@ -59,6 +59,7 @@ class LLMFlow(StrEnum):
     EMBED_PASSAGE = "embed_passage"
     RERANK = "rerank"
     INTENT_CLASSIFICATION = "intent_classification"
+    PROVIDER_CONNECTION_TEST = "provider_connection_test"
 
     # Sentinels — emitted when a caller did not tag the call. Showing up in
     # dashboards is a signal to set ``GenerationContext.flow`` at the call site.
