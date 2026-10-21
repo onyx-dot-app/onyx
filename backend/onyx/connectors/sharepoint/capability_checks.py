@@ -126,15 +126,14 @@ _TIMEOUT_TEXT = CheckRowText(
     description="The check did not finish within its time limit.\nRe-run the checks.",
 )
 _PROBE_SITES: int = 5
-# Listed sites the documents probe reads in turn for one file indexing would
-# read. Tenants often list empty or demo sites first, in no stable order.
+# Listed sites the documents and file-permission probes read in turn for one
+# file to read. Tenants often list empty or demo sites first, in no stable order.
 # Each site costs one library listing, so the whole first listing page (up to
 # hundreds of sites) is too many.
 _PROBE_SAMPLE_SITES: int = 20
-# Libraries whose first delta page holds no indexable file before the probe
-# stops, so a tenant of empty libraries cannot spend the check's budget.
-_PROBE_LIBRARIES: int = 10
-# The same bound for the documents probe, one library for each sample site.
+# Libraries whose first delta page holds no indexable file before those probes
+# stop, so a tenant of empty libraries cannot spend the check's budget. One
+# library for each sample site.
 _PROBE_SAMPLE_LIBRARIES: int = _PROBE_SAMPLE_SITES
 # Site groups searched for an Entra group when the site names none directly,
 # the way the sync expands site groups to find the Entra groups inside them.
@@ -716,11 +715,15 @@ def _site_pages(
         )
 
 
-def _perm_probe_sites(context: CapabilityCheckContext) -> list[SiteDescriptor]:
+def _perm_probe_sites(
+    context: CapabilityCheckContext, listed_limit: int = _PROBE_SITES
+) -> list[SiteDescriptor]:
     """The probe sites, which a permission read needs at least one of. The
     permission checks do not run after "Find selected sites", so a missing
     site fails their own SharePoint read."""
-    sites: list[SiteDescriptor] = _probe_sites(context, found_only=False)
+    sites: list[SiteDescriptor] = _probe_sites(
+        context, found_only=False, listed_limit=listed_limit
+    )
     if not sites:
         _raise_row(
             NothingToCheckError,
@@ -1452,19 +1455,16 @@ class _DocumentsReadCheck(_SharepointCheck):
             )
 
 
-def _libraries_probed(probed: int, limit: int = _PROBE_LIBRARIES) -> str:
-    """The libraries a probe read, for a line: "The first 10 libraries", "The
+def _libraries_probed(probed: int) -> str:
+    """The libraries a probe read, for a line: "The first 20 libraries", "The
     library"."""
-    if probed == limit:
+    if probed == _PROBE_SAMPLE_LIBRARIES:
         return f"The first {probed} libraries"
     return "The library" if probed == 1 else f"The {probed} libraries"
 
 
 def _no_sample_file(probed: int, sites_read: int) -> NoReturn:
-    libraries: str = (
-        f"{_libraries_probed(probed, _PROBE_SAMPLE_LIBRARIES)}, on "
-        f"{_counted_sites(sites_read)},"
-    )
+    libraries: str = f"{_libraries_probed(probed)}, on {_counted_sites(sites_read)},"
     raise InconclusiveValidationError(
         f"{libraries} list no file indexing would read, so no file was read.",
         summary="No files found to test",
@@ -1822,12 +1822,14 @@ class _DocumentPermissionsCheck(_SharepointCheck):
         graph_api_base: str = _graph_api_base(config)
         excluded_paths: list[str] = _excluded_paths(config)
         probed: int = 0
-        for site in _perm_probe_sites(context):
+        sites_read: int = 0
+        for site in _perm_probe_sites(context, listed_limit=_PROBE_SAMPLE_SITES):
+            sites_read += 1
             for drive in _found_site_drives(context, site):
                 if drive.list_id is None:
                     continue
-                if probed == _PROBE_LIBRARIES:
-                    return _no_permission_sample(probed)
+                if probed == _PROBE_SAMPLE_LIBRARIES:
+                    return _no_permission_sample(probed, sites_read)
                 probed += 1
                 self._read_library(gateway, site, drive, drive.list_id)
                 item: DriveItemData | None = _first_indexable_file(
@@ -1867,7 +1869,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
                     "No library in scope can carry permissions.",
                 ),
             )
-        return _no_permission_sample(probed)
+        return _no_permission_sample(probed, sites_read)
 
     def _read_library(
         self,
@@ -2041,10 +2043,11 @@ class _DocumentPermissionsCheck(_SharepointCheck):
             )
 
 
-def _no_permission_sample(probed: int) -> NoReturn:
+def _no_permission_sample(probed: int, sites_read: int) -> NoReturn:
     raise InconclusiveValidationError(
-        f"{_libraries_probed(probed)} in scope list no file the sync would read, "
-        "so only library permissions were read.",
+        f"{_libraries_probed(probed)}, on "
+        f"{_counted_sites(sites_read)}, list no file the sync would read, so only "
+        "library permissions were read.",
         summary="No files found to test",
         description="Library permissions were read, but no file was found.",
     )
