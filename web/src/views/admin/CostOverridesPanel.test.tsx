@@ -249,7 +249,8 @@ describe("CostOverridesPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Clear model" }));
 
-    expect(submitButton).toBeDisabled();
+    // Formik re-validates after setFieldValue asynchronously.
+    await waitFor(() => expect(submitButton).toBeDisabled());
     expect(mockUpsertCostOverride).not.toHaveBeenCalled();
   });
 });
