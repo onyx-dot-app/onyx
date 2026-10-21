@@ -87,7 +87,8 @@ export default function MCPConnectionPrompt({
 
   function openConnections() {
     setOpenedServerIds(pendingServers.map((server) => server.id));
-    setOpen(true);
+    // Let open popovers dismiss on this click before the modal traps focus.
+    window.setTimeout(() => setOpen(true), 0);
   }
 
   return (
