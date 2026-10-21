@@ -19,6 +19,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import (
+    ATLASCLOUD_PROVIDER_NAME,
     ANTHROPIC_PROVIDER_NAME,
     AZURE_PROVIDER_NAME,
     BEDROCK_PROVIDER_NAME,
@@ -67,6 +68,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
         VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
+        ATLASCLOUD_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
     }
 
 
@@ -298,6 +300,7 @@ def get_provider_display_name(provider_name: str) -> str:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
         VERCEL_AI_GATEWAY_PROVIDER_NAME: "Vercel AI Gateway",
+        ATLASCLOUD_PROVIDER_NAME: "Atlas Cloud",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

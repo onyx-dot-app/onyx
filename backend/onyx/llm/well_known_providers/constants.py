@@ -27,6 +27,10 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 # Public, unauthenticated catalog; also litellm's default base for this provider.
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
+ATLASCLOUD_PROVIDER_NAME = "atlascloud"
+# Public, unauthenticated catalog: the model list loads before a key is entered.
+ATLASCLOUD_DEFAULT_API_BASE = "https://api.atlascloud.ai/v1"
+
 PORTKEY_PROVIDER_NAME = "portkey"
 # Which API surface a Portkey provider targets; stored in custom_config.
 PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"
