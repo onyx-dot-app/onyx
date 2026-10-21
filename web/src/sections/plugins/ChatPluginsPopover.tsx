@@ -27,6 +27,7 @@ import {
   useMemberPlugins,
   type MemberPlugin,
 } from "@/lib/plugins/member";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useAppPosition } from "@/lib/position/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
@@ -53,6 +54,7 @@ export default function ChatPluginsPopover({
   const appPosition = useAppPosition();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isMobile } = useScreenSize();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const trigger = useRef<HTMLElement | null>(null);
@@ -150,9 +152,10 @@ export default function ChatPluginsPopover({
           />
         </Popover.Trigger>
         <Popover.Content
-          side="right"
-          align="end"
-          alignOffset={-5}
+          // No room beside the parent menu on phones, so open over it.
+          side={isMobile ? "top" : "right"}
+          align={isMobile ? "start" : "end"}
+          alignOffset={isMobile ? 0 : -5}
           width={60}
           aria-label={t("chat.trigger.label")}
           onPointerEnter={cancelHover}
