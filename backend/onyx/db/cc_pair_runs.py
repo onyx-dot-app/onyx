@@ -790,15 +790,16 @@ def count_pairs_indexing(db_session: Session, cc_pair_ids: list[int]) -> int:
 
 
 def get_index_runs_since(
-    db_session: Session, cc_pair_ids: list[int], since: datetime
+    db_session: Session, cc_pair_ids: list[int], since: datetime | None
 ) -> list[IndexAttempt]:
     """The pairs' index runs created or finished since ``since``, plus any
-    still active, oldest first. Attempts from before ``time_finished`` existed
-    end at their last heartbeat check. ``time_updated`` is left out of the
-    window because checkpoint cleanup touches old attempts days later."""
-    stmt = (
-        _index_runs(cc_pair_ids)
-        .where(
+    still active, oldest first; every run kept when ``since`` is None.
+    Attempts from before ``time_finished`` existed end at their last heartbeat
+    check. ``time_updated`` is left out of the window because checkpoint
+    cleanup touches old attempts days later."""
+    stmt = _index_runs(cc_pair_ids)
+    if since is not None:
+        stmt = stmt.where(
             or_(
                 IndexAttempt.time_created >= since,
                 func.coalesce(
@@ -810,6 +811,4 @@ def get_index_runs_since(
                 ),
             )
         )
-        .order_by(IndexAttempt.time_created)
-    )
-    return list(db_session.scalars(stmt).all())
+    return list(db_session.scalars(stmt.order_by(IndexAttempt.time_created)).all())

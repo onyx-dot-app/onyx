@@ -376,8 +376,8 @@ export interface TargetedReindexJobStatus {
   resolved_summary: { id: number; document_id: string }[];
 }
 
-/** How far back a throughput chart reaches. */
-export type CCPairThroughputWindow = "1h" | "12h" | "24h" | "7d";
+/** How far back a throughput chart reaches. `all` reaches the oldest run kept. */
+export type CCPairThroughputWindow = "1h" | "24h" | "7d" | "all";
 
 /** Mirrors `CCPairThroughputResponse`: an estimate of the documents per equal slice of the window, oldest first. Each run's total is spread evenly over its span. */
 export interface CCPairThroughputResponse {

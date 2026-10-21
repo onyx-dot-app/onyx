@@ -46,6 +46,7 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
       }}
       title={t("activities.panel.pairTitle", { name: row.name })}
       onClose={onClose}
+      sticky
       className="max-lg:order-first"
     />
   );
@@ -126,8 +127,13 @@ export default function IndexingStatusPage() {
               )}
             </Section>
             <ConnectorList
+              // View Logs on the connector whose history is open closes it.
               onViewLogs={(row) => {
-                setHistory(row);
+                setHistory((open) =>
+                  open !== "fleet" && open?.cc_pair_id === row.cc_pair_id
+                    ? null
+                    : row
+                );
                 setRange(null);
               }}
               onFocusChange={setListFocused}
@@ -143,6 +149,7 @@ export default function IndexingStatusPage() {
                 setRange(null);
               }}
               range={range}
+              sticky
               className="max-lg:order-first"
             />
           ) : (

@@ -1,7 +1,7 @@
 """Coverage for the indexing status page's overview: a pair mid-run counts as
 indexing, backfills included, a paused pair is not active, the window's
-documents come from the runs inside it, and a reader sees only the pairs they
-can read. The database holds other pairs, so every figure is read against the
+documents come from the runs inside it, a reader sees only the pairs they can
+read, and there is no all-time window. The database holds other pairs, so every figure is read against the
 overview from before the pairs were created, with the clock frozen so no other
 run crosses the window's edge between the two reads."""
 
@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -25,6 +26,8 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential, IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair_throughput
 from onyx.server.documents.index_monitoring import get_indexing_overview
 from onyx.server.documents.models import CCPairThroughputWindow
@@ -189,3 +192,14 @@ def test_a_reader_sees_only_the_pairs_they_can_read(db_session: Session) -> None
     assert response.active_connectors == before.active_connectors + 1
     assert response.recent_docs_indexed == before.recent_docs_indexed + 5
     assert len(response.throughput.runs) == len(before.throughput.runs) + 1
+
+
+def test_the_overview_has_no_all_time_window(db_session: Session) -> None:
+    admin = create_test_user(db_session, "overview_admin", is_admin=True)
+
+    with pytest.raises(OnyxError) as refused:
+        get_indexing_overview(
+            window=CCPairThroughputWindow.ALL, user=admin, db_session=db_session
+        )
+
+    assert refused.value.error_code == OnyxErrorCode.INVALID_INPUT

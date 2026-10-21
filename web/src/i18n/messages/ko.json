@@ -2966,8 +2966,8 @@
           "queued": "대기 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({minutes, number}분)",
-          "rateFinished": "분당 {rate}개 문서 ({minutes, number}분)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "분당 {rate}개 문서 ({duration})",
           "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
@@ -3014,7 +3014,6 @@
           "label": "기간",
           "all": "전체 기간",
           "h1": "최근 1시간",
-          "h12": "최근 12시간",
           "h24": "최근 24시간",
           "d7": "최근 7일",
           "d30": "최근 30일"
