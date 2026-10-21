@@ -799,7 +799,8 @@ Infrastructure startup waits for active Onyx controllers and the Telepresence ma
 Application readiness checks the real API readiness response through the frontend proxy,
 then checks the frontend HTML page. It does not verify worker readiness, login, or licensing.
 The intercept command reuses an existing intercept. A known stale-agent identity failure
-allows one targeted rollout and retry; other failures propagate.
+allows one targeted rollout and retry after command failures or timeouts; unrelated failures propagate.
+Migration upgrades detect this checkout's API launcher even when its relative script path outlives a directory change.
 
 Doctor checks prerequisites and effective configuration without printing secret values.
 The local overlay selects the dev sandbox image with `IfNotPresent` for all containers.

@@ -39,6 +39,7 @@ class ImageInfo(TypedDict):
 
 
 def run(*args: str, capture: bool = False, cwd: Path = ROOT) -> str:
+    """Run a development command and propagate failures."""
     result = subprocess.run(
         args,
         cwd=cwd,
@@ -50,6 +51,7 @@ def run(*args: str, capture: bool = False, cwd: Path = ROOT) -> str:
 
 
 def source_hash(context: str) -> str:
+    """Fingerprint tracked and unignored source contents, paths, and file modes."""
     paths = subprocess.check_output(
         [
             "git",
@@ -78,6 +80,7 @@ def source_hash(context: str) -> str:
 
 
 def nodes(cluster: str) -> list[str]:
+    """Find the selected kind cluster nodes or reject a missing cluster."""
     result = run("kind", "get", "nodes", "--name", cluster, capture=True).splitlines()
     if not result:
         raise ValueError(f"kind cluster {cluster!r} does not exist")
@@ -85,6 +88,7 @@ def nodes(cluster: str) -> list[str]:
 
 
 def kube(args: argparse.Namespace, *command: str, capture: bool = False) -> str:
+    """Run kubectl against the selected local cluster and namespace."""
     return run(
         "kubectl",
         "--context",
@@ -98,7 +102,7 @@ def kube(args: argparse.Namespace, *command: str, capture: bool = False) -> str:
 
 
 def inspect_image(image: str) -> ImageInfo | None:
-    # A daemon failure must not be mistaken for a missing image.
+    """Inspect a Docker image without treating daemon failures as missing images."""
     run("docker", "info", "--format", "{{.ServerVersion}}", capture=True)
     result = subprocess.run(
         ["docker", "image", "inspect", image],
@@ -113,10 +117,12 @@ def inspect_image(image: str) -> ImageInfo | None:
 
 
 def labels(info: ImageInfo) -> dict[str, str]:
+    """Read image labels, including images with no labels."""
     return info["Config"]["Labels"] or {}
 
 
 def images(args: argparse.Namespace) -> int:
+    """Check, build, load, and apply selected images while preserving live sandboxes."""
     nodes(args.cluster_name)
     selected = [args.only] if args.only else list(IMAGES)
     stale = False
@@ -266,6 +272,7 @@ def images(args: argparse.Namespace) -> int:
 
 
 def disk(args: argparse.Namespace) -> None:
+    """Report host Docker storage and each selected kind node image store."""
     run("docker", "system", "df")
     for node in nodes(args.cluster_name):
         print(f"\nkind node: {node}", flush=True)
@@ -278,11 +285,13 @@ def doctor(args: argparse.Namespace) -> int:
     failures = 0
 
     def report(level: str, message: str) -> None:
+        """Print one diagnostic result and count required failures."""
         nonlocal failures
         failures += level == "FAIL"
         print(f"{level}: {message}", flush=True)
 
     def probe(*command: str) -> subprocess.CompletedProcess[str] | None:
+        """Capture diagnostic commands without exposing their output on failure."""
         try:
             return subprocess.run(
                 command,
@@ -530,6 +539,7 @@ print(json.dumps({
 
 
 def clean(args: argparse.Namespace) -> None:
+    """Preview or remove unused checkout images, with separate optional builder cache cleanup."""
     candidates = run(
         "docker",
         "image",
@@ -577,10 +587,12 @@ def clean(args: argparse.Namespace) -> None:
 
 
 def cluster_runtime(args: argparse.Namespace) -> Cluster:
+    """Bind shared runtime commands to the selected development environment."""
     return Cluster(ROOT, args.cluster_name, args.namespace, args.sandbox_namespace)
 
 
 def readiness(args: argparse.Namespace) -> None:
+    """Check the selected infrastructure or application readiness stage."""
     if args.stage == "infrastructure":
         cluster_runtime(args).infrastructure_ready(args.timeout)
     else:
@@ -588,6 +600,7 @@ def readiness(args: argparse.Namespace) -> None:
 
 
 def pause_resume(args: argparse.Namespace) -> None:
+    """Stop or restart cluster nodes while preserving their data."""
     cluster_nodes = nodes(args.cluster_name)
     if args.command == "pause":
         # Never quit a Telepresence connection to another cluster.
@@ -620,6 +633,7 @@ def pause_resume(args: argparse.Namespace) -> None:
 
 
 def migrate(args: argparse.Namespace) -> None:
+    """Inspect or upgrade the selected database after validating local migration prerequisites."""
     import psutil
 
     env = cluster_runtime(args).database_environment(args.env_file)
@@ -639,9 +653,10 @@ def migrate(args: argparse.Namespace) -> None:
                 continue
             launcher = str(ROOT / "deployment/helm/dev/launch.py")
             shared_launch = any(
-                str((Path(directory) / arg).resolve()) == launcher
+                str((base / arg).resolve()) == launcher
                 for arg in command
-                if arg.endswith("/launch.py")
+                if Path(arg).name == "launch.py"
+                for base in (Path(directory), ROOT)
             ) and any(role in command for role in ("api", "celery"))
             api = "onyx.main:app" in command
             worker = any("celery" in Path(arg).name for arg in command) and any(
@@ -683,6 +698,7 @@ def migrate(args: argparse.Namespace) -> None:
 
 
 def main() -> int:
+    """Dispatch local development commands and return their exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cluster-name", default="onyx-dev")
     parser.add_argument("--namespace", default="onyx")

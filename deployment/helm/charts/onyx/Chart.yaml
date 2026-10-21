@@ -23,10 +23,6 @@ annotations:
     - kind: changed
       description: Default Craft sandbox API callbacks to the chart's internal
         API Service, while preserving explicit ONYX_SERVER_URL overrides.
-    - kind: added
-      description: Add the TABULAR_RECHUNK_ENABLED setting. It runs a one-time
-        migration that re-chunks already indexed tabular documents with the current
-        chunker, without re-crawling the source.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

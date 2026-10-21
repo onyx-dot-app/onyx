@@ -19,6 +19,7 @@ from runtime import Cluster, application_ready  # noqa: E402
 
 class RuntimeTests(unittest.TestCase):
     def test_deployed_sources_and_local_overrides_keep_secrets_in_memory(self) -> None:
+        """Match Kubernetes precedence without writing resolved credentials to local files."""
         workload = {
             "spec": {
                 "template": {
@@ -110,6 +111,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(list(root.iterdir()), [override])
 
     def test_missing_required_secret_fails_before_launch(self) -> None:
+        """Reject incomplete deployed configuration before starting a local application."""
         workload = {
             "spec": {
                 "template": {
@@ -132,6 +134,7 @@ class RuntimeTests(unittest.TestCase):
                 Cluster(Path.cwd()).deployment_env()
 
     def test_failed_rollout_never_reports_infrastructure_ready(self) -> None:
+        """Do not report usable infrastructure after a failed workload rollout."""
         workload = {
             "items": [
                 {
@@ -163,6 +166,7 @@ class RuntimeTests(unittest.TestCase):
     def test_application_readiness_rejects_html_health_and_requires_real_payload(
         self,
     ) -> None:
+        """Reject login-page responses as API health while accepting a ready API and frontend."""
         health = {"ready": False}
 
         class Handler(BaseHTTPRequestHandler):
@@ -200,10 +204,79 @@ class RuntimeTests(unittest.TestCase):
             thread.join()
 
     def test_application_readiness_rejects_non_http_urls(self) -> None:
+        """Restrict readiness probes to HTTP and HTTPS endpoints."""
         with self.assertRaisesRegex(ValueError, "HTTP"):
             application_ready("file:///etc/passwd")
 
+    def test_intercept_recovers_known_stale_agents_after_failure_or_timeout(
+        self,
+    ) -> None:
+        """Recover stale agent identities for both failures and timeouts without restarting unrelated failures."""
+        for failure in (
+            subprocess.CalledProcessError(1, ["telepresence", "intercept"]),
+            subprocess.TimeoutExpired(["telepresence", "intercept"], 150),
+        ):
+            for stale in (False, True):
+                logs = (
+                    'rpc error: code = NotFound desc = Session "agent:stale" not found'
+                    if stale
+                    else "unrelated network failure"
+                )
+                with (
+                    self.subTest(failure=type(failure).__name__, stale=stale),
+                    patch.object(Cluster, "connect"),
+                    patch.object(
+                        Cluster,
+                        "api_workload",
+                        return_value={"metadata": {"name": "api"}},
+                    ),
+                    patch.object(Cluster, "intercept_active", return_value=False),
+                    patch.object(
+                        Cluster, "command", side_effect=[failure, ""]
+                    ) as command,
+                    patch.object(Cluster, "kube", return_value=logs) as kube,
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    if stale:
+                        Cluster(Path.cwd()).intercept()
+                    else:
+                        with self.assertRaises(type(failure)):
+                            Cluster(Path.cwd()).intercept()
+                    self.assertEqual(command.call_count, 2 if stale else 1)
+                    restarts = [
+                        call
+                        for call in kube.call_args_list
+                        if call.args[:2] == ("rollout", "restart")
+                    ]
+                    self.assertEqual(len(restarts), int(stale))
+
+    def test_stale_intercept_recovery_retries_only_once(self) -> None:
+        """Stop after one recovery attempt if intercept creation still fails."""
+        with (
+            patch.object(Cluster, "connect"),
+            patch.object(
+                Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
+            ),
+            patch.object(Cluster, "intercept_active", return_value=False),
+            patch.object(
+                Cluster,
+                "command",
+                side_effect=subprocess.TimeoutExpired(
+                    ["telepresence", "intercept"], 150
+                ),
+            ) as command,
+            patch.object(
+                Cluster,
+                "kube",
+                return_value='code = NotFound desc = Session "agent:stale" not found',
+            ),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                Cluster(Path.cwd()).intercept()
+        self.assertEqual(command.call_count, 2)
+
     def test_migrations_reject_overrides_to_another_database(self) -> None:
+        """Prevent personal overrides from redirecting migrations away from the selected database."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "override.env"
             path.write_text("POSTGRES_HOST=other.example.com\n")
@@ -222,6 +295,7 @@ class RuntimeTests(unittest.TestCase):
                     Cluster(Path(directory)).database_environment(path)
 
     def test_readiness_requires_active_intercept_in_the_selected_context(self) -> None:
+        """Require the selected local API intercept instead of accepting another cluster or waiting intercept."""
         cluster = Cluster(Path.cwd(), "selected")
         active = [
             {

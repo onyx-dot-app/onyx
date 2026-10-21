@@ -137,6 +137,10 @@ Set `configMap.ONYX_SERVER_URL` to override the default. Include any API path pr
 for example `https://onyx.example/api`. Explicit overrides continue to apply to both the API and sandbox.
 Docker sandbox deployments still configure their reachable API URL separately.
 
+Existing sandbox pods keep their creation-time callback URL. When upgrading an existing environment,
+retain its previous `configMap.ONYX_SERVER_URL` until those sandboxes are safely removed or recreated.
+Then remove the override to use the internal default. Changing the proxy destination first can break authenticated callbacks.
+
 ### Iteration loop
 
 | Change or task | Command |

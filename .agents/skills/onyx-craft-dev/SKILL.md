@@ -46,7 +46,7 @@ Telepresence provides access to cluster services from local application processe
 For the first connection, run this command in the developer's interactive terminal, including over SSH:
 
 ```bash
-telepresence connect --context kind-onyx-dev -n onyx
+telepresence connect --context "kind-${CLUSTER_NAME:-onyx-dev}" -n "${NAMESPACE:-onyx}"
 ```
 
 The networking daemon can require a sudo password. Automated tasks cannot answer that prompt.
@@ -92,7 +92,7 @@ They resolve cluster credentials, connect Telepresence, and reject database targ
 Stop local Onyx API and Celery processes before an upgrade. Do not kill unrelated processes to bypass this check.
 A failed migration is a failed operation; inspect the error before retrying.
 
-Check workload readiness with `kubectl --context kind-onyx-dev -n onyx get pods`.
+Check workloads with `kubectl --context "kind-${CLUSTER_NAME:-onyx-dev}" -n "${NAMESPACE:-onyx}" get pods`.
 For sandbox failures, inspect pods, events, and container logs in `onyx-sandboxes`.
 Use the frontend URL for API verification, as required by the repository instructions.
 Report separately whether infrastructure, application services, and a real Craft operation were verified.

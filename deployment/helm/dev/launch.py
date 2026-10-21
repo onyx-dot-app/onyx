@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def main() -> None:
+    """Resolve cluster configuration and launch the selected local application or readiness check."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cluster-name", default=os.environ.get("CLUSTER_NAME", "onyx-dev")

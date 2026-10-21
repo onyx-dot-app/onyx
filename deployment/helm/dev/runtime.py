@@ -24,9 +24,11 @@ class Cluster:
 
     @property
     def context(self) -> str:
+        """Return the explicit kubectl context for this kind cluster."""
         return f"kind-{self.name}"
 
     def command(self, *args: str, capture: bool = True, timeout: float = 30) -> str:
+        """Run a bounded command, keeping captured configuration and secrets out of terminal output."""
         result = subprocess.run(
             args,
             cwd=self.root,
@@ -41,6 +43,7 @@ class Cluster:
     def kube(
         self, *args: str, namespace: str | None = None, timeout: float = 30
     ) -> str:
+        """Run kubectl with an explicit context, namespace, and request timeout."""
         return self.command(
             "kubectl",
             "--context",
@@ -53,6 +56,7 @@ class Cluster:
         )
 
     def api_workload(self) -> dict[str, Any]:
+        """Find the single API deployment that defines local process configuration."""
         items = json.loads(
             self.kube(
                 "get",
@@ -83,6 +87,7 @@ class Cluster:
         cache: dict[tuple[str, str], dict[str, str] | None] = {}
 
         def source(kind: str, name: str, optional: bool = False) -> dict[str, str]:
+            """Read and cache referenced configuration, respecting optional Kubernetes sources."""
             key = (kind, name)
             if key not in cache:
                 raw = self.kube("get", kind, name, "--ignore-not-found", "-o", "json")
@@ -163,6 +168,7 @@ class Cluster:
     def environment(
         self, env_file: Path | None = None, *, settings: dict[str, str] | None = None
     ) -> dict[str, str]:
+        """Combine deployed settings and personal overrides, qualifying cluster service hosts."""
         from dotenv import dotenv_values
 
         settings = dict(self.deployment_env() if settings is None else settings)
@@ -212,6 +218,7 @@ class Cluster:
         return result
 
     def database_environment(self, env_file: Path | None = None) -> dict[str, str]:
+        """Resolve migration settings and reject changes to the deployed database target."""
         settings = self.deployment_env()
         env = self.environment(env_file, settings=settings)
         defaults = {
@@ -231,6 +238,7 @@ class Cluster:
         return env
 
     def qualify(self, host: str) -> str:
+        """Expand a bare service name while retaining addresses and qualified hosts."""
         if host == "localhost" or "." in host or ":" in host:
             return host
         try:
@@ -240,6 +248,7 @@ class Cluster:
             return f"{host}.{self.namespace}.svc.cluster.local"
 
     def infrastructure_ready(self, timeout: float = 600) -> None:
+        """Wait for active Onyx workloads and the installed Telepresence manager."""
         deadline = time.monotonic() + timeout
         workloads = json.loads(
             self.kube(
@@ -304,6 +313,7 @@ class Cluster:
         )
 
     def connect(self) -> None:
+        """Connect Telepresence to the selected cluster and application namespace."""
         self.kube("get", "namespace", self.namespace, "-o", "name")
         self.command(
             "telepresence",
@@ -317,6 +327,7 @@ class Cluster:
         )
 
     def intercept_active(self, name: str) -> bool:
+        """Check for an active API intercept in this cluster and namespace."""
         status = json.loads(self.command("telepresence", "status", "--format", "json"))
         user = status.get("user_daemon", {})
         if (
@@ -351,6 +362,7 @@ class Cluster:
         application_ready(frontend_url, timeout)
 
     def intercept(self) -> None:
+        """Reuse or create the API intercept, recovering a known stale agent once."""
         self.connect()
         name = self.api_workload()["metadata"]["name"]
         if self.intercept_active(name):
@@ -369,7 +381,7 @@ class Cluster:
                     capture=False,
                     timeout=150,
                 )
-            except subprocess.CalledProcessError:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 # Retry once only for the known stale-agent identity failure.
                 logs = self.kube(
                     "logs",
