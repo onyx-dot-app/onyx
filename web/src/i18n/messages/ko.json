@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "비즈니스 플랜",
-        "tooltip": "[비즈니스 또는 엔터프라이즈 플랜](/admin/billing)이 필요합니다."
+        "tooltip": "이 기능은 [Onyx Business 또는 Enterprise 버전](/admin/billing)에서만 사용할 수 있습니다."
       },
       "enterprise": {
         "title": "엔터프라이즈 플랜",
-        "tooltip": "[엔터프라이즈 플랜](/admin/billing)이 필요합니다."
+        "tooltip": "이 기능은 [Onyx Enterprise 버전](/admin/billing)에서만 사용할 수 있습니다."
       },
       "upgrade": {
         "label": "플랜 업그레이드"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "이 기능은 [Onyx Business 또는 Enterprise 버전](/admin/billing)에서만 사용할 수 있습니다."
-      },
-      "enterpriseOnly": {
-        "tooltip": "이 기능은 [Onyx Enterprise 버전](/admin/billing)에서만 사용할 수 있습니다."
-      },
       "exitAdminPanel": {
         "label": "관리자 패널 나가기"
       },

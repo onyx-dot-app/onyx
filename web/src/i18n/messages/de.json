@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "Business-Tarif",
-        "tooltip": "Erfordert den [Business- oder Enterprise-Tarif](/admin/billing)."
+        "tooltip": "Diese Funktion ist nur in der [Business- oder Enterprise-Version von Onyx](/admin/billing) verfügbar."
       },
       "enterprise": {
         "title": "Enterprise-Tarif",
-        "tooltip": "Erfordert den [Enterprise-Tarif](/admin/billing)."
+        "tooltip": "Diese Funktion ist nur in der [Enterprise-Version von Onyx](/admin/billing) verfügbar."
       },
       "upgrade": {
         "label": "Tarif upgraden"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "Diese Funktion ist nur in der [Business- oder Enterprise-Version von Onyx](/admin/billing) verfügbar."
-      },
-      "enterpriseOnly": {
-        "tooltip": "Diese Funktion ist nur in der [Enterprise-Version von Onyx](/admin/billing) verfügbar."
-      },
       "exitAdminPanel": {
         "label": "Admin-Bereich verlassen"
       },

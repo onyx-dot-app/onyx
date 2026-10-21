@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "Business Plan",
-        "tooltip": "Requires the [Business or Enterprise plan](/admin/billing)."
+        "tooltip": "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
       },
       "enterprise": {
         "title": "Enterprise Plan",
-        "tooltip": "Requires the [Enterprise plan](/admin/billing)."
+        "tooltip": "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
       },
       "upgrade": {
         "label": "Upgrade Plan"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
-      },
-      "enterpriseOnly": {
-        "tooltip": "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
-      },
       "exitAdminPanel": {
         "label": "Exit Admin Panel"
       },

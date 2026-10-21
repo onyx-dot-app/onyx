@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "خطة الأعمال",
-        "tooltip": "يتطلب [خطة الأعمال أو المؤسسات](/admin/billing)."
+        "tooltip": "هذه الميزة متاحة فقط في [نسخة Business أو Enterprise من Onyx](/admin/billing)."
       },
       "enterprise": {
         "title": "خطة المؤسسات",
-        "tooltip": "يتطلب [خطة المؤسسات](/admin/billing)."
+        "tooltip": "هذه الميزة متاحة فقط في [نسخة Enterprise من Onyx](/admin/billing)."
       },
       "upgrade": {
         "label": "ترقية الخطة"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "هذه الميزة متاحة فقط في [نسخة Business أو Enterprise من Onyx](/admin/billing)."
-      },
-      "enterpriseOnly": {
-        "tooltip": "هذه الميزة متاحة فقط في [نسخة Enterprise من Onyx](/admin/billing)."
-      },
       "exitAdminPanel": {
         "label": "الخروج من لوحة الإدارة"
       },

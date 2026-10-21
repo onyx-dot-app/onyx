@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "Offre Business",
-        "tooltip": "Nécessite l'[offre Business ou Enterprise](/admin/billing)."
+        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Business ou Enterprise d'Onyx](/admin/billing)."
       },
       "enterprise": {
         "title": "Offre Enterprise",
-        "tooltip": "Nécessite l'[offre Enterprise](/admin/billing)."
+        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Enterprise d'Onyx](/admin/billing)."
       },
       "upgrade": {
         "label": "Mettre à niveau l'offre"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Business ou Enterprise d'Onyx](/admin/billing)."
-      },
-      "enterpriseOnly": {
-        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Enterprise d'Onyx](/admin/billing)."
-      },
       "exitAdminPanel": {
         "label": "Quitter le panneau d'administration"
       },

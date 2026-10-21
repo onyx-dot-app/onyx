@@ -14108,11 +14108,11 @@
       },
       "business": {
         "title": "Plano Business",
-        "tooltip": "Requer o [plano Business ou Enterprise](/admin/billing)."
+        "tooltip": "Este recurso está disponível apenas na [versão Business ou Enterprise do Onyx](/admin/billing)."
       },
       "enterprise": {
         "title": "Plano Enterprise",
-        "tooltip": "Requer o [plano Enterprise](/admin/billing)."
+        "tooltip": "Este recurso está disponível apenas na [versão Enterprise do Onyx](/admin/billing)."
       },
       "upgrade": {
         "label": "Fazer upgrade do plano"
@@ -16579,12 +16579,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "Este recurso está disponível apenas na [versão Business ou Enterprise do Onyx](/admin/billing)."
-      },
-      "enterpriseOnly": {
-        "tooltip": "Este recurso está disponível apenas na [versão Enterprise do Onyx](/admin/billing)."
-      },
       "exitAdminPanel": {
         "label": "Sair do painel de administração"
       },
