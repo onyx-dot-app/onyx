@@ -63,6 +63,53 @@ def test_docker_inventory_stops_requests_when_deadline_expires(
     manager._cleanup_docker.volumes.list.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "kind", [SandboxResourceKind.CONTAINER, SandboxResourceKind.VOLUME]
+)
+def test_docker_inventory_rejects_foreign_network_with_matching_compose_project(
+    kind: SandboxResourceKind,
+) -> None:
+    manager = object.__new__(dsm.DockerSandboxManager)
+    manager._cleanup_docker = MagicMock()
+    manager._network_name = "deployment-network"
+    manager._compose_project = "onyx"
+    items = []
+    for name, network in (
+        ("owned", "deployment-network"),
+        ("foreign", "other-network"),
+        ("legacy", None),
+    ):
+        item = MagicMock()
+        item.name = name
+        item.id = name
+        item.labels = dsm.build_sandbox_labels(
+            uuid4(), "tenant-a", None, compose_project="onyx"
+        )
+        if network is None:
+            item.labels.pop(dsm.LABEL_DOCKER_NETWORK)
+        else:
+            item.labels[dsm.LABEL_DOCKER_NETWORK] = network
+        item.attrs = {
+            "Labels": item.labels,
+            "Created": "2026-10-21T10:00:00Z",
+            "CreatedAt": "2026-10-21T10:00:00Z",
+        }
+        items.append(item)
+    manager._cleanup_docker.containers.list.return_value = (
+        items if kind == SandboxResourceKind.CONTAINER else []
+    )
+    manager._cleanup_docker.volumes.list.return_value = (
+        items if kind == SandboxResourceKind.VOLUME else []
+    )
+
+    resources = list(manager.iter_resources("tenant-a", time.monotonic() + 30))
+
+    assert [(resource.kind, resource.name) for resource in resources] == [
+        (kind, "owned"),
+        (kind, "legacy"),
+    ]
+
+
 def test_pod_log_stream_preserves_lines_without_an_idle_read_timeout() -> None:
     manager = object.__new__(KubernetesSandboxManager)
     manager._namespace = "sandbox-test"
