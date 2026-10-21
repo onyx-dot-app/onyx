@@ -53,7 +53,7 @@ def _sync_project_permissions(
     project_key: str,
 ) -> list[DocExternalAccessSet]:
     try:
-        connector = Connector(
+        connector: Connector = Connector(
             name=f"Test Jira {project_key} Doc Sync Connector",
             source=DocumentSource.JIRA,
             input_type=InputType.POLL,
@@ -68,7 +68,7 @@ def _sync_project_permissions(
         db_session.add(connector)
         db_session.flush()
 
-        credential = Credential(
+        credential: Credential = Credential(
             source=DocumentSource.JIRA,
             credential_json=jira_credentials.as_credential_json(),
         )
@@ -76,7 +76,7 @@ def _sync_project_permissions(
         db_session.flush()
         db_session.expire(credential)
 
-        cc_pair = ConnectorCredentialPair(
+        cc_pair: ConnectorCredentialPair = ConnectorCredentialPair(
             connector_id=connector.id,
             credential_id=credential.id,
             name=f"Test Jira {project_key} Doc Sync CC Pair",
@@ -113,13 +113,13 @@ def test_jira_team_managed_project_doc_sync(
     jira_credentials: JiraTestCredentials,
 ) -> None:
     """A team-managed project maps its roles to a private document ACL."""
-    connector = JiraConnector(
+    connector: JiraConnector = JiraConnector(
         jira_base_url=JIRA_BASE_URL,
         project_key=TEAM_MANAGED_PROJECT_KEY,
     )
     connector.load_credentials(jira_credentials.as_credential_json())
 
-    documents = [
+    documents: list[SlimDocument] = [
         item
         for batch in connector.retrieve_all_slim_docs_perm_sync()
         for item in batch
@@ -127,7 +127,7 @@ def test_jira_team_managed_project_doc_sync(
     ]
     assert len(documents) == 1
 
-    document = documents[0]
+    document: SlimDocument = documents[0]
     assert document.id == f"{JIRA_BASE_URL}/browse/{TEAM_MANAGED_PROJECT_KEY}-2"
     assert document.external_access is not None
     assert document.external_access.external_user_emails == {TEAM_MANAGED_USER_EMAIL}
@@ -140,7 +140,7 @@ def test_jira_doc_sync(
     jira_connector_config: dict[str, Any],
     jira_credentials: JiraTestCredentials,
 ) -> None:
-    expected_docs = {
+    expected_docs: dict[str, DocExternalAccessSet] = {
         f"{JIRA_BASE_URL}/browse/AS-3": DocExternalAccessSet(
             doc_id=f"{JIRA_BASE_URL}/browse/AS-3",
             external_user_emails=set(),
@@ -154,7 +154,7 @@ def test_jira_doc_sync(
             is_public=True,
         ),
     }
-    actual_docs = {
+    actual_docs: dict[str, DocExternalAccessSet] = {
         doc.doc_id: doc
         for doc in _sync_project_permissions(
             db_session=db_session,
@@ -171,7 +171,7 @@ def test_jira_doc_sync_with_specific_permissions(
     jira_connector_config: dict[str, Any],
     jira_credentials: JiraTestCredentials,
 ) -> None:
-    docs = _sync_project_permissions(
+    docs: list[DocExternalAccessSet] = _sync_project_permissions(
         db_session=db_session,
         jira_connector_config=jira_connector_config,
         jira_credentials=jira_credentials,
@@ -179,7 +179,7 @@ def test_jira_doc_sync_with_specific_permissions(
     )
     assert docs
 
-    expected_user_emails = {
+    expected_user_emails: set[str] = {
         "yuhong@onyx.app",
         "chris@onyx.app",
         "founders@onyx.app",
