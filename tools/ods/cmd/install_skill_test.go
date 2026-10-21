@@ -22,7 +22,6 @@ func skillEnv(t *testing.T) (home, repoRoot string) {
 	}
 	home = t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv(agentContextEnv, "")
 	repoRoot = t.TempDir()
 	gittest.Git(t, repoRoot, "init", "--quiet")
 	t.Chdir(repoRoot)
@@ -282,145 +281,21 @@ func TestInstallSkill_sourceWithoutSkillsInstallsNothing(t *testing.T) {
 	}
 }
 
-// skillContextCheckout writes an onyx-agent-context checkout at dir: its
-// AGENTS.md entry file and the given manual skills.
-func skillContextCheckout(t *testing.T, dir string, skills ...string) {
-	t.Helper()
-	deployWriteFile(t, filepath.Join(dir, agentContextEntryFile), "entry")
-	for _, name := range skills {
-		deployWriteFile(t, filepath.Join(dir, "skills", name, "SKILL.md"), name)
-	}
-}
-
 func TestInstallSkill_missingSourceRequiresClone(t *testing.T) {
-	_, repoRoot := skillEnv(t)
+	home, _ := skillEnv(t)
 
 	_, err := skillRun(t)
 
-	wantSource := filepath.Join(filepath.Dir(repoRoot), agentContextRepoName)
-	if err == nil || !strings.Contains(err.Error(), agentContextRepoName+" checkout not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
+	wantSource := filepath.Join(home, ".claude", "skills", "onyx-infra")
+	if err == nil || !strings.Contains(err.Error(), "onyx-infra checkout not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
 		t.Fatalf("expected a hint to use --clone for %s, got %v", wantSource, err)
 	}
 }
 
-func TestInstallSkill_findsTheContextNextToTheMainCheckoutFromAWorktree(t *testing.T) {
-	_, repoRoot := skillEnv(t)
-	gittest.Git(t, repoRoot, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
-	worktree := filepath.Join(t.TempDir(), "feature")
-	gittest.Git(t, repoRoot, "worktree", "add", "-q", worktree)
-	t.Chdir(worktree)
-	skillContextCheckout(t, filepath.Join(filepath.Dir(repoRoot), agentContextRepoName), "review")
-
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install-skill: %v", err)
-	}
-
-	if got := skillReadFile(t, filepath.Join(worktree, projectSkillsDir, "review", "SKILL.md")); got != "review" {
-		t.Fatalf("expected the sibling checkout's skill in the worktree, got %q", got)
-	}
-}
-
-func TestInstallSkill_envVarPathWinsOverTheSibling(t *testing.T) {
-	_, repoRoot := skillEnv(t)
-	skillContextCheckout(t, filepath.Join(filepath.Dir(repoRoot), agentContextRepoName), "sibling")
-	explicit := filepath.Join(t.TempDir(), "my-context")
-	skillContextCheckout(t, explicit, "explicit")
-	t.Setenv(agentContextEnv, explicit)
-
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install-skill: %v", err)
-	}
-
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "explicit")); err != nil {
-		t.Fatalf("expected the $%s checkout to be installed: %v", agentContextEnv, err)
-	}
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "sibling")); !os.IsNotExist(err) {
-		t.Fatalf("expected the sibling checkout to be ignored, got %v", err)
-	}
-}
-
-func TestInstallSkill_fallsBackToTheCheckoutInsideTheRepo(t *testing.T) {
-	_, repoRoot := skillEnv(t)
-	skillContextCheckout(t, filepath.Join(repoRoot, inRepoAgentContextDir), "review")
-	// A sibling folder without the entry file is not the context.
-	deployWriteFile(t, filepath.Join(filepath.Dir(repoRoot), agentContextRepoName, "README.md"), "not it")
-
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install-skill: %v", err)
-	}
-
-	if got := skillReadFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md")); got != "review" {
-		t.Fatalf("expected the in-repo checkout to be installed, got %q", got)
-	}
-}
-
-func TestCloneDestination_staysInsideTheCheckoutWhenItsFolderIsNotKept(t *testing.T) {
-	// The devcontainer mounts the checkout at /workspace; / does not survive a rebuild.
-	if got, want := cloneDestination("/workspace"), filepath.Join("/workspace", inRepoAgentContextDir); got != want {
-		t.Fatalf("expected %s, got %s", want, got)
-	}
-
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores folder permissions")
-	}
-	parent := t.TempDir()
-	mainRoot := filepath.Join(parent, "onyx")
-	if err := os.Mkdir(mainRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := cloneDestination(mainRoot), filepath.Join(parent, agentContextRepoName); got != want {
-		t.Fatalf("expected %s, got %s", want, got)
-	}
-	if err := os.Chmod(parent, 0o555); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
-	if got, want := cloneDestination(mainRoot), filepath.Join(mainRoot, inRepoAgentContextDir); got != want {
-		t.Fatalf("expected %s, got %s", want, got)
-	}
-}
-
-func TestInstallSkill_expandsHomeInTheEnvVarPath(t *testing.T) {
-	home, repoRoot := skillEnv(t)
-	skillContextCheckout(t, filepath.Join(home, "my-context"), "review")
-	t.Setenv(agentContextEnv, "~/my-context")
-
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install-skill: %v", err)
-	}
-
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "review")); err != nil {
-		t.Fatalf("expected the ~/ path to be installed: %v", err)
-	}
-}
-
-func TestInstallSkill_switchingFromAnOlderCheckoutRemovesItsLinks(t *testing.T) {
-	home, repoRoot := skillEnv(t)
-	skillWriteSource(t, filepath.Join(home, ".claude", "skills", "onyx-infra", agentContextDir))
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install from the older checkout: %v", err)
-	}
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "review")); err != nil {
-		t.Fatalf("expected the older checkout's skill to be linked: %v", err)
-	}
-
-	skillContextCheckout(t, filepath.Join(filepath.Dir(repoRoot), agentContextRepoName), "fresh")
-	if _, err := skillRun(t, "--no-pull"); err != nil {
-		t.Fatalf("install from the new checkout: %v", err)
-	}
-
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "review")); !os.IsNotExist(err) {
-		t.Fatalf("expected the older checkout's link to be removed, got %v", err)
-	}
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "fresh")); err != nil {
-		t.Fatalf("expected the new checkout's skill to be linked: %v", err)
-	}
-}
-
-// skillFakeGit puts a git wrapper first on PATH that records clone calls and
-// runs the given script for them (the destination directory is "$dest");
-// every other git call goes to the real git.
-func skillFakeGit(t *testing.T, cloneScript string) string {
+// skillFakeGit puts a git wrapper first on PATH that records clone and
+// sparse-checkout calls and runs the given scripts for them (the destination
+// directory is "$dest"); every other git call goes to the real git.
+func skillFakeGit(t *testing.T, cloneScript, sparseScript string) string {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
@@ -435,6 +310,11 @@ func skillFakeGit(t *testing.T, cloneScript string) string {
 		"  printf '%s\\n' \"$@\" >> \"${0%/*}/git-calls\"\n" +
 		cloneScript +
 		"fi\n" +
+		"if [ \"$1\" = -C ] && [ \"$3\" = sparse-checkout ]; then\n" +
+		"  dest=$2\n" +
+		"  printf '%s\\n' \"$@\" >> \"${0%/*}/git-calls\"\n" +
+		sparseScript +
+		"fi\n" +
 		"exec \"$ODS_TEST_REAL_GIT\" \"$@\"\n"
 	deployWriteFile(t, filepath.Join(dir, "git"), script)
 	if err := os.Chmod(filepath.Join(dir, "git"), 0o755); err != nil {
@@ -444,10 +324,11 @@ func skillFakeGit(t *testing.T, cloneScript string) string {
 	return record
 }
 
-func TestInstallSkill_cloneFetchesTheRepoNextToTheMainCheckout(t *testing.T) {
-	_, repoRoot := skillEnv(t)
+func TestInstallSkill_cloneFetchesTheDefaultSourceSparsely(t *testing.T) {
+	home, repoRoot := skillEnv(t)
 	record := skillFakeGit(t,
-		"  mkdir -p \"$dest/skills/review\" && echo review > \"$dest/skills/review/SKILL.md\" && echo entry > \"$dest/AGENTS.md\"\n  exit 0\n",
+		"  mkdir -p \"$dest/agent-context/skills/review\" && echo review > \"$dest/agent-context/skills/review/SKILL.md\"\n  exit 0\n",
+		"  exit 0\n",
 	)
 
 	out, err := skillRun(t, "--clone")
@@ -455,9 +336,11 @@ func TestInstallSkill_cloneFetchesTheRepoNextToTheMainCheckout(t *testing.T) {
 		t.Fatalf("install-skill: %v", err)
 	}
 
-	source := filepath.Join(filepath.Dir(repoRoot), agentContextRepoName)
-	if got, want := skillReadFile(t, record), "clone\n"+agentContextCloneURL+"\n"+source+"\n"; got != want {
-		t.Fatalf("expected git args %q, got %q", want, got)
+	source := filepath.Join(home, ".claude", "skills", "onyx-infra")
+	wantArgs := "clone\n--depth\n1\n--filter=blob:none\n--sparse\n" + agentContextCloneURL + "\n" + source + "\n" +
+		"-C\n" + source + "\nsparse-checkout\nset\nagent-context\n"
+	if got := skillReadFile(t, record); got != wantArgs {
+		t.Fatalf("expected git args %q, got %q", wantArgs, got)
 	}
 	if got := skillReadFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md")); got != "review\n" {
 		t.Fatalf("expected the cloned skill to be installed, got %q", got)
@@ -467,29 +350,9 @@ func TestInstallSkill_cloneFetchesTheRepoNextToTheMainCheckout(t *testing.T) {
 	}
 }
 
-func TestInstallSkill_cloneReplacesAnOlderCheckout(t *testing.T) {
-	home, repoRoot := skillEnv(t)
-	skillWriteSource(t, filepath.Join(home, ".claude", "skills", "onyx-infra", agentContextDir))
-	record := skillFakeGit(t,
-		"  mkdir -p \"$dest/skills/fresh\" && echo fresh > \"$dest/skills/fresh/SKILL.md\" && echo entry > \"$dest/AGENTS.md\"\n  exit 0\n",
-	)
-
-	if _, err := skillRun(t, "--clone"); err != nil {
-		t.Fatalf("install-skill: %v", err)
-	}
-
-	source := filepath.Join(filepath.Dir(repoRoot), agentContextRepoName)
-	if got := skillReadFile(t, record); !strings.Contains(got, source) {
-		t.Fatalf("expected a clone to %s, got %q", source, got)
-	}
-	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "fresh")); err != nil {
-		t.Fatalf("expected the new checkout to be installed: %v", err)
-	}
-}
-
 func TestInstallSkill_cloneFailureStopsTheInstall(t *testing.T) {
-	_, repoRoot := skillEnv(t)
-	skillFakeGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n")
+	home, _ := skillEnv(t)
+	skillFakeGit(t, "  echo 'fatal: unable to access' >&2\n  exit 128\n", "  exit 0\n")
 
 	out, err := skillRun(t, "--clone")
 
@@ -502,21 +365,37 @@ func TestInstallSkill_cloneFailureStopsTheInstall(t *testing.T) {
 	if !strings.Contains(out, "fatal: unable to access") {
 		t.Fatalf("expected git's error output to be forwarded, got %q", out)
 	}
-	if _, err := os.Stat(filepath.Join(repoRoot, projectSkillsDir)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills")); !os.IsNotExist(err) {
 		t.Fatalf("expected nothing installed, got %v", err)
 	}
 }
 
-// TestCloneAgentContext_clonesTheRepo runs the real git against a local repo.
-func TestCloneAgentContext_clonesTheRepo(t *testing.T) {
+func TestInstallSkill_sparseCheckoutFailureRemovesTheCheckout(t *testing.T) {
+	home, _ := skillEnv(t)
+	skillFakeGit(t, "  mkdir -p \"$dest\"\n  exit 0\n", "  echo 'fatal: sparse' >&2\n  exit 1\n")
+
+	_, err := skillRun(t, "--clone")
+
+	if err == nil || !strings.Contains(err.Error(), "sparse-checkout failed") {
+		t.Fatalf("expected sparse-checkout failure, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "onyx-infra")); !os.IsNotExist(err) {
+		t.Fatalf("expected the half-made checkout to be removed, got %v", err)
+	}
+}
+
+// TestCloneAgentContext_checksOutOnlyTheSkillsDirectory runs the real git
+// against a local repo.
+func TestCloneAgentContext_checksOutOnlyTheSkillsDirectory(t *testing.T) {
 	skillEnv(t)
 	remote := t.TempDir()
 	gittest.Git(t, remote, "init", "--quiet", "-b", "main")
-	skillContextCheckout(t, remote, "review")
+	deployWriteFile(t, filepath.Join(remote, "agent-context", "skills", "review", "SKILL.md"), "review")
+	deployWriteFile(t, filepath.Join(remote, "customers", "big", "values.yaml"), "not needed")
 	gittest.Git(t, remote, "add", "-A")
 	gittest.Git(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
 
-	dest := filepath.Join(t.TempDir(), agentContextRepoName)
+	dest := filepath.Join(t.TempDir(), "onyx-infra")
 	cmd := NewInstallSkillCommand()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -525,6 +404,12 @@ func TestCloneAgentContext_clonesTheRepo(t *testing.T) {
 		t.Fatalf("clone: %v\n%s", err, out.String())
 	}
 
+	if got := skillReadFile(t, filepath.Join(dest, "agent-context", "skills", "review", "SKILL.md")); got != "review" {
+		t.Fatalf("expected the skill to be checked out, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "customers")); !os.IsNotExist(err) {
+		t.Fatalf("expected the rest of the repo not to be checked out, got %v", err)
+	}
 	skills, err := discoverAgentContextSkills(dest)
 	if err != nil || len(skills) != 1 || skills[0].Name != "review" {
 		t.Fatalf("expected to discover the review skill, got %v, %v", skills, err)
@@ -557,8 +442,8 @@ func TestInstallSkill_sourceWithoutSkillsIsAnError(t *testing.T) {
 
 	_, err := skillRun(t, "--source", checkout, "--no-pull")
 
-	if err == nil || !strings.Contains(err.Error(), "no skills/, enforced/, or agent-context/ directory found") {
-		t.Fatalf("expected a missing skills error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no agent-context/ directory found") {
+		t.Fatalf("expected a missing agent-context error, got %v", err)
 	}
 }
 
@@ -574,7 +459,7 @@ func TestInstallSkill_fallsBackToTheOldDefaultCheckout(t *testing.T) {
 	if got := skillReadFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md")); got != "review" {
 		t.Fatalf("expected the old checkout to be installed, got %q", got)
 	}
-	if !strings.Contains(out, "older checkout") || !strings.Contains(out, "--clone") {
+	if !strings.Contains(out, "old checkout") || !strings.Contains(out, "--clone") {
 		t.Fatalf("expected a warning about the old checkout, got %q", out)
 	}
 }

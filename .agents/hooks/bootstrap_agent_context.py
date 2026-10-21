@@ -15,7 +15,10 @@ agent can set the rest up:
    that went.
 4. Otherwise it is silent and makes no network calls.
 
-It never prompts for credentials and always exits 0. Set
+Claude Code and Codex run it from `.claude/settings.json` and `.codex/hooks.json`;
+Cursor runs the Claude Code one through its third-party import, and reads the
+message from a JSON response. It never prompts for credentials and always exits
+0. Set
 `ONYX_SKIP_AGENT_CONTEXT_BOOTSTRAP=1` to turn it off.
 """
 
@@ -190,18 +193,29 @@ def _report(repo: Path) -> str | None:
     )
 
 
+def _session_folder(payload: dict[str, object]) -> Path:
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd:
+        return Path(cwd)
+    roots = payload.get("workspace_roots")
+    if isinstance(roots, list) and roots and isinstance(roots[0], str):
+        return Path(roots[0])
+    return Path(os.getcwd())
+
+
 def main() -> int:
     if os.environ.get(_SKIP_ENV, "").strip().lower() in {"1", "true", "yes", "on"}:
         return 0
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
-        cwd = payload.get("cwd") if isinstance(payload, dict) else None
-        start = Path(cwd) if isinstance(cwd, str) and cwd else Path(os.getcwd())
-        top = _git(start, "rev-parse", "--show-toplevel")
+        decoded = json.loads(sys.stdin.read() or "{}")
+        payload = decoded if isinstance(decoded, dict) else {}
+        top = _git(_session_folder(payload), "rev-parse", "--show-toplevel")
         report = _report(Path(top)) if top else None
     except Exception:  # a session-start hook must never break the session
         return 0
-    if report:
+    if report and "cursor_version" in payload:
+        print(json.dumps({"additional_context": report}))
+    elif report:
         print(report)
     return 0
 

@@ -133,3 +133,27 @@ def test_can_be_turned_off(tmp_path: Path) -> None:
 
     assert _run(onyx, {**env, "ONYX_SKIP_AGENT_CONTEXT_BOOTSTRAP": "1"}) == ""
     assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+
+
+def test_answers_cursor_with_json_and_reads_its_workspace_root(tmp_path: Path) -> None:
+    onyx, env = _setup(tmp_path, email="someone@example.com")
+    context = tmp_path / "ws" / "onyx-agent-context"
+    context.mkdir()
+    (context / "AGENTS.md").write_text("entry\n")
+    payload = {
+        "hook_event_name": "sessionStart",
+        "cursor_version": "2.0.0",
+        "workspace_roots": [str(onyx)],
+    }
+
+    result = subprocess.run(
+        [sys.executable, str(_HOOK)],
+        input=json.dumps(payload),
+        cwd=tmp_path,
+        env={**_GIT_ENV, **env},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    assert f"`{context}`" in json.loads(result.stdout)["additional_context"]

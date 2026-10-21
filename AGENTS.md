@@ -84,8 +84,8 @@ If you find it, read its `AGENTS.md` and follow it. If you do not find it, conti
 It holds the feature map and the agent session hooks. When its hooks are set up, the session
 starts with a line that begins with `[agent-context]`.
 
-Claude Code and Codex run `.agents/hooks/bootstrap_agent_context.py` at session start until
-those hooks are set up. For a git email at `onyx.app`, it clones the repo when it is missing,
+Claude Code, Codex, and Cursor run `.agents/hooks/bootstrap_agent_context.py` at session start
+until those hooks are set up. For a git email at `onyx.app`, it clones the repo when it is missing,
 at most once a week. It then tells you where the repo is and to offer its setup skill.
 
 ## Code Quality

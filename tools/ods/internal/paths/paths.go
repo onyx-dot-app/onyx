@@ -21,23 +21,6 @@ func GitRoot() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// MainCheckoutRoot returns the main working tree of the current git
-// repository: the repository root itself, or for a linked worktree, the
-// working tree that owns it. `git worktree list` lists it first.
-func MainCheckoutRoot() (string, error) {
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	for _, line := range strings.Split(string(output), "\n") {
-		if path, ok := strings.CutPrefix(line, "worktree "); ok {
-			return path, nil
-		}
-	}
-	return GitRoot()
-}
-
 // DataDir returns the data directory for onyx-dev tools.
 // On Linux/macOS: ~/.local/share/onyx-dev/
 // On Windows: %LOCALAPPDATA%/onyx-dev/
