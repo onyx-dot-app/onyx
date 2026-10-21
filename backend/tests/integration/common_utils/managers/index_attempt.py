@@ -12,9 +12,6 @@ from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestIndexAttempt, DATestUser
 
-# Longer than the check_for_indexing beat interval (15 seconds).
-_SCHEDULER_TICK_SECONDS = 20
-
 
 class IndexAttemptManager:
     @staticmethod
@@ -237,11 +234,9 @@ class IndexAttemptManager:
         skips a cc_pair with an unfinished attempt, so call this first.
         Returns all attempts of the cc_pair.
 
-        A pause does not take the attempt creation lock, so a scheduler run
-        that read the pair before the pause can still add an attempt. The
-        state must hold across a scheduler tick before this returns."""
+        After a pause commits, no attempt is created for the cc_pair: the
+        pause and attempt creation both take the cc_pair row lock."""
         start = time.monotonic()
-        settled_ids: set[int] | None = None
         while True:
             attempts = IndexAttemptManager.get_all_index_attempts(
                 cc_pair_id=cc_pair_id,
@@ -252,13 +247,8 @@ class IndexAttemptManager:
                 for attempt in attempts
                 if not (attempt.status and attempt.status.is_terminal())
             ]
-            attempt_ids: set[int] = {attempt.id for attempt in attempts}
-            if unfinished:
-                settled_ids = None
-            elif settled_ids == attempt_ids:
+            if not unfinished:
                 return attempts
-            else:
-                settled_ids = attempt_ids
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
@@ -266,13 +256,10 @@ class IndexAttemptManager:
                     f"IndexAttempts {unfinished} for CC Pair {cc_pair_id} did not finish within {timeout} seconds"
                 )
 
-            if unfinished:
-                print(
-                    f"Waiting for IndexAttempts {unfinished} to finish. elapsed={elapsed:.2f} timeout={timeout}"
-                )
-                time.sleep(2)
-            else:
-                time.sleep(_SCHEDULER_TICK_SECONDS)
+            print(
+                f"Waiting for IndexAttempts {unfinished} to finish. elapsed={elapsed:.2f} timeout={timeout}"
+            )
+            time.sleep(2)
 
     @staticmethod
     def get_index_attempt_errors_for_cc_pair(
