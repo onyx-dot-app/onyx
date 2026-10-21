@@ -95,7 +95,7 @@ def test_recent_completed_attempts_skip_unstarted(
     assert [a.id for a in results] == [failed.id]
 
 
-@patch(f"{_RUN_DOCFETCHING}.reissue_old_batches", return_value=(3, 2))
+@patch(f"{_RUN_DOCFETCHING}.reissue_old_batches", return_value=5)
 @patch(f"{_RUN_DOCFETCHING}.get_document_batch_storage")
 @patch(f"{_RUN_DOCFETCHING}.MemoryTracer")
 @patch(f"{_RUN_DOCFETCHING}._get_connector_runner")

@@ -468,6 +468,10 @@ access-control consequence of this.
    `save_file` call, or the new write silently overwrites the renamed object
    still referenced by the old key. The Postgres backend is safe: it moves the
    `FileContent` row to the new id, so a reused id makes a new large object.
+   `change_file_id` and `delete_file` lock the `FileRecord` row, so a rename
+   and a delete of the same file run one after the other. `delete_file` removes
+   the object only after it deletes the row. `change_file_id` returns `False`
+   when the record is already gone.
 
 ---
 
