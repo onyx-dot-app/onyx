@@ -600,7 +600,8 @@ URL session identity owns the draft; a welcome sandbox is its replaceable upload
 Replacing that destination preserves selected source files and uploads them into the replacement.
 New Session, another session, or visit end clears the previous attachment draft.
 Composer text uses `useDraft` in browser session storage, keyed by the URL session ID or a separate New Session key.
-Text survives same-tab navigation and reloads without moving between sessions. Sending or queueing clears the saved text.
+Text survives same-tab navigation and reloads without moving between sessions. Accepted prompt handoff or queueing clears the saved text. Failed session provisioning retains the text and attachments.
+Draft cleanup survives composer unmounting. Paste-tile edits and slash-query removal update the saved text immediately.
 Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
 Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
 ChatPanel owns its UploadFilesProvider. Unmounting chat releases its attachment draft, including pending welcome files and navigation to Craft apps.

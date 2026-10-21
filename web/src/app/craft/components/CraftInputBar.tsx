@@ -30,7 +30,7 @@ import {
   useUploadFilesContext,
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { draftKey, useDraft } from "@/hooks/useDraft";
+import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
@@ -54,7 +54,10 @@ export interface CraftInputBarHandle {
 export interface CraftInputBarProps {
   /** URL session identity; null identifies the New Session draft. */
   sessionId?: string | null;
-  onSubmit: (message: string, files: BuildFile[]) => void;
+  onSubmit: (
+    message: string,
+    files: BuildFile[]
+  ) => boolean | void | Promise<boolean | void>;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -222,15 +225,21 @@ const CraftInputBar = memo(
       );
 
       const handleSubmit = useCallback(
-        (message: string) => {
-          onSubmit(
+        async (message: string) => {
+          const accepted = await onSubmit(
             withEntryPrefixes(message, activeEntries),
             currentMessageFiles
           );
-          setActiveEntries([]);
-          clearFiles();
+          if (accepted === false) return false;
+          // Navigation can unmount this input before the handoff completes.
+          clearDraft(storageKey);
+          if (baseRef.current) {
+            setActiveEntries([]);
+            clearFiles();
+          }
+          return true;
         },
-        [activeEntries, currentMessageFiles, onSubmit, clearFiles]
+        [activeEntries, currentMessageFiles, onSubmit, clearFiles, storageKey]
       );
 
       const handleQueueMessage = useCallback(

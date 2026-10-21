@@ -1,6 +1,8 @@
 import React from "react";
-import { fireEvent, screen } from "@testing-library/react";
-import { render } from "@tests/setup/test-utils";
+import { act, fireEvent, screen, within } from "@testing-library/react";
+import { deferred, render } from "@tests/setup/test-utils";
+import { draftKey } from "@/hooks/useDraft";
+import type { BaseInputBarHandle } from "@/sections/input/BaseInputBar";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
 import {
   UploadFileStatus,
@@ -65,18 +67,27 @@ jest.mock("@/hooks/useEscapeInterrupt", () => ({
   useEscapeInterrupt: jest.fn(),
 }));
 
+let mockDeleteBeforeToken: (token: string) => boolean | undefined;
 jest.mock("@/hooks/useSlashPicker", () => ({
   __esModule: true,
-  default: () => ({
-    open: false,
-    anchorRect: null,
-    query: "",
-    onInput: jest.fn(),
-    onSelectionChange: jest.fn(),
-    onSelect: jest.fn(),
-    onClose: jest.fn(),
-    reset: jest.fn(),
-  }),
+  default: ({
+    inputRef,
+  }: {
+    inputRef: React.RefObject<BaseInputBarHandle | null>;
+  }) => {
+    mockDeleteBeforeToken = (token) =>
+      inputRef.current?.deleteBeforeToken(token);
+    return {
+      open: false,
+      anchorRect: null,
+      query: "",
+      onInput: jest.fn(),
+      onSelectionChange: jest.fn(),
+      onSelect: jest.fn(),
+      onClose: jest.fn(),
+      reset: jest.fn(),
+    };
+  },
 }));
 
 jest.mock("@/lib/skills/picker", () => ({
@@ -179,7 +190,7 @@ describe("CraftInputBar session drafts", () => {
     );
   });
 
-  it("does not restore submitted text", () => {
+  it("does not restore submitted text", async () => {
     const onSubmit = jest.fn();
     const { unmount } = render(
       <CraftInputBar onSubmit={onSubmit} isRunning={false} />
@@ -187,6 +198,7 @@ describe("CraftInputBar session drafts", () => {
     fireEvent.keyDown(enterText("Send this"), { key: "Enter" });
     expect(onSubmit).toHaveBeenCalledWith("Send this", attachedFiles);
     unmount();
+    await act(async () => {});
     render(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
     expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
   });
@@ -208,4 +220,110 @@ describe("CraftInputBar session drafts", () => {
       );
     }
   );
+});
+
+describe("Craft draft review regressions", () => {
+  it.each([true, false])(
+    "handles async acceptance after unmount: %s",
+    async (accepted) => {
+      const pending = deferred<boolean>();
+      const onSubmit = jest.fn(() => pending.promise);
+      const { unmount } = render(
+        <CraftInputBar onSubmit={onSubmit} isRunning={false} />
+      );
+      const input = enterText("Pending draft");
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(input).toHaveAttribute("contenteditable", "false");
+      expect(sessionStorage.getItem(draftKey("craft", "new"))).toBe(
+        JSON.stringify("Pending draft")
+      );
+      unmount();
+      await act(async () => pending.resolve(accepted));
+      render(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
+      expect(screen.getByRole("textbox").textContent).toBe(
+        accepted ? "" : "Pending draft"
+      );
+    }
+  );
+
+  it("preserves text and attachments after a rejected submission", async () => {
+    mockClearFiles.mockClear();
+    const onSubmit = jest.fn().mockResolvedValue(false);
+    render(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
+    await act(async () =>
+      fireEvent.keyDown(enterText("Keep me"), { key: "Enter" })
+    );
+    expect(screen.getByRole("textbox")).toHaveTextContent("Keep me");
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "contenteditable",
+      "true"
+    );
+    expect(mockClearFiles).not.toHaveBeenCalled();
+  });
+
+  it("restores edited paste-tile text after navigation without dismissing the popover", () => {
+    const props = { onSubmit: jest.fn(), isRunning: false };
+    const { unmount } = render(<CraftInputBar {...props} />);
+    const input = screen.getByRole("textbox");
+    fireEvent.paste(input, {
+      clipboardData: {
+        getData: () => "Original text ".repeat(30),
+        items: [],
+        files: [],
+      },
+    });
+    const tile = input.querySelector<HTMLElement>("[data-rich-tile]");
+    if (!tile) throw new Error("Expected a paste tile");
+    fireEvent.click(tile);
+    fireEvent.change(within(screen.getByRole("dialog")).getByRole("textbox"), {
+      target: { value: "Corrected text" },
+    });
+    unmount();
+    render(<CraftInputBar {...props} />);
+    expect(screen.getByRole("textbox").textContent).toBe("Corrected text");
+  });
+
+  it("does not restore a slash query removed by the picker", () => {
+    const props = { onSubmit: jest.fn(), isRunning: false };
+    const { unmount } = render(<CraftInputBar {...props} />);
+    const input = enterText("Prompt /pptx");
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    // The picker removes a token immediately before a text-node caret.
+    const textNode = input.firstChild;
+    if (!textNode) throw new Error("Expected input text");
+    range.setStart(textNode, textNode.textContent?.length ?? 0);
+    range.collapse(true);
+    selection?.addRange(range);
+    act(() => {
+      expect(mockDeleteBeforeToken("/pptx")).toBe(true);
+    });
+    unmount();
+    render(<CraftInputBar {...props} />);
+    expect(screen.getByRole("textbox").textContent).toBe("Prompt ");
+  });
+});
+
+it("clears only the submitted draft when another session mounts during handoff", async () => {
+  const pending = deferred<boolean>();
+  const { unmount } = render(
+    <CraftInputBar onSubmit={() => pending.promise} isRunning={false} />
+  );
+  fireEvent.keyDown(enterText("Welcome submission"), { key: "Enter" });
+  unmount();
+  render(
+    <CraftInputBar sessionId="other" onSubmit={jest.fn()} isRunning={false} />
+  );
+  enterText("Other session draft");
+  await act(async () => pending.resolve(true));
+  expect(sessionStorage.getItem(draftKey("craft", "new"))).toBeNull();
+  expect(sessionStorage.getItem(draftKey("craft", "other"))).toBe(
+    JSON.stringify("Other session draft")
+  );
+  expect(screen.getByRole("textbox")).toHaveTextContent("Other session draft");
 });

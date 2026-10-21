@@ -56,6 +56,7 @@ export interface UseContentEditableReturn {
   message: string;
   setMessage: (text: string) => void;
   clearMessage: () => void;
+  deleteBeforeToken: (token: string) => boolean;
   handleInput: (event: React.SyntheticEvent<HTMLDivElement>) => string;
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
@@ -450,6 +451,19 @@ export function useContentEditable({
     onContentChangeRef.current?.("");
   }, [resize, clearTileSelection, clearUndoHistory]);
 
+  const deleteBeforeToken = useCallback(
+    (token: string): boolean => {
+      const el = ref.current;
+      if (!el) return false;
+      pushUndoSnapshot();
+      if (!deleteTokenBeforeCursor(el, token)) return false;
+      syncFromDOM();
+      resize();
+      return true;
+    },
+    [pushUndoSnapshot, syncFromDOM, resize]
+  );
+
   const insertTextAtCursor = useCallback(
     (text: string) => {
       if (!ref.current) return;
@@ -688,6 +702,7 @@ export function useContentEditable({
       if (meta) {
         meta.textContent = getPasteTileMeta(newText);
       }
+      syncFromDOM();
     },
     [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit]
   );
@@ -882,6 +897,7 @@ export function useContentEditable({
     message,
     setMessage,
     clearMessage,
+    deleteBeforeToken,
     handleInput,
     handleCompositionStart,
     handleCompositionEnd,
