@@ -2225,16 +2225,10 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
-        "sessionModel": {
-          "label": "Utiliser le modèle par défaut"
-        },
         "title": "Modèle de nommage des chats"
       },
       "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Par défaut, le modèle de chaque chat.",
-        "sessionModel": {
-          "label": "Utiliser le modèle par défaut"
-        },
+        "description": "Sélectionne et vérifie les documents récupérés. Un modèle rapide et peu coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
         "title": "Modèle de sélection de recherche"
       },
       "taskModels": {

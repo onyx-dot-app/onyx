@@ -2225,16 +2225,10 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "Gera os títulos das sessões. Um modelo rápido e de baixo custo funciona bem.",
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
         "title": "Modelo de nomeação de chats"
       },
       "searchSelectionModel": {
-        "description": "Seleciona e verifica os documentos recuperados. Por padrão, usa o modelo de cada chat.",
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
+        "description": "Seleciona e verifica os documentos recuperados. Um modelo rápido e de baixo custo pode reduzir os custos de pesquisa, mas pode afetar a qualidade das respostas.",
         "title": "Modelo de seleção de pesquisa"
       },
       "taskModels": {

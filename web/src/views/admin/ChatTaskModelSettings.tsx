@@ -6,18 +6,23 @@ import { Button, OnyxLoader, Text } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
-import { filterModelConfigurations } from "@/lib/languageModels/options";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+} from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import type { DefaultModel } from "@/lib/languageModels/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
+  deleteDefaultChatNamingModel,
+  deleteDefaultSearchSelectionModel,
   setDefaultChatNamingModel,
   setDefaultSearchSelectionModel,
 } from "@/lib/languageModels/svc";
 
 // The two background tasks with their own model. Each row reads and writes one
-// designation; unset, the task uses the chat's model.
+// designation; the Global Default row leaves it unset.
 type TaskModel = "chatNaming" | "searchSelection";
 
 const TASK_COPY = {
@@ -36,6 +41,11 @@ const SAVE_TASK_MODEL = {
   searchSelection: setDefaultSearchSelectionModel,
 } as const;
 
+const CLEAR_TASK_MODEL = {
+  chatNaming: deleteDefaultChatNamingModel,
+  searchSelection: deleteDefaultSearchSelectionModel,
+} as const;
+
 interface TaskModelSettingProps {
   task: TaskModel;
 }
@@ -46,6 +56,7 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   const [isPending, setIsPending] = useState(false);
   const {
     llmProviders,
+    defaultText,
     defaultChatNaming,
     defaultSearchSelection,
     modelPaging,
@@ -65,11 +76,15 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
     );
   }, [current, llmProviders]);
 
-  async function handleChange(model: DefaultModel) {
+  async function handleChange(model: DefaultModel | null) {
     if (isPending) return;
     setIsPending(true);
     try {
-      await SAVE_TASK_MODEL[task](model.provider_id, model.model_name);
+      if (model) {
+        await SAVE_TASK_MODEL[task](model.provider_id, model.model_name);
+      } else {
+        await CLEAR_TASK_MODEL[task]();
+      }
       await refetch();
     } catch (error) {
       toast.error(
@@ -105,7 +120,10 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   } else {
     control = (
       <SimpleModelSelector
-        placeholder={t(`${copy.section}.sessionModel.label`)}
+        nullable
+        globalDefault={{
+          description: findDefaultModelDisplayName(llmProviders, defaultText),
+        }}
         providers={filterModelConfigurations(llmProviders, {
           visibleOnly: false,
           keep: modelConfigId,
@@ -115,6 +133,10 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
         onChange={(modelConfigurationId) => {
+          if (modelConfigurationId === null) {
+            void handleChange(null);
+            return;
+          }
           const provider = findProviderOwningModelConfig(
             llmProviders,
             modelConfigurationId
@@ -139,7 +161,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
     <InputHorizontal
       title={t(`${copy.section}.title`)}
       description={t(`${copy.section}.description`)}
-      suffix="optional"
       fillInput
     >
       {control}
@@ -147,12 +168,12 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   );
 }
 
-/** Model that names chat sessions; unset, each session's model names it. */
+/** Model that names chat sessions. */
 export function ChatNamingModelSetting() {
   return <TaskModelSetting task="chatNaming" />;
 }
 
-/** Model that selects retrieved documents; unset, each chat's model does. */
+/** Model that selects and checks retrieved documents. */
 export function SearchSelectionModelSetting() {
   return <TaskModelSetting task="searchSelection" />;
 }

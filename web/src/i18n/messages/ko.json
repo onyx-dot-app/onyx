@@ -2225,16 +2225,10 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "세션 제목을 생성합니다. 빠르고 저렴한 모델이 적합합니다.",
-        "sessionModel": {
-          "label": "기본 모델 사용"
-        },
         "title": "채팅 이름 지정 모델"
       },
       "searchSelectionModel": {
-        "description": "검색된 문서를 선택하고 확인합니다. 기본값은 각 채팅의 모델입니다.",
-        "sessionModel": {
-          "label": "기본 모델 사용"
-        },
+        "description": "검색된 문서를 선택하고 확인합니다. 빠르고 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
         "title": "검색 문서 선택 모델"
       },
       "taskModels": {

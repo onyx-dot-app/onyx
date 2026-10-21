@@ -2225,16 +2225,10 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "Erstellt Sitzungstitel. Ein schnelles, kostengünstiges Modell eignet sich gut.",
-        "sessionModel": {
-          "label": "Standardmodell verwenden"
-        },
         "title": "Modell für Chat-Benennung"
       },
       "searchSelectionModel": {
-        "description": "Wählt abgerufene Dokumente aus und prüft sie. Standardmäßig das Modell des jeweiligen Chats.",
-        "sessionModel": {
-          "label": "Standardmodell verwenden"
-        },
+        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein schnelles, kostengünstiges Modell kann die Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
         "title": "Modell für Suchauswahl"
       },
       "taskModels": {

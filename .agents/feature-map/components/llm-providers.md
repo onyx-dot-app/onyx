@@ -155,9 +155,9 @@ Control and Hide Provider Grouping switches. Model selection for naming and
 search lives in Chat Preferences.
 `web/src/views/admin/ChatTaskModelSettings.tsx` renders the Chat Naming Model
 row (chat card) and the Search Selection Model row (search card).
-Both selectors offer hidden models without changing visibility. Unset defaults
-show Use Default model inside each selector, without a separate status label.
-The UI has no reset control. Each selector stays disabled during its own save,
+Both selectors offer hidden models without changing visibility. Each starts
+with a Global Default row, described by the default model's name; picking it
+deletes that designation. Each selector stays disabled during its own save,
 without blocking the other setting.
 CHAT_NAMING handles chat naming; SEARCH_SELECTION handles document selection
 and relevance checks. Search rewrites and answers retain the primary model.

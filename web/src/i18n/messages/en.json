@@ -2225,16 +2225,10 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "Generates session titles. A fast, low-cost model works well.",
-        "sessionModel": {
-          "label": "Use Default model"
-        },
         "title": "Chat Naming Model"
       },
       "searchSelectionModel": {
-        "description": "Selects and checks retrieved documents. Defaults to each chat's model.",
-        "sessionModel": {
-          "label": "Use Default model"
-        },
+        "description": "Selects and checks retrieved documents. A fast, low-cost model can reduce search costs, but may affect answer quality.",
         "title": "Search Selection Model"
       },
       "taskModels": {

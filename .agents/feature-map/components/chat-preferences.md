@@ -148,9 +148,10 @@ Chat Naming Model, Multi-Model Generation, Deep Research and Chat Auto-Scroll.
 The search card holds Search Selection Model, Search Mode and Auto-Detect
 Search Filters. Temperature Control and Reasoning Control are on Language
 Models. `ChatTaskModelSettings` exports one row component for each task model.
-Each row owns its model-provider fetch. Both optional selectors show Use
-Default model when unset and save independently from the page's workspace
-settings. There is no reset control.
+Each row owns its model-provider fetch. Each selector starts with a Global
+Default row (the default model's name as its description) above a divider.
+Global Default clears the designation. Each row saves independently from the
+page's workspace settings.
 CHAT_NAMING controls naming; SEARCH_SELECTION controls document selection and
 relevance checks. Neither changes query rewrites, and neither falls back to
 the other. Language Models retains provider configuration and the default chat

@@ -115,6 +115,11 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       includeDecisionOnly,
     });
     if (!globalDefault) return models;
+    // Loose model rows go under an untitled divider, so a line always
+    // separates them from the Global Default row.
+    const looseModels = models.filter(
+      (option): option is SelectOption => !("options" in option)
+    );
     return [
       {
         value: GLOBAL_DEFAULT_SELECT_VALUE,
@@ -122,7 +127,9 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         description: globalDefault.description ?? undefined,
         icon: getModelIcon("", ""),
       },
-      ...models,
+      ...(looseModels.length === models.length
+        ? [{ options: looseModels }]
+        : models),
     ];
   }, [
     providers,

@@ -7,9 +7,6 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
-import { NextIntlClientProvider } from "next-intl";
-import OpalStringsBridge from "@/i18n/OpalStringsBridge";
-import frenchMessages from "@/i18n/messages/fr.json";
 import {
   ChatNamingModelSetting,
   SearchSelectionModelSetting,
@@ -208,19 +205,6 @@ describe("ChatTaskModelSettings", () => {
     jest.restoreAllMocks();
   });
 
-  test("translates optional suffixes through the Opal strings bridge", async () => {
-    render(
-      <NextIntlClientProvider locale="fr" messages={frenchMessages}>
-        <OpalStringsBridge>
-          <TaskModels />
-        </OpalStringsBridge>
-      </NextIntlClientProvider>
-    );
-
-    expect(await screen.findAllByText("(Facultatif)")).toHaveLength(2);
-    expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
-  });
-
   test("waits for provider data before rendering task controls", async () => {
     const pending = deferred<Response>();
     listingResponse = () => pending.promise;
@@ -271,14 +255,14 @@ describe("ChatTaskModelSettings", () => {
     );
   });
 
-  test("shows the chat fallback only inside the empty naming selector", async () => {
+  test("shows Global Default for both unset task models", async () => {
     await renderTaskModels();
 
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
     expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText("Use Default model")).toHaveLength(2);
-    expect(screen.queryByText("Session model")).not.toBeInTheDocument();
-    expect(screen.getAllByDisplayValue("").length).toBeGreaterThanOrEqual(2);
+    expect(taskSelector(0)).toHaveValue("Global Default");
+    expect(taskSelector(1)).toHaveValue("Global Default");
+    expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Reset" })
     ).not.toBeInTheDocument();
@@ -357,12 +341,27 @@ describe("ChatTaskModelSettings", () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("Provider is unavailable");
     });
-    expect(selector).toHaveAttribute("placeholder", "Use Default model");
-    expect(selector).toHaveValue("");
+    expect(selector).toHaveValue("Global Default");
     expect(selector).toBeEnabled();
     expect(
       screen.queryByRole("button", { name: "Reset" })
     ).not.toBeInTheDocument();
+  });
+
+  test("picking Global Default clears the chat naming model", async () => {
+    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
+    const user = setupUser();
+    await renderTaskModels();
+    const selector = await screen.findByDisplayValue("GPT-4o Mini");
+
+    await user.click(selector);
+    await user.click(screen.getByRole("option", { name: /Global Default/ }));
+
+    await waitFor(() => expect(selector).toHaveValue("Global Default"));
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/admin/llm/default-chat-naming",
+      { method: "DELETE" }
+    );
   });
 
   test("saving a hidden search model leaves naming and chat defaults unchanged", async () => {
