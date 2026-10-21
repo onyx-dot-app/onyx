@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.21
+version: 0.9.22
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,6 +20,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: changed
+      description: Default Craft sandbox API callbacks to the chart's internal
+        API Service, while preserving explicit ONYX_SERVER_URL overrides.
+    - kind: fixed
+      description: Allow Craft cleanup workers to inventory sandbox Services and
+        Secrets in the sandbox namespace.
     - kind: fixed
       description: The api server and the legacy MinIO copy Job wait for the
         bundled object store to answer before they start, so they no longer

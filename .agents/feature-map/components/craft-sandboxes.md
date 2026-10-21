@@ -538,6 +538,8 @@ Docker inventory and deletion use a separate client with a 15-second timeout.
 Bulk restoration retains its existing client timeout.
 Readiness watches use the remaining provisioning budget rather than the default
 short REST timeout, so slow image pulls can still finish within that budget.
+The sandbox-manager Role grants `list` for Pods, Services, and Secrets within
+the sandbox namespace. The proxy-resolution Role retains only Service `get`.
 
 ---
 
