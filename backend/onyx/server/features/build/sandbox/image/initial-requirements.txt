@@ -73,7 +73,7 @@ pdfminer-six==20251230
     # via pdfplumber
 pdfplumber==0.11.9
     # via -r initial-requirements.in
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -r initial-requirements.in
     #   matplotlib
