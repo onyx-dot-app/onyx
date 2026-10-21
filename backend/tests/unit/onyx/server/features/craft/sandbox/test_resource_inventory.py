@@ -40,6 +40,44 @@ def test_docker_cleanup_timeout_does_not_shorten_bulk_restoration(
     assert manager._cleanup_docker is factory.return_value
 
 
+@pytest.mark.parametrize("expires_during_request", [False, True])
+def test_docker_inventory_stops_requests_when_deadline_expires(
+    expires_during_request: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = object.__new__(dsm.DockerSandboxManager)
+    manager._cleanup_docker = MagicMock()
+    clock = MagicMock(return_value=0.0 if expires_during_request else 2.0)
+    monkeypatch.setattr(dsm.time, "monotonic", clock)
+
+    def list_containers(**_kwargs: object) -> list[object]:
+        clock.return_value = 2.0
+        return []
+
+    manager._cleanup_docker.containers.list.side_effect = list_containers
+    with pytest.raises(TimeoutError):
+        list(manager.iter_resources("tenant-a", deadline=1.0))
+    assert manager._cleanup_docker.containers.list.call_count == int(
+        expires_during_request
+    )
+    manager._cleanup_docker.volumes.list.assert_not_called()
+
+
+def test_pod_log_stream_preserves_lines_without_an_idle_read_timeout() -> None:
+    manager = object.__new__(KubernetesSandboxManager)
+    manager._namespace = "sandbox-test"
+    manager._core_api = MagicMock()
+    stream = manager._core_api.read_namespaced_pod_log.return_value
+    stream.stream.return_value = iter([b"first\n", b"second\n"])
+
+    assert list(manager.stream_pod_logs(uuid4())) == ["first", "second"]
+    timeout = manager._core_api.read_namespaced_pod_log.call_args.kwargs[
+        "_request_timeout"
+    ]
+    assert timeout == (ksm.CONNECT_TIMEOUT_SECONDS, None)
+    stream.close.assert_called_once()
+
+
 def _resource() -> SandboxResource:
     return SandboxResource(
         kind=SandboxResourceKind.POD,
