@@ -465,7 +465,7 @@ writer of the attempt's aggregate counters:
   mid-section. A failed acquire raises and fails the task. Celery does not
   redeliver a failed task: the batch file stays in storage, the heartbeat check
   fails the attempt, and the next attempt re-issues the batch.
-- `check_cancellation_requested` / `request_cancellation` implement admin-triggered
+- `check_cancellation_requested` / `request_cancellation__no_commit` implement admin-triggered
   cancellation without Redis fencing: a boolean column on `IndexAttempt`, polled by
   both docfetching (`_check_connector_and_attempt_status`) and
   `check_for_indexing`'s monitor loop.
