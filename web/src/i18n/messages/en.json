@@ -2999,8 +2999,8 @@
           "checks": "checks run"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# new document} other {# new documents}}",
-          "updatedDocs": "Updated documents",
+          "newDocs": "{count, plural, one {# document new to the index in this run} other {# documents new to the index in this run}}",
+          "updatedDocs": "{count, plural, one {# document already in the index, indexed again in this run} other {# documents already in the index, indexed again in this run}}",
           "removedDocs": "{count, plural, one {# document removed} other {# documents removed}}",
           "users": "{count, plural, one {# user} other {# users}}",
           "groups": "{count, plural, one {# group} other {# groups}}",
@@ -7351,13 +7351,18 @@
           "label": "Connectors"
         },
         "documents": {
-          "caption": "Recently indexed / total",
+          "caption": "In the index",
           "label": "Documents"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "The overview could not load."
+        "loadError": "The overview could not load.",
+        "processed": {
+          "caption": "Processed in time range",
+          "label": "Documents",
+          "tooltip": "Documents the runs in this time range processed. A document counts once for each run that touched it, so this can be more than the documents in the index."
+        }
       },
       "activities": {
         "title": "Activities",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} processed",
+          "processedTooltip": {
+            "running": "Documents the current run has processed so far. Each run counts every document it touches, so this can be more than the connector's documents.",
+            "finished": "Documents the last run processed. Each run counts every document it touches, so this can be more than the connector's documents."
+          }
         },
         "actions": {
           "manage": "Manage",

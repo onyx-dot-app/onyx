@@ -2999,8 +2999,8 @@
           "checks": "件のチェックを実行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
-          "updatedDocs": "更新されたドキュメント",
+          "newDocs": "{count, plural, other {この実行でインデックスに新しく追加されたドキュメント # 件}}",
+          "updatedDocs": "{count, plural, other {すでにインデックスにあり、この実行で再インデックスされたドキュメント # 件}}",
           "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
           "users": "{count, plural, other {# 人のユーザー}}",
           "groups": "{count, plural, other {# 件のグループ}}",
@@ -7351,13 +7351,18 @@
           "label": "コネクタ"
         },
         "documents": {
-          "caption": "最近インデックス済み / 合計",
+          "caption": "インデックス内",
           "label": "ドキュメント"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "概要を読み込めませんでした。"
+        "loadError": "概要を読み込めませんでした。",
+        "processed": {
+          "caption": "期間内に処理",
+          "label": "ドキュメント",
+          "tooltip": "この期間の実行が処理したドキュメント数です。ドキュメントは処理した実行ごとに1回数えられるため、インデックス内のドキュメント数を超えることがあります。"
+        }
       },
       "activities": {
         "title": "アクティビティ",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} 件処理済み",
+          "processedTooltip": {
+            "running": "現在の実行がこれまでに処理したドキュメント数です。実行ごとに処理したドキュメントを数えるため、コネクタのドキュメント数を超えることがあります。",
+            "finished": "前回の実行が処理したドキュメント数です。実行ごとに処理したドキュメントを数えるため、コネクタのドキュメント数を超えることがあります。"
+          }
         },
         "actions": {
           "manage": "管理",

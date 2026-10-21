@@ -16,7 +16,7 @@ import type {
 export interface IndexingOverviewResponse {
   indexing_connectors: number;
   active_connectors: number;
-  /** Documents indexed inside the window. */
+  /** Documents the window's runs processed, once per run that touched each, so it can exceed the total. */
   recent_docs_indexed: number;
   total_docs_indexed: number;
   throughput: CCPairThroughputResponse;

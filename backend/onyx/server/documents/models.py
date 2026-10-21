@@ -728,11 +728,12 @@ class CCPairThroughputResponse(BaseModel):
 
 class IndexingOverviewResponse(BaseModel):
     """The pairs the caller can read at a glance: how many run an index now and
-    how many are active at all, the documents indexed in the window against the
-    documents held, and the window's throughput."""
+    how many are active at all, the documents held, the documents the window's
+    runs processed, and the window's throughput."""
 
     indexing_connectors: int
     active_connectors: int
+    # Counts a document once per run that touched it, so it can exceed the total.
     recent_docs_indexed: int
     total_docs_indexed: int
     throughput: CCPairThroughputResponse

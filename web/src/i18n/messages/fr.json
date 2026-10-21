@@ -2999,8 +2999,8 @@
           "checks": "vérifications exécutées"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# nouveau document} other {# nouveaux documents}}",
-          "updatedDocs": "Documents mis à jour",
+          "newDocs": "{count, plural, one {# document nouveau dans l'index lors de cette exécution} other {# documents nouveaux dans l'index lors de cette exécution}}",
+          "updatedDocs": "{count, plural, one {# document déjà dans l'index, réindexé lors de cette exécution} other {# documents déjà dans l'index, réindexés lors de cette exécution}}",
           "removedDocs": "{count, plural, one {# document supprimé} other {# documents supprimés}}",
           "users": "{count, plural, one {# utilisateur} other {# utilisateurs}}",
           "groups": "{count, plural, one {# groupe} other {# groupes}}",
@@ -7351,13 +7351,18 @@
           "label": "Connecteurs"
         },
         "documents": {
-          "caption": "Indexés récemment / total",
+          "caption": "Dans l'index",
           "label": "Documents"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Impossible de charger la vue d'ensemble."
+        "loadError": "Impossible de charger la vue d'ensemble.",
+        "processed": {
+          "caption": "Traités sur la période",
+          "label": "Documents",
+          "tooltip": "Documents traités par les exécutions de cette période. Un document compte une fois par exécution qui l'a traité, ce chiffre peut donc dépasser le nombre de documents de l'index."
+        }
       },
       "activities": {
         "title": "Activités",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} traités",
+          "processedTooltip": {
+            "running": "Documents traités jusqu'ici par l'exécution en cours. Chaque exécution compte chaque document qu'elle traite, ce chiffre peut donc dépasser le nombre de documents du connecteur.",
+            "finished": "Documents traités par la dernière exécution. Chaque exécution compte chaque document qu'elle traite, ce chiffre peut donc dépasser le nombre de documents du connecteur."
+          }
         },
         "actions": {
           "manage": "Gérer",

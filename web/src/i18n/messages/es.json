@@ -2999,8 +2999,8 @@
           "checks": "comprobaciones ejecutadas"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# documento nuevo} other {# documentos nuevos}}",
-          "updatedDocs": "Documentos actualizados",
+          "newDocs": "{count, plural, one {# documento nuevo en el índice en esta ejecución} other {# documentos nuevos en el índice en esta ejecución}}",
+          "updatedDocs": "{count, plural, one {# documento que ya estaba en el índice, indexado de nuevo en esta ejecución} other {# documentos que ya estaban en el índice, indexados de nuevo en esta ejecución}}",
           "removedDocs": "{count, plural, one {# documento eliminado} other {# documentos eliminados}}",
           "users": "{count, plural, one {# usuario} other {# usuarios}}",
           "groups": "{count, plural, one {# grupo} other {# grupos}}",
@@ -7351,13 +7351,18 @@
           "label": "Conectores"
         },
         "documents": {
-          "caption": "Indexados recientemente / total",
+          "caption": "En el índice",
           "label": "Documentos"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "No se pudo cargar el resumen."
+        "loadError": "No se pudo cargar el resumen.",
+        "processed": {
+          "caption": "Procesados en el intervalo",
+          "label": "Documentos",
+          "tooltip": "Documentos que procesaron las ejecuciones de este intervalo. Un documento cuenta una vez por cada ejecución que lo tocó, así que la cifra puede superar los documentos del índice."
+        }
       },
       "activities": {
         "title": "Actividades",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} procesados",
+          "processedTooltip": {
+            "running": "Documentos que la ejecución actual ha procesado hasta ahora. Cada ejecución cuenta cada documento que toca, así que la cifra puede superar los documentos del conector.",
+            "finished": "Documentos que procesó la última ejecución. Cada ejecución cuenta cada documento que toca, así que la cifra puede superar los documentos del conector."
+          }
         },
         "actions": {
           "manage": "Administrar",

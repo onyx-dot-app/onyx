@@ -2999,8 +2999,8 @@
           "checks": "项检查已运行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 个新文档}}",
-          "updatedDocs": "已更新的文档",
+          "newDocs": "{count, plural, other {本次运行新加入索引的文档 # 个}}",
+          "updatedDocs": "{count, plural, other {已在索引中、本次运行重新索引的文档 # 个}}",
           "removedDocs": "{count, plural, other {已移除 # 个文档}}",
           "users": "{count, plural, other {# 个用户}}",
           "groups": "{count, plural, other {# 个群组}}",
@@ -7351,13 +7351,18 @@
           "label": "连接器"
         },
         "documents": {
-          "caption": "最近索引 / 总计",
+          "caption": "索引中",
           "label": "文档"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "无法加载概览。"
+        "loadError": "无法加载概览。",
+        "processed": {
+          "caption": "时间范围内已处理",
+          "label": "文档",
+          "tooltip": "此时间范围内的运行处理过的文档数。每次运行处理某文档都会计一次，因此可能超过索引中的文档数。"
+        }
       },
       "activities": {
         "title": "活动",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "文档",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "已处理 {count, number} 个",
+          "processedTooltip": {
+            "running": "当前运行到目前为止处理过的文档数。每次运行都会计入其处理的每个文档，因此可能超过该连接器的文档数。",
+            "finished": "上次运行处理过的文档数。每次运行都会计入其处理的每个文档，因此可能超过该连接器的文档数。"
+          }
         },
         "actions": {
           "manage": "管理",

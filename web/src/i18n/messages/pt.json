@@ -2999,8 +2999,8 @@
           "checks": "verificações executadas"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
-          "updatedDocs": "Documentos atualizados",
+          "newDocs": "{count, plural, one {# documento novo no índice nesta execução} other {# documentos novos no índice nesta execução}}",
+          "updatedDocs": "{count, plural, one {# documento que já estava no índice, reindexado nesta execução} other {# documentos que já estavam no índice, reindexados nesta execução}}",
           "removedDocs": "{count, plural, one {# documento removido} other {# documentos removidos}}",
           "users": "{count, plural, one {# usuário} other {# usuários}}",
           "groups": "{count, plural, one {# grupo} other {# grupos}}",
@@ -7351,13 +7351,18 @@
           "label": "Conectores"
         },
         "documents": {
-          "caption": "Indexados recentemente / total",
+          "caption": "No índice",
           "label": "Documentos"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Não foi possível carregar a visão geral."
+        "loadError": "Não foi possível carregar a visão geral.",
+        "processed": {
+          "caption": "Processados no período",
+          "label": "Documentos",
+          "tooltip": "Documentos que as execuções deste período processaram. Um documento conta uma vez para cada execução que o processou, então o número pode passar dos documentos no índice."
+        }
       },
       "activities": {
         "title": "Atividades",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} processados",
+          "processedTooltip": {
+            "running": "Documentos que a execução atual processou até agora. Cada execução conta cada documento que processa, então o número pode passar dos documentos do conector.",
+            "finished": "Documentos que a última execução processou. Cada execução conta cada documento que processa, então o número pode passar dos documentos do conector."
+          }
         },
         "actions": {
           "manage": "Gerenciar",

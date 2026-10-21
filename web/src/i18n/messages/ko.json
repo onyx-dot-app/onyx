@@ -2999,8 +2999,8 @@
           "checks": "개 검사 실행됨"
         },
         "counts": {
-          "newDocs": "{count, plural, other {새 문서 #개}}",
-          "updatedDocs": "업데이트된 문서",
+          "newDocs": "{count, plural, other {이번 실행에서 인덱스에 새로 추가된 문서 #개}}",
+          "updatedDocs": "{count, plural, other {이미 인덱스에 있었고 이번 실행에서 다시 인덱싱된 문서 #개}}",
           "removedDocs": "{count, plural, other {문서 #개 제거됨}}",
           "users": "{count, plural, other {사용자 #명}}",
           "groups": "{count, plural, other {그룹 #개}}",
@@ -7351,13 +7351,18 @@
           "label": "커넥터"
         },
         "documents": {
-          "caption": "최근 인덱싱 / 전체",
+          "caption": "인덱스에 있음",
           "label": "문서"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "개요를 불러올 수 없습니다."
+        "loadError": "개요를 불러올 수 없습니다.",
+        "processed": {
+          "caption": "기간 내 처리됨",
+          "label": "문서",
+          "tooltip": "이 기간의 실행이 처리한 문서 수입니다. 문서는 처리한 실행마다 한 번씩 계산되므로 인덱스에 있는 문서 수보다 많을 수 있습니다."
+        }
       },
       "activities": {
         "title": "활동",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "문서",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number}개 처리됨",
+          "processedTooltip": {
+            "running": "현재 실행이 지금까지 처리한 문서 수입니다. 실행마다 처리한 모든 문서를 세므로 커넥터의 문서 수보다 많을 수 있습니다.",
+            "finished": "마지막 실행이 처리한 문서 수입니다. 실행마다 처리한 모든 문서를 세므로 커넥터의 문서 수보다 많을 수 있습니다."
+          }
         },
         "actions": {
           "manage": "관리",

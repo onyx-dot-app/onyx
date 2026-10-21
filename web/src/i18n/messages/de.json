@@ -2999,8 +2999,8 @@
           "checks": "Prüfungen ausgeführt"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
-          "updatedDocs": "Aktualisierte Dokumente",
+          "newDocs": "{count, plural, one {# Dokument, das dieser Lauf neu in den Index aufgenommen hat} other {# Dokumente, die dieser Lauf neu in den Index aufgenommen hat}}",
+          "updatedDocs": "{count, plural, one {# Dokument, das schon im Index war und von diesem Lauf erneut indexiert wurde} other {# Dokumente, die schon im Index waren und von diesem Lauf erneut indexiert wurden}}",
           "removedDocs": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}",
           "users": "{count, plural, one {# Benutzer} other {# Benutzer}}",
           "groups": "{count, plural, one {# Gruppe} other {# Gruppen}}",
@@ -7351,13 +7351,18 @@
           "label": "Konnektoren"
         },
         "documents": {
-          "caption": "Kürzlich indexiert / gesamt",
+          "caption": "Im Index",
           "label": "Dokumente"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Die Übersicht konnte nicht geladen werden."
+        "loadError": "Die Übersicht konnte nicht geladen werden.",
+        "processed": {
+          "caption": "Im Zeitraum verarbeitet",
+          "label": "Dokumente",
+          "tooltip": "Dokumente, die die Läufe in diesem Zeitraum verarbeitet haben. Ein Dokument zählt einmal je Lauf, der es berührt hat, daher kann die Zahl größer sein als die Dokumente im Index."
+        }
       },
       "activities": {
         "title": "Aktivitäten",
@@ -7398,7 +7403,11 @@
         },
         "docs": {
           "label": "Dokumente",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} verarbeitet",
+          "processedTooltip": {
+            "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat. Jeder Lauf zählt jedes Dokument, das er berührt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
+            "finished": "Dokumente, die der letzte Lauf verarbeitet hat. Jeder Lauf zählt jedes Dokument, das er berührt, daher kann die Zahl größer sein als die Dokumente des Konnektors."
+          }
         },
         "actions": {
           "manage": "Verwalten",

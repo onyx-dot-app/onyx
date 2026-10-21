@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Button, Card, Popover, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
@@ -329,19 +329,30 @@ export default function ConnectorRow({
                       height="fit"
                     >
                       <Text font="main-ui-action" color="text-04">
-                        {row.status === "indexing" && attempt !== null
-                          ? t("docs.recentOfTotal", {
-                              recent: format.number(attempt.total_docs_indexed),
-                              total: format.number(row.docs_indexed),
-                            })
-                          : format.number(row.docs_indexed)}
+                        {format.number(row.docs_indexed)}
                       </Text>
                       <Text font="secondary-body" color="text-03">
                         {t("docs.label")}
                       </Text>
                     </Section>
                     {attempt !== null && !idle && (
-                      <DocCounts attempt={attempt} />
+                      <>
+                        <Tooltip
+                          tooltip={
+                            row.status === "indexing"
+                              ? t("docs.processedTooltip.running")
+                              : t("docs.processedTooltip.finished")
+                          }
+                          side="top"
+                        >
+                          <Text font="secondary-body" color="text-03">
+                            {t("docs.processed", {
+                              count: attempt.total_docs_indexed,
+                            })}
+                          </Text>
+                        </Tooltip>
+                        <DocCounts attempt={attempt} />
+                      </>
                     )}
                   </Section>
 
