@@ -329,6 +329,7 @@
         "saveStage": "无法保存连接设置",
         "loadStage": "无法加载连接设置",
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
+        "clientMetadataRejected": "提供方无法使用客户端元数据文档。如果此实例无法从公共互联网访问，请关闭“使用客户端元数据文档”后重新连接。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
         "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
         "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
@@ -411,7 +412,8 @@
       },
       "cimd": {
         "label": "使用客户端元数据文档",
-        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。"
+        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。",
+        "turnOff": "关闭客户端元数据文档"
       },
       "discovery": {
         "checking": "正在检查自动设置…",

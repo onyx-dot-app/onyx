@@ -1102,6 +1102,40 @@ test("registration failures show a clear recovery action instead of provider HTM
   ).toBeVisible();
 });
 
+test("rejected client metadata documents offer to turn off the switch", async () => {
+  const configuredServer: MCPServer = {
+    ...server,
+    admin_credentials: {},
+  };
+  mockNetwork(configuredServer, "Invalid client_id", false, {
+    oauthReason: "client_metadata_rejected",
+  });
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  render(
+    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
+  );
+  await user.click(screen.getByRole("button", { name: "Open setup" }));
+  await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
+  const cimdSwitch = screen.getByRole("switch", {
+    name: new RegExp(`^${copy.cimd.label}`),
+  });
+  expect(cimdSwitch).toBeChecked();
+  await user.click(
+    screen.getByRole("button", {
+      name: copy.submitButton.label,
+    })
+  );
+  const recovery = await screen.findByRole("button", {
+    name: copy.cimd.turnOff,
+  });
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    copy.errors.clientMetadataRejected
+  );
+  await user.click(recovery);
+  expect(cimdSwitch).not.toBeChecked();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 test("retrying unavailable discovery refreshes support while preserving automatic setup", async () => {
   const options: { discovery: MCPOAuthDiscovery } = {
     discovery: {
