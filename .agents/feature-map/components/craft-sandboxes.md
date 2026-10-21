@@ -480,9 +480,9 @@ session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
 already-deleted). The new archive is stored before any old blob is deleted.
 Pruning is best-effort. If `delete_snapshot` raises, the function logs a
 warning and keeps that old row, so more than one `Snapshot` row can remain.
-The new `Snapshot` row is committed only after those deletions
-(`db_session.commit()` is the last step). A commit failure in that window can
-leave no restorable snapshot, because the old blobs are already gone.
+The new `Snapshot` row commits before any old blob is deleted. A failed commit
+leaves the prior committed archives intact. Pruned row deletions commit in a
+second transaction, so a pruning commit failure cannot remove the new reference.
 The sandbox-global opencode history snapshot is **not** versioned at all: it
 overwrites one fixed FileStore path each capture (§3).
 
@@ -567,10 +567,9 @@ the sandbox namespace. The proxy-resolution Role retains only Service `get`.
    including on unhealthy pods (`sandbox_lifecycle.py:sleep_sandbox`).
    Workspace listing requires successful execution. Kubernetes also checks a
    completion marker so truncated output cannot report an empty workspace.
-2. **A snapshot write must not corrupt the previous one.** New-blob-before-delete:
-   the new blob is stored before any prior blob is deleted, but the DB commit is
-   the last step (`create_session_snapshot_keep_latest`, §4.5). A commit failure
-   after the prunes can leave no restorable snapshot. Restore extracts
+2. **A snapshot write must not corrupt the previous one.** The new blob and DB
+   reference commit before pruning begins (`create_session_snapshot_keep_latest`, §4.5).
+   A failed commit preserves the previous archive. Restore extracts
    to a temp dir and atomically renames into place
    (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
 3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads
