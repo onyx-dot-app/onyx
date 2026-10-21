@@ -10,9 +10,14 @@ FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c
 
 FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Keep build-time Ubuntu packages consistent across layers and fresh builds.
+# Advance this snapshot when updating the Ubuntu base image.
+ARG UBUNTU_APT_SNAPSHOT=20261020T000000Z
+# Bootstrap certificates before accessing the HTTPS-only snapshot service.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+  && echo "APT::Snapshot \"${UBUNTU_APT_SNAPSHOT}\";" > /etc/apt/apt.conf.d/50build-snapshot \
+  && apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
-  ca-certificates \
   cargo \
   cmake \
   curl \
@@ -119,7 +124,8 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # the version always matches the lockfile's playwright-python.
 RUN apt-get update \
   && uvx --quiet --from playwright playwright install-deps chromium \
-  && apt-get clean && rm -rf /var/lib/apt/lists/*
+  && apt-get clean && rm -rf /var/lib/apt/lists/* \
+  && rm /etc/apt/apt.conf.d/50build-snapshot
 
 # Give Playwright's browser cache a fixed, user-independent path. The default
 # (~/.cache/ms-playwright) would be shadowed by the devcontainer's per-user
