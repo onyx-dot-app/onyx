@@ -11,9 +11,8 @@ import {
   InputTypeIn,
   Modal,
   Tooltip,
-  Text,
 } from "@opal/components";
-import { InputVertical, toast } from "@opal/layouts";
+import { InputErrorText, InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -129,17 +128,11 @@ function FormContent({
   const t = useTranslations("actions");
   const fields = useTranslations("agents.editor.general");
   const canEdit = !existingTool || can(existingTool, "edit");
-  const {
-    values,
-    errors,
-    setFieldValue,
-    setFieldError,
-    dirty,
-    isSubmitting,
-    submitForm,
-  } = useFormikContext<OpenAPIActionFormValues>();
+  const { values, setFieldValue, dirty, isSubmitting, submitForm } =
+    useFormikContext<OpenAPIActionFormValues>();
 
   const validationRequest = useRef(0);
+  const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   useEffect(() => {
     onBusyChange?.(isSubmitting || checking);
@@ -184,20 +177,17 @@ function FormContent({
         2
       );
       setFieldValue("definition", formatted);
-      setFieldError("definition", "");
+      setDefinitionError(null);
     } catch {
-      setFieldError("definition", t("addOpenApiModal.definition.invalidJson"));
+      setDefinitionError(t("addOpenApiModal.definition.invalidJson"));
     }
-  }, [values.definition, setFieldValue, setFieldError, t]);
+  }, [values.definition, setFieldValue, t]);
 
   const validateDefinition = useCallback(
-    async (
-      rawDefinition: string,
-      setFieldError: (field: string, message: string) => void
-    ) => {
+    async (rawDefinition: string) => {
       const request = ++validationRequest.current;
       if (!rawDefinition.trim()) {
-        setFieldError("definition", "");
+        setDefinitionError(null);
         return false;
       }
 
@@ -209,19 +199,11 @@ function FormContent({
 
         if (request !== validationRequest.current) return false;
 
-        if (response.error) {
-          setFieldError("definition", response.error);
-          return false;
-        } else {
-          setFieldError("definition", "");
-          return true;
-        }
+        setDefinitionError(response.error);
+        return !response.error;
       } catch {
         if (request !== validationRequest.current) return false;
-        setFieldError(
-          "definition",
-          t("addOpenApiModal.definition.invalidJson")
-        );
+        setDefinitionError(t("addOpenApiModal.definition.invalidJson"));
         return false;
       }
     },
@@ -245,17 +227,16 @@ function FormContent({
       : t("addOpenApiModal.submitButton.addLabel");
 
   useEffect(() => {
-    if (!values.definition.trim()) {
-      setFieldError("definition", "");
-    } else {
-      debouncedValidateDefinition(values.definition, setFieldError);
+    setDefinitionError(null);
+    if (values.definition.trim()) {
+      debouncedValidateDefinition(values.definition);
     }
 
     return () => {
       debouncedValidateDefinition.cancel();
       validationRequest.current += 1;
     };
-  }, [values.definition, debouncedValidateDefinition, setFieldError]);
+  }, [values.definition, debouncedValidateDefinition]);
 
   const inlineSave = (
     <Button
@@ -316,7 +297,11 @@ function FormContent({
               <InputTextAreaField
                 name="definition"
                 variant={
-                  checking || isSubmitting || !canEdit ? "disabled" : undefined
+                  checking || isSubmitting || !canEdit
+                    ? "disabled"
+                    : definitionError
+                      ? "error"
+                      : undefined
                 }
                 rows={8}
                 placeholder={t("addOpenApiModal.definition.placeholder")}
@@ -325,10 +310,8 @@ function FormContent({
           </div>
         </Hoverable.Root>
       </InputVertical>
-      {errors.definition && (
-        <Text font="secondary-body" color="status-error-05">
-          {errors.definition}
-        </Text>
+      {definitionError && (
+        <InputErrorText type="error">{definitionError}</InputErrorText>
       )}
     </div>
   );
@@ -470,10 +453,7 @@ function FormContent({
               onClick={async () => {
                 setChecking(true);
                 debouncedValidateDefinition.cancel();
-                const validation = validateDefinition(
-                  values.definition,
-                  setFieldError
-                );
+                const validation = validateDefinition(values.definition);
                 const request = validationRequest.current;
                 try {
                   if (await validation) await submitForm();

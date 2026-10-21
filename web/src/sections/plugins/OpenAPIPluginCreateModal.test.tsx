@@ -525,3 +525,37 @@ describe("authentication save retries", () => {
     }
   );
 });
+
+test("shows a schema validation error once before and after blur", async () => {
+  const error = "Server URL is not allowed.";
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    if (String(input) === "/api/admin/tool/custom/validate")
+      return new Response(JSON.stringify({ detail: error }), { status: 400 });
+    return new Response(JSON.stringify([]));
+  });
+  render(
+    <OpenAPIPluginCreateModal open onClose={jest.fn()} onCreated={jest.fn()} />
+  );
+  const schema = await screen.findByRole("textbox", {
+    name: /OpenAPI Schema Definition/,
+  });
+  fireEvent.change(schema, { target: { value: JSON.stringify(definition) } });
+  expect(await screen.findByText(error)).toBeInTheDocument();
+  expect(screen.getAllByText(error)).toHaveLength(1);
+  fireEvent.blur(schema);
+  fireEvent.change(
+    screen.getByRole("textbox", { name: /Description for Humans/ }),
+    { target: { value: "Release notes" } }
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(screen.getAllByText(error)).toHaveLength(1);
+
+  fireEvent.change(schema, { target: { value: "" } });
+  fireEvent.blur(schema);
+  expect(
+    await screen.findAllByText("OpenAPI schema definition is required")
+  ).toHaveLength(1);
+  expect(screen.queryByText(error)).not.toBeInTheDocument();
+});
