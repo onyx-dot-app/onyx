@@ -478,11 +478,12 @@ Personal approval drafts survive tab changes and write only on Save.
 Opening the plugin modal preloads approval settings, before Tools is selected. If a tab switch must wait, the available list stays visible with a tab spinner.
 Member indicators and tooltip rows use Main Chat, Custom agents, then Craft.
 The segments run clockwise: upper left, upper right, then bottom.
-Workspace setup uses one gray dot and one setup message instead of surface rows.
-Other plugin states show three segments. Unsupported surfaces are gray and say Not available;
+Unconnected member plugins use one dot and one status message instead of surface rows.
+Workspace setup uses gray; required sign-in uses orange.
+Only connected member plugins show three segments. Unsupported surfaces are gray and say Not available;
 these segments do not lower the plugin's sort priority. Tooltip rows have no introductory status sentence.
-Supported segments are green when connected and enabled, orange when sign-in is needed
-or an admin or personal setting disables the surface, and gray when state is unknown.
+Supported segments are green when enabled, orange when an admin or personal setting
+disables the surface, and gray when state is unknown.
 Tooltips identify admin-disabled and personally disabled surfaces.
 Custom agents remain ready when only default Chat or personal Craft preferences are disabled;
 each agent must still be configured with the plugin. Sorting uses the same supported-surface rules.
