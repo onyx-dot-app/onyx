@@ -2966,8 +2966,8 @@
           "queued": "Queued",
           "running": "Running",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({minutes, number} min)",
-          "rateFinished": "{rate} docs/min ({minutes, number} min)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} memberships/min"
         },
         "actions": {
@@ -3014,7 +3014,6 @@
           "label": "Time range",
           "all": "All time",
           "h1": "Last hour",
-          "h12": "Last 12 hours",
           "h24": "Last 24 hours",
           "d7": "Last 7 days",
           "d30": "Last 30 days"

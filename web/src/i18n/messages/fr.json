@@ -2966,8 +2966,8 @@
           "queued": "En file d'attente",
           "running": "En cours",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({minutes, number} min)",
-          "rateFinished": "{rate} docs/min ({minutes, number} min)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} adhésions/min"
         },
         "actions": {
@@ -3014,7 +3014,6 @@
           "label": "Période",
           "all": "Toute la période",
           "h1": "Dernière heure",
-          "h12": "12 dernières heures",
           "h24": "24 dernières heures",
           "d7": "7 derniers jours",
           "d30": "30 derniers jours"

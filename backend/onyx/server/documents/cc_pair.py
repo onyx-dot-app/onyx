@@ -475,7 +475,7 @@ def resolve_matching_cc_pair_runs(
 @router.get("/admin/cc-pair/{cc_pair_id}/throughput")
 def get_cc_pair_throughput(
     cc_pair_id: int,
-    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_12),
+    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_24),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
