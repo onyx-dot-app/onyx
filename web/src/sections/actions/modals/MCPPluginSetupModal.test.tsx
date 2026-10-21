@@ -508,7 +508,7 @@ test("starts with name and URL fields and shows detection before Continue withou
   ]) {
     const row = (await screen.findByText(label)).closest("[data-stage]");
     expect(row).toBeVisible();
-    expect(row).toHaveAttribute("data-state", "pending");
+    expect(row).toHaveAttribute("data-state", "idle");
   }
   expect(probeUrls).toEqual([]);
   await enterUrl();
@@ -519,7 +519,7 @@ test("starts with name and URL fields and shows detection before Continue withou
     })
   ).not.toBeInTheDocument();
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  await screen.findByRole("status", {}, { timeout: 3000 });
+  await waitFor(() => expect(probeUrls).toHaveLength(1), { timeout: 3000 });
   expect(
     screen.getByText(messages.actions.mcpAuthModal.transport.label)
   ).toBeVisible();
@@ -743,11 +743,31 @@ test("debounces URL edits and discards a stale probe", async () => {
   probeResponse = (url) =>
     url.includes("first") ? stale.promise : Promise.resolve(oauthResult);
   render(<SetupModal />);
-  const input = await enterUrl("https://first.example.com/mcp");
+  const input = await enterUrl("https://discarded.example.com/mcp");
+  expect(probeUrls).toEqual([]);
+  expect(
+    screen
+      .getByText(messages.actions.mcpAuthModal.authType.label)
+      .closest("[data-stage]")
+  ).toHaveAttribute("data-state", "idle");
+  fireEvent.change(input, {
+    target: { value: "https://first.example.com/mcp" },
+  });
   await waitFor(
     () => expect(probeUrls).toEqual(["https://first.example.com/mcp"]),
     { timeout: 3000 }
   );
+  fireEvent.change(input, { target: { value: "" } });
+  for (const label of [
+    messages.actions.mcpAuthModal.authType.label,
+    messages.actions.mcpAuthModal.transport.label,
+  ]) {
+    expect(screen.getByText(label).closest("[data-stage]")).toHaveAttribute(
+      "data-state",
+      "idle"
+    );
+  }
+  expect(probeSignals[0]?.aborted).toBe(true);
   fireEvent.change(input, {
     target: { value: "https://second.example.com/mcp" },
   });

@@ -30,6 +30,7 @@
     visibility 150ms;
 }
 
+.stage[data-state="idle"] [data-icon="idle"],
 .stage[data-state="pending"] [data-icon="pending"],
 .stage[data-state="success"] [data-icon="success"],
 .stage[data-state="error"] [data-icon="error"] {

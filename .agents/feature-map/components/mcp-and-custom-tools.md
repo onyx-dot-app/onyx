@@ -388,7 +388,7 @@ A real MCP initialization or authentication challenge completes contact. Authent
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
 fails that row. Unreachable servers fail contact and leave authentication pending.
 Closing the stream cancels its probe task. The first setup page places access controls and Chat/Craft availability below a divider, before authentication.
-Authentication method and connection transport rows render immediately with pending spinners. They stay visible during URL entry, debounce, and detection before Continue. Failed probes stop pending spinners. The modal discards
+Authentication method and connection transport rows show neutral minus icons during URL entry and the 700-millisecond debounce. Spinners start only when a valid URL probe starts. Clearing or changing the URL resets both rows immediately. Failed probes stop pending spinners. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
 then tries compatible SSE. It uses the shared SSRF guard, bounded timeouts, and
@@ -397,6 +397,7 @@ Anonymous success recommends no authentication. OAuth metadata from a challenge
 recommends individual OAuth, with automatic client setup when supported.
 Recommended tags identify detected authentication and supported automatic client setup.
 The tags remain on those defaults when the admin selects another option.
+OAuth pass-through appears whenever Onyx OAuth login is available, including when Connection settings is collapsed.
 Unknown authentication leaves the method unselected until the admin chooses it.
 Connection failures keep the first form open without creating a server. Retry
 checks the URL again. Configure manually lets an admin supply headers or transport

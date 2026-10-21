@@ -13,7 +13,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
-import { SvgCheck, SvgX } from "@opal/icons";
+import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -440,10 +440,13 @@ function MCPSetupSession({
                               ["authentication", "contacting_server"] as const
                             ).map((stage) => {
                               let state =
-                                checked?.kind === "oauth" ||
-                                checked?.kind === "public"
-                                  ? "success"
-                                  : (progress[stage] ?? "pending");
+                                probe.kind === "idle" ||
+                                probe.url !== normalizedUrl
+                                  ? "idle"
+                                  : checked?.kind === "oauth" ||
+                                      checked?.kind === "public"
+                                    ? "success"
+                                    : (progress[stage] ?? "pending");
                               if (
                                 checked?.kind === "unreachable" &&
                                 state === "pending"
@@ -464,6 +467,9 @@ function MCPSetupSession({
                                     aria-hidden="true"
                                     className={styles.statusIcon}
                                   >
+                                    <span data-icon="idle">
+                                      <SvgMinus className="size-4 text-text-02" />
+                                    </span>
                                     <span data-icon="pending">
                                       <IconLoader size={16} />
                                     </span>
@@ -497,13 +503,15 @@ function MCPSetupSession({
                                               ? "mcpAuthModal.transport.sseLabel"
                                               : "mcpAuthModal.transport.httpLabel"
                                           )
-                                      : t(
-                                          state === "pending"
-                                            ? "mcpSetup.stagePending"
-                                            : state === "success"
-                                              ? "mcpSetup.stageSuccess"
-                                              : "mcpSetup.stageError"
-                                        )}
+                                      : state === "idle"
+                                        ? undefined
+                                        : t(
+                                            state === "pending"
+                                              ? "mcpSetup.stagePending"
+                                              : state === "success"
+                                                ? "mcpSetup.stageSuccess"
+                                                : "mcpSetup.stageError"
+                                          )}
                                   </Text>
                                 </div>
                               );
