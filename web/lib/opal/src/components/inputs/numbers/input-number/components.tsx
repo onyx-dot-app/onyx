@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import "@opal/components/inputs/input-number/styles.css";
+import "@opal/components/inputs/numbers/input-number/styles.css";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components";

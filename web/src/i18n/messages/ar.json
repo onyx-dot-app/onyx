@@ -15794,6 +15794,11 @@
     "iconTooltip": {
       "label": "مزيد من المعلومات"
     },
+    "inputCurrency": {
+      "amount": "المبلغ",
+      "fraction": "الجزء الكسري من المبلغ",
+      "whole": "الجزء الصحيح من المبلغ"
+    },
     "input": {
       "day": "اليوم",
       "hidePassword": "إخفاء كلمة المرور",

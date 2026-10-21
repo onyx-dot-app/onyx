@@ -15794,6 +15794,11 @@
     "iconTooltip": {
       "label": "Weitere Informationen"
     },
+    "inputCurrency": {
+      "amount": "Betrag",
+      "fraction": "Nachkommastellen des Betrags",
+      "whole": "Ganzzahliger Betrag"
+    },
     "input": {
       "day": "Tag",
       "hidePassword": "Passwort verbergen",

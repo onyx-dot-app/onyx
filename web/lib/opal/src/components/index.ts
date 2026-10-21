@@ -85,11 +85,21 @@ export {
   type InputImageProps,
 } from "@opal/components/inputs/input-image/components";
 
+/* InputCurrency */
+export {
+  InputCurrency,
+  type InputCurrencyProps,
+} from "@opal/components/inputs/numbers/input-currency/components";
+export {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
+
 /* InputNumber */
 export {
   default as InputNumber,
   type InputNumberProps,
-} from "@opal/components/inputs/input-number/components";
+} from "@opal/components/inputs/numbers/input-number/components";
 
 /* InputSingleUpload */
 export {

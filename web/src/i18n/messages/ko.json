@@ -15794,6 +15794,11 @@
     "iconTooltip": {
       "label": "자세한 정보"
     },
+    "inputCurrency": {
+      "amount": "금액",
+      "fraction": "금액의 소수 부분",
+      "whole": "금액의 정수 부분"
+    },
     "input": {
       "day": "일",
       "hidePassword": "비밀번호 숨기기",

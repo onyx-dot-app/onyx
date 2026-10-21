@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import InputNumber from "@opal/components/inputs/input-number/components";
+import InputNumber from "@opal/components/inputs/numbers/input-number/components";
 
 interface HarnessProps {
   min?: number;

@@ -15794,6 +15794,11 @@
     "iconTooltip": {
       "label": "詳細情報"
     },
+    "inputCurrency": {
+      "amount": "金額",
+      "fraction": "金額の小数部",
+      "whole": "金額の整数部"
+    },
     "input": {
       "day": "日",
       "hidePassword": "パスワードを非表示",
