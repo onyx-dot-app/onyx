@@ -5,8 +5,8 @@ Onyx staff keep agent skills, knowledge and session hooks in the private
 `onyx-agent-context` repo. This hook gets a new checkout to the point where the
 agent can set the rest up:
 
-1. When the user already has the context's hooks registered, it does nothing;
-   those hooks take over.
+1. When the user already has the context's hooks registered, and the script they
+   point at still exists, it does nothing; those hooks take over.
 2. When the context is on disk (see "Onyx agent context" in `AGENTS.md`), it tells
    the agent where it is and to offer the `agent-context-setup` skill.
 3. When it is missing and the git email is at `onyx.app`, it clones it next to the
@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -43,6 +44,17 @@ _SKIP_ENV = "ONYX_SKIP_AGENT_CONTEXT_BOOTSTRAP"
 _STAFF_EMAIL_SUFFIX = "@onyx.app"
 # Entries the context's own setup writes into the user's agent settings.
 _REGISTERED_MARKER = "Onyx agent context: "
+_SESSION_HOOK = "session_start.py"
+# Files older setups (the context's old installer, `ods install-skill`) left behind.
+_OLD_REPO_FILES = (".onyx-agent-context.json", ".agents-local.md", ".claude/CLAUDE.md")
+_OLD_HOME_PATHS = (".claude/skills/onyx-infra", ".claude/skills/onyx-llm-context")
+_USER_SKILL_HOMES = (
+    ".claude/skills",
+    ".cursor/skills",
+    ".agents/skills",
+    ".copilot/skills",
+)
+_CONTEXT_REPO_NAMES = ("onyx-agent-context", "onyx-llm-context")
 _USER_SETTINGS = (".claude/settings.json", ".codex/hooks.json")
 _STAMP_NAME = "onyx-agent-context-clone-attempt"
 _RETRY_SECONDS = 7 * 24 * 60 * 60
@@ -87,15 +99,57 @@ def _find(repo: Path, main: Path) -> Path | None:
     return None
 
 
+def _registered_commands(value: object) -> list[str]:
+    """Commands of hook entries the context's setup wrote, anywhere in `value`."""
+    if isinstance(value, dict):
+        if str(value.get("statusMessage", "")).startswith(_REGISTERED_MARKER):
+            return [str(value.get("command", ""))]
+        return [c for v in value.values() for c in _registered_commands(v)]
+    if isinstance(value, list):
+        return [c for v in value for c in _registered_commands(v)]
+    return []
+
+
 def _hooks_registered() -> bool:
+    """True when a registered session hook points at a script that exists."""
     home = Path.home()
     for name in _USER_SETTINGS:
         try:
-            if _REGISTERED_MARKER in (home / name).read_text():
+            settings = json.loads((home / name).read_text())
+        except (OSError, ValueError):
+            continue
+        for command in _registered_commands(settings):
+            try:
+                words = shlex.split(command)
+            except ValueError:
+                continue
+            if any(w.endswith(_SESSION_HOOK) and Path(w).is_file() for w in words):
                 return True
+    return False
+
+
+def _older_setup_note(repo: Path) -> str:
+    home = Path.home()
+    found = [repo / name for name in _OLD_REPO_FILES if (repo / name).is_file()]
+    found += [home / name for name in _OLD_HOME_PATHS if (home / name).exists()]
+    # The current setup's skill links only exist once its hooks are registered,
+    # which this note is never shown for.
+    for name in _USER_SKILL_HOMES:
+        try:
+            links = [p for p in (home / name).iterdir() if p.is_symlink()]
         except OSError:
             continue
-    return False
+        found += [
+            link
+            for link in links
+            if any(repo_name in os.readlink(link) for repo_name in _CONTEXT_REPO_NAMES)
+        ]
+    if not found:
+        return ""
+    return (
+        f" This machine also has files from an older agent-context setup, such as "
+        f"`{found[0]}`; the setup skill migrates them."
+    )
 
 
 def _writable(folder: Path) -> bool:
@@ -175,7 +229,7 @@ def _report(repo: Path) -> str | None:
     main = _main_checkout(repo)
     context = _find(repo, main)
     if context:
-        return _offer(context, "")
+        return _offer(context, "") + _older_setup_note(repo)
     if os.environ.get(_ENV_PATH, "").strip():
         return None
     email = (_git(repo, "config", "user.email") or "").lower()

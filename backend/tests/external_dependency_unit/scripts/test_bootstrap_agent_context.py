@@ -101,16 +101,48 @@ def test_points_at_a_context_already_on_disk(tmp_path: Path) -> None:
     assert "Cloned" not in out
 
 
+def _register(env: dict[str, str], script: Path) -> None:
+    settings = Path(env["HOME"]) / ".claude" / "settings.json"
+    settings.parent.mkdir(exist_ok=True)
+    entry = {
+        "type": "command",
+        "command": f"if [ -f '{script}' ]; then python3 '{script}'; fi",
+        "statusMessage": "Onyx agent context: load the context",
+    }
+    settings.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [entry]}]}}))
+
+
 def test_is_silent_once_the_context_hooks_are_registered(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path)
-    settings = Path(env["HOME"]) / ".claude" / "settings.json"
-    settings.parent.mkdir()
-    settings.write_text(
-        json.dumps({"statusMessage": "Onyx agent context: load the context"})
-    )
+    script = tmp_path / "ctx" / "hooks" / "session_start.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("")
+    _register(env, script)
 
     assert _run(onyx, env) == ""
     assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+
+
+def test_registered_hooks_for_a_missing_checkout_do_not_count(tmp_path: Path) -> None:
+    onyx, env = _setup(tmp_path)
+    _register(env, tmp_path / "moved" / "hooks" / "session_start.py")
+
+    assert "Cloned `onyx-agent-context` for you." in _run(onyx, env)
+
+
+def test_mentions_an_older_setup(tmp_path: Path) -> None:
+    onyx, env = _setup(tmp_path, email="someone@example.com")
+    context = tmp_path / "ws" / "onyx-agent-context"
+    context.mkdir()
+    (context / "AGENTS.md").write_text("entry\n")
+    skills = Path(env["HOME"]) / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "celery-tasks").symlink_to(context / "skills" / "celery-tasks")
+
+    out = _run(onyx, env)
+
+    assert "older agent-context setup" in out
+    assert "celery-tasks" in out
 
 
 def test_never_clones_for_other_emails(tmp_path: Path) -> None:
