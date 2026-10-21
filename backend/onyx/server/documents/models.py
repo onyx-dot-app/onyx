@@ -284,7 +284,7 @@ class IndexAttemptSnapshot(BaseModel):
     docs_removed_from_index: int
     error_msg: str | None
     error_count: int
-    # Unresolved document-level errors, the ones a targeted reindex can retry.
+    # Document-level errors still open: unresolved, on an attempt no admin resolved.
     open_doc_error_count: int
     full_exception_trace: str | None
     time_started: str | None

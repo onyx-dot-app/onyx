@@ -37,6 +37,7 @@ import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
+import { closedByResolution } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
@@ -107,7 +108,7 @@ type CardState =
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run whose document errors were all resolved, which says so. */
+/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run with errors that Retry or an admin resolved, which says so. */
 function cardState(
   run: CCPairRun,
   group: ActivityGroup,
@@ -119,7 +120,7 @@ function cardState(
     case "failures":
       return "failed";
     case "errors":
-      if (closed && run.resolved_at === null) return "resolved";
+      if (closed && closedByResolution(run, group)) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -277,10 +278,11 @@ export default function ActivityCard({
       minutes,
     });
   }
-  // A closed card keeps the pill it had when open, only faded.
-  const docsLabel = t(`tags.${run.kind}`, {
-    count: listsDocs ? openDocs : warnings,
-  });
+  // A resolved card counts the documents it resolved. A superseded one keeps the pill it had when open, only faded.
+  const docsLabel =
+    closed && closedByResolution(run, group) && run.kind !== "checks"
+      ? t("tags.resolvedDocs", { count: warnings })
+      : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
   const pillIconColor = closed ? undefined : "orange";
 

@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session, joinedload
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.backfill_models import BackfillSpec
+from onyx.db.cc_pair_run_resolution import run_is_resolved
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -947,8 +949,10 @@ def get_open_doc_error_counts_for_index_attempts(
     db_session: Session,
     index_attempt_ids: list[int],
 ) -> dict[int, int]:
-    """Per-attempt counts of unresolved document-level errors, the ones a
-    targeted reindex can retry. Attempt ids with none are absent."""
+    """Per-attempt counts of open document-level errors: unresolved, on an
+    attempt no admin resolved. Resolving the attempt leaves ``is_resolved``
+    alone, since the poll cursor and a targeted reindex read it. Attempt ids
+    with none are absent."""
     if not index_attempt_ids:
         return {}
 
@@ -958,6 +962,9 @@ def get_open_doc_error_counts_for_index_attempts(
             IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
             IndexAttemptError.is_resolved.is_(False),
             IndexAttemptError.document_id.isnot(None),
+            ~run_is_resolved(
+                CCPairRunKind.INDEXING, IndexAttemptError.index_attempt_id
+            ),
         )
         .group_by(IndexAttemptError.index_attempt_id)
     )
