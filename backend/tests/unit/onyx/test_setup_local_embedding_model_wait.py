@@ -1,6 +1,7 @@
 """API server startup waits for the model server to load the self-hosted
 embedding model, and fails with a clear error when the wait runs out."""
 
+import threading
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
@@ -83,10 +84,25 @@ def test_fails_with_the_last_error_when_the_wait_runs_out(
     assert clock.now == 30
 
 
-@pytest.mark.usefixtures("clock", "encode")
-def test_fails_when_a_request_is_still_waiting_at_the_deadline() -> None:
-    with (
-        patch("onyx.setup.run_with_timeout", side_effect=TimeoutError),
-        pytest.raises(RuntimeError, match="still waiting for the model server"),
-    ):
-        wait_for_local_embedding_model(_search_settings())
+@pytest.mark.usefixtures("clock")
+def test_fails_when_a_request_is_still_waiting_at_the_deadline(
+    encode: MagicMock,
+) -> None:
+    release = threading.Event()
+    request_threads: list[threading.Thread] = []
+
+    def wait_for_release(**_: object) -> None:
+        request_threads.append(threading.current_thread())
+        release.wait()
+
+    encode.side_effect = wait_for_release
+    try:
+        with (
+            patch("onyx.setup.LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT", 0.1),
+            pytest.raises(RuntimeError, match="still waiting for the model server"),
+        ):
+            wait_for_local_embedding_model(_search_settings())
+        # The waiting request must not keep the failed process from exiting.
+        assert [thread.daemon for thread in request_threads] == [True]
+    finally:
+        release.set()

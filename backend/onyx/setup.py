@@ -63,7 +63,7 @@ from onyx.server.settings.store import (
 )
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import (
     DISABLE_MODEL_SERVER,
     MODEL_SERVER_HOST,
@@ -184,12 +184,14 @@ def wait_for_local_embedding_model(search_settings: SearchSettings) -> None:
     last_error: Exception | None = None
     while (remaining := deadline - time.monotonic()) > 0:
         try:
-            run_with_timeout(
-                remaining,
+            # A daemon thread: a request that still waits at the deadline does
+            # not keep the failed process from exiting.
+            start_thread_future(
                 lambda: embedding_model.encode(
                     texts=[_STARTUP_EMBED_TEXT], text_type=EmbedTextType.QUERY
                 ),
-            )
+                name="embedding-model-startup-check",
+            ).result(timeout=remaining)
         except TimeoutError:
             # The deadline passed during a request, e.g. a slow download.
             last_error = None
