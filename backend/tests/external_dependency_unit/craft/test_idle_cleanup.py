@@ -500,14 +500,14 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     )
 
 
-def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
+def test_opencode_history_snapshot_failure_on_unreachable_pod_preserves_runtime(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If the pod is already unreachable, do not keep the sandbox RUNNING forever."""
+    """A health failure does not prove that pod-local files are lost."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
@@ -537,24 +537,18 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
-    assert refreshed.status == SandboxStatus.SLEEPING
-    assert {
-        "sandbox_id": sandbox.id
-    } in stubbed_cleanup.list_session_workspaces_payloads
-    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
-def test_snapshot_failure_on_unreachable_pod_still_terminates(
+def test_snapshot_failure_on_unreachable_pod_preserves_runtime(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unreachable pod is terminated despite the snapshot failure: its
-    workspace is already gone, so keeping it RUNNING forever (never sleeping,
-    never reclaimed) is worse than terminating.
-    """
+    """Preserve files after snapshot failure, including on an unhealthy pod."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     session_row = BuildSession(
@@ -587,11 +581,9 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
-    # Unreachable pod is terminated despite the snapshot failure. (Tenant-wide
-    # task; assert our sandbox's outcome, not global counts.)
-    assert refreshed.status == SandboxStatus.SLEEPING
+    assert refreshed.status == SandboxStatus.RUNNING
     assert stubbed_cleanup.list_session_workspaces_count == 1
-    assert stubbed_cleanup.terminate_count >= 1
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
 def test_sessions_marked_idle_and_nextjs_ports_cleared(
