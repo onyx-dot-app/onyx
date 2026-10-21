@@ -71,11 +71,16 @@ function PluginConnectionStatus({
       ? t("status.none")
       : t(`status.${connection.kind}`);
 
-  const requiresWorkspaceSetup = connection.kind === "unconfigured";
+  const showSurfaceStatus = connection.kind === "connected";
 
   function StatusIcon(props: IconProps) {
-    if (requiresWorkspaceSetup)
-      return <PluginStatusIcon {...props} primary="inactive" />;
+    if (!showSurfaceStatus)
+      return (
+        <PluginStatusIcon
+          {...props}
+          primary={needsAuth ? "issues" : "inactive"}
+        />
+      );
     return (
       <PluginStatusIcon
         {...props}
@@ -108,7 +113,7 @@ function PluginConnectionStatus({
       sideOffset={6}
       delayDuration={250}
       tooltip={
-        requiresWorkspaceSetup ? (
+        !showSurfaceStatus ? (
           <Text font="secondary-body">{connectionLabel}</Text>
         ) : (
           <div className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1.5">
@@ -117,17 +122,15 @@ function PluginConnectionStatus({
                 memberPluginSurfaceAvailability(plugin, item, craftAvailable);
               const value = !supported
                 ? t("availability.notAvailable")
-                : connection.kind !== "connected"
-                  ? connectionLabel
-                  : item === "craft" && skillWarning
-                    ? skillCopy("skillWarningSummary")
-                    : available === false
-                      ? t("availability.disabledByAdmin")
-                      : personallyEnabled === false
-                        ? t("availability.disabledByYou")
-                        : available === true
-                          ? t("status.none")
-                          : availabilityCopy("unknown");
+                : item === "craft" && skillWarning
+                  ? skillCopy("skillWarningSummary")
+                  : available === false
+                    ? t("availability.disabledByAdmin")
+                    : personallyEnabled === false
+                      ? t("availability.disabledByYou")
+                      : available === true
+                        ? t("status.none")
+                        : availabilityCopy("unknown");
               return (
                 <div key={item} className="contents">
                   <Text font="secondary-body" color="text-03">

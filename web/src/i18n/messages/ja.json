@@ -923,7 +923,7 @@
       "status": {
         "connected": "接続済み",
         "workspace": "ワークスペースの接続",
-        "session": "ログイン情報を使用",
+        "session": "接続済みのアカウントを使用",
         "none": "使用可能",
         "oauth": "アカウントを接続",
         "credentials": "認証情報を追加",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "問題",
-        "readyDescription": "このプラグインを使い始めることができます。",
+        "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",
