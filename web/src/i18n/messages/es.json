@@ -12424,6 +12424,9 @@
         "authFailedStatus": {
           "text": "Falló la autenticación de {toolName} (HTTP {statusCode})"
         },
+        "blockedStatus": {
+          "text": "{toolName} fue bloqueado"
+        },
         "completedStatus": {
           "text": "{toolName} completado"
         },

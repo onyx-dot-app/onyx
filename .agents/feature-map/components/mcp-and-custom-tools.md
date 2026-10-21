@@ -1014,8 +1014,10 @@ returned as a `ToolResponse` (never a raised exception, per
 
 `CustomTool.run` (`custom_tool.py`) only classifies HTTP `401`/`403` as an
 auth error (`CustomToolErrorInfo(is_auth_error=True, ...)`). A blocked
-destination or a 3xx redirect raises `ToolCallException`. Any other status
-code or exception surfaces as the raw response body or propagates up to
+destination (`status_code=None`) or a 3xx redirect returns a failed
+`CustomToolCallSummary` and emits a `CustomToolDelta` with the same error, so
+the chat step shows a blocked or failed state live and after reload. Any other
+status code or exception surfaces as the raw response body or propagates up to
 `_safe_run_single_tool`'s generic exception handling
 (`[[tools-framework]]` §4.5 step 6).
 
