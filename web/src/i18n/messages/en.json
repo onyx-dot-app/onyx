@@ -1292,6 +1292,9 @@
         }
       },
       "sources": {
+        "seafile": {
+          "description": "Index files from Seafile libraries."
+        },
         "web": {
           "description": "Link any public URL"
         },
@@ -2506,6 +2509,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save Changes",
+          "saving": "Saving..."
+        },
+        "editModal": { "title": "Edit Seafile Configuration" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "File extensions this connector should index.",
+            "label": "Allowed Extensions",
+            "placeholder": "Enter extension"
+          },
+          "baseUrl": {
+            "description": "Your self-hosted Seafile URL, e.g. https://seafile.example.com",
+            "label": "Base URL"
+          },
+          "libraries": {
+            "description": "Select or enter the Seafile libraries this connector should index.",
+            "label": "Library IDs"
+          },
+          "maxFileSize": {
+            "description": "Files larger than this limit are skipped.",
+            "label": "Max File Size Bytes"
+          },
+          "pathPrefixes": {
+            "description": "Paths inside each library. Leave as / to index each configured library.",
+            "label": "Path Prefixes",
+            "placeholder": "Enter path prefix"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "Unable to fetch libraries.",
+          "loading": "Loading Seafile libraries...",
+          "manualDescription": "Enter library IDs directly if library discovery is unavailable.",
+          "manualLabel": "Manual Library IDs",
+          "manualPlaceholder": "Enter library ID",
+          "refresh": "Refresh"
+        },
+        "toasts": {
+          "updated": "Seafile settings updated. Run a complete re-index and allow pruning to reconcile existing indexed documents.",
+          "updateFailed": "Failed to update Seafile settings"
+        },
+        "validation": {
+          "baseUrlProtocol": "Base URL must start with http:// or https://",
+          "baseUrlRequired": "Base URL is required",
+          "extensionRequired": "At least one file extension is required",
+          "extensionUnsupported": "One or more extensions are not supported by the Seafile connector",
+          "libraryRequired": "At least one library ID is required",
+          "maxFileSizeInteger": "Max file size must be an integer",
+          "maxFileSizePositive": "Max file size must be greater than zero",
+          "maxFileSizeRequired": "Max file size is required"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# day} other {# days}}",
@@ -3702,6 +3759,32 @@
         "placeholder": "Pick {label} from the list, or type one"
       },
       "connectors": {
+          "seafile": {
+            "description": "Index files from Seafile libraries.",
+            "subtext": "Select or enter the Seafile libraries this connector should index.",
+            "fields": {
+              "base_url": {
+                "label": "Base URL",
+                "description": "Your self-hosted Seafile URL, e.g. https://seafile.example.com"
+              },
+              "repo_ids": {
+                "label": "Library IDs",
+                "description": "Select or enter the Seafile libraries this connector should index."
+              },
+              "path_prefixes": {
+                "label": "Path Prefixes",
+                "description": "Paths inside each library. Leave as / to index each configured library."
+              },
+              "allowed_extensions": {
+                "label": "Allowed Extensions",
+                "description": "File extensions this connector should index."
+              },
+              "max_file_size_bytes": {
+                "label": "Max File Size Bytes",
+                "description": "Files larger than this limit are skipped."
+              }
+            }
+          },
         "shared": {
           "fields": {
             "include_attachments": {

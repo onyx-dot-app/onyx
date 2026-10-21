@@ -48,6 +48,7 @@ import {
   SvgOutlook,
   SvgProductboard,
   SvgSalesforce,
+  SvgSeafile,
   SvgSharePoint,
   SvgSlab,
   SvgSlack,
@@ -150,6 +151,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.FederatedSlack]: "sources.federatedSlack.description",
   [ValidSources.OneDrive]: "sources.onedrive.description",
   [ValidSources.Zoom]: "sources.zoom.description",
+  [ValidSources.Seafile]: "sources.seafile.description",
 } as const satisfies Record<ValidSources, string>;
 
 // ---------------------------------------------------------------------------
@@ -309,6 +311,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "OneDrive",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
+  },
+  seafile: {
+    icon: SvgSeafile,
+    displayName: "Seafile",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/seafile`,
   },
   box: {
     icon: SvgBox,

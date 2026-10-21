@@ -2157,6 +2157,68 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  seafile: {
+    description: "connectors.seafile.description",
+    subtext: "connectors.seafile.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.seafile.fields.base_url.label",
+        name: "base_url",
+        optional: false,
+        description: "connectors.seafile.fields.base_url.description",
+      },
+      {
+        type: "list",
+        label: "connectors.seafile.fields.repo_ids.label",
+        name: "repo_ids",
+        optional: false,
+        description: "connectors.seafile.fields.repo_ids.description",
+      },
+      {
+        type: "list",
+        label: "connectors.seafile.fields.path_prefixes.label",
+        name: "path_prefixes",
+        optional: true,
+        default: ["/"],
+        description: "connectors.seafile.fields.path_prefixes.description",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "connectors.seafile.fields.allowed_extensions.label",
+        name: "allowed_extensions",
+        optional: true,
+        default: [
+          ".txt",
+          ".md",
+          ".markdown",
+          ".html",
+          ".csv",
+          ".json",
+          ".yaml",
+          ".yml",
+          ".xml",
+          ".log",
+          ".pdf",
+          ".docx",
+          ".pptx",
+          ".xlsx",
+        ],
+        description: "connectors.seafile.fields.allowed_extensions.description",
+      },
+      {
+        type: "number",
+        label: "connectors.seafile.fields.max_file_size_bytes.label",
+        name: "max_file_size_bytes",
+        optional: true,
+        default: 20971520,
+        description:
+          "connectors.seafile.fields.max_file_size_bytes.description",
+      },
+    ],
+  },
   airtable: {
     description: "connectors.airtable.description",
     values: [
