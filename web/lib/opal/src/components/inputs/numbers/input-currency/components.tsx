@@ -22,9 +22,6 @@ interface AmountSegments {
 
 const EMPTY_SEGMENTS: AmountSegments = { whole: "", fraction: "" };
 
-// Characters that end the whole-number segment, besides the locale separator.
-const DECIMAL_KEYS = [".", ","];
-
 // Negative, non-finite and exponent-sized values render empty.
 function toSegments(
   value: number | null,
@@ -193,29 +190,22 @@ function InputCurrency({
 
   // The whole segment splits on a decimal separator, so typing "." jumps to
   // the fraction and pasting "3.50" fills both segments.
+  // Typing: the locale decimal key steps to the fraction; any other
+  // non-digit, the grouping key included, does nothing.
   function handleWholeChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = toAsciiDigits(e.target.value);
-    if (!showFraction) {
-      // No fraction to fill: drop everything from the decimal separator, so
-      // "12.50" stays 12 rather than becoming 1250. Grouping ("1,200") goes
-      // with the other non-digits.
-      const decimalAt = raw.indexOf(parts.decimal);
-      const whole = decimalAt < 0 ? raw : raw.slice(0, decimalAt);
-      update({ ...segments, whole: whole.replace(/\D/g, "") });
-      return;
-    }
-    const separators = [parts.decimal, ...DECIMAL_KEYS];
-    const index = Math.max(...separators.map((sep) => raw.indexOf(sep)));
-    if (index < 0) {
+    const decimalAt = raw.indexOf(parts.decimal);
+    if (decimalAt < 0) {
       update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
-    const whole = trimLeadingZeros(raw.slice(0, index).replace(/\D/g, ""));
-    const fraction = raw
-      .slice(index + 1)
-      .replace(/\D/g, "")
-      .slice(0, maxFraction);
-    update({ whole, fraction: fraction || segments.fraction });
+    const whole = trimLeadingZeros(raw.slice(0, decimalAt).replace(/\D/g, ""));
+    // No fraction segment: the decimal key is a no-op like any other.
+    if (!showFraction) {
+      update({ ...segments, whole });
+      return;
+    }
+    update({ ...segments, whole });
     fractionRef.current?.focus();
     fractionRef.current?.select();
   }
@@ -225,6 +215,52 @@ function InputCurrency({
       .replace(/\D/g, "")
       .slice(0, maxFraction);
     update({ ...segments, fraction });
+  }
+
+  // Pasting reads the text as an amount, whichever segment has focus. Only
+  // whitespace, grouping and the currency's own symbol or code are dropped;
+  // the rest must be digits with at most one decimal separator:
+  // - one separator: whole and fraction both replaced ("1.2" → 1 . 2);
+  // - none: the digits go into the focused segment at the caret;
+  // - anything else ("a1b2c3", "1.2.3", "-5"): not an amount, so ignored.
+  function handlePaste(segment: keyof AmountSegments) {
+    return (e: React.ClipboardEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      const text = [parts.symbol, currency, parts.group]
+        .reduce(
+          (rest, token) => rest.split(token).join(""),
+          toAsciiDigits(e.clipboardData.getData("text"))
+        )
+        .replace(/\s/g, "");
+      const pieces = text.split(parts.decimal);
+      if (
+        pieces.length > 2 ||
+        pieces.some((piece) => /\D/.test(piece)) ||
+        pieces.every((piece) => piece === "")
+      ) {
+        return;
+      }
+
+      const [first = "", second] = pieces;
+      if (second !== undefined) {
+        update({
+          whole: trimLeadingZeros(first),
+          fraction: showFraction ? second.slice(0, maxFraction) : "",
+        });
+        return;
+      }
+
+      const input = e.currentTarget;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      const inserted =
+        input.value.slice(0, start) + first + input.value.slice(end);
+      const next =
+        segment === "fraction" ? inserted.slice(0, maxFraction) : inserted;
+      update({ ...segments, [segment]: next });
+      const caret = Math.min(start + first.length, next.length);
+      requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+    };
   }
 
   // Tidy when focus leaves the whole field, not on intra-field moves.
@@ -278,6 +314,7 @@ function InputCurrency({
               value={segments.whole}
               style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
               onChange={handleWholeChange}
+              onPaste={handlePaste("whole")}
               onKeyDown={handleKeyDown(
                 "whole",
                 null,
@@ -300,6 +337,7 @@ function InputCurrency({
                     width: segmentWidth(segments.fraction, fractionPlaceholder),
                   }}
                   onChange={handleFractionChange}
+                  onPaste={handlePaste("fraction")}
                   onKeyDown={handleKeyDown("fraction", wholeRef, null)}
                 />
               </>

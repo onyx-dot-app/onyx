@@ -164,6 +164,64 @@ describe("typing", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Pasting
+// ---------------------------------------------------------------------------
+
+describe("pasting", () => {
+  function renderEmpty() {
+    const onChange = jest.fn();
+    render(<InputCurrency value={null} onChange={onChange} />);
+    return {
+      onChange,
+      whole: screen.getByLabelText("Whole amount"),
+      fraction: screen.getByLabelText("Fractional amount"),
+    };
+  }
+
+  it.each([
+    ["whole", "1", "1", ""],
+    ["fraction", "1", "", "1"],
+    ["whole", "1.2", "1", "2"],
+    ["fraction", "1.2", "1", "2"],
+    ["whole", "$1,234.56", "1234", "56"],
+  ] as const)(
+    "into the %s segment, %s reads as %s . %s",
+    async (segment, text, whole, fraction) => {
+      const user = setupUser();
+      const fields = renderEmpty();
+      await user.click(fields[segment]);
+      await user.paste(text);
+      expect(fields.whole).toHaveValue(whole);
+      expect(fields.fraction).toHaveValue(fraction);
+    }
+  );
+
+  it.each(["1.2.3", "a1b2c3", "-5"])(
+    "ignores %s, which is not an amount",
+    async (text) => {
+      const user = setupUser();
+      const fields = renderEmpty();
+      for (const field of [fields.whole, fields.fraction]) {
+        await user.click(field);
+        await user.paste(text);
+      }
+      expect(fields.whole).toHaveValue("");
+      expect(fields.fraction).toHaveValue("");
+      expect(fields.onChange).not.toHaveBeenCalled();
+    }
+  );
+
+  it("ignores the grouping key when typed", async () => {
+    const user = setupUser();
+    const fields = renderEmpty();
+    await user.click(fields.whole);
+    await user.keyboard("1,2");
+    expect(fields.whole).toHaveValue("12");
+    expect(fields.whole).toHaveFocus();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getCurrencyParts
 // ---------------------------------------------------------------------------
 
@@ -173,12 +231,14 @@ describe("getCurrencyParts", () => {
       symbol: "$",
       symbolAfter: false,
       decimal: ".",
+      group: ",",
       fractionDigits: 2,
     });
     expect(getCurrencyParts("de-DE", "EUR")).toMatchObject({
       symbol: "€",
       symbolAfter: true,
       decimal: ",",
+      group: ".",
     });
   });
 

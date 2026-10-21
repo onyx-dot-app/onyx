@@ -6,6 +6,8 @@ export interface CurrencyParts {
   symbolAfter: boolean;
   /** The decimal separator, e.g. "." or ",". */
   decimal: string;
+  /** The grouping separator, e.g. "," in "1,200" or "." in "1.200". */
+  group: string;
   /** The currency's usual number of decimals (USD 2, JPY 0). */
   fractionDigits: number;
 }
@@ -13,6 +15,7 @@ export interface CurrencyParts {
 const FALLBACK_PARTS: Omit<CurrencyParts, "symbol"> = {
   symbolAfter: false,
   decimal: ".",
+  group: ",",
   fractionDigits: 2,
 };
 
@@ -33,16 +36,20 @@ export function getCurrencyParts(
     const parts = format.formatToParts(1);
     const symbolIndex = parts.findIndex((part) => part.type === "currency");
     const integerIndex = parts.findIndex((part) => part.type === "integer");
-    // A zero-decimal currency writes no separator, so read it from a plain number.
+    // A zero-decimal currency writes no separator, so read both separators
+    // from a plain number.
+    const numberParts = new Intl.NumberFormat(locale).formatToParts(1234567.5);
     const decimal =
-      new Intl.NumberFormat(locale)
-        .formatToParts(1.5)
-        .find((part) => part.type === "decimal")?.value ??
+      numberParts.find((part) => part.type === "decimal")?.value ??
       FALLBACK_PARTS.decimal;
+    const group =
+      numberParts.find((part) => part.type === "group")?.value ??
+      FALLBACK_PARTS.group;
     return {
       symbol: parts[symbolIndex]?.value ?? currency,
       symbolAfter: symbolIndex > integerIndex,
       decimal,
+      group,
       fractionDigits:
         format.resolvedOptions().maximumFractionDigits ??
         FALLBACK_PARTS.fractionDigits,
