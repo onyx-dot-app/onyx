@@ -9,6 +9,7 @@ from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
+from httpx import HTTPStatusError
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
@@ -25,6 +26,8 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -134,6 +137,26 @@ def _create_mcp_client_function_runner(
                 return await function(session, **kwargs)
 
     return run_client_function
+
+
+def has_unauthorized_response(error: BaseException) -> bool:
+    """Inspect transport exceptions without treating error messages as auth evidence."""
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, HTTPStatusError) and current.response.status_code == 401:
+            return True
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        elif current.__context__ is not None and not current.__suppress_context__:
+            pending.append(current.__context__)
+    return False
 
 
 def log_exception_group(e: ExceptionGroup) -> Exception | None:
@@ -283,13 +306,21 @@ def discover_mcp_tools(
     """
     Synchronous wrapper for discovering MCP tools.
     """
-    return _call_mcp_client_function_sync(
-        _discover_mcp_tools,
-        server_url,
-        connection_headers,
-        transport,
-        auth,
-    )
+    try:
+        return _call_mcp_client_function_sync(
+            _discover_mcp_tools,
+            server_url,
+            connection_headers,
+            transport,
+            auth,
+        )
+    except Exception as error:
+        if has_unauthorized_response(error):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                "MCP authentication failed (401 Unauthorized). Check your authentication settings and try again.",
+            ) from error
+        raise
 
 
 async def _discover_mcp_resources(session: ClientSession) -> ListResourcesResult:
