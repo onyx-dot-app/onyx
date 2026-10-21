@@ -431,8 +431,10 @@ every five minutes.
   `tools/interface.py:Tool.run` records executed tool categories through
   `utils/fleet_query_telemetry.py:CURRENT_QUERY_OBSERVATION`, copied into workers.
   Unknown or canceled calls that never run do not count.
-  Chat reports LLM cycles through the SDK response event stream. Deep research
-  reports the deep_research mode without a cycle count.
+  `chat/presentation.py:ResponsePresenter` counts root LLM message starts through
+  `chat/emitter.py:Emitter`. The first answer packet captures its model’s cycle count
+  before delivery. Child messages do not count. Deep research reports the
+  deep_research mode without a cycle count.
 - Indexing counters: the fetch, embed, and write steps call `emit_stage_counter`
   ([[indexing-pipeline]] §4.10). The sender thread sums the deltas for one
   attempt and stage over at most 30 seconds.

@@ -4,6 +4,7 @@ import queue
 import threading
 from datetime import datetime, timezone
 from functools import partial
+from unittest.mock import Mock
 
 import pytest
 
@@ -36,6 +37,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.models import ChatFile
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
 
 
@@ -75,7 +77,15 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         ]
     )
     output: queue.Queue[Packet] = queue.Queue()
-    emitter = Emitter(model_idx=0, publish=output.put_nowait)
+    observation = QueryObservation(channel="api", mode=QueryMode.CHAT)
+    telemetry = Mock()
+    monkeypatch.setattr("onyx.utils.fleet_query_telemetry.emit_telemetry", telemetry)
+
+    def publish(packet: Packet) -> None:
+        observation.observe_packet(packet)
+        output.put_nowait(packet)
+
+    emitter = Emitter(model_idx=0, publish=publish, query_observation=observation)
     history: list[Message] = [
         UserMessage(content="Hello", metadata=PromptMetadata(token_count=1))
     ]
@@ -111,6 +121,9 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         max_steps=2,
         cancellation=CancellationSignal(),
     )
+    if render and not observer_fails:
+        observation.finish()
+        assert telemetry.call_args.args[1]["llm_cycles"] == 2
     assert len(llm.requests) == 2
     assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
     assert llm.requests[1]["tools"] is None

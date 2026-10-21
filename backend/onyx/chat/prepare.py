@@ -95,6 +95,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
@@ -402,7 +403,11 @@ def prepare_chat_turn(
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
             forced_tool_id = new_msg_req.forced_tool_id
-            if forced_tool_id in {tool.id for tool in tools if not tool.enabled}:
+            if forced_tool_id in {
+                tool.id
+                for tool in tools
+                if not is_tool_available_for_persona(tool, persona.id)
+            }:
                 forced_tool_id = None
             summary_message = find_summary_for_branch(session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
