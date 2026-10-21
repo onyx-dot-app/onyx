@@ -1186,20 +1186,20 @@ numpy==2.4.1 \
     #   contourpy
     #   matplotlib
     #   voyageai
-onyx-devtools==0.13.11 \
-    --hash=sha256:311d561443b5e3b0c1a37a229e642ed573f44c0f9f8045f5daa5c10090005cd5 \
-    --hash=sha256:3d83e1eebbb5da8ac1525e86c55e4fd8bcc778e524cc8afeb83ba356205c6883 \
-    --hash=sha256:58f43a934febc2f4ea15aa384cd89b22d55a9f98dbded807ba13496df561ca9f \
-    --hash=sha256:74a9c1647c32e6d46d669cd05995aa99cbf34291e6c57bc8db7acce0a3373d34 \
-    --hash=sha256:d28eab6e21cd7d19d8444280d3cb4143ceb851c5e8f9a9fce06edb158fcb1d9c \
-    --hash=sha256:d42ab49b49a57bfcc30f03c6c27dc7bac0edce1b2950cb5916fb3bb42d455b3c
-onyx-devtools-audit==0.13.11 \
-    --hash=sha256:3e9a45e7eddc8c1dab212197125524557fe2463723d34ae37b285d5c6af83c6b \
-    --hash=sha256:96011d97654d8b23a5730632b430b41fa0ca880494c6ee0cbebc350e8ab21934 \
-    --hash=sha256:a604d0cbeb036ed01d5761161a354c064a7adbb56faf16f7d51829105033af80 \
-    --hash=sha256:b611b066410afe49f49b7530360376abc79157e9bde7618b5a8e839b8c79fcba \
-    --hash=sha256:b6e4a339a41cdfc6a6715ef1c1a537f73669f79d62a804b07d09e6a1a3006681 \
-    --hash=sha256:bb0e223be1a367127d2afc94bc0adc202570f7f56aa4ccad110ea86568c5b2ab
+onyx-devtools==0.13.14 \
+    --hash=sha256:42959a65c3af7bb074551d1ca946893df7a0734bb6cb4c91ca78227d0ee77325 \
+    --hash=sha256:45c14516d26babe0ce3579e87a0bc3fe60b818b4bbdb361f8c499b37adad53ea \
+    --hash=sha256:84675b1776d55789998a524542b78e351336743a347748f343cdfc737c4a71e9 \
+    --hash=sha256:a1d932c1dc79ea1b51ecc65a7e20899e2237903577c41408735f0e5bab1067f2 \
+    --hash=sha256:a2cd19c6765226272f4b0b4f223a137e3f88fb12c1cddf5be7171dffce79194b \
+    --hash=sha256:ff3aeff1d50e1cb4efbe2d6023f9eedf67288278c07d0c0e48fde0464fdd13f0
+onyx-devtools-audit==0.13.14 \
+    --hash=sha256:0c961ee57e466af989fbc0b6ca043105e3ba29ef41213edc150eb6b6e6ad04c4 \
+    --hash=sha256:1c3227d26960f5adad2aa4c40bbb39273d3bf9adf0e901604e1eeaa5cd2c6e85 \
+    --hash=sha256:3e95fcecede96aeb1f11e3a265ca9c9e9ae836dc17686214331c02f59c5af5f6 \
+    --hash=sha256:ac852808f6b1ddeda98fb0d746c70af0ffac7d98fcc474813c06ac4164b978ef \
+    --hash=sha256:e3da9cef6fc8393152bdb0d6f685abff8a4d40a826e770405ef1c5ae3ebdcac4 \
+    --hash=sha256:eb3e94d61f64c0f224909fcd7c6ef7f8ec121e5d662974b376ad9880297aa217
     # via onyx-devtools
 openai==2.38.0 \
     --hash=sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3 \
