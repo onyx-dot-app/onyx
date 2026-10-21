@@ -7,15 +7,11 @@ of API-based calls to bypass the model server.
 
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
-# Model used when a cloud embedding call gets no model name. Only the provider
-# key test (test-embedding with an empty model_name) relies on this: stored
-# search settings always carry a model name. OpenAI, Cohere and Google point at
-# selectable models, so the key test checks access to a model an admin can
-# still choose. Voyage cloud has no selectable model; its default is unchanged.
+# Default model names for different providers
 DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
-DEFAULT_COHERE_MODEL = "embed-v5.0-fast"
+DEFAULT_COHERE_MODEL = "embed-english-light-v3.0"
 DEFAULT_VOYAGE_MODEL = "voyage-large-2-instruct"
-DEFAULT_VERTEX_MODEL = "gemini-embedding-2"
+DEFAULT_VERTEX_MODEL = "text-embedding-005"
 
 
 class EmbeddingModelTextType:

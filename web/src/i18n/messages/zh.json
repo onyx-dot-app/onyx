@@ -7000,8 +7000,7 @@
           "label": "当前模型"
         },
         "gpuRecommended": {
-          "tag": "建议使用 GPU",
-          "tooltip": "支持 CPU 索引，但速度较慢。使用 GPU 可加快索引速度。"
+          "tag": "建议使用 GPU"
         },
         "legacy": {
           "tag": "旧版",
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
         "googleGeminiEmbedding2": "Google 的旗舰嵌入模型。功能非常强大，但成本高、速度较慢。3072 维输出会生成较大的索引。对已在使用 Google 的团队来说是稳妥的选择。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
-        "googleTextEmbedding004": "Google 早期的文本嵌入模型。已被更新的 Google 模型取代。",
-        "googleTextEmbeddingGecko003": "Google 早期的 Gecko 文本嵌入模型。已被更新的 Google 模型取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyage4Large": "Voyage 4 系列中最大的嵌入模型。Voyage 最佳检索质量，支持多语言。",
         "voyage4": "Voyage 4 系列通用嵌入模型。以适中成本提供高检索质量。",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
-        "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。",
-        "gteSmall": "GTE 系列的小型英文嵌入模型。早期 {appName} 版本的默认模型。"
+        "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
       },
       "ccPairIdsBackfill": {
         "complete": {

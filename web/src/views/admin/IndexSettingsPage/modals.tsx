@@ -20,6 +20,7 @@ import {
   type EmbeddingProvider,
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
+import { defaultTestModelName } from "@/lib/searchSettings";
 import {
   connectEmbeddingProvider,
   testEmbedding,
@@ -103,7 +104,8 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 // returns `null`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
-// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
+// providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`
+// and the `modelName` the test embeds with.
 // ---------------------------------------------------------------------------
 
 interface ProviderTestResult {
@@ -115,8 +117,7 @@ async function testAndSaveProviderCredentials({
   apiKey,
   unknownErrorMessage,
   apiUrl = "",
-  modelName = "",
-  fallbackModelName,
+  modelName,
   apiVersion = null,
   deploymentName = null,
   vertexConfig,
@@ -127,9 +128,7 @@ async function testAndSaveProviderCredentials({
   /** Fallback toast copy when the backend error carries no message. */
   unknownErrorMessage: string;
   apiUrl?: string;
-  modelName?: string;
-  /** Tested only if the test with `modelName` fails. */
-  fallbackModelName?: string;
+  modelName: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
@@ -141,7 +140,6 @@ async function testAndSaveProviderCredentials({
       apiKey,
       apiUrl,
       modelName,
-      fallbackModelName,
       apiVersion,
       deploymentName,
       vertexConfig,
@@ -162,18 +160,12 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Model being connected, selected, or edited for this provider. Google
-   * tests this model. Custom providers also use it to preload model fields.
+   * Model being connected, selected, or edited for this provider. The
+   * credential test of a registry provider embeds with it, else with
+   * `defaultTestModelName`. Custom providers also use it to preload model
+   * fields.
    */
   existingModel?: EmbeddingModel;
-  /**
-   * Registry model the admin is connecting this provider for. The credential
-   * test embeds with it, so it checks access to the model that will index.
-   * Without it (editing credentials), the test uses `existingModel`. If that
-   * test fails, it tries the backend default model, because the provider may
-   * have retired the current legacy model.
-   */
-  targetModelName?: string;
   /**
    * Called after the modal finishes its work. The optional `customModel`
    * argument is only populated by `CustomSelfHostedModal`, which uses it
@@ -181,29 +173,6 @@ interface ProviderModalProps {
    * staged into the Formik form.
    */
   onSubmit: (req?: EmbeddingModelRequest) => void;
-}
-
-/** The model a registry provider's credential test embeds with. */
-function probeModelName({
-  targetModelName,
-  existingModel,
-}: Pick<ProviderModalProps, "targetModelName" | "existingModel">): string {
-  return targetModelName ?? existingModel?.modelName ?? "";
-}
-
-/**
- * The model to test if the `probeModelName` test fails: the backend default
- * (""), only when editing the credentials of the current model's provider.
- * The provider may have retired that model, and the admin must still be able
- * to save a new key. A connect for a target model never falls back.
- */
-function probeFallbackModelName({
-  targetModelName,
-  existingModel,
-}: Pick<ProviderModalProps, "targetModelName" | "existingModel">):
-  | string
-  | undefined {
-  return targetModelName === undefined && existingModel ? "" : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +186,6 @@ function StandardProviderModal({
   provider,
   existingCredentials,
   existingModel,
-  targetModelName,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -244,11 +212,9 @@ function StandardProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
-            modelName: probeModelName({ targetModelName, existingModel }),
-            fallbackModelName: probeFallbackModelName({
-              targetModelName,
-              existingModel,
-            }),
+            modelName:
+              existingModel?.modelName ??
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -331,7 +297,6 @@ function GoogleProviderModal({
   provider,
   existingCredentials,
   existingModel,
-  targetModelName,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -401,11 +366,9 @@ function GoogleProviderModal({
                   : null,
               location: values.location.trim() || null,
             },
-            modelName: probeModelName({ targetModelName, existingModel }),
-            fallbackModelName: probeFallbackModelName({
-              targetModelName,
-              existingModel,
-            }),
+            modelName:
+              existingModel?.modelName ??
+              defaultTestModelName(provider.providerName),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -490,6 +453,7 @@ function AzureProviderModal({
             apiKey,
             unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
+            modelName: values.modelName.trim(),
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
           })

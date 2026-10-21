@@ -91,74 +91,47 @@ export function findProviderModel(
   );
 }
 
-/** Identify a persisted model by its display group and name. */
-export function toEmbeddingModelRef(
-  modelName: string,
-  providerTypeHint: EmbeddingProviderName | null
-): EmbeddingModelRef {
-  return {
-    modelName,
-    providerName: resolveProviderName(modelName, providerTypeHint),
-  };
-}
-
-/** `true` if `ref` names this registry model of this provider group. */
-function isSameModel(
-  ref: EmbeddingModelRef | null,
-  provider: EmbeddingProvider,
-  model: EmbeddingModel
-): boolean {
-  return (
-    ref !== null &&
-    ref.providerName === provider.providerName &&
-    ref.modelName === model.modelName
-  );
-}
-
 /**
- * The provider groups and models the picker lists (and searches).
- *
- * - A legacy model is kept only while it is the current model. The match uses
- *   the provider AND the name, so an Azure deployment labelled like a registry
- *   model does not bring back that model.
- * - A group left with no models is dropped, except:
- *   - Bring-your-own groups (LiteLLM, Azure, Bifrost). They have no registry
- *     models by design.
- *   - The group of the current model. It lists a current model that is not in
- *     the registry.
- *   - Groups in `keepProviders` (e.g. providers with saved credentials). Their
- *     header holds the only Disconnect and Edit credentials buttons.
- *
- * Returns the same provider object when nothing in it is hidden.
+ * The provider groups and models the picker lists and searches. A legacy model
+ * shows only while it is the current model, matched on provider and name. A
+ * group that this empties drops out, unless `keepProviders` has it (saved
+ * credentials: its header holds the Edit and Disconnect buttons).
  */
 export function visibleEmbeddingProviders(
   providers: EmbeddingProvider[],
   current: EmbeddingModelRef | null,
-  keepProviders: ReadonlySet<EmbeddingProviderName> = new Set()
+  keepProviders: {
+    has(providerName: EmbeddingProviderName): boolean;
+  } = new Set()
 ): EmbeddingProvider[] {
-  const visible: EmbeddingProvider[] = [];
-  for (const provider of providers) {
-    if (isBringYourOwnProvider(provider.providerName)) {
-      visible.push(provider);
-      continue;
-    }
+  return providers.flatMap((provider) => {
     const models = provider.embeddingModels.filter(
-      (m) => !m.legacy || isSameModel(current, provider, m)
+      (m) =>
+        !m.legacy ||
+        (current?.providerName === provider.providerName &&
+          current.modelName === m.modelName)
     );
-    if (
-      models.length === 0 &&
-      current?.providerName !== provider.providerName &&
-      !keepProviders.has(provider.providerName)
-    ) {
-      continue;
-    }
-    visible.push(
-      models.length === provider.embeddingModels.length
-        ? provider
-        : { ...provider, embeddingModels: models }
-    );
+    const emptied = models.length === 0 && provider.embeddingModels.length > 0;
+    return emptied && !keepProviders.has(provider.providerName)
+      ? []
+      : [{ ...provider, embeddingModels: models }];
+  });
+}
+
+/**
+ * The model a credential test embeds with when no model is being connected or
+ * edited: the provider's first selectable registry model.
+ */
+export function defaultTestModelName(
+  providerName: EmbeddingProviderName
+): string {
+  const model = findProvider(providerName).embeddingModels.find(
+    (m) => !m.legacy
+  );
+  if (!model) {
+    throw new Error(`No selectable ${providerName} model to test with`);
   }
-  return visible;
+  return model.modelName;
 }
 
 /** Translated registry description, undefined without a key. */

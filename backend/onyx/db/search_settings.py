@@ -284,12 +284,9 @@ def update_search_settings_status(
 
 
 def user_has_overridden_embedding_model() -> bool:
-    """True if env DOCUMENT_ENCODER_MODEL names a non-default model.
-
-    Only the alembic seed (dbaa756c2ccf) uses this. The previous default (nomic)
-    also counts as not overridden, so an explicit nomic env setting seeds the
-    same rows as before granite became the default.
-    """
+    """True if env DOCUMENT_ENCODER_MODEL names a non-default model, for the alembic
+    seed (dbaa756c2ccf). nomic, the previous default, counts as a default so that
+    DOCUMENT_ENCODER_MODEL=nomic seeds the same rows as an install before granite."""
     return DOCUMENT_ENCODER_MODEL not in (
         DEFAULT_DOCUMENT_ENCODER_MODEL,
         PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,

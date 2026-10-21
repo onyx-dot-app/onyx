@@ -7000,8 +7000,7 @@
           "label": "현재 모델"
         },
         "gpuRecommended": {
-          "tag": "GPU 권장",
-          "tooltip": "CPU 인덱싱을 지원하지만 속도가 느립니다. GPU를 사용하면 인덱싱 속도가 빨라집니다."
+          "tag": "GPU 권장"
         },
         "legacy": {
           "tag": "레거시",
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Google의 더 작고 가벼운 임베딩 모델입니다.",
         "googleGeminiEmbedding2": "Google의 대표 임베딩 모델입니다. 매우 강력하지만 비용이 높고 더 느립니다. 3072차원 출력으로 인덱스가 커집니다. 이미 Google을 사용하는 팀에게 탄탄한 선택입니다.",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
-        "googleTextEmbedding004": "Google의 이전 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
-        "googleTextEmbeddingGecko003": "Google의 이전 Gecko 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
         "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
         "voyage4Large": "Voyage 4 시리즈의 가장 큰 임베딩 모델입니다. Voyage 최고의 검색 품질과 다국어를 지원합니다.",
         "voyage4": "Voyage 4 시리즈의 범용 임베딩 모델입니다. 적당한 비용으로 높은 검색 품질을 제공합니다.",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "Microsoft E5 계열의 영어 임베딩 모델입니다. 속도와 검색 품질의 균형을 갖추었습니다.",
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",
         "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
-        "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요.",
-        "gteSmall": "GTE 계열의 소형 영어 임베딩 모델입니다. 초기 {appName} 버전의 기본 모델이었습니다."
+        "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
       },
       "ccPairIdsBackfill": {
         "complete": {

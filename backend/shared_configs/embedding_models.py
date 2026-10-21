@@ -1,24 +1,18 @@
-"""Backend registry of known embedding models.
+"""Registry of known embedding models, shared by the API server (upgrade-only
+guard, tokenizer revision, config defaults) and the model server (loader
+settings). Keep it pure (pydantic, the stdlib, ``shared_configs``): the
+model-server image has no ``onyx`` package and the API image has no torch.
 
-The API server (upgrade-only guard, tokenizer revision, config defaults) and
-the model server (per-model loader settings) share this registry. Keep it pure:
-pydantic, the stdlib and other ``shared_configs`` modules only. The model-server
-image copies ``shared_configs/`` but has no ``onyx`` package, and the API image
-has no torch.
-
-Rules for editing:
-- Only add entries. Existing deployments can hold any entry as PRESENT, FUTURE
-  or PAST, so never remove or rename one.
-- ``model_name`` is the exact string stored in ``SearchSettings.model_name``:
-  the bare model name for cloud providers, the HF repo id for self-hosted.
-- Loader settings (revision, loader kind) are keyed by exact model name on the
-  server side. They are never sent in a request.
+Only add entries: a deployment can hold any entry as PRESENT, FUTURE or PAST.
+``model_name`` is the exact ``SearchSettings.model_name``: the bare name for
+cloud providers, the HF repo id for self-hosted models.
 """
 
 from enum import Enum
 
 from pydantic import BaseModel
 
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.utils import clean_model_name
 
@@ -44,12 +38,9 @@ class LocalModelLoader(str, Enum):
 
 
 class EmbeddingModelSpec(BaseModel, frozen=True):
-    """One known embedding model.
-
-    For LEGACY entries, ``model_dim``, ``normalize`` and the prefixes are
-    informational only. Real rows often differ (e.g. empty prefixes), so never
-    compare a request or a stored row against them.
-    """
+    """One known embedding model. LEGACY values only seed env defaults
+    (``onyx.configs.model_configs``). Stored rows often differ (e.g. empty
+    prefixes), so never compare a request or a row against them."""
 
     # None means self-hosted (the model server runs it).
     provider_type: EmbeddingProvider | None
@@ -62,15 +53,9 @@ class EmbeddingModelSpec(BaseModel, frozen=True):
     # Pinned HF commit sha. Set only for SELECTABLE self-hosted models.
     hf_revision: str | None = None
     loader: LocalModelLoader = LocalModelLoader.STANDARD
-    # True if the model-server image ships the weights.
-    bundled_in_image: bool = False
-    # True if CPU inference is too slow for practical indexing.
-    gpu_recommended: bool = False
     # True if the embedding path honors `reduced_dimension` (Matryoshka).
     supports_reduced_dimension: bool = False
 
-
-DEFAULT_LOCAL_EMBEDDING_MODEL_NAME = "ibm-granite/granite-embedding-97m-multilingual-r2"
 
 _SELECTABLE = EmbeddingModelStatus.SELECTABLE
 _LEGACY = EmbeddingModelStatus.LEGACY
@@ -121,14 +106,13 @@ EMBEDDING_MODEL_SPECS: tuple[EmbeddingModelSpec, ...] = (
     # ---- SELECTABLE: self-hosted ----
     EmbeddingModelSpec(
         provider_type=None,
-        model_name=DEFAULT_LOCAL_EMBEDDING_MODEL_NAME,
+        model_name=DEFAULT_DOCUMENT_ENCODER_MODEL,
         model_dim=384,
         normalize=True,
         query_prefix="",
         passage_prefix="",
         status=_SELECTABLE,
         hf_revision="835ad14087e140460703cf0fae09f97d469d65c2",
-        bundled_in_image=True,
     ),
     EmbeddingModelSpec(
         provider_type=None,
@@ -150,7 +134,6 @@ EMBEDDING_MODEL_SPECS: tuple[EmbeddingModelSpec, ...] = (
         passage_prefix="passage: ",
         status=_SELECTABLE,
         hf_revision="c0c9fea93ea424587517f2c59e20db9f1d6bf615",
-        gpu_recommended=True,
     ),
     # ---- SELECTABLE: cloud ----
     _cloud_spec(EmbeddingProvider.COHERE, "embed-v5.0-pro", 2048, _SELECTABLE),
@@ -214,47 +197,33 @@ EMBEDDING_MODEL_SPECS: tuple[EmbeddingModelSpec, ...] = (
 )
 
 
-def _match_key(
+def embedding_model_match_key(
     provider_type: EmbeddingProvider | None, model_name: str
 ) -> tuple[EmbeddingProvider | None, str]:
+    """The fold that names indexes, so case, punctuation and whitespace variants
+    of a model name match."""
     return provider_type, clean_model_name(model_name.strip())
 
 
-def _build_spec_index() -> dict[
-    tuple[EmbeddingProvider | None, str], EmbeddingModelSpec
-]:
-    index: dict[tuple[EmbeddingProvider | None, str], EmbeddingModelSpec] = {}
-    for spec in EMBEDDING_MODEL_SPECS:
-        key = _match_key(spec.provider_type, spec.model_name)
-        if key in index:
-            raise ValueError(f"Duplicate embedding model spec for key {key}")
-        index[key] = spec
-    return index
-
-
-_SPECS_BY_MATCH_KEY = _build_spec_index()
+_SPECS_BY_MATCH_KEY = {
+    embedding_model_match_key(spec.provider_type, spec.model_name): spec
+    for spec in EMBEDDING_MODEL_SPECS
+}
+if len(_SPECS_BY_MATCH_KEY) != len(EMBEDDING_MODEL_SPECS):
+    raise ValueError("Two embedding model specs share a match key")
 
 
 def find_embedding_model_spec(
     provider_type: EmbeddingProvider | None, model_name: str
 ) -> EmbeddingModelSpec | None:
-    """Return the spec for a provider and model name, or None if unknown.
-
-    Matching uses ``(provider_type, clean_model_name(model_name.strip()))``, the
-    same folding that names the index. So case, ``/``, ``-`` and ``.`` variants
-    and surrounding whitespace all match the same entry. Covers SELECTABLE and
-    LEGACY entries.
-    """
-    return _SPECS_BY_MATCH_KEY.get(_match_key(provider_type, model_name))
+    """The SELECTABLE or LEGACY spec for ``embedding_model_match_key``, or None."""
+    return _SPECS_BY_MATCH_KEY.get(embedding_model_match_key(provider_type, model_name))
 
 
 def get_local_model_spec(model_name: str) -> EmbeddingModelSpec | None:
-    """Return the spec that the model server must use to load ``model_name``.
-
-    Matches only the EXACT name of a SELECTABLE self-hosted entry that has a
-    pinned ``hf_revision``. Any other name (legacy, custom, a case variant)
-    returns None and keeps the legacy load path unchanged.
-    """
+    """The spec the model server loads ``model_name`` with: only the exact name of
+    a pinned SELECTABLE self-hosted entry. Any other name (legacy, custom, a case
+    variant) returns None and keeps the legacy load."""
     for spec in EMBEDDING_MODEL_SPECS:
         if (
             spec.provider_type is None
@@ -272,13 +241,4 @@ def selectable_embedding_model_specs() -> tuple[EmbeddingModelSpec, ...]:
         spec
         for spec in EMBEDDING_MODEL_SPECS
         if spec.status == EmbeddingModelStatus.SELECTABLE
-    )
-
-
-def bundled_local_model_names() -> frozenset[str]:
-    """Return the exact names of the self-hosted models baked into the image."""
-    return frozenset(
-        spec.model_name
-        for spec in EMBEDDING_MODEL_SPECS
-        if spec.provider_type is None and spec.bundled_in_image
     )

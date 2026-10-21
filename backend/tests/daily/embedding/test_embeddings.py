@@ -7,6 +7,8 @@ from tenacity import (
 )
 
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+from shared_configs.embedding_models import EmbeddingModelSpec, get_local_model_spec
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import EmbeddingProvider
 from tests.utils.secret_names import TestSecret
@@ -69,27 +71,35 @@ def test_cohere_embedding(cohere_embedding_model: EmbeddingModel) -> None:
     _run_embeddings(TOO_LONG_SAMPLE, cohere_embedding_model, 384)
 
 
-@pytest.fixture
-def local_granite_embedding_model() -> EmbeddingModel:
+def _default_model_spec() -> EmbeddingModelSpec:
     # The default self-hosted model, baked into the model-server image.
+    spec = get_local_model_spec(DEFAULT_DOCUMENT_ENCODER_MODEL)
+    assert spec is not None
+    return spec
+
+
+@pytest.fixture
+def local_default_embedding_model() -> EmbeddingModel:
+    spec = _default_model_spec()
     return EmbeddingModel(
         server_host="localhost",
         server_port=9000,
-        model_name="ibm-granite/granite-embedding-97m-multilingual-r2",
-        normalize=True,
-        query_prefix="",
-        passage_prefix="",
+        model_name=spec.model_name,
+        normalize=spec.normalize,
+        query_prefix=spec.query_prefix,
+        passage_prefix=spec.passage_prefix,
         api_key=None,
         provider_type=None,
         api_url=None,
     )
 
 
-def test_local_granite_embedding(
-    local_granite_embedding_model: EmbeddingModel,
+def test_local_default_embedding(
+    local_default_embedding_model: EmbeddingModel,
 ) -> None:
-    _run_embeddings(VALID_SAMPLE, local_granite_embedding_model, 384)
-    _run_embeddings(TOO_LONG_SAMPLE, local_granite_embedding_model, 384)
+    model_dim = _default_model_spec().model_dim
+    _run_embeddings(VALID_SAMPLE, local_default_embedding_model, model_dim)
+    _run_embeddings(TOO_LONG_SAMPLE, local_default_embedding_model, model_dim)
 
 
 @pytest.fixture

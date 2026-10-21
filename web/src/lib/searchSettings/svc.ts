@@ -38,13 +38,6 @@ export async function testEmbedding({
   deploymentName,
   vertexConfig,
 }: TestEmbeddingArgs) {
-  // An empty name makes the backend probe its provider default. OpenAI has
-  // none, so it falls back to a model every OpenAI key can call.
-  const testModelName =
-    provider_type === "openai" && !modelName
-      ? "text-embedding-3-small"
-      : modelName;
-
   return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,7 +45,7 @@ export async function testEmbedding({
       provider_type: provider_type,
       api_key: apiKey,
       api_url: apiUrl,
-      model_name: testModelName,
+      model_name: modelName,
       api_version: apiVersion,
       deployment_name: deploymentName,
       vertex_config: vertexConfig,
@@ -71,18 +64,14 @@ export async function testEmbedding({
  *
  * Returns the vector length of the test embedding, or `null` when no test ran.
  * `alwaysTest` runs the test even when the stored key is kept, for providers
- * whose model is free text (Bifrost).
- *
- * `fallbackModelName` is tested only when the test with `modelName` fails.
- * The key is saved if either test passes. If both fail, the error of the
- * `modelName` test is thrown.
+ * whose model is free text (Bifrost). The test embeds with `modelName`, which
+ * must not be empty.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
-  modelName = "",
-  fallbackModelName,
+  modelName,
   apiVersion,
   deploymentName,
   vertexConfig,
@@ -91,8 +80,7 @@ export async function connectEmbeddingProvider({
   providerType: string;
   apiKey: string | null;
   apiUrl: string;
-  modelName?: string;
-  fallbackModelName?: string;
+  modelName: string;
   apiVersion: string | null;
   deploymentName: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
@@ -101,28 +89,19 @@ export async function connectEmbeddingProvider({
   const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
   let dimension: number | null = null;
   if (alwaysTest || apiKey !== null || vertexConfig != null) {
-    const testWith = (testModelName: string) =>
-      testEmbedding({
-        provider_type: providerType,
-        modelName: testModelName,
-        apiKey,
-        apiUrl,
-        apiVersion,
-        deploymentName,
-        vertexConfig,
-      });
+    const testResponse = await testEmbedding({
+      provider_type: providerType,
+      modelName,
+      apiKey,
+      apiUrl,
+      apiVersion,
+      deploymentName,
+      vertexConfig,
+    });
 
-    let testResponse = await testWith(modelName);
     if (!testResponse.ok) {
       const err: ErrorResponseBody = await testResponse.json();
-      const fallbackResponse =
-        fallbackModelName !== undefined && fallbackModelName !== modelName
-          ? await testWith(fallbackModelName)
-          : null;
-      if (fallbackResponse === null || !fallbackResponse.ok) {
-        throw new Error(err.detail ?? "Embedding test failed");
-      }
-      testResponse = fallbackResponse;
+      throw new Error(err.detail ?? "Embedding test failed");
     }
     const result: TestEmbeddingResponse = await testResponse.json();
     dimension = result.dimension;

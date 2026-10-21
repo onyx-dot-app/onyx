@@ -97,7 +97,6 @@ from onyx.file_processing.unstructured import (
 )
 from onyx.indexing.port_reembed import ReembedStrategy, select_reembed_strategy
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
@@ -119,8 +118,6 @@ from onyx.utils.audit import (
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
     ALT_INDEX_SUFFIX,
-    MODEL_SERVER_HOST,
-    MODEL_SERVER_PORT,
     MULTI_TENANT,
     PRESERVED_SEARCH_FIELDS,
 )
@@ -128,10 +125,11 @@ from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.embedding_models import (
     EmbeddingModelSpec,
     EmbeddingModelStatus,
+    embedding_model_match_key,
     find_embedding_model_spec,
     selectable_embedding_model_specs,
 )
-from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.enums import EmbeddingProvider
 from shared_configs.utils import clean_model_name
 
 router = APIRouter(prefix="/search-settings")
@@ -162,8 +160,22 @@ def set_new_search_settings(
             OnyxErrorCode.INVALID_INPUT, "Contextual RAG disabled in Onyx Cloud"
         )
 
+    spec = find_embedding_model_spec(
+        search_settings_new.provider_type, search_settings_new.model_name
+    )
+    selectable_spec = (
+        spec
+        if spec is not None and spec.status == EmbeddingModelStatus.SELECTABLE
+        else None
+    )
+    # A selectable model gets its canonical name: the probe, the model server and
+    # the tokenizer match it exactly.
+    if selectable_spec is not None:
+        search_settings_new = search_settings_new.model_copy(
+            update={"model_name": selectable_spec.model_name}
+        )
+
     # Validate cloud provider exists or create new LiteLLM provider.
-    cloud_provider: CloudEmbeddingProviderModel | None = None
     if search_settings_new.provider_type is not None:
         cloud_provider = get_embedding_provider_from_provider_type(
             db_session, provider_type=search_settings_new.provider_type
@@ -175,8 +187,14 @@ def set_new_search_settings(
                 f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
             )
 
-        if search_settings_new.provider_type == EmbeddingProvider.BIFROST:
-            _validate_gateway_embedding_model(search_settings_new, cloud_provider)
+        # Before the PRESENT row lock below: the probe is a network call. Nothing
+        # is written yet, so end the read transaction instead of idling in it.
+        if (
+            search_settings_new.provider_type == EmbeddingProvider.BIFROST
+            or selectable_spec is not None
+        ):
+            db_session.commit()
+            _validate_cloud_embedding_model(search_settings_new, cloud_provider)
 
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
@@ -184,12 +202,6 @@ def set_new_search_settings(
         enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
     _validate_vector_quantization_supported(search_settings_new.vector_quantization)
-
-    # Before the PRESENT row lock below: the probe is a network call that can take
-    # minutes against a slow provider.
-    cloud_target_probed = cloud_provider is not None and _probe_cloud_target_unlocked(
-        db_session, search_settings_new, cloud_provider
-    )
 
     # Lock PRESENT so concurrent reindex submissions serialize: without it two racers both
     # pass the no-FUTURE guard below and the loser trips the FUTURE unique index (raw 500).
@@ -199,32 +211,28 @@ def set_new_search_settings(
     # abandon it — live index left short its un-ported docs, PAST source stuck
     # undeletable. Block until it drains (same condition _resolve_port_target_settings
     # uses).
-    if _instant_backfill_pending(db_session, search_settings):
-        raise OnyxError(OnyxErrorCode.CONFLICT, _INSTANT_BACKFILL_PENDING_MESSAGE)
+    if (
+        search_settings.use_port_flow
+        and search_settings.port_backfill_source_id is not None
+        and port_backfill_has_pending_work(db_session, search_settings.id)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "An INSTANT reindex is still backfilling the live index; wait for it to "
+            "finish before starting another reindex.",
+        )
 
     # One re-index at a time: refuse a new one while a secondary FUTURE is still in flight
     # (no supersede). Reuse of a retired index's name is handled by _guard_index_name_reuse.
     if get_secondary_search_settings(db_session) is not None:
-        raise OnyxError(OnyxErrorCode.CONFLICT, _REINDEX_IN_PROGRESS_MESSAGE)
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A re-index is already in progress. Cancel it before starting a new one.",
+        )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.
     # Runs before anything below writes or commits.
-    target_check = _check_embedding_model_target(
-        search_settings_new,
-        present_provider_type=search_settings.provider_type,
-        present_model_name=search_settings.model_name,
-        present_model_dim=search_settings.model_dim,
-        present_reduced_dimension=search_settings.reduced_dimension,
-    )
-    search_settings_new = target_check.request
-    if (
-        target_check.needs_cloud_probe
-        and not cloud_target_probed
-        and cloud_provider is not None
-    ):
-        # Only when PRESENT changed after the unlocked read. Rare enough that
-        # probing under the lock is acceptable.
-        _probe_cloud_embedding_model(search_settings_new, cloud_provider)
+    _check_embedding_model_target(search_settings_new, search_settings)
 
     if search_settings_new.index_name is None:
         search_values = search_settings_new.model_dump()
@@ -332,14 +340,13 @@ def set_new_search_settings(
     return IdReturn(id=new_search_settings.id)
 
 
-def _validate_gateway_embedding_model(
+def _validate_cloud_embedding_model(
     search_settings_new: SearchSettingsCreationRequest,
     cloud_provider: CloudEmbeddingProviderModel,
 ) -> None:
-    """A gateway accepts any model ID, so prove the model embeds at the set dimension.
-
-    Rejects a chat model or a wrong dimension before indexing starts.
-    """
+    """Prove the model embeds at the set dimension with the stored credentials, so
+    a bad key, region or model ID (a gateway accepts any) fails before indexing
+    starts."""
     api_key: str | None = (
         cloud_provider.api_key.get_value(apply_mask=False)
         if cloud_provider.api_key is not None
@@ -350,7 +357,11 @@ def _validate_gateway_embedding_model(
         api_key=api_key,
         api_url=cloud_provider.api_url,
         model_name=search_settings_new.model_name,
-        auth=build_embedding_auth(cloud_provider.provider_type, api_key),
+        auth=build_embedding_auth(
+            cloud_provider.provider_type, api_key, cloud_provider.vertex_config
+        ),
+        api_version=cloud_provider.api_version,
+        deployment_name=cloud_provider.deployment_name,
         reduced_dimension=search_settings_new.reduced_dimension,
     )
     if dimension != search_settings_new.final_embedding_dim:
@@ -360,23 +371,6 @@ def _validate_gateway_embedding_model(
             f"vectors, but the search settings expect "
             f"{search_settings_new.final_embedding_dim}.",
         )
-
-
-_INSTANT_BACKFILL_PENDING_MESSAGE = (
-    "An INSTANT reindex is still backfilling the live index; wait for it to "
-    "finish before starting another reindex."
-)
-_REINDEX_IN_PROGRESS_MESSAGE = (
-    "A re-index is already in progress. Cancel it before starting a new one."
-)
-
-
-def _instant_backfill_pending(db_session: Session, present: SearchSettings) -> bool:
-    return (
-        present.use_port_flow
-        and present.port_backfill_source_id is not None
-        and port_backfill_has_pending_work(db_session, present.id)
-    )
 
 
 # Providers whose model list Onyx owns. Only SELECTABLE registry models are valid
@@ -391,40 +385,9 @@ _REGISTRY_ONLY_CLOUD_PROVIDERS = frozenset(
     }
 )
 
-# Texts embedded by the pre-flight probe of a new cloud model.
-_CLOUD_PROBE_PASSAGES = [
-    "Onyx connects to the documents of a company and answers questions about them.",
-    "An embedding model turns each chunk of text into a vector for semantic search.",
-]
-_CLOUD_PROBE_QUERY = "Which component turns text into vectors?"
-_CLOUD_PROBE_MAX_ERROR_CHARS = 1000
-
-
-class _EmbeddingModelTargetCheck(BaseModel):
-    """Result of the upgrade-only rules for one set-new-search-settings request."""
-
-    # The request to continue with. A selectable model has its canonical name.
-    request: SearchSettingsCreationRequest
-    # True for a new selectable cloud model, which the probe embeds before the
-    # FUTURE is created.
-    needs_cloud_probe: bool
-
-
-def _embedding_model_match_key(
-    provider_type: EmbeddingProvider | None, model_name: str
-) -> tuple[EmbeddingProvider | None, str]:
-    """The fold that names indexes, so case and punctuation variants match."""
-    return provider_type, clean_model_name(model_name.strip())
-
 
 def _embedding_provider_label(provider_type: EmbeddingProvider | None) -> str:
     return provider_type.value if provider_type is not None else "self-hosted"
-
-
-def _describe_embedding_model(
-    provider_type: EmbeddingProvider | None, model_name: str
-) -> str:
-    return f"'{model_name}' ({_embedding_provider_label(provider_type)})"
 
 
 def _selectable_embedding_models_hint() -> str:
@@ -442,7 +405,9 @@ def _selectable_embedding_models_hint() -> str:
 def _not_selectable_error(
     request: SearchSettingsCreationRequest, spec: EmbeddingModelSpec | None
 ) -> OnyxError:
-    model = _describe_embedding_model(request.provider_type, request.model_name)
+    model = (
+        f"'{request.model_name}' ({_embedding_provider_label(request.provider_type)})"
+    )
     if spec is not None:
         reason = (
             f"{model} is a legacy embedding model. Existing indexes on it keep "
@@ -489,30 +454,13 @@ def _validate_selectable_embedding_request(
 
 
 def _check_embedding_model_target(
-    request: SearchSettingsCreationRequest,
-    *,
-    present_provider_type: EmbeddingProvider | None,
-    present_model_name: str,
-    present_model_dim: int,
-    present_reduced_dimension: int | None,
-) -> _EmbeddingModelTargetCheck:
-    """Upgrade-only rules for a new embedding target, applied in order:
-
-    1. Same model as PRESENT: allow. This is a re-index to change quantization,
-       contextual RAG or switchover, legacy models included. Stored rows often
-       differ from the registry (e.g. empty prefixes), so they are not compared
-       to it. Only the dimension is checked: model_dim must be PRESENT's (or the
-       registry's, to move a custom row to the registry model), and in
-       MULTI_TENANT reduced_dimension must be PRESENT's, because tenants share
-       the index. A variant of a selectable model's name gets the canonical name:
-       the model server and the tokenizer match it exactly.
-    2. A SELECTABLE registry model: allow, with the canonical name and the
-       registry's settings.
-    3. Any other model of a provider whose list Onyx owns: reject.
-    4. A LEGACY self-hosted model: reject.
-    5. Anything else (custom HF models, LiteLLM, Azure, Bifrost): allow.
-
-    Raises OnyxError(INVALID_INPUT) when a rule rejects the target."""
+    request: SearchSettingsCreationRequest, present: SearchSettings
+) -> None:
+    """Upgrade-only rules for a new embedding target. Allowed: the PRESENT model
+    (legacy included), a selectable model with the registry settings, and any
+    model of a provider whose list Onyx does not own (custom HF models, LiteLLM,
+    Azure, Bifrost). Other OpenAI, Cohere, Google and Voyage models and legacy
+    self-hosted models raise OnyxError(INVALID_INPUT)."""
     spec = find_embedding_model_spec(request.provider_type, request.model_name)
     selectable_spec = (
         spec
@@ -520,12 +468,14 @@ def _check_embedding_model_target(
         else None
     )
 
-    # Rule 1
-    request_key = _embedding_model_match_key(request.provider_type, request.model_name)
-    if request_key == _embedding_model_match_key(
-        present_provider_type, present_model_name
-    ):
-        allowed_dims = {present_model_dim}
+    # A re-index with the PRESENT model (quantization, contextual RAG, switchover).
+    # Stored rows often differ from the registry (e.g. empty prefixes), so only
+    # the dimension is checked. Tenants share the index of a model, so
+    # MULTI_TENANT also keeps reduced_dimension.
+    if embedding_model_match_key(
+        request.provider_type, request.model_name
+    ) == embedding_model_match_key(present.provider_type, present.model_name):
+        allowed_dims = {present.model_dim}
         if selectable_spec is not None:
             allowed_dims.add(selectable_spec.model_dim)
         if request.model_dim not in allowed_dims:
@@ -535,172 +485,23 @@ def _check_embedding_model_target(
                 f"model_dim must be {' or '.join(str(d) for d in sorted(allowed_dims))}, "
                 f"not {request.model_dim}.",
             )
-        if MULTI_TENANT and request.reduced_dimension != present_reduced_dimension:
+        if MULTI_TENANT and request.reduced_dimension != present.reduced_dimension:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "reduced_dimension can't be changed in Onyx Cloud: "
                 "all tenants on a model share its index.",
             )
-        if selectable_spec is not None:
-            request = request.model_copy(
-                update={"model_name": selectable_spec.model_name}
-            )
-        return _EmbeddingModelTargetCheck(request=request, needs_cloud_probe=False)
+        return
 
-    # Rule 2
     if selectable_spec is not None:
         _validate_selectable_embedding_request(request, selectable_spec)
-        return _EmbeddingModelTargetCheck(
-            request=request.model_copy(
-                update={"model_name": selectable_spec.model_name}
-            ),
-            needs_cloud_probe=selectable_spec.provider_type is not None,
-        )
+        return
 
-    # Rule 3
-    if request.provider_type in _REGISTRY_ONLY_CLOUD_PROVIDERS:
-        raise _not_selectable_error(request, spec)
-
-    # Rule 4: any spec left here is LEGACY.
-    if request.provider_type is None and spec is not None:
-        raise _not_selectable_error(request, spec)
-
-    # Rule 5
-    return _EmbeddingModelTargetCheck(request=request, needs_cloud_probe=False)
-
-
-def _probe_cloud_target_unlocked(
-    db_session: Session,
-    request: SearchSettingsCreationRequest,
-    cloud_provider: CloudEmbeddingProviderModel,
-) -> bool:
-    """Probe a new selectable cloud target before PRESENT is locked. Returns True
-    if the probe ran and passed.
-
-    Reads PRESENT without the lock. A CONFLICT or a rejection is left to the
-    checks under the lock, so the probe never runs for a request that they
-    refuse. If PRESENT or the re-index state changes before the lock, the check
-    under the lock probes instead."""
-    spec = find_embedding_model_spec(request.provider_type, request.model_name)
-    if spec is None or spec.status != EmbeddingModelStatus.SELECTABLE:
-        return False
-
-    present = get_current_search_settings(db_session)
-    present_provider_type = present.provider_type
-    present_model_name = present.model_name
-    present_model_dim = present.model_dim
-    present_reduced_dimension = present.reduced_dimension
-    conflict_visible = (
-        _instant_backfill_pending(db_session, present)
-        or get_secondary_search_settings(db_session) is not None
-    )
-    # The locked read must load PRESENT again, not reuse this unlocked copy.
-    db_session.expire(present)
-    if conflict_visible:
-        return False
-
-    try:
-        target_check = _check_embedding_model_target(
-            request,
-            present_provider_type=present_provider_type,
-            present_model_name=present_model_name,
-            present_model_dim=present_model_dim,
-            present_reduced_dimension=present_reduced_dimension,
-        )
-    except OnyxError:
-        return False
-    if not target_check.needs_cloud_probe:
-        return False
-
-    # Nothing is written yet. End the read transaction so that the connection is
-    # not idle in a transaction during the network calls, which can take
-    # minutes. The session has expire_on_commit=False, so cloud_provider stays
-    # loaded and the probe makes no query.
-    db_session.commit()
-    _probe_cloud_embedding_model(target_check.request, cloud_provider)
-    return True
-
-
-def _probe_cloud_embedding_model(
-    request: SearchSettingsCreationRequest,
-    cloud_provider: CloudEmbeddingProviderModel,
-) -> None:
-    """Embed a few texts with the exact target cloud model and the stored
-    credentials, so a key without access, a wrong region or a wrong dimension
-    fails now and not in the middle of the re-index.
-
-    Raises OnyxError(INVALID_INPUT) with the provider's error on failure."""
-    provider_type = request.provider_type
-    if provider_type is None:
-        raise ValueError("The cloud embedding probe needs a cloud provider type")
-    expected_dim = request.reduced_dimension or request.model_dim
-    model = _describe_embedding_model(provider_type, request.model_name)
-
-    embedding_model = EmbeddingModel(
-        # Not used: cloud models bypass the model server.
-        server_host=MODEL_SERVER_HOST,
-        server_port=MODEL_SERVER_PORT,
-        model_name=request.model_name,
-        normalize=request.normalize,
-        query_prefix=request.query_prefix,
-        passage_prefix=request.passage_prefix,
-        api_key=(
-            cloud_provider.api_key.get_value(apply_mask=False)
-            if cloud_provider.api_key is not None
-            else None
-        ),
-        api_url=cloud_provider.api_url,
-        provider_type=provider_type,
-        api_version=cloud_provider.api_version,
-        deployment_name=cloud_provider.deployment_name,
-        reduced_dimension=request.reduced_dimension,
-    )
-    try:
-        passage_embeddings = embedding_model.encode(
-            _CLOUD_PROBE_PASSAGES, text_type=EmbedTextType.PASSAGE
-        )
-        query_embeddings = embedding_model.encode(
-            [_CLOUD_PROBE_QUERY], text_type=EmbedTextType.QUERY
-        )
-    except Exception as e:
-        logger.warning("Embedding probe of %s failed: %s", model, e)
-        hint = "Check that the API key has access to this model."
-        if provider_type == EmbeddingProvider.GOOGLE:
-            hint += (
-                " Vertex AI serves gemini-embedding-2 only in the global, us and eu "
-                "locations. Onyx takes the location from the 'location' field of the "
-                "service account JSON, then GOOGLE_CLOUD_LOCATION, then 'global'."
-            )
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Onyx could not embed test text with {model}: "
-            f"{str(e)[:_CLOUD_PROBE_MAX_ERROR_CHARS]} {hint}",
-        )
-
-    if (
-        len(passage_embeddings) != len(_CLOUD_PROBE_PASSAGES)
-        or len(query_embeddings) != 1
+    # Any spec left here is LEGACY.
+    if request.provider_type in _REGISTRY_ONLY_CLOUD_PROVIDERS or (
+        request.provider_type is None and spec is not None
     ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"{model} returned {len(passage_embeddings)} passage and "
-            f"{len(query_embeddings)} query vectors for "
-            f"{len(_CLOUD_PROBE_PASSAGES)} passages and 1 query.",
-        )
-    wrong_dims = sorted(
-        {
-            len(embedding)
-            for embedding in passage_embeddings + query_embeddings
-            if len(embedding) != expected_dim
-        }
-    )
-    if wrong_dims:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"{model} returned vectors of size "
-            f"{', '.join(str(dim) for dim in wrong_dims)}, but the new index "
-            f"expects size {expected_dim}.",
-        )
+        raise _not_selectable_error(request, spec)
 
 
 def _validate_vector_quantization_supported(

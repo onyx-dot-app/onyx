@@ -21,16 +21,10 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 // ═══════════════════════════════════════════════════════════════════════════
 // Embedding
 //
-// Mirrors backend/shared_configs/embedding_models.py. The name, dimension,
-// normalize flag and prefixes of a model are sent as-is to
-// set-new-search-settings, so they must match the backend registry exactly
-// (prefixes include their trailing space).
-//
-// Only add entries. Existing deployments can still use any entry, so never
-// remove or rename one: mark it `legacy` instead. The picker shows a legacy
-// model only while it is the current model.
-//
-// List selectable models first in each group.
+// Mirrors backend/shared_configs/embedding_models.py, and
+// test_web_embedding_model_registry_parity.py pins the two together. Never
+// remove or rename an entry: mark it `legacy`. List selectable models first in
+// each group.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
@@ -162,7 +156,6 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        descriptionKey: "modelDescriptions.googleTextEmbedding004",
         legacy: true,
       },
       {
@@ -171,7 +164,6 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        descriptionKey: "modelDescriptions.googleTextEmbeddingGecko003",
         legacy: true,
       },
     ],
@@ -381,7 +373,6 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         normalize: false,
         queryPrefix: "",
         passagePrefix: "",
-        descriptionKey: "modelDescriptions.gteSmall",
         legacy: true,
       },
     ],

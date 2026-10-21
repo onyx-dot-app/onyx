@@ -7000,8 +7000,7 @@
           "label": "Modèle actuel"
         },
         "gpuRecommended": {
-          "tag": "GPU recommandé",
-          "tooltip": "L’indexation sur CPU est prise en charge, mais lente. Un GPU accélère l’indexation."
+          "tag": "GPU recommandé"
         },
         "legacy": {
           "tag": "Ancien",
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Modèle d'embedding plus petit et plus léger de Google.",
         "googleGeminiEmbedding2": "Le modèle d'embedding phare de Google. Très puissant, mais coûteux et plus lent. Sa sortie de 3072 dimensions produit un index volumineux. Un choix solide pour les équipes qui utilisent déjà Google.",
         "googleGeminiEmbedding2Preview": "Version préliminaire de Gemini Embedding 2. Remplacée par gemini-embedding-2 pour les nouvelles configurations.",
-        "googleTextEmbedding004": "Ancien modèle d'embedding de texte de Google. Remplacé par des modèles Google plus récents.",
-        "googleTextEmbeddingGecko003": "Ancien modèle d'embedding de texte Gecko de Google. Remplacé par des modèles Google plus récents.",
         "voyageLarge2Instruct": "Grand modèle d'embedding de Voyage. Hautes performances grâce au fine-tuning par instructions.",
         "voyage4Large": "Le plus grand modèle d'embedding de la série 4 de Voyage. Meilleure qualité de recherche de Voyage, multilingue.",
         "voyage4": "Modèle d'embedding polyvalent de la série 4 de Voyage. Haute qualité de recherche à coût modéré.",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "Modèle d'embedding anglais de la famille E5 de Microsoft. Un équilibre entre vitesse et qualité de recherche.",
         "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si {appName} tourne sur un système aux ressources limitées.",
         "multilingualE5Base": "Pour les corpus dans d'autres langues que l'anglais, c'est le modèle à choisir.",
-        "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir.",
-        "gteSmall": "Petit modèle d'embedding anglais de la famille GTE. Le modèle par défaut des premières versions de {appName}."
+        "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir."
       },
       "ccPairIdsBackfill": {
         "complete": {

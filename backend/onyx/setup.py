@@ -70,7 +70,6 @@ from shared_configs.configs import (
     MODEL_SERVER_PORT,
     MULTI_TENANT,
 )
-from shared_configs.embedding_models import get_local_model_spec
 from shared_configs.enums import EmbedTextType
 
 logger = setup_logger()
@@ -116,9 +115,6 @@ def setup_onyx(
     if search_settings.query_prefix or search_settings.passage_prefix:
         logger.notice('Query embedding prefix: "%s"', search_settings.query_prefix)
         logger.notice('Passage embedding prefix: "%s"', search_settings.passage_prefix)
-    warn_on_custom_models_with_registry_names(
-        [search_settings, secondary_search_settings]
-    )
 
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
@@ -168,8 +164,8 @@ def setup_onyx(
 
 def wait_for_local_embedding_model(search_settings: SearchSettings) -> None:
     """Block until the inference model server embeds with the self-hosted model in
-    use. Its first request loads the model and downloads it if it is not cached
-    (e.g. nomic, which the image no longer bundles). Raise when the wait runs out,
+    use. Its first request loads the model, with a download if it is not cached
+    (e.g. nomic, which the image does not bundle). Raise when the wait runs out,
     so the API server does not start with search that cannot embed queries."""
     model_name = search_settings.model_name
     embedding_model = EmbeddingModel.from_db_model(
@@ -227,36 +223,6 @@ def wait_for_local_embedding_model(search_settings: SearchSettings) -> None:
         "has no internet access), add the model to its Hugging Face cache. "
         "LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT sets the wait; 0 disables it."
     ) from last_error
-
-
-def warn_on_custom_models_with_registry_names(
-    search_settings_list: list[SearchSettings | None],
-) -> None:
-    """Warn about a self-hosted model that has the exact name of a registry model
-    but another dimension. An admin added it with "Add Custom Model" before the
-    registry existed. The model server keeps loading it as before (see
-    model_server/embedding_model_loader.py), so it works, but it is not the
-    registry model. Only logs; the settings are not changed."""
-    for settings in search_settings_list:
-        if settings is None or settings.provider_type is not None:
-            continue
-        spec = get_local_model_spec(settings.model_name)
-        if spec is None or settings.model_dim == spec.model_dim:
-            continue
-        logger.warning(
-            "Embedding model %s (search settings %s, %s) is a custom model with "
-            "%s dimensions. The Onyx model with this name has %s dimensions. The "
-            "model server loads the custom model as before, so its index keeps "
-            "working. To use the Onyx model, re-index to %s with %s dimensions "
-            "and the Onyx settings.",
-            settings.model_name,
-            settings.id,
-            settings.status.value,
-            settings.model_dim,
-            spec.model_dim,
-            spec.model_name,
-            spec.model_dim,
-        )
 
 
 def mark_reindex_flag(db_session: Session) -> None:

@@ -7000,8 +7000,7 @@
           "label": "Modelo actual"
         },
         "gpuRecommended": {
-          "tag": "GPU recomendada",
-          "tooltip": "La indexación con CPU es compatible, pero lenta. Una GPU acelera la indexación."
+          "tag": "GPU recomendada"
         },
         "legacy": {
           "tag": "Heredado",
@@ -7015,7 +7014,7 @@
         }
       },
       "modelPicker": {
-        "cpuEstimateHint": "Las velocidades de CPU son estimaciones y varían según el hardware y el tamaño del documento. La RAM recomendada cubre un modelo cargado, no toda la infraestructura de Onyx. Reserve más memoria durante la reindexación.",
+        "cpuEstimateHint": "Las velocidades de CPU son estimaciones y varían según el hardware y el tamaño del documento. La RAM recomendada cubre un modelo cargado, no toda la infraestructura de Onyx. Reserva más memoria durante la reindexación.",
         "addCustomModel": {
           "label": "Añadir modelo personalizado"
         },
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Modelo de embeddings más pequeño y ligero de Google.",
         "googleGeminiEmbedding2": "El modelo de embeddings principal de Google. Muy potente, pero caro y más lento. Su salida de 3072 dimensiones genera un índice grande. Una opción sólida para equipos que ya usan Google.",
         "googleGeminiEmbedding2Preview": "Versión preliminar de Gemini Embedding 2. Sustituida por gemini-embedding-2 en nuevas configuraciones.",
-        "googleTextEmbedding004": "Modelo anterior de embeddings de texto de Google. Sustituido por modelos más recientes de Google.",
-        "googleTextEmbeddingGecko003": "Modelo anterior de embeddings de texto Gecko de Google. Sustituido por modelos más recientes de Google.",
         "voyageLarge2Instruct": "Modelo de embeddings grande de Voyage. Alto rendimiento con ajuste fino por instrucciones.",
         "voyage4Large": "El modelo de embeddings más grande de la serie 4 de Voyage. La mejor calidad de recuperación de Voyage, multilingüe.",
         "voyage4": "Modelo de embeddings de uso general de la serie 4 de Voyage. Alta calidad de recuperación a un coste moderado.",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "Modelo de embeddings en inglés de la familia E5 de Microsoft. Equilibra velocidad y calidad de búsqueda.",
         "e5SmallV2": "La versión más pequeña y rápida de la línea de modelos E5. Si ejecutas {appName} en un sistema con recursos limitados, puede ser una buena opción.",
         "multilingualE5Base": "Para corpus en idiomas distintos del inglés, esta es la opción indicada.",
-        "multilingualE5Small": "Para corpus en idiomas distintos del inglés en un sistema con recursos limitados, esta es la opción indicada.",
-        "gteSmall": "Modelo de embeddings pequeño en inglés de la familia GTE. El modelo predeterminado de las primeras versiones de {appName}."
+        "multilingualE5Small": "Para corpus en idiomas distintos del inglés en un sistema con recursos limitados, esta es la opción indicada."
       },
       "ccPairIdsBackfill": {
         "complete": {

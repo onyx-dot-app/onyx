@@ -7000,8 +7000,7 @@
           "label": "Aktuelles Modell"
         },
         "gpuRecommended": {
-          "tag": "GPU empfohlen",
-          "tooltip": "CPU-Indizierung wird unterstützt, ist aber langsam. Eine GPU beschleunigt die Indizierung."
+          "tag": "GPU empfohlen"
         },
         "legacy": {
           "tag": "Veraltet",
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Kleineres, leichteres Embedding-Modell von Google.",
         "googleGeminiEmbedding2": "Das Top-Embedding-Modell von Google. Sehr leistungsstark, aber teuer und langsamer. Mit 3072 Dimensionen entsteht ein großer Index. Eine solide Wahl für Teams, die Google bereits nutzen.",
         "googleGeminiEmbedding2Preview": "Vorschauversion von Gemini Embedding 2. Für neue Einrichtungen durch gemini-embedding-2 ersetzt.",
-        "googleTextEmbedding004": "Früheres Text-Embedding-Modell von Google. Durch neuere Google-Modelle ersetzt.",
-        "googleTextEmbeddingGecko003": "Früheres Gecko-Text-Embedding-Modell von Google. Durch neuere Google-Modelle ersetzt.",
         "voyageLarge2Instruct": "Großes Embedding-Modell von Voyage. Hohe Leistung durch Instruction-Fine-Tuning.",
         "voyage4Large": "Größtes Embedding-Modell der Voyage-4-Serie. Beste Retrieval-Qualität von Voyage, mehrsprachig.",
         "voyage4": "Universelles Embedding-Modell der Voyage-4-Serie. Hohe Retrieval-Qualität zu moderaten Kosten.",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "Englisches Embedding-Modell aus der E5-Familie von Microsoft. Ausgewogen zwischen Geschwindigkeit und Suchqualität.",
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
-        "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl.",
-        "gteSmall": "Kleines englisches Embedding-Modell aus der GTE-Familie. Das Standardmodell früher {appName}-Versionen."
+        "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
       },
       "ccPairIdsBackfill": {
         "complete": {

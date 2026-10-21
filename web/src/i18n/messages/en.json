@@ -7000,8 +7000,7 @@
           "label": "Current Model"
         },
         "gpuRecommended": {
-          "tag": "GPU recommended",
-          "tooltip": "CPU indexing is supported, but slow. A GPU makes indexing faster."
+          "tag": "GPU recommended"
         },
         "legacy": {
           "tag": "Legacy",
@@ -7233,8 +7232,6 @@
         "googleTextEmbedding005": "Smaller, lighter-weight embedding model from Google.",
         "googleGeminiEmbedding2": "Google's top embedding model. Very powerful, but expensive and slower. Its 3072-dim output builds a large index. A solid choice for teams that already use Google.",
         "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
-        "googleTextEmbedding004": "Earlier Google text embedding model. Newer Google models replace it.",
-        "googleTextEmbeddingGecko003": "Earlier Google Gecko text embedding model. Newer Google models replace it.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
         "voyage4Large": "Voyage's largest 4-series embedding model. Best Voyage retrieval quality, multilingual.",
         "voyage4": "Voyage's general-purpose 4-series embedding model. High retrieval quality at moderate cost.",
@@ -7247,8 +7244,7 @@
         "e5BaseV2": "English embedding model from Microsoft's E5 family. A balance of speed and search quality.",
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",
         "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
-        "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
-        "gteSmall": "Small English embedding model from the GTE family. The default model of early {appName} versions."
+        "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
       },
       "ccPairIdsBackfill": {
         "complete": {

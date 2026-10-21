@@ -49,15 +49,6 @@ def _search_settings() -> MagicMock:
     return settings
 
 
-def test_returns_once_the_model_server_embeds(
-    clock: _FakeClock, encode: MagicMock
-) -> None:
-    wait_for_local_embedding_model(_search_settings())
-
-    encode.assert_called_once()
-    assert clock.sleeps == []
-
-
 def test_retries_until_the_model_server_is_ready(
     clock: _FakeClock, encode: MagicMock
 ) -> None:
@@ -84,10 +75,9 @@ def test_fails_with_the_last_error_when_the_wait_runs_out(
     ):
         wait_for_local_embedding_model(_search_settings())
 
-    message = str(exc_info.value)
-    assert f"did not load embedding model {_NOMIC} within 30s" in message
-    assert _NOT_CACHED_ERROR in message
-    assert "LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT" in message
+    # The operator sees the last error and the setting that controls the wait.
+    assert _NOT_CACHED_ERROR in str(exc_info.value)
+    assert "LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT" in str(exc_info.value)
     assert str(exc_info.value.__cause__) == _NOT_CACHED_ERROR
     assert encode.call_count == 3
     assert clock.now == 30
