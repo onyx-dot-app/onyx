@@ -17,7 +17,7 @@ Architecture Note (User-Shared Sandbox Model):
 import json
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import PurePosixPath
@@ -48,6 +48,7 @@ from onyx.server.features.build.sandbox.models import (
     PushResult,
     RetriableWriteError,
     SandboxInfo,
+    SandboxResource,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
@@ -192,6 +193,16 @@ class SandboxManager(_ServeMixin, ABC):
     """
 
     supports_opencode_history_persistence: bool = False
+
+    def iter_resources(
+        self, tenant_id: str, deadline: float
+    ) -> Iterator[SandboxResource]:
+        """Inventory only this deployment's resources, including partial provisions."""
+        raise NotImplementedError
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        """Delete the observed instance after ownership checks. Raise on incomplete deletion."""
+        raise NotImplementedError
 
     def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
         """Return False only after confirming that workspace storage is absent."""
