@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "Add OpenAPI action"
+        "title": "Add OpenAPI plugin"
       },
       "cancelButton": {
         "label": "Cancel"
@@ -188,14 +188,14 @@
         "invalidJson": "Invalid JSON format",
         "placeholder": "Enter your OpenAPI schema here",
         "required": "OpenAPI schema definition is required",
-        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI actions]({docsUrl}).",
+        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this plugin. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI plugins]({docsUrl}).",
         "title": "OpenAPI Schema Definition"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Only the action's creator or an admin can manage authentication"
+        "disabledTooltip": "Only the plugin's creator or an admin can manage authentication"
       },
       "editHeader": {
-        "title": "Edit OpenAPI action"
+        "title": "Edit OpenAPI plugin"
       },
       "empty": {
         "description": "Provide OpenAPI schema to preview actions here.",
@@ -208,17 +208,17 @@
         "noSummary": "No summary provided"
       },
       "submitButton": {
-        "addLabel": "Add Action",
+        "addLabel": "Add Plugin",
         "addingLabel": "Adding...",
         "saveLabel": "Save Changes",
         "savingLabel": "Saving..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI action created successfully",
-        "actionUpdated": "OpenAPI action updated successfully",
-        "createFailed": "Failed to create OpenAPI action",
+        "actionCreated": "OpenAPI plugin created successfully",
+        "actionUpdated": "OpenAPI plugin updated successfully",
+        "createFailed": "Failed to create OpenAPI plugin",
         "invalidJson": "Invalid JSON format in OpenAPI schema definition",
-        "updateFailed": "Failed to update OpenAPI action"
+        "updateFailed": "Failed to update OpenAPI plugin"
       },
       "humanDescription": {
         "title": "Description for Humans",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "Failed to load existing OAuth configuration. Re-enter the details to update it."
       },
       "header": {
-        "description": "Authenticate your connection to start using the OpenAPI actions."
+        "description": "Authenticate your connection to start using this OpenAPI plugin."
       },
       "headers": {
         "addButton": {
           "label": "Add Header"
         },
-        "description": "Specify custom headers for all requests sent to this action's API endpoint.",
+        "description": "Specify custom headers for all requests sent to this plugin's API endpoint.",
         "keyRequired": "Header key is required",
         "keyTitle": "Header",
         "minRequired": "Add at least one authentication header",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "Delete"
         },
-        "title": "Delete OpenAPI action"
+        "title": "Delete OpenAPI plugin"
       },
       "method": {
         "noSummary": "No summary provided"
@@ -764,7 +764,7 @@
           "tooltip": "Configure Image Generation"
         },
         "openapi": {
-          "tooltip": "Manage OpenAPI Actions"
+          "tooltip": "Manage OpenAPI plugins"
         },
         "webSearch": {
           "tooltip": "Configure Web Search"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "Add",
         "mcp": "Add custom MCP server",
-        "openapi": "Add OpenAPI action"
+        "openapi": "Add OpenAPI plugin"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP servers could not be loaded.",
         "listErrorDescription": "We couldn't load this plugin list. Try again in a moment.",
-        "openapiError": "OpenAPI actions could not be loaded.",
+        "openapiError": "OpenAPI plugins could not be loaded.",
         "retry": {
           "label": "Retry"
         },
@@ -2423,7 +2423,7 @@
           "title": "Coding Agent"
         },
         "description": "Tools and capabilities available for chat to use. This does not apply to agents.",
-        "pluginsNote": "Configure MCP servers and OpenAPI actions for default Chat in [Plugins]({url}).",
+        "pluginsNote": "Configure MCP servers and OpenAPI plugins for default Chat in [Plugins]({url}).",
         "imageGeneration": {
           "description": "Generate and manipulate images using AI-powered tools.",
           "disabledTooltip": "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin.",
