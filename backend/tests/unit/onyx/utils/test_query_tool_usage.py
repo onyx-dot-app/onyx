@@ -71,7 +71,9 @@ def test_parallel_models_share_usage_and_cancellation_freezes_it(
 ) -> None:
     sink = Mock()
     monkeypatch.setattr(telemetry, "emit_telemetry", sink)
-    observation = telemetry.QueryObservation(channel="api", mode=telemetry.QueryMode.CHAT)
+    observation = telemetry.QueryObservation(
+        channel="api", mode=telemetry.QueryMode.CHAT
+    )
     run_functions_tuples_in_parallel(
         [
             (lambda: observation.tool_started(is_search=True), ()),
