@@ -80,11 +80,13 @@ export function ccPairStatusTag(
   if (inRepeatedErrorState && lastAttemptStatus !== "in_progress") {
     return TAGS.failed;
   }
+  if (status === ConnectorCredentialPairStatus.INVALID) return TAGS.invalid;
+  // A pair stays scheduled or initial indexing after its first run fails, and the status page reads it failed.
+  if (lastAttemptStatus === "failed") return TAGS.failed;
   if (status === ConnectorCredentialPairStatus.SCHEDULED) return TAGS.scheduled;
   if (status === ConnectorCredentialPairStatus.INITIAL_INDEXING) {
     return TAGS.initialIndexing;
   }
-  if (status === ConnectorCredentialPairStatus.INVALID) return TAGS.invalid;
   switch (lastAttemptStatus) {
     case "in_progress":
       return TAGS.indexing;

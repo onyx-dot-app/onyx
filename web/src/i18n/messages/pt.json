@@ -3087,6 +3087,7 @@
             "errors": "Indexação concluída com erros.",
             "resolved": "Erros de indexação resolvidos.",
             "succeeded": "Indexação concluída com sucesso.",
+            "queued": "Indexação na fila.",
             "inProgress": "Indexação em andamento.",
             "canceled": "Indexação interrompida."
           },
@@ -3098,6 +3099,7 @@
             "errors": "Permissões sincronizadas com erros.",
             "resolved": "Erros de sincronização de permissões resolvidos.",
             "succeeded": "Permissões sincronizadas com sucesso.",
+            "queued": "Sincronização de permissões na fila.",
             "inProgress": "Sincronizando permissões.",
             "canceled": "Sincronização de permissões interrompida."
           },
@@ -3109,6 +3111,7 @@
             "errors": "Membros de grupos sincronizados com erros.",
             "resolved": "Erros de sincronização de membros de grupos resolvidos.",
             "succeeded": "Associações de grupo sincronizadas com sucesso.",
+            "queued": "Sincronização de associações de grupo na fila.",
             "inProgress": "Sincronizando associações de grupo.",
             "canceled": "Sincronização de grupos interrompida."
           },
@@ -3120,6 +3123,7 @@
             "errors": "Limpeza concluída com erros.",
             "resolved": "Erros de limpeza resolvidos.",
             "succeeded": "Limpeza concluída com sucesso.",
+            "queued": "Limpeza na fila.",
             "inProgress": "Limpeza em andamento.",
             "canceled": "Limpeza interrompida."
           },
@@ -3131,6 +3135,7 @@
             "errors": "Verificações do conector concluídas com erros.",
             "resolved": "Erros das verificações do conector resolvidos.",
             "succeeded": "Verificações do conector aprovadas.",
+            "queued": "Verificações do conector na fila.",
             "inProgress": "Verificações do conector em andamento.",
             "canceled": "Verificações do conector interrompidas."
           }

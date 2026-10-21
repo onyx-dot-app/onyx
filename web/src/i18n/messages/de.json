@@ -3087,6 +3087,7 @@
             "errors": "Indexierung mit Fehlern abgeschlossen.",
             "resolved": "Indexierungsfehler behoben.",
             "succeeded": "Indexierung erfolgreich abgeschlossen.",
+            "queued": "Indexierung in der Warteschlange.",
             "inProgress": "Indexierung läuft.",
             "canceled": "Indexierung gestoppt."
           },
@@ -3098,6 +3099,7 @@
             "errors": "Berechtigungen mit Fehlern synchronisiert.",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben.",
             "succeeded": "Berechtigungen erfolgreich synchronisiert.",
+            "queued": "Berechtigungssynchronisierung in der Warteschlange.",
             "inProgress": "Berechtigungen werden synchronisiert.",
             "canceled": "Berechtigungssynchronisierung gestoppt."
           },
@@ -3109,6 +3111,7 @@
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert.",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben.",
             "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert.",
+            "queued": "Gruppensynchronisierung in der Warteschlange.",
             "inProgress": "Gruppenmitgliedschaften werden synchronisiert.",
             "canceled": "Gruppensynchronisierung gestoppt."
           },
@@ -3120,6 +3123,7 @@
             "errors": "Bereinigung mit Fehlern abgeschlossen.",
             "resolved": "Bereinigungsfehler behoben.",
             "succeeded": "Bereinigung erfolgreich abgeschlossen.",
+            "queued": "Bereinigung in der Warteschlange.",
             "inProgress": "Bereinigung läuft.",
             "canceled": "Bereinigung gestoppt."
           },
@@ -3131,6 +3135,7 @@
             "errors": "Connector-Prüfungen mit Fehlern abgeschlossen.",
             "resolved": "Fehler der Connector-Prüfungen behoben.",
             "succeeded": "Connector-Prüfungen bestanden.",
+            "queued": "Connector-Prüfungen in der Warteschlange.",
             "inProgress": "Connector-Prüfungen laufen.",
             "canceled": "Connector-Prüfungen gestoppt."
           }

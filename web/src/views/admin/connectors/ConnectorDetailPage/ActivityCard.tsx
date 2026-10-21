@@ -18,6 +18,7 @@ import {
   SvgCheckAll,
   SvgCheckCircle,
   SvgCheckSquare,
+  SvgClock,
   SvgFiles,
   SvgRefreshCw,
   SvgTextLines,
@@ -101,6 +102,7 @@ type CardState =
   | "stopped"
   | "errors"
   | "resolved"
+  | "queued"
   | "inProgress"
   | "canceled"
   | "succeeded";
@@ -121,9 +123,33 @@ function cardState(
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
+      if (run.attempt.status === "not_started") return "queued";
       if (isActive(run)) return "inProgress";
       return stopped ? "canceled" : "succeeded";
   }
+}
+
+interface StatusIcon {
+  icon: IconFunctionComponent;
+  stroke: string;
+}
+
+/** A queued run waits on the Scheduled tag's clock, a live one spins, any other shows its group's icon. */
+function statusIcon(
+  state: CardState,
+  active: boolean,
+  group: ActivityGroup,
+  closed: boolean
+): StatusIcon {
+  if (state === "queued") {
+    return { icon: SvgClock, stroke: "stroke-theme-purple-05" };
+  }
+  if (active) return { icon: IconLoader, stroke: "stroke-status-info-05" };
+  const style = GROUP_STYLE[group];
+  return {
+    icon: style.icon,
+    stroke: closed ? style.closedStroke : style.stroke,
+  };
 }
 
 interface FailureReason {
@@ -201,8 +227,14 @@ export default function ActivityCard({
     );
   const tRuns = useTranslations("admin.connector.runs");
   const active = isActive(run);
+  const state = cardState(run, group, closed);
   const style = GROUP_STYLE[group];
-  const StatusIcon = active ? IconLoader : style.icon;
+  const { icon: StatusIcon, stroke: statusStroke } = statusIcon(
+    state,
+    active,
+    group,
+    closed
+  );
   const IdentityIcon =
     connector === undefined
       ? RUN_KIND_ICONS[run.kind]
@@ -221,7 +253,6 @@ export default function ActivityCard({
   const resolveUnsupported = listsDocs && canResolveRuns && !canResolve;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
-  const state = cardState(run, group, closed);
   // A run still going can fail again, so it is resolved once it ends.
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
@@ -300,16 +331,7 @@ export default function ActivityCard({
               width="fit"
               height="fit"
             >
-              <StatusIcon
-                size={16}
-                className={
-                  active
-                    ? "stroke-status-info-05"
-                    : closed
-                      ? style.closedStroke
-                      : style.stroke
-                }
-              />
+              <StatusIcon size={16} className={statusStroke} />
             </Section>
             <Section
               alignItems="stretch"
