@@ -23,6 +23,8 @@ router = APIRouter(prefix="/encoder")
 
 
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
+# The longest sequence that each model's RoPE caches are pre-warmed to.
+_ROPE_PREWARMED_TO: dict[str, int] = {}
 
 # One lock per model, so a model loads once even if requests race.
 _MODEL_LOCKS: dict[str, threading.Lock] = {}
@@ -58,7 +60,9 @@ def _target_max_seq_length(model_name: str, max_context_length: int) -> int:
     return max_context_length
 
 
-def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
+def _prewarm_rope(
+    model_name: str, st_model: "SentenceTransformer", target_len: int
+) -> None:
     """
     Build RoPE cos/sin caches once on the final device/dtype so later forwards only read.
     Works by calling the underlying HF model directly with dummy IDs/attention.
@@ -75,6 +79,7 @@ def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
             show_progress_bar=False,
             normalize_embeddings=False,
         )
+        _ROPE_PREWARMED_TO[model_name] = target_len
         logger.info("RoPE pre-warm successful")
     except Exception as e:
         logger.warning("RoPE pre-warm skipped/failed: %s", e)
@@ -100,13 +105,13 @@ def get_embedding_model(
             # Raises on failure, so a failed or rejected model is never cached.
             model = load_embedding_model(model_name)
             model.max_seq_length = max_seq_length
-            _prewarm_rope(model, max_seq_length)
+            _prewarm_rope(model_name, model, max_seq_length)
             _GLOBAL_MODELS_DICT[model_name] = model
         elif max_seq_length != model.max_seq_length:
             model.max_seq_length = max_seq_length
-            prev = getattr(model, "_rope_prewarmed_to", 0)  # ods: ignore[getattr]
-            if max_seq_length > int(prev or 0):
-                _prewarm_rope(model, max_seq_length)
+            # Caches built for a longer sequence also serve a shorter one.
+            if max_seq_length > _ROPE_PREWARMED_TO.get(model_name, 0):
+                _prewarm_rope(model_name, model, max_seq_length)
 
     return model
 

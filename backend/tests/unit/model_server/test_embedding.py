@@ -23,6 +23,7 @@ _LOAD_EMBEDDING_MODEL = "model_server.encoders.load_embedding_model"
 def _empty_model_cache() -> Iterator[None]:
     with (
         patch.object(encoders, "_GLOBAL_MODELS_DICT", {}),
+        patch.object(encoders, "_ROPE_PREWARMED_TO", {}),
         patch.object(encoders, "_PENDING_MODEL_JOBS", {}),
     ):
         yield
@@ -50,6 +51,17 @@ def test_only_registry_models_get_prefix_headroom(
                 model_name, max_context_length=max_context_length
             )
             assert model.max_seq_length == max_context_length + headroom
+
+
+def test_rope_prewarm_runs_again_only_for_a_longer_context() -> None:
+    model = MagicMock()
+    with patch(_LOAD_EMBEDDING_MODEL, return_value=model):
+        for max_context_length in (512, 2048, 512, 2048):
+            encoders.get_embedding_model(
+                _NOMIC_MODEL_NAME, max_context_length=max_context_length
+            )
+    # The load pre-warms to 512 and the first 2048 to 2048. The rest reuse them.
+    assert model.encode.call_count == 2
 
 
 # ---- Loading off the event loop ----
