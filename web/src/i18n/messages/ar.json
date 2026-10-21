@@ -12435,6 +12435,9 @@
         "authFailedStatus": {
           "text": "فشلت مصادقة {toolName} (HTTP {statusCode})"
         },
+        "blockedStatus": {
+          "text": "تم حظر {toolName}"
+        },
         "completedStatus": {
           "text": "اكتمل {toolName}"
         },

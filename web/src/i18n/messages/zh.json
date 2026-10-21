@@ -12435,6 +12435,9 @@
         "authFailedStatus": {
           "text": "{toolName} 身份验证失败（HTTP {statusCode}）"
         },
+        "blockedStatus": {
+          "text": "{toolName} 已被阻止"
+        },
         "completedStatus": {
           "text": "{toolName} 已完成"
         },

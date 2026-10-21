@@ -8,8 +8,9 @@ import pytest
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.api import _validate_tool_definition
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.security.models import SSRFProtectionLevel
-from onyx.tools.models import DynamicSchemaInfo, ToolCallException, ToolResponse
+from onyx.tools.models import DynamicSchemaInfo, ToolResponse
 from onyx.tools.tool_implementations.custom import custom_tool
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CUSTOM_TOOL_REQUEST_TIMEOUT,
@@ -684,8 +685,7 @@ def test_link_local_blocked_at_every_level(
     with pytest.raises(SSRFException):
         validate_custom_tool_url(url, resolve_dns=False)
     with patch("onyx.utils.url._pinned_request") as pinned:
-        with pytest.raises(ToolCallException):
-            _run_ping(url)
+        _assert_failed(_run_ping(url), status_code=None)
         pinned.assert_not_called()
 
 
@@ -724,10 +724,33 @@ def _run_ping(server_url: str) -> ToolResponse:
     tool = build_custom_tools_from_openapi_schema_and_headers(
         tool_id=1, openapi_schema=_schema(server_url)
     )[0]
-    return tool.run(
+    emitter = unittest.mock.MagicMock()
+    tool._emitter = emitter
+    response = tool.run(
         placement=Placement(turn_index=0, tab_index=0),
         requestBody={"q": 1},
     )
+    deltas = [
+        call.args[0].obj
+        for call in emitter.emit.call_args_list
+        if isinstance(call.args[0].obj, CustomToolDelta)
+    ]
+    assert len(deltas) == 1
+    assert deltas[0].error == (
+        response.rich_response.error
+        if isinstance(response.rich_response, CustomToolCallSummary)
+        else None
+    )
+    return response
+
+
+def _assert_failed(response: ToolResponse, status_code: int | None) -> None:
+    assert isinstance(response.rich_response, CustomToolCallSummary)
+    error = response.rich_response.error
+    assert error is not None
+    assert not error.is_auth_error
+    assert error.status_code == status_code
+    assert response.llm_facing_response == error.message
 
 
 @pytest.mark.parametrize(
@@ -751,8 +774,7 @@ def test_call_blocks_host_resolving_to_blocked_ip(
         ),
         patch("onyx.utils.url._pinned_request") as pinned,
     ):
-        with pytest.raises(ToolCallException):
-            _run_ping("https://api.example.com")
+        _assert_failed(_run_ping("https://api.example.com"), status_code=None)
         pinned.assert_not_called()
 
 
@@ -793,8 +815,7 @@ def test_call_refuses_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
         patch("onyx.utils.url.socket.getaddrinfo", return_value=_addr_info("8.8.8.8")),
         patch("onyx.utils.url._pinned_request", return_value=redirect) as pinned,
     ):
-        with pytest.raises(ToolCallException):
-            _run_ping("https://api.example.com")
+        _assert_failed(_run_ping("https://api.example.com"), status_code=302)
     pinned.assert_called_once()
 
 
