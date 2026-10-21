@@ -199,13 +199,13 @@ export function useContentEditable({
   }, []);
 
   /** Push the current state as an undo restore point (starts a new undo unit). */
-  const pushUndoSnapshot = useCallback(() => {
+  const pushUndoSnapshot = useCallback((previous?: EditableSnapshot) => {
     const el = ref.current;
     if (!el) return;
     redoStackRef.current = [];
     lastEditKindRef.current = null;
     const stack = undoStackRef.current;
-    const snapshot = captureSnapshot(el);
+    const snapshot = previous ?? captureSnapshot(el);
     const top = stack[stack.length - 1];
     if (top && snapshotsEqual(top, snapshot)) return;
     pushBoundedSnapshot(stack, snapshot);
@@ -455,8 +455,9 @@ export function useContentEditable({
     (token: string): boolean => {
       const el = ref.current;
       if (!el) return false;
-      pushUndoSnapshot();
+      const snapshot = captureSnapshot(el);
       if (!deleteTokenBeforeCursor(el, token)) return false;
+      pushUndoSnapshot(snapshot);
       syncFromDOM();
       resize();
       return true;

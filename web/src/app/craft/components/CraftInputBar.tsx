@@ -30,6 +30,7 @@ import {
   useUploadFilesContext,
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
+import { useUser } from "@/providers/UserProvider";
 import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
@@ -105,17 +106,32 @@ const CraftInputBar = memo(
       const t = useTranslations("craft.inputBar");
       const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
-      const storageKey = draftKey("craft", sessionId ?? "new");
+      const { user } = useUser();
+      const userId = user?.id;
+      const storageKey = draftKey(
+        "craft",
+        `${userId ?? "signed-out"}:${sessionId ?? "new"}`
+      );
       const { draft, loaded, save } = useDraft<string>({
         key: storageKey,
         debounceMs: 0,
       });
+      const saveDraft = useCallback(
+        (text: string) => {
+          if (userId) save(text);
+        },
+        [userId, save]
+      );
       const restoredKeyRef = useRef<string | null>(null);
       useEffect(() => {
+        if (!userId) {
+          restoredKeyRef.current = null;
+          return;
+        }
         if (!loaded || restoredKeyRef.current === storageKey) return;
         restoredKeyRef.current = storageKey;
         if (typeof draft === "string") baseRef.current?.setMessage(draft);
-      }, [draft, loaded, storageKey]);
+      }, [draft, loaded, storageKey, userId]);
       const fileInputRef = useRef<HTMLInputElement>(null);
       const router = useRouter();
 
@@ -320,7 +336,7 @@ const CraftInputBar = memo(
           />
           <BaseInputBar
             key={storageKey}
-            onContentChange={save}
+            onContentChange={saveDraft}
             ref={baseRef}
             onSubmit={handleSubmit}
             isRunning={isRunning}

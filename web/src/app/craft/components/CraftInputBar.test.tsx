@@ -9,6 +9,11 @@ import {
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
 
+let mockUserId: string | null = "user";
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: mockUserId ? { id: mockUserId } : null }),
+}));
+
 const mockClearFiles = jest.fn();
 const attachedFiles: BuildFile[] = [
   {
@@ -120,7 +125,10 @@ function enterText(text: string) {
   return input;
 }
 
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  mockUserId = "user";
+  sessionStorage.clear();
+});
 
 describe("CraftInputBar queued attachments", () => {
   beforeEach(() => {
@@ -236,7 +244,7 @@ describe("Craft draft review regressions", () => {
       fireEvent.keyDown(input, { key: "Enter" });
       expect(onSubmit).toHaveBeenCalledTimes(1);
       expect(input).toHaveAttribute("contenteditable", "false");
-      expect(sessionStorage.getItem(draftKey("craft", "new"))).toBe(
+      expect(sessionStorage.getItem(draftKey("craft", "user:new"))).toBe(
         JSON.stringify("Pending draft")
       );
       unmount();
@@ -321,9 +329,43 @@ it("clears only the submitted draft when another session mounts during handoff",
   );
   enterText("Other session draft");
   await act(async () => pending.resolve(true));
-  expect(sessionStorage.getItem(draftKey("craft", "new"))).toBeNull();
-  expect(sessionStorage.getItem(draftKey("craft", "other"))).toBe(
+  expect(sessionStorage.getItem(draftKey("craft", "user:new"))).toBeNull();
+  expect(sessionStorage.getItem(draftKey("craft", "user:other"))).toBe(
     JSON.stringify("Other session draft")
   );
   expect(screen.getByRole("textbox")).toHaveTextContent("Other session draft");
+});
+
+it("isolates account drafts and ignores legacy drafts without an owner", () => {
+  sessionStorage.setItem(
+    draftKey("craft", "new"),
+    JSON.stringify("Legacy private draft")
+  );
+  const props = { onSubmit: jest.fn(), isRunning: false };
+  const { rerender } = render(<CraftInputBar {...props} />);
+  expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+  enterText("First account draft");
+  mockUserId = null;
+  rerender(<CraftInputBar {...props} onSubmit={jest.fn()} />);
+  expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+  mockUserId = "user";
+  rerender(<CraftInputBar {...props} onSubmit={jest.fn()} />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("First account draft");
+  mockUserId = "second-user";
+  rerender(<CraftInputBar {...props} onSubmit={jest.fn()} />);
+  expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+  enterText("Second account draft");
+  mockUserId = "user";
+  rerender(<CraftInputBar {...props} onSubmit={jest.fn()} />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("First account draft");
+  mockUserId = "second-user";
+  rerender(<CraftInputBar {...props} onSubmit={jest.fn()} />);
+  expect(screen.getByRole("textbox")).toHaveTextContent("Second account draft");
+});
+
+it("does not persist text without a signed-in owner", () => {
+  mockUserId = null;
+  render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+  enterText("No owner");
+  expect(sessionStorage.length).toBe(0);
 });

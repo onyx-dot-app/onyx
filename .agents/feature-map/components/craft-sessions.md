@@ -599,7 +599,8 @@ Uploads hold the session row lock through quota checks and file writes, so concu
 URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
 Replacing that destination preserves selected source files and uploads them into the replacement.
 New Session, another session, or visit end clears the previous attachment draft.
-Composer text uses `useDraft` in browser session storage, keyed by the URL session ID or a separate New Session key.
+Composer text uses `useDraft` in browser session storage, keyed by account and URL session ID, with a separate New Session key for each account.
+Signed-out composers do not save drafts. Logout removes current and legacy Craft draft keys.
 Text survives same-tab navigation and reloads without moving between sessions. Accepted prompt handoff or queueing clears the saved text. Failed session provisioning retains the text and attachments.
 Draft cleanup survives composer unmounting. Paste-tile edits and slash-query removal update the saved text immediately.
 Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
