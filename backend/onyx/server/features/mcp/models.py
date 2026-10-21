@@ -420,6 +420,15 @@ class MCPToolCreateRequest(BaseModel):
         return self
 
 
+class MCPSetupRequest(MCPToolCreateRequest):
+    """Connection settings validated before a new or edited server is saved."""
+
+    available_in_craft: bool | None = None
+    enable_chat: bool | None = None
+    users_can_manage_policies: bool | None = None
+    action_policies: dict[str, ActionPolicy] | None = None
+
+
 class MCPToolUpdateRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
     name: Optional[str] = Field(None, description="Updated name of the MCP server")
@@ -882,3 +891,13 @@ class MCPToolListResponse(BaseModel):
     server_name: str
     server_url: str
     tools: list[MCPLibTool]
+
+
+class MCPSetupConnectedResponse(BaseModel):
+    status: Literal["connected"] = "connected"
+    server: MCPServer
+
+
+class MCPSetupAuthorizationResponse(BaseModel):
+    status: Literal["authorization_required"] = "authorization_required"
+    authorization_url: str
