@@ -6848,6 +6848,9 @@
         "reindex": {
           "description": "قد تستغرق إعادة الفهرسة *ساعات أو أيامًا* حسب حجم المحتوى. [اعرف المزيد](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "ستُجرى إعادة فهرسة كاملة."
+        },
+        "reindexModel": {
+          "title": "التبديل إلى {provider} / {model}. ستُجرى إعادة فهرسة كاملة."
         }
       },
       "cloudDisabled": {

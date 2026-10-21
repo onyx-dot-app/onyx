@@ -6848,6 +6848,9 @@
         "reindex": {
           "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "A full re-index will run."
+        },
+        "reindexModel": {
+          "title": "Switching to {provider} / {model}. A full re-index will run."
         }
       },
       "cloudDisabled": {

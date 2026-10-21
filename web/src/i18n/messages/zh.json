@@ -6848,6 +6848,9 @@
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
+        },
+        "reindexModel": {
+          "title": "正在切换到 {provider} / {model}。将运行完整的重新索引。"
         }
       },
       "cloudDisabled": {

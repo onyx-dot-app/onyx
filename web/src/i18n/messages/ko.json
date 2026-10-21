@@ -6848,6 +6848,9 @@
         "reindex": {
           "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "전체 재인덱싱이 실행됩니다."
+        },
+        "reindexModel": {
+          "title": "{provider} / {model}(으)로 전환합니다. 전체 재인덱싱이 실행됩니다."
         }
       },
       "cloudDisabled": {

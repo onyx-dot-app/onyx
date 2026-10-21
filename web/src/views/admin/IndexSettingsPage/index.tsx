@@ -240,9 +240,12 @@ interface ProviderGroupProps {
    * `LiteLLMProviderModal` can preload its model-spec fields on edit.
    */
   existingModel?: EmbeddingModel;
+  /** Spec of the staged model when it belongs to THIS provider. */
+  stagedModel?: EmbeddingModel;
   /**
    * `customModel` is set only for providers with no pre-registered models
-   * (LiteLLM / Azure), where the user defines the spec in the connect modal.
+   * (LiteLLM / Azure / Bifrost), where the user defines the spec in the
+   * connect modal.
    */
   onSelectModel: (
     modelName: string,
@@ -258,11 +261,21 @@ function ProviderGroup({
   isCloud = false,
   existingCredentials,
   existingModel,
+  stagedModel,
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
   const t = useTranslations("admin.indexSettings");
-  const models = provider.embeddingModels;
+  // Bring-your-own models are not in the registry, so list the current and
+  // staged specs too. The first entry for a name wins.
+  const models = [
+    ...provider.embeddingModels,
+    ...(existingModel ? [existingModel] : []),
+    ...(stagedModel ? [stagedModel] : []),
+  ].filter(
+    (model, index, all) =>
+      all.findIndex((m) => m.modelName === model.modelName) === index
+  );
   const isBringYourOwn = isBringYourOwnProvider(provider.providerName);
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
@@ -310,9 +323,11 @@ function ProviderGroup({
 
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
-      if (isCloud && !isConfigured) return "unconnected";
+      // Before the credential check: a model just staged from the connect
+      // modal can render before the refreshed provider list arrives.
       if (model.modelName === selectedModelName) return "selected";
       if (model.modelName === currentModelName) return "current";
+      if (isCloud && !isConfigured) return "unconnected";
       return "connected";
     },
     [isCloud, isConfigured, selectedModelName, currentModelName]
@@ -896,8 +911,11 @@ export default function IndexSettingsPage() {
     null
   );
 
-  // Whether the admin opened the bring-your-own section.
-  const [bringYourOwnOpen, setBringYourOwnOpen] = useState(false);
+  // The admin's explicit toggle of the bring-your-own section; null until
+  // they toggle it.
+  const [bringYourOwnOpen, setBringYourOwnOpen] = useState<boolean | null>(
+    null
+  );
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
@@ -1434,8 +1452,17 @@ export default function IndexSettingsPage() {
                       resolveProviderName(values.model_name, null),
                   }
                 : null;
-              // A search that matches a bring-your-own option shows it.
-              const bringYourOwnExpanded = bringYourOwnOpen || isSearching;
+              // A search that matches a bring-your-own option shows it. The
+              // cloud section also opens by default when it holds the staged
+              // or current model, so that model's card is in view.
+              const holdsBringYourOwnModel = [
+                stagedModelRef,
+                currentModelRef,
+              ].some((ref) => ref && isBringYourOwnProvider(ref.providerName));
+              const cloudBringYourOwnExpanded =
+                isSearching || (bringYourOwnOpen ?? holdsBringYourOwnModel);
+              const selfHostedBringYourOwnExpanded =
+                isSearching || (bringYourOwnOpen ?? false);
               const renderCloudProviderGroup = (
                 provider: EmbeddingProvider
               ) => (
@@ -1452,6 +1479,12 @@ export default function IndexSettingsPage() {
                     currentEmbeddingModel?.provider_type ===
                     provider.providerName
                       ? (currentEmbeddingModelSpec ?? undefined)
+                      : undefined
+                  }
+                  stagedModel={
+                    isModelStaged &&
+                    values.model_provider === provider.providerName
+                      ? (values.model_spec ?? undefined)
                       : undefined
                   }
                   onSelectModel={(name, customModel) =>
@@ -1522,6 +1555,16 @@ export default function IndexSettingsPage() {
                 strategyCopy,
                 quantizationOnlyChange
               );
+              // A staged embedding model is named, so the admin can see which
+              // model the re-index uses.
+              const bannerTitle =
+                bannerCopy === "reindex" && stagedModelRef
+                  ? t("changesBanner.reindexModel.title", {
+                      provider: findProvider(stagedModelRef.providerName)
+                        .displayName,
+                      model: stagedModelRef.modelName,
+                    })
+                  : t(`changesBanner.${bannerCopy}.title`);
               const forwardModalKey = contextualDisableOnlyChange
                 ? "disableForwardModal"
                 : "forwardOnlyModal";
@@ -1829,7 +1872,7 @@ export default function IndexSettingsPage() {
                       >
                         <MessageCard
                           variant={bannerVariant}
-                          title={t(`changesBanner.${bannerCopy}.title`)}
+                          title={bannerTitle}
                           description={markdown(
                             t(`changesBanner.${bannerCopy}.description`)
                           )}
@@ -1971,7 +2014,7 @@ export default function IndexSettingsPage() {
                                           {filteredBringYourOwnProviders.length >
                                             0 && (
                                             <BringYourOwnSection
-                                              open={bringYourOwnExpanded}
+                                              open={cloudBringYourOwnExpanded}
                                               onOpenChange={setBringYourOwnOpen}
                                               description={t(
                                                 "modelPicker.bringYourOwn.cloudDescription"
@@ -2032,7 +2075,9 @@ export default function IndexSettingsPage() {
 
                                           {customModelMatched && (
                                             <BringYourOwnSection
-                                              open={bringYourOwnExpanded}
+                                              open={
+                                                selfHostedBringYourOwnExpanded
+                                              }
                                               onOpenChange={setBringYourOwnOpen}
                                               description={t(
                                                 "modelPicker.bringYourOwn.selfHostedDescription"

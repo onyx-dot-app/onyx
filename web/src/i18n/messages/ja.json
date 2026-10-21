@@ -6848,6 +6848,9 @@
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"
+        },
+        "reindexModel": {
+          "title": "{provider} / {model} に切り替えます。完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {

@@ -1203,3 +1203,137 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Bring-your-own model cards (ENG-4417)
+//
+// LiteLLM, Azure and Bifrost list no registry models. The picker must still
+// show the configured model as a card, and open the bring-your-own section
+// that holds it.
+// ---------------------------------------------------------------------------
+
+const BIFROST_MODEL = "openai/text-embedding-3-small";
+const BIFROST_API_URL = "http://bifrost.example.com:8080";
+
+test.describe("Index Settings — bring-your-own model cards @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("connecting Bifrost shows its model as a selected card", async ({
+    page,
+  }) => {
+    await page.route(TEST_EMBEDDING_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ dimension: 1536 }),
+      });
+    });
+    let bifrostSaved = false;
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      const method = route.request().method();
+      if (method === "PUT") {
+        bifrostSaved = true;
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify({ provider_type: "bifrost" }),
+        });
+      } else if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify(
+            bifrostSaved
+              ? [
+                  {
+                    provider_type: "bifrost",
+                    api_key: null,
+                    api_url: BIFROST_API_URL,
+                    api_version: null,
+                    deployment_name: null,
+                  },
+                ]
+              : []
+          ),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+    await indexSettings.switchToCloudTab();
+
+    await indexSettings.openProviderSetup("Bifrost");
+    await indexSettings.fillBifrostCredentials({
+      apiBaseUrl: BIFROST_API_URL,
+      modelName: BIFROST_MODEL,
+    });
+    await indexSettings.submitProviderSetup();
+
+    await indexSettings.expectModelStaged();
+    await indexSettings.expectBringYourOwnSectionOpen();
+    await indexSettings.expectModelCardState(
+      "bifrost",
+      BIFROST_MODEL,
+      "Selected"
+    );
+    await indexSettings.expectBannerTitle(
+      `Switching to Bifrost / ${BIFROST_MODEL}. A full re-index will run.`
+    );
+  });
+
+  test("a current Bifrost model opens the bring-your-own section on its card", async ({
+    page,
+  }) => {
+    const current = await getCurrentSearchSettings(page);
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          ...current,
+          model_name: BIFROST_MODEL,
+          model_dim: 1536,
+          normalize: false,
+          query_prefix: "",
+          passage_prefix: "",
+          provider_type: "bifrost",
+        }),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify([
+            {
+              provider_type: "bifrost",
+              api_key: null,
+              api_url: BIFROST_API_URL,
+              api_version: null,
+              deployment_name: null,
+            },
+          ]),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+
+    await indexSettings.expectBringYourOwnSectionOpen();
+    await indexSettings.expectModelCardState(
+      "bifrost",
+      BIFROST_MODEL,
+      "Current Model"
+    );
+  });
+});
