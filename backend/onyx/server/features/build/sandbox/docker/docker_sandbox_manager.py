@@ -1162,14 +1162,15 @@ class DockerSandboxManager(SandboxManager):
                     else item.labels
                 )
                 labels = labels or {}
-                if labels.get(LABEL_DOCKER_NETWORK) != self._network_name:
-                    # Older Compose resources can still be attributed to this deployment.
-                    if (
-                        not self._compose_project
-                        or labels.get("com.docker.compose.project")
-                        != self._compose_project
-                    ):
+                resource_network = labels.get(LABEL_DOCKER_NETWORK)
+                if resource_network is not None:
+                    if resource_network != self._network_name:
                         continue
+                elif (
+                    not self._compose_project
+                    or labels.get("com.docker.compose.project") != self._compose_project
+                ):
+                    continue
                 resource = sandbox_resource_from_labels(
                     kind=kind,
                     name=item.name,
