@@ -145,6 +145,47 @@ describe("typing", () => {
     expect(screen.getByLabelText("Whole amount")).toHaveValue("0");
   });
 
+  describe("a separator typed mid-number", () => {
+    async function typeSeparatorAt(
+      caret: number,
+      props: Partial<React.ComponentProps<typeof InputCurrency>> = {}
+    ) {
+      const user = setupUser();
+      const onChange = jest.fn();
+      render(<InputCurrency value={1234} onChange={onChange} {...props} />);
+      await user.type(screen.getByLabelText("Whole amount"), ".", {
+        initialSelectionStart: caret,
+        initialSelectionEnd: caret,
+      });
+      return onChange;
+    }
+
+    it("moves the digits after the caret into the fraction", async () => {
+      const onChange = await typeSeparatorAt(1, { precision: 6 });
+      expect(screen.getByLabelText("Whole amount")).toHaveValue("1");
+      expect(screen.getByLabelText("Fractional amount")).toHaveValue("234");
+      expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
+      expect(onChange).toHaveBeenLastCalledWith(1.234);
+    });
+
+    it("clips the moved digits to the precision", async () => {
+      await typeSeparatorAt(1);
+      expect(screen.getByLabelText("Fractional amount")).toHaveValue("23");
+    });
+
+    it("fills 0 when the separator goes before every digit", async () => {
+      await typeSeparatorAt(0, { precision: 6 });
+      expect(screen.getByLabelText("Whole amount")).toHaveValue("0");
+      expect(screen.getByLabelText("Fractional amount")).toHaveValue("1234");
+    });
+
+    it("keeps every digit when there is no fraction segment", async () => {
+      const onChange = await typeSeparatorAt(1, { currency: "JPY" });
+      expect(screen.getByLabelText("Whole amount")).toHaveValue("1234");
+      expect(onChange).not.toHaveBeenCalled();
+    });
+  });
+
   it("blocks fraction digits beyond the precision", async () => {
     const user = setupUser();
     const onChange = jest.fn();

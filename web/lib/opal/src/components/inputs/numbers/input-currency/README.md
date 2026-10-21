@@ -4,7 +4,7 @@
 
 Segmented currency amount field on the shared `.opal-input` chrome. Mono segments read `$ [whole] . [fraction]`. The host locale sets the symbol, the side it sits on (`3,00 €`) and the decimal separator.
 
-- Typing the locale decimal separator in the whole segment jumps to the fraction, filling an empty whole segment with `0` (`.5` reads `0 . 5`). Arrows, Tab and Enter only move focus and fill nothing. The grouping separator (`,` in `1,200`) and other non-digits do nothing.
+- Typing the locale decimal separator anywhere in the whole segment jumps to the fraction and splits the number at the caret: digits before it stay (an empty whole part becomes `0`, so `.5` reads `0 . 5`), digits after it move to the front of the fraction, clipped to the precision (`1|234` → `1 . 23`). With no fraction segment it does nothing. Arrows, Tab and Enter only move focus and fill nothing. The grouping separator (`,` in `1,200`) and other non-digits do nothing.
 - Pasting reads the text as an amount, whichever segment has focus. Whitespace, grouping and the currency's symbol or code are dropped; the rest must be digits with at most one decimal separator:
   - one separator replaces both segments (`1.2` → `1 . 2`, `$1,234.56` → `1234 . 56`);
   - none inserts the digits into the focused segment at the caret;

@@ -256,17 +256,32 @@ function InputCurrency({
       update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
-    const whole = trimLeadingZeros(raw.slice(0, decimalAt).replace(/\D/g, ""));
     // No fraction segment: the decimal key is a no-op like any other.
     if (!showFraction) {
-      update({ ...segments, whole });
+      update({ ...segments, whole: raw.replace(/\D/g, "") });
       return;
     }
-    // A typed separator says the whole part is done, so an empty one is 0
-    // (".5" reads 0.5). Arrows, Tab and Enter only move focus and fill nothing.
-    update({ ...segments, whole: whole || "0" });
-    fractionRef.current?.focus();
-    fractionRef.current?.select();
+    // Wherever the caret is, the separator splits the number there: digits
+    // before it stay (an empty whole part is 0, so ".5" reads 0.5), and
+    // digits after it move to the front of the fraction ("1|234" → 1 . 234).
+    // Arrows, Tab and Enter only move focus and fill nothing.
+    const whole = trimLeadingZeros(raw.slice(0, decimalAt).replace(/\D/g, ""));
+    const moved = raw
+      .slice(decimalAt + parts.decimal.length)
+      .replace(/\D/g, "");
+    update({
+      whole: whole || "0",
+      fraction: (moved + segments.fraction).slice(0, maxFraction),
+    });
+    const fraction = fractionRef.current;
+    if (!fraction) return;
+    fraction.focus();
+    if (moved) {
+      // Caret just after the separator, ahead of the moved digits.
+      requestAnimationFrame(() => fraction.setSelectionRange(0, 0));
+    } else {
+      fraction.select();
+    }
   }
 
   function handleFractionChange(e: React.ChangeEvent<HTMLInputElement>) {
