@@ -956,3 +956,9 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
+
+
+class SkillInstallationPolicy(str, PyEnum):
+    AVAILABLE = "AVAILABLE"
+    DEFAULT = "DEFAULT"
+    REQUIRED = "REQUIRED"

@@ -849,3 +849,8 @@ that arbiter without extending it.
   Docker volume's `ca.crt`) from projecting correctly, breaks TLS for every
   running sandbox simultaneously, not just new ones, since existing
   sandboxes only refresh their trust store at boot.
+
+
+Skill installation policies preserve explicit opt-outs when a user disconnects
+an app. Deleting an app resets detached custom skills to AVAILABLE and removes
+their preferences. See [[skills]] for policy precedence and runtime readiness.
