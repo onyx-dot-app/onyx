@@ -10,9 +10,11 @@ import requests
 import urllib3
 from hubspot.crm.associations.v4.models import (
     BatchResponsePublicAssociationMultiWithLabel,
+    BatchResponsePublicAssociationMultiWithLabelWithErrors,
     MultiAssociatedObjectWithLabel,
     PublicAssociationMultiWithLabel,
     PublicObjectId,
+    StandardError,
 )
 from hubspot.crm.associations.v4.models import NextPage as AssociationsNextPage
 from hubspot.crm.associations.v4.models import Paging as AssociationsPaging
@@ -207,6 +209,66 @@ def test_a_link_read_sends_one_input_per_record_with_its_cursor() -> None:
     assert kwargs["to_object_type"] == "notes"
     request = kwargs["batch_input_public_fetch_associations_batch_request"]
     assert [(i.id, i.after) for i in request.inputs] == [("1", None), ("2", "c2")]
+
+
+def _partial_link_answer(*errors: StandardError) -> Any:
+    return BatchResponsePublicAssociationMultiWithLabelWithErrors(
+        status="COMPLETE",
+        started_at=CREATED,
+        completed_at=CREATED,
+        results=[
+            PublicAssociationMultiWithLabel(
+                _from=PublicObjectId(id="1"),
+                to=[
+                    MultiAssociatedObjectWithLabel(to_object_id=5, association_types=[])
+                ],
+            )
+        ],
+        errors=list(errors),
+        num_errors=len(errors),
+    )
+
+
+def _batch_error(category: str, sub_category: str | None = None) -> StandardError:
+    return StandardError(
+        category=category,
+        sub_category=sub_category,
+        message=f"{category} message",
+        context={"fromObjectId": ["2"]},
+        links={},
+        errors=[],
+        status="error",
+    )
+
+
+def test_a_record_without_links_is_left_out_of_a_partial_answer() -> None:
+    gateway, client = _gateway()
+    client.crm.associations.v4.batch_api.get_page.return_value = _partial_link_answer(
+        _batch_error("OBJECT_NOT_FOUND", "crm.associations.NO_ASSOCIATIONS_FOUND")
+    )
+
+    links = gateway.read_associations(
+        object_type=HubSpotObjectType.DEALS,
+        to_object_type="contacts",
+        cursors={"1": None, "2": None},
+    )
+
+    assert links == {"1": HubSpotPage(items=["5"])}
+
+
+def test_any_other_error_in_a_partial_answer_fails_the_read() -> None:
+    """A record whose links HubSpot could not read must not read as unlinked."""
+    gateway, client = _gateway()
+    client.crm.associations.v4.batch_api.get_page.return_value = _partial_link_answer(
+        _batch_error("INTERNAL_ERROR")
+    )
+
+    with pytest.raises(HubSpotApiError, match="INTERNAL_ERROR message"):
+        gateway.read_associations(
+            object_type=HubSpotObjectType.DEALS,
+            to_object_type="contacts",
+            cursors={"1": None, "2": None},
+        )
 
 
 def test_a_link_read_of_too_many_records_is_refused_before_the_call() -> None:

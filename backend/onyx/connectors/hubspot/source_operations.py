@@ -67,6 +67,8 @@ PORTAL_INFO_PATH = "/integrations/v1/me"
 USERS_PATH = "/settings/users/2026-09"
 PERMITTED_USERS_PATH = "/resource-permissions/v3/permitted-users"
 VIEW_ACTION = "crm-object:VIEW"
+# The batch association read reports a record with no links as an error.
+NO_ASSOCIATIONS_SUBCATEGORY = "crm.associations.NO_ASSOCIATIONS_FOUND"
 # The SDK calls' paths, for error details.
 _OBJECTS_PATH = "/crm/v3/objects"
 _ASSOCIATIONS_PATH = "/crm/v4/associations"
@@ -455,10 +457,12 @@ class HubSpotSourceOperations(SourceOperations):
                 ]
             )
         )
+        operation: str = f"{object_type} to {to_object_type} associations"
+        path: str = f"{_ASSOCIATIONS_PATH}/{object_type}/{to_object_type}/batch/read"
         response: Any = self._sdk(
-            f"{object_type} to {to_object_type} associations",
+            operation,
             "POST",
-            f"{_ASSOCIATIONS_PATH}/{object_type}/{to_object_type}/batch/read",
+            path,
             self._api().crm.associations.v4.batch_api.get_page,
             from_object_type=object_type.value,
             to_object_type=to_object_type,
@@ -467,6 +471,21 @@ class HubSpotSourceOperations(SourceOperations):
         raw: ApiAssociationBatch = ApiAssociationBatch.model_validate(
             response.to_dict()
         )
+        # Any other error leaves a record's links unread, so it must not read as none.
+        failures: list[str] = [
+            error.message or error.category or "unknown error"
+            for error in raw.errors
+            if error.sub_category != NO_ASSOCIATIONS_SUBCATEGORY
+        ]
+        if failures:
+            raise HubSpotApiError(
+                operation,
+                207,
+                None,
+                "; ".join(failures),
+                method="POST",
+                url=f"{HUBSPOT_API_BASE}{path}",
+            )
         return {
             result.from_.id: HubSpotPage(
                 items=[str(link.to_object_id) for link in result.to],
