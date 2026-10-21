@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Sandbox
+from onyx.db.models import Sandbox, User
 from onyx.server.features.build.db.build_session import (
     update_sandbox_heartbeat as legacy_heartbeat,
 )
@@ -16,17 +16,16 @@ from onyx.server.features.build.db.sandbox import (
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 
 
 @pytest.mark.parametrize(
     "transition", ["sleep", "provision", "recovery", "heartbeat", "legacy_heartbeat"]
 )
 def test_checkpoint_is_committed_for_other_workers_and_cleared_on_transition(
-    db_session: Session, transition: str
+    db_session: Session, test_user: User, transition: str
 ) -> None:
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
+    sandbox = make_sandbox(db_session, test_user)
     sandbox.provisioning_attempt_number = 1
     db_session.commit()
     sandbox_id = sandbox.id
@@ -64,9 +63,10 @@ def test_checkpoint_is_committed_for_other_workers_and_cleared_on_transition(
     assert refreshed.cleanup_checkpoint is None
 
 
-def test_stale_attempt_cannot_record_cleanup_proof(db_session: Session) -> None:
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
+def test_stale_attempt_cannot_record_cleanup_proof(
+    db_session: Session, test_user: User
+) -> None:
+    sandbox = make_sandbox(db_session, test_user)
     sandbox.provisioning_attempt_number = 2
     db_session.commit()
     assert not record_cleanup_checkpoint__no_commit(
@@ -83,9 +83,10 @@ def test_stale_attempt_cannot_record_cleanup_proof(db_session: Session) -> None:
     assert sandbox.cleanup_checkpoint is None
 
 
-def test_intervening_heartbeat_fences_checkpoint_save(db_session: Session) -> None:
-    user = make_user(db_session)
-    sandbox = make_sandbox(db_session, user)
+def test_intervening_heartbeat_fences_checkpoint_save(
+    db_session: Session, test_user: User
+) -> None:
+    sandbox = make_sandbox(db_session, test_user)
     sandbox.provisioning_attempt_number = 1
     sandbox.last_heartbeat = datetime.now(timezone.utc) - timedelta(days=1)
     db_session.commit()
