@@ -54,6 +54,11 @@ import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 
+// Settings toggles that gate per-chat model controls in the model picker.
+type ChatControlKey =
+  | "reasoning_override_enabled"
+  | "temperature_override_enabled";
+
 const route = ADMIN_ROUTES.LLM_MODELS;
 
 // ============================================================================
@@ -123,7 +128,6 @@ function ExistingProviderCard({
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success(t("toasts.providerDeleted"));
     } catch (e) {
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.providerDeleteFailed", { message }));
@@ -390,6 +394,9 @@ export default function LanguageModelsPage() {
   const [pendingRoutingTarget, setPendingRoutingTarget] = useState<
     number | null
   >(null);
+  const [pendingChatControls, setPendingChatControls] = useState<
+    Partial<Record<ChatControlKey, boolean>>
+  >({});
   const {
     llmProviders: existingLlmProviders,
     defaultText,
@@ -528,13 +535,34 @@ export default function LanguageModelsPage() {
     try {
       await updateAdminSettings({ hide_provider_grouping: checked });
       await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
       );
     } finally {
       setPendingHideGrouping(null);
+    }
+  }
+
+  async function handleChatControlChange(
+    key: ChatControlKey,
+    checked: boolean
+  ) {
+    if (pendingChatControls[key] !== undefined) return;
+    setPendingChatControls((prev) => ({ ...prev, [key]: checked }));
+    try {
+      await updateAdminSettings({ [key]: checked });
+      await mutate(SWR_KEYS.settings);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    } finally {
+      setPendingChatControls((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     }
   }
 
@@ -547,7 +575,6 @@ export default function LanguageModelsPage() {
     try {
       await updateModelRouting({ model_routing_enabled: checked });
       await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
@@ -569,7 +596,6 @@ export default function LanguageModelsPage() {
         mutate(SWR_KEYS.settings),
         refreshLlmProviderCaches(mutate),
       ]);
-      toast.success(t("toasts.settingsUpdated"));
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
@@ -691,6 +717,53 @@ export default function LanguageModelsPage() {
                   )}
                 </InputHorizontal>
               )}
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              <InputHorizontal
+                title={t("reasoning.title")}
+                description={t("reasoning.description")}
+                withLabel
+              >
+                <InputSwitch
+                  id="reasoning_override_enabled"
+                  checked={
+                    pendingChatControls.reasoning_override_enabled ??
+                    settings.reasoning_override_enabled ??
+                    true
+                  }
+                  disabled={
+                    pendingChatControls.reasoning_override_enabled !== undefined
+                  }
+                  onCheckedChange={(checked) => {
+                    void handleChatControlChange(
+                      "reasoning_override_enabled",
+                      checked
+                    );
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title={t("temperature.title")}
+                description={t("temperature.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={
+                    pendingChatControls.temperature_override_enabled ??
+                    settings.temperature_override_enabled ??
+                    true
+                  }
+                  disabled={
+                    pendingChatControls.temperature_override_enabled !==
+                    undefined
+                  }
+                  onCheckedChange={(checked) => {
+                    void handleChatControlChange(
+                      "temperature_override_enabled",
+                      checked
+                    );
+                  }}
+                />
+              </InputHorizontal>
               {hasProviderGrouping && (
                 <InputHorizontal
                   title={t("hideProviderGrouping.title")}

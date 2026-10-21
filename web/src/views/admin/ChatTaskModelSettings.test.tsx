@@ -5,13 +5,15 @@ import {
   screen,
   setupUser,
   waitFor,
-  within,
 } from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
 import { NextIntlClientProvider } from "next-intl";
 import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import frenchMessages from "@/i18n/messages/fr.json";
-import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
+import {
+  ChatNamingModelSetting,
+  SearchSelectionModelSetting,
+} from "@/views/admin/ChatTaskModelSettings";
 import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -90,9 +92,25 @@ providers.push({
   ],
 });
 
+function TaskModels() {
+  return (
+    <>
+      <ChatNamingModelSetting />
+      <SearchSelectionModelSetting />
+    </>
+  );
+}
+
 async function renderTaskModels(): Promise<void> {
-  render(<ChatTaskModelSettings />);
-  await screen.findByText("Chat naming model");
+  render(<TaskModels />);
+  await screen.findByText("Chat Naming Model");
+}
+
+// Rows render in order: chat naming, then search selection.
+function taskSelector(row: 0 | 1): HTMLElement {
+  const selector = screen.getAllByRole("combobox")[row];
+  if (!selector) throw new Error(`Missing task model selector ${row}`);
+  return selector;
 }
 
 describe("ChatTaskModelSettings", () => {
@@ -194,7 +212,7 @@ describe("ChatTaskModelSettings", () => {
     render(
       <NextIntlClientProvider locale="fr" messages={frenchMessages}>
         <OpalStringsBridge>
-          <ChatTaskModelSettings />
+          <TaskModels />
         </OpalStringsBridge>
       </NextIntlClientProvider>
     );
@@ -206,7 +224,7 @@ describe("ChatTaskModelSettings", () => {
   test("waits for provider data before rendering task controls", async () => {
     const pending = deferred<Response>();
     listingResponse = () => pending.promise;
-    render(<ChatTaskModelSettings />);
+    render(<TaskModels />);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     await act(async () =>
       pending.resolve(
@@ -222,18 +240,16 @@ describe("ChatTaskModelSettings", () => {
         )
       )
     );
-    expect(await screen.findByText("Chat naming model")).toBeInTheDocument();
+    expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
   });
 
   test("offers provider setup when none are configured", async () => {
     listedProviders = [];
-    render(<ChatTaskModelSettings />);
-    expect(
-      await screen.findByText("Connect a language model provider")
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add Provider" })).toHaveAttribute(
-      "href",
-      "/admin/language-models"
+    render(<TaskModels />);
+    const links = await screen.findAllByRole("link", { name: "Add Provider" });
+    expect(links).toHaveLength(2);
+    links.forEach((link) =>
+      expect(link).toHaveAttribute("href", "/admin/language-models")
     );
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
@@ -242,13 +258,13 @@ describe("ChatTaskModelSettings", () => {
     listingResponse = async () =>
       new Response(JSON.stringify({ detail: "Unavailable" }), { status: 503 });
     const user = setupUser();
-    render(<ChatTaskModelSettings />);
+    render(<TaskModels />);
     expect(
-      await screen.findByText("Could not load task models")
-    ).toBeInTheDocument();
+      await screen.findAllByText("Could not load task models")
+    ).toHaveLength(2);
     listingResponse = null;
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("Chat naming model")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Retry" })[0]!);
+    expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalledWith(
       "/api/admin/llm/default-chat-naming",
       expect.anything()
@@ -258,12 +274,11 @@ describe("ChatTaskModelSettings", () => {
   test("shows the chat fallback only inside the empty naming selector", async () => {
     await renderTaskModels();
 
-    expect(await screen.findByText("Chat naming model")).toBeInTheDocument();
-    expect(screen.getByText("Search selection model")).toBeInTheDocument();
+    expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
+    expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText("Use Default model")).toHaveLength(2);
     expect(screen.queryByText("Session model")).not.toBeInTheDocument();
     expect(screen.getAllByDisplayValue("").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText("Chat Naming Model")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Reset" })
     ).not.toBeInTheDocument();
@@ -300,13 +315,9 @@ describe("ChatTaskModelSettings", () => {
   test("saves a hidden model without changing model visibility", async () => {
     const user = setupUser();
     await renderTaskModels();
-    await screen.findByText("Chat naming model");
+    await screen.findByText("Chat Naming Model");
 
-    await user.click(
-      within(
-        screen.getByRole("group", { name: "Chat naming model" })
-      ).getByRole("combobox")
-    );
+    await user.click(taskSelector(0));
     await user.type(
       screen.getByRole("textbox", { name: "Search" }),
       "GPT-4o Mini"
@@ -322,60 +333,7 @@ describe("ChatTaskModelSettings", () => {
         body: JSON.stringify({ provider_id: 7, model_name: "gpt-4o-mini" }),
       }
     );
-    expect(toast.success).toHaveBeenCalledWith("Chat naming model updated");
-  });
-
-  test("disables naming controls during reset and then returns to the chat fallback", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
-    const pending = deferred<Response>();
-    mutationResponse = () => pending.promise;
-    const user = setupUser();
-    await renderTaskModels();
-    const selector = await screen.findByDisplayValue("GPT-4o Mini");
-
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-
-    expect(selector).toBeDisabled();
-    expect(
-      within(
-        screen.getByRole("group", { name: "Search selection model" })
-      ).getByRole("combobox")
-    ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/admin/llm/default-chat-naming",
-      {
-        method: "DELETE",
-      }
-    );
-
-    await act(async () => pending.resolve(new Response(null, { status: 204 })));
-
-    await waitFor(() => expect(selector).toHaveValue(""));
-    expect(selector).toHaveAttribute("placeholder", "Use Default model");
-    expect(selector).toHaveValue("");
-    expect(selector).toBeEnabled();
-    expect(toast.success).toHaveBeenCalledWith(
-      "Chat naming model reset to the default model"
-    );
-  });
-
-  test("keeps the chat naming model when its title is clicked", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
-    const user = setupUser();
-    await renderTaskModels();
-    await screen.findByDisplayValue("GPT-4o Mini");
-
-    await user.click(screen.getByText("Chat naming model"));
-
-    expect(screen.getByDisplayValue("GPT-4o Mini")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
-    expect(global.fetch).not.toHaveBeenCalledWith(
-      "/api/admin/llm/default-chat-naming",
-      {
-        method: "DELETE",
-      }
-    );
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   test("keeps the chat fallback after a failed save and re-enables the selector", async () => {
@@ -386,11 +344,9 @@ describe("ChatTaskModelSettings", () => {
       });
     const user = setupUser();
     await renderTaskModels();
-    await screen.findByText("Chat naming model");
+    await screen.findByText("Chat Naming Model");
 
-    const selector = within(
-      screen.getByRole("group", { name: "Chat naming model" })
-    ).getByRole("combobox");
+    const selector = taskSelector(0);
     await user.click(selector);
     await user.type(
       screen.getByRole("textbox", { name: "Search" }),
@@ -409,45 +365,12 @@ describe("ChatTaskModelSettings", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("shows defaults from different providers and resets search independently", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
-    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
-    const pending = deferred<Response>();
-    searchMutationResponse = () => pending.promise;
-    const user = setupUser();
-    await renderTaskModels();
-    const searchSelector = await screen.findByDisplayValue("Search Mini");
-    const namingSelector = screen.getByDisplayValue("GPT-4o Mini");
-
-    await user.click(
-      within(
-        screen.getByRole("group", { name: "Search selection model" })
-      ).getByRole("button", { name: "Reset" })
-    );
-
-    expect(searchSelector).toBeDisabled();
-    expect(namingSelector).toBeEnabled();
-    expect(screen.getAllByRole("button", { name: "Reset" })[0]).toBeEnabled();
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/admin/llm/default-search-selection",
-      { method: "DELETE" }
-    );
-    await act(async () => pending.resolve(new Response(null, { status: 204 })));
-    await waitFor(() => expect(searchSelector).toHaveValue(""));
-    expect(namingSelector).toHaveValue("GPT-4o Mini");
-    expect(toast.success).toHaveBeenCalledWith(
-      "Search selection model reset to the default model"
-    );
-  });
-
   test("saving a hidden search model leaves naming and chat defaults unchanged", async () => {
     defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
     const user = setupUser();
     await renderTaskModels();
     await screen.findByDisplayValue("GPT-4o Mini");
-    const selector = within(
-      screen.getByRole("group", { name: "Search selection model" })
-    ).getByRole("combobox");
+    const selector = taskSelector(1);
     await user.click(selector);
     await user.type(
       screen.getByRole("textbox", { name: "Search" }),
@@ -465,63 +388,9 @@ describe("ChatTaskModelSettings", () => {
         body: JSON.stringify({ provider_id: 8, model_name: "search-mini" }),
       }
     );
-    expect(toast.success).toHaveBeenCalledWith(
-      "Search selection model updated"
-    );
+    expect(toast.success).not.toHaveBeenCalled();
     expect(providers[1]?.model_configurations[0]?.is_visible).toBe(false);
 
     expect(providers[0]?.model_configurations[1]?.is_visible).toBe(false);
-  });
-
-  test("search saves while a naming reset is pending without sharing its state", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
-    const pending = deferred<Response>();
-    mutationResponse = () => pending.promise;
-    const user = setupUser();
-    await renderTaskModels();
-    const namingSelector = await screen.findByDisplayValue("GPT-4o Mini");
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    expect(namingSelector).toBeDisabled();
-
-    await user.click(
-      within(
-        screen.getByRole("group", { name: "Search selection model" })
-      ).getByRole("combobox")
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
-      "Search Mini"
-    );
-    await user.click(screen.getByRole("option", { name: /Search Mini/ }));
-    expect(await screen.findByDisplayValue("Search Mini")).toBeEnabled();
-    expect(namingSelector).toBeDisabled();
-
-    await act(async () => pending.resolve(new Response(null, { status: 204 })));
-    await waitFor(() => expect(namingSelector).toHaveValue(""));
-    expect(screen.getByDisplayValue("Search Mini")).toBeInTheDocument();
-  });
-
-  test("a failed search reset preserves both defaults and re-enables controls", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
-    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
-    searchMutationResponse = async () =>
-      new Response(JSON.stringify({ detail: "Provider is unavailable" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    const user = setupUser();
-    await renderTaskModels();
-    const selector = await screen.findByDisplayValue("Search Mini");
-    await user.click(
-      within(
-        screen.getByRole("group", { name: "Search selection model" })
-      ).getByRole("button", { name: "Reset" })
-    );
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith("Provider is unavailable");
-    });
-    expect(selector).toHaveValue("Search Mini");
-    expect(selector).toBeEnabled();
-    expect(screen.getByDisplayValue("GPT-4o Mini")).toBeInTheDocument();
   });
 });

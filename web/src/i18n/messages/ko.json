@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "채팅 세션의 이름을 생성하는 모델입니다. 기본적으로 각 세션의 모델을 사용합니다.",
-        "resetButton": {
-          "label": "초기화"
-        },
+        "description": "세션 제목을 생성합니다. 빠르고 저렴한 모델이 적합합니다.",
         "sessionModel": {
           "label": "기본 모델 사용"
         },
-        "title": "채팅 이름 생성 모델"
+        "title": "채팅 이름 지정 모델"
       },
       "searchSelectionModel": {
-        "description": "검색된 문서를 선택하고 확인합니다. 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
-        "resetButton": {
-          "label": "초기화"
-        },
+        "description": "검색된 문서를 선택하고 확인합니다. 기본값은 각 채팅의 모델입니다.",
         "sessionModel": {
           "label": "기본 모델 사용"
         },
-        "title": "검색 선택 모델"
+        "title": "검색 문서 선택 모델"
       },
       "taskModels": {
-        "title": "모델 선택",
         "loadFailed": "작업 모델을 불러오지 못했습니다",
         "retry": {
           "label": "다시 시도"
-        },
-        "noProviders": {
-          "title": "언어 모델 공급자를 연결하세요"
         },
         "addProvider": {
           "label": "제공자 추가"
@@ -2353,10 +2343,6 @@
         },
         "title": "질의 기록 공개 범위"
       },
-      "reasoning": {
-        "description": "채팅의 모델 선택기에서 모델이 답변 전에 수행할 추론의 양을 사용자가 조절할 수 있게 합니다.",
-        "title": "추론 제어"
-      },
       "retention": {
         "custom": {
           "invalidError": "1에서 {max} 사이의 정수 일수를 입력하세요.",
@@ -2427,26 +2413,13 @@
         "placeholder": "팀 이름 입력",
         "title": "팀 이름"
       },
-      "temperature": {
-        "description": "채팅의 모델 선택기에서 모델 응답의 temperature(창의성)를 사용자가 조절할 수 있게 합니다.",
-        "title": "Temperature 제어"
-      },
       "toasts": {
-        "chatNamingUpdated": "채팅 이름 생성 모델이 업데이트되었습니다",
-        "chatNamingReset": "채팅 이름 생성 모델을 기본 모델로 초기화했습니다",
         "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
-        "chatNamingResetFailed": "채팅 이름 생성 모델을 초기화하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
-        "searchSelectionReset": "검색 선택 모델을 기본 모델로 초기화했습니다",
-        "searchSelectionResetFailed": "검색 선택 모델을 초기화하지 못했습니다",
         "searchSelectionUpdateFailed": "검색 선택 모델을 업데이트하지 못했습니다",
-        "searchSelectionUpdated": "검색 선택 모델이 업데이트되었습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
-        "settingsUpdated": "설정을 업데이트했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
-        "systemPromptUpdated": "시스템 프롬프트를 업데이트했습니다",
         "toolsUpdateFailed": "도구를 업데이트하지 못했습니다",
-        "toolsUpdated": "도구를 업데이트했습니다",
         "unknownError": "알 수 없는 오류가 발생했습니다"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "재정의를 제거하지 못했습니다: {message}",
-        "removed": "{model}의 재정의를 제거했습니다.",
         "saveFailed": "재정의를 저장하지 못했습니다: {message}",
-        "saved": "{model}의 요금을 저장했습니다.",
         "unknownError": "알 수 없는 오류"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
-        "providerDeleted": "제공자를 삭제했습니다!",
         "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
-        "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "사용자 지정 모델",
           "companyName": "OpenAI 호환 엔드포인트"
         }
+      },
+      "reasoning": {
+        "description": "채팅의 모델 선택기에서 모델이 답변 전에 수행할 추론의 양을 사용자가 조절할 수 있게 합니다.",
+        "title": "추론 제어"
+      },
+      "temperature": {
+        "description": "채팅의 모델 선택기에서 모델 응답의 temperature(창의성)를 사용자가 조절할 수 있게 합니다.",
+        "title": "Temperature 제어"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "nae-vertex-peurojekteu",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "전역 기본값"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "비밀번호 변경",
         "toasts": {
           "networkError": "비밀번호를 변경하는 중 오류가 발생했습니다",
-          "updateFailed": "비밀번호를 변경하지 못했습니다",
-          "updated": "비밀번호를 변경했습니다"
+          "updateFailed": "비밀번호를 변경하지 못했습니다"
         },
         "validation": {
           "confirmRequired": "새 비밀번호를 확인해 주세요",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "token을 생성하지 못했습니다",
         "createNetworkError": "token 생성 중 네트워크 오류가 발생했습니다",
-        "created": "token을 생성했습니다",
         "deleteFailed": "token을 삭제하지 못했습니다",
         "deleteNetworkError": "token 삭제 중 네트워크 오류가 발생했습니다",
-        "deleted": "token을 삭제했습니다",
         "loadFailed": "token을 불러오지 못했습니다",
         "loadPermissionsFailed": "권한 옵션을 불러오지 못했습니다",
         "nameRequired": "token 이름을 입력해야 합니다"
@@ -16146,8 +16125,7 @@
       },
       "title": "채팅",
       "toasts": {
-        "saveFailed": "환경설정을 저장하지 못했습니다",
-        "saved": "환경설정을 저장했습니다"
+        "saveFailed": "환경설정을 저장하지 못했습니다"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "커넥터",
       "toasts": {
-        "disconnectFailed": "연결을 해제하지 못했습니다",
-        "disconnected": "연결을 해제했습니다"
+        "disconnectFailed": "연결을 해제하지 못했습니다"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "모든 채팅 세션을 영구히 삭제합니다.",
         "title": "모든 채팅 삭제",
         "toasts": {
-          "deleteFailed": "모든 채팅 세션을 삭제하지 못했습니다",
-          "deleted": "모든 채팅 세션을 삭제했습니다."
+          "deleteFailed": "모든 채팅 세션을 삭제하지 못했습니다"
         }
       },
       "title": "위험 구역"
@@ -16232,8 +16208,7 @@
       "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
-      },
-      "workspaceDefault": "워크스페이스 기본값 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "프로필",
       "toasts": {
-        "updateFailed": "개인화 설정을 변경하지 못했습니다",
-        "updated": "개인화 설정을 변경했습니다"
+        "updateFailed": "개인화 설정을 변경하지 못했습니다"
       },
       "workRole": {
         "description": "직무를 알려주면 응답을 더 잘 맞출 수 있습니다.",
@@ -16339,12 +16313,9 @@
       "title": "프롬프트 단축어",
       "toasts": {
         "bothRequired": "단축어와 확장 내용을 모두 입력해야 합니다",
-        "created": "단축어를 생성했습니다",
         "deleteFailed": "단축어를 삭제하지 못했습니다",
-        "deleted": "단축어를 삭제했습니다",
         "loadFailed": "단축어를 불러오지 못했습니다",
-        "saveFailed": "단축어를 저장하지 못했습니다",
-        "updated": "단축어를 수정했습니다"
+        "saveFailed": "단축어를 저장하지 못했습니다"
       },
       "toggle": {
         "description": "단축어를 활성화하면 자주 쓰는 프롬프트를 빠르게 넣을 수 있습니다.",

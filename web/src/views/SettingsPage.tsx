@@ -35,7 +35,8 @@ import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
-import { LOCALE_ENDONYMS, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
+import { type Locale } from "@/i18n/config";
+import { LanguageSelect } from "@/lib/app/components";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -132,9 +133,6 @@ interface CreatedTokenState {
   token: string;
   name: string;
 }
-
-// Select value for "no stored language". Never a locale code.
-const WORKSPACE_DEFAULT_LANGUAGE_VALUE = "workspace-default";
 
 interface ScopeGroup {
   label: string;
@@ -499,7 +497,6 @@ function usePATCreation({
           token: data.token,
           name: newTokenName,
         });
-        toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
         const errorData: ErrorResponseBody = await response.json();
@@ -551,9 +548,6 @@ function GeneralSettings() {
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
   const workspaceLanguage: Locale = useSettings().default_language;
-  // No stored language = follow the workspace default.
-  const currentLanguage: string =
-    user?.preferences?.language ?? WORKSPACE_DEFAULT_LANGUAGE_VALUE;
 
   const tBg = useTranslations("common.chatBackgrounds");
   const bgLabels: Record<string, string> = {
@@ -592,7 +586,6 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("profile.toasts.updated")),
     onError: () => toast.error(t("profile.toasts.updateFailed")),
   });
 
@@ -611,7 +604,6 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success(t("dangerZone.deleteAllChats.toasts.deleted"));
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
@@ -852,30 +844,14 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSingleSelect
-                  value={currentLanguage}
-                  onValueChange={(value) => {
-                    // SAFETY: the options are LOCALE_OPTIONS plus the
-                    // workspace-default sentinel, so nothing else is emitted.
-                    const language: Locale | null =
-                      value === WORKSPACE_DEFAULT_LANGUAGE_VALUE
-                        ? null
-                        : (value as Locale);
+                <LanguageSelect
+                  value={user?.preferences?.language ?? null}
+                  globalDefault={workspaceLanguage}
+                  onChange={(language) => {
                     updateUserLanguage(language).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                  defaultOption={WORKSPACE_DEFAULT_LANGUAGE_VALUE}
-                  placeholder={tInputSelect("placeholder.fallback")}
-                  options={[
-                    {
-                      value: WORKSPACE_DEFAULT_LANGUAGE_VALUE,
-                      title: t("language.workspaceDefault", {
-                        language: LOCALE_ENDONYMS[workspaceLanguage],
-                      }),
-                    },
-                    ...LOCALE_OPTIONS,
-                  ]}
                 />
               </InputHorizontal>
             </Section>
@@ -1030,7 +1006,6 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          toast.success(t("promptShortcuts.toasts.deleted"));
         } else {
           throw new Error("Failed to delete shortcut");
         }
@@ -1065,7 +1040,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.created"));
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -1084,7 +1058,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.updated"));
           } else {
             throw new Error("Failed to update shortcut");
           }
@@ -1229,7 +1202,6 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("chats.toasts.saved")),
     onError: () => toast.error(t("chats.toasts.saveFailed")),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
@@ -1248,7 +1220,6 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1292,7 +1263,6 @@ function ChatPreferencesSettings() {
     async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1306,7 +1276,6 @@ function ChatPreferencesSettings() {
         await updateUserReasoningEffortDefault(
           ALL_REASONING_STOPS[effortStop] ?? null
         );
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -2101,7 +2070,6 @@ function AccountsAccessSettings() {
             tokenCreation.closeTokenModal();
           }
           await mutate();
-          toast.success(t("apiKeys.toasts.deleted"));
           setTokenToDelete(null);
         } else {
           toast.error(t("apiKeys.toasts.deleteFailed"));
@@ -2132,7 +2100,6 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success(t("accounts.passwordModal.toasts.updated"));
           setShowPasswordModal(false);
         } else {
           const errorData: ErrorResponseBody = await response.json();
@@ -2548,7 +2515,6 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success(t("connectors.toasts.disconnected"));
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {

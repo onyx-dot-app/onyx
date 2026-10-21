@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Modell zum Benennen von Chats. Standardmäßig wird das Modell der jeweiligen Sitzung verwendet.",
-        "resetButton": {
-          "label": "Zurücksetzen"
-        },
+        "description": "Erstellt Sitzungstitel. Ein schnelles, kostengünstiges Modell eignet sich gut.",
         "sessionModel": {
           "label": "Standardmodell verwenden"
         },
-        "title": "Modell zur Chat-Benennung"
+        "title": "Modell für Chat-Benennung"
       },
       "searchSelectionModel": {
-        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein günstigeres Modell kann Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
-        "resetButton": {
-          "label": "Zurücksetzen"
-        },
+        "description": "Wählt abgerufene Dokumente aus und prüft sie. Standardmäßig das Modell des jeweiligen Chats.",
         "sessionModel": {
           "label": "Standardmodell verwenden"
         },
-        "title": "Modell für die Dokumentauswahl"
+        "title": "Modell für Suchauswahl"
       },
       "taskModels": {
-        "title": "Modellauswahl",
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
         "retry": {
           "label": "Erneut versuchen"
-        },
-        "noProviders": {
-          "title": "Verbinden Sie einen Sprachmodellanbieter"
         },
         "addProvider": {
           "label": "Anbieter hinzufügen"
@@ -2353,10 +2343,6 @@
         },
         "title": "Sichtbarkeit des Abfrageverlaufs"
       },
-      "reasoning": {
-        "description": "Lassen Sie Benutzer über die Modellauswahl im Chat anpassen, wie viel Reasoning das Modell vor der Antwort ausführt.",
-        "title": "Reasoning-Steuerung"
-      },
       "retention": {
         "custom": {
           "invalidError": "Geben Sie eine ganze Anzahl von Tagen zwischen 1 und {max} ein.",
@@ -2427,26 +2413,13 @@
         "placeholder": "Teamnamen eingeben",
         "title": "Teamname"
       },
-      "temperature": {
-        "description": "Lassen Sie Benutzer die Temperatur (Kreativität) der Modellantworten über die Modellauswahl im Chat anpassen.",
-        "title": "Temperatursteuerung"
-      },
       "toasts": {
-        "chatNamingUpdated": "Modell zur Chat-Benennung aktualisiert",
-        "chatNamingReset": "Modell zur Chat-Benennung auf das Standardmodell zurückgesetzt",
         "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
-        "chatNamingResetFailed": "Modell zur Chat-Benennung konnte nicht zurückgesetzt werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
-        "searchSelectionReset": "Modell für die Dokumentauswahl auf das Standardmodell zurückgesetzt",
-        "searchSelectionResetFailed": "Modell für die Dokumentauswahl konnte nicht zurückgesetzt werden",
         "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
-        "searchSelectionUpdated": "Modell für die Dokumentauswahl aktualisiert",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
-        "settingsUpdated": "Einstellungen aktualisiert",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
-        "systemPromptUpdated": "System-Prompt aktualisiert",
         "toolsUpdateFailed": "Die Tools konnten nicht aktualisiert werden",
-        "toolsUpdated": "Tools aktualisiert",
         "unknownError": "Ein unbekannter Fehler ist aufgetreten"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "Die Überschreibung konnte nicht entfernt werden: {message}",
-        "removed": "Überschreibung für {model} entfernt.",
         "saveFailed": "Die Überschreibung konnte nicht gespeichert werden: {message}",
-        "saved": "Preis für {model} gespeichert.",
         "unknownError": "Unbekannter Fehler"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "Der Anbieter konnte nicht gelöscht werden: {message}",
-        "providerDeleted": "Anbieter erfolgreich gelöscht!",
         "providerLoadFailed": "Der Anbieter konnte nicht geladen werden: {message}",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
-        "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "Benutzerdefinierte Modelle",
           "companyName": "OpenAI-kompatible Endpunkte"
         }
+      },
+      "reasoning": {
+        "description": "Lassen Sie Benutzer über die Modellauswahl im Chat anpassen, wie viel Reasoning das Modell vor der Antwort ausführt.",
+        "title": "Reasoning-Steuerung"
+      },
+      "temperature": {
+        "description": "Lassen Sie Benutzer die Temperatur (Kreativität) der Modellantworten über die Modellauswahl im Chat anpassen.",
+        "title": "Temperatursteuerung"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "mein-vertex-projekt",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Globaler Standard"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "Passwort ändern",
         "toasts": {
           "networkError": "Beim Ändern des Passworts ist ein Fehler aufgetreten",
-          "updateFailed": "Passwort konnte nicht geändert werden",
-          "updated": "Passwort erfolgreich aktualisiert"
+          "updateFailed": "Passwort konnte nicht geändert werden"
         },
         "validation": {
           "confirmRequired": "Bitte bestätigen Sie Ihr neues Passwort",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "Token konnte nicht erstellt werden",
         "createNetworkError": "Netzwerkfehler beim Erstellen des Tokens",
-        "created": "Token erfolgreich erstellt",
         "deleteFailed": "Token konnte nicht gelöscht werden",
         "deleteNetworkError": "Netzwerkfehler beim Löschen des Tokens",
-        "deleted": "Token erfolgreich gelöscht",
         "loadFailed": "Token konnten nicht geladen werden",
         "loadPermissionsFailed": "Berechtigungsoptionen konnten nicht geladen werden",
         "nameRequired": "Token-Name ist erforderlich"
@@ -16146,8 +16125,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Einstellungen konnten nicht gespeichert werden",
-        "saved": "Einstellungen gespeichert"
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "Konnektoren",
       "toasts": {
-        "disconnectFailed": "Trennung fehlgeschlagen",
-        "disconnected": "Erfolgreich getrennt"
+        "disconnectFailed": "Trennung fehlgeschlagen"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "Löschen Sie alle Ihre Chat-Sitzungen dauerhaft.",
         "title": "Alle Chats löschen",
         "toasts": {
-          "deleteFailed": "Alle Chat-Sitzungen konnten nicht gelöscht werden",
-          "deleted": "Alle Ihre Chat-Sitzungen wurden gelöscht."
+          "deleteFailed": "Alle Chat-Sitzungen konnten nicht gelöscht werden"
         }
       },
       "title": "Gefahrenzone"
@@ -16232,8 +16208,7 @@
       "title": "Sprache",
       "toasts": {
         "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
-      },
-      "workspaceDefault": "Standard ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "Profil",
       "toasts": {
-        "updateFailed": "Personalisierung konnte nicht aktualisiert werden",
-        "updated": "Personalisierung erfolgreich aktualisiert"
+        "updateFailed": "Personalisierung konnte nicht aktualisiert werden"
       },
       "workRole": {
         "description": "Teilen Sie Ihre Rolle mit, um Antworten besser anzupassen.",
@@ -16339,12 +16313,9 @@
       "title": "Prompt-Shortcuts",
       "toasts": {
         "bothRequired": "Shortcut und Erweiterung sind beide erforderlich",
-        "created": "Shortcut erstellt",
         "deleteFailed": "Shortcut konnte nicht gelöscht werden",
-        "deleted": "Shortcut gelöscht",
         "loadFailed": "Shortcuts konnten nicht geladen werden",
-        "saveFailed": "Shortcut konnte nicht gespeichert werden",
-        "updated": "Shortcut aktualisiert"
+        "saveFailed": "Shortcut konnte nicht gespeichert werden"
       },
       "toggle": {
         "description": "Aktivieren Sie Shortcuts, um häufig verwendete Prompts schnell einzufügen.",

@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
-        "resetButton": {
-          "label": "リセット"
-        },
+        "description": "セッションのタイトルを生成します。高速で低コストのモデルが適しています。",
         "sessionModel": {
           "label": "デフォルトモデルを使用"
         },
-        "title": "チャット名の生成モデル"
+        "title": "チャット命名モデル"
       },
       "searchSelectionModel": {
-        "description": "取得したドキュメントを選択して確認します。低コストのモデルは検索コストを削減できますが、回答の品質に影響する可能性があります。",
-        "resetButton": {
-          "label": "リセット"
-        },
+        "description": "取得したドキュメントを選択して確認します。既定では各チャットのモデルを使用します。",
         "sessionModel": {
           "label": "デフォルトモデルを使用"
         },
-        "title": "検索選択モデル"
+        "title": "検索ドキュメント選択モデル"
       },
       "taskModels": {
-        "title": "モデルの選択",
         "loadFailed": "タスクモデルを読み込めませんでした",
         "retry": {
           "label": "再試行"
-        },
-        "noProviders": {
-          "title": "言語モデルのプロバイダーを接続"
         },
         "addProvider": {
           "label": "プロバイダーを追加"
@@ -2353,10 +2343,6 @@
         },
         "title": "クエリ履歴の表示設定"
       },
-      "reasoning": {
-        "description": "チャットのモデル選択メニューから、回答前にモデルが行う推論の量をユーザーが調整できるようにします。",
-        "title": "推論の制御"
-      },
       "retention": {
         "custom": {
           "invalidError": "1 から {max} までの整数の日数を入力してください。",
@@ -2427,26 +2413,13 @@
         "placeholder": "チーム名を入力",
         "title": "チーム名"
       },
-      "temperature": {
-        "description": "チャットのモデル選択メニューから、モデル応答の Temperature（創造性）をユーザーが調整できるようにします。",
-        "title": "Temperature の制御"
-      },
       "toasts": {
-        "chatNamingUpdated": "チャット名の生成モデルを更新しました",
-        "chatNamingReset": "チャット名の生成モデルをデフォルトモデルにリセットしました",
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
-        "chatNamingResetFailed": "チャット名の生成モデルのリセットに失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchSelectionReset": "検索選択モデルをデフォルトモデルにリセットしました",
-        "searchSelectionResetFailed": "検索選択モデルのリセットに失敗しました",
         "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
-        "searchSelectionUpdated": "検索選択モデルを更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
-        "systemPromptUpdated": "システムプロンプトを更新しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
-        "toolsUpdated": "ツールを更新しました",
         "unknownError": "不明なエラーが発生しました"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",
-        "removed": "{model} のオーバーライドを削除しました。",
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
-        "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
-        "providerDeleted": "プロバイダーを削除しました。",
         "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "カスタムモデル",
           "companyName": "OpenAI 互換エンドポイント"
         }
+      },
+      "reasoning": {
+        "description": "チャットのモデル選択メニューから、回答前にモデルが行う推論の量をユーザーが調整できるようにします。",
+        "title": "推論の制御"
+      },
+      "temperature": {
+        "description": "チャットのモデル選択メニューから、モデル応答の Temperature（創造性）をユーザーが調整できるようにします。",
+        "title": "Temperature の制御"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "vertex-purojekuto",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "グローバルデフォルト"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "パスワードを変更",
         "toasts": {
           "networkError": "パスワードの変更中にエラーが発生しました",
-          "updateFailed": "パスワードを変更できませんでした",
-          "updated": "パスワードを更新しました"
+          "updateFailed": "パスワードを変更できませんでした"
         },
         "validation": {
           "confirmRequired": "新しいパスワードを確認してください",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "トークンを作成できませんでした",
         "createNetworkError": "トークンの作成中にネットワークエラーが発生しました",
-        "created": "トークンを作成しました",
         "deleteFailed": "トークンを削除できませんでした",
         "deleteNetworkError": "トークンの削除中にネットワークエラーが発生しました",
-        "deleted": "トークンを削除しました",
         "loadFailed": "トークンを読み込めませんでした",
         "loadPermissionsFailed": "権限オプションを読み込めませんでした",
         "nameRequired": "トークン名は必須です"
@@ -16146,8 +16125,7 @@
       },
       "title": "チャット",
       "toasts": {
-        "saveFailed": "設定を保存できませんでした",
-        "saved": "設定を保存しました"
+        "saveFailed": "設定を保存できませんでした"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "コネクター",
       "toasts": {
-        "disconnectFailed": "切断できませんでした",
-        "disconnected": "切断しました"
+        "disconnectFailed": "切断できませんでした"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "すべてのチャットセッションを完全に削除します。",
         "title": "すべてのチャットを削除",
         "toasts": {
-          "deleteFailed": "すべてのチャットセッションを削除できませんでした",
-          "deleted": "すべてのチャットセッションを削除しました。"
+          "deleteFailed": "すべてのチャットセッションを削除できませんでした"
         }
       },
       "title": "危険な操作"
@@ -16232,8 +16208,7 @@
       "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
-      },
-      "workspaceDefault": "ワークスペースの既定 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "プロフィール",
       "toasts": {
-        "updateFailed": "パーソナライズ設定を更新できませんでした",
-        "updated": "パーソナライズ設定を更新しました"
+        "updateFailed": "パーソナライズ設定を更新できませんでした"
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
@@ -16339,12 +16313,9 @@
       "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
-        "created": "ショートカットを作成しました",
         "deleteFailed": "ショートカットを削除できませんでした",
-        "deleted": "ショートカットを削除しました",
         "loadFailed": "ショートカットを読み込めませんでした",
-        "saveFailed": "ショートカットを保存できませんでした",
-        "updated": "ショートカットを更新しました"
+        "saveFailed": "ショートカットを保存できませんでした"
       },
       "toggle": {
         "description": "ショートカットを有効にすると、よく使うプロンプトをすばやく挿入できます。",

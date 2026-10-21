@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Model used to name chat sessions. Defaults to each session's model.",
-        "resetButton": {
-          "label": "Reset"
-        },
+        "description": "Generates session titles. A fast, low-cost model works well.",
         "sessionModel": {
           "label": "Use Default model"
         },
-        "title": "Chat naming model"
+        "title": "Chat Naming Model"
       },
       "searchSelectionModel": {
-        "description": "Selects and checks retrieved documents. A lower-cost model can reduce search costs, but may affect answer quality.",
-        "resetButton": {
-          "label": "Reset"
-        },
+        "description": "Selects and checks retrieved documents. Defaults to each chat's model.",
         "sessionModel": {
           "label": "Use Default model"
         },
-        "title": "Search selection model"
+        "title": "Search Selection Model"
       },
       "taskModels": {
-        "title": "Model selection",
         "loadFailed": "Could not load task models",
         "retry": {
           "label": "Retry"
-        },
-        "noProviders": {
-          "title": "Connect a language model provider"
         },
         "addProvider": {
           "label": "Add Provider"
@@ -2353,10 +2343,6 @@
         },
         "title": "Query History Visibility"
       },
-      "reasoning": {
-        "description": "Let users adjust how much reasoning the model performs before answering, from the model picker in chat.",
-        "title": "Reasoning Control"
-      },
       "retention": {
         "custom": {
           "invalidError": "Enter a whole number of days between 1 and {max}.",
@@ -2427,26 +2413,13 @@
         "placeholder": "Enter team name",
         "title": "Team Name"
       },
-      "temperature": {
-        "description": "Let users adjust the temperature (creativity) of model responses from the model picker in chat.",
-        "title": "Temperature Control"
-      },
       "toasts": {
-        "chatNamingUpdated": "Chat naming model updated",
-        "chatNamingReset": "Chat naming model reset to the default model",
         "chatNamingUpdateFailed": "Failed to update chat naming model",
-        "chatNamingResetFailed": "Failed to reset chat naming model",
         "providerResolveFailed": "Could not resolve provider",
-        "searchSelectionReset": "Search selection model reset to the default model",
-        "searchSelectionResetFailed": "Failed to reset search selection model",
         "searchSelectionUpdateFailed": "Failed to update search selection model",
-        "searchSelectionUpdated": "Search selection model updated",
         "settingsUpdateFailed": "Failed to update settings",
-        "settingsUpdated": "Settings updated",
         "systemPromptUpdateFailed": "Failed to update system prompt",
-        "systemPromptUpdated": "System prompt updated",
         "toolsUpdateFailed": "Failed to update tools",
-        "toolsUpdated": "Tools updated",
         "unknownError": "An unknown error occurred"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "Failed to remove override: {message}",
-        "removed": "Removed override for {model}.",
         "saveFailed": "Failed to save override: {message}",
-        "saved": "Saved rate for {model}.",
         "unknownError": "Unknown error"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "Failed to delete provider: {message}",
-        "providerDeleted": "Provider deleted successfully!",
         "providerLoadFailed": "Could not load the provider: {message}",
         "providerResolveFailed": "Could not resolve provider",
         "settingsUpdateFailed": "Failed to update settings",
-        "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "Custom Models",
           "companyName": "OpenAI-compatible endpoints"
         }
+      },
+      "reasoning": {
+        "description": "Let users adjust how much reasoning the model performs before answering, from the model picker in chat.",
+        "title": "Reasoning Control"
+      },
+      "temperature": {
+        "description": "Let users adjust the temperature (creativity) of model responses from the model picker in chat.",
+        "title": "Temperature Control"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "my-vertex-project",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Global Default"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "Change Password",
         "toasts": {
           "networkError": "An error occurred while changing the password",
-          "updateFailed": "Failed to change password",
-          "updated": "Password updated successfully"
+          "updateFailed": "Failed to change password"
         },
         "validation": {
           "confirmRequired": "Please confirm your new password",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "Failed to create token",
         "createNetworkError": "Network error creating token",
-        "created": "Token created successfully",
         "deleteFailed": "Failed to delete token",
         "deleteNetworkError": "Network error deleting token",
-        "deleted": "Token deleted successfully",
         "loadFailed": "Failed to load tokens",
         "loadPermissionsFailed": "Failed to load permission options",
         "nameRequired": "Token name is required"
@@ -16146,8 +16125,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Failed to save preferences",
-        "saved": "Preferences saved"
+        "saveFailed": "Failed to save preferences"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "Connectors",
       "toasts": {
-        "disconnectFailed": "Failed to disconnect",
-        "disconnected": "Disconnected successfully"
+        "disconnectFailed": "Failed to disconnect"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "Permanently delete all your chat sessions.",
         "title": "Delete All Chats",
         "toasts": {
-          "deleteFailed": "Failed to delete all chat sessions",
-          "deleted": "All your chat sessions have been deleted."
+          "deleteFailed": "Failed to delete all chat sessions"
         }
       },
       "title": "Danger Zone"
@@ -16232,8 +16208,7 @@
       "title": "Language",
       "toasts": {
         "updateFailed": "Failed to update language preference"
-      },
-      "workspaceDefault": "Default ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "Profile",
       "toasts": {
-        "updateFailed": "Failed to update personalization",
-        "updated": "Personalization updated successfully"
+        "updateFailed": "Failed to update personalization"
       },
       "workRole": {
         "description": "Share your role to better tailor responses.",
@@ -16339,12 +16313,9 @@
       "title": "Prompt Shortcuts",
       "toasts": {
         "bothRequired": "Both shortcut and expansion are required",
-        "created": "Shortcut created",
         "deleteFailed": "Failed to delete shortcut",
-        "deleted": "Shortcut deleted",
         "loadFailed": "Failed to load shortcuts",
-        "saveFailed": "Failed to save shortcut",
-        "updated": "Shortcut updated"
+        "saveFailed": "Failed to save shortcut"
       },
       "toggle": {
         "description": "Enable shortcuts to quickly insert common prompts.",

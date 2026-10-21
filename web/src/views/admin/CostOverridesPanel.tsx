@@ -137,7 +137,6 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
         cache_read_cost_per_mtok: values.cacheRate,
       });
       await refreshCostOverrides(mutate);
-      toast.success(t("toasts.saved", { model }));
       onClose();
     } catch (e) {
       console.error("Failed to save cost override", e);
@@ -341,7 +340,6 @@ function OverrideRow({ override }: OverrideRowProps) {
       await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
       deleteModal.toggle(false);
-      toast.success(t("toasts.removed", { model: override.model }));
     } catch (e) {
       console.error("Failed to remove cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");

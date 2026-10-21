@@ -49,7 +49,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
-import { DEFAULT_LOCALE, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
+import { LanguageSelect } from "@/lib/app/components";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -73,7 +73,10 @@ import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { Tier } from "@/lib/tiers/types";
-import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
+import {
+  ChatNamingModelSetting,
+  SearchSelectionModelSetting,
+} from "@/views/admin/ChatTaskModelSettings";
 
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 
@@ -686,7 +689,6 @@ export default function ChatPreferencesPage() {
   const toggleTools = async (toolDbIds: number[], enabled: boolean) => {
     try {
       await updateTools(toolDbIds, enabled);
-      toast.success(t("toasts.toolsUpdated"));
     } catch {
       toast.error(t("toasts.toolsUpdateFailed"));
     }
@@ -723,7 +725,6 @@ export default function ChatPreferencesPage() {
 
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success(t("toasts.settingsUpdated"));
       } catch (error) {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
@@ -742,9 +743,66 @@ export default function ChatPreferencesPage() {
         />
 
         <SettingsLayouts.Body>
-          {/* Features */}
+          {/* Chat */}
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
+              <InputHorizontal
+                title={t("defaultLanguage.title")}
+                description={t("defaultLanguage.description")}
+                withLabel
+                fillInput
+              >
+                <LanguageSelect
+                  value={s.default_language}
+                  onChange={(language) => {
+                    void saveSettings({ default_language: language });
+                  }}
+                />
+              </InputHorizontal>
+              <ChatNamingModelSetting />
+              <InputHorizontal
+                title={t("multiModel.title")}
+                description={t("multiModel.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={s.multi_model_chat_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ multi_model_chat_enabled: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title={t("deepResearch.title")}
+                description={t("deepResearch.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={s.deep_research_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ deep_research_enabled: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title={t("autoScroll.title")}
+                description={t("autoScroll.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={s.auto_scroll ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputHorizontal>
+            </Section>
+          </Card>
+
+          {/* Search */}
+          <Card border="solid" rounding={4}>
+            <Section alignItems="stretch">
+              <SearchSelectionModelSetting />
               {/* Below Business, or with no connectors, the row stays as is;
               only its switch is locked. */}
               <InputHorizontal
@@ -791,101 +849,13 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
-              <InputHorizontal
-                title={t("multiModel.title")}
-                tag={{ title: t("betaTag.label"), color: "blue" }}
-                description={t("multiModel.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={s.multi_model_chat_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ multi_model_chat_enabled: checked });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("deepResearch.title")}
-                description={t("deepResearch.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={s.deep_research_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ deep_research_enabled: checked });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("autoScroll.title")}
-                description={t("autoScroll.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={s.auto_scroll ?? false}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({ auto_scroll: checked });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("temperature.title")}
-                description={t("temperature.description")}
-                withLabel
-              >
-                <InputSwitch
-                  checked={s.temperature_override_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({
-                      temperature_override_enabled: checked,
-                    });
-                  }}
-                />
-              </InputHorizontal>
-              <InputHorizontal
-                title={t("reasoning.title")}
-                description={t("reasoning.description")}
-                withLabel
-              >
-                <InputSwitch
-                  id="reasoning_override_enabled"
-                  checked={s.reasoning_override_enabled ?? true}
-                  onCheckedChange={(checked) => {
-                    void saveSettings({
-                      reasoning_override_enabled: checked,
-                    });
-                  }}
-                />
-              </InputHorizontal>
             </Section>
           </Card>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-          <Section alignItems="stretch" gap={3}>
-            <Content title={t("taskModels.title")} sizePreset="main-ui" />
-            <ChatTaskModelSettings />
-          </Section>
-
-          {/* Workspace language and team context */}
+          {/* Team context */}
           <Section gap={4}>
-            <InputVertical
-              title={t("defaultLanguage.title")}
-              subDescription={t("defaultLanguage.description")}
-              withLabel
-            >
-              <InputSingleSelect
-                value={s.default_language}
-                onValueChange={(value) => {
-                  // SAFETY: LOCALE_OPTIONS only carries SUPPORTED_LOCALES values.
-                  void saveSettings({ default_language: value as Locale });
-                }}
-                defaultOption={DEFAULT_LOCALE}
-                placeholder={tInputSelect("placeholder.fallback")}
-                options={LOCALE_OPTIONS}
-              />
-            </InputVertical>
-
             <InputVertical
               title={t("teamName.title")}
               subDescription={t("teamName.description")}
@@ -1339,7 +1309,6 @@ export default function ChatPreferencesPage() {
                 }
                 await mutateDefaultAgent();
                 setSystemPromptModalOpen(false);
-                toast.success(t("toasts.systemPromptUpdated"));
               } catch {
                 toast.error(t("toasts.systemPromptUpdateFailed"));
               }

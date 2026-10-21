@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "النموذج المستخدم لتسمية جلسات المحادثة. يستخدم نموذج كل جلسة افتراضيًا.",
-        "resetButton": {
-          "label": "إعادة تعيين"
-        },
+        "description": "يُنشئ عناوين الجلسات. يعمل النموذج السريع منخفض التكلفة بشكل جيد.",
         "sessionModel": {
           "label": "استخدام النموذج الافتراضي"
         },
-        "title": "نموذج تسمية المحادثة"
+        "title": "نموذج تسمية المحادثات"
       },
       "searchSelectionModel": {
-        "description": "يختار المستندات المسترجعة ويتحقق منها. يمكن لنموذج أقل تكلفة تقليل تكاليف البحث، لكنه قد يؤثر في جودة الإجابات.",
-        "resetButton": {
-          "label": "إعادة تعيين"
-        },
+        "description": "يختار المستندات المسترجعة ويتحقق منها. يستخدم افتراضيًا نموذج كل محادثة.",
         "sessionModel": {
           "label": "استخدام النموذج الافتراضي"
         },
-        "title": "نموذج اختيار مستندات البحث"
+        "title": "نموذج اختيار البحث"
       },
       "taskModels": {
-        "title": "اختيار النماذج",
         "loadFailed": "تعذر تحميل نماذج المهام",
         "retry": {
           "label": "إعادة المحاولة"
-        },
-        "noProviders": {
-          "title": "اربط موفر نماذج لغوية"
         },
         "addProvider": {
           "label": "إضافة موفر"
@@ -2353,10 +2343,6 @@
         },
         "title": "ظهور سجل الاستعلامات"
       },
-      "reasoning": {
-        "description": "السماح للمستخدمين بضبط مقدار الاستدلال الذي يؤديه النموذج قبل الإجابة، من منتقي النماذج في المحادثة.",
-        "title": "التحكم في الاستدلال"
-      },
       "retention": {
         "custom": {
           "invalidError": "أدخل عددًا صحيحًا من الأيام بين 1 و{max}.",
@@ -2427,26 +2413,13 @@
         "placeholder": "أدخل اسم الفريق",
         "title": "اسم الفريق"
       },
-      "temperature": {
-        "description": "السماح للمستخدمين بضبط درجة الحرارة (الإبداع) في إجابات النموذج من منتقي النماذج في المحادثة.",
-        "title": "التحكم في درجة الحرارة"
-      },
       "toasts": {
-        "chatNamingUpdated": "تم تحديث نموذج تسمية المحادثة",
-        "chatNamingReset": "أُعيد تعيين نموذج تسمية المحادثة إلى النموذج الافتراضي",
         "chatNamingUpdateFailed": "تعذر تحديث نموذج تسمية المحادثة",
-        "chatNamingResetFailed": "تعذرت إعادة تعيين نموذج تسمية المحادثة",
         "providerResolveFailed": "تعذّر تحديد الموفر",
-        "searchSelectionReset": "أُعيد تعيين نموذج اختيار مستندات البحث إلى النموذج الافتراضي",
-        "searchSelectionResetFailed": "تعذرت إعادة تعيين نموذج اختيار مستندات البحث",
         "searchSelectionUpdateFailed": "تعذر تحديث نموذج اختيار مستندات البحث",
-        "searchSelectionUpdated": "تم تحديث نموذج اختيار مستندات البحث",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
-        "settingsUpdated": "تم تحديث الإعدادات",
         "systemPromptUpdateFailed": "فشل تحديث مطالبة النظام",
-        "systemPromptUpdated": "تم تحديث مطالبة النظام",
         "toolsUpdateFailed": "فشل تحديث الأدوات",
-        "toolsUpdated": "تم تحديث الأدوات",
         "unknownError": "حدث خطأ غير معروف"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "فشلت إزالة التجاوز: {message}",
-        "removed": "أُزيل التجاوز للنموذج {model}.",
         "saveFailed": "فشل حفظ التجاوز: {message}",
-        "saved": "حُفظ السعر للنموذج {model}.",
         "unknownError": "خطأ غير معروف"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "فشل حذف الموفر: {message}",
-        "providerDeleted": "تم حذف الموفر بنجاح!",
         "providerLoadFailed": "تعذر تحميل المزود: {message}",
         "providerResolveFailed": "تعذّر تحديد الموفر",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
-        "settingsUpdated": "تم تحديث الإعدادات",
         "unknownError": "خطأ غير معروف"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "نماذج مخصصة",
           "companyName": "نقاط نهاية متوافقة مع OpenAI"
         }
+      },
+      "reasoning": {
+        "description": "السماح للمستخدمين بضبط مقدار الاستدلال الذي يؤديه النموذج قبل الإجابة، من منتقي النماذج في المحادثة.",
+        "title": "التحكم في الاستدلال"
+      },
+      "temperature": {
+        "description": "السماح للمستخدمين بضبط درجة الحرارة (الإبداع) في إجابات النموذج من منتقي النماذج في المحادثة.",
+        "title": "التحكم في درجة الحرارة"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "mashrue-vertex",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "الافتراضي العام"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "تغيير كلمة المرور",
         "toasts": {
           "networkError": "حدث خطأ أثناء تغيير كلمة المرور",
-          "updateFailed": "فشل تغيير كلمة المرور",
-          "updated": "تم تحديث كلمة المرور بنجاح"
+          "updateFailed": "فشل تغيير كلمة المرور"
         },
         "validation": {
           "confirmRequired": "يرجى تأكيد كلمة المرور الجديدة",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "فشل إنشاء الرمز",
         "createNetworkError": "خطأ في الشبكة أثناء إنشاء الرمز",
-        "created": "تم إنشاء الرمز بنجاح",
         "deleteFailed": "فشل حذف الرمز",
         "deleteNetworkError": "خطأ في الشبكة أثناء حذف الرمز",
-        "deleted": "تم حذف الرمز بنجاح",
         "loadFailed": "فشل تحميل الرموز",
         "loadPermissionsFailed": "فشل تحميل خيارات الأذونات",
         "nameRequired": "اسم الرمز مطلوب"
@@ -16146,8 +16125,7 @@
       },
       "title": "المحادثات",
       "toasts": {
-        "saveFailed": "فشل حفظ التفضيلات",
-        "saved": "تم حفظ التفضيلات"
+        "saveFailed": "فشل حفظ التفضيلات"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "الموصلات",
       "toasts": {
-        "disconnectFailed": "فشل قطع الاتصال",
-        "disconnected": "تم قطع الاتصال بنجاح"
+        "disconnectFailed": "فشل قطع الاتصال"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "حذف جميع جلسات المحادثة نهائيًا.",
         "title": "حذف جميع المحادثات",
         "toasts": {
-          "deleteFailed": "فشل حذف جميع جلسات المحادثة",
-          "deleted": "تم حذف جميع جلسات المحادثة الخاصة بك."
+          "deleteFailed": "فشل حذف جميع جلسات المحادثة"
         }
       },
       "title": "منطقة الخطر"
@@ -16232,8 +16208,7 @@
       "title": "اللغة",
       "toasts": {
         "updateFailed": "فشل تحديث تفضيل اللغة"
-      },
-      "workspaceDefault": "الافتراضي لمساحة العمل ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "الملف الشخصي",
       "toasts": {
-        "updateFailed": "فشل تحديث التخصيص",
-        "updated": "تم تحديث التخصيص بنجاح"
+        "updateFailed": "فشل تحديث التخصيص"
       },
       "workRole": {
         "description": "شارك دورك الوظيفي لتخصيص الإجابات بشكل أفضل.",
@@ -16339,12 +16313,9 @@
       "title": "اختصارات المطالبات",
       "toasts": {
         "bothRequired": "الاختصار والنص الموسّع كلاهما مطلوبان",
-        "created": "تم إنشاء الاختصار",
         "deleteFailed": "فشل حذف الاختصار",
-        "deleted": "تم حذف الاختصار",
         "loadFailed": "فشل تحميل الاختصارات",
-        "saveFailed": "فشل حفظ الاختصار",
-        "updated": "تم تحديث الاختصار"
+        "saveFailed": "فشل حفظ الاختصار"
       },
       "toggle": {
         "description": "فعّل الاختصارات لإدراج المطالبات الشائعة بسرعة.",

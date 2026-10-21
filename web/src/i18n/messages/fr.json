@@ -2224,33 +2224,23 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Modèle utilisé pour nommer les discussions. Utilise par défaut le modèle de chaque session.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
+        "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
         "sessionModel": {
           "label": "Utiliser le modèle par défaut"
         },
-        "title": "Modèle pour nommer les discussions"
+        "title": "Modèle de nommage des chats"
       },
       "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Un modèle moins coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
+        "description": "Sélectionne et vérifie les documents récupérés. Par défaut, le modèle de chaque chat.",
         "sessionModel": {
           "label": "Utiliser le modèle par défaut"
         },
-        "title": "Modèle de sélection pour la recherche"
+        "title": "Modèle de sélection de recherche"
       },
       "taskModels": {
-        "title": "Sélection des modèles",
         "loadFailed": "Impossible de charger les modèles de tâches",
         "retry": {
           "label": "Réessayer"
-        },
-        "noProviders": {
-          "title": "Connectez un fournisseur de modèles de langage"
         },
         "addProvider": {
           "label": "Ajouter un fournisseur"
@@ -2353,10 +2343,6 @@
         },
         "title": "Visibilité de l'historique des requêtes"
       },
-      "reasoning": {
-        "description": "Permettez aux utilisateurs d'ajuster le niveau de raisonnement du modèle avant sa réponse, depuis le sélecteur de modèle dans la discussion.",
-        "title": "Contrôle du raisonnement"
-      },
       "retention": {
         "custom": {
           "invalidError": "Saisissez un nombre entier de jours entre 1 et {max}.",
@@ -2427,26 +2413,13 @@
         "placeholder": "Saisissez le nom de l'équipe",
         "title": "Nom de l'équipe"
       },
-      "temperature": {
-        "description": "Permettez aux utilisateurs d'ajuster la température (créativité) des réponses du modèle depuis le sélecteur de modèle dans la discussion.",
-        "title": "Contrôle de la température"
-      },
       "toasts": {
-        "chatNamingUpdated": "Modèle de nommage des discussions mis à jour",
-        "chatNamingReset": "Modèle de nommage des discussions réinitialisé sur le modèle par défaut",
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
-        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionReset": "Modèle de sélection pour la recherche réinitialisé sur le modèle par défaut",
-        "searchSelectionResetFailed": "Échec de la réinitialisation du modèle de sélection pour la recherche",
         "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
-        "searchSelectionUpdated": "Modèle de sélection pour la recherche mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
-        "systemPromptUpdated": "Prompt système mis à jour",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",
-        "toolsUpdated": "Outils mis à jour",
         "unknownError": "Une erreur inconnue est survenue"
       },
       "tools": {
@@ -4926,9 +4899,7 @@
       },
       "toasts": {
         "removeFailed": "Échec de la suppression du remplacement : {message}",
-        "removed": "Remplacement supprimé pour {model}.",
         "saveFailed": "Échec de l'enregistrement du remplacement : {message}",
-        "saved": "Tarif enregistré pour {model}.",
         "unknownError": "Erreur inconnue"
       }
     },
@@ -7968,11 +7939,9 @@
       },
       "toasts": {
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
-        "providerDeleted": "Fournisseur supprimé avec succès !",
         "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
       },
       "modelRouting": {
@@ -7997,6 +7966,14 @@
           "productName": "Modèles personnalisés",
           "companyName": "Points de terminaison compatibles OpenAI"
         }
+      },
+      "reasoning": {
+        "description": "Permettez aux utilisateurs d'ajuster le niveau de raisonnement du modèle avant sa réponse, depuis le sélecteur de modèle dans la discussion.",
+        "title": "Contrôle du raisonnement"
+      },
+      "temperature": {
+        "description": "Permettez aux utilisateurs d'ajuster la température (créativité) des réponses du modèle depuis le sélecteur de modèle dans la discussion.",
+        "title": "Contrôle de la température"
       }
     },
     "mcpActions": {
@@ -14145,6 +14122,11 @@
         "projectId": "mon-projet-vertex",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Valeur par défaut globale"
+      }
     }
   },
   "craft": {
@@ -16006,8 +15988,7 @@
         "title": "Modifier le mot de passe",
         "toasts": {
           "networkError": "Une erreur s'est produite lors de la modification du mot de passe",
-          "updateFailed": "Échec de la modification du mot de passe",
-          "updated": "Mot de passe mis à jour avec succès"
+          "updateFailed": "Échec de la modification du mot de passe"
         },
         "validation": {
           "confirmRequired": "Veuillez confirmer votre nouveau mot de passe",
@@ -16079,10 +16060,8 @@
       "toasts": {
         "createFailed": "Échec de la création du jeton",
         "createNetworkError": "Erreur réseau lors de la création du jeton",
-        "created": "Jeton créé avec succès",
         "deleteFailed": "Échec de la suppression du jeton",
         "deleteNetworkError": "Erreur réseau lors de la suppression du jeton",
-        "deleted": "Jeton supprimé avec succès",
         "loadFailed": "Échec du chargement des jetons",
         "loadPermissionsFailed": "Échec du chargement des options d'autorisation",
         "nameRequired": "Le nom du jeton est requis"
@@ -16146,8 +16125,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Échec de l'enregistrement des préférences",
-        "saved": "Préférences enregistrées"
+        "saveFailed": "Échec de l'enregistrement des préférences"
       }
     },
     "connectors": {
@@ -16167,8 +16145,7 @@
       },
       "title": "Connecteurs",
       "toasts": {
-        "disconnectFailed": "Échec de la déconnexion",
-        "disconnected": "Déconnecté avec succès"
+        "disconnectFailed": "Échec de la déconnexion"
       }
     },
     "dangerZone": {
@@ -16184,8 +16161,7 @@
         "description": "Supprimez définitivement toutes vos sessions de chat.",
         "title": "Supprimer tous les chats",
         "toasts": {
-          "deleteFailed": "Échec de la suppression de toutes les sessions de chat",
-          "deleted": "Toutes vos sessions de chat ont été supprimées."
+          "deleteFailed": "Échec de la suppression de toutes les sessions de chat"
         }
       },
       "title": "Zone de danger"
@@ -16232,8 +16208,7 @@
       "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
-      },
-      "workspaceDefault": "Par défaut ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16320,8 +16295,7 @@
       },
       "title": "Profil",
       "toasts": {
-        "updateFailed": "Échec de la mise à jour de la personnalisation",
-        "updated": "Personnalisation mise à jour avec succès"
+        "updateFailed": "Échec de la mise à jour de la personnalisation"
       },
       "workRole": {
         "description": "Indiquez votre rôle pour mieux adapter les réponses.",
@@ -16339,12 +16313,9 @@
       "title": "Raccourcis d'invite",
       "toasts": {
         "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
-        "created": "Raccourci créé",
         "deleteFailed": "Échec de la suppression du raccourci",
-        "deleted": "Raccourci supprimé",
         "loadFailed": "Échec du chargement des raccourcis",
-        "saveFailed": "Échec de l'enregistrement du raccourci",
-        "updated": "Raccourci mis à jour"
+        "saveFailed": "Échec de l'enregistrement du raccourci"
       },
       "toggle": {
         "description": "Activez les raccourcis pour insérer rapidement des invites courantes.",

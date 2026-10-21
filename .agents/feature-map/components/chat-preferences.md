@@ -143,12 +143,14 @@ A schema change here is a KV-blob field addition, not a migration; see root
 
 ## 4. How it works
 
-Chat Preferences includes an always-visible Model selection section beneath the
-general chat behavior controls. It uses a smaller static header, without a
-disclosure control. `ChatTaskModelSettings` owns its model-provider fetch and
-shows Chat naming model and Search selection model immediately on page load.
-Both optional selectors show Use Default model
-when unset and save/reset independently from the page's workspace settings.
+Chat Preferences starts with two cards. The chat card holds Default Language,
+Chat Naming Model, Multi-Model Generation, Deep Research and Chat Auto-Scroll.
+The search card holds Search Selection Model, Search Mode and Auto-Detect
+Search Filters. Temperature Control and Reasoning Control are on Language
+Models. `ChatTaskModelSettings` exports one row component for each task model.
+Each row owns its model-provider fetch. Both optional selectors show Use
+Default model when unset and save independently from the page's workspace
+settings. There is no reset control.
 CHAT_NAMING controls naming; SEARCH_SELECTION controls document selection and
 relevance checks. Neither changes query rewrites, and neither falls back to
 the other. Language Models retains provider configuration and the default chat

@@ -62,13 +62,14 @@ async function setDisableDefaultAssistantSetting(
       return;
     }
 
-    // Toggle the switch
+    // Toggle the switch and wait for the auto-save
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/settings" &&
+        response.request().method() === "PATCH"
+    );
     await switchEl.click();
-
-    // Wait for auto-save toast
-    await expect(page.getByText("Settings updated")).toBeVisible({
-      timeout: 5000,
-    });
+    expect((await saved).ok()).toBeTruthy();
 
     await page.waitForTimeout(SETTING_SAVE_RETRY_DELAY_MS);
 
