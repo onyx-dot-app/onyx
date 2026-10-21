@@ -25,8 +25,10 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_count
-from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.form_state import ConfigT, FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -82,7 +84,6 @@ from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
 T = TypeVar("T")
 
-_OUTLOOK_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/outlook"
 
 # A well-known folder every mailbox has, used to prove name resolution works.
 _PROBE_WELL_KNOWN_FOLDER = "junkemail"
@@ -265,23 +266,21 @@ def _open_sample_mailbox(
     )
 
 
-class _TokenAuthCheck(CapabilityCheck):
+class _OutlookCheck(CapabilityCheck[ConfigT]):
+    def __init__(
+        self, *, check_id: str, capability: CredentialCapability | None = None
+    ) -> None:
+        # Metadata and dependencies come from the Outlook check graph.
+        self.init_from_graph(check_node(DocumentSource.OUTLOOK, check_id), capability)
+
+
+class _TokenAuthCheck(_OutlookCheck):
     """Asks Entra for a token. A blank credential field fails here too, since
     the gateway refuses to build the MSAL app without every field its
     authentication method needs."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_token_auth",
-            display_name="App registration can sign in",
-            requires_connector_instance=False,
-            remediation=(
-                "Enter the client id, directory (tenant) id and a current "
-                "client secret or certificate of the Entra app registration."
-            ),
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_token_auth")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -292,23 +291,13 @@ class _TokenAuthCheck(CapabilityCheck):
             raise_for_graph_error(e, _TOKEN_ENDPOINT_DENIED)
 
 
-class _MailboxListingCheck(CapabilityCheck):
+class _MailboxListingCheck(_OutlookCheck):
     """Lists one user. Proves ``User.Read.All``."""
 
     def __init__(
         self, capability: CredentialCapability = CredentialCapability.INDEXING
     ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id="outlook_mailbox_listing",
-            display_name="Tenant users can be listed",
-            requires_connector_instance=False,
-            remediation=(
-                "Grant the `User.Read.All` application permission to the app "
-                "registration and admin-consent it."
-            ),
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_mailbox_listing", capability=capability)
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -333,7 +322,7 @@ def _tenant_mailboxes(
     )
 
 
-class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
+class _MailboxCountCheck(_OutlookCheck[OutlookConnectorConfig]):
     """Counts the enabled users with a mail address: the mailboxes indexing
     walks in every-mailbox mode. It does not probe each mailbox, so a mailbox
     outside the app's Exchange scope still counts. Separate from
@@ -344,18 +333,7 @@ class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
     config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_mailbox_count",
-            display_name="Counts the tenant's mailboxes",
-            requires_connector_instance=False,
-            remediation=(
-                "Grant the `User.Read.All` application permission to the app "
-                "registration and admin-consent it."
-            ),
-            docs_link=_OUTLOOK_DOCS_LINK,
-            discovery=True,
-        )
+        super().__init__(check_id="outlook_mailbox_count")
 
     def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
         config: OutlookConnectorConfig = form_state.config
@@ -387,7 +365,7 @@ def _advise(message: str) -> CheckOutput:
     return CheckOutput(advisories=[CheckAdvisory(message=message)])
 
 
-class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
+class _MailReadCheck(_OutlookCheck[OutlookConnectorConfig]):
     """Reads folders, one delta page, one message body and, when that message
     has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
     is inside the app's Exchange scope. A config-less run reads any mailbox.
@@ -397,14 +375,7 @@ class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_mail_read",
-            display_name="Mail in one mailbox is readable",
-            requires_connector_instance=False,
-            remediation=EXCHANGE_SCOPE_REMEDIATION,
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_mail_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = _gateway(context)
@@ -480,7 +451,7 @@ def _event_with_body(
     return sample
 
 
-class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
+class _CalendarReadCheck(_OutlookCheck[OutlookConnectorConfig]):
     """Reads one page of one mailbox's calendar view, the call indexing makes,
     then one event with its body, which ``Calendars.ReadBasic.All`` withholds.
     Together they prove ``Calendars.Read``. An empty calendar proves the
@@ -492,15 +463,7 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_calendar_read",
-            display_name="Calendar of one mailbox is readable",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation=CALENDAR_READ_REMEDIATION,
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_calendar_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config = self.config(context)
@@ -551,7 +514,7 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
         return None
 
 
-class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
+class _ConfiguredMailboxesCheck(_OutlookCheck[OutlookConnectorConfig]):
     """Resolves and probes every explicitly configured mailbox.
 
     With no configured list the check passes without a call: every-mailbox
@@ -561,15 +524,7 @@ class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
     config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_configured_mailboxes",
-            display_name="Configured mailboxes are reachable",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation=f"{MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}",
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_configured_mailboxes")
 
     def run(self, context: CapabilityCheckContext) -> None:
         addresses = configured_addresses(self.config(context))
@@ -580,21 +535,13 @@ class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
         )
 
 
-class _ConfiguredGroupsCheck(CapabilityCheck):
+class _ConfiguredGroupsCheck(_OutlookCheck):
     """Each configured group names exactly one Entra group the app can read."""
 
     config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="outlook_configured_groups",
-            display_name="Configured mailbox groups resolve",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation=f"{GROUP_UNAVAILABLE_REMEDIATION} {GROUP_LISTING_REMEDIATION}",
-            docs_link=_OUTLOOK_DOCS_LINK,
-        )
+        super().__init__(check_id="outlook_configured_groups")
 
     def run(self, context: CapabilityCheckContext) -> None:
         groups = configured_groups(self.config(context))

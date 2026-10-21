@@ -1,0 +1,62 @@
+{
+  "source": "outlook",
+  "nodes": [
+    {
+      "id": "outlook_token_auth",
+      "display_name": "App registration can sign in",
+      "requires_connector_instance": false,
+      "remediation": "Enter the client id, directory (tenant) id and a current client secret or certificate of the Entra app registration.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    },
+    {
+      "id": "outlook_mailbox_listing",
+      "display_name": "Tenant users can be listed",
+      "capabilities": [
+        "indexing",
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant the `User.Read.All` application permission to the app registration and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    },
+    {
+      "id": "outlook_mailbox_count",
+      "display_name": "Counts the tenant's mailboxes",
+      "requires_connector_instance": false,
+      "remediation": "Grant the `User.Read.All` application permission to the app registration and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook",
+      "discovery": true
+    },
+    {
+      "id": "outlook_mail_read",
+      "display_name": "Mail in one mailbox is readable",
+      "requires_connector_instance": false,
+      "remediation": "Grant the `Mail.Read` application permission and admin-consent it, or, when the app is scoped with Exchange RBAC for Applications or an application access policy, add the mailbox to that scope. Exchange takes 30 minutes to two hours to apply the change.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    },
+    {
+      "id": "outlook_calendar_read",
+      "display_name": "Calendar of one mailbox is readable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant the `Calendars.Read` application permission and admin-consent it, or, when the app is scoped with Exchange RBAC for Applications or an application access policy, add the mailbox to that scope. Exchange takes 30 minutes to two hours to apply the change.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    },
+    {
+      "id": "outlook_configured_mailboxes",
+      "display_name": "Configured mailboxes are reachable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use the user principal name or primary SMTP address of a licensed, enabled mailbox. Shared mailboxes are sign-in disabled and must be listed explicitly. Grant the `Mail.Read` application permission and admin-consent it, or, when the app is scoped with Exchange RBAC for Applications or an application access policy, add the mailbox to that scope. Exchange takes 30 minutes to two hours to apply the change.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    },
+    {
+      "id": "outlook_configured_groups",
+      "display_name": "Configured mailbox groups resolve",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use the display name or the object id of an Entra group. When several groups share the name, use the object id. Grant the `GroupMember.Read.All` application permission and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/outlook"
+    }
+  ]
+}

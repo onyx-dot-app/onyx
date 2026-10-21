@@ -16,13 +16,14 @@ index nothing, so the first type's read check FAILS.
 from datetime import datetime, timezone
 from typing import NoReturn
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
     form_config,
 )
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
@@ -58,16 +59,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/hubspot"
 _PROBE_LIMIT = 1
 _NOTE_BODY_PROPERTY = "hs_note_body"
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 _USERS_SCOPE = "settings.users.read"
-_INDEXED_TYPES_REMEDIATION = (
-    "Grant the private app the read scope of every object type the connector indexes."
-)
-_TOKEN_CHECK_ID = "hubspot_token"
-_USERS_CHECK_ID = "hubspot_users"
 # What the gateway raises for a call HubSpot refused or never answered.
 _GATEWAY_ERRORS = (
     HubSpotApiError,
@@ -78,21 +73,6 @@ _GATEWAY_ERRORS = (
 
 def _read_check_id(object_type: HubSpotObjectType) -> str:
     return f"hubspot_{object_type.value}_readable"
-
-
-# check_id to the checks it runs after. The linked-record and notes checks run
-# after the sign-in only: they sample any readable type, so an empty or denied
-# type does not stop them.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    **{
-        _read_check_id(object_type): (_TOKEN_CHECK_ID,)
-        for object_type in HubSpotObjectType
-    },
-    "hubspot_associations": (_TOKEN_CHECK_ID,),
-    "hubspot_notes": (_TOKEN_CHECK_ID,),
-    _USERS_CHECK_ID: (_TOKEN_CHECK_ID,),
-    "hubspot_record_viewers": (_USERS_CHECK_ID,),
-}
 
 
 def _gateway(context: CapabilityCheckContext) -> HubSpotSourceOperations:
@@ -270,37 +250,14 @@ def _first_readable_record(context: CapabilityCheckContext) -> _Sample:
 class _HubSpotCheck(CapabilityCheck[HubSpotConnectorConfig]):
     config_class = HubSpotConnectorConfig
 
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        required: bool = True,
-        remediation: str | None = None,
-        fails_when_unreachable: bool = False,
-    ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            required=required,
-            requires_connector_instance=False,
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            fails_when_unreachable=fails_when_unreachable,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the HubSpot check graph.
+        self.init_from_graph(check_node(DocumentSource.HUBSPOT, check_id))
 
 
 class _TokenCheck(_HubSpotCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_TOKEN_CHECK_ID,
-            display_name="Sign in to HubSpot",
-            remediation="Create a private app in HubSpot and paste its access token.",
-            fails_when_unreachable=True,
-        )
+        super().__init__(check_id="hubspot_token")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -374,13 +331,7 @@ class _RecordsReadableCheck(_HubSpotCheck):
 
     def __init__(self, object_type: HubSpotObjectType) -> None:
         self._object_type: HubSpotObjectType = object_type
-        super().__init__(
-            check_id=_read_check_id(object_type),
-            display_name=f"Read {object_type.value}",
-            remediation=(
-                f"Grant the private app the `{_read_scope(object_type)}` scope."
-            ),
-        )
+        super().__init__(check_id=_read_check_id(object_type))
 
     def applies(self, form_state: FormState[HubSpotConnectorConfig]) -> bool:
         return self._object_type in _object_types(form_state.config)
@@ -462,12 +413,7 @@ class _AssociationsCheck(_HubSpotCheck):
     it cannot read."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="hubspot_associations",
-            display_name="List linked records",
-            required=False,
-            remediation=_INDEXED_TYPES_REMEDIATION,
-        )
+        super().__init__(check_id="hubspot_associations")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         object_type, record = _first_readable_record(context)
@@ -504,12 +450,7 @@ class _NotesCheck(_HubSpotCheck):
     """Optional, since indexing logs and skips notes it cannot read."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="hubspot_notes",
-            display_name="Sample notes",
-            required=False,
-            remediation=_INDEXED_TYPES_REMEDIATION,
-        )
+        super().__init__(check_id="hubspot_notes")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         object_type, record = _first_readable_record(context)
@@ -555,12 +496,7 @@ class _UsersCheck(_HubSpotCheck):
     listing and, for ids it leaves out, one user at a time."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id=_USERS_CHECK_ID,
-            display_name="List users",
-            remediation=f"Grant the private app the `{_USERS_SCOPE}` scope.",
-        )
+        super().__init__(check_id="hubspot_users")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: HubSpotSourceOperations = _gateway(context)
@@ -595,11 +531,7 @@ class _UsersCheck(_HubSpotCheck):
 
 class _RecordViewersCheck(_HubSpotCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="hubspot_record_viewers",
-            display_name="Read record viewers",
-        )
+        super().__init__(check_id="hubspot_record_viewers")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         object_type, record = self._sample(context)

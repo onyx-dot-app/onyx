@@ -1,0 +1,51 @@
+{
+  "source": "onedrive",
+  "nodes": [
+    {
+      "id": "onedrive_token_auth",
+      "display_name": "App registration can sign in",
+      "requires_connector_instance": false,
+      "remediation": "Check the app id, tenant id, and client credential.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_users",
+      "display_name": "Tenant users can be listed",
+      "requires_connector_instance": false,
+      "remediation": "Grant and admin-consent `User.Read.All`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_drive_count",
+      "display_name": "Counts the tenant's OneDrives",
+      "requires_connector_instance": false,
+      "remediation": "Grant and admin-consent `User.Read.All`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive",
+      "discovery": true
+    },
+    {
+      "id": "onedrive_configured_users",
+      "display_name": "Configured users resolve",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use enabled member user principal names.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_drive",
+      "display_name": "A OneDrive is readable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` or a selected personal-site read grant.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_delta",
+      "display_name": "OneDrive changes are readable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` or a selected personal-site read grant.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    }
+  ]
+}

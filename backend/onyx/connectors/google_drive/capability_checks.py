@@ -28,6 +28,7 @@ from typing import Any, NoReturn
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_count, bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -37,7 +38,6 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CheckRowText,
     CountFinding,
-    CredentialCapability,
     OptionsFinding,
 )
 from onyx.connectors.exceptions import (
@@ -87,14 +87,11 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GOOGLE_SCOPES,
     MISSING_SCOPES_ERROR_STR,
-    SCOPE_DOC_URL,
     GoogleCredentialKind,
     google_credential_kind,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
-
-_DOCS_LINK = SCOPE_DOC_URL
 
 _DRIVE_API = "Google Drive API"
 _ADMIN_API = "Admin SDK API"
@@ -123,43 +120,6 @@ _DOWNLOAD_BLOCKED_REASONS = frozenset({"cannotDownloadFile", "cannotExportFile"}
 # What Google's token endpoint says when the service account's key is deleted
 # or not the account's: the key, not domain-wide delegation, is the problem.
 _BAD_KEY_TEXTS = ("Invalid JWT Signature", "invalid_client")
-
-_WORKSPACE_USERS_CHECK_ID = "google_drive_workspace_users"
-_SHARED_DRIVES_CHECK_ID = "google_drive_shared_drives"
-# check_id to the checks it runs after, in run order. A listed check that does
-# not apply (another credential kind, a scope not in use) is left out.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    _WORKSPACE_USERS_CHECK_ID: ("google_drive_auth",),
-    "google_drive_user_count": (_WORKSPACE_USERS_CHECK_ID,),
-    "google_drive_directory_users": ("google_drive_auth",),
-    # Sign-in is listed too: Workspace users do not apply with selected users.
-    "google_drive_specific_users": ("google_drive_auth", _WORKSPACE_USERS_CHECK_ID),
-    "google_drive_configured_my_drives": (
-        "google_drive_auth",
-        _WORKSPACE_USERS_CHECK_ID,
-    ),
-    _SHARED_DRIVES_CHECK_ID: ("google_drive_auth",),
-    "google_drive_shared_drive_listing": (_SHARED_DRIVES_CHECK_ID,),
-    "google_drive_configured_shared_drives": (_SHARED_DRIVES_CHECK_ID,),
-    "google_drive_shared_drive_organizer": (_SHARED_DRIVES_CHECK_ID,),
-    "google_drive_configured_folders": ("google_drive_auth",),
-    "google_drive_content_read": ("google_drive_auth",),
-    "google_drive_docs_api": ("google_drive_auth",),
-    "google_drive_file_permissions": ("google_drive_auth",),
-    "google_drive_folder_permissions": ("google_drive_file_permissions",),
-    "google_drive_directory_admin": ("google_drive_auth",),
-    "google_drive_groups": ("google_drive_directory_admin",),
-    "google_drive_shared_drive_members": (
-        _SHARED_DRIVES_CHECK_ID,
-        "google_drive_directory_admin",
-    ),
-}
-# Checks that show on another check's row.
-_ROW_IDS: dict[str, str] = {
-    "google_drive_user_count": _WORKSPACE_USERS_CHECK_ID,
-    "google_drive_directory_users": _WORKSPACE_USERS_CHECK_ID,
-    "google_drive_shared_drive_listing": _SHARED_DRIVES_CHECK_ID,
-}
 
 
 def _gateway(context: CapabilityCheckContext) -> GoogleDriveSourceOperations:
@@ -493,35 +453,10 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
     config_class = GoogleDriveConnectorConfig
 
     def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        required: bool = True,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        requires_connector_config: bool = False,
-        credential_kind: GoogleCredentialKind | None = None,
-        discovery: bool = False,
+        self, *, check_id: str, credential_kind: GoogleCredentialKind | None = None
     ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            row_id=_ROW_IDS.get(check_id),
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            required=required,
-            requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
-            requires_fields=(
-                frozenset({"credential_kind"})
-                if credential_kind is not None
-                else frozenset()
-            ),
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            discovery=discovery,
-        )
+        # Metadata and dependencies come from the Google Drive check graph.
+        self.init_from_graph(check_node(DocumentSource.GOOGLE_DRIVE, check_id))
         self._credential_kind = credential_kind
 
     def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
@@ -544,16 +479,7 @@ class _AuthCheck(_GoogleDriveCheck):
     does first."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_auth",
-            display_name="Sign in to Google Drive",
-            remediation=(
-                "Service account: set up domain-wide delegation with the scopes "
-                "in the Onyx docs, and use a Workspace user as the primary admin. "
-                "OAuth: connect Google Drive again. Turn on the Google Drive API "
-                "in the Google Cloud project of the credential."
-            ),
-        )
+        super().__init__(check_id="google_drive_auth")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -594,15 +520,8 @@ class _WorkspaceUsersCheck(_GoogleDriveCheck):
 
     def __init__(self) -> None:
         super().__init__(
-            check_id=_WORKSPACE_USERS_CHECK_ID,
-            display_name="List Workspace users",
+            check_id="google_drive_workspace_users",
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
-            remediation=(
-                "Make the primary admin a Google Workspace admin, give the service "
-                "account the admin.directory.user.readonly scope in domain-wide "
-                "delegation, and turn on the Admin SDK API. Or list the users to "
-                "index in 'Specific user emails'."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -711,14 +630,7 @@ class _SpecificUsersCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_specific_users",
-            display_name="Act as selected users",
-            required=False,
-            requires_connector_config=True,
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
-            remediation=(
-                "Check the emails in 'Specific user emails': each must be the "
-                "primary email of an active Workspace user with Google Drive."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -751,14 +663,7 @@ class _OAuthIgnoredSettingsCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_oauth_user_settings",
-            display_name="Check per-user settings",
-            required=False,
-            requires_connector_config=True,
             credential_kind=GoogleCredentialKind.OAUTH,
-            remediation=(
-                "To index other users' My Drives, pick a service-account "
-                "account. An OAuth account reads only what its own user sees."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -787,16 +692,7 @@ class _OAuthIgnoredSettingsCheck(_GoogleDriveCheck):
 
 class _SharedDrivesCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_SHARED_DRIVES_CHECK_ID,
-            display_name="List shared drives",
-            requires_connector_config=True,
-            remediation=(
-                "Service account: make the primary admin a Workspace admin who "
-                "can manage shared drives. OAuth: the connected user must be a "
-                "member of the shared drives to index."
-            ),
-        )
+        super().__init__(check_id="google_drive_shared_drives")
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return _shared_drives_in_scope(config)
@@ -880,16 +776,7 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
     must be visible to some user the connector acts as."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_configured_shared_drives",
-            display_name="Find selected drives",
-            requires_connector_config=True,
-            remediation=(
-                "Use the URL of each shared drive (https://drive.google.com/drive/"
-                "folders/<id>). Service account: an organizer of the drive must be "
-                "a user Onyx indexes. OAuth: the connected user must be a member."
-            ),
-        )
+        super().__init__(check_id="google_drive_configured_shared_drives")
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return bool(config.shared_drive_urls)
@@ -981,16 +868,7 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
 
 class _ConfiguredFoldersCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_configured_folders",
-            display_name="Find selected folders",
-            requires_connector_config=True,
-            remediation=(
-                "Use the URL of each folder (https://drive.google.com/drive/"
-                "folders/<id>). Put shared drive URLs in 'Shared drive URLs'. "
-                "Share each folder with a user Onyx indexes."
-            ),
-        )
+        super().__init__(check_id="google_drive_configured_folders")
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return bool(config.shared_folder_urls)
@@ -1117,14 +995,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_configured_my_drives",
-            display_name="Find My Drive users",
-            requires_connector_config=True,
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
-            remediation=(
-                "Use each user's primary Workspace email, not an alias. With "
-                "'Specific user emails' set, each My Drive email must also be in "
-                "that list."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -1229,15 +1100,7 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_shared_drive_organizer",
-            display_name="Find drive organizers",
-            required=False,
-            requires_connector_config=True,
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
-            remediation=(
-                "Make a Workspace user a Manager of each shared drive, and keep "
-                "that user in the users Onyx indexes. Without one, Onyx can miss "
-                "folders with limited access."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -1340,17 +1203,7 @@ class _SharedDriveListingCheck(_GoogleDriveCheck):
     drives."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_shared_drive_listing",
-            display_name="List shared drives",
-            discovery=True,
-            requires_connector_config=True,
-            remediation=(
-                "Service account: make the primary admin a Workspace admin who "
-                "can manage shared drives. OAuth: the connected user must be a "
-                "member of the shared drives to index."
-            ),
-        )
+        super().__init__(check_id="google_drive_shared_drive_listing")
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return _shared_drives_in_scope(config)
@@ -1391,14 +1244,7 @@ class _UserCountCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_user_count",
-            display_name="List Workspace users",
-            discovery=True,
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
-            remediation=(
-                "Make the primary admin a Google Workspace admin, give the service "
-                "account the admin.directory.user.readonly scope in domain-wide "
-                "delegation, and turn on the Admin SDK API."
-            ),
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
@@ -1455,16 +1301,7 @@ class _ContentReadCheck(_GoogleDriveCheck):
     has none."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_content_read",
-            display_name="Sample file content",
-            required=False,
-            remediation=(
-                "Give the service account the drive.readonly scope (OAuth: "
-                "connect again and accept every permission). A file owner can "
-                "also block downloads for viewers; Onyx skips those files."
-            ),
-        )
+        super().__init__(check_id="google_drive_content_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1589,16 +1426,7 @@ class _DocsApiCheck(_GoogleDriveCheck):
     their heading links. Passes when the primary admin sees no Google Doc."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="google_drive_docs_api",
-            display_name="Use Google Docs API",
-            required=False,
-            remediation=(
-                "Turn on the Google Docs API in the Google Cloud project of the "
-                "credential. Without it, Google Docs index without links to their "
-                "headings."
-            ),
-        )
+        super().__init__(check_id="google_drive_docs_api")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1682,11 +1510,6 @@ _PERMISSION_SAMPLE_FIELDS = (
 _PERMISSION_FIELDS = "permissions(id, emailAddress, type),nextPageToken"
 # Permission reads the file check makes before it gives up.
 _MAX_PERMISSION_READS = 3
-_DIRECTORY_HINT = (
-    "Make the primary admin a Google Workspace admin. Service account: give it "
-    "the admin.directory.user.readonly and admin.directory.group.readonly "
-    "scopes in domain-wide delegation. Turn on the Admin SDK API."
-)
 
 
 def _is_item_denial(error: GoogleDriveHttpError) -> bool:
@@ -1734,16 +1557,7 @@ class _FilePermissionsCheck(_GoogleDriveCheck):
     failure."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="google_drive_file_permissions",
-            display_name="Read file permissions",
-            remediation=(
-                "Give the service account the drive.readonly and "
-                "drive.metadata.readonly scopes (OAuth: connect again and accept "
-                "every permission)."
-            ),
-        )
+        super().__init__(check_id="google_drive_file_permissions")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1847,12 +1661,7 @@ class _DirectoryAdminCheck(_GoogleDriveCheck):
     """Reads the primary admin's directory entry, as group sync does first."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="google_drive_directory_admin",
-            display_name="Use Workspace directory",
-            remediation=_DIRECTORY_HINT,
-        )
+        super().__init__(check_id="google_drive_directory_admin")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1873,12 +1682,7 @@ class _DirectoryUsersCheck(_GoogleDriveCheck):
     which "anyone at the domain" shares grant."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="google_drive_directory_users",
-            display_name="List Workspace users",
-            remediation=_DIRECTORY_HINT,
-        )
+        super().__init__(check_id="google_drive_directory_users")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1910,12 +1714,7 @@ class _GroupsCheck(_GoogleDriveCheck):
     domain has no group."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="google_drive_groups",
-            display_name="Read group members",
-            remediation=_DIRECTORY_HINT,
-        )
+        super().__init__(check_id="google_drive_groups")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -1965,17 +1764,7 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
     it is a member of."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="google_drive_shared_drive_members",
-            display_name="Read drive members",
-            required=False,
-            remediation=(
-                "Make the primary admin a Workspace admin who can manage shared "
-                "drives. Without it, users get access to shared drive files only "
-                "through the files' own permissions."
-            ),
-        )
+        super().__init__(check_id="google_drive_shared_drive_members")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -2045,17 +1834,7 @@ class _FolderPermissionsCheck(_GoogleDriveCheck):
     them only by id."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="google_drive_folder_permissions",
-            display_name="Read folder permissions",
-            required=False,
-            remediation=(
-                "Give the service account the drive.metadata.readonly scope "
-                "(OAuth: connect again and accept every permission). Without it, "
-                "users get access only through each file's own permissions."
-            ),
-        )
+        super().__init__(check_id="google_drive_folder_permissions")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)

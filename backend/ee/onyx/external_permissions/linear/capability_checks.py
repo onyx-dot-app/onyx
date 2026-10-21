@@ -4,6 +4,8 @@ teams and cannot name the workspace's members, and a users listing Linear
 cuts short would leave people out of the workspace group."""
 
 from ee.onyx.external_permissions.linear.access import complete_workspace_users
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -17,10 +19,7 @@ from onyx.connectors.exceptions import (
     NothingToCheckError,
 )
 from onyx.connectors.linear.capability_checks import (
-    DOCS_LINK,
-    ISSUES_CHECK_ID,
     PROBE_PAGE_SIZE,
-    SIGN_IN_CHECK_ID,
     gateway_from_context,
     member_need,
     probe,
@@ -38,59 +37,19 @@ from onyx.connectors.linear.models import (
 _GUEST_REMEDIATION: str = (
     "Connect as a workspace member who belongs to every private team to index."
 )
-# One row for the member check of both sync capabilities: the same probe.
+# Each sync capability has its own member check; both share one row.
 _MEMBER_ROW_ID: str = "linear_workspace_member"
-_DOC_SYNC_MEMBER_CHECK_ID: str = (
-    f"{_MEMBER_ROW_ID}_{CredentialCapability.DOC_PERMISSION_SYNC.value}"
-)
-_GROUP_SYNC_MEMBER_CHECK_ID: str = (
-    f"{_MEMBER_ROW_ID}_{CredentialCapability.EXTERNAL_GROUP_SYNC.value}"
-)
-_ISSUE_ACCESS_CHECK_ID: str = "linear_issue_access"
-_WORKSPACE_USERS_CHECK_ID: str = "linear_workspace_users"
-_TEAM_MEMBERS_CHECK_ID: str = "linear_team_members"
-# check_id to the checks it runs after. Each capability's checks follow its
-# own member check.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    _DOC_SYNC_MEMBER_CHECK_ID: (SIGN_IN_CHECK_ID,),
-    _GROUP_SYNC_MEMBER_CHECK_ID: (SIGN_IN_CHECK_ID,),
-    _ISSUE_ACCESS_CHECK_ID: (ISSUES_CHECK_ID,),
-    _WORKSPACE_USERS_CHECK_ID: (_GROUP_SYNC_MEMBER_CHECK_ID,),
-    _TEAM_MEMBERS_CHECK_ID: (_WORKSPACE_USERS_CHECK_ID,),
-}
 
 
 class _LinearSyncCheck(CapabilityCheck[LinearConnectorConfig]):
-    def __init__(
-        self,
-        *,
-        capability: CredentialCapability,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        row_id: str | None = None,
-    ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            requires_connector_instance=False,
-            remediation=remediation,
-            docs_link=DOCS_LINK,
-            row_id=row_id,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the Linear check graph.
+        self.init_from_graph(check_node(DocumentSource.LINEAR, check_id))
 
 
 class _WorkspaceMemberCheck(_LinearSyncCheck):
     def __init__(self, capability: CredentialCapability) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=f"{_MEMBER_ROW_ID}_{capability.value}",
-            display_name="Read account role",
-            remediation=_GUEST_REMEDIATION,
-            row_id=_MEMBER_ROW_ID,
-        )
+        super().__init__(check_id=f"{_MEMBER_ROW_ID}_{capability.value}")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         viewer: LinearViewer = probe(
@@ -114,12 +73,7 @@ class _IssueAccessCheck(_LinearSyncCheck):
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id=_ISSUE_ACCESS_CHECK_ID,
-            display_name="Read issue sharing",
-            remediation="Grant the credential read access to issues and teams.",
-        )
+        super().__init__(check_id="linear_issue_access")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = gateway_from_context(context)
@@ -149,12 +103,7 @@ class _IssueAccessCheck(_LinearSyncCheck):
 
 class _WorkspaceUsersCheck(_LinearSyncCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id=_WORKSPACE_USERS_CHECK_ID,
-            display_name="List workspace users",
-            remediation=_GUEST_REMEDIATION,
-        )
+        super().__init__(check_id="linear_workspace_users")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         workspace: WorkspaceUsers = probe(
@@ -182,12 +131,7 @@ class _WorkspaceUsersCheck(_LinearSyncCheck):
 
 class _TeamMembersCheck(_LinearSyncCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id=_TEAM_MEMBERS_CHECK_ID,
-            display_name="List team members",
-            remediation="Grant the credential read access to teams.",
-        )
+        super().__init__(check_id="linear_team_members")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = gateway_from_context(context)

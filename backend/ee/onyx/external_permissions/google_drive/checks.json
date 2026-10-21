@@ -1,0 +1,87 @@
+{
+  "source": "google_drive",
+  "nodes": [
+    {
+      "id": "google_drive_file_permissions",
+      "display_name": "Read file permissions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Give the service account the drive.readonly and drive.metadata.readonly scopes (OAuth: connect again and accept every permission).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_directory_admin",
+      "display_name": "Use Workspace directory",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Make the primary admin a Google Workspace admin. Service account: give it the admin.directory.user.readonly and admin.directory.group.readonly scopes in domain-wide delegation. Turn on the Admin SDK API.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_directory_users",
+      "display_name": "List Workspace users",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Make the primary admin a Google Workspace admin. Service account: give it the admin.directory.user.readonly and admin.directory.group.readonly scopes in domain-wide delegation. Turn on the Admin SDK API.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ],
+      "row_id": "google_drive_workspace_users"
+    },
+    {
+      "id": "google_drive_groups",
+      "display_name": "Read group members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Make the primary admin a Google Workspace admin. Service account: give it the admin.directory.user.readonly and admin.directory.group.readonly scopes in domain-wide delegation. Turn on the Admin SDK API.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_directory_admin"
+      ]
+    },
+    {
+      "id": "google_drive_shared_drive_members",
+      "display_name": "Read drive members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Make the primary admin a Workspace admin who can manage shared drives. Without it, users get access to shared drive files only through the files' own permissions.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_shared_drives",
+        "google_drive_directory_admin"
+      ]
+    },
+    {
+      "id": "google_drive_folder_permissions",
+      "display_name": "Read folder permissions",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Give the service account the drive.metadata.readonly scope (OAuth: connect again and accept every permission). Without it, users get access only through each file's own permissions.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_file_permissions"
+      ]
+    }
+  ]
+}

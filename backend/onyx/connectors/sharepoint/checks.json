@@ -1,0 +1,62 @@
+{
+  "source": "sharepoint",
+  "nodes": [
+    {
+      "id": "sharepoint_token_auth",
+      "display_name": "App registration can sign in",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Check the client id, directory id and client secret or certificate, and that the Graph API and authority hosts match the app's cloud.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint",
+      "validates_binding": true
+    },
+    {
+      "id": "sharepoint_content_types",
+      "display_name": "A content type is selected",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Turn on site documents, site pages, or both.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_configured_sites",
+      "display_name": "Configured sites resolve",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use full site URLs on this tenant (https://tenant.sharepoint.com/sites/name or /teams/name, https://tenant-my.sharepoint.com/personal/name). Grant `Sites.Read.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app read access on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_sites_visible",
+      "display_name": "Tenant sites can be listed",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` (application permission) and admin-consent it, or configure the site URLs to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_configured_libraries",
+      "display_name": "Configured libraries and folders exist",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use the library's URL segment and the folder's path inside it as they appear in the site URL.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_documents_read",
+      "display_name": "Site documents are readable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app read access on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_site_pages_read",
+      "display_name": "Site pages are readable",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app read access on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    }
+  ]
+}

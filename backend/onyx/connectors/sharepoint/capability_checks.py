@@ -12,7 +12,9 @@ named checks replace that validation at creation.
 
 from typing import NoReturn
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -86,7 +88,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/sharepoint"
 _PROBE_SITES: int = 5
 # Listed sites the documents probe reads in turn for one file indexing would
 # read. Tenants often list empty or demo sites first, in no stable order.
@@ -123,10 +124,6 @@ _REST_REMEDIATION: str = (
 )
 _GROUPS_REMEDIATION: str = (
     "Grant `GroupMember.Read.All` (application permission) and admin-consent it."
-)
-_CERTIFICATE_REMEDIATION: str = (
-    "Recreate the credential with Certificate Authentication, or turn permission "
-    "sync off."
 )
 _SITE_SECURABLE: SharepointSecurable = SharepointSecurable(
     kind=SharepointSecurableKind.SITE
@@ -465,24 +462,11 @@ class _SharepointCheck(CapabilityCheck[SharepointConnectorConfig]):
     config_class = SharepointConnectorConfig
 
     def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        requires_connector_config: bool = True,
-        validates_binding: bool = False,
+        self, *, check_id: str, capability: CredentialCapability | None = None
     ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            validates_binding=validates_binding,
+        # Metadata and dependencies come from the SharePoint check graph.
+        self.init_from_graph(
+            check_node(DocumentSource.SHAREPOINT, check_id), capability
         )
 
 
@@ -491,16 +475,7 @@ class _TokenCheck(_SharepointCheck):
     for them: a national-cloud app fails against the commercial authority."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_token_auth",
-            display_name="App registration can sign in",
-            validates_binding=True,
-            remediation=(
-                "Check the client id, directory id and client secret or "
-                "certificate, and that the Graph API and authority hosts match "
-                "the app's cloud."
-            ),
-        )
+        super().__init__(check_id="sharepoint_token_auth")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -513,11 +488,7 @@ class _TokenCheck(_SharepointCheck):
 
 class _ContentTypesCheck(_SharepointCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_content_types",
-            display_name="A content type is selected",
-            remediation="Turn on site documents, site pages, or both.",
-        )
+        super().__init__(check_id="sharepoint_content_types")
 
     def run(self, context: CapabilityCheckContext) -> None:
         config: SharepointConnectorConfig = _config(context)
@@ -529,15 +500,7 @@ class _ConfiguredSitesCheck(_SharepointCheck):
     Graph resolves each of the first few."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_configured_sites",
-            display_name="Configured sites resolve",
-            remediation=(
-                "Use full site URLs on this tenant (https://tenant.sharepoint.com/"
-                "sites/name or /teams/name, https://tenant-my.sharepoint.com/"
-                "personal/name). " + _READ_REMEDIATION
-            ),
-        )
+        super().__init__(check_id="sharepoint_configured_sites")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return bool(_configured_sites(form_state.config))
@@ -584,14 +547,7 @@ class _SitesVisibleCheck(_SharepointCheck):
     which needs a tenant-wide read grant: `Sites.Selected` lists nothing."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_sites_visible",
-            display_name="Tenant sites can be listed",
-            remediation=(
-                "Grant `Sites.Read.All` (application permission) and admin-consent "
-                "it, or configure the site URLs to index."
-            ),
-        )
+        super().__init__(check_id="sharepoint_sites_visible")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return not _configured_sites(form_state.config)
@@ -619,14 +575,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
     not read libraries, so this is a documents rule."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_configured_libraries",
-            display_name="Configured libraries and folders exist",
-            remediation=(
-                "Use the library's URL segment and the folder's path inside it "
-                "as they appear in the site URL."
-            ),
-        )
+        super().__init__(check_id="sharepoint_configured_libraries")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_documents and any(
@@ -664,11 +613,7 @@ class _DocumentsReadCheck(_SharepointCheck):
     holds a file indexing would read."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_documents_read",
-            display_name="Site documents are readable",
-            remediation=_READ_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_documents_read")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_documents
@@ -735,11 +680,7 @@ class _DocumentsReadCheck(_SharepointCheck):
 
 class _SitePagesReadCheck(_SharepointCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="sharepoint_site_pages_read",
-            display_name="Site pages are readable",
-            remediation=_READ_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_site_pages_read")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_pages
@@ -794,12 +735,7 @@ class _CertificateAuthCheck(_SharepointCheck):
     no grant makes a client-secret credential sync permissions."""
 
     def __init__(self, capability: CredentialCapability) -> None:
-        super().__init__(
-            capability=capability,
-            check_id="sharepoint_certificate_auth",
-            display_name="Credential can reach SharePoint REST",
-            remediation=_CERTIFICATE_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_certificate_auth", capability=capability)
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -818,10 +754,7 @@ class _CertificateAuthCheck(_SharepointCheck):
 class _SitePermissionsCheck(_SharepointCheck):
     def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
-            capability=capability,
-            check_id="sharepoint_site_permissions_read",
-            display_name="Site permissions are readable",
-            remediation=_REST_REMEDIATION,
+            check_id="sharepoint_site_permissions_read", capability=capability
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -836,10 +769,7 @@ class _SiteGroupMembersCheck(_SharepointCheck):
 
     def __init__(self, capability: CredentialCapability) -> None:
         super().__init__(
-            capability=capability,
-            check_id="sharepoint_site_group_members_read",
-            display_name="Site group members are readable",
-            remediation=_REST_REMEDIATION,
+            check_id="sharepoint_site_group_members_read", capability=capability
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -872,12 +802,7 @@ class _EntraNestedGroupsCheck(_SharepointCheck):
     group Entra no longer has is skipped, as the sync skips it."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="sharepoint_entra_nested_groups_read",
-            display_name="Entra group nesting is readable",
-            remediation=_GROUPS_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_entra_nested_groups_read")
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway: SharepointSourceOperations = _gateway(context)
@@ -909,12 +834,7 @@ class _EntraGroupMembersCheck(_SharepointCheck):
     one listed group stands in, since a later site may name one."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="sharepoint_entra_group_members_read",
-            display_name="Entra group members are readable",
-            remediation=_GROUPS_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_entra_group_members_read")
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway: SharepointSourceOperations = _gateway(context)
@@ -968,12 +888,7 @@ class _EntraGroupEnumerationCheck(_SharepointCheck):
     exhaustive Entra enumeration."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="sharepoint_entra_group_enumeration",
-            display_name="Entra groups can be enumerated",
-            remediation=_GROUPS_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_entra_group_enumeration")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.exhaustive_ad_enumeration
@@ -1002,12 +917,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
     libraries must not block indexing."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="sharepoint_document_permissions_read",
-            display_name="Document permissions are readable",
-            remediation=_REST_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_document_permissions_read")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_documents
@@ -1183,12 +1093,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
 
 class _PagePermissionsCheck(_SharepointCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="sharepoint_page_permissions_read",
-            display_name="Page permissions are readable",
-            remediation=_REST_REMEDIATION,
-        )
+        super().__init__(check_id="sharepoint_page_permissions_read")
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_pages

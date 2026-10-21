@@ -12,13 +12,14 @@ from collections.abc import Callable
 from enum import Enum
 from typing import NoReturn, TypeVar
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
     form_config,
 )
 from onyx.connectors.exceptions import (
@@ -58,19 +59,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 
 T = TypeVar("T")
 
-DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/linear"
 PROBE_PAGE_SIZE: int = 1
-SIGN_IN_CHECK_ID: str = "linear_token"
-ISSUES_CHECK_ID: str = "linear_issues"
-_TEAMS_CHECK_ID: str = "linear_teams"
-_PROJECTS_CHECK_ID: str = "linear_projects"
-# check_id to the checks it runs after. A scope check that does not apply
-# (no teams or no projects selected) does not stop the issues check.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    _TEAMS_CHECK_ID: (SIGN_IN_CHECK_ID,),
-    _PROJECTS_CHECK_ID: (SIGN_IN_CHECK_ID,),
-    ISSUES_CHECK_ID: (SIGN_IN_CHECK_ID, _TEAMS_CHECK_ID, _PROJECTS_CHECK_ID),
-}
 _MAX_SUMMARY_CHARS: int = 40
 # A refused renewal: the refresh token is spent, revoked or expired.
 _REFRESH_REFUSED_STATUSES: frozenset[int] = frozenset({400, 401})
@@ -291,36 +280,14 @@ def _find_result(
 
 
 class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        requires_connector_config: bool = False,
-        fails_when_unreachable: bool = False,
-    ) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id=check_id,
-            display_name=display_name,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
-            remediation=remediation,
-            docs_link=DOCS_LINK,
-            fails_when_unreachable=fails_when_unreachable,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the Linear check graph.
+        self.init_from_graph(check_node(DocumentSource.LINEAR, check_id))
 
 
 class _TokenCheck(_LinearCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id=SIGN_IN_CHECK_ID,
-            display_name="Sign in to Linear",
-            remediation="Check the API key, or reconnect through OAuth.",
-            fails_when_unreachable=True,
-        )
+        super().__init__(check_id="linear_token")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         viewer: LinearViewer = probe(
@@ -338,14 +305,7 @@ class _TeamsCheck(_LinearCheck):
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_TEAMS_CHECK_ID,
-            display_name="Find selected teams",
-            requires_connector_config=True,
-            remediation=(
-                "Check each team key, or connect as a member of the team if it is private."
-            ),
-        )
+        super().__init__(check_id="linear_teams")
 
     def applies(self, form_state: FormState[LinearConnectorConfig]) -> bool:
         return bool(form_state.config.team_keys)
@@ -371,15 +331,7 @@ class _ProjectsCheck(_LinearCheck):
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_PROJECTS_CHECK_ID,
-            display_name="Find selected projects",
-            requires_connector_config=True,
-            remediation=(
-                "Check each project name or URL, or connect as a member of the "
-                "project's team if it is private."
-            ),
-        )
+        super().__init__(check_id="linear_projects")
 
     def applies(self, form_state: FormState[LinearConnectorConfig]) -> bool:
         return bool(form_state.config.projects)
@@ -416,11 +368,7 @@ class _IssuesCheck(_LinearCheck):
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=ISSUES_CHECK_ID,
-            display_name="Sample issues",
-            remediation="Grant the credential read access to issues.",
-        )
+        super().__init__(check_id="linear_issues")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         pages = gateway_from_context(context).iterate_issues(

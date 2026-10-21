@@ -8,13 +8,14 @@ permission sync checks build on the same helpers from EE.
 from collections.abc import Callable
 from typing import TypeVar
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CredentialCapability,
     form_config,
 )
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -29,8 +30,6 @@ from onyx.connectors.youtrack.source_operations import YouTrackSourceOperations
 T = TypeVar("T")
 
 PROBE_PAGE_SIZE: int = 1
-# The gateway reads the base URL from the config, so no check runs without it.
-REQUIRED_FIELDS: frozenset[str] = frozenset({"base_url"})
 
 
 def gateway_from_context(context: CapabilityCheckContext) -> YouTrackSourceOperations:
@@ -64,17 +63,7 @@ class _TokenCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="youtrack_token",
-            display_name="YouTrack accepts the URL and token",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation=(
-                "Check the YouTrack URL, including the context path on YouTrack "
-                "Server, and that the permanent token is valid."
-            ),
-        )
+        self.init_from_graph(check_node(DocumentSource.YOUTRACK, "youtrack_token"))
 
     def run(self, context: CapabilityCheckContext) -> None:
         probe(gateway_from_context(context).get_me, "YouTrack did not answer.")
@@ -84,17 +73,7 @@ class _ProjectsCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="youtrack_projects",
-            display_name="Configured projects are readable",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation=(
-                "Check each project short name, or give the token's user access "
-                "to the project."
-            ),
-        )
+        self.init_from_graph(check_node(DocumentSource.YOUTRACK, "youtrack_projects"))
 
     def applies(self, form_state: FormState[YouTrackConnectorConfig]) -> bool:
         return bool(form_state.config.projects)
@@ -113,14 +92,7 @@ class _IssuesCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="youtrack_issues",
-            display_name="Issues and comments are readable",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation="Give the token's user Read Issue and Read Issue Comment.",
-        )
+        self.init_from_graph(check_node(DocumentSource.YOUTRACK, "youtrack_issues"))
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway: YouTrackSourceOperations = gateway_from_context(context)

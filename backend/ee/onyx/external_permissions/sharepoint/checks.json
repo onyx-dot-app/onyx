@@ -1,0 +1,96 @@
+{
+  "source": "sharepoint",
+  "nodes": [
+    {
+      "id": "sharepoint_certificate_auth",
+      "display_name": "Credential can reach SharePoint REST",
+      "capabilities": [
+        "doc_permission_sync",
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Recreate the credential with Certificate Authentication, or turn permission sync off.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_site_permissions_read",
+      "display_name": "Site permissions are readable",
+      "capabilities": [
+        "doc_permission_sync",
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.FullControl.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app full control on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_site_group_members_read",
+      "display_name": "Site group members are readable",
+      "capabilities": [
+        "doc_permission_sync",
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.FullControl.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app full control on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_entra_nested_groups_read",
+      "display_name": "Entra group nesting is readable",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `GroupMember.Read.All` (application permission) and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_document_permissions_read",
+      "display_name": "Document permissions are readable",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.FullControl.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app full control on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_page_permissions_read",
+      "display_name": "Page permissions are readable",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.FullControl.All` (application permission) and admin-consent it, or with `Sites.Selected` grant the app full control on each configured site.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_entra_group_members_read",
+      "display_name": "Entra group members are readable",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `GroupMember.Read.All` (application permission) and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    },
+    {
+      "id": "sharepoint_entra_group_enumeration",
+      "display_name": "Entra groups can be enumerated",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `GroupMember.Read.All` (application permission) and admin-consent it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/sharepoint"
+    }
+  ]
+}

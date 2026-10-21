@@ -1,0 +1,162 @@
+{
+  "source": "google_drive",
+  "nodes": [
+    {
+      "id": "google_drive_auth",
+      "display_name": "Sign in to Google Drive",
+      "requires_connector_instance": false,
+      "remediation": "Service account: set up domain-wide delegation with the scopes in the Onyx docs, and use a Workspace user as the primary admin. OAuth: connect Google Drive again. Turn on the Google Drive API in the Google Cloud project of the credential.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview"
+    },
+    {
+      "id": "google_drive_workspace_users",
+      "display_name": "List Workspace users",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "Make the primary admin a Google Workspace admin, give the service account the admin.directory.user.readonly scope in domain-wide delegation, and turn on the Admin SDK API. Or list the users to index in 'Specific user emails'.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_specific_users",
+      "display_name": "Act as selected users",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "Check the emails in 'Specific user emails': each must be the primary email of an active Workspace user with Google Drive.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth",
+        "google_drive_workspace_users"
+      ]
+    },
+    {
+      "id": "google_drive_oauth_user_settings",
+      "display_name": "Check per-user settings",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "To index other users' My Drives, pick a service-account account. An OAuth account reads only what its own user sees.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview"
+    },
+    {
+      "id": "google_drive_shared_drives",
+      "display_name": "List shared drives",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Service account: make the primary admin a Workspace admin who can manage shared drives. OAuth: the connected user must be a member of the shared drives to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_configured_shared_drives",
+      "display_name": "Find selected drives",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use the URL of each shared drive (https://drive.google.com/drive/folders/<id>). Service account: an organizer of the drive must be a user Onyx indexes. OAuth: the connected user must be a member.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_shared_drives"
+      ]
+    },
+    {
+      "id": "google_drive_configured_folders",
+      "display_name": "Find selected folders",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Use the URL of each folder (https://drive.google.com/drive/folders/<id>). Put shared drive URLs in 'Shared drive URLs'. Share each folder with a user Onyx indexes.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_configured_my_drives",
+      "display_name": "Find My Drive users",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "Use each user's primary Workspace email, not an alias. With 'Specific user emails' set, each My Drive email must also be in that list.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth",
+        "google_drive_workspace_users"
+      ]
+    },
+    {
+      "id": "google_drive_shared_drive_organizer",
+      "display_name": "Find drive organizers",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "Make a Workspace user a Manager of each shared drive, and keep that user in the users Onyx indexes. Without one, Onyx can miss folders with limited access.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_shared_drives"
+      ]
+    },
+    {
+      "id": "google_drive_content_read",
+      "display_name": "Sample file content",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Give the service account the drive.readonly scope (OAuth: connect again and accept every permission). A file owner can also block downloads for viewers; Onyx skips those files.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_docs_api",
+      "display_name": "Use Google Docs API",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Turn on the Google Docs API in the Google Cloud project of the credential. Without it, Google Docs index without links to their headings.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "depends_on": [
+        "google_drive_auth"
+      ]
+    },
+    {
+      "id": "google_drive_shared_drive_listing",
+      "display_name": "List shared drives",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Service account: make the primary admin a Workspace admin who can manage shared drives. OAuth: the connected user must be a member of the shared drives to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "discovery": true,
+      "depends_on": [
+        "google_drive_shared_drives"
+      ],
+      "row_id": "google_drive_shared_drives"
+    },
+    {
+      "id": "google_drive_user_count",
+      "display_name": "List Workspace users",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "credential_kind"
+      ],
+      "remediation": "Make the primary admin a Google Workspace admin, give the service account the admin.directory.user.readonly scope in domain-wide delegation, and turn on the Admin SDK API.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/google_drive/overview",
+      "discovery": true,
+      "depends_on": [
+        "google_drive_workspace_users"
+      ],
+      "row_id": "google_drive_workspace_users"
+    }
+  ]
+}

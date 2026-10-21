@@ -1,0 +1,128 @@
+{
+  "source": "github",
+  "nodes": [
+    {
+      "id": "github_auth",
+      "display_name": "Sign in to GitHub",
+      "requires_connector_instance": false,
+      "remediation": "Create a new personal access token (classic or fine-grained) and check the Enterprise Server URL, if one is set.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "github_document_types",
+      "display_name": "Check selected content",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Select pull requests, issues or files.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github"
+    },
+    {
+      "id": "github_token_scopes",
+      "display_name": "Read token scopes",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `repo` scope to the classic token, or use a fine-grained token with read access to Contents, Issues, Pull requests and Metadata.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_auth"
+      ]
+    },
+    {
+      "id": "github_owner",
+      "display_name": "Find repository owner",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Enter the organization or user name from the repository URL (github.com/<owner>/<repository>).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_auth"
+      ]
+    },
+    {
+      "id": "github_repositories_visible",
+      "display_name": "List repositories",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Classic token: the `repo` scope reads private repositories. Fine-grained token: its resource owner must be the repository owner, and its repository access must include the repositories. A user owner lists only public repositories; enter the repository names to index private ones.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_owner"
+      ]
+    },
+    {
+      "id": "github_configured_repositories",
+      "display_name": "Find selected repos",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Check each repository name (without the owner) and the owner. Classic token: the `repo` scope reads private repositories. Fine-grained token: its resource owner must be the repository owner, and its repository access must include the repositories.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_owner"
+      ]
+    },
+    {
+      "id": "github_branch",
+      "display_name": "Find selected branch",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Check the branch name, or leave it blank to index each repository's default branch.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_pull_requests",
+      "display_name": "Sample pull requests",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Fine-grained token: give it read access to Pull requests. Classic token: the `repo` scope for private repositories.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_issues",
+      "display_name": "Sample issues",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Fine-grained token: give it read access to Issues. Classic token: the `repo` scope for private repositories.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_files",
+      "display_name": "Sample files",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Fine-grained token: give it read access to Contents. Classic token: the `repo` scope for private repositories.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_branch",
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    }
+  ]
+}

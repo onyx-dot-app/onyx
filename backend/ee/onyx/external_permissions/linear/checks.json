@@ -1,0 +1,72 @@
+{
+  "source": "linear",
+  "nodes": [
+    {
+      "id": "linear_workspace_member_doc_permission_sync",
+      "display_name": "Read account role",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Connect as a workspace member who belongs to every private team to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_token"
+      ],
+      "row_id": "linear_workspace_member"
+    },
+    {
+      "id": "linear_issue_access",
+      "display_name": "Read issue sharing",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant the credential read access to issues and teams.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_issues"
+      ]
+    },
+    {
+      "id": "linear_workspace_member_external_group_sync",
+      "display_name": "Read account role",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Connect as a workspace member who belongs to every private team to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_token"
+      ],
+      "row_id": "linear_workspace_member"
+    },
+    {
+      "id": "linear_workspace_users",
+      "display_name": "List workspace users",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Connect as a workspace member who belongs to every private team to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_workspace_member_external_group_sync"
+      ]
+    },
+    {
+      "id": "linear_team_members",
+      "display_name": "List team members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant the credential read access to teams.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_workspace_users"
+      ]
+    }
+  ]
+}

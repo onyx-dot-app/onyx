@@ -1,0 +1,74 @@
+{
+  "source": "slack",
+  "nodes": [
+    {
+      "id": "slack_perm_sync_channel_listing",
+      "display_name": "List public channels",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Add the `channels:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ],
+      "row_id": "slack_public_channel_listing"
+    },
+    {
+      "id": "slack_perm_sync_private_channel_listing",
+      "display_name": "List private channels",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `groups:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ],
+      "row_id": "slack_private_channel_listing"
+    },
+    {
+      "id": "slack_private_channel_member_listing",
+      "display_name": "List channel members",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Add the `groups:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace. Member-to-user resolution also needs `users:read`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_perm_sync_private_channel_listing"
+      ]
+    },
+    {
+      "id": "slack_user_email_visibility",
+      "display_name": "Read user emails",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Add the `users:read.email` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace. Slack only returns email fields once the app is reinstalled.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_grid_public_channel_scoping",
+      "display_name": "List users per workspace",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `users:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace. Also grant `users:read.email` and `team:read` so per-workspace user lists can be built.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_grid_workspace_listing"
+      ]
+    }
+  ]
+}

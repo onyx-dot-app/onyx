@@ -1,0 +1,47 @@
+{
+  "source": "linear",
+  "nodes": [
+    {
+      "id": "linear_token",
+      "display_name": "Sign in to Linear",
+      "requires_connector_instance": false,
+      "remediation": "Check the API key, or reconnect through OAuth.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "linear_teams",
+      "display_name": "Find selected teams",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Check each team key, or connect as a member of the team if it is private.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_token"
+      ]
+    },
+    {
+      "id": "linear_projects",
+      "display_name": "Find selected projects",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Check each project name or URL, or connect as a member of the project's team if it is private.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_token"
+      ]
+    },
+    {
+      "id": "linear_issues",
+      "display_name": "Sample issues",
+      "requires_connector_instance": false,
+      "remediation": "Grant the credential read access to issues.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/linear",
+      "depends_on": [
+        "linear_token",
+        "linear_teams",
+        "linear_projects"
+      ]
+    }
+  ]
+}

@@ -1,8 +1,10 @@
 from collections.abc import Callable, Generator
 from typing import TypeVar
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_count
-from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.form_state import ConfigT, FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -11,7 +13,6 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CountFinding,
-    CredentialCapability,
     form_config,
 )
 from onyx.connectors.exceptions import (
@@ -46,7 +47,6 @@ from onyx.connectors.onedrive.source_operations import (
     OneDriveSourceOperations,
 )
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
 _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
 # A bound on the pages the drive count reads. Pages hold up to 999 users, so
@@ -238,16 +238,15 @@ def _group_membership_probe_group(
     return None
 
 
-class _TokenCheck(CapabilityCheck):
+class _OneDriveCheck(CapabilityCheck[ConfigT]):
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the OneDrive check graph.
+        self.init_from_graph(check_node(DocumentSource.ONEDRIVE, check_id))
+
+
+class _TokenCheck(_OneDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_token_auth",
-            display_name="App registration can sign in",
-            requires_connector_instance=False,
-            remediation="Check the app id, tenant id, and client credential.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_token_auth")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -258,16 +257,9 @@ class _TokenCheck(CapabilityCheck):
             raise_for_graph_error(error, "Microsoft refused the token request.")
 
 
-class _UsersCheck(CapabilityCheck):
+class _UsersCheck(_OneDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_users",
-            display_name="Tenant users can be listed",
-            requires_connector_instance=False,
-            remediation="Grant and admin-consent `User.Read.All`.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_users")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -292,7 +284,7 @@ def _tenant_users(
     )
 
 
-class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
+class _DriveCountCheck(_OneDriveCheck[OneDriveConnectorConfig]):
     """Counts the enabled member users: the owners of the OneDrives indexing
     walks in every-user mode. It does not open each drive, so a user without a
     OneDrive still counts. Separate from ``onedrive_users``, which reads one
@@ -302,15 +294,7 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_drive_count",
-            display_name="Counts the tenant's OneDrives",
-            requires_connector_instance=False,
-            remediation="Grant and admin-consent `User.Read.All`.",
-            docs_link=_DOCS_LINK,
-            discovery=True,
-        )
+        super().__init__(check_id="onedrive_drive_count")
 
     def applies(self, form_state: FormState[OneDriveConnectorConfig]) -> bool:
         return not [user for user in form_state.config.users or [] if user.strip()]
@@ -327,19 +311,11 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
         return CheckOutput(findings=[finding])
 
 
-class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
+class _ConfiguredUsersCheck(_OneDriveCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_configured_users",
-            display_name="Configured users resolve",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation="Use enabled member user principal names.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_configured_users")
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
@@ -352,19 +328,11 @@ class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
                 raise ConnectorValidationError(f"No user matches `{identifier}`.")
 
 
-class _DriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
+class _DriveCheck(_OneDriveCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_drive",
-            display_name="A OneDrive is readable",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_drive")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -378,19 +346,11 @@ class _DriveCheck(CapabilityCheck[OneDriveConnectorConfig]):
             raise_for_graph_error(error, "The app cannot read this user's OneDrive.")
 
 
-class _DeltaCheck(CapabilityCheck[OneDriveConnectorConfig]):
+class _DeltaCheck(_OneDriveCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="onedrive_delta",
-            display_name="OneDrive changes are readable",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_delta")
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
@@ -416,19 +376,11 @@ class _DeltaCheck(CapabilityCheck[OneDriveConnectorConfig]):
             raise_for_graph_error(error, "The app cannot read OneDrive changes.")
 
 
-class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
+class _PermissionCheck(_OneDriveCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="onedrive_item_permissions",
-            display_name="OneDrive item permissions are readable",
-            requires_connector_instance=False,
-            requires_connector_config=True,
-            remediation="Grant `Sites.Read.All` or a selected personal-site read grant.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_item_permissions")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
@@ -461,16 +413,9 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
         return None
 
 
-class _GroupListCheck(CapabilityCheck):
+class _GroupListCheck(_OneDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="onedrive_groups",
-            display_name="Entra groups are readable",
-            requires_connector_instance=False,
-            remediation="Grant and admin-consent `GroupMember.ReadBasic.All`.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_groups")
 
     def run(self, context: CapabilityCheckContext) -> None:
         try:
@@ -479,16 +424,9 @@ class _GroupListCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot list Entra groups.")
 
 
-class _GroupMembershipCheck(CapabilityCheck):
+class _GroupMembershipCheck(_OneDriveCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="onedrive_group_members",
-            display_name="Entra transitive group members are readable",
-            requires_connector_instance=False,
-            remediation="Grant `GroupMember.ReadBasic.All`.",
-            docs_link=_DOCS_LINK,
-        )
+        super().__init__(check_id="onedrive_group_members")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)

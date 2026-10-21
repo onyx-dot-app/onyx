@@ -21,14 +21,15 @@ from typing import NoReturn
 import requests
 from pydantic import BaseModel
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -63,13 +64,11 @@ from onyx.connectors.github.utils import parse_repository_names
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
 _SSO_GUIDE_LINK = (
     "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
     "authenticating-with-saml-single-sign-on/"
     "authorizing-a-personal-access-token-for-use-with-saml-single-sign-on"
 )
-_OWNER_FIELDS = frozenset({"repo_owner"})
 _ERROR_DETAIL_CHARS = 300
 # GitHub's text when a SAML organization has not authorized the token.
 _SAML_TEXT = "saml enforcement"
@@ -88,31 +87,8 @@ _TOKEN_ACCESS_HINT = (
 
 _AUTH_CHECK_ID = "github_auth"
 _OWNER_CHECK_ID = "github_owner"
-_REPOSITORY_CHECK_IDS = (
-    "github_repositories_visible",
-    "github_configured_repositories",
-)
 _COLLABORATORS_CHECK_ID = "github_repository_collaborators"
 _MEMBERS_CHECK_ID = "github_organization_members"
-# check_id to the checks it runs after, in run order. The two repository
-# checks are alternatives: only one applies to a config.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    "github_token_scopes": (_AUTH_CHECK_ID,),
-    _OWNER_CHECK_ID: (_AUTH_CHECK_ID,),
-    "github_repositories_visible": (_OWNER_CHECK_ID,),
-    "github_configured_repositories": (_OWNER_CHECK_ID,),
-    "github_branch": _REPOSITORY_CHECK_IDS,
-    "github_pull_requests": _REPOSITORY_CHECK_IDS,
-    "github_issues": _REPOSITORY_CHECK_IDS,
-    "github_files": ("github_branch", *_REPOSITORY_CHECK_IDS),
-    "github_repository_visibility": _REPOSITORY_CHECK_IDS,
-    _COLLABORATORS_CHECK_ID: _REPOSITORY_CHECK_IDS,
-    _MEMBERS_CHECK_ID: _REPOSITORY_CHECK_IDS,
-    # Not the collaborators and members checks: one of them finds nothing to
-    # test when the repositories are all private or all internal, and the
-    # emails check still reads the users of the other.
-    "github_user_emails": _REPOSITORY_CHECK_IDS,
-}
 
 
 def _gateway(context: CapabilityCheckContext) -> GitHubSourceOperations:
@@ -261,31 +237,9 @@ def _raise_for_api_error(
 class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
     config_class = GithubConnectorConfig
 
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        required: bool = True,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        requires_fields: frozenset[str] = _OWNER_FIELDS,
-        requires_connector_config: bool = False,
-        fails_when_unreachable: bool = False,
-    ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            required=required,
-            requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
-            requires_fields=requires_fields,
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            fails_when_unreachable=fails_when_unreachable,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the GitHub check graph.
+        self.init_from_graph(check_node(DocumentSource.GITHUB, check_id))
 
 
 def _lacks_private_scope(token: GitHubTokenInfo | None) -> bool:
@@ -301,16 +255,7 @@ class _AuthCheck(_GitHubCheck):
     """Signs in with ``GET /user``, which every valid token can call."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_AUTH_CHECK_ID,
-            display_name="Sign in to GitHub",
-            remediation=(
-                "Create a new personal access token (classic or fine-grained) and "
-                "check the Enterprise Server URL, if one is set."
-            ),
-            requires_fields=frozenset(),
-            fails_when_unreachable=True,
-        )
+        super().__init__(check_id=_AUTH_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -368,17 +313,7 @@ class _TokenScopesCheck(_GitHubCheck):
     fine-grained token has no scopes; the probes check its permissions."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_token_scopes",
-            display_name="Read token scopes",
-            required=False,
-            remediation=(
-                "Add the `repo` scope to the classic token, or use a fine-grained "
-                "token with read access to Contents, Issues, Pull requests and "
-                "Metadata."
-            ),
-            requires_fields=frozenset(),
-        )
+        super().__init__(check_id="github_token_scopes")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -414,13 +349,7 @@ _DOCUMENT_TYPE_NAMES = ("pull requests", "issues", "documents")
 
 class _DocumentTypesCheck(_GitHubCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_document_types",
-            display_name="Check selected content",
-            remediation="Select pull requests, issues or files.",
-            requires_fields=frozenset(),
-            requires_connector_config=True,
-        )
+        super().__init__(check_id="github_document_types")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
@@ -472,14 +401,7 @@ def _no_owner_row(owner: str) -> CheckRowText:
 
 class _OwnerCheck(_GitHubCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_OWNER_CHECK_ID,
-            display_name="Find repository owner",
-            remediation=(
-                "Enter the organization or user name from the repository URL "
-                "(github.com/<owner>/<repository>)."
-            ),
-        )
+        super().__init__(check_id=_OWNER_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         owner: str = _owner(self.config(context))
@@ -532,14 +454,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
     sees. This is what ``validate_connector_settings`` probes."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_repositories_visible",
-            display_name="List repositories",
-            remediation=(
-                f"{_TOKEN_ACCESS_HINT} A user owner lists only public repositories; "
-                "enter the repository names to index private ones."
-            ),
-        )
+        super().__init__(check_id="github_repositories_visible")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return not parse_repository_names(form_state.config.repositories)
@@ -664,14 +579,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
     on the readable ones; none readable FAILS."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_configured_repositories",
-            display_name="Find selected repos",
-            remediation=(
-                "Check each repository name (without the owner) and the owner. "
-                f"{_TOKEN_ACCESS_HINT}"
-            ),
-        )
+        super().__init__(check_id="github_configured_repositories")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return bool(parse_repository_names(form_state.config.repositories))
@@ -886,14 +794,7 @@ class _BranchCheck(_GitHubCheck):
     repository without it."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_branch",
-            display_name="Find selected branch",
-            remediation=(
-                "Check the branch name, or leave it blank to index each "
-                "repository's default branch."
-            ),
-        )
+        super().__init__(check_id="github_branch")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         config: GithubConnectorConfig = form_state.config
@@ -974,14 +875,7 @@ class _PullRequestsCheck(_GitHubCheck):
     reads the first one, as indexing does."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_pull_requests",
-            display_name="Sample pull requests",
-            remediation=(
-                "Fine-grained token: give it read access to Pull requests. Classic "
-                "token: the `repo` scope for private repositories."
-            ),
-        )
+        super().__init__(check_id="github_pull_requests")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_prs
@@ -1051,14 +945,7 @@ class _IssuesCheck(_GitHubCheck):
     the first issue that is not a pull request, as indexing does."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_issues",
-            display_name="Sample issues",
-            remediation=(
-                "Fine-grained token: give it read access to Issues. Classic token: "
-                "the `repo` scope for private repositories."
-            ),
-        )
+        super().__init__(check_id="github_issues")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_issues
@@ -1127,14 +1014,7 @@ class _FilesCheck(_GitHubCheck):
     file that indexing would read."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="github_files",
-            display_name="Sample files",
-            remediation=(
-                "Fine-grained token: give it read access to Contents. Classic "
-                "token: the `repo` scope for private repositories."
-            ),
-        )
+        super().__init__(check_id="github_files")
 
     def applies(self, form_state: FormState[GithubConnectorConfig]) -> bool:
         return form_state.config.include_files
@@ -1287,15 +1167,7 @@ class _RepositoryVisibilityCheck(_GitHubCheck):
     repository belongs to an organization, as doc sync needs."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="github_repository_visibility",
-            display_name="Read repo visibility",
-            remediation=(
-                "Give the token read access to the repositories (see the indexing "
-                "checks)."
-            ),
-        )
+        super().__init__(check_id="github_repository_visibility")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
@@ -1416,15 +1288,7 @@ class _CollaboratorsCheck(_GitHubCheck):
     only public and internal repositories reads no collaborators."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id=_COLLABORATORS_CHECK_ID,
-            display_name="List collaborators",
-            remediation=(
-                "Use a token of an account with write access to the private "
-                f"repositories. {_COLLABORATORS_HINT}"
-            ),
-        )
+        super().__init__(check_id=_COLLABORATORS_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
@@ -1501,12 +1365,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
     GitHub reports no error for it."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id=_MEMBERS_CHECK_ID,
-            display_name="List org members",
-            remediation=_MEMBERS_HINT,
-        )
+        super().__init__(check_id=_MEMBERS_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)
@@ -1569,16 +1428,7 @@ class _UserEmailsCheck(_GitHubCheck):
     group; a partial sample is INCOMPLETE."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="github_user_emails",
-            display_name="Read public emails",
-            required=False,
-            remediation=(
-                "Ask the users to set a public email on their GitHub profile. "
-                f"{_EMAIL_HINT}"
-            ),
-        )
+        super().__init__(check_id="github_user_emails")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: GithubConnectorConfig = self.config(context)

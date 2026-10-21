@@ -1,0 +1,74 @@
+{
+  "source": "github",
+  "nodes": [
+    {
+      "id": "github_repository_visibility",
+      "display_name": "Read repo visibility",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Give the token read access to the repositories (see the indexing checks).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_repository_collaborators",
+      "display_name": "List collaborators",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Use a token of an account with write access to the private repositories. GitHub lists collaborators only to an account with write (push) access to the repository. Classic token: the `repo` and `read:org` scopes. Fine-grained token: read access to Metadata.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_organization_members",
+      "display_name": "List org members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Classic token: the `read:org` scope. Fine-grained token: read access to the organization's Members. Without it, GitHub lists only the public members.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    },
+    {
+      "id": "github_user_emails",
+      "display_name": "Read public emails",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "repo_owner"
+      ],
+      "remediation": "Ask the users to set a public email on their GitHub profile. GitHub returns only the public email of a profile (Settings > Public email). Users without one get no access in Onyx.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/github",
+      "depends_on": [
+        "github_repositories_visible",
+        "github_configured_repositories"
+      ]
+    }
+  ]
+}

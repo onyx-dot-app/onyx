@@ -1,0 +1,36 @@
+{
+  "source": "onedrive",
+  "nodes": [
+    {
+      "id": "onedrive_item_permissions",
+      "display_name": "OneDrive item permissions are readable",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Grant `Sites.Read.All` or a selected personal-site read grant.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_groups",
+      "display_name": "Entra groups are readable",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant and admin-consent `GroupMember.ReadBasic.All`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    },
+    {
+      "id": "onedrive_group_members",
+      "display_name": "Entra transitive group members are readable",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant `GroupMember.ReadBasic.All`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/onedrive"
+    }
+  ]
+}

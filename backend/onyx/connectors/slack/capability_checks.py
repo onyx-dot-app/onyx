@@ -36,8 +36,10 @@ from urllib.error import URLError
 
 from pydantic import BaseModel
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -47,7 +49,6 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
     OptionsFinding,
 )
 from onyx.connectors.exceptions import (
@@ -86,25 +87,11 @@ from onyx.connectors.slack.source_operations import (
 )
 from onyx.connectors.source_operations import SourceOperations
 
-_SLACK_DOCS_LINK = (
-    "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed"
-)
-
-_ADD_SCOPE_REMEDIATION = (
-    "Add the `{scope}` bot scope under OAuth & Permissions in the Slack app "
-    "settings and reinstall the app to the workspace."
-)
-
 # Page size when sampling users for email visibility. Workspaces commonly have
 # many bot/deactivated users, so sample enough to nearly always include a human
 # member.
 _EMAIL_PROBE_PAGE_SIZE = 100
 
-# Hang guard for the full-workspace channel enumeration, the one multi-page
-# probe: triple the 600s ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default, since the
-# gateway's redis-coordinated client also serves any concurrently running
-# indexing job's rate-limit backoff.
-_CHANNEL_ENUMERATION_TIMEOUT_SECONDS = 1800.0
 
 # Bound on the search for one channel of a type. Slack applies ``limit`` before
 # it filters by type, so a page can be empty and still have a cursor; the
@@ -129,30 +116,6 @@ _GRID_LISTING_CHECK_ID = "slack_grid_workspace_listing"
 _PUBLIC_LISTING_CHECK_ID = "slack_public_channel_listing"
 _PRIVATE_LISTING_CHECK_ID = "slack_private_channel_listing"
 _PERM_SYNC_PRIVATE_LISTING_CHECK_ID = "slack_perm_sync_private_channel_listing"
-# check_id to the checks it runs after, in run order.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    _GRID_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    _PUBLIC_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    "slack_readable_channel_listing": (_AUTH_CHECK_ID,),
-    "slack_perm_sync_channel_listing": (_AUTH_CHECK_ID,),
-    "slack_message_history_read": (_PUBLIC_LISTING_CHECK_ID,),
-    "slack_channel_join_scope": (_AUTH_CHECK_ID,),
-    "slack_configured_channels_visible": (_PUBLIC_LISTING_CHECK_ID,),
-    _PRIVATE_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    _PERM_SYNC_PRIVATE_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    "slack_private_message_history_read": (_PRIVATE_LISTING_CHECK_ID,),
-    "slack_private_channel_member_listing": (_PERM_SYNC_PRIVATE_LISTING_CHECK_ID,),
-    "slack_user_profile_read": (_AUTH_CHECK_ID,),
-    "slack_user_email_visibility": (_AUTH_CHECK_ID,),
-    "slack_grid_public_channel_scoping": (_GRID_LISTING_CHECK_ID,),
-}
-# Checks that share one design row: a probe's variants per capability and the
-# public listing's discovery step.
-_ROW_IDS: dict[str, str] = {
-    "slack_readable_channel_listing": _PUBLIC_LISTING_CHECK_ID,
-    "slack_perm_sync_channel_listing": _PUBLIC_LISTING_CHECK_ID,
-    _PERM_SYNC_PRIVATE_LISTING_CHECK_ID: _PRIVATE_LISTING_CHECK_ID,
-}
 
 
 def _need(scope: str) -> str:
@@ -456,52 +419,16 @@ def _probe_channel_history(
 
 
 class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        required: bool = True,
-        requires_connector_config: bool = False,
-        timeout_seconds: float | None = None,
-        validates_binding: bool = False,
-        discovery: bool = False,
-        fails_when_unreachable: bool = False,
-    ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            row_id=_ROW_IDS.get(check_id),
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            required=required,
-            requires_connector_instance=False,
-            requires_connector_config=requires_connector_config,
-            timeout_seconds=timeout_seconds,
-            remediation=remediation,
-            docs_link=_SLACK_DOCS_LINK,
-            validates_binding=validates_binding,
-            discovery=discovery,
-            fails_when_unreachable=fails_when_unreachable,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the Slack check graph.
+        self.init_from_graph(check_node(DocumentSource.SLACK, check_id))
 
 
 class _TokenAuthCheck(_SlackCheck):
     """Rejects non-bot token shapes, then probes ``auth.test``."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_AUTH_CHECK_ID,
-            display_name="Sign in to Slack",
-            remediation=(
-                "Create a bot token (`xoxb-...`) for the Slack app and paste "
-                "it into the credential."
-            ),
-            validates_binding=True,
-            fails_when_unreachable=True,
-        )
+        super().__init__(check_id=_AUTH_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         token = context.credential_json.get(_BOT_TOKEN_KEY)
@@ -548,12 +475,7 @@ class _ChannelPatternsCheck(_SlackCheck):
     config_class = SlackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_channel_patterns",
-            display_name="Compile channel patterns",
-            remediation="Fix the channel regex in the connector settings.",
-            requires_connector_config=True,
-        )
+        super().__init__(check_id="slack_channel_patterns")
 
     def applies(self, form_state: FormState[SlackConnectorConfig]) -> bool:
         return bool(_patterns(form_state.config))
@@ -605,12 +527,7 @@ class _GridWorkspaceListingCheck(_SlackCheck):
     """Counts the Grid org's workspaces. Does not apply off Grid."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_GRID_LISTING_CHECK_ID,
-            display_name="List Grid workspaces",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="team:read"),
-            validates_binding=True,
-        )
+        super().__init__(check_id=_GRID_LISTING_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -655,11 +572,7 @@ class _PublicChannelListingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_PUBLIC_LISTING_CHECK_ID,
-            display_name="List public channels",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
-        )
+        super().__init__(check_id=_PUBLIC_LISTING_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -708,12 +621,7 @@ class _PrivateChannelListingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_PRIVATE_LISTING_CHECK_ID,
-            display_name="List private channels",
-            required=False,
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="groups:read"),
-        )
+        super().__init__(check_id=_PRIVATE_LISTING_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -780,11 +688,7 @@ class _MessageHistoryReadCheck(_SlackCheck):
     """Reads one message page and one thread from a public channel."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_message_history_read",
-            display_name="Sample public messages",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:history"),
-        )
+        super().__init__(check_id="slack_message_history_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -832,11 +736,7 @@ class _PrivateMessageHistoryReadCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_private_message_history_read",
-            display_name="Sample private messages",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="groups:history"),
-        )
+        super().__init__(check_id="slack_private_message_history_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -888,18 +788,7 @@ class _ChannelJoinScopeCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_channel_join_scope",
-            display_name="Join public channels",
-            required=False,
-            remediation=(
-                _ADD_SCOPE_REMEDIATION.format(scope="channels:join")
-                + " Alternatively, manually invite the bot (`/invite @<bot>`) "
-                "to every channel that should be indexed. Do not dismiss this "
-                "warning unless the bot is already a member of every such "
-                "channel."
-            ),
-        )
+        super().__init__(check_id="slack_channel_join_scope")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         granted_scopes = _auth_test(_slack_client(context)).granted_scopes
@@ -936,12 +825,7 @@ class _UserProfileReadCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_user_profile_read",
-            display_name="Read user profiles",
-            required=False,
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="users:read"),
-        )
+        super().__init__(check_id="slack_user_profile_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -1005,16 +889,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
     config_class = SlackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_configured_channels_visible",
-            display_name="Find selected channels",
-            requires_connector_config=True,
-            timeout_seconds=_CHANNEL_ENUMERATION_TIMEOUT_SECONDS,
-            remediation=(
-                "Fix the channel name, or invite the bot to the private "
-                "channel (`/invite @<bot>` in Slack) and grant `groups:read`."
-            ),
-        )
+        super().__init__(check_id="slack_configured_channels_visible")
 
     def applies(self, form_state: FormState[SlackConnectorConfig]) -> bool:
         # No channel filter indexes whatever is visible; patterns are compiled
@@ -1153,12 +1028,10 @@ class _ReadableChannelListingCheck(_SlackCheck):
     field: the discovery step of the public listing's row."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="slack_readable_channel_listing",
-            display_name="List public channels",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
-            discovery=True,
-        )
+        # Its timeout in checks.json (1800s) triples the 600s default: this is
+        # the one multi-page probe, and the gateway's redis-coordinated client
+        # also serves any running indexing job's rate-limit backoff.
+        super().__init__(check_id="slack_readable_channel_listing")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -1210,12 +1083,7 @@ class _PermSyncChannelListingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="slack_perm_sync_channel_listing",
-            display_name="List public channels",
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
-        )
+        super().__init__(check_id="slack_perm_sync_channel_listing")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -1257,13 +1125,7 @@ class _PermSyncPrivateChannelListingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id=_PERM_SYNC_PRIVATE_LISTING_CHECK_ID,
-            display_name="List private channels",
-            required=False,
-            remediation=_ADD_SCOPE_REMEDIATION.format(scope="groups:read"),
-        )
+        super().__init__(check_id=_PERM_SYNC_PRIVATE_LISTING_CHECK_ID)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -1302,16 +1164,7 @@ class _UserEmailVisibilityCheck(_SlackCheck):
     """Samples users and requires at least one visible email address."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="slack_user_email_visibility",
-            display_name="Read user emails",
-            remediation=(
-                _ADD_SCOPE_REMEDIATION.format(scope="users:read.email")
-                + " Slack only returns email fields once the app is "
-                "reinstalled."
-            ),
-        )
+        super().__init__(check_id="slack_user_email_visibility")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -1385,15 +1238,7 @@ class _PrivateChannelMemberListingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="slack_private_channel_member_listing",
-            display_name="List channel members",
-            remediation=(
-                _ADD_SCOPE_REMEDIATION.format(scope="groups:read")
-                + " Member-to-user resolution also needs `users:read`."
-            ),
-        )
+        super().__init__(check_id="slack_private_channel_member_listing")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)
@@ -1466,17 +1311,7 @@ class _GridPublicChannelScopingCheck(_SlackCheck):
     """
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="slack_grid_public_channel_scoping",
-            display_name="List users per workspace",
-            required=False,
-            remediation=(
-                _ADD_SCOPE_REMEDIATION.format(scope="users:read")
-                + " Also grant `users:read.email` and `team:read` so "
-                "per-workspace user lists can be built."
-            ),
-        )
+        super().__init__(check_id="slack_grid_public_channel_scoping")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         slack_client = _slack_client(context)

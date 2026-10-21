@@ -31,8 +31,10 @@ import requests
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -40,7 +42,6 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
     OptionsFinding,
 )
 from onyx.connectors.confluence.config import (
@@ -93,8 +94,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/confluence"
-_SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
 _SPACE_FIELD = "space"
 
 # Pages sampled when a probe needs a page with attachments.
@@ -323,75 +322,12 @@ def _sample_pages(
     )
 
 
-_SIGN_IN_CHECK_IDS = ("confluence_auth", "confluence_scoped_token_auth")
-_SPACE_PERMISSION_CHECK_IDS = (
-    "confluence_space_permissions_read",
-    "confluence_space_permissions_read_dc_rest",
-    "confluence_space_permissions_read_dc_jsonrpc",
-)
-_USER_LISTING_CHECK_IDS = ("confluence_user_listing", "confluence_user_listing_dc")
-# check_id to the checks it runs after, in run order. A listed check that does
-# not apply (another token type or deployment) is left out.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    "confluence_spaces_visible": _SIGN_IN_CHECK_IDS,
-    "confluence_space_listing": ("confluence_spaces_visible",),
-    "confluence_configured_space": ("confluence_spaces_visible",),
-    "confluence_configured_page": ("confluence_spaces_visible",),
-    "confluence_cql_query": ("confluence_spaces_visible",),
-    "confluence_content_read": (
-        "confluence_spaces_visible",
-        "confluence_configured_space",
-        "confluence_configured_page",
-        "confluence_cql_query",
-    ),
-    "confluence_comments_read": ("confluence_content_read",),
-    "confluence_attachments_read": ("confluence_content_read",),
-    "confluence_user_names": ("confluence_content_read",),
-    "confluence_page_restrictions_read": ("confluence_content_read",),
-    "confluence_restrictions_batch_read": ("confluence_page_restrictions_read",),
-    **dict.fromkeys(_SPACE_PERMISSION_CHECK_IDS, ("confluence_spaces_visible",)),
-    "confluence_permission_user_emails": _SPACE_PERMISSION_CHECK_IDS,
-    "confluence_permission_user_emails_dc": _SPACE_PERMISSION_CHECK_IDS,
-    "confluence_anonymous_space_access": _SPACE_PERMISSION_CHECK_IDS,
-    **dict.fromkeys(_USER_LISTING_CHECK_IDS, _SIGN_IN_CHECK_IDS),
-    "confluence_group_membership": _USER_LISTING_CHECK_IDS,
-    "confluence_group_membership_dc": _USER_LISTING_CHECK_IDS,
-    "confluence_group_user_emails": _USER_LISTING_CHECK_IDS,
-    "confluence_group_user_emails_dc": _USER_LISTING_CHECK_IDS,
-}
-
-
 class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
     config_class = ConfluenceConnectorConfig
 
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        required: bool = True,
-        capability: CredentialCapability = CredentialCapability.INDEXING,
-        validates_binding: bool = False,
-        discovery: bool = False,
-        fails_when_unreachable: bool = False,
-        row_id: str | None = None,
-    ) -> None:
-        super().__init__(
-            capability=capability,
-            check_id=check_id,
-            display_name=display_name,
-            row_id=row_id,
-            required=required,
-            requires_connector_instance=False,
-            requires_fields=_SITE_FIELDS,
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            validates_binding=validates_binding,
-            discovery=discovery,
-            fails_when_unreachable=fails_when_unreachable,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the Confluence check graph.
+        self.init_from_graph(check_node(DocumentSource.CONFLUENCE, check_id))
 
 
 class _SiteAuthCheck(_ConfluenceCheck):
@@ -405,30 +341,9 @@ class _SiteAuthCheck(_ConfluenceCheck):
     def __init__(self, *, scoped: bool) -> None:
         self._scoped = scoped
         if scoped:
-            super().__init__(
-                check_id="confluence_scoped_token_auth",
-                row_id="confluence_auth",
-                validates_binding=True,
-                fails_when_unreachable=True,
-                display_name="Sign in to Confluence",
-                remediation=(
-                    "Scoped API tokens work only with Confluence Cloud. Check the "
-                    "site URL, and create a new scoped token if it expired."
-                ),
-            )
+            super().__init__(check_id="confluence_scoped_token_auth")
         else:
-            super().__init__(
-                check_id="confluence_auth",
-                validates_binding=True,
-                fails_when_unreachable=True,
-                display_name="Sign in to Confluence",
-                remediation=(
-                    "Check the site URL and the Cloud setting. For an API token, "
-                    "use the email of the token's Atlassian account. Create a new "
-                    "token if it expired. For a scoped API token, turn on "
-                    "'Using scoped token'."
-                ),
-            )
+            super().__init__(check_id="confluence_auth")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.scoped_token == self._scoped
@@ -564,16 +479,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
 
 class _SpacesVisibleCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_spaces_visible",
-            validates_binding=True,
-            display_name="List spaces",
-            remediation=(
-                "Give the token's user view permission on the spaces to index. "
-                "OAuth: the `read:space:confluence` scope. Scoped API token: the "
-                "`read:confluence-space.summary` scope."
-            ),
-        )
+        super().__init__(check_id="confluence_spaces_visible")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -618,13 +524,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
     ``confluence_spaces_visible``, which reads one space to validate."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_space_listing",
-            row_id="confluence_spaces_visible",
-            display_name="List spaces",
-            remediation="Give the token's user view permission on the spaces to index.",
-            discovery=True,
-        )
+        super().__init__(check_id="confluence_space_listing")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -650,14 +550,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
 
 class _ConfiguredSpaceCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_configured_space",
-            display_name="Find selected spaces",
-            remediation=(
-                "Use the space key, not the space name (e.g. `KB`; keys are case "
-                "sensitive), and give the token's user view permission on it."
-            ),
-        )
+        super().__init__(check_id="confluence_configured_space")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.SPACE
@@ -705,14 +598,7 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
 
 class _ConfiguredPageCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_configured_page",
-            display_name="Find selected pages",
-            remediation=(
-                "Use the number after /pages/ in the page URL, and give the "
-                "token's user view permission on the page and its space."
-            ),
-        )
+        super().__init__(check_id="confluence_configured_page")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.PAGE
@@ -801,15 +687,7 @@ def _validate_cql_shape(cql: str) -> None:
 
 class _CqlQueryCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_cql_query",
-            display_name="Run CQL query",
-            remediation=(
-                "Select only pages: join `type=page` to the other filters with "
-                "AND. Use no lastModified filter and no ORDER BY. Test the query "
-                "in Confluence search."
-            ),
-        )
+        super().__init__(check_id="confluence_cql_query")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return _mode(form_state.config) == ConfluenceIndexingMode.CQL
@@ -884,15 +762,7 @@ class _ContentReadCheck(_ConfluenceCheck):
     the indexing run pages through."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_content_read",
-            display_name="Sample page content",
-            remediation=(
-                "Give the token's user view permission on the pages to index. "
-                "OAuth: the `read:confluence-content.all` and `search:confluence` "
-                "scopes."
-            ),
-        )
+        super().__init__(check_id="confluence_content_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -959,15 +829,7 @@ class _ContentReadCheck(_ConfluenceCheck):
 
 class _CommentsReadCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_comments_read",
-            display_name="Sample comments",
-            required=False,
-            remediation=(
-                "Without comments, pages index without their comments. OAuth: "
-                "the `read:confluence-content.all` scope."
-            ),
-        )
+        super().__init__(check_id="confluence_comments_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -1045,16 +907,7 @@ class _AttachmentsReadCheck(_ConfluenceCheck):
     alone passes."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_attachments_read",
-            display_name="Sample attachments",
-            required=False,
-            remediation=(
-                "Without attachment access, attachments are not indexed. OAuth: "
-                "the `readonly:content.attachment:confluence` scope. To skip "
-                "attachments, turn off 'Include attachments'."
-            ),
-        )
+        super().__init__(check_id="confluence_attachments_read")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.include_attachments
@@ -1153,16 +1006,7 @@ def _author_id(page: dict[str, Any]) -> str | None:
 
 class _UserNamesCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            check_id="confluence_user_names",
-            display_name="Read user names",
-            required=False,
-            remediation=(
-                "Without user details, mentions index as 'Unknown Confluence "
-                "User'. OAuth: the `read:confluence-user` scope. API tokens: the "
-                "user needs permission to view user profiles."
-            ),
-        )
+        super().__init__(check_id="confluence_user_names")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -1458,15 +1302,7 @@ class _PageRestrictionsReadCheck(_ConfluenceCheck):
     sync restarts with per-page lookups, so the check then proves those."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_page_restrictions_read",
-            display_name="Read page restrictions",
-            remediation=(
-                "Give the token's user view permission on the pages to sync. "
-                "OAuth: the `read:confluence-content.permission` scope."
-            ),
-        )
+        super().__init__(check_id="confluence_page_restrictions_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -1522,17 +1358,7 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
     ancestors one at a time."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_restrictions_batch_read",
-            display_name="Batch-read restrictions",
-            required=False,
-            remediation=(
-                "No action is necessary: permission sync is slower but correct. "
-                "To make it fast again, delete or publish the draft, outdated or "
-                "trashed parent pages (CONFCLOUD-77618)."
-            ),
-        )
+        super().__init__(check_id="confluence_restrictions_batch_read")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -1570,16 +1396,7 @@ class _RestrictionsBatchReadCheck(_ConfluenceCheck):
 
 class _CloudSpacePermissionsCheck(_ConfluenceCheck):
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_space_permissions_read",
-            display_name="Read space permissions",
-            remediation=(
-                "Make the token's user a space admin of every space to sync, or "
-                "a Confluence admin. OAuth: the `read:confluence-space.summary` "
-                "scope."
-            ),
-        )
+        super().__init__(check_id="confluence_space_permissions_read")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.is_cloud
@@ -1632,17 +1449,7 @@ class _DcRestSpacePermissionsCheck(_ConfluenceCheck):
     it (before 9.1) passes: permission sync then uses JSON-RPC."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_space_permissions_read_dc_rest",
-            row_id="confluence_space_permissions_read",
-            display_name="Read space permissions",
-            remediation=(
-                "Make the token's user a space admin of every space to sync, or "
-                "a Confluence admin. Without admin rights this API returns HTTP "
-                "500 (CONFSERVER-99908)."
-            ),
-        )
+        super().__init__(check_id="confluence_space_permissions_read_dc_rest")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
@@ -1686,16 +1493,7 @@ class _DcJsonRpcSpacePermissionsCheck(_ConfluenceCheck):
     the REST API is missing. Passes when permission sync uses REST."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_space_permissions_read_dc_jsonrpc",
-            row_id="confluence_space_permissions_read",
-            display_name="Read space permissions",
-            remediation=(
-                f"{_REMOTE_API_HINT} Make the token's user a space admin of every "
-                "space to sync, or a Confluence admin."
-            ),
-        )
+        super().__init__(check_id="confluence_space_permissions_read_dc_jsonrpc")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
@@ -1748,15 +1546,11 @@ class _PermissionUserEmailsCheck(_ConfluenceCheck):
     def __init__(self, *, is_cloud: bool) -> None:
         self._is_cloud = is_cloud
         super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id=(
                 "confluence_permission_user_emails"
                 if is_cloud
                 else "confluence_permission_user_emails_dc"
-            ),
-            row_id="confluence_permission_user_emails",
-            display_name="Read user emails",
-            remediation=_CLOUD_EMAIL_HINT if is_cloud else _DC_EMAIL_HINT,
+            )
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
@@ -1857,16 +1651,7 @@ class _AnonymousSpaceAccessCheck(_ConfluenceCheck):
     the 9.1+ REST API answers, else from the JSON-RPC permissions."""
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.DOC_PERMISSION_SYNC,
-            check_id="confluence_anonymous_space_access",
-            display_name="Read anonymous access",
-            required=False,
-            remediation=(
-                "Without it, spaces open to anonymous users sync as not public. "
-                "Make the token's user a Confluence admin (CONFSERVER-99908)."
-            ),
-        )
+        super().__init__(check_id="confluence_anonymous_space_access")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return not form_state.config.is_cloud
@@ -1967,22 +1752,9 @@ def _sample_users(
 class _GroupSyncCheck(_ConfluenceCheck):
     """A group-sync check with one instance each for Cloud and Data Center."""
 
-    def __init__(
-        self,
-        *,
-        is_cloud: bool,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-    ) -> None:
+    def __init__(self, *, is_cloud: bool, check_id: str) -> None:
         self._is_cloud = is_cloud
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id=check_id if is_cloud else f"{check_id}_dc",
-            row_id=check_id,
-            display_name=display_name,
-            remediation=remediation,
-        )
+        super().__init__(check_id=check_id if is_cloud else f"{check_id}_dc")
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
         return form_state.config.is_cloud == self._is_cloud
@@ -1990,17 +1762,7 @@ class _GroupSyncCheck(_ConfluenceCheck):
 
 class _UserListingCheck(_GroupSyncCheck):
     def __init__(self, *, is_cloud: bool) -> None:
-        super().__init__(
-            is_cloud=is_cloud,
-            check_id="confluence_user_listing",
-            display_name="List users",
-            remediation=(
-                "Give the token's user the global permission to browse users. "
-                "OAuth: the `read:confluence-user` scope. Data Center before "
-                "10.1 can list too few users (CONFSERVER-95999); set "
-                "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE to list them."
-            ),
-        )
+        super().__init__(is_cloud=is_cloud, check_id="confluence_user_listing")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -2019,15 +1781,7 @@ class _UserListingCheck(_GroupSyncCheck):
 
 class _GroupMembershipCheck(_GroupSyncCheck):
     def __init__(self, *, is_cloud: bool) -> None:
-        super().__init__(
-            is_cloud=is_cloud,
-            check_id="confluence_group_membership",
-            display_name="Read group members",
-            remediation=(
-                "Give the token's user the global permission to browse users. "
-                "OAuth: the `read:confluence-groups` scope."
-            ),
-        )
+        super().__init__(is_cloud=is_cloud, check_id="confluence_group_membership")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
@@ -2089,12 +1843,7 @@ class _GroupUserEmailsCheck(_GroupSyncCheck):
     each one needs a lookup; the profile override carries its own emails."""
 
     def __init__(self, *, is_cloud: bool) -> None:
-        super().__init__(
-            is_cloud=is_cloud,
-            check_id="confluence_group_user_emails",
-            display_name="Read member emails",
-            remediation=_CLOUD_EMAIL_HINT if is_cloud else _DC_EMAIL_HINT,
-        )
+        super().__init__(is_cloud=is_cloud, check_id="confluence_group_user_emails")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
