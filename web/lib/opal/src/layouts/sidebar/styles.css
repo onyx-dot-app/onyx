@@ -175,5 +175,5 @@
 }
 
 .opal-sidebar-section__title {
-  @apply flex px-0.5 py-1.5;
+  @apply flex items-center gap-1 px-0.5 py-1.5;
 }

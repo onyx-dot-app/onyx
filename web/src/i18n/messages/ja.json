@@ -16599,6 +16599,9 @@
       },
       "searchInput": {
         "placeholder": "検索..."
+      },
+      "betaTag": {
+        "label": "ベータ"
       }
     },
     "appSidebar": {

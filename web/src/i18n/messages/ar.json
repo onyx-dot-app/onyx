@@ -16599,6 +16599,9 @@
       },
       "searchInput": {
         "placeholder": "بحث..."
+      },
+      "betaTag": {
+        "label": "تجريبي"
       }
     },
     "appSidebar": {

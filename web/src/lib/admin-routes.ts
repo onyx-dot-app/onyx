@@ -80,6 +80,7 @@ export interface FeatureFlags {
  *   visible (subject to the permission and tier checks above).** When
  *   provided, the predicate is evaluated against the resolved feature flags;
  *   returning `false` hides the route from the sidebar.
+ * - `beta`: Shows a Beta tag on the sidebar entry.
  */
 export interface AdminRouteEntry {
   path: string;
@@ -90,6 +91,7 @@ export interface AdminRouteEntry {
   section: string;
   requiredTier: Tier | null;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;
+  beta?: boolean;
 }
 
 export const ADMIN_ROUTES = {
@@ -143,6 +145,7 @@ export const ADMIN_ROUTES = {
     section: "",
     requiredTier: null,
     visibleWhen: null,
+    beta: true,
   },
   CODE_INTERPRETER: {
     path: "/admin/code-interpreter",

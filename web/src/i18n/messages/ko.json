@@ -16599,6 +16599,9 @@
       },
       "searchInput": {
         "placeholder": "검색..."
+      },
+      "betaTag": {
+        "label": "베타"
       }
     },
     "appSidebar": {

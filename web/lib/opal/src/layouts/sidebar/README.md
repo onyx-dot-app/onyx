@@ -71,6 +71,7 @@ optional hover-revealed action.
 | Prop       | Type                | Default | Description                                           |
 | ---------- | ------------------- | ------- | ----------------------------------------------------- |
 | `title`    | `string \| RichStr` | —       | Section heading; omit for an untitled spacer          |
+| `tag`      | `TagProps`          | —       | Optional tag beside the title (e.g. a Beta tag)       |
 | `action`   | `ReactNode`         | —       | Optional element shown on hover (e.g. a `+` button)   |
 | `disabled` | `boolean`           | —       | Dims the section header to indicate it is unavailable |
 | `children` | `ReactNode`         | —       |                                                       |

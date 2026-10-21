@@ -14,7 +14,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
-import { InputTypeIn, SidebarTab } from "@opal/components";
+import { InputTypeIn, SidebarTab, Tag, type TagProps } from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
@@ -28,6 +28,7 @@ import useFilter from "@/hooks/useFilter";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { markdown } from "@opal/utils";
 import {
+  BETA_SECTION_IDS,
   buildItems,
   groupBySection,
   type AdminNavSectionId,
@@ -100,6 +101,15 @@ export default function AdminSidebar() {
     [t]
   );
 
+  const betaTag: TagProps = {
+    title: t("adminSidebar.betaTag.label"),
+    color: "blue",
+  };
+  const sectionTag = (sectionId: AdminNavSectionId | null) =>
+    sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
+  const itemTag = (beta: boolean | undefined) =>
+    beta ? <Tag {...betaTag} /> : undefined;
+
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(
     (item: SidebarItemEntry) => navLabels[item.nameId],
@@ -149,13 +159,15 @@ export default function AdminSidebar() {
               title={
                 group.sectionId ? sectionLabels[group.sectionId] : undefined
               }
+              tag={sectionTag(group.sectionId)}
             >
-              {group.items.map(({ link, icon, nameId }) => (
+              {group.items.map(({ link, icon, nameId, beta }) => (
                 <SidebarTab
                   key={link}
                   icon={icon}
                   href={link}
                   selected={pathname.startsWith(link)}
+                  rightChildren={itemTag(beta)}
                 >
                   {navLabels[nameId]}
                 </SidebarTab>
@@ -182,9 +194,14 @@ export default function AdminSidebar() {
                 title={
                   group.sectionId ? sectionLabels[group.sectionId] : undefined
                 }
+                tag={sectionTag(group.sectionId)}
               >
-                {group.items.map(({ link, icon, nameId }) => (
-                  <SidebarTab key={link} icon={icon}>
+                {group.items.map(({ link, icon, nameId, beta }) => (
+                  <SidebarTab
+                    key={link}
+                    icon={icon}
+                    rightChildren={itemTag(beta)}
+                  >
                     {navLabels[nameId]}
                   </SidebarTab>
                 ))}
