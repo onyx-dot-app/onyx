@@ -7941,12 +7941,12 @@
       "modelRouting": {
         "autoMode": {
           "title": "Mode auto",
-          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message."
+          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message.",
+          "noRoutersTooltip": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle."
         },
         "target": {
           "title": "Modèle de routage",
           "description": "Gère le routage des modèles pour le mode Auto.",
-          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
           "error": "Impossible de charger les modèles de routage.",
           "retry": "Réessayer"
         }

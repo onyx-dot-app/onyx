@@ -7941,12 +7941,12 @@
       "modelRouting": {
         "autoMode": {
           "title": "Auto Mode",
-          "description": "Add an Auto option to the model picker that picks the best-fit model for each message."
+          "description": "Add an Auto option to the model picker that picks the best-fit model for each message.",
+          "noRoutersTooltip": "No router models found. Enable a router model on a gateway provider first."
         },
         "target": {
           "title": "Router Model",
           "description": "Handles model routing for Auto mode.",
-          "empty": "No router models found. Enable a router model on a gateway provider first.",
           "error": "Failed to load router models.",
           "retry": "Retry"
         }

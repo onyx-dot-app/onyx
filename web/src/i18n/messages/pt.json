@@ -7941,12 +7941,12 @@
       "modelRouting": {
         "autoMode": {
           "title": "Modo automático",
-          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem."
+          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem.",
+          "noRoutersTooltip": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway."
         },
         "target": {
           "title": "Modelo de roteamento",
           "description": "Gerencia o roteamento de modelos para o modo Auto.",
-          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
           "error": "Falha ao carregar os modelos de roteamento.",
           "retry": "Tentar novamente"
         }

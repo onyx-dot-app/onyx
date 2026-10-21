@@ -7941,12 +7941,12 @@
       "modelRouting": {
         "autoMode": {
           "title": "Auto-Modus",
-          "description": "Fügt der Modellauswahl eine Auto-Option hinzu, die für jede Nachricht das am besten passende Modell wählt."
+          "description": "Fügt der Modellauswahl eine Auto-Option hinzu, die für jede Nachricht das am besten passende Modell wählt.",
+          "noRoutersTooltip": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter."
         },
         "target": {
           "title": "Router-Modell",
           "description": "Übernimmt das Modell-Routing für den Auto-Modus.",
-          "empty": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter.",
           "error": "Router-Modelle konnten nicht geladen werden.",
           "retry": "Erneut versuchen"
         }

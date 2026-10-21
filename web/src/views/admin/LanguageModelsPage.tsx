@@ -21,6 +21,7 @@ import {
   Text,
   Card,
   OnyxLoader,
+  Tooltip,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -568,6 +569,10 @@ export default function LanguageModelsPage() {
 
   const routingEnabled =
     pendingRoutingEnabled ?? settings.model_routing_enabled ?? false;
+  // Auto Mode needs a router. Turning it off stays possible, so a router
+  // removed after the fact cannot lock it on.
+  const noRouterModels = routerProviders?.length === 0;
+  const autoModeLocked = noRouterModels && !routingEnabled;
 
   async function handleRoutingEnabledChange(checked: boolean) {
     if (pendingRoutingEnabled !== null) return;
@@ -661,15 +666,27 @@ export default function LanguageModelsPage() {
                 description={t("modelRouting.autoMode.description")}
                 withLabel
               >
-                <InputSwitch
-                  checked={routingEnabled}
-                  disabled={pendingRoutingEnabled !== null}
-                  onCheckedChange={(checked) => {
-                    void handleRoutingEnabledChange(checked);
-                  }}
-                />
+                <Tooltip
+                  tooltip={
+                    autoModeLocked
+                      ? t("modelRouting.autoMode.noRoutersTooltip")
+                      : undefined
+                  }
+                >
+                  <div>
+                    <InputSwitch
+                      checked={routingEnabled}
+                      disabled={
+                        pendingRoutingEnabled !== null || autoModeLocked
+                      }
+                      onCheckedChange={(checked) => {
+                        void handleRoutingEnabledChange(checked);
+                      }}
+                    />
+                  </div>
+                </Tooltip>
               </InputHorizontal>
-              {routingEnabled && (
+              {routingEnabled && !noRouterModels && (
                 <InputHorizontal
                   title={t("modelRouting.target.title")}
                   description={t("modelRouting.target.description")}
@@ -690,7 +707,7 @@ export default function LanguageModelsPage() {
                     </Section>
                   ) : routerProviders === undefined ? (
                     <OnyxLoader size={24} />
-                  ) : routerProviders.length > 0 ? (
+                  ) : (
                     <SimpleModelSelector
                       providers={routerProviders}
                       value={
@@ -708,10 +725,6 @@ export default function LanguageModelsPage() {
                         void handleRoutingTargetChange(modelConfigurationId);
                       }}
                     />
-                  ) : (
-                    <Text font="secondary-body" color="text-03">
-                      {t("modelRouting.target.empty")}
-                    </Text>
                   )}
                 </InputHorizontal>
               )}
