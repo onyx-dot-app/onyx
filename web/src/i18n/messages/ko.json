@@ -2240,11 +2240,12 @@
         "label": "베타"
       },
       "connectors": {
+        "description": "채팅의 내부 검색에서 사용하는 소스입니다. 인덱싱 상태 페이지에서 추가하거나 변경하세요.",
         "empty": {
           "title": "설정된 커넥터 없음"
         },
         "manageAllButton": {
-          "label": "전체 관리"
+          "label": "커넥터 관리"
         },
         "title": "커넥터"
       },

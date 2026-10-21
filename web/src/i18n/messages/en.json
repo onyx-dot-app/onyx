@@ -2240,11 +2240,12 @@
         "label": "beta"
       },
       "connectors": {
+        "description": "Sources that Internal Search uses in chat. Add or change them on the indexing status page.",
         "empty": {
           "title": "No connectors set up"
         },
         "manageAllButton": {
-          "label": "Manage All"
+          "label": "Manage connectors"
         },
         "title": "Connectors"
       },
