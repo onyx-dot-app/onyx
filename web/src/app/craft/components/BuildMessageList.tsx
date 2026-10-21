@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { cn } from "@opal/utils";
-import { CopyButton } from "@opal/components";
+import { CopyButton, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
-import { SvgAlertCircle } from "@opal/icons";
+import { SvgAlertCircle, SvgLoader } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
 import { FoldableLogo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
@@ -77,8 +79,7 @@ interface BuildMessageListProps {
  * Per-turn structure after filtering:
  *   [Working block | single tool card], [last thinking?], [final text]
  * The in-progress turn additionally pins the latest TodoListCard to the top
- * (sticky) and surfaces a "working on…" pill at the bottom while a tool is
- * mid-stream.
+ * (sticky) and shows Working until finalization starts.
  */
 export default function BuildMessageList({
   sessionId,
@@ -95,6 +96,7 @@ export default function BuildMessageList({
   onTurnOutputsOpen,
   onFileOpen,
 }: BuildMessageListProps) {
+  const t = useTranslations("craft.toolCards.group");
   const outputsByTurn = useMemo(() => {
     const groups = new Map<number, OutputCard[]>();
     for (const output of outputCards ?? []) {
@@ -136,10 +138,14 @@ export default function BuildMessageList({
 
   const hasStreamItems = streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
-  const lastMessageIsUser = lastMessage?.type === "user";
+  const showWorking = isStreaming && !isFinalizing;
+  const showEmptyFinalization =
+    isStreaming &&
+    isFinalizing &&
+    !hasStreamItems &&
+    lastMessage?.type !== "assistant";
   const showStreamingArea =
-    hasStreamItems ||
-    (isStreaming && (lastMessageIsUser || messages.length === 0));
+    hasStreamItems || showWorking || showEmptyFinalization;
 
   const renderStreamItems = (
     rawItems: StreamItem[],
@@ -511,14 +517,24 @@ export default function BuildMessageList({
                   />
                 </div>
               )}
-              {!hasStreamItems ? (
-                <div className="h-9 flex items-center">
-                  <BlinkingBar />
-                </div>
-              ) : (
+              {hasStreamItems && (
                 <AnimatePresence initial={false}>
                   {streamRender?.nodes}
                 </AnimatePresence>
+              )}
+              {showEmptyFinalization && <BlinkingBar />}
+              {showWorking && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  height="auto"
+                  gap={2}
+                >
+                  <SvgLoader className="size-4 animate-spin stroke-text-03" />
+                  <Text font="main-ui-muted" color="text-03">
+                    {t("working.label")}
+                  </Text>
+                </Section>
               )}
               {trailingAssistantSlot}
             </div>

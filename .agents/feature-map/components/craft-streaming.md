@@ -38,6 +38,9 @@ also does not replay, byte-for-byte, whatever the client missed while
 disconnected (see §5, §9).
 
 Connected app setup cards link to **App permissions**. This opens Tools > Approval settings in plugin details, without delaying authentication.
+New attachments restore pending connection cards from the session's cache index.
+The pending record includes the card data and expires with the permission wait.
+Resolved and expired requests are excluded. Request IDs deduplicate restored and live announcements.
 The editor covers external apps and MCP servers. Workspace-disabled actions
 remain visible and locked. Task editors use the same action rows with
 independent saved choices.
@@ -54,6 +57,9 @@ The displayed approval deadline comes from the server; a browser does not own th
 The Working group shows the tool-call count without a failed-count badge.
 Its tool details start collapsed, including failures; users can expand each call
 to read its output.
+An active turn also shows a persistent Working indicator, including after refresh during a quiet tool call.
+Failed active-turn reads use session-load recovery instead of treating the turn as idle.
+Typing and submission remain disabled until recovery succeeds.
 
 A sub-agent ("task" tool) has a separate sub-agent view (`SubagentView.tsx`).
 That view shows the sub-agent's own thinking and tool calls live while the
@@ -413,11 +419,12 @@ It does not delay stream attachment. See [[craft-sessions]] for name persistence
    [[streaming-protocol]]'s `stream_buffer.py`, nothing compresses and stores
    every SSE line Craft emits. A client that attaches after missing events
    gets an empty per-subscriber queue (bounded, `maxsize=500`, per
-   `_Subscription`). It receives only events the turn emits after the attach. What it lost is recoverable only
+   `_Subscription`). It receives only events the turn emits after the attach. Missing conversation content is recovered
    through the **persisted** `BuildMessage` rows via
    `GET /sessions/{id}/messages`, which is a different, coarser shape (no
    `ToolCallStart`, no `CurrentModeUpdate`, no live deltas), not a replay of
-   the wire format. Owned terminal turns replay only `turn_completed`, not earlier content. See §9.
+   the wire format. Pending Connect app requests are restored separately from their cache records.
+   Owned terminal turns replay only `turn_completed`, not earlier content. See §9.
 10. **There is no terminal channel.** There is no `/build/sessions/{id}/terminal` websocket, no PTY
     bridge, and no `xterm.js` integration anywhere under `web/src/app/craft/`
     (verified by grep; the only websocket route in `webapp_proxy.py` is the

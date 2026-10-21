@@ -850,11 +850,12 @@ def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
-    """Unexpected permission.asked events trigger an out-of-band POST to
-    opencode's ``/permissions/{id}`` endpoint with ``{"response": "once"}``.
-    This keeps the turn moving when opencode adds a new permission category
-    we haven't pre-configured in opencode.json."""
+@pytest.mark.parametrize("malformed_connect", [False, True])
+def test_send_message_answers_permission_asks(
+    bus: PodEventBus,
+    malformed_connect: bool,
+) -> None:
+    """Answer unknown permissions and reject malformed connection requests."""
     permission_posts: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -878,7 +879,11 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
                 "properties": {
                     "sessionID": _SESSION,
                     "id": "perm_42",
-                    "permission": "bash",
+                    "permission": "connect_app" if malformed_connect else "bash",
+                    "metadata": {
+                        "external_app_id": 17,
+                        "reason": {"invalid": "object"},
+                    },
                     "patterns": ["rm *"],
                 },
             }
@@ -904,7 +909,9 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
 
     assert len(permission_posts) == 1
     assert permission_posts[0]["path"].endswith(f"/{_SESSION}/permissions/perm_42")
-    assert permission_posts[0]["body"] == {"response": "once"}
+    assert permission_posts[0]["body"] == {
+        "response": "reject" if malformed_connect else "once"
+    }
 
 
 # ---------------------------------------------------------------------------

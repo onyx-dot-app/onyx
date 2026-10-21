@@ -87,6 +87,8 @@ the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
 An app connection card resolves its pending agent request even when credentials already exist.
 It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
+Refresh restores pending connection cards and shows Working while the turn is active.
+Failed turn-status reads keep the input disabled and expose the session retry action.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files

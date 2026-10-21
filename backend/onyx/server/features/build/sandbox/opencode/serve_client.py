@@ -23,6 +23,7 @@ from uuid import uuid4
 import httpx
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
@@ -1798,7 +1799,14 @@ class OpencodeServeClient:
 
         build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
         request_id = str(uuid4())
+        deadline = time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+        cache: CacheBackend | None = None
         try:
+            request = connect_app.ConnectAppRequest(
+                request_id=request_id,
+                external_app_id=external_app_id,
+                reason=meta.get("reason") or None,
+            )
             cache = get_cache_backend(tenant_id=get_current_tenant_id())
             connect_app.stash_pending(
                 request_id,
@@ -1807,30 +1815,31 @@ class OpencodeServeClient:
                     opencode_session_id=state.session_id,
                     perm_id=perm_id,
                     directory=directory,
+                    request=request,
+                    expires_at=time.time() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
                 ),
                 cache,
             )
             connect_app.announce_request(
                 build_session_id,
-                connect_app.ConnectAppRequest(
-                    request_id=request_id,
-                    external_app_id=external_app_id,
-                    reason=meta.get("reason") or None,
-                ),
+                request,
                 cache,
             )
         except Exception:
             logger.exception(
                 "connect_app announce failed for app=%s; denying", external_app_id
             )
+            if cache is not None:
+                try:
+                    connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for %s", request_id)
             self.answer_permission(
                 state.session_id, perm_id, allow=False, directory=directory
             )
             return
 
-        state.pending_connect_app_deadlines[perm_id] = (
-            time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-        )
+        state.pending_connect_app_deadlines[perm_id] = deadline
 
     def _reject_expired_connect_app_permissions(
         self, state: _TurnState, now: float, *, directory: str
