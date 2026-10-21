@@ -96,9 +96,15 @@ class ApiAssociation(BaseModel):
     to_object_id: int
 
 
-class ApiAssociationPage(BaseModel):
-    results: list[ApiAssociation]
+class ApiAssociationBatchResult(BaseModel):
+    from_: ApiAssociatedId = Field(alias="_from")
+    to: list[ApiAssociation]
     paging: ApiPaging | None = None
+
+
+class ApiAssociationBatch(BaseModel):
+    # A record with no links is not in the results.
+    results: list[ApiAssociationBatchResult]
 
 
 class ApiPortalInfo(BaseModel):

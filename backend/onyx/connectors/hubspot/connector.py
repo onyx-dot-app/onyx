@@ -25,10 +25,12 @@ from onyx.connectors.hubspot.models import (
     HubSpotAssociationIds,
     HubSpotDocumentParts,
     HubSpotObjectSpec,
+    HubSpotPage,
     HubSpotRecord,
 )
 from onyx.connectors.hubspot.permissions import HubSpotPermissionReader
 from onyx.connectors.hubspot.source_operations import (
+    ASSOCIATIONS_BATCH_SIZE,
     HUBSPOT_PAGE_SIZE,
     NOTES_OBJECT_TYPE,
     PERMITTED_USERS_BATCH_SIZE,
@@ -546,23 +548,46 @@ class HubSpotConnector(
             _MAX_LISTING_PAGES,
         )
 
-    def _list_association_ids(
+    def _association_ids(
         self,
         object_type: HubSpotObjectType,
-        object_id: str,
+        record_ids: list[str],
         to_object_type: str,
-    ) -> list[str]:
-        """Deduplicated, since HubSpot returns one entry per association label."""
-        ids: Iterator[str] = iter_pages(
-            lambda after: self.ops.list_associations(
-                object_type=object_type,
-                object_id=object_id,
-                to_object_type=to_object_type,
-                after=after,
-            ),
-            _MAX_ASSOCIATION_PAGES,
-        )
-        return list(dict.fromkeys(ids))
+    ) -> dict[str, list[str]]:
+        """The linked ids of each record, read in batches. Deduplicated, since
+        HubSpot returns one entry per association label."""
+        linked: dict[str, list[str]] = {record_id: [] for record_id in record_ids}
+        for chunk in batch_generator(record_ids, ASSOCIATIONS_BATCH_SIZE):
+            cursors: dict[str, str | None] = dict.fromkeys(chunk)
+            for _ in range(_MAX_ASSOCIATION_PAGES):
+                pages: dict[str, HubSpotPage[str]] = self.ops.read_associations(
+                    object_type=object_type,
+                    to_object_type=to_object_type,
+                    cursors=cursors,
+                )
+                next_cursors: dict[str, str | None] = {}
+                for record_id, page in pages.items():
+                    if record_id not in cursors:
+                        continue
+                    linked[record_id].extend(page.items)
+                    if page.next_after is None:
+                        continue
+                    if page.next_after == cursors[record_id]:
+                        raise RuntimeError(
+                            "HubSpot association cursor stopped moving at "
+                            f"{page.next_after!r}"
+                        )
+                    next_cursors[record_id] = page.next_after
+                if not next_cursors:
+                    break
+                cursors = next_cursors
+            else:
+                raise RuntimeError(
+                    f"HubSpot association listing ran past {_MAX_ASSOCIATION_PAGES} pages"
+                )
+        return {
+            record_id: list(dict.fromkeys(ids)) for record_id, ids in linked.items()
+        }
 
     def _search_time_range(
         self,
@@ -644,7 +669,7 @@ class HubSpotConnector(
         end: datetime | None,
     ) -> Iterator[HubSpotRecord]:
         """A full listing carries associations inline. A search cannot, so a
-        poll window pays one associations call per type per record."""
+        poll window reads them in batches."""
         if start is None and end is None:
             return self._list_all_records(
                 object_type, properties, ASSOCIATED_TYPES[object_type]
@@ -683,70 +708,77 @@ class HubSpotConnector(
             return None
         return inline.ids
 
-    def _get_associated_objects(
+    def _linked_records(
         self,
         object_type: HubSpotObjectType,
-        record: HubSpotRecord,
-        to_object_type: HubSpotObjectType,
+        records: list[HubSpotRecord],
+        to_variant: str,
         strict: bool,
-    ) -> list[HubSpotRecord]:
-        """Errors are logged and read as no associations, or raised when strict."""
+    ) -> dict[str, list[HubSpotRecord]]:
+        """The records (or notes) linked to each record, read once for the whole
+        batch. Errors are logged and read as no links, or raised when strict."""
         try:
-            object_ids: list[str] | None = self._extract_inline_association_ids(
-                record, to_object_type
-            )
-            if object_ids is None:
-                object_ids = self._list_association_ids(
-                    object_type, record.id, to_object_type.value
-                )
-            associated_objects: list[HubSpotRecord] = []
-            for chunk in batch_generator(object_ids, HUBSPOT_PAGE_SIZE):
-                associated_objects.extend(
-                    self._batch_read(
-                        to_object_type.value,
-                        chunk,
-                        ASSOC_PROPERTIES[to_object_type.value],
-                        strict,
+            linked_ids: dict[str, list[str]] = {}
+            unlisted: list[str] = []
+            for record in records:
+                # Notes never come back inline.
+                inline: list[str] | None = (
+                    None
+                    if to_variant == NOTES_OBJECT_TYPE
+                    else self._extract_inline_association_ids(
+                        record, HubSpotObjectType(to_variant)
                     )
                 )
-            return associated_objects
+                if inline is None:
+                    unlisted.append(record.id)
+                else:
+                    linked_ids[record.id] = inline
+            if unlisted:
+                linked_ids.update(
+                    self._association_ids(object_type, unlisted, to_variant)
+                )
+            # A record linked to several records in the batch is read once.
+            to_read: list[str] = list(
+                dict.fromkeys(i for ids in linked_ids.values() for i in ids)
+            )
+            read: dict[str, HubSpotRecord] = {}
+            for chunk in batch_generator(to_read, HUBSPOT_PAGE_SIZE):
+                read.update(
+                    (linked.id, linked)
+                    for linked in self._batch_read(
+                        to_variant, chunk, ASSOC_PROPERTIES[to_variant], strict
+                    )
+                )
+            return {
+                record_id: [read[i] for i in ids if i in read]
+                for record_id, ids in linked_ids.items()
+            }
         except Exception as e:
             if strict:
                 raise
             logger.warning(
-                "Failed to get associations from %s to %s: %s",
+                "Failed to get the %s linked to %s %s: %s",
+                to_variant,
+                len(records),
                 object_type,
-                to_object_type,
                 e,
             )
-            return []
+            return {}
 
-    def _get_associated_notes(
-        self, object_type: HubSpotObjectType, object_id: str, strict: bool
-    ) -> list[HubSpotRecord]:
-        """Errors are logged and read as no notes, or raised when strict."""
-        try:
-            note_ids: list[str] = self._list_association_ids(
-                object_type, object_id, NOTES_OBJECT_TYPE
-            )
-            associated_notes: list[HubSpotRecord] = []
-            for chunk in batch_generator(note_ids, HUBSPOT_PAGE_SIZE):
-                associated_notes.extend(
-                    self._batch_read(
-                        NOTES_OBJECT_TYPE,
-                        chunk,
-                        ASSOC_PROPERTIES[NOTES_OBJECT_TYPE],
-                        strict,
-                    )
-                )
-            return associated_notes
-        except Exception as e:
-            if strict:
-                raise
-            logger.warning(
-                "Failed to get notes for %s %s: %s", object_type, object_id, e
-            )
-            return []
+    def _links(
+        self,
+        object_type: HubSpotObjectType,
+        records: list[HubSpotRecord],
+        strict: bool,
+    ) -> dict[str, dict[str, list[HubSpotRecord]]]:
+        """Every linked type and the notes of the records, by variant."""
+        return {
+            to_variant: self._linked_records(object_type, records, to_variant, strict)
+            for to_variant in [
+                *(to_type.value for to_type in ASSOCIATED_TYPES[object_type]),
+                NOTES_OBJECT_TYPE,
+            ]
+        }
 
     def _create_object_section(
         self, record: HubSpotRecord, variant: str
@@ -760,14 +792,14 @@ class HubSpotConnector(
         self,
         object_type: HubSpotObjectType,
         record: HubSpotRecord,
+        linked: dict[str, dict[str, list[HubSpotRecord]]],
         sections: list[TextSection],
         metadata: dict[str, str | list[str]],
-        strict: bool,
     ) -> None:
         """Note ids stay out of the metadata, only record ids are listed."""
         for to_object_type in ASSOCIATED_TYPES[object_type]:
-            associated: list[HubSpotRecord] = self._get_associated_objects(
-                object_type, record, to_object_type, strict
+            associated: list[HubSpotRecord] = linked[to_object_type.value].get(
+                record.id, []
             )
             sections.extend(
                 self._create_object_section(obj, to_object_type.value)
@@ -778,22 +810,22 @@ class HubSpotConnector(
                 metadata[f"associated_{noun}_ids"] = [obj.id for obj in associated]
         sections.extend(
             self._create_object_section(note, NOTES_OBJECT_TYPE)
-            for note in self._get_associated_notes(object_type, record.id, strict)
+            for note in linked[NOTES_OBJECT_TYPE].get(record.id, [])
         )
 
     def _build_document(
-        self, object_type: HubSpotObjectType, record: HubSpotRecord, strict: bool
+        self,
+        object_type: HubSpotObjectType,
+        record: HubSpotRecord,
+        linked: dict[str, dict[str, list[HubSpotRecord]]],
     ) -> Document:
-        """The crawl skips an association it cannot read. A targeted reindex
-        passes strict, so the read error fails the target instead of resolving
-        it with missing sections."""
         spec: HubSpotObjectSpec = HUBSPOT_OBJECT_SPECS[object_type]
         parts: HubSpotDocumentParts = _DOCUMENT_PARTS[object_type](record)
         sections: list[TextSection] = [
             TextSection(link=self._record_url(object_type, record.id), text=parts.text)
         ]
         metadata: dict[str, str | list[str]] = dict(parts.metadata)
-        self._add_associations(object_type, record, sections, metadata, strict)
+        self._add_associations(object_type, record, linked, sections, metadata)
         return Document(
             id=hubspot_document_id(object_type, record.id),
             sections=cast(list[TextSection | ImageSection], sections),
@@ -817,10 +849,20 @@ class HubSpotConnector(
         start: datetime | None,
         end: datetime | None,
     ) -> Generator[Document | HierarchyNode, None, None]:
-        for record in self._iter_records(
-            object_type, INDEXED_PROPERTIES[object_type], start, end
+        """Links are read for a batch of records at once, so a batch costs a
+        few calls per linked type instead of a few calls per record. The crawl
+        skips a link it cannot read."""
+        for records in batch_generator(
+            self._iter_records(
+                object_type, INDEXED_PROPERTIES[object_type], start, end
+            ),
+            HUBSPOT_PAGE_SIZE,
         ):
-            yield self._build_document(object_type, record, strict=False)
+            linked: dict[str, dict[str, list[HubSpotRecord]]] = self._links(
+                object_type, records, strict=False
+            )
+            for record in records:
+                yield self._build_document(object_type, record, linked)
 
     def _process(
         self,
@@ -1057,8 +1099,10 @@ class HubSpotConnector(
                 )
                 continue
             try:
+                # Strict, so a link read error fails the target instead of
+                # resolving it with missing sections.
                 document: Document = self._build_document(
-                    object_type, record, strict=True
+                    object_type, record, self._links(object_type, [record], strict=True)
                 )
                 if reader is not None:
                     document.external_access = reader.access_for(viewers[record_id])

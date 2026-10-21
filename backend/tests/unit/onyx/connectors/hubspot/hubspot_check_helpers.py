@@ -27,7 +27,7 @@ def healthy_gateway() -> MagicMock:
     gateway.list_records.return_value = HubSpotPage(items=[make_record("1")])
     gateway.search_records.return_value = HubSpotPage(items=[make_record("1")])
     gateway.read_records.return_value = [make_record("1")]
-    gateway.list_associations.return_value = HubSpotPage(items=["9"])
+    gateway.read_associations.return_value = {"1": HubSpotPage(items=["9"])}
     gateway.list_users.return_value = HubSpotPage(items=[HubSpotUser(id=7)])
     gateway.get_user.return_value = HubSpotUser(id=7, email="ada@example.com")
     gateway.get_record_viewers.return_value = {"1": {7}}

@@ -13,6 +13,10 @@ from hubspot import HubSpot
 from hubspot.crm.associations.v4.exceptions import (
     ApiException as AssociationsApiException,
 )
+from hubspot.crm.associations.v4.models import (
+    BatchInputPublicFetchAssociationsBatchRequest,
+    PublicFetchAssociationsBatchRequest,
+)
 from hubspot.crm.companies.exceptions import ApiException as CompaniesApiException
 from hubspot.crm.contacts.exceptions import ApiException as ContactsApiException
 from hubspot.crm.contacts.models import (
@@ -34,7 +38,7 @@ from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
 from onyx.connectors.hubspot.models import (
     ApiActionPermittedUsers,
-    ApiAssociationPage,
+    ApiAssociationBatch,
     ApiPaging,
     ApiPermittedUsersResponse,
     ApiPortalInfo,
@@ -54,6 +58,7 @@ from onyx.connectors.source_operations import (
     source_operation,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -64,10 +69,12 @@ PERMITTED_USERS_PATH = "/resource-permissions/v3/permitted-users"
 VIEW_ACTION = "crm-object:VIEW"
 # The SDK calls' paths, for error details.
 _OBJECTS_PATH = "/crm/v3/objects"
-_ASSOCIATIONS_PATH = "/crm/v4/objects"
+_ASSOCIATIONS_PATH = "/crm/v4/associations"
 CREDENTIAL_ACCESS_TOKEN = "hubspot_access_token"
 
 HUBSPOT_PAGE_SIZE = 100
+# HubSpot's cap on the records in one batch association read.
+ASSOCIATIONS_BATCH_SIZE = 1_000
 USERS_PAGE_SIZE = 100
 # Measured: HubSpot rejects a permitted-users request naming more resources.
 PERMITTED_USERS_BATCH_SIZE = 20
@@ -83,6 +90,10 @@ _SDK_API_EXCEPTIONS = (
     NotesApiException,
     TicketsApiException,
 )
+# Every gateway call only reads, so a call HubSpot did not answer is sent
+# again. urllib3 drops the timed-out socket, so the resend opens a new one.
+_CONNECTION_TRIES = 3
+_CONNECTION_RETRY_DELAY_SECONDS = 1.0
 _RECORD_VARIANTS = tuple(object_type.value for object_type in HubSpotObjectType)
 _READ_VARIANTS = _RECORD_VARIANTS + (NOTES_OBJECT_TYPE,)
 
@@ -276,7 +287,19 @@ class HubSpotSourceOperations(SourceOperations):
                     operation, timed_out=_sdk_timed_out(e), detail=str(e)
                 ) from e
 
-        return self._limiter().call(call)
+        return self._resend_unanswered(call)
+
+    def _resend_unanswered(self, call: Callable[[], _T]) -> _T:
+        @retry_builder(
+            tries=_CONNECTION_TRIES,
+            delay=_CONNECTION_RETRY_DELAY_SECONDS,
+            jitter=0,
+            exceptions=(HubSpotConnectionError,),
+        )
+        def attempt() -> _T:
+            return self._limiter().call(call)
+
+        return attempt()
 
     def _rest(
         self, operation: str, model: type[_M], path: str, params: QueryParams
@@ -312,7 +335,7 @@ class HubSpotSourceOperations(SourceOperations):
                 )
             return model.model_validate(response.json())
 
-        return self._limiter().call(call)
+        return self._resend_unanswered(call)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -409,33 +432,48 @@ class HubSpotSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def list_associations(
+    def read_associations(
         self,
         *,
         object_type: HubSpotObjectType,
-        object_id: str,
         to_object_type: str,
-        after: str | None = None,
-        limit: int = HUBSPOT_PAGE_SIZE,
-    ) -> HubSpotPage[str]:
-        """One page of ids of the records (or notes) linked to one record."""
-        page: Any = self._sdk(
+        cursors: Mapping[str, str | None],
+    ) -> dict[str, HubSpotPage[str]]:
+        """One page of the ids of the records (or notes) linked to each record,
+        keyed by record id. A cursor of None asks for the first page. A record
+        with no links is left out."""
+        if len(cursors) > ASSOCIATIONS_BATCH_SIZE:
+            raise ValueError(
+                f"HubSpot reads the links of at most {ASSOCIATIONS_BATCH_SIZE} "
+                "records per batch"
+            )
+        request: BatchInputPublicFetchAssociationsBatchRequest = (
+            BatchInputPublicFetchAssociationsBatchRequest(
+                inputs=[
+                    PublicFetchAssociationsBatchRequest(id=record_id, after=after)
+                    for record_id, after in cursors.items()
+                ]
+            )
+        )
+        response: Any = self._sdk(
             f"{object_type} to {to_object_type} associations",
-            "GET",
-            f"{_ASSOCIATIONS_PATH}/{object_type}/{object_id}/associations/"
-            f"{to_object_type}",
-            self._api().crm.associations.v4.basic_api.get_page,
-            object_type=object_type.value,
-            object_id=object_id,
+            "POST",
+            f"{_ASSOCIATIONS_PATH}/{object_type}/{to_object_type}/batch/read",
+            self._api().crm.associations.v4.batch_api.get_page,
+            from_object_type=object_type.value,
             to_object_type=to_object_type,
-            limit=limit,
-            after=after,
+            batch_input_public_fetch_associations_batch_request=request,
         )
-        raw: ApiAssociationPage = ApiAssociationPage.model_validate(page.to_dict())
-        return HubSpotPage(
-            items=[str(item.to_object_id) for item in raw.results],
-            next_after=_next_after(raw.paging),
+        raw: ApiAssociationBatch = ApiAssociationBatch.model_validate(
+            response.to_dict()
         )
+        return {
+            result.from_.id: HubSpotPage(
+                items=[str(link.to_object_id) for link in result.to],
+                next_after=_next_after(result.paging),
+            )
+            for result in raw.results
+        }
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

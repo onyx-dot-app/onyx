@@ -315,7 +315,7 @@ def test_linked_records_run_past_an_empty_type() -> None:
 
 def test_a_denied_link_names_the_linked_type_and_scope() -> None:
     gateway = healthy_gateway()
-    gateway.list_associations.side_effect = api_refusal("associations", 403)
+    gateway.read_associations.side_effect = api_refusal("associations", 403)
 
     result = _run("hubspot_associations", gateway)
 
@@ -348,7 +348,7 @@ def test_notes_name_the_record_type() -> None:
 
 def test_a_record_without_notes_is_incomplete() -> None:
     gateway = healthy_gateway()
-    gateway.list_associations.return_value = HubSpotPage(items=[])
+    gateway.read_associations.return_value = {}
 
     result = _run("hubspot_notes", gateway)
 

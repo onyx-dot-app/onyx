@@ -11,7 +11,6 @@ from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.hubspot.models import (
     HubSpotAssociationIds,
-    HubSpotPage,
     HubSpotRecord,
 )
 from onyx.connectors.hubspot.source_operations import (
@@ -73,7 +72,7 @@ def _run(
 def test_archived_record_yields_failure() -> None:
     connector, ops = _connector()
     ops.read_records.return_value = [_record("1"), _record("2", archived=True)]
-    ops.list_associations.return_value = HubSpotPage[str](items=[])
+    ops.read_associations.return_value = {}
 
     results = _run(connector, ["hubspot_company_1", "hubspot_company_2"])
 
@@ -121,7 +120,7 @@ def test_other_read_error_fails_only_its_targets() -> None:
 def test_failed_note_read_fails_the_target() -> None:
     connector, ops = _connector()
     ops.read_records.return_value = [_record("1")]
-    ops.list_associations.side_effect = HubSpotApiError("notes", 500, {}, "boom")
+    ops.read_associations.side_effect = HubSpotApiError("notes", 500, {}, "boom")
 
     results = _run(connector, ["hubspot_company_1"])
 
@@ -152,7 +151,7 @@ def test_failed_association_record_read_fails_the_target() -> None:
 def test_rejected_token_on_a_note_read_ends_the_run() -> None:
     connector, ops = _connector()
     ops.read_records.return_value = [_record("1")]
-    ops.list_associations.side_effect = HubSpotApiError("notes", 401, {}, "nope")
+    ops.read_associations.side_effect = HubSpotApiError("notes", 401, {}, "nope")
 
     with pytest.raises(HubSpotApiError):
         _run(connector, ["hubspot_company_1"])
