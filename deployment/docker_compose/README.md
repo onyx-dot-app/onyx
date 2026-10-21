@@ -64,6 +64,31 @@ Without them the app keeps its files in MinIO, which a later release removes. Th
 `object-store-copy` logs warn about this at startup. External storage (S3, GCS, Azure) needs no change. See
 the [object store migration guide](https://docs.onyx.app/admins/advanced_configs/object_store_migration).
 
+### Rolling back the deployment
+A rollback does not change the database schema. An older release fails to start on a newer schema with
+`Can't locate revision`. Only the newer image has the migrations to downgrade it. The downgrade deletes data
+that only the newer release stores.
+
+First get the last migration of the target release. For v4.9 it is `25053020dd5a`.
+
+```bash
+docker run --rm onyxdotapp/onyx-backend:<target version> alembic heads
+```
+
+Then downgrade with the newer image and roll back immediately. Run the downgrade in the directory with the
+compose files. On a prod install, add `-f docker-compose.prod.yml` after `docker compose`. If
+`docker compose ls` shows a project name other than `onyx`, add `-p <project>`. Run `onyx-cli` from where you
+usually run it, or pass `--dir <install root>`. It warns that downgrades are not supported. Continue, because
+the schema now matches.
+
+```bash
+IMAGE_TAG=<newer version> docker compose run --rm --no-deps api_server alembic downgrade <target migration>
+onyx-cli deploy upgrade --tag <target version> --allow-downgrade
+```
+
+If you rolled back first and `api_server` restarts in a loop, run the same downgrade command. `api_server`
+then starts on the target release.
+
 ### Customizing the compose files
 The CLI owns the compose files it writes. Each `onyx-cli deploy upgrade` refreshes them to match the
 new version. If you edit one, the CLI asks before it replaces the file, and it keeps a backup — but
