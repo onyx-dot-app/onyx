@@ -1,6 +1,6 @@
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type { SkillsList } from "@/lib/skills/types";
-import { MCPConnectionStatus } from "@/lib/mcp/types";
+import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
 import {
   act,
   deferred,
@@ -122,6 +122,61 @@ test("connected cards use the status dot without an extra Connected line", async
       .map((row) => row.textContent)
   ).toEqual(["Main Chat", "Custom agents", "Craft"]);
 });
+
+test.each([MCPAuthenticationType.OAUTH, MCPAuthenticationType.API_TOKEN])(
+  "unauthenticated %s MCP has one Needs sign-in status",
+  async (auth_type) => {
+    network({
+      servers: [
+        memberServer({
+          auth_type,
+          connection_status: MCPConnectionStatus.NOT_CONNECTED,
+        }),
+      ],
+    });
+    render(<MemberPluginsPage />);
+    const indicator = await screen.findByRole("button", {
+      name: "Connection status for Linear",
+    });
+    expect(indicator.querySelector("span[aria-hidden]")).toHaveClass(
+      "bg-status-warning-05"
+    );
+    expect(indicator.querySelectorAll("span[aria-hidden] > span")).toHaveLength(
+      0
+    );
+    await setupUser().hover(indicator);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /^Needs sign-in$/
+    );
+  }
+);
+
+test.each(["openapi", "external-app"] as const)(
+  "unauthenticated %s has one Needs sign-in status",
+  async (kind) => {
+    network({
+      servers: [],
+      tools: kind === "openapi" ? [memberTool({ oauth_config_id: 9 })] : [],
+      apps: kind === "external-app" ? [memberApp()] : [],
+    });
+    render(<MemberPluginsPage />);
+    const name = kind === "openapi" ? "Reports API" : "Workspace GitHub";
+    await screen.findByRole("button", { name: `Connect ${name}` });
+    const indicator = screen.getByRole("button", {
+      name: `Connection status for ${name}`,
+    });
+    expect(indicator.querySelector("span[aria-hidden]")).toHaveClass(
+      "bg-status-warning-05"
+    );
+    expect(indicator.querySelectorAll("span[aria-hidden] > span")).toHaveLength(
+      0
+    );
+    await setupUser().hover(indicator);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      /^Needs sign-in$/
+    );
+  }
+);
 
 test("ordinary members see approved native plugins with colliding IDs without admin requests", async () => {
   const requests = network();
@@ -547,21 +602,42 @@ test("connecting an app keeps its row in the default All filter", async () => {
   });
   render(<MemberPluginsPage />);
   const user = setupUser();
-  await user.click(
-    await screen.findByRole("button", { name: "Connect Workspace GitHub" })
+  const connect = await screen.findByRole("button", {
+    name: "Connect Workspace GitHub",
+  });
+  const indicator = screen.getByRole("button", {
+    name: "Connection status for Workspace GitHub",
+  });
+  expect(indicator.querySelectorAll("span[aria-hidden] > span")).toHaveLength(
+    0
   );
+  await user.hover(indicator);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    /^Needs sign-in$/
+  );
+  await user.unhover(indicator);
+  await user.click(connect);
   await user.type(screen.getByLabelText("api_key"), "personal-key");
   await user.click(screen.getByRole("button", { name: /^Connect$/ }));
   const details = await screen.findByRole("dialog", {
     name: /^Workspace GitHub/,
   });
   await user.click(within(details).getByRole("tab", { name: "Connection" }));
-  expect(within(details).getByRole("status")).toHaveTextContent("Connected");
+  expect(within(details).getByRole("status")).toHaveTextContent("Ready to use");
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   await user.click(within(details).getByRole("button", { name: /^Cancel$/ }));
   expect(
     screen.getByRole("button", { name: "View Workspace GitHub" })
   ).toBeVisible();
+  expect(indicator.querySelectorAll("span[aria-hidden] > span")).toHaveLength(
+    6
+  );
+  await user.hover(indicator);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).not.toHaveTextContent("Needs sign-in");
+  expect(within(tooltip).getByText("Main Chat")).toBeVisible();
+  expect(within(tooltip).getByText("Custom agents")).toBeVisible();
+  expect(within(tooltip).getByText("Craft")).toBeVisible();
   expect(screen.getByRole("button", { name: /^All$/ })).toHaveAttribute(
     "aria-pressed",
     "true"
@@ -643,7 +719,7 @@ test("a successful connection returns to the Connection tab with the same backdr
     await screen.findByRole("tab", { name: "Connection" })
   ).toHaveAttribute("aria-selected", "true");
   await waitFor(() =>
-    expect(screen.getByRole("status")).toHaveTextContent("Connected")
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to use")
   );
   expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
 });

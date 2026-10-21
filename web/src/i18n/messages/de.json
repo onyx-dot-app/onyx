@@ -923,7 +923,7 @@
       "status": {
         "connected": "Verbunden",
         "workspace": "Workspace-Verbindung",
-        "session": "Nutzt Ihre Anmeldung",
+        "session": "Verwendet Ihr verbundenes Konto",
         "none": "Einsatzbereit",
         "oauth": "Konto verbinden",
         "credentials": "Anmeldedaten hinzufügen",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Probleme",
-        "readyDescription": "Du kannst dieses Plugin jetzt verwenden.",
+        "noAuthentication": "Keine Authentifizierung erforderlich",
         "connection": "Verbindung",
         "tools": "Werkzeuge",
         "toolCount": "{count, plural, one {# Werkzeug} other {# Werkzeuge}}",

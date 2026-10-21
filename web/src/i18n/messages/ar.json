@@ -923,7 +923,7 @@
       "status": {
         "connected": "متصل",
         "workspace": "اتصال مساحة العمل",
-        "session": "يستخدم تسجيل دخولك",
+        "session": "يستخدم حسابك المتصل",
         "none": "جاهز للاستخدام",
         "oauth": "اربط حسابك",
         "credentials": "أضف بيانات اعتمادك",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "مشكلات",
-        "readyDescription": "يمكنك البدء في استخدام هذه الإضافة.",
+        "noAuthentication": "لا يلزم المصادقة",
         "connection": "الاتصال",
         "tools": "الأدوات",
         "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",

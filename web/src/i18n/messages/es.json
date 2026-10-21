@@ -923,7 +923,7 @@
       "status": {
         "connected": "Conectado",
         "workspace": "Conexión del espacio de trabajo",
-        "session": "Usa tu sesión",
+        "session": "Usa tu cuenta conectada",
         "none": "Listo para usar",
         "oauth": "Conecta tu cuenta",
         "credentials": "Añade tus credenciales",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Problemas",
-        "readyDescription": "Ya puedes empezar a usar este complemento.",
+        "noAuthentication": "No se requiere autenticación",
         "connection": "Conexión",
         "tools": "Herramientas",
         "toolCount": "{count, plural, one {# herramienta} other {# herramientas}}",

@@ -923,7 +923,7 @@
       "status": {
         "connected": "Connected",
         "workspace": "Workspace connection",
-        "session": "Uses your sign-in",
+        "session": "Uses your connected account",
         "none": "Ready to use",
         "oauth": "Connect your account",
         "credentials": "Add your credentials",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Issues",
-        "readyDescription": "You can start using this plugin.",
+        "noAuthentication": "No authentication required",
         "connection": "Connection",
         "tools": "Tools",
         "toolCount": "{count, plural, one {# tool} other {# tools}}",
