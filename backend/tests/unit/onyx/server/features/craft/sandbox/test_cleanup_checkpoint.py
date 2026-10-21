@@ -31,12 +31,16 @@ def test_cleanup_keeps_runtime_and_ports_after_checkpoint_or_delete_failure(
     )
     session_id = uuid4()
     manager, db_session, lock = MagicMock(), MagicMock(), MagicMock()
+    manager.workspace_storage_identity.return_value = "workspace-v1"
     manager.health_check.return_value = False
     manager.supports_opencode_history_persistence = True
     manager.list_session_workspaces.return_value = [session_id]
     monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
     snapshot = MagicMock()
     monkeypatch.setattr(lifecycle, "create_session_snapshot_keep_latest", snapshot)
+    monkeypatch.setattr(
+        lifecycle, "record_cleanup_checkpoint__no_commit", lambda *_args: True
+    )
     if failure == "history":
         manager.create_opencode_history_snapshot.side_effect = RuntimeError(
             "history failed"
@@ -61,10 +65,12 @@ def test_cleanup_keeps_runtime_and_ports_after_checkpoint_or_delete_failure(
     if failure != "delete":
         manager.terminate.assert_not_called()
     db_session.execute.assert_not_called()
-    db_session.commit.assert_not_called()
+    assert db_session.commit.call_count == int(failure == "delete")
 
 
-@pytest.mark.parametrize("output", ["", str(uuid4()), "ls: permission denied"])
+@pytest.mark.parametrize(
+    "output", ["", "00000000-0000-0000-0000-000000000001", "ls: permission denied"]
+)
 def test_kubernetes_discovery_requires_completion(
     output: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -114,9 +120,17 @@ def test_missing_storage_retries_partial_deletion_without_checkpoint(
     manager, db_session, lock = MagicMock(), MagicMock(), MagicMock()
     manager.supports_opencode_history_persistence = True
     manager.workspace_storage_exists.side_effect = [True, False]
+    manager.workspace_storage_identity.side_effect = [
+        "workspace-v1",
+        "workspace-v1",
+        None,
+    ]
     manager.list_session_workspaces.return_value = []
     manager.terminate.side_effect = [RuntimeError("secret deletion failed"), None]
     monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
+    monkeypatch.setattr(
+        lifecycle, "record_cleanup_checkpoint__no_commit", lambda *_args: True
+    )
     monkeypatch.setattr(
         lifecycle, "sleep_running_sandbox__no_commit", lambda *_args: True
     )
@@ -126,14 +140,14 @@ def test_missing_storage_retries_partial_deletion_without_checkpoint(
     )
     with pytest.raises(RuntimeError, match="secret deletion failed"):
         lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
-    db_session.commit.assert_not_called()
+    db_session.commit.assert_called_once()
 
     lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
 
     manager.create_opencode_history_snapshot.assert_called_once()
     assert manager.list_session_workspaces.call_count == 2
     assert manager.terminate.call_count == 2
-    db_session.commit.assert_called_once()
+    assert db_session.commit.call_count == 2
 
 
 @pytest.mark.parametrize("status", [404, 500])

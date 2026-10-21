@@ -52,6 +52,7 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     get_sandbox_user_map,
     get_snapshots_for_session,
+    record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
@@ -59,6 +60,7 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     FileSet,
+    SandboxCleanupCheckpoint,
     SandboxProvisionContentionError,
     SnapshotResult,
 )
@@ -822,11 +824,29 @@ def sleep_sandbox(
     before termination because snapshots can take minutes.
     """
     sandbox_id = sandbox.id
+    initial_attempt = sandbox.provisioning_attempt_number
     storage_exists = sandbox_manager.workspace_storage_exists(sandbox_id, tenant_id)
+    storage_identity = (
+        sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+        if storage_exists
+        else None
+    )
+    checkpoint = (
+        SandboxCleanupCheckpoint.model_validate(sandbox.cleanup_checkpoint)
+        if sandbox.cleanup_checkpoint is not None
+        else None
+    )
+    resume_deletion = (
+        checkpoint is not None
+        and checkpoint.provisioning_attempt_number == initial_attempt
+        and checkpoint.storage_identity == storage_identity
+        and not sandbox_manager.runtime_exists(sandbox_id, tenant_id)
+    )
+    needs_checkpoint = storage_exists and not resume_deletion
 
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
-    if storage_exists and sandbox_manager.supports_opencode_history_persistence:
+    if needs_checkpoint and sandbox_manager.supports_opencode_history_persistence:
         try:
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
@@ -852,7 +872,7 @@ def sleep_sandbox(
                 sandbox,
                 session_creation_lock,
             )
-            if storage_exists
+            if needs_checkpoint
             else []
         )
     finally:
@@ -910,7 +930,7 @@ def sleep_sandbox(
                 sandbox,
                 session_creation_lock,
             )
-            if storage_exists
+            if needs_checkpoint
             else []
         )
         new_session_ids = set(current_session_ids) - set(session_ids)
@@ -925,12 +945,35 @@ def sleep_sandbox(
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
+        if (
+            sandbox.status != SandboxStatus.RUNNING
+            or sandbox.provisioning_attempt_number != initial_attempt
+            or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
+
+        if (
+            sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+            != storage_identity
+        ):
+            logger.info(
+                "Sandbox %s workspace storage changed during checkpoint", sandbox_id
+            )
+            return
+        if storage_identity is not None and not resume_deletion:
+            if not record_cleanup_checkpoint__no_commit(
+                db_session,
+                sandbox_id,
+                SandboxCleanupCheckpoint(
+                    provisioning_attempt_number=sleep_attempt_number,
+                    storage_identity=storage_identity,
+                ),
+            ):
+                db_session.rollback()
+                return
+            db_session.commit()
 
         # Terminate the pod (but keep the sandbox record).
         sandbox_manager.terminate(sandbox_id)

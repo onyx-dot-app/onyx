@@ -513,6 +513,10 @@ Both backends attempt resource removal independently and report incomplete clean
 Kubernetes checks each resource once even after the shared deletion wait budget expires.
 Confirmed missing workspace storage skips checkpoints, so partial deletion can finish on a later sweep.
 An existing Docker volume still requires preservation, even when its container is missing.
+Before deletion, cleanup commits `Sandbox.cleanup_checkpoint` with the provisioning attempt and observed storage identity.
+A later worker can reuse this proof only when the runtime is absent and both values still match.
+A changed storage instance, new attempt, or existing runtime requires a fresh checkpoint.
+Successful fenced sleep and new provisioning clear the proof. Cache entries never authorize volume deletion.
 Kubernetes waits for Pod, Service, and Secret absence within one teardown budget.
 A deletion error or wait timeout aborts sleep. The row stays eligible for retry,
 and session ports remain allocated until termination succeeds.

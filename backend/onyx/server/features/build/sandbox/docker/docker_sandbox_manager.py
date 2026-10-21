@@ -1255,7 +1255,7 @@ echo "Session cleanup complete"
             return False
         return "WORKSPACE_FOUND" in result.stdout_text
 
-    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
         container = self._get_container(sandbox_id)
         if container is not None:
             labels = container.labels or {}
@@ -1265,17 +1265,30 @@ echo "Session cleanup complete"
             ):
                 raise RuntimeError("Workspace storage ownership mismatch")
             return True
+        return False
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
         try:
             volume = self._docker.volumes.get(_sandbox_volume_name(sandbox_id))
         except NotFound:
-            return False
+            return None
         labels = volume.attrs.get("Labels") or {}
         if (
             labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
             or labels.get(LABEL_TENANT_ID) != tenant_id
         ):
             raise RuntimeError("Workspace storage ownership mismatch")
-        return True
+        created_at = volume.attrs["CreatedAt"]
+        if not isinstance(created_at, str) or not created_at:
+            raise RuntimeError("Workspace storage identity missing")
+        return f"{volume.name}:{created_at}"
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id) or (
+            self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+        )
 
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
