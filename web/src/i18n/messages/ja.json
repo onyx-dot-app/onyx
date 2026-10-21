@@ -3156,7 +3156,8 @@
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
           "resolved": "解決済み",
-          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}"
+          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
+          "superseded": "置き換え済み"
         },
         "more": "さらに表示",
         "empty": {

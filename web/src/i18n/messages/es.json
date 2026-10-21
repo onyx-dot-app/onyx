@@ -3156,7 +3156,8 @@
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
           "resolved": "Resuelto",
-          "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}"
+          "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}",
+          "superseded": "Reemplazado"
         },
         "more": "Mostrar más",
         "empty": {

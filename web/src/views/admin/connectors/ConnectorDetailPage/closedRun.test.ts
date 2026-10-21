@@ -1,18 +1,27 @@
 /** How a closed activity card reads: resolved by Retry or by an admin, or superseded. */
-import { closedByResolution } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
+import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 
-describe("closedByResolution", () => {
-  it("reads a closed errors run as resolved whichever path resolved it", () => {
-    expect(closedByResolution({ resolved_at: null }, "errors")).toBe(true);
-    expect(
-      closedByResolution({ resolved_at: "2026-01-01T00:00:00Z" }, "errors")
-    ).toBe(true);
+const RESOLVED_AT = "2026-01-01T00:00:00Z";
+
+describe("closedBySupersede", () => {
+  it("reads a superseded run nobody resolved as superseded", () => {
+    expect(closedBySupersede({ resolved_at: null, superseded: true })).toBe(
+      true
+    );
   });
 
-  it("reads a closed failure as resolved only when an admin resolved it", () => {
+  it("reads a resolved run as resolved, superseded or not", () => {
     expect(
-      closedByResolution({ resolved_at: "2026-01-01T00:00:00Z" }, "failures")
-    ).toBe(true);
-    expect(closedByResolution({ resolved_at: null }, "failures")).toBe(false);
+      closedBySupersede({ resolved_at: RESOLVED_AT, superseded: true })
+    ).toBe(false);
+    expect(
+      closedBySupersede({ resolved_at: RESOLVED_AT, superseded: false })
+    ).toBe(false);
+  });
+
+  it("reads a run Retry closed as resolved", () => {
+    expect(closedBySupersede({ resolved_at: null, superseded: false })).toBe(
+      false
+    );
   });
 });

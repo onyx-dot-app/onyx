@@ -20,6 +20,7 @@ import {
   SvgCheckSquare,
   SvgClock,
   SvgFiles,
+  SvgHistory,
   SvgRefreshCw,
   SvgTextLines,
   SvgUserShield,
@@ -37,7 +38,7 @@ import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
-import { closedByResolution } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
+import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
@@ -120,7 +121,7 @@ function cardState(
     case "failures":
       return "failed";
     case "errors":
-      if (closed && closedByResolution(run, group)) return "resolved";
+      if (closed && !closedBySupersede(run)) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -257,6 +258,7 @@ export default function ActivityCard({
   // A run still going can fail again, so it is resolved once it ends.
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
+  const superseded = closed && closedBySupersede(run);
 
   // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
   let description: string | null = null;
@@ -280,7 +282,7 @@ export default function ActivityCard({
   }
   // A resolved card counts the documents it resolved. A superseded one keeps the pill it had when open, only faded.
   const docsLabel =
-    closed && closedByResolution(run, group) && run.kind !== "checks"
+    closed && !superseded && run.kind !== "checks"
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
@@ -505,10 +507,10 @@ export default function ActivityCard({
                 <SelectButton
                   variant="select-heavy"
                   state="selected"
-                  rightIcon={SvgCheckSquare}
+                  rightIcon={superseded ? SvgHistory : SvgCheckSquare}
                   size="xs"
                 >
-                  {t("tags.resolved")}
+                  {t(superseded ? "tags.superseded" : "tags.resolved")}
                 </SelectButton>
               ) : (
                 resolvesRun && (

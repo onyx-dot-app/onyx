@@ -549,6 +549,8 @@ class CCPairIndexRun(BaseModel):
     attempt: IndexAttemptSnapshot
     # When an admin resolved the run. It keeps its status.
     resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
 
 
 class CCPairDocPermissionSyncRun(BaseModel):
@@ -557,6 +559,8 @@ class CCPairDocPermissionSyncRun(BaseModel):
     attempt: DocPermissionSyncAttemptSnapshot
     # When an admin resolved the run. It keeps its status.
     resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
 
 
 class CCPairGroupSyncRun(BaseModel):
@@ -565,6 +569,8 @@ class CCPairGroupSyncRun(BaseModel):
     attempt: ExternalGroupSyncAttemptSnapshot
     # When an admin resolved the run. It keeps its status.
     resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
 
 
 class PruneRunSnapshot(BaseModel):
@@ -641,6 +647,8 @@ class CCPairPruneRun(BaseModel):
     attempt: PruneRunSnapshot
     # When an admin resolved the run. It keeps its status.
     resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
 
 
 class CCPairChecksRun(BaseModel):
@@ -649,6 +657,8 @@ class CCPairChecksRun(BaseModel):
     attempt: CheckRunSnapshot
     # When an admin resolved the run. It keeps its status.
     resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
 
 
 CCPairRun = Annotated[
