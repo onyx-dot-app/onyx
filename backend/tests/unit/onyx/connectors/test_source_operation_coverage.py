@@ -368,6 +368,8 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     ],
     # The root page check reads a page only when a root page is set.
     DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
+    # The selected-scope checks read teams and projects only when some are set.
+    DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
 }
 
 
