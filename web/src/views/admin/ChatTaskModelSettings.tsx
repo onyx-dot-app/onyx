@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, OnyxLoader, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { LineLoader } from "@opal/loaders";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
@@ -106,7 +107,7 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
       </Section>
     );
   } else if (!llmProviders) {
-    control = <OnyxLoader size={24} />;
+    control = <LineLoader />;
   } else if (llmProviders.length === 0) {
     control = (
       <Button href={ADMIN_ROUTES.LLM_MODELS.path} prominence="secondary">

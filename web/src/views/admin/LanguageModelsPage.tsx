@@ -10,7 +10,7 @@ import {
   useAdminLanguageModels,
 } from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
-import { PageLoader } from "@opal/loaders";
+import { LineLoader, PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
@@ -20,7 +20,6 @@ import {
   InputSwitch,
   Text,
   Card,
-  OnyxLoader,
   Tooltip,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
@@ -723,6 +722,8 @@ export default function LanguageModelsPage() {
                       : undefined
                   }
                   withLabel
+                  // The shimmer spans the input column; the select hugs.
+                  fillInput={routerProviders === undefined}
                 >
                   {routerProvidersError ? (
                     <Section flexDirection="row" alignItems="center" gap={2}>
@@ -738,7 +739,7 @@ export default function LanguageModelsPage() {
                       </Button>
                     </Section>
                   ) : routerProviders === undefined ? (
-                    <OnyxLoader size={24} />
+                    <LineLoader />
                   ) : (
                     <SimpleModelSelector
                       // Clearable: re-picking the chosen router unsets it.
