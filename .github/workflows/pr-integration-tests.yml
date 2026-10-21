@@ -1,8 +1,10 @@
 name: Run Integration Tests v2
 concurrency:
-  # Pushes to one ref share a group, so a burst of merges to main runs once.
+  # Pushes to main share a group and queue: one run in progress and the
+  # newest one pending, so a burst of merges runs at most twice and every
+  # run finishes (cancelling would starve main while merges keep landing).
   group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref) || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
   pull_request:
