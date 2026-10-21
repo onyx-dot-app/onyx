@@ -435,6 +435,33 @@ def _check_failure_threshold(
         )
 
 
+def mark_attempt_failed_unless_terminal(
+    index_attempt_id: int, error: Exception
+) -> None:
+    """Fail the attempt with ``error`` unless it is already terminal. The watchdog
+    sees only the exit code, so the real cause is recorded in-process. Best
+    effort: the caller re-raises, and the watchdog fails the attempt if this
+    write does not land."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            attempt = get_index_attempt(db_session, index_attempt_id)
+            if attempt is None or attempt.status.is_terminal():
+                logger.info(
+                    "Attempt %s is missing or already terminal, skipping marking as failed.",
+                    index_attempt_id,
+                )
+                return
+
+            mark_attempt_failed(
+                index_attempt_id,
+                db_session,
+                failure_reason=str(error),
+                full_exception_trace="".join(traceback.format_exception(error)),
+            )
+    except Exception:
+        logger.exception("Failed to mark attempt %s as failed", index_attempt_id)
+
+
 def run_docfetching_entrypoint(
     app: Celery,
     index_attempt_id: int,
@@ -1088,31 +1115,9 @@ def connector_document_extraction(
                 )
 
         else:
-            with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite an attempt already in a terminal state for
-                # another reason (e.g. INTERRUPTED by a worker shutdown)
-                index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
-                if index_attempt and index_attempt.status.is_terminal():
-                    logger.info(
-                        "Attempt %s is already terminal, skipping marking as failed.",
-                        index_attempt_id,
-                    )
-                    raise e
-
-                # PERSISTENT_INDEXING deliberately does NOT catch unhandled
-                # connector-generator exceptions: we can't isolate the failing
-                # entity from a black-box raise, and silently landing the
-                # attempt as COMPLETED_WITH_ERRORS would let the system advance
-                # past potentially-missed source data. Operators need a FAILED
-                # signal here to triage. Threshold disable + docprocessing
-                # per-batch recovery still apply.
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session_temp,
-                    failure_reason=str(e),
-                    full_exception_trace=traceback.format_exc(),
-                )
-
+            # A black-box generator raise can't be pinned to one entity, and
+            # COMPLETED_WITH_ERRORS would advance past missed source data.
+            mark_attempt_failed_unless_terminal(index_attempt_id, e)
             raise e
 
     finally:
