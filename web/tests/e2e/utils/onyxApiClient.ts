@@ -1499,13 +1499,12 @@ export class OnyxApiClient {
 
   /**
    * Add the given tool ids to the default assistant (preserving existing ones).
-   * The PATCH endpoint expects the full replacement list, so we read-merge-write.
+   * Sends only the change, so parallel specs cannot overwrite each other.
    */
   async addToolsToDefaultAssistant(toolIds: number[]): Promise<void> {
-    const { tool_ids: current } = await this.getDefaultAssistantConfig();
-    const merged = Array.from(new Set([...current, ...toolIds]));
-    const response = await this.patch("/admin/default-assistant", {
-      tool_ids: merged,
+    const response = await this.patch("/admin/default-assistant/tools", {
+      tool_ids: toolIds,
+      enabled: true,
     });
     await this.handleResponse(
       response,

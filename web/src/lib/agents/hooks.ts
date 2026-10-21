@@ -389,6 +389,8 @@ export function useAgentLabels() {
   };
 }
 
+const DEFAULT_ASSISTANT_TOOLS_URL = "/api/admin/default-assistant/tools";
+
 type DefaultAssistantCache = ReturnType<typeof useSWRConfig>["cache"];
 
 const defaultAssistantSaveTails = new WeakMap<
@@ -447,11 +449,12 @@ export function useDefaultAssistantConfiguration() {
       await result.mutate(
         async (current) => {
           if (!current) return current;
-          const next = applySelection(current);
-          const response = await fetch("/api/admin/default-assistant", {
+          // Send only the change: a full list from this cache would overwrite
+          // concurrent edits to the shared default assistant.
+          const response = await fetch(DEFAULT_ASSISTANT_TOOLS_URL, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tool_ids: next.tool_ids }),
+            body: JSON.stringify({ tool_ids: toolIds, enabled }),
           });
           if (!response.ok)
             throw new Error(

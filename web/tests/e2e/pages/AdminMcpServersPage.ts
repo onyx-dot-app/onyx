@@ -82,7 +82,8 @@ export class AdminMcpServersPage {
     await expect(save).toBeEnabled();
     const responsePromise = this.page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/admin/default-assistant" &&
+        new URL(response.url()).pathname ===
+          "/api/admin/default-assistant/tools" &&
         response.request().method() === "PATCH"
     );
     await save.click();

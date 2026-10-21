@@ -59,7 +59,9 @@ controls.
 |---|---|---|---|
 | PATCH | `/admin/settings` | `backend/onyx/server/settings/api.py` | Admin. Workspace `Settings` blob (company name/description, `auto_detect_search_filters`, `multi_model_chat_enabled`, `deep_research_enabled`, `search_ui_enabled`, retention, query-history policy, file limits, `anonymous_user_enabled`, `disable_default_assistant`, `default_language`). |
 | GET | `/settings` | `backend/onyx/server/settings/api.py` | Public read of the same blob, consumed by both admin and app UI. |
-| GET `/admin/default-assistant/configuration`, PATCH `/admin/default-assistant` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration`, `update_default_assistant` | Admin. Default persona's `tool_ids` and `system_prompt`. |
+| GET | `/admin/default-assistant/configuration` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration` | Admin. Default persona's `tool_ids` and `system_prompt`. |
+| PATCH | `/admin/default-assistant` | `backend/onyx/server/features/default_assistant/api.py:update_default_assistant` | Admin. Replaces the full `tool_ids` list and/or `system_prompt`. |
+| PATCH | `/admin/default-assistant/tools` | `backend/onyx/server/features/default_assistant/api.py:update_default_assistant_tools` | Admin. Adds or removes only the given tool ids. |
 | PATCH | `/user/personalization` | `backend/onyx/server/manage/users.py:update_user_personalization_api` | User. `personal_name`, `personal_role`, `use_memories`, `enable_memory_tool`, `memories`, `user_preferences` in one call. |
 | PATCH | `/user/language` | `backend/onyx/server/manage/users.py:update_user_language_api` | User. `null` clears the preference so the user follows `Settings.default_language`. Also sets the `NEXT_LOCALE` cookie to the effective language (`settings/store.py:resolve_user_language`) via `set_locale_cookie`. `GET /me` reconciles the same cookie. |
 | PATCH | `/shortcut-enabled`, `/temperature-override-enabled`, `/temperature-default`, `/reasoning-effort-default`, `/auto-scroll`, `/paste-as-tile`, `/user/theme-preference`, `/user/chat-background`, `/user/default-app-mode`, `/user/default-model` | `backend/onyx/server/manage/users.py` | User. One column each, all in `backend/onyx/db/user_preferences.py`. |
@@ -177,9 +179,10 @@ in `web/src/lib/agents/hooks.ts`. Both use the existing default-assistant API
 and SWR cache. Server toggles add or remove that server's tool IDs while preserving
 other selections. A selected subset counts as on. No server-level availability
 column stores a second value. These settings require `FULL_ADMIN_PANEL_ACCESS`.
-Replacement writes are sequenced per SWR cache across hook instances. Failed
-writes roll back before the next operation reads current selections. This
-does not provide concurrency control across independent browser clients.
+Tool toggles send only the changed ids to `PATCH /admin/default-assistant/tools`.
+The backend locks the default persona row, so writes from separate clients
+serialize and do not drop each other's tools. Writes are also sequenced per SWR
+cache. Failed writes roll back before the next operation reads current selections.
 
 The last row is a deliberate non-finding: the admin default-assistant modal only
 exposes `system_prompt` and `tool_ids` (`DefaultAssistantUpdateRequest`,
