@@ -923,7 +923,7 @@
       "status": {
         "connected": "已连接",
         "workspace": "工作区连接",
-        "session": "使用您的登录信息",
+        "session": "使用您已连接的账户",
         "none": "可直接使用",
         "oauth": "连接您的账户",
         "credentials": "添加您的凭据",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "问题",
-        "readyDescription": "你可以开始使用此插件。",
+        "noAuthentication": "无需身份验证",
         "connection": "连接",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",

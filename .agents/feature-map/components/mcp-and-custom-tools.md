@@ -107,7 +107,10 @@ filters distinguish account state without separating services by protocol.
 Workspace credentials and no-auth services count as connected. Connected external apps with disabled associated skills show a yellow directory indicator with an explanatory tooltip. Card type labels use the singular Craft App. Surface support appears in the status indicator instead of Chat only or Craft only tags.
 Loading and failed account-status checks remain distinct from missing credentials.
 Connected and needs-auth cards omit the extra connection text line; the dot and
-its tooltip retain account status. Setup errors and unavailable states remain visible.
+its tooltip retain account status. Until connected, cards use one account-status dot
+and tooltip. Needs sign-in never shows separate surface states. Connected cards
+show the Main Chat, custom agents, and Craft status breakdown.
+Setup errors and unavailable states remain visible.
 Craft App and OpenAPI cards show unsupported surfaces in the availability indicator and tooltip.
 The Craft MCP catalog includes default Chat availability for this indicator and sorting.
 
@@ -127,7 +130,10 @@ Craft Apps have no stored description, so their headers use the localized Craft 
 Member directory detail and connection dialogs share one persistent backdrop, so switching screens does not restart its fade-in.
 The backdrop and active content use the same Radix dialog root, so its scroll lock permits wheel and touch events inside the modal. Standalone callers wrap the shared content in their own dialog root.
 The Connection tab starts with a status card: green when connected, yellow when setup is needed, and gray when checking or unavailable.
-Connected cards include secondary readiness text. External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
+Connected MCP, OpenAPI, and Craft App cards all use the title "Ready to use"
+and the same ownership text.
+Personal credentials and pass-through show "Uses your connected account".
+Workspace credentials show "Workspace connection". No-auth cards show "No authentication required". External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
 The connection card provides Connect when the user can authenticate. Workspace setup remains distinct from personal authentication.
 Personal account connections show Disconnect in the connection card. It opens the existing confirmation flow.
 Tool descriptions use secondary body text and wrap within the row.
@@ -472,11 +478,12 @@ Personal approval drafts survive tab changes and write only on Save.
 Opening the plugin modal preloads approval settings, before Tools is selected. If a tab switch must wait, the available list stays visible with a tab spinner.
 Member indicators and tooltip rows use Main Chat, Custom agents, then Craft.
 The segments run clockwise: upper left, upper right, then bottom.
-Workspace setup uses one gray dot and one setup message instead of surface rows.
-Other plugin states show three segments. Unsupported surfaces are gray and say Not available;
+Unconnected member plugins use one dot and one status message instead of surface rows.
+Workspace setup uses gray; required sign-in uses orange.
+Only connected member plugins show three segments. Unsupported surfaces are gray and say Not available;
 these segments do not lower the plugin's sort priority. Tooltip rows have no introductory status sentence.
-Supported segments are green when connected and enabled, orange when sign-in is needed
-or an admin or personal setting disables the surface, and gray when state is unknown.
+Supported segments are green when enabled, orange when an admin or personal setting
+disables the surface, and gray when state is unknown.
 Tooltips identify admin-disabled and personally disabled surfaces.
 Custom agents remain ready when only default Chat or personal Craft preferences are disabled;
 each agent must still be configured with the plugin. Sorting uses the same supported-surface rules.
