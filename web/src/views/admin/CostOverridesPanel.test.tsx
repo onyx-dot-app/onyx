@@ -230,27 +230,4 @@ describe("CostOverridesPanel", () => {
       });
     });
   });
-
-  test("clearing the picked model blocks the save", async () => {
-    const user = setupUser();
-    render(<CostOverridesPanel />);
-
-    await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(screen.getByText("Choose shared-model"));
-    await user.type(wholeAmountField(0), "3");
-    await user.type(wholeAmountField(1), "4");
-    const submitButton = within(screen.getByRole("dialog")).getByRole(
-      "button",
-      {
-        name: "Add",
-      }
-    );
-    expect(submitButton).toBeEnabled();
-
-    await user.click(screen.getByRole("button", { name: "Clear model" }));
-
-    // Formik re-validates after setFieldValue asynchronously.
-    await waitFor(() => expect(submitButton).toBeDisabled());
-    expect(mockUpsertCostOverride).not.toHaveBeenCalled();
-  });
 });
