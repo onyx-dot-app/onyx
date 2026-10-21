@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI 액션 추가"
+        "title": "OpenAPI 플러그인 추가"
       },
       "cancelButton": {
         "label": "취소"
@@ -188,14 +188,14 @@
         "invalidJson": "잘못된 JSON 형식입니다",
         "placeholder": "여기에 OpenAPI 스키마를 입력하세요",
         "required": "OpenAPI 스키마 정의는 필수입니다",
-        "subDescription": "이 액션의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 액션]({docsUrl})에 대해 자세히 알아보세요.",
+        "subDescription": "이 플러그인의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 플러그인]({docsUrl})에 대해 자세히 알아보세요.",
         "title": "OpenAPI 스키마 정의"
       },
       "editConfigsButton": {
         "disabledTooltip": "액션을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
       },
       "editHeader": {
-        "title": "OpenAPI 액션 편집"
+        "title": "OpenAPI 플러그인 편집"
       },
       "empty": {
         "description": "OpenAPI 스키마를 입력하면 여기에서 액션을 미리 볼 수 있습니다.",
@@ -208,17 +208,17 @@
         "noSummary": "요약이 제공되지 않음"
       },
       "submitButton": {
-        "addLabel": "액션 추가",
+        "addLabel": "플러그인 추가",
         "addingLabel": "추가하는 중...",
         "saveLabel": "변경 사항 저장",
         "savingLabel": "저장하는 중..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI 액션을 만들었습니다",
-        "actionUpdated": "OpenAPI 액션을 업데이트했습니다",
-        "createFailed": "OpenAPI 액션을 만들지 못했습니다",
+        "actionCreated": "OpenAPI 플러그인을 만들었습니다",
+        "actionUpdated": "OpenAPI 플러그인을 업데이트했습니다",
+        "createFailed": "OpenAPI 플러그인을 만들지 못했습니다",
         "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다",
-        "updateFailed": "OpenAPI 액션을 업데이트하지 못했습니다"
+        "updateFailed": "OpenAPI 플러그인을 업데이트하지 못했습니다"
       },
       "humanDescription": {
         "title": "사용자를 위한 설명",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "기존 OAuth 구성을 불러오지 못했습니다. 업데이트하려면 세부 정보를 다시 입력하세요."
       },
       "header": {
-        "description": "OpenAPI 액션을 사용하려면 연결을 인증하세요."
+        "description": "OpenAPI 플러그인을 사용하려면 연결을 인증하세요."
       },
       "headers": {
         "addButton": {
           "label": "헤더 추가"
         },
-        "description": "이 액션의 API 엔드포인트로 보내는 모든 요청에 사용할 사용자 지정 헤더를 지정하세요.",
+        "description": "이 플러그인의 API 엔드포인트로 보내는 모든 요청에 사용할 사용자 지정 헤더를 지정하세요.",
         "keyRequired": "헤더 키는 필수입니다",
         "keyTitle": "헤더",
         "minRequired": "인증 헤더를 하나 이상 추가하세요",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "삭제"
         },
-        "title": "OpenAPI 액션 삭제"
+        "title": "OpenAPI 플러그인 삭제"
       },
       "method": {
         "noSummary": "요약이 제공되지 않음"
@@ -764,7 +764,7 @@
           "tooltip": "이미지 생성 구성"
         },
         "openapi": {
-          "tooltip": "OpenAPI 작업 관리"
+          "tooltip": "OpenAPI 플러그인 관리"
         },
         "webSearch": {
           "tooltip": "웹 검색 구성"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "추가",
         "mcp": "사용자 지정 MCP 서버 추가",
-        "openapi": "OpenAPI 작업 추가"
+        "openapi": "OpenAPI 플러그인 추가"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP 서버를 불러올 수 없습니다.",
         "listErrorDescription": "플러그인 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
-        "openapiError": "OpenAPI 작업을 불러올 수 없습니다.",
+        "openapiError": "OpenAPI 플러그인을 불러올 수 없습니다.",
         "retry": {
           "label": "다시 시도"
         },
@@ -2423,7 +2423,7 @@
           "title": "코딩 에이전트"
         },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
-        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 작업은 [플러그인]({url})에서 설정하세요.",
+        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 플러그인은 [플러그인]({url})에서 설정하세요.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
           "disabledTooltip": "이미지 생성에는 설정된 모델이 필요합니다. 구성 > 이미지 생성에서 모델을 설정하거나 관리자에게 문의하세요.",

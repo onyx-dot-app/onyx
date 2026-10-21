@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "إضافة إجراء OpenAPI"
+        "title": "إضافة إضافة OpenAPI"
       },
       "cancelButton": {
         "label": "إلغاء"
@@ -188,14 +188,14 @@
         "invalidJson": "تنسيق JSON غير صالح",
         "placeholder": "أدخل مخطط OpenAPI هنا",
         "required": "تعريف مخطط OpenAPI مطلوب",
-        "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذا الإجراء. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إجراءات OpenAPI]({docsUrl}).",
+        "subDescription": "حدد مخطط OpenAPI يعرّف واجهات API التي تريد إتاحتها ضمن هذه الإضافة. يمكنك استخدام العناصر النائبة `CHAT_SESSION_ID` و`MESSAGE_ID` و`USER_ID` و`USER_EMAIL` في أي مكان في المخطط (مثل عنوان الخادم أو المسارات أو القيم الافتراضية للمعاملات) وستُستبدل بقيم الطلب الحالي وقت الاستدعاء. اعرف المزيد عن [إضافات OpenAPI]({docsUrl}).",
         "title": "تعريف مخطط OpenAPI"
       },
       "editConfigsButton": {
         "disabledTooltip": "يمكن لمنشئ الإجراء أو المسؤول فقط إدارة المصادقة"
       },
       "editHeader": {
-        "title": "تعديل إجراء OpenAPI"
+        "title": "تعديل إضافة OpenAPI"
       },
       "empty": {
         "description": "قدّم مخطط OpenAPI لمعاينة الإجراءات هنا.",
@@ -208,17 +208,17 @@
         "noSummary": "لا يوجد ملخص"
       },
       "submitButton": {
-        "addLabel": "إضافة إجراء",
+        "addLabel": "إضافة إضافة",
         "addingLabel": "جارٍ الإضافة...",
         "saveLabel": "حفظ التغييرات",
         "savingLabel": "جارٍ الحفظ..."
       },
       "toasts": {
-        "actionCreated": "تم إنشاء إجراء OpenAPI بنجاح",
-        "actionUpdated": "تم تحديث إجراء OpenAPI بنجاح",
-        "createFailed": "فشل إنشاء إجراء OpenAPI",
+        "actionCreated": "تم إنشاء إضافة OpenAPI بنجاح",
+        "actionUpdated": "تم تحديث إضافة OpenAPI بنجاح",
+        "createFailed": "فشل إنشاء إضافة OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
-        "updateFailed": "فشل تحديث إجراء OpenAPI"
+        "updateFailed": "فشل تحديث إضافة OpenAPI"
       },
       "humanDescription": {
         "title": "وصف للبشر",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "فشل تحميل إعدادات OAuth الحالية. أعد إدخال التفاصيل لتحديثها."
       },
       "header": {
-        "description": "صادق على اتصالك لبدء استخدام إجراءات OpenAPI."
+        "description": "صادق على اتصالك لبدء استخدام إضافات OpenAPI."
       },
       "headers": {
         "addButton": {
           "label": "إضافة ترويسة"
         },
-        "description": "حدد ترويسات مخصصة لجميع الطلبات المرسلة إلى نقطة نهاية API لهذا الإجراء.",
+        "description": "حدد ترويسات مخصصة لجميع الطلبات المرسلة إلى نقطة نهاية API لهذه الإضافة.",
         "keyRequired": "مفتاح الترويسة مطلوب",
         "keyTitle": "الترويسة",
         "minRequired": "أضف ترويسة مصادقة واحدة على الأقل",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "حذف"
         },
-        "title": "حذف إجراء OpenAPI"
+        "title": "حذف إضافة OpenAPI"
       },
       "method": {
         "noSummary": "لا يوجد ملخص"
@@ -764,7 +764,7 @@
           "tooltip": "تهيئة توليد الصور"
         },
         "openapi": {
-          "tooltip": "إدارة إجراءات OpenAPI"
+          "tooltip": "إدارة إضافات OpenAPI"
         },
         "webSearch": {
           "tooltip": "تهيئة البحث في الويب"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "إضافة",
         "mcp": "إضافة خادم MCP مخصص",
-        "openapi": "إضافة إجراء OpenAPI"
+        "openapi": "إضافة إضافة OpenAPI"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "تعذر تحميل خوادم MCP.",
         "listErrorDescription": "تعذر تحميل قائمة المكونات الإضافية. حاول مجددًا بعد قليل.",
-        "openapiError": "تعذر تحميل إجراءات OpenAPI.",
+        "openapiError": "تعذر تحميل إضافات OpenAPI.",
         "retry": {
           "label": "إعادة المحاولة"
         },
@@ -2423,7 +2423,7 @@
           "title": "وكيل البرمجة"
         },
         "description": "الأدوات والقدرات المتاحة للمحادثة. لا ينطبق هذا على الوكلاء.",
-        "pluginsNote": "يمكنك إعداد خوادم MCP وإجراءات OpenAPI للدردشة الافتراضية في [الإضافات]({url}).",
+        "pluginsNote": "يمكنك إعداد خوادم MCP وإضافات OpenAPI للدردشة الافتراضية في [الإضافات]({url}).",
         "imageGeneration": {
           "description": "توليد الصور ومعالجتها باستخدام أدوات مدعومة بالذكاء الاصطناعي.",
           "disabledTooltip": "يتطلب توليد الصور نموذجًا مهيأً. قم بإعداده من التهيئة > توليد الصور، أو اطلب من مسؤول.",

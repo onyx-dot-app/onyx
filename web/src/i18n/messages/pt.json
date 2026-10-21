@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "Adicionar ação OpenAPI"
+        "title": "Adicionar plugin OpenAPI"
       },
       "cancelButton": {
         "label": "Cancelar"
@@ -188,14 +188,14 @@
         "invalidJson": "Formato JSON inválido",
         "placeholder": "Insira seu esquema OpenAPI aqui",
         "required": "A definição do esquema OpenAPI é obrigatória",
-        "subDescription": "Especifique um esquema OpenAPI que defina as APIs que você quer disponibilizar como parte desta ação. Você pode usar os espaços reservados `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` e `USER_EMAIL` em qualquer lugar do esquema (por exemplo, URL do servidor, caminhos, valores padrão de parâmetros). Eles serão substituídos pelos valores da solicitação atual no momento da chamada. Saiba mais sobre [ações OpenAPI]({docsUrl}).",
+        "subDescription": "Especifique um esquema OpenAPI que defina as APIs que você quer disponibilizar como parte deste plugin. Você pode usar os espaços reservados `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` e `USER_EMAIL` em qualquer lugar do esquema (por exemplo, URL do servidor, caminhos, valores padrão de parâmetros). Eles serão substituídos pelos valores da solicitação atual no momento da chamada. Saiba mais sobre [plugins OpenAPI]({docsUrl}).",
         "title": "Definição do esquema OpenAPI"
       },
       "editConfigsButton": {
         "disabledTooltip": "Somente o criador da ação ou um administrador pode gerenciar a autenticação"
       },
       "editHeader": {
-        "title": "Editar ação OpenAPI"
+        "title": "Editar plugin OpenAPI"
       },
       "empty": {
         "description": "Forneça um esquema OpenAPI para pré-visualizar as ações aqui.",
@@ -208,17 +208,17 @@
         "noSummary": "Nenhum resumo fornecido"
       },
       "submitButton": {
-        "addLabel": "Adicionar ação",
+        "addLabel": "Adicionar plugin",
         "addingLabel": "Adicionando...",
         "saveLabel": "Salvar alterações",
         "savingLabel": "Salvando..."
       },
       "toasts": {
-        "actionCreated": "Ação OpenAPI criada com sucesso",
-        "actionUpdated": "Ação OpenAPI atualizada com sucesso",
-        "createFailed": "Falha ao criar a ação OpenAPI",
+        "actionCreated": "Plugin OpenAPI criado com sucesso",
+        "actionUpdated": "Plugin OpenAPI atualizado com sucesso",
+        "createFailed": "Falha ao criar o plugin OpenAPI",
         "invalidJson": "Formato JSON inválido na definição do esquema OpenAPI",
-        "updateFailed": "Falha ao atualizar a ação OpenAPI"
+        "updateFailed": "Falha ao atualizar o plugin OpenAPI"
       },
       "humanDescription": {
         "title": "Descrição para pessoas",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "Falha ao carregar a configuração OAuth existente. Informe os detalhes novamente para atualizá-la."
       },
       "header": {
-        "description": "Autentique sua conexão para começar a usar as ações OpenAPI."
+        "description": "Autentique sua conexão para começar a usar este plugin OpenAPI."
       },
       "headers": {
         "addButton": {
           "label": "Adicionar cabeçalho"
         },
-        "description": "Especifique cabeçalhos personalizados para todas as solicitações enviadas ao endpoint de API desta ação.",
+        "description": "Especifique cabeçalhos personalizados para todas as solicitações enviadas ao endpoint de API deste plugin.",
         "keyRequired": "A chave do cabeçalho é obrigatória",
         "keyTitle": "Cabeçalho",
         "minRequired": "Adicione pelo menos um cabeçalho de autenticação",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "Excluir"
         },
-        "title": "Excluir ação OpenAPI"
+        "title": "Excluir plugin OpenAPI"
       },
       "method": {
         "noSummary": "Nenhum resumo fornecido"
@@ -764,7 +764,7 @@
           "tooltip": "Configurar geração de imagens"
         },
         "openapi": {
-          "tooltip": "Gerenciar ações OpenAPI"
+          "tooltip": "Gerenciar plugins OpenAPI"
         },
         "webSearch": {
           "tooltip": "Configurar pesquisa na web"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "Adicionar",
         "mcp": "Adicionar servidor MCP personalizado",
-        "openapi": "Adicionar ação OpenAPI"
+        "openapi": "Adicionar plugin OpenAPI"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "Não foi possível carregar os servidores MCP.",
         "listErrorDescription": "Não foi possível carregar esta lista de plugins. Tente novamente em instantes.",
-        "openapiError": "Não foi possível carregar as ações OpenAPI.",
+        "openapiError": "Não foi possível carregar os plugins OpenAPI.",
         "retry": {
           "label": "Tentar novamente"
         },
@@ -2423,7 +2423,7 @@
           "title": "Agente de código"
         },
         "description": "Ferramentas e recursos disponíveis para o chat usar. Isso não se aplica aos agentes.",
-        "pluginsNote": "Configure servidores MCP e ações OpenAPI para o chat padrão em [Plugins]({url}).",
+        "pluginsNote": "Configure servidores MCP e plugins OpenAPI para o chat padrão em [Plugins]({url}).",
         "imageGeneration": {
           "description": "Gera e manipula imagens com ferramentas de IA.",
           "disabledTooltip": "A geração de imagens requer um modelo configurado. Configure um em Configuração > Geração de imagens ou peça a um administrador.",

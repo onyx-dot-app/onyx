@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI アクションを追加"
+        "title": "OpenAPI プラグインを追加"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -188,14 +188,14 @@
         "invalidJson": "JSON の形式が無効です",
         "placeholder": "ここに OpenAPI スキーマを入力してください",
         "required": "OpenAPI スキーマ定義は必須です",
-        "subDescription": "このアクションで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI アクション]({docsUrl}) を参照してください。",
+        "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
       "editConfigsButton": {
         "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
       },
       "editHeader": {
-        "title": "OpenAPI アクションを編集"
+        "title": "OpenAPI プラグインを編集"
       },
       "empty": {
         "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
@@ -208,17 +208,17 @@
         "noSummary": "概要はありません"
       },
       "submitButton": {
-        "addLabel": "アクションを追加",
+        "addLabel": "プラグインを追加",
         "addingLabel": "追加中...",
         "saveLabel": "変更を保存",
         "savingLabel": "保存中..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI アクションを作成しました",
-        "actionUpdated": "OpenAPI アクションを更新しました",
-        "createFailed": "OpenAPI アクションの作成に失敗しました",
+        "actionCreated": "OpenAPI プラグインを作成しました",
+        "actionUpdated": "OpenAPI プラグインを更新しました",
+        "createFailed": "OpenAPI プラグインの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
-        "updateFailed": "OpenAPI アクションの更新に失敗しました"
+        "updateFailed": "OpenAPI プラグインの更新に失敗しました"
       },
       "humanDescription": {
         "title": "ユーザー向けの説明",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "既存の OAuth 設定の読み込みに失敗しました。更新するには、内容を再入力してください。"
       },
       "header": {
-        "description": "接続を認証すると、OpenAPI アクションを使用できます。"
+        "description": "接続を認証すると、OpenAPI プラグインを使用できます。"
       },
       "headers": {
         "addButton": {
           "label": "ヘッダーを追加"
         },
-        "description": "このアクションの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
+        "description": "このプラグインの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
         "keyRequired": "ヘッダーのキーは必須です",
         "keyTitle": "ヘッダー",
         "minRequired": "認証ヘッダーを 1 つ以上追加してください",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "削除"
         },
-        "title": "OpenAPI アクションを削除"
+        "title": "OpenAPI プラグインを削除"
       },
       "method": {
         "noSummary": "概要はありません"
@@ -764,7 +764,7 @@
           "tooltip": "画像生成を設定"
         },
         "openapi": {
-          "tooltip": "OpenAPIアクションを管理"
+          "tooltip": "OpenAPIプラグインを管理"
         },
         "webSearch": {
           "tooltip": "ウェブ検索を設定"
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "追加",
         "mcp": "カスタム MCP サーバーを追加",
-        "openapi": "OpenAPI アクションを追加"
+        "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP サーバーを読み込めませんでした。",
         "listErrorDescription": "このプラグイン一覧を読み込めませんでした。しばらくしてから再試行してください。",
-        "openapiError": "OpenAPI アクションを読み込めませんでした。",
+        "openapiError": "OpenAPI プラグインを読み込めませんでした。",
         "retry": {
           "label": "再試行"
         },
@@ -2423,7 +2423,7 @@
           "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
-        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI アクションは、[プラグイン]({url})で設定できます。",
+        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",
