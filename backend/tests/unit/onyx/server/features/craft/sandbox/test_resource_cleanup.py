@@ -1,4 +1,5 @@
 import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -111,15 +112,17 @@ def test_db_read_failure_does_not_authorize_orphan_deletion(
 
 
 @pytest.mark.parametrize(
-    "updates",
+    ("updates", "should_delete"),
     [
-        {"tenant_id": "tenant-b"},
-        {"created_at": datetime.now(timezone.utc)},
-        {"provisioning_attempt_number": 2},
+        ({}, True),
+        ({"tenant_id": "tenant-b"}, False),
+        ({"created_at": datetime.now(timezone.utc)}, False),
+        ({"provisioning_attempt_number": 2}, False),
     ],
 )
-def test_preserves_foreign_fresh_or_newer_generation_resources(
+def test_collection_respects_tenant_age_and_generation(
     updates: dict[str, object],
+    should_delete: bool,
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -129,14 +132,73 @@ def test_preserves_foreign_fresh_or_newer_generation_resources(
     row = Sandbox(
         id=resource.sandbox_id,
         user_id=uuid4(),
-        status=SandboxStatus.FAILED,
+        status=SandboxStatus.SLEEPING,
         provisioning_attempt_number=1,
     )
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: row)
     cleanup.reconcile_sandbox_resources(
         manager, "tenant-a", time.monotonic() + 60, lambda: None
     )
-    manager.delete_resource.assert_not_called()
+    if should_delete:
+        assert manager.delete_resource.call_args.args[0] == resource
+    else:
+        manager.delete_resource.assert_not_called()
+
+
+@pytest.mark.parametrize("idle", [True, False])
+@pytest.mark.parametrize("lease_owned", [True, False])
+def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
+    idle: bool,
+    lease_owned: bool,
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.tasks.build import tasks
+    from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
+
+    manager, _cache = collector
+    manager.supports_opencode_history_persistence = False
+    sandbox = Sandbox(id=uuid4(), user_id=uuid4(), status=SandboxStatus.RUNNING)
+    session_id = uuid4()
+
+    def broken_inventory(*_args: object) -> Iterator[SandboxResource]:
+        yield _resource()
+        raise RuntimeError("Inventory unavailable")
+
+    manager.iter_resources.side_effect = broken_inventory
+    redis = MagicMock()
+    redis.lock.return_value.owned.return_value = lease_owned
+    monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
+    monkeypatch.setattr(tasks, "get_redis_client", lambda **_kwargs: redis)
+    monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
+    monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args: [sandbox])
+    monkeypatch.setattr(tasks, "maybe_mark_tenant_active", MagicMock())
+    monkeypatch.setattr(tasks, "user_has_stale_active_session", lambda *_args: True)
+    monkeypatch.setattr(tasks, "get_latest_snapshot_for_session", lambda *_args: None)
+    monkeypatch.setattr(lifecycle, "is_sandbox_idle", lambda *_args: idle)
+    monkeypatch.setattr(
+        lifecycle, "list_snapshotable_session_workspaces", lambda *_args: [session_id]
+    )
+    sleep = MagicMock()
+    snapshot = MagicMock(return_value=None)
+    monkeypatch.setattr(lifecycle, "sleep_sandbox", sleep)
+    monkeypatch.setattr(lifecycle, "create_session_snapshot_keep_latest", snapshot)
+
+    if not lease_owned:
+        with pytest.raises(RuntimeError, match="Sandbox cleanup lease lost"):
+            tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
+        sleep.assert_not_called()
+        snapshot.assert_not_called()
+        return
+
+    tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
+    if idle:
+        assert sleep.call_args.kwargs["sandbox"].id == sandbox.id
+        snapshot.assert_not_called()
+    else:
+        assert snapshot.call_args.kwargs["session_id"] == session_id
+        sleep.assert_not_called()
 
 
 def test_deletion_failure_does_not_skip_other_resources(

@@ -508,6 +508,8 @@ RUNNING and live PROVISIONING owners remain protected. Resources get a 15-minute
 creation grace period. Each pass attempts at most 100 resource deletions under
 the same per-sandbox lock that provisioning uses. Errors retain the resource
 for retry and do not prevent independent resource cleanup.
+Inventory failures stop reconciliation but do not skip snapshots or idle cleanup
+while the cleanup lease remains owned. Losing that lease aborts the task.
 
 Reap = `sleep_sandbox` (§4.5, step 1), run from `cleanup_idle_sandboxes_task`.
 Idle is `last_heartbeat` (falling back to `created_at`) older than

@@ -79,12 +79,18 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     try:
         sandbox_manager = get_sandbox_manager()
 
-        reconcile_sandbox_resources(
-            sandbox_manager,
-            tenant_id,
-            time.monotonic() + TIMEOUT_SECONDS,
-            lambda: _check_cleanup_lease(lock),
-        )
+        try:
+            reconcile_sandbox_resources(
+                sandbox_manager,
+                tenant_id,
+                time.monotonic() + TIMEOUT_SECONDS,
+                lambda: _check_cleanup_lease(lock),
+            )
+        except Exception:
+            _check_cleanup_lease(lock)
+            task_logger.exception(
+                "Resource reconciliation failed; continuing sandbox snapshots and idle cleanup"
+            )
 
         with get_session_with_current_tenant() as db_session:
             running_sandboxes = get_running_sandboxes(db_session)
