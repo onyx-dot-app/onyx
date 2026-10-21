@@ -152,7 +152,9 @@ misses the main store falls back to the legacy store. The copy tool
 `python -m onyx.file_store.legacy_copy [--retire | --replay]` (`legacy_copy.py`) copies the
 objects that file records point at into the main store. After `--retire`, a marker object
 (`LEGACY_RETIRED_MARKER_KEY`) makes writes and deletes skip the legacy store. Reads still fall
-back to it.
+back to it. When the s3 backend still points at the bundled MinIO (`_runs_on_legacy_minio`, an
+upgrade whose `.env` was never switched), `app_configs.py` logs a warning at import that names
+the `.env` settings to change, so both `api_server` and the copy tool show it.
 
 `file_store.py:content_byte_size` computes the stored size at save time;
 `FILE_SIZE_MISSING_SENTINEL` (-1) marks a row whose backing object was
