@@ -6863,6 +6863,9 @@
         "noModelsTooltip": "モデルが設定されていないため、コンテキスト検索は無効です。先に [言語モデル]({link}) を設定してください。",
         "title": "コンテキスト検索"
       },
+      "currentModel": {
+        "legacyHint": "これはレガシーモデルです。引き続き動作しますが、新しいインデックスに再度選択することはできません。アップグレードするには、「すべてのモデルを表示」をクリックして新しいモデルを選択してください。"
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "embedding モデルと関連設定は Onyx Cloud が管理します。"
@@ -7001,9 +7004,12 @@
         "currentButton": {
           "label": "現在のモデル"
         },
-        "deprecated": {
-          "connectTooltip": "この embedding モデルは非推奨のため接続できません。",
-          "selectTooltip": "この embedding モデルは非推奨のため選択できません。"
+        "gpuRecommended": {
+          "tag": "GPU推奨"
+        },
+        "legacy": {
+          "tag": "レガシー",
+          "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
           "label": "モデルを選択"
@@ -7013,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPUの速度は目安で、ハードウェアと文書サイズによって異なります。推奨RAMは読み込んだモデル1つ分であり、Onyx全体の必要量ではありません。再インデックス時は追加のメモリを確保してください。",
         "addCustomModel": {
           "label": "カスタムモデルを追加"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、または Bifrost ゲートウェイを接続します。モデル名はご自身で指定します。LiteLLM と Azure では次元も指定します。",
+          "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
+          "title": "詳細設定: 独自のモデルまたはプロキシを使用"
         },
         "cloudTab": {
           "label": "クラウド型"
@@ -7214,22 +7226,27 @@
         "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere の主力埋め込みモデル。品質とコストのバランスが最も優れています。2048 次元出力。",
+        "cohereEmbedV5Fast": "Cohere の Embed 5 の低コスト版。それでも非常に優れた選択肢です。2048 次元出力。",
         "cohereEmbedEnglishV3": "Cohere の英語向け埋め込みモデル。英語タスクで良好な性能。",
         "cohereEmbedEnglishLightV3": "Cohere の軽量な英語向け埋め込みモデル。単純なタスクではより高速で効率的。",
-        "cohereEmbedV4": "Cohere の最新の多言語埋め込みモデル。デフォルトの 1536 次元出力で検索品質を向上。",
-        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。最高の性能だが高コスト。",
-        "openaiTextEmbedding3Small": "OpenAI の新しく効率的な埋め込みモデル。性能とコストのバランスが良い。",
+        "cohereEmbedV4": "Cohere の多言語埋め込みモデル。1536 次元出力。",
+        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。すでに OpenAI を利用している場合に適しています。3072 次元出力。",
+        "openaiTextEmbedding3Small": "OpenAI の小型埋め込みモデル。クラウド型の選択肢の中で群を抜いて経済的です。1536 次元出力。",
         "googleGeminiEmbedding001": "Google の Gemini 埋め込みモデル。強力で効率的。",
         "googleTextEmbedding005": "Google のより小型で軽量な埋め込みモデル。",
-        "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
+        "googleGeminiEmbedding2": "Google の主力埋め込みモデル。非常に高性能ですが、コストが高く低速です。3072 次元出力のためインデックスが大きくなります。すでに Google を利用しているチームには堅実な選択肢です。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
         "voyage4Large": "Voyage 4 シリーズ最大の埋め込みモデル。Voyage で最高の検索品質、多言語対応。",
         "voyage4": "Voyage 4 シリーズの汎用埋め込みモデル。手頃なコストで高い検索品質。",
         "voyage4Lite": "Voyage 4 シリーズの軽量埋め込みモデル。最も低コストで、レート制限が最も高い。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
+        "graniteEmbedding97mMultilingualR2": "IBMの小型多言語モデル。{appName}に同梱。9700万パラメータ、384次元出力。CPUコアあたり最大200文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "voyage4Nano": "Voyage AIのオープンウェイトモデル。3億4600万パラメータ、2048次元出力。CPUコアあたり最大50文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "nemotron3Embed1b": "NVIDIAの多言語モデル。11億パラメータ、2048次元出力。CPUコアあたり最大5文書/分。CPU実行時の推奨RAM：モデルサーバーあたり8 GB。GPU推奨。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
-        "e5BaseV2": "デフォルトより小型で高速なモデル。検索品質は下がるが、デフォルトモデルの約 2 倍高速。",
+        "e5BaseV2": "Microsoft の E5 ファミリーの英語埋め込みモデル。速度と検索品質のバランスが取れています。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",
         "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
         "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"

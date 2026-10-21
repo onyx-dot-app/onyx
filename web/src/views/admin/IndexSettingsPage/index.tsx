@@ -40,6 +40,7 @@ import {
   SvgClock,
   SvgCloud,
   SvgEmpty,
+  SvgExpand,
   SvgExternalLink,
   SvgFold,
   SvgPlusCircle,
@@ -62,6 +63,7 @@ import {
   VectorQuantization,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
+  type EmbeddingModelRef,
   type EmbeddingModelRequest,
   type EmbeddingModelSelection,
   type EmbeddingModelState,
@@ -77,9 +79,11 @@ import {
 import {
   embeddingModelDescription,
   findProvider,
-  findRegistryModel,
+  findProviderModel,
+  isBringYourOwnProvider,
   isCloudBased,
   resolveProviderName,
+  visibleEmbeddingProviders,
 } from "@/lib/searchSettings";
 import {
   isSameModelSelection,
@@ -107,7 +111,6 @@ import {
   useSecondarySearchSettings,
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
-import useFilter from "@/hooks/useFilter";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import {
   filterModelConfigurations,
@@ -225,8 +228,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
 
 interface ProviderGroupProps {
   provider: EmbeddingProvider;
-  currentModelName?: string;
-  selectedModelName?: string;
+  /** The active embedding model, in this group or another one. */
+  current: EmbeddingModelRef | null;
+  /** The staged model, in this group or another one. */
+  staged: EmbeddingModelRef | null;
   isCloud?: boolean;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
@@ -248,8 +253,8 @@ interface ProviderGroupProps {
 
 function ProviderGroup({
   provider,
-  currentModelName,
-  selectedModelName,
+  current,
+  staged,
   isCloud = false,
   existingCredentials,
   existingModel,
@@ -258,6 +263,7 @@ function ProviderGroup({
 }: ProviderGroupProps) {
   const t = useTranslations("admin.indexSettings");
   const models = provider.embeddingModels;
+  const isBringYourOwn = isBringYourOwnProvider(provider.providerName);
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
@@ -265,9 +271,14 @@ function ProviderGroup({
   const providerCreationModal = useCreateModal();
   const [pendingConnectModel, setPendingConnectModel] =
     useState<EmbeddingModel | null>(null);
-  const providerGroupContainsCurrentModelName = models.some(
-    (m) => m.modelName === currentModelName
-  );
+  // The current model uses this provider's credentials, whether or not it is
+  // a registry model, so they cannot be disconnected.
+  const isCurrentProvider = current?.providerName === provider.providerName;
+  const currentModelName = isCurrentProvider ? current?.modelName : undefined;
+  const selectedModelName =
+    staged?.providerName === provider.providerName
+      ? staged.modelName
+      : undefined;
 
   const handleDisconnect = useCallback(async () => {
     if (!isCloud) return;
@@ -309,13 +320,16 @@ function ProviderGroup({
 
   const handleModelSelect = useCallback(
     (model: EmbeddingModel) => {
-      if (model.deprecated) return;
       const state = getModelState(model);
 
       if (state === "selected" || state === "current") {
         onDeselectModel();
         return;
       }
+
+      // A legacy model is listed only while it is current; it is never a new
+      // target.
+      if (model.legacy) return;
 
       if (state === "unconnected" && isCloud) {
         setPendingConnectModel(model);
@@ -334,6 +348,23 @@ function ProviderGroup({
       setPendingConnectModel,
     ]
   );
+
+  function renderModelCard(model: EmbeddingModel) {
+    const state = getModelState(model);
+    // The current card loses its highlight to a staged model in any group.
+    const isPrioritized =
+      state === "selected" || (state === "current" && staged === null);
+    return (
+      <EmbeddingModelCard
+        key={model.modelName}
+        model={model}
+        provider={provider}
+        modelState={state}
+        cardState={isPrioritized ? "selected" : "filled"}
+        onSelect={() => handleModelSelect(model)}
+      />
+    );
+  }
 
   return (
     <>
@@ -433,9 +464,9 @@ function ProviderGroup({
                     icon={SvgUnplug}
                     prominence="tertiary"
                     size="sm"
-                    disabled={providerGroupContainsCurrentModelName}
+                    disabled={isCurrentProvider}
                     tooltip={
-                      providerGroupContainsCurrentModelName
+                      isCurrentProvider
                         ? t("providerGroup.disconnectButton.disabledTooltip")
                         : undefined
                     }
@@ -456,7 +487,8 @@ function ProviderGroup({
           </GeneralLayouts.Section>
         </div>
 
-        {models.length === 0 ? (
+        {models.map(renderModelCard)}
+        {isBringYourOwn && (
           <SelectCard
             state="filled"
             rounding={3}
@@ -483,23 +515,6 @@ function ProviderGroup({
               center
             />
           </SelectCard>
-        ) : (
-          models.map((model) => {
-            const state = getModelState(model);
-            const isPrioritized =
-              state === "selected" ||
-              (state === "current" && !selectedModelName);
-            return (
-              <EmbeddingModelCard
-                key={model.modelName}
-                model={model}
-                provider={provider}
-                modelState={state}
-                cardState={isPrioritized ? "selected" : "filled"}
-                onSelect={() => handleModelSelect(model)}
-              />
-            );
-          })
         )}
       </GeneralLayouts.Section>
     </>
@@ -523,7 +538,6 @@ function EmbeddingModelCard({
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
-  const isDeprecated = model.deprecated;
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -532,26 +546,13 @@ function EmbeddingModelCard({
             prominence="tertiary"
             rightIcon={SvgArrowExchange}
             onClick={onSelect}
-            disabled={isDeprecated}
-            tooltip={
-              isDeprecated
-                ? t("modelCard.deprecated.connectTooltip")
-                : undefined
-            }
           >
             {t("modelCard.connectButton.label")}
           </Button>
         );
       case "connected":
         return (
-          <Button
-            prominence="tertiary"
-            onClick={onSelect}
-            disabled={isDeprecated}
-            tooltip={
-              isDeprecated ? t("modelCard.deprecated.selectTooltip") : undefined
-            }
-          >
+          <Button prominence="tertiary" onClick={onSelect}>
             {t("modelCard.selectButton.label")}
           </Button>
         );
@@ -580,19 +581,13 @@ function EmbeddingModelCard({
     }
   })();
 
-  const isClickable =
-    !isDeprecated &&
-    (modelState === "unconnected" ||
-      modelState === "connected" ||
-      modelState === "current" ||
-      modelState === "selected");
-
   return (
     <SelectCard
       state={cardState}
       rounding={3}
       padding={1}
-      onClick={isClickable ? onSelect : undefined}
+      onClick={onSelect}
+      data-testid={`embedding-model-card:${provider.providerName}:${model.modelName}`}
     >
       <GeneralLayouts.Section flexDirection="row" alignItems="start">
         <GeneralLayouts.Section gap={0} padding={2} alignItems="start">
@@ -600,6 +595,17 @@ function EmbeddingModelCard({
             icon={provider.icon}
             title={model.modelName}
             description={embeddingModelDescription(model, t, appName)}
+            tag={
+              model.legacy
+                ? {
+                    title: t("modelCard.legacy.tag"),
+                    color: "amber",
+                    tooltip: t("modelCard.legacy.tooltip"),
+                  }
+                : model.gpuRecommended
+                  ? { title: t("modelCard.gpuRecommended.tag"), color: "gray" }
+                  : undefined
+            }
             sizePreset="main-ui"
             variant="section"
           />
@@ -610,6 +616,113 @@ function EmbeddingModelCard({
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
       </GeneralLayouts.Section>
     </SelectCard>
+  );
+}
+
+interface BringYourOwnSectionProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  description: string | RichStr;
+  children: React.ReactNode;
+}
+
+/**
+ * Low-prominence, collapsible home for the bring-your-own options (LiteLLM,
+ * Azure, Bifrost, custom self-hosted models), below the registry models.
+ */
+function BringYourOwnSection({
+  open,
+  onOpenChange,
+  description,
+  children,
+}: BringYourOwnSectionProps) {
+  const t = useTranslations("admin.indexSettings");
+  return (
+    <GeneralLayouts.Section gap={1} alignItems="stretch">
+      <GeneralLayouts.Section
+        flexDirection="row"
+        justifyContent="start"
+        height="fit"
+        className="mt-2"
+      >
+        <Button
+          prominence="tertiary"
+          rightIcon={open ? SvgFold : SvgExpand}
+          aria-expanded={open}
+          onClick={() => onOpenChange(!open)}
+        >
+          {t("modelPicker.bringYourOwn.title")}
+        </Button>
+      </GeneralLayouts.Section>
+      {open && (
+        <>
+          <GeneralLayouts.Section
+            alignItems="start"
+            width="auto"
+            height="fit"
+            className="mx-2 mb-1"
+          >
+            <Text font="secondary-body" color="text-03" as="p">
+              {description}
+            </Text>
+          </GeneralLayouts.Section>
+          {children}
+        </>
+      )}
+    </GeneralLayouts.Section>
+  );
+}
+
+interface CustomModelGroupProps {
+  onAddCustomModel: () => void;
+}
+
+/** Self-hosted models entered by hand ("Add Custom Model"). */
+function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
+  const t = useTranslations("admin.indexSettings");
+  return (
+    <GeneralLayouts.Section gap={1}>
+      <GeneralLayouts.Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        padding={1}
+        height="fit"
+        className="mt-1"
+      >
+        <Spacer orientation="horizontal" rem={0.675} />
+        <Content
+          icon={CUSTOM_PROVIDER.icon}
+          title={t("modelPicker.customModels.title")}
+          sizePreset="secondary"
+        />
+      </GeneralLayouts.Section>
+
+      <SelectCard
+        state="filled"
+        rounding={3}
+        padding={2}
+        onClick={onAddCustomModel}
+      >
+        <ContentAction
+          title={t("modelPicker.customModel.title")}
+          sizePreset="secondary"
+          variant="body"
+          color="muted"
+          padding={1}
+          rightChildren={
+            <Button
+              prominence="tertiary"
+              rightIcon={SvgPlusCircle}
+              onClick={onAddCustomModel}
+            >
+              {t("modelPicker.addCustomModel.label")}
+            </Button>
+          }
+          center
+        />
+      </SelectCard>
+    </GeneralLayouts.Section>
   );
 }
 
@@ -783,35 +896,8 @@ export default function IndexSettingsPage() {
     null
   );
 
-  const allModels = useMemo(
-    () => [...CLOUD_BASED_PROVIDERS, ...SELF_HOSTED_PROVIDERS],
-    []
-  );
-
-  const {
-    query,
-    setQuery,
-    filtered: filteredProviders,
-  } = useFilter(
-    allModels,
-    (embeddingProvider) =>
-      `${embeddingProvider.displayName} ${embeddingProvider.embeddingModels
-        .map((embeddingModel) => embeddingModel.modelName)
-        .join(" ")}`
-  );
-
-  const { filteredCloudProviders, filteredSelfHostedProviders } =
-    useMemo(() => {
-      const matched = new Set(filteredProviders);
-      return {
-        filteredCloudProviders: CLOUD_BASED_PROVIDERS.filter((p) =>
-          matched.has(p)
-        ),
-        filteredSelfHostedProviders: SELF_HOSTED_PROVIDERS.filter((p) =>
-          matched.has(p)
-        ),
-      };
-    }, [filteredProviders]);
+  // Whether the admin opened the bring-your-own section.
+  const [bringYourOwnOpen, setBringYourOwnOpen] = useState(false);
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
@@ -855,27 +941,85 @@ export default function IndexSettingsPage() {
     };
   }, [currentEmbeddingModel]);
 
-  const currentProviderName = currentEmbeddingModel
-    ? resolveProviderName(
-        currentEmbeddingModel.model_name,
-        currentEmbeddingModel.provider_type
-      )
-    : null;
+  const currentModelName = currentEmbeddingModel?.model_name;
+  const currentProviderType = currentEmbeddingModel?.provider_type ?? null;
+  const currentModelRef: EmbeddingModelRef | null = useMemo(
+    () =>
+      currentModelName === undefined
+        ? null
+        : {
+            modelName: currentModelName,
+            providerName: resolveProviderName(
+              currentModelName,
+              currentProviderType
+            ),
+          },
+    [currentModelName, currentProviderType]
+  );
+  const currentProviderName = currentModelRef?.providerName ?? null;
   const currentProvider = currentProviderName
     ? findProvider(currentProviderName)
     : null;
   const isCurrentCloudBased = currentProviderName
     ? isCloudBased(currentProviderName)
     : false;
+  // Matched on provider AND name: an Azure deployment labelled like an OpenAI
+  // model must not borrow that model's registry entry.
+  const currentRegistryModel = currentModelRef
+    ? findProviderModel(currentModelRef.providerName, currentModelRef.modelName)
+    : null;
 
-  const { data: searchSettings, isLoading: isLoadingSearchSettings } =
-    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const { data: configuredProvidersList } = useConfiguredEmbeddingProviders();
   const configuredProviders = useMemo(
     () =>
       new Map((configuredProvidersList ?? []).map((p) => [p.provider_type, p])),
     [configuredProvidersList]
   );
+  const visibleCloudProviders = useMemo(
+    () =>
+      visibleEmbeddingProviders(
+        CLOUD_BASED_PROVIDERS,
+        currentModelRef,
+        configuredProviders
+      ),
+    [currentModelRef, configuredProviders]
+  );
+  const visibleSelfHostedProviders = useMemo(
+    () => visibleEmbeddingProviders(SELF_HOSTED_PROVIDERS, currentModelRef),
+    [currentModelRef]
+  );
+  const [query, setQuery] = useState("");
+  const isSearching = query.trim() !== "";
+  // The search runs over the visible groups, so it cannot find a hidden
+  // legacy model.
+  const {
+    filteredCloudProviders,
+    filteredBringYourOwnProviders,
+    filteredSelfHostedProviders,
+    customModelMatched,
+  } = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const matches = (provider: EmbeddingProvider) =>
+      `${provider.displayName} ${provider.embeddingModels
+        .map((model) => model.modelName)
+        .join(" ")}`
+        .toLowerCase()
+        .includes(needle);
+    const cloud = visibleCloudProviders.filter(matches);
+    return {
+      filteredCloudProviders: cloud.filter(
+        (p) => !isBringYourOwnProvider(p.providerName)
+      ),
+      filteredBringYourOwnProviders: cloud.filter((p) =>
+        isBringYourOwnProvider(p.providerName)
+      ),
+      filteredSelfHostedProviders: visibleSelfHostedProviders.filter(matches),
+      customModelMatched: matches(CUSTOM_PROVIDER),
+    };
+  }, [query, visibleCloudProviders, visibleSelfHostedProviders]);
+
+  const { data: searchSettings, isLoading: isLoadingSearchSettings } =
+    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const cancelReindexModal = useCreateModal();
   const forwardOnlyModal = useCreateModal();
   const customModelModal = useCreateModal();
@@ -944,9 +1088,12 @@ export default function IndexSettingsPage() {
     () =>
       savedModelSelection(
         currentEmbeddingModelSpec,
-        currentEmbeddingModel?.provider_type ?? null
+        // Custom models are staged as CUSTOM, so the saved one must match.
+        currentProviderName === EmbeddingProviderName.CUSTOM
+          ? EmbeddingProviderName.CUSTOM
+          : (currentEmbeddingModel?.provider_type ?? null)
       ),
-    [currentEmbeddingModelSpec, currentEmbeddingModel]
+    [currentEmbeddingModelSpec, currentEmbeddingModel, currentProviderName]
   );
 
   const initialFormValues: IndexSettingsFormValues = useMemo(
@@ -1271,10 +1418,56 @@ export default function IndexSettingsPage() {
                 void setFieldValue("model_spec", selection.model_spec);
                 void setFieldValue("model_provider", selection.model_provider);
               };
+              // Compares the provider and the spec too, like classifyChanges:
+              // an OpenAI model with the name of the current Azure deployment
+              // is a staged change.
               const isModelStaged =
-                values.model_name !== initialFormValues.model_name &&
-                !!values.model_name;
-              const stagedModelName = isModelStaged ? values.model_name : null;
+                !!values.model_name &&
+                !isSameModelSelection(values, initialFormValues);
+              // Registry picks carry no provider; their name resolves it.
+              // Custom models carry CUSTOM, even with a registry name.
+              const stagedModelRef: EmbeddingModelRef | null = isModelStaged
+                ? {
+                    modelName: values.model_name,
+                    providerName:
+                      values.model_provider ??
+                      resolveProviderName(values.model_name, null),
+                  }
+                : null;
+              // A search that matches a bring-your-own option shows it.
+              const bringYourOwnExpanded = bringYourOwnOpen || isSearching;
+              const renderCloudProviderGroup = (
+                provider: EmbeddingProvider
+              ) => (
+                <ProviderGroup
+                  key={provider.providerName}
+                  provider={provider}
+                  current={currentModelRef}
+                  staged={stagedModelRef}
+                  isCloud
+                  existingCredentials={configuredProviders?.get(
+                    provider.providerName
+                  )}
+                  existingModel={
+                    currentEmbeddingModel?.provider_type ===
+                    provider.providerName
+                      ? (currentEmbeddingModelSpec ?? undefined)
+                      : undefined
+                  }
+                  onSelectModel={(name, customModel) =>
+                    applySelection({
+                      model_name: name,
+                      model_spec: customModel
+                        ? { ...customModel, modelName: name }
+                        : null,
+                      model_provider: customModel
+                        ? provider.providerName
+                        : null,
+                    })
+                  }
+                  onDeselectModel={() => applySelection(savedSelection)}
+                />
+              );
               // Block apply when Contextual Retrieval is on but no LLM is set.
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
@@ -1511,7 +1704,7 @@ export default function IndexSettingsPage() {
                               ...customModel,
                               modelName: customModel.modelName,
                             },
-                            model_provider: null,
+                            model_provider: EmbeddingProviderName.CUSTOM,
                           });
                         }
                         customModelModal.toggle(false);
@@ -1765,55 +1958,29 @@ export default function IndexSettingsPage() {
                                 expandedContent={
                                   <>
                                     <Tabs.Content value={MODEL_TAB_CLOUD}>
-                                      {filteredCloudProviders.length > 0 ? (
+                                      {filteredCloudProviders.length > 0 ||
+                                      filteredBringYourOwnProviders.length >
+                                        0 ? (
                                         <GeneralLayouts.Section
                                           gap={2}
                                           padding={2}
                                         >
                                           {filteredCloudProviders.map(
-                                            (provider) => (
-                                              <ProviderGroup
-                                                key={provider.providerName}
-                                                provider={provider}
-                                                currentModelName={
-                                                  currentEmbeddingModel?.model_name
-                                                }
-                                                selectedModelName={
-                                                  stagedModelName ?? undefined
-                                                }
-                                                isCloud
-                                                existingCredentials={configuredProviders?.get(
-                                                  provider.providerName
-                                                )}
-                                                existingModel={
-                                                  currentEmbeddingModel?.provider_type ===
-                                                  provider.providerName
-                                                    ? (currentEmbeddingModelSpec ??
-                                                      undefined)
-                                                    : undefined
-                                                }
-                                                onSelectModel={(
-                                                  name,
-                                                  customModel
-                                                ) =>
-                                                  applySelection({
-                                                    model_name: name,
-                                                    model_spec: customModel
-                                                      ? {
-                                                          ...customModel,
-                                                          modelName: name,
-                                                        }
-                                                      : null,
-                                                    model_provider: customModel
-                                                      ? provider.providerName
-                                                      : null,
-                                                  })
-                                                }
-                                                onDeselectModel={() =>
-                                                  applySelection(savedSelection)
-                                                }
-                                              />
-                                            )
+                                            renderCloudProviderGroup
+                                          )}
+                                          {filteredBringYourOwnProviders.length >
+                                            0 && (
+                                            <BringYourOwnSection
+                                              open={bringYourOwnExpanded}
+                                              onOpenChange={setBringYourOwnOpen}
+                                              description={t(
+                                                "modelPicker.bringYourOwn.cloudDescription"
+                                              )}
+                                            >
+                                              {filteredBringYourOwnProviders.map(
+                                                renderCloudProviderGroup
+                                              )}
+                                            </BringYourOwnSection>
                                           )}
                                         </GeneralLayouts.Section>
                                       ) : (
@@ -1830,23 +1997,25 @@ export default function IndexSettingsPage() {
                                     </Tabs.Content>
 
                                     <Tabs.Content value={MODEL_TAB_SELF}>
-                                      {filteredSelfHostedProviders.length >
-                                      0 ? (
+                                      {filteredSelfHostedProviders.length > 0 ||
+                                      customModelMatched ? (
                                         <GeneralLayouts.Section
                                           gap={2}
                                           padding={2}
                                         >
+                                          <Text
+                                            font="secondary-body"
+                                            color="text-03"
+                                          >
+                                            {t("modelPicker.cpuEstimateHint")}
+                                          </Text>
                                           {filteredSelfHostedProviders.map(
                                             (shProvider) => (
                                               <ProviderGroup
                                                 key={shProvider.providerName}
                                                 provider={shProvider}
-                                                currentModelName={
-                                                  currentEmbeddingModel?.model_name
-                                                }
-                                                selectedModelName={
-                                                  stagedModelName ?? undefined
-                                                }
+                                                current={currentModelRef}
+                                                staged={stagedModelRef}
                                                 onSelectModel={(name) =>
                                                   applySelection({
                                                     model_name: name,
@@ -1861,63 +2030,21 @@ export default function IndexSettingsPage() {
                                             )
                                           )}
 
-                                          <GeneralLayouts.Section gap={1}>
-                                            <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
-                                              <GeneralLayouts.Section
-                                                flexDirection="row"
-                                                gap={0}
-                                              >
-                                                <Spacer
-                                                  orientation="horizontal"
-                                                  rem={0.675}
-                                                />
-                                                <div className="flex flex-row justify-between items-center w-full py-1">
-                                                  <Content
-                                                    icon={CUSTOM_PROVIDER.icon}
-                                                    title={t(
-                                                      "modelPicker.customModels.title"
-                                                    )}
-                                                    sizePreset="secondary"
-                                                  />
-                                                </div>
-                                              </GeneralLayouts.Section>
-                                            </div>
-
-                                            <SelectCard
-                                              state="filled"
-                                              rounding={3}
-                                              padding={2}
-                                              onClick={() =>
-                                                customModelModal.toggle(true)
-                                              }
+                                          {customModelMatched && (
+                                            <BringYourOwnSection
+                                              open={bringYourOwnExpanded}
+                                              onOpenChange={setBringYourOwnOpen}
+                                              description={t(
+                                                "modelPicker.bringYourOwn.selfHostedDescription"
+                                              )}
                                             >
-                                              <ContentAction
-                                                title={t(
-                                                  "modelPicker.customModel.title"
-                                                )}
-                                                sizePreset="secondary"
-                                                variant="body"
-                                                color="muted"
-                                                padding={1}
-                                                rightChildren={
-                                                  <Button
-                                                    prominence="tertiary"
-                                                    rightIcon={SvgPlusCircle}
-                                                    onClick={() =>
-                                                      customModelModal.toggle(
-                                                        true
-                                                      )
-                                                    }
-                                                  >
-                                                    {t(
-                                                      "modelPicker.addCustomModel.label"
-                                                    )}
-                                                  </Button>
+                                              <CustomModelGroup
+                                                onAddCustomModel={() =>
+                                                  customModelModal.toggle(true)
                                                 }
-                                                center
                                               />
-                                            </SelectCard>
-                                          </GeneralLayouts.Section>
+                                            </BringYourOwnSection>
+                                          )}
                                         </GeneralLayouts.Section>
                                       ) : (
                                         <IllustrationContent
@@ -1985,7 +2112,10 @@ export default function IndexSettingsPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex flex-row items-start w-full">
+                                  <div
+                                    className="flex flex-row items-start w-full"
+                                    data-testid="current-embedding-model"
+                                  >
                                     <GeneralLayouts.Section
                                       padding={2}
                                       gap={0}
@@ -1997,12 +2127,20 @@ export default function IndexSettingsPage() {
                                         }
                                         title={currentEmbeddingModel.model_name}
                                         description={embeddingModelDescription(
-                                          findRegistryModel(
-                                            currentEmbeddingModel.model_name
-                                          ),
+                                          currentRegistryModel,
                                           t,
                                           settings.appName
                                         )}
+                                        tag={
+                                          currentRegistryModel?.legacy
+                                            ? {
+                                                title: t(
+                                                  "modelCard.legacy.tag"
+                                                ),
+                                                color: "amber",
+                                              }
+                                            : undefined
+                                        }
                                         sizePreset="main-ui"
                                         variant="section"
                                       />
@@ -2013,29 +2151,38 @@ export default function IndexSettingsPage() {
                                           />
                                         )}
                                       </div>
+                                      {currentRegistryModel?.legacy && (
+                                        <GeneralLayouts.Section
+                                          alignItems="start"
+                                          width="auto"
+                                          height="fit"
+                                          className="mt-2 mx-6"
+                                        >
+                                          <Text
+                                            font="secondary-body"
+                                            color="text-03"
+                                            as="p"
+                                          >
+                                            {t("currentModel.legacyHint")}
+                                          </Text>
+                                        </GeneralLayouts.Section>
+                                      )}
                                     </GeneralLayouts.Section>
 
                                     <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
                                       <Button
                                         prominence="secondary"
                                         onClick={() => {
-                                          const isStagedSelfHosted =
-                                            stagedModelName &&
-                                            SELF_HOSTED_PROVIDERS.some((p) =>
-                                              p.embeddingModels.some(
-                                                (m) =>
-                                                  m.modelName ===
-                                                  stagedModelName
-                                              )
-                                            );
+                                          // Open on the tab that holds the
+                                          // staged model, else the current one.
+                                          const focusProviderName =
+                                            stagedModelRef?.providerName ??
+                                            currentProviderName;
                                           setActiveModelTab(
-                                            isStagedSelfHosted
-                                              ? MODEL_TAB_SELF
-                                              : stagedModelName
-                                                ? MODEL_TAB_CLOUD
-                                                : currentEmbeddingModel?.provider_type
-                                                  ? MODEL_TAB_CLOUD
-                                                  : MODEL_TAB_SELF
+                                            focusProviderName &&
+                                              isCloudBased(focusProviderName)
+                                              ? MODEL_TAB_CLOUD
+                                              : MODEL_TAB_SELF
                                           );
                                           setViewAllModelsOpen(true);
                                         }}

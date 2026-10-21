@@ -6863,6 +6863,9 @@
         "noModelsTooltip": "A recuperação contextual está desativada porque você não tem modelos configurados. Configure primeiro um [modelo de linguagem]({link}).",
         "title": "Recuperação contextual"
       },
+      "currentModel": {
+        "legacyHint": "Este é um modelo legado. Ele continua funcionando, mas você não pode selecioná-lo de novo para um novo índice. Para atualizar, clique em “Ver todos os modelos” e selecione um modelo mais recente."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "O modelo de embedding e as configurações são gerenciados pelo Onyx Cloud."
@@ -7001,9 +7004,12 @@
         "currentButton": {
           "label": "Modelo atual"
         },
-        "deprecated": {
-          "connectTooltip": "Este modelo de embedding está descontinuado e não é possível se conectar a ele.",
-          "selectTooltip": "Este modelo de embedding está descontinuado e não pode ser selecionado."
+        "gpuRecommended": {
+          "tag": "GPU recomendada"
+        },
+        "legacy": {
+          "tag": "Legado",
+          "tooltip": "Você não pode selecionar este modelo para um novo índice. Ele continua funcionando até você trocar de modelo."
         },
         "selectButton": {
           "label": "Selecionar modelo"
@@ -7013,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "As velocidades de CPU são estimativas e variam conforme o hardware e o tamanho dos documentos. A RAM recomendada cobre um modelo carregado, não toda a infraestrutura do Onyx. Reserve mais memória durante a reindexação.",
         "addCustomModel": {
           "label": "Adicionar modelo personalizado"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "Conecte um proxy LiteLLM, uma implantação do Azure OpenAI ou um gateway Bifrost. Você informa o nome do modelo. Para LiteLLM e Azure, você também informa a dimensão.",
+          "selfHostedDescription": "Execute um modelo de embeddings do Hugging Face que não está na lista acima. Você informa o nome, a dimensão e os prefixos do modelo.",
+          "title": "Avançado: use seu próprio modelo ou proxy"
         },
         "cloudTab": {
           "label": "Na nuvem"
@@ -7214,22 +7226,27 @@
         "restoreHint": "Para manter um conector, cancele aqui, retome-o ou corrija-o e reindexe novamente — assim ele será levado adiante. Caso contrário, adicione-o de volta quando a reindexação terminar."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "O principal modelo de embeddings da Cohere. O melhor equilíbrio entre qualidade e custo. Saída de 2048 dimensões.",
+        "cohereEmbedV5Fast": "Versão de menor custo do Embed 5 da Cohere. Ainda assim, uma excelente opção. Saída de 2048 dimensões.",
         "cohereEmbedEnglishV3": "Modelo de embeddings em inglês da Cohere. Bom desempenho em tarefas em inglês.",
         "cohereEmbedEnglishLightV3": "Modelo leve de embeddings em inglês da Cohere. Mais rápido e eficiente para tarefas simples.",
-        "cohereEmbedV4": "O modelo de embeddings multilíngue mais recente da Cohere, com saída padrão de 1536 dimensões para melhor qualidade de recuperação.",
-        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Melhor desempenho, porém mais caro.",
-        "openaiTextEmbedding3Small": "Modelo de embeddings mais novo e eficiente da OpenAI. Bom equilíbrio entre desempenho e custo.",
+        "cohereEmbedV4": "O modelo de embeddings multilíngue da Cohere, com saída de 1536 dimensões.",
+        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Uma boa escolha se você já usa a OpenAI. Saída de 3072 dimensões.",
+        "openaiTextEmbedding3Small": "Modelo de embeddings pequeno da OpenAI. De longe a opção na nuvem mais econômica. Saída de 1536 dimensões.",
         "googleGeminiEmbedding001": "Modelo de embeddings Gemini do Google. Poderoso e eficiente.",
         "googleTextEmbedding005": "Modelo de embeddings menor e mais leve do Google.",
-        "googleGeminiEmbedding2": "O modelo de embeddings multimodal mais recente do Google (GA). Recuperação da mais alta qualidade com saída de 3072 dimensões.",
+        "googleGeminiEmbedding2": "O principal modelo de embeddings do Google. Muito poderoso, mas caro e mais lento. Sua saída de 3072 dimensões gera um índice grande. Uma escolha sólida para equipes que já usam o Google.",
         "googleGeminiEmbedding2Preview": "Versão prévia do Gemini Embedding 2. Substituída pelo gemini-embedding-2 em novas configurações.",
         "voyageLarge2Instruct": "Modelo de embeddings grande da Voyage. Alto desempenho com ajuste fino por instruções.",
         "voyage4Large": "O maior modelo de embeddings da série 4 da Voyage. A melhor qualidade de recuperação da Voyage, multilíngue.",
         "voyage4": "Modelo de embeddings de uso geral da série 4 da Voyage. Alta qualidade de recuperação a um custo moderado.",
         "voyage4Lite": "Modelo leve de embeddings da série 4 da Voyage. Menor custo e maiores limites de taxa.",
         "voyageLight2Instruct": "Modelo leve de embeddings da Voyage. Bom equilíbrio entre desempenho e eficiência.",
+        "graniteEmbedding97mMultilingualR2": "O pequeno modelo multilíngue da IBM. Incluído no {appName}. 97 milhões de parâmetros, saída de 384 dimensões. Até 200 documentos / min / núcleo de CPU. RAM recomendada para CPU: 4 GB por servidor de modelos.",
+        "voyage4Nano": "O modelo de pesos abertos da Voyage AI. 346 milhões de parâmetros, saída de 2048 dimensões. Até 50 documentos / min / núcleo de CPU. RAM recomendada para CPU: 4 GB por servidor de modelos.",
+        "nemotron3Embed1b": "O modelo multilíngue da NVIDIA. 1,1 bilhão de parâmetros, saída de 2048 dimensões. Até 5 documentos / min / núcleo de CPU. RAM recomendada para CPU: 8 GB por servidor de modelos. GPU recomendada.",
         "nomicEmbedTextV1": "Modelo de embeddings da Nomic especializado em recuperação, similaridade, agrupamento e classificação.",
-        "e5BaseV2": "Um modelo menor e mais rápido que o padrão. É cerca de 2x mais rápido que o modelo padrão, com menor qualidade de busca.",
+        "e5BaseV2": "Modelo de embeddings em inglês da família E5 da Microsoft. Equilibra velocidade e qualidade de busca.",
         "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o {appName} em um sistema com recursos limitados, pode ser uma boa escolha.",
         "multilingualE5Base": "Para corpora em outros idiomas além do inglês, esta é a escolha certa.",
         "multilingualE5Small": "Para corpora em outros idiomas além do inglês em um sistema com recursos limitados, esta é a escolha certa."

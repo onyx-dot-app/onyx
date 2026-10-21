@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.model_configs import (
     DEFAULT_DOCUMENT_ENCODER_MODEL,
     DOCUMENT_ENCODER_MODEL,
+    PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
 )
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.llm import fetch_embedding_provider
@@ -283,7 +284,13 @@ def update_search_settings_status(
 
 
 def user_has_overridden_embedding_model() -> bool:
-    return DOCUMENT_ENCODER_MODEL != DEFAULT_DOCUMENT_ENCODER_MODEL
+    """True if env DOCUMENT_ENCODER_MODEL names a non-default model, for the alembic
+    seed (dbaa756c2ccf). nomic, the previous default, counts as a default so that
+    DOCUMENT_ENCODER_MODEL=nomic seeds the same rows as an install before granite."""
+    return DOCUMENT_ENCODER_MODEL not in (
+        DEFAULT_DOCUMENT_ENCODER_MODEL,
+        PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
+    )
 
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
