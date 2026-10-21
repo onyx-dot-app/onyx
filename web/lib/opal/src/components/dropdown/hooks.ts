@@ -504,13 +504,14 @@ export function useDropdownOverlay({
   const labelRef = useRef<HTMLElement | null>(null);
   const floatingRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset highlight and keyboard nav when closing
+  // Reset highlight and keyboard nav when the list closes, including when
+  // disabling closes it under a parent that still holds `open`.
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || disabled) {
       setHighlightedIndex(-1);
       setIsKeyboardNav(false);
     }
-  }, [isOpen]);
+  }, [isOpen, disabled]);
 
   const widthRef = useRef(width);
   const { refs, floatingStyles, isPositioned, placement, update } =
