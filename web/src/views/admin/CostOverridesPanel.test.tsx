@@ -82,7 +82,9 @@ jest.mock("@/lib/languageModels/hooks", () => ({
 }));
 
 // A stand-in that exposes what the panel hands the picker: one button per
-// offered model, and a clear button when the picker is nullable.
+// offered model, and a clear button when the picker is nullable. The Model
+// row's <label> wraps these, so the first button takes the label's text as
+// its accessible name; tests find the buttons by their own text instead.
 jest.mock("@/lib/languageModels/components", () => {
   const { Button } =
     jest.requireActual<typeof import("@opal/components")>("@opal/components");
@@ -179,9 +181,7 @@ describe("CostOverridesPanel", () => {
     render(<CostOverridesPanel />);
 
     await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(
-      screen.getByRole("button", { name: "Choose shared-model" })
-    );
+    await user.click(screen.getByText("Choose shared-model"));
 
     await user.type(wholeAmountField(0), "3");
     await user.type(wholeAmountField(1), "4");
@@ -209,9 +209,7 @@ describe("CostOverridesPanel", () => {
     render(<CostOverridesPanel />);
 
     await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(
-      screen.getByRole("button", { name: "Choose hidden-model" })
-    );
+    await user.click(screen.getByText("Choose hidden-model"));
     await user.type(wholeAmountField(0), "1");
     await user.type(wholeAmountField(1), "2");
     const submitButton = within(screen.getByRole("dialog")).getByRole(
@@ -238,9 +236,7 @@ describe("CostOverridesPanel", () => {
     render(<CostOverridesPanel />);
 
     await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(
-      screen.getByRole("button", { name: "Choose shared-model" })
-    );
+    await user.click(screen.getByText("Choose shared-model"));
     await user.type(wholeAmountField(0), "3");
     await user.type(wholeAmountField(1), "4");
     const submitButton = within(screen.getByRole("dialog")).getByRole(
