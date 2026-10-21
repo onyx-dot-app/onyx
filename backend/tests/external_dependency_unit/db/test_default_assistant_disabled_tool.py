@@ -382,3 +382,104 @@ def test_default_selection_leaves_custom_agent_tools_alone(
     finally:
         db_session.delete(custom)
         db_session.commit()
+
+
+def test_tool_update_and_default_selection_do_not_deadlock(
+    db_session: Session,
+    make_tool: ToolFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A selection write locks the default assistant and then enables a legacy
+    OpenAPI tool. A tool update that changes default Chat overlaps it. The
+    update must take the persona lock before it writes the tool row, or
+    Postgres aborts one of the two as a deadlock."""
+    import threading
+    import time
+
+    from sqlalchemy import text
+
+    from onyx.db.models import User
+    from onyx.db.persona import set_default_chat_tools__no_commit
+    from onyx.server.features.tool import api
+    from onyx.server.features.tool.models import CustomToolUpdate
+    from tests.external_dependency_unit.tools.test_disabled_tool_not_constructed import (
+        OPENAPI_SCHEMA,
+    )
+
+    monkeypatch.setattr(api, "has_global_permission", lambda *_: True)
+    monkeypatch.setattr(api, "can_manage_tool", lambda *_: True)
+    monkeypatch.setattr(api, "_connected_tool_ids", lambda *_: set())
+    tool = make_tool(enabled=False, openapi=True)
+    tool.openapi_schema = OPENAPI_SCHEMA
+    db_session.commit()
+    tool_id = tool.id
+    bind = db_session.get_bind()
+
+    selection_locked = threading.Event()
+    update_waiting = threading.Event()
+    saw_lock_wait = False
+    update_pids: list[int] = []
+    errors: list[BaseException] = []
+
+    def select_tool() -> None:
+        try:
+            with Session(bind=bind) as session:
+                set_default_chat_tools__no_commit(session, [tool_id], True)
+                selection_locked.set()
+                update_waiting.wait(timeout=10)
+                session.commit()
+        except BaseException as error:
+            errors.append(error)
+            selection_locked.set()
+
+    def update_tool() -> None:
+        try:
+            selection_locked.wait(timeout=10)
+            with Session(bind=bind) as session:
+                update_pids.append(session.scalar(text("SELECT pg_backend_pid()")))
+                api.update_custom_tool(
+                    tool_id,
+                    CustomToolUpdate(name="renamed", default_chat_enabled=True),
+                    session,
+                    User(),
+                )
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [
+        threading.Thread(target=select_tool),
+        threading.Thread(target=update_tool),
+    ]
+    for thread in threads:
+        thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while not update_waiting.is_set() and time.monotonic() < deadline:
+            if update_pids:
+                waiting = db_session.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE pid = :pid AND wait_event_type = 'Lock'"
+                    ),
+                    {"pid": update_pids[0]},
+                )
+                db_session.rollback()
+                if waiting:
+                    saw_lock_wait = True
+                    update_waiting.set()
+            time.sleep(0.05)
+    finally:
+        update_waiting.set()
+        for thread in threads:
+            thread.join(timeout=20)
+
+    assert not errors, errors
+    assert saw_lock_wait, "the tool update did not wait on the persona lock"
+    db_session.expire_all()
+    updated = db_session.get(Tool, tool_id)
+    assert updated is not None
+    assert updated.name == "renamed"
+    assert updated.enabled is True
+    persona = get_default_assistant(db_session)
+    assert persona is not None
+    assert tool_id in [selected.id for selected in persona.tools]

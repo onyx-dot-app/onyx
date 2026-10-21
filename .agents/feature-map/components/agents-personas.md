@@ -322,8 +322,10 @@ flag but still require access and authentication. No migration rewrites existing
 See [[mcp-and-custom-tools]] §4.5 for the plugin API contract.
 
 All writers of the default assistant's tool list lock its persona row
-(`db/persona.py:_lock_default_assistant__no_commit`), so concurrent writes
-serialize. They change `persona__tool` rows with core SQL, not an ORM
+(`db/persona.py:lock_default_assistant__no_commit`), so concurrent writes
+serialize. Each writer takes this lock before it writes a `tool` row. The
+custom tool create and update routes take it before they save the tool, so
+the lock order cannot deadlock. They change `persona__tool` rows with core SQL, not an ORM
 collection replace, so a concurrent delete cannot cause `StaleDataError`.
 
 Frontend `useDefaultAssistantConfiguration.updateTools` sends only the changed

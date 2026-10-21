@@ -2114,7 +2114,7 @@ def get_default_assistant(db_session: Session) -> Persona | None:
     )
 
 
-def _lock_default_assistant__no_commit(db_session: Session) -> Persona:
+def lock_default_assistant__no_commit(db_session: Session) -> Persona:
     """Row-lock the default assistant so writers of its tool list serialize."""
     persona = db_session.scalar(
         select(Persona)
@@ -2170,7 +2170,7 @@ def set_default_chat_tools__no_commit(
     db_session: Session, tool_ids: Sequence[int], enabled: bool
 ) -> Persona:
     """Add or remove only the given tools, keeping the rest of the selection."""
-    persona = _lock_default_assistant__no_commit(db_session)
+    persona = lock_default_assistant__no_commit(db_session)
     if enabled:
         _attach_default_chat_tools__no_commit(
             db_session, persona, _get_selectable_tools(db_session, tool_ids)
@@ -2190,7 +2190,7 @@ def set_default_chat_tool__no_commit(
     db_session: Session, tool: Tool, enabled: bool
 ) -> None:
     """Change one selection without replacing other plugins' default settings."""
-    persona = _lock_default_assistant__no_commit(db_session)
+    persona = lock_default_assistant__no_commit(db_session)
     if enabled:
         _attach_default_chat_tools__no_commit(db_session, persona, [tool])
     else:
@@ -2223,7 +2223,7 @@ def update_default_assistant_configuration(
     Raises:
         ValueError: If default assistant not found or invalid tool IDs provided
     """
-    persona = _lock_default_assistant__no_commit(db_session)
+    persona = lock_default_assistant__no_commit(db_session)
 
     if update_system_prompt:
         persona.system_prompt = system_prompt
