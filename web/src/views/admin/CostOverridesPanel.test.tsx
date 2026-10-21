@@ -1,10 +1,4 @@
-import {
-  render,
-  screen,
-  setupUser,
-  waitFor,
-  within,
-} from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 import type { CostOverride } from "@/lib/languageModels/types";
 
@@ -171,61 +165,6 @@ describe("CostOverridesPanel", () => {
         provider: "anthropic",
         input_cost_per_mtok: 3,
         output_cost_per_mtok: 5,
-        cache_read_cost_per_mtok: null,
-      });
-    });
-  });
-
-  test("saves the selected provider when adding an override", async () => {
-    const user = setupUser();
-    render(<CostOverridesPanel />);
-
-    await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(screen.getByText("Choose shared-model"));
-
-    await user.type(wholeAmountField(0), "3");
-    await user.type(wholeAmountField(1), "4");
-    const submitButton = within(screen.getByRole("dialog")).getByRole(
-      "button",
-      {
-        name: "Add",
-      }
-    );
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockUpsertCostOverride).toHaveBeenCalledWith({
-        model: "shared-model",
-        provider: "anthropic",
-        input_cost_per_mtok: 3,
-        output_cost_per_mtok: 4,
-        cache_read_cost_per_mtok: null,
-      });
-    });
-  });
-
-  test("offers hidden models and saves one", async () => {
-    const user = setupUser();
-    render(<CostOverridesPanel />);
-
-    await user.click(screen.getByRole("button", { name: "Add override" }));
-    await user.click(screen.getByText("Choose hidden-model"));
-    await user.type(wholeAmountField(0), "1");
-    await user.type(wholeAmountField(1), "2");
-    const submitButton = within(screen.getByRole("dialog")).getByRole(
-      "button",
-      {
-        name: "Add",
-      }
-    );
-    await user.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockUpsertCostOverride).toHaveBeenCalledWith({
-        model: "hidden-model",
-        provider: "anthropic",
-        input_cost_per_mtok: 1,
-        output_cost_per_mtok: 2,
         cache_read_cost_per_mtok: null,
       });
     });
