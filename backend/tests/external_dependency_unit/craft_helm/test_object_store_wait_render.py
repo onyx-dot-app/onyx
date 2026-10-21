@@ -5,6 +5,13 @@ install on external object storage has no bundled store to wait for.
 Lives in the ``craft_helm`` shard, the lane that provides ``helm`` and builds
 the chart dependencies."""
 
+import socket
+import subprocess
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 import pytest
 import yaml
 
@@ -59,6 +66,50 @@ def test_api_waits_when_reused_values_have_no_object_store_key() -> None:
 
 def test_legacy_copy_waits_for_the_object_store() -> None:
     _assert_waits(_pod_spec(_COPY_TEMPLATE))
+
+
+class _StartingStoreHandler(BaseHTTPRequestHandler):
+    """Answers 503 once, as a store still starting, then 200."""
+
+    answered = 0
+
+    def do_GET(self) -> None:
+        type(self).answered += 1
+        self.send_response(503 if type(self).answered == 1 else 200)
+        self.end_headers()
+
+
+def test_wait_script_retries_until_the_store_answers() -> None:
+    spec = _pod_spec(_API_TEMPLATE)
+    assert spec is not None
+    script = spec["initContainers"][0]["command"][-1]
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    wait = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            script.replace(_HEALTH_URL, f"http://127.0.0.1:{port}/healthz"),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    # Nothing listens yet, so the first try is refused.
+    time.sleep(1)
+    server = HTTPServer(("127.0.0.1", port), _StartingStoreHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        output, _ = wait.communicate(timeout=30)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert wait.returncode == 0
+    assert "Connection refused" in output
+    assert "503" in output
+    assert _StartingStoreHandler.answered == 2
 
 
 def test_external_object_storage_has_no_wait() -> None:
