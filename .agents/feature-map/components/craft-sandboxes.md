@@ -222,7 +222,8 @@ external I/O (module docstring):
 A per-sandbox `CacheBackend` lock (`sandbox/locks.py:sandbox_provision_lock`)
 serializes creation and resource collection across replicas for both backends.
 A losing acquirer raises `SandboxProvisionContentionError`, which the lifecycle
-layer treats as retryable. Cache failure aborts the operation.
+layer treats as retryable. Cache failure during lock acquisition aborts the operation.
+Lock release errors are logged without replacing the operation's result or original error.
 
 `setup_session_workspace` (per-session, called after `provision`) execs into the
 pod (`k8s_stream`/`connect_get_namespaced_pod_exec`) to run a replay-safe,
