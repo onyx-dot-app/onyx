@@ -227,9 +227,8 @@ function FormContent({
       : t("addOpenApiModal.submitButton.addLabel");
 
   useEffect(() => {
-    if (!values.definition.trim()) {
-      setDefinitionError(null);
-    } else {
+    setDefinitionError(null);
+    if (values.definition.trim()) {
       debouncedValidateDefinition(values.definition);
     }
 

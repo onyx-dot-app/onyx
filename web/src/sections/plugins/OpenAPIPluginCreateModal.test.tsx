@@ -551,4 +551,11 @@ test("shows a schema validation error once before and after blur", async () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
   expect(screen.getAllByText(error)).toHaveLength(1);
+
+  fireEvent.change(schema, { target: { value: "" } });
+  fireEvent.blur(schema);
+  expect(
+    await screen.findAllByText("OpenAPI schema definition is required")
+  ).toHaveLength(1);
+  expect(screen.queryByText(error)).not.toBeInTheDocument();
 });
