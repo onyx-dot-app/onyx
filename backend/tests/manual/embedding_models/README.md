@@ -13,8 +13,9 @@ The suites read keys from plain env vars only. Do not put a gate in
 
 Key env vars. A cloud model without its key skips: `COHERE_API_KEY`,
 `OPENAI_API_KEY`, `VOYAGE_API_KEY`, `VERTEX_CREDENTIALS` (the path to a Google
-service-account JSON file). You can keep them in the gitignored
-`.vscode/.env.embedding-tests`.
+service-account JSON file). Keep them, and the e2e admin login
+(`ONYX_E2E_ADMIN_EMAIL`, `ONYX_E2E_ADMIN_PASSWORD`), in the gitignored
+`.vscode/.env.embedding-tests`, not on the command line.
 
 ## Commands
 
@@ -28,7 +29,6 @@ ONYX_RUN_CLOUD_EMBEDDING_TESTS=true uv run --env-file .vscode/.env.embedding-tes
   pytest -v -rs backend/tests/manual/embedding_models/test_cloud_embedding_models_live.py
 
 ONYX_EMBEDDING_E2E_ALLOW_MUTATION=true API_SERVER_PORT=18080 \
-ONYX_E2E_ADMIN_EMAIL=<admin email> ONYX_E2E_ADMIN_PASSWORD=<admin password> \
 ONYX_EMBEDDING_E2E_MODELS=ibm-granite/granite-embedding-97m-multilingual-r2,embed-v5.0-fast \
   uv run --env-file .vscode/.env.embedding-tests \
   pytest -v -s -rs backend/tests/manual/embedding_models/test_embedding_model_switch_e2e.py
