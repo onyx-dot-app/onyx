@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "Valeur par défaut globale"
       }
+    },
+    "appFooter": {
+      "slogan": "Plateforme d'IA open source"
     }
   },
   "craft": {
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "+{count} de plus"
+    },
+    "sidebar": {
+      "open": "Ouvrir la barre latérale",
+      "close": "Fermer la barre latérale"
     }
   },
   "settings": {

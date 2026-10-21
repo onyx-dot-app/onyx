@@ -6,33 +6,33 @@
       "account": "Angemeldet als {email}",
       "workspace": "Arbeitsbereich: {workspaceName}",
       "appAddress": "App-Adresse: {origin}",
-      "access": "Suchergebnisse aus Dokumenten lesen, auf die du Zugriff hast. Die Websuche nutzen und Webseiten öffnen.",
+      "access": "Suchergebnisse aus Dokumenten lesen, auf die Sie Zugriff haben. Die Websuche nutzen und Webseiten öffnen.",
       "allow": "Zugriff erlauben",
       "deny": "Ablehnen",
       "pending": "Auswahl wird gespeichert...",
       "loading": "Autorisierungsanfrage wird geladen...",
-      "unavailable": "Diese Anfrage ist abgelaufen oder wurde geändert. Starte erneut in deiner App.",
-      "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starte erneut in deiner App.",
-      "signInRequired": "Melde dich an, um diese App zu autorisieren.",
+      "unavailable": "Diese Anfrage ist abgelaufen oder wurde geändert. Starten Sie den Vorgang in Ihrer App erneut.",
+      "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starten Sie den Vorgang in Ihrer App erneut.",
+      "signInRequired": "Melden Sie sich an, um diese App zu autorisieren.",
       "signIn": "Anmelden",
-      "forbidden": "Du kannst diese App nicht autorisieren. Wende dich an die Administration deines Arbeitsbereichs.",
-      "loadFailed": "Onyx konnte diese Anfrage nicht laden. Versuche es erneut.",
+      "forbidden": "Sie können diese App nicht autorisieren. Wenden Sie sich an die Administration Ihres Arbeitsbereichs.",
+      "loadFailed": "Onyx konnte diese Anfrage nicht laden. Versuchen Sie es erneut.",
       "retry": "Erneut versuchen"
     },
     "connections": {
       "cancel": "Abbrechen",
       "title": "Verbundene Apps",
-      "description": "Apps, denen du erlaubt hast, Onyx zu durchsuchen.",
+      "description": "Apps, denen Sie erlaubt haben, Onyx zu durchsuchen.",
       "empty": "Keine verbundenen Apps.",
       "loading": "Verbundene Apps werden geladen...",
       "expires": "Läuft am {date} ab",
       "disconnect": "Trennen",
       "disconnectAriaLabel": "Verbindung zu {clientName} trennen",
       "pending": "Verbindung wird getrennt...",
-      "failed": "Die App konnte nicht getrennt werden. Versuche es erneut.",
+      "failed": "Die App konnte nicht getrennt werden. Versuchen Sie es erneut.",
       "loadFailed": "Verbundene Apps konnten nicht geladen werden.",
       "confirmTitle": "Verbindung mit {clientName} trennen?",
-      "confirmDescription": "Diese App verliert den Zugriff auf Onyx. Du kannst sie später erneut verbinden."
+      "confirmDescription": "Diese App verliert den Zugriff auf Onyx. Sie können sie später erneut verbinden."
     }
   },
   "accountPopover": {
@@ -227,7 +227,7 @@
       "agentDescription": {
         "title": "Beschreibung für Agenten",
         "hint": "Bearbeitet info.description im OpenAPI-Schema.",
-        "disabled": "Gib ein gültiges Schema ein, um dieses Feld zu bearbeiten."
+        "disabled": "Geben Sie ein gültiges Schema ein, um dieses Feld zu bearbeiten."
       }
     },
     "cardHeader": {
@@ -939,7 +939,7 @@
         "off": "Aus",
         "unknown": "Unbekannt",
         "disabledByAdmin": "Vom Admin deaktiviert",
-        "disabledByYou": "Von dir deaktiviert",
+        "disabledByYou": "Von Ihnen deaktiviert",
         "agents": "Benutzerdefinierte Agenten",
         "notAvailable": "Nicht verfügbar"
       },
@@ -955,7 +955,7 @@
         "appsError": "Craft-Apps konnten nicht geladen werden.",
         "appsLoading": "Craft-Apps werden geladen",
         "emptyTitle": "Keine Plugins gefunden",
-        "emptyDescription": "Versuche einen anderen Verbindungsfilter oder bitte deinen Workspace-Admin, ein Plugin hinzuzufügen."
+        "emptyDescription": "Versuchen Sie einen anderen Verbindungsfilter oder bitten Sie Ihren Workspace-Admin, ein Plugin hinzuzufügen."
       },
       "detail": {
         "issuesTitle": "Probleme",
@@ -1028,14 +1028,14 @@
         "search": "Skills suchen",
         "count": "{count, plural, one {# Skill} other {# Skills}}",
         "empty": "Mit dieser App sind keine Skills verknüpft.",
-        "noMatches": "Keine Skills entsprechen deiner Suche.",
+        "noMatches": "Keine Skills entsprechen Ihrer Suche.",
         "error": "Skills konnten nicht geladen werden.",
         "enabled": "Aktiviert",
         "disabled": "Deaktiviert",
         "loading": "Skills werden geladen…"
       },
       "externalApp": {
-        "description": "Verwende dein Konto in Craft.",
+        "description": "Verwenden Sie Ihr Konto in Craft.",
         "craftOnly": "Nur Craft",
         "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht.",
         "craftDisabledDescription": "Diese App ist in Craft deaktiviert. Der Hauptchat unterstützt sie nicht."
@@ -1092,7 +1092,7 @@
         "schemaPreview": {
           "detected": "{count, plural, one {# Tool erkannt} other {# Tools erkannt}}",
           "viewTools": "Tools anzeigen",
-          "saveToUpdate": "Speichere die Änderungen, um die Tools zu aktualisieren."
+          "saveToUpdate": "Speichern Sie die Änderungen, um die Tools zu aktualisieren."
         },
         "createTitle": "OpenAPI-Plugin hinzufügen",
         "detailDescription": "Verwalten Sie diese API und die Tools für Ihre Agenten.",
@@ -1105,7 +1105,7 @@
         "deleteDescription": "Dadurch werden das OpenAPI-Plugin und seine Konfiguration dauerhaft gelöscht."
       },
       "title": "Plugins",
-      "description": "Verbinde Tools und Apps mit deinem Workspace.",
+      "description": "Verbinden Sie Tools und Apps mit Ihrem Workspace.",
       "search": {
         "placeholder": "Plugins suchen"
       },
@@ -1121,7 +1121,7 @@
         },
         "hubspot": {
           "summary": "Mit Kontakten und Deals arbeiten",
-          "description": "Mit Kontakten und Deals arbeiten. Erfordert einen HubSpot-MCP-Connector."
+          "description": "Mit Kontakten und Deals arbeiten. Erfordert einen HubSpot-MCP-Konnektor."
         },
         "asana": {
           "summary": "Aufgaben und Projekte verwalten",
@@ -1178,7 +1178,7 @@
         "loading": "Plugins werden geladen",
         "empty": {
           "title": "Keine Plugins installiert",
-          "description": "Füge deinem Workspace ein Plugin hinzu.",
+          "description": "Fügen Sie Ihrem Workspace ein Plugin hinzu.",
           "explore": {
             "label": "Plugins entdecken"
           }
@@ -1204,12 +1204,12 @@
       "progress": "Einrichtungsfortschritt",
       "serverStep": "Server",
       "connectionStep": "Verbindung",
-      "permissionDenied": "Du hast keine Berechtigung, MCP-Server hinzuzufügen.",
-      "reviewSettings": "Prüfe die Servereinstellungen vor dem Verbinden.",
-      "urlDescription": "Gib die Server-URL ein, um Verbindung und Authentifizierung zu erkennen.",
+      "permissionDenied": "Sie haben keine Berechtigung, MCP-Server hinzuzufügen.",
+      "reviewSettings": "Prüfen Sie die Servereinstellungen vor dem Verbinden.",
+      "urlDescription": "Geben Sie die Server-URL ein, um Verbindung und Authentifizierung zu erkennen.",
       "detectedTransport": "Transport: {transport}",
       "retry": "Erneut prüfen",
-      "authenticationUndetected": "Wähle die Authentifizierungsmethode auf der nächsten Seite.",
+      "authenticationUndetected": "Wählen Sie die Authentifizierungsmethode auf der nächsten Seite.",
       "configureManually": "Manuell konfigurieren",
       "details": "Details",
       "checking": "Server wird geprüft…",
@@ -1315,7 +1315,7 @@
         }
       },
       "popular": {
-        "title": "Connector hinzufügen",
+        "title": "Konnektor hinzufügen",
         "description": "Verbinden Sie {appName} mit Ihren Datenquellen."
       },
       "search": {
@@ -1922,7 +1922,7 @@
             "text": "**Deaktiviert:** Standardantworten und SCIM-Token;"
           },
           "intro": {
-            "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindizierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
+            "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindexierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
           "madePublic": {
             "text": "**Öffentlich gemacht:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
@@ -2541,7 +2541,7 @@
         }
       },
       "deleteModal": {
-        "additionalDetails": "Beim Löschen dieses Konnektors wird ein Löschauftrag geplant, der seine indizierten Dokumente entfernt und ihn für alle Benutzer löscht.",
+        "additionalDetails": "Beim Löschen dieses Konnektors wird ein Löschauftrag geplant, der seine indexierten Dokumente entfernt und ihn für alle Benutzer löscht.",
         "entityType": "Konnektor"
       },
       "deletionError": {
@@ -2550,7 +2550,7 @@
       },
       "docsLink": {
         "checkOutDocs": {
-          "text": "In <link>unserer Dokumentation</link> findest du weitere Informationen zur Konfiguration dieses Konnektors."
+          "text": "In <link>unserer Dokumentation</link> finden Sie weitere Informationen zur Konfiguration dieses Konnektors."
         }
       },
       "fileManagement": {
@@ -2566,7 +2566,7 @@
           "uploadDate": "Hochladedatum"
         },
         "confirmModal": {
-          "addDetails": "Neue Dateien werden hochgeladen, in Chunks zerlegt, eingebettet und im Dokumentenindex indiziert",
+          "addDetails": "Neue Dateien werden hochgeladen, in Chunks zerlegt, eingebettet und im Dokumentenindex indexiert",
           "addSummary": "{count} Datei(en) werden hinzugefügt",
           "confirmButton": {
             "label": "Bestätigen & speichern"
@@ -2601,7 +2601,7 @@
         },
         "toasts": {
           "cannotRemoveAllFiles": "Es können nicht alle Dateien aus einem Konnektor entfernt werden. Löschen Sie den Konnektor, wenn Sie das möchten.",
-          "filesUpdated": "Dateien erfolgreich aktualisiert! Der Dokumentenindex wird im Hintergrund aktualisiert. Neue Dateien werden indiziert und entfernte Dateien werden aus den Suchergebnissen bereinigt.",
+          "filesUpdated": "Dateien erfolgreich aktualisiert! Der Dokumentenindex wird im Hintergrund aktualisiert. Neue Dateien werden indexiert und entfernte Dateien werden aus den Suchergebnissen bereinigt.",
           "updateFailed": "Die Dateien konnten nicht aktualisiert werden"
         },
         "units": "{count, plural, one {Datei} other {Dateien}}"
@@ -2622,7 +2622,7 @@
         "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
         "picker": {
-          "placeholder": "Gruppen hinzufügen, um den Zugriff auf diesen Connector zu beschränken"
+          "placeholder": "Gruppen hinzufügen, um den Zugriff auf diesen Konnektor zu beschränken"
         },
         "remove": {
           "tooltip": "{name} entfernen"
@@ -2637,7 +2637,7 @@
         "managerCount": "{count, plural, one {# Gruppenmanager} other {# Gruppenmanager}}"
       },
       "invalidState": {
-        "description": "Dieser Konnektor befindet sich in einem ungültigen Zustand. Bitte aktualisieren Sie Ihre Anmeldedaten oder erstellen Sie einen neuen Konnektor, bevor Sie neu indizieren.",
+        "description": "Dieser Konnektor befindet sich in einem ungültigen Zustand. Bitte aktualisieren Sie Ihre Anmeldedaten oder erstellen Sie einen neuen Konnektor, bevor Sie neu indexieren.",
         "title": "Ungültiger Konnektorzustand"
       },
       "loadError": {
@@ -2650,18 +2650,18 @@
         },
         "reIndex": {
           "tooltip": {
-            "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
-            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
-            "paused": "Setzen Sie den Konnektor vor der Neuindizierung fort"
+            "indexing": "Eine Neuindexierung ist nicht möglich, während bereits eine Indexierung läuft",
+            "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindexierung",
+            "paused": "Setzen Sie den Konnektor vor der Neuindexierung fort"
           }
         },
         "toggleStatus": {
           "pause": {
-            "label": "Indizierung & Synchronisation pausieren",
+            "label": "Indexierung & Synchronisation pausieren",
             "description": "Laufende und künftige Indexläufe und Berechtigungssynchronisierungen abbrechen. Indexierte Dokumente sind dann nicht mehr aktuell, bleiben aber durchsuchbar."
           },
           "resume": {
-            "label": "Indizierung & Synchronisation fortsetzen",
+            "label": "Indexierung & Synchronisation fortsetzen",
             "description": "Indexläufe und Berechtigungssynchronisierungen wieder starten."
           },
           "tooltip": {
@@ -2673,15 +2673,15 @@
         },
         "updateIndex": {
           "label": "Index aktualisieren",
-          "description": "Änderungen seit dem letzten erfolgreichen Indexlauf abrufen und indizieren."
+          "description": "Änderungen seit dem letzten erfolgreichen Indexlauf abrufen und indexieren."
         },
         "fullReindex": {
-          "label": "Vollständig neu indizieren",
-          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang **Stunden oder Tage** dauern."
+          "label": "Vollständig neu indexieren",
+          "description": "Alle Dokumente der Quelle neu indexieren. Das kann je nach Umfang **Stunden oder Tage** dauern."
         },
         "startIndexing": {
           "label": "Indexierung starten",
-          "description": "Konnektorprüfungen überspringen und jetzt indexieren."
+          "description": "Konnektor-Prüfungen überspringen und jetzt indexieren."
         },
         "syncPermissions": {
           "label": "Berechtigungen synchronisieren",
@@ -2793,7 +2793,7 @@
             "label": "Berechtigungsprüfung"
           },
           "postIndexDbUpdate": {
-            "label": "DB-Aktualisierung nach Indizierung"
+            "label": "DB-Aktualisierung nach Indexierung"
           },
           "queueWait": {
             "label": "Warteschlangenzeit"
@@ -2816,9 +2816,9 @@
           "label": "Indexierte Dokumente"
         },
         "indexingSpeed": "{speed} Dok./Min.",
-        "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Connectors",
+        "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Konnektors",
         "lastIndexed": {
-          "value": "Zuletzt indiziert {when}"
+          "value": "Zuletzt indexiert {when}"
         },
         "statusLine": "Indexierungsstatus - {detail}",
         "documents": {
@@ -2827,7 +2827,7 @@
           "totalLabel": "Gesamt"
         },
         "throughput": {
-          "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
+          "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
           "loadError": "Das Diagramm konnte nicht geladen werden.",
           "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
@@ -2839,16 +2839,16 @@
           "start": "Indexierung starten",
           "released": "Indexierung gestartet",
           "releaseFailed": "Indexierung konnte nicht gestartet werden",
-          "viewChecks": "Connector-Prüfungen anzeigen"
+          "viewChecks": "Konnektor-Prüfungen anzeigen"
         },
         "title": "Indexierungsstatus"
       },
       "toasts": {
-        "completeReindexStarted": "Vollständige Neuindizierung erfolgreich gestartet",
+        "completeReindexStarted": "Vollständige Neuindexierung erfolgreich gestartet",
         "deletionScheduleFailed": "Das Löschen des Konnektors konnte nicht geplant werden - {message}",
-        "indexingStartFailed": "Die Indizierung konnte nicht gestartet werden",
-        "indexingStartUnexpectedError": "Beim Starten der Indizierung ist ein unerwarteter Fehler aufgetreten",
-        "indexingUpdateStarted": "Indizierungsaktualisierung erfolgreich gestartet",
+        "indexingStartFailed": "Die Indexierung konnte nicht gestartet werden",
+        "indexingStartUnexpectedError": "Beim Starten der Indexierung ist ein unerwarteter Fehler aufgetreten",
+        "indexingUpdateStarted": "Indexierungsaktualisierung erfolgreich gestartet",
         "nameUpdateFailed": "Der Konnektorname konnte nicht aktualisiert werden",
         "nameUpdated": "Konnektorname erfolgreich aktualisiert",
         "noUnresolvedErrors": "Keine nicht behobenen Fehler für einen erneuten Versuch.",
@@ -2856,10 +2856,10 @@
         "pruningFrequencyUpdated": "Bereinigungsintervall des Konnektors erfolgreich aktualisiert",
         "refreshFrequencyUpdateFailed": "Das Aktualisierungsintervall des Konnektors konnte nicht aktualisiert werden",
         "refreshFrequencyUpdated": "Aktualisierungsintervall des Konnektors erfolgreich aktualisiert",
-        "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
-        "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
-        "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
-        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
+        "targetedReindexFailed": "Die gezielte Neuindexierung ist fehlgeschlagen: {message}",
+        "targetedReindexSubmitted": "Gezielte Neuindexierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indexiert sind.",
+        "checkFrequencyUpdated": "Prüfintervall des Konnektors erfolgreich aktualisiert",
+        "checkFrequencyUpdateFailed": "Prüfintervall des Konnektors konnte nicht aktualisiert werden",
         "runResolved": "Als behoben markiert.",
         "runResolveFailed": "Konnte nicht als behoben markiert werden: {message}",
         "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert.",
@@ -2974,7 +2974,7 @@
           "doc_permission_sync": "Berechtigungssync",
           "group_sync": "Gruppenmitgliedschaftssync",
           "pruning": "Dokumentbereinigung",
-          "checks": "Connector-Prüfungen"
+          "checks": "Konnektor-Prüfungen"
         },
         "detail": {
           "queued": "In Warteschlange",
@@ -2999,7 +2999,7 @@
           "tooltip": "Mit dem Embedding-Modell indexiert, das das aktuelle Modell ersetzt."
         },
         "figures": {
-          "indexed": "indiziert",
+          "indexed": "indexiert",
           "synced": "synchronisiert",
           "removed": "entfernt",
           "checksRun": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}",
@@ -3057,14 +3057,14 @@
           "doc_permission_sync": "Fehler beim Dokumentberechtigungssync",
           "group_sync": "Fehler beim Gruppenmitgliedschaftssync",
           "pruning": "Fehler bei der Dokumentbereinigung",
-          "checks": "Fehler bei den Connector-Prüfungen"
+          "checks": "Fehler bei den Konnektor-Prüfungen"
         },
         "toasts": {
           "canceled": "Der Lauf wird abgebrochen.",
           "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
         },
         "checkResults": {
-          "title": "Connector-Prüfungen",
+          "title": "Konnektor-Prüfungen",
           "close": "Schließen",
           "count": "({count})"
         },
@@ -3142,16 +3142,16 @@
             "canceled": "Bereinigung gestoppt."
           },
           "checks": {
-            "failed": "Connector-Prüfungen fehlgeschlagen.",
-            "failedWith": "Connector-Prüfungen fehlgeschlagen: {reason}.",
-            "running": "Connector-Prüfungen laufen mit Fehlern.",
-            "stopped": "Connector-Prüfungen mit Fehlern gestoppt.",
-            "errors": "Connector-Prüfungen mit Fehlern abgeschlossen.",
-            "resolved": "Fehler der Connector-Prüfungen behoben.",
-            "succeeded": "Connector-Prüfungen bestanden.",
-            "queued": "Connector-Prüfungen in der Warteschlange.",
-            "inProgress": "Connector-Prüfungen laufen.",
-            "canceled": "Connector-Prüfungen gestoppt."
+            "failed": "Konnektor-Prüfungen fehlgeschlagen.",
+            "failedWith": "Konnektor-Prüfungen fehlgeschlagen: {reason}.",
+            "running": "Konnektor-Prüfungen laufen mit Fehlern.",
+            "stopped": "Konnektor-Prüfungen mit Fehlern gestoppt.",
+            "errors": "Konnektor-Prüfungen mit Fehlern abgeschlossen.",
+            "resolved": "Fehler der Konnektor-Prüfungen behoben.",
+            "succeeded": "Konnektor-Prüfungen bestanden.",
+            "queued": "Konnektor-Prüfungen in der Warteschlange.",
+            "inProgress": "Konnektor-Prüfungen laufen.",
+            "canceled": "Konnektor-Prüfungen gestoppt."
           }
         },
         "description": {
@@ -3192,7 +3192,7 @@
           },
           "resolveAll": "Alle erneut versuchen",
           "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
-          "resolveAllUnsupported": "Dieser Connector kann einzelne Dokumente nicht neu indexieren. Indexieren Sie den Connector neu, um sie erneut zu versuchen.",
+          "resolveAllUnsupported": "Dieser Konnektor kann einzelne Dokumente nicht neu indexieren. Indexieren Sie den Konnektor neu, um sie erneut zu versuchen.",
           "resolveOne": "Dieses Dokument erneut versuchen",
           "retry": "{count, plural, one {# Dokument erneut versuchen} other {# Dokumente erneut versuchen}}",
           "more": "Mehr",
@@ -3214,7 +3214,7 @@
           "button": "Alle angezeigten beheben",
           "title": "Alle angezeigten Läufe beheben?",
           "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
-          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, auf den Connectoren, die Sie verwalten, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
+          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, bei den Konnektoren, die Sie verwalten, als behoben markiert. Die Läufe behalten ihren Status und erscheinen unter „Behoben“.",
           "confirm": "Alle beheben"
         },
         "resolved": {
@@ -3254,18 +3254,18 @@
     },
     "connectorsList": {
       "oneDrive": {
-        "description": "OneDrive-Connector konfigurieren",
+        "description": "OneDrive-Konnektor konfigurieren",
         "indexingScope": {
           "label": "Zu indexierende OneDrive-Dateien",
           "general": {
             "label": "Allgemein",
-            "description": "Alle berechtigten Benutzer indizieren, auf die die Microsoft-Anwendung zugreifen kann."
+            "description": "Alle berechtigten Benutzer indexieren, auf die die Microsoft-Anwendung zugreifen kann."
           },
           "specific": {
             "label": "Bestimmte",
             "users": {
               "label": "Benutzer",
-              "description": "Fügen Sie für jeden zu indizierenden Benutzer den Benutzerprinzipalnamen oder die primäre E-Mail-Adresse hinzu.",
+              "description": "Fügen Sie für jeden zu indexierenden Benutzer den Benutzerprinzipalnamen oder die primäre E-Mail-Adresse hinzu.",
               "required": "Fügen Sie mindestens einen Benutzer für den bestimmten Bereich hinzu"
             }
           }
@@ -3288,7 +3288,7 @@
         }
       },
       "linear": {
-        "description": "Linear-Connector konfigurieren",
+        "description": "Linear-Konnektor konfigurieren",
         "teams": {
           "label": "Teams",
           "description": "Linear-Teamschlüssel (z. B. ENG), die indexiert werden sollen. Leer lassen, um jedes Team zu indexieren, das der verbundene Benutzer sehen kann."
@@ -3314,7 +3314,7 @@
           "title": "Anmeldedaten für {source} erstellen"
         },
         "credentialsLoadFailed": {
-          "description": "Anmeldedaten können gerade nicht eingerichtet werden. Lade die Seite neu oder versuche es später erneut.",
+          "description": "Anmeldedaten können gerade nicht eingerichtet werden. Laden Sie die Seite neu oder versuchen Sie es später erneut.",
           "title": "Anmeldedaten konnten nicht geladen werden"
         },
         "credentialStep": {
@@ -3400,14 +3400,14 @@
           },
           "deleteButton": {
             "label": "Konto löschen",
-            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden."
+            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Konnektoren sie verwenden."
           },
           "updateButton": {
             "label": "Anmeldedaten aktualisieren",
-            "tooltip": "Ändert die gespeicherten Werte für jeden Connector, der dieses Konto nutzt."
+            "tooltip": "Ändert die gespeicherten Werte für jeden Konnektor, der dieses Konto nutzt."
           },
           "usedBy": {
-            "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
+            "label": "Verwendet von {count, plural, one {# Konnektor} other {# Konnektoren}}"
           },
           "owner": {
             "you": "{name} (Sie)"
@@ -3440,7 +3440,7 @@
             "toast": "Konto umbenannt."
           },
           "renameFailed": {
-            "toast": "Das Konto konnte nicht umbenannt werden. Versuche es erneut."
+            "toast": "Das Konto konnte nicht umbenannt werden. Versuchen Sie es erneut."
           },
           "onlyMeOwnerOnly": {
             "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, kann es privat machen."
@@ -3457,7 +3457,7 @@
         }
       },
       "credentialRequired": {
-        "tooltip": "Wähle zuerst einen Zugang aus."
+        "tooltip": "Wählen Sie zuerst einen Zugang aus."
       },
       "bindingGate": {
         "enterField": "Geben Sie das Feld „{field}“ ein.",
@@ -3482,8 +3482,8 @@
           "pendingLabel": "Wird authentifiziert..."
         },
         "oauthOption": {
-          "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Drive Sie indizieren möchten.",
-          "sharedScopesNote": "Google fragt den Zugriff auf Google Drive und Gmail gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Google Drive zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Gmail-Bereichen ([warum wir fragen]({docsUrl}))."
+          "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Drive Sie indexieren möchten.",
+          "sharedScopesNote": "Google fragt den Zugriff auf Google Drive und Gmail gemeinsam an, damit ein Konto beide Konnektoren versorgen kann. Um dieses Konto nur für Google Drive zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Gmail-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
@@ -3498,8 +3498,8 @@
           "pendingLabel": "Wird authentifiziert..."
         },
         "oauthOption": {
-          "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Gmail Sie indizieren möchten.",
-          "sharedScopesNote": "Google fragt den Zugriff auf Gmail und Google Drive gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Gmail zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Google-Drive-Bereichen ([warum wir fragen]({docsUrl}))."
+          "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Gmail Sie indexieren möchten.",
+          "sharedScopesNote": "Google fragt den Zugriff auf Gmail und Google Drive gemeinsam an, damit ein Konto beide Konnektoren versorgen kann. Um dieses Konto nur für Gmail zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Google-Drive-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
@@ -3510,9 +3510,9 @@
           "label": "Abbrechen"
         },
         "connectButton": {
-          "label": "Connector erstellen"
+          "label": "Konnektor erstellen"
         },
-        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
+        "description": "Verbinden Sie sich mit {source} und richten Sie den Konnektor für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -3616,8 +3616,8 @@
         }
       },
       "content": {
-        "title": "Connector-Inhalte",
-        "description": "Wählen Sie die Inhalte aus, die für diesen Connector indexiert werden sollen."
+        "title": "Konnektor-Inhalte",
+        "description": "Wählen Sie die Inhalte aus, die für diesen Konnektor indexiert werden sollen."
       },
       "selectInput": {
         "emptyOption": {
@@ -3643,7 +3643,7 @@
         }
       },
       "scheduled": {
-        "description": "Legen Sie fest, wie der Connector die Indexierung durchführt. Der Betreiber kann diesen Abschnitt bearbeiten.",
+        "description": "Legen Sie fest, wie der Konnektor die Indexierung durchführt. Der Betreiber kann diesen Abschnitt bearbeiten.",
         "indexingStart": {
           "description": "Dokumente, deren letztes Änderungsdatum davor liegt, werden ignoriert.",
           "placeholder": "Gesamter Zeitraum",
@@ -3668,24 +3668,24 @@
         }
       },
       "settings": {
-        "description": "Connector-Informationen und Zugriff.",
+        "description": "Konnektor-Informationen und Zugriff.",
         "displayName": {
-          "title": "Anzeigename des Connectors"
+          "title": "Anzeigename des Konnektors"
         },
         "documentAccess": {
-          "description": "Legen Sie fest, wer auf die von diesem Connector indexierten Dokumente zugreifen kann.",
+          "description": "Legen Sie fest, wer auf die von diesem Konnektor indexierten Dokumente zugreifen kann.",
           "everyone": {
-            "description": "Von diesem Connector indexierte Dokumente sind für alle in Ihrer Organisation öffentlich.",
+            "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation öffentlich.",
             "title": "Alle in Ihrer Organisation"
           },
           "specificGroups": {
-            "description": "Benennen Sie Gruppen, die auf Dokumente dieses Connectors zugreifen können.",
+            "description": "Benennen Sie Gruppen, die auf Dokumente dieses Konnektors zugreifen können.",
             "required": "Wählen Sie mindestens eine Gruppe aus.",
             "title": "Bestimmte Gruppen"
           },
           "sync": {
             "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
-            "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
+            "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechseln Sie zu einer unterstützten Authentifizierungsmethode.",
             "title": "Mit {source} synchronisieren"
           },
           "title": "Dokumentzugriff"
@@ -3695,9 +3695,9 @@
             "alwaysShared": "Immer geteilt",
             "title": "Admins"
           },
-          "description": "Legen Sie fest, wer den Connector betreiben (Indexierung planen und überwachen) und/oder seine Konfiguration bearbeiten kann.",
-          "note": "Nur Nutzer mit der Berechtigung „Connectors verwalten“ (Gruppenmanager-Rolle oder Gruppenberechtigungen) erhalten Zugriff, um Connectors zu betreiben und/oder zu bearbeiten.",
-          "placeholder": "Gruppen hinzufügen, um diesen Connector zu teilen",
+          "description": "Legen Sie fest, wer den Konnektor betreiben (Indexierung planen und überwachen) und/oder seine Konfiguration bearbeiten kann.",
+          "note": "Nur Nutzer mit der Berechtigung „Konnektoren verwalten“ (Gruppenmanager-Rolle oder Gruppenberechtigungen) erhalten Zugriff, um Konnektoren zu betreiben und/oder zu bearbeiten.",
+          "placeholder": "Gruppen hinzufügen, um diesen Konnektor zu teilen",
           "role": {
             "editor": {
               "description": "Konfigurationen ändern/löschen.",
@@ -3714,9 +3714,9 @@
               "label": "Zugriff entfernen"
             }
           },
-          "title": "Verwaltungszugriff für den Connector"
+          "title": "Verwaltungszugriff für den Konnektor"
         },
-        "title": "Connector-Einstellungen"
+        "title": "Konnektor-Einstellungen"
       },
       "optionsListInput": {
         "placeholder": "{label} aus der Liste wählen oder eingeben"
@@ -3750,7 +3750,7 @@
             },
             "group_id": {
               "label": "Zoom-Gruppen-ID",
-              "description": "Indexiert alle Sitzungen, die die Mitglieder einer Zoom-Gruppe als Host durchführen, und zwar der unten ausgewählten Typen. Zoom liest die Mitgliederliste bei jedem Durchlauf neu ein, sodass neue und ausgeschiedene Mitglieder ohne Änderung dieses Connectors berücksichtigt werden."
+              "description": "Indexiert alle Sitzungen, die die Mitglieder einer Zoom-Gruppe als Host durchführen, und zwar der unten ausgewählten Typen. Zoom liest die Mitgliederliste bei jedem Durchlauf neu ein, sodass neue und ausgeschiedene Mitglieder ohne Änderung dieses Konnektors berücksichtigt werden."
             },
             "include_meetings": {
               "label": "Meetings einbeziehen",
@@ -3770,18 +3770,18 @@
                 "pro": "pro",
                 "business_plus": "business_plus"
               },
-              "description": "Legt fest, wie schnell dieser Connector Zoom aufrufen darf. Wählen Sie `pro` bei einem Pro-Konto und `business_plus` bei Business, Education, Enterprise oder Partner."
+              "description": "Legt fest, wie schnell dieser Konnektor Zoom aufrufen darf. Wählen Sie `pro` bei einem Pro-Konto und `business_plus` bei Business, Education, Enterprise oder Partner."
             },
             "rate_limit_percent": {
               "label": "Zoom-API-Ratenlimit",
-              "description": "Ganzzahliger Prozentwert von 1 bis 100 des Zoom-Ratenlimits des Kontos, den dieser Connector verbrauchen darf. Leer bedeutet 50, was Spielraum für andere Zoom-Integrationen des Kunden lässt. Jeder Zoom-Connector taktet sich selbst und sieht die anderen nicht. Zwei Connectors auf einem Zoom-Konto verbrauchen also jeweils diesen Prozentwert – teilen Sie ihn, wenn Sie mehrere betreiben."
+              "description": "Ganzzahliger Prozentwert von 1 bis 100 des Zoom-Ratenlimits des Kontos, den dieser Konnektor verbrauchen darf. Leer bedeutet 50, was Spielraum für andere Zoom-Integrationen des Kunden lässt. Jeder Zoom-Konnektor taktet sich selbst und sieht die anderen nicht. Zwei Konnektoren auf einem Zoom-Konto verbrauchen also jeweils diesen Prozentwert – teilen Sie ihn, wenn Sie mehrere betreiben."
             }
           },
-          "description": "Zoom-Connector konfigurieren",
+          "description": "Zoom-Konnektor konfigurieren",
           "subtext": "Indexiert das Cloud-Recording-Transkript jeder Zoom-Sitzung, ab einem Zoom-Pro-Tarif. Eine Sitzung, die nie in der Cloud aufgezeichnet wurde, wird übersprungen. Legen Sie unter Erweitert ein Startdatum für die Indexierung fest. Zoom listet Aufzeichnungen pro Anfrage für einen Monat auf. Ohne Startdatum fragt der erste Crawl daher jeden Monat bis 2013 ab und verbraucht das API-Kontingent Ihres Kontos für Jahre ohne Inhalte."
         },
         "web": {
-          "description": "Web-Connector konfigurieren",
+          "description": "Web-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Basis-URL",
@@ -3810,7 +3810,7 @@
           }
         },
         "lumapps": {
-          "description": "LumApps-Connector konfigurieren",
+          "description": "LumApps-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "API-Basis-URL (Cell-Host)",
@@ -3835,7 +3835,7 @@
           }
         },
         "youtrack": {
-          "description": "YouTrack-Connector konfigurieren",
+          "description": "YouTrack-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "YouTrack-URL",
@@ -3848,7 +3848,7 @@
           }
         },
         "github": {
-          "description": "GitHub-Connector konfigurieren",
+          "description": "GitHub-Konnektor konfigurieren",
           "fields": {
             "github_base_url": {
               "label": "URL des GitHub Enterprise Servers",
@@ -3875,7 +3875,7 @@
             },
             "everything": {
               "label": "Alles",
-              "description": "Dieser Connector indexiert alle Repositories, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "description": "Dieser Konnektor indexiert alle Repositories, auf die die angegebenen Zugangsdaten Zugriff haben!"
             },
             "include_prs": {
               "label": "Pull Requests einbeziehen",
@@ -3891,12 +3891,12 @@
             },
             "branch": {
               "label": "Branch",
-              "description": "Branch, aus dem Dokumente indexiert werden (z. B. gh-pages). Leer lassen, um den Standard-Branch jedes Repositorys zu verwenden. Gilt nur, wenn \"Dokumente einbeziehen\" aktiviert ist. Nach einer Änderung bei einem bestehenden Connector eine Neuindexierung auslösen, damit der neue Branch sofort übernommen wird."
+              "description": "Branch, aus dem Dokumente indexiert werden (z. B. gh-pages). Leer lassen, um den Standard-Branch jedes Repositorys zu verwenden. Gilt nur, wenn \"Dokumente einbeziehen\" aktiviert ist. Nach einer Änderung bei einem bestehenden Konnektor eine Neuindexierung auslösen, damit der neue Branch sofort übernommen wird."
             }
           }
         },
         "testrail": {
-          "description": "TestRail-Connector konfigurieren",
+          "description": "TestRail-Konnektor konfigurieren",
           "fields": {
             "testrail_base_url": {
               "label": "TestRail-Basis-URL",
@@ -3921,7 +3921,7 @@
           }
         },
         "gitlab": {
-          "description": "GitLab-Connector konfigurieren",
+          "description": "GitLab-Konnektor konfigurieren",
           "fields": {
             "gitlab_url": {
               "label": "GitLab-URL",
@@ -3944,8 +3944,8 @@
           }
         },
         "bitbucket": {
-          "description": "Bitbucket-Connector konfigurieren",
-          "subtext": "Bitbucket-Connector konfigurieren (nur Cloud). Sie können einen Workspace, bestimmte Projekte oder Repositories indexieren.",
+          "description": "Bitbucket-Konnektor konfigurieren",
+          "subtext": "Bitbucket-Konnektor konfigurieren (nur Cloud). Sie können einen Workspace, bestimmte Projekte oder Repositories indexieren.",
           "fields": {
             "workspace": {
               "label": "Workspace",
@@ -3975,12 +3975,12 @@
             },
             "workspace_tab": {
               "label": "Workspace",
-              "description": "Dieser Connector indexiert alle Repositories im Workspace."
+              "description": "Dieser Konnektor indexiert alle Repositories im Workspace."
             }
           }
         },
         "gitbook": {
-          "description": "GitBook-Connector konfigurieren",
+          "description": "GitBook-Konnektor konfigurieren",
           "fields": {
             "space_id": {
               "label": "Space-ID",
@@ -3989,7 +3989,7 @@
           }
         },
         "google_drive": {
-          "description": "Google-Drive-Connector konfigurieren",
+          "description": "Google-Drive-Konnektor konfigurieren",
           "fields": {
             "credential_kind": {
               "label": "Art der Zugangsdaten"
@@ -4051,10 +4051,10 @@
           }
         },
         "gmail": {
-          "description": "Gmail-Connector konfigurieren"
+          "description": "Gmail-Konnektor konfigurieren"
         },
         "bookstack": {
-          "description": "BookStack-Connector konfigurieren",
+          "description": "BookStack-Konnektor konfigurieren",
           "fields": {
             "bookstack_base_url": {
               "label": "BookStack-Basis-URL",
@@ -4063,7 +4063,7 @@
           }
         },
         "outline": {
-          "description": "Outline-Connector konfigurieren",
+          "description": "Outline-Konnektor konfigurieren",
           "fields": {
             "outline_base_url": {
               "label": "Outline-Basis-URL",
@@ -4072,7 +4072,7 @@
           }
         },
         "confluence": {
-          "description": "Confluence-Connector konfigurieren",
+          "description": "Confluence-Konnektor konfigurieren",
           "fields": {
             "is_cloud": {
               "label": "Ist Cloud",
@@ -4100,7 +4100,7 @@
             },
             "everything": {
               "label": "Alles",
-              "description": "Dieser Connector indexiert alle Seiten, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "description": "Dieser Konnektor indexiert alle Seiten, auf die die angegebenen Zugangsdaten Zugriff haben!"
             },
             "space": {
               "label": "Space-Schlüssel",
@@ -4116,12 +4116,12 @@
             },
             "cql_query": {
               "label": "CQL-Abfrage",
-              "description": "WICHTIG: Derzeit werden nur CQL-Abfragen unterstützt, die Objekte vom Typ 'page' zurückgeben. Das heißt, jede CQL-Abfrage muss 'type=page' als einzigen Typfilter enthalten. Außerdem dürfen keine Filter für 'lastModified' verwendet werden, da sie die Polling-Logik unseres Connectors stören. Verwenden Sie kein ORDER BY, da der Connector die Sortierung selbst festlegt. Zu den von der CQL-Abfrage gelieferten Seiten werden weiterhin alle Anhänge und Kommentare abgerufen. Alle 'lastmodified'-Filter werden überschrieben. Weitere Details finden Sie in der [CQL-Dokumentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) von Atlassian."
+              "description": "WICHTIG: Derzeit werden nur CQL-Abfragen unterstützt, die Objekte vom Typ 'page' zurückgeben. Das heißt, jede CQL-Abfrage muss 'type=page' als einzigen Typfilter enthalten. Außerdem dürfen keine Filter für 'lastModified' verwendet werden, da sie die Polling-Logik unseres Konnektors stören. Verwenden Sie kein ORDER BY, da der Konnektor die Sortierung selbst festlegt. Zu den von der CQL-Abfrage gelieferten Seiten werden weiterhin alle Anhänge und Kommentare abgerufen. Alle 'lastmodified'-Filter werden überschrieben. Weitere Details finden Sie in der [CQL-Dokumentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) von Atlassian."
             }
           }
         },
         "jira": {
-          "description": "Jira-Connector konfigurieren",
+          "description": "Jira-Konnektor konfigurieren",
           "subtext": "Legen Sie fest, welche Jira-Inhalte indexiert werden. Sie können alles indexieren oder ein bestimmtes Projekt angeben.",
           "fields": {
             "jira_base_url": {
@@ -4143,7 +4143,7 @@
             },
             "everything": {
               "label": "Alles",
-              "description": "Dieser Connector indexiert alle Issues, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "description": "Dieser Konnektor indexiert alle Issues, auf die die angegebenen Zugangsdaten Zugriff haben!"
             },
             "project_key": {
               "label": "Projektschlüssel",
@@ -4151,7 +4151,7 @@
             },
             "jql_query": {
               "label": "JQL-Abfrage",
-              "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern von Jira-Issues.\n\nWICHTIG: Nehmen Sie keine zeitbasierten Filter in die JQL-Abfrage auf, da diese mit der Logik des Connectors kollidieren. Verwenden Sie außerdem keine ORDER-BY-Klauseln.\n\nWeitere Details zur Syntax finden Sie in der [JQL-Dokumentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) von Atlassian."
+              "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern von Jira-Issues.\n\nWICHTIG: Nehmen Sie keine zeitbasierten Filter in die JQL-Abfrage auf, da diese mit der Logik des Konnektors kollidieren. Verwenden Sie außerdem keine ORDER-BY-Klauseln.\n\nWeitere Details zur Syntax finden Sie in der [JQL-Dokumentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) von Atlassian."
             },
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
@@ -4160,7 +4160,7 @@
           }
         },
         "salesforce": {
-          "description": "Salesforce-Connector konfigurieren",
+          "description": "Salesforce-Konnektor konfigurieren",
           "fields": {
             "salesforce_config_type": {
               "label": "Konfigurationstyp",
@@ -4184,11 +4184,11 @@
           }
         },
         "sharepoint": {
-          "description": "SharePoint-Connector konfigurieren",
+          "description": "SharePoint-Konnektor konfigurieren",
           "fields": {
             "sites": {
               "label": "Sites",
-              "description": "- Wenn keine Sites angegeben sind, werden alle Sites Ihrer Organisation indexiert (Berechtigung `Sites.Read.All` erforderlich).\n- Die Angabe von `https://onyxai.sharepoint.com/sites/support` indexiert zum Beispiel nur diese Site.\n- Die Angabe von `https://onyxai.sharepoint.com/sites/support/subfolder` indexiert zum Beispiel nur diesen Ordner.\n- Um die persönlichen Sites von Nutzern zu indexieren, verwenden Sie den [OneDrive-Connector]({docsAdminsPath}/connectors/official/onedrive).\n- Die Angabe von Sites funktioniert derzeit für SharePoint-Instanzen in englischer, spanischer oder deutscher Sprache. Wenden Sie sich an das Onyx-Team, wenn Sie eine andere Sprache benötigen."
+              "description": "- Wenn keine Sites angegeben sind, werden alle Sites Ihrer Organisation indexiert (Berechtigung `Sites.Read.All` erforderlich).\n- Die Angabe von `https://onyxai.sharepoint.com/sites/support` indexiert zum Beispiel nur diese Site.\n- Die Angabe von `https://onyxai.sharepoint.com/sites/support/subfolder` indexiert zum Beispiel nur diesen Ordner.\n- Um die persönlichen Sites von Nutzern zu indexieren, verwenden Sie den [OneDrive-Konnektor]({docsAdminsPath}/connectors/official/onedrive).\n- Die Angabe von Sites funktioniert derzeit für SharePoint-Instanzen in englischer, spanischer oder deutscher Sprache. Wenden Sie sich an das Onyx-Team, wenn Sie eine andere Sprache benötigen."
             },
             "include_site_documents": {
               "label": "Dokumente indexieren",
@@ -4225,7 +4225,7 @@
           }
         },
         "teams": {
-          "description": "Teams-Connector konfigurieren",
+          "description": "Teams-Konnektor konfigurieren",
           "fields": {
             "teams": {
               "label": "Teams",
@@ -4261,7 +4261,7 @@
           }
         },
         "outlook": {
-          "description": "Outlook-Connector konfigurieren",
+          "description": "Outlook-Konnektor konfigurieren",
           "fields": {
             "mailboxes": {
               "label": "Postfächer",
@@ -4301,7 +4301,7 @@
           }
         },
         "discourse": {
-          "description": "Discourse-Connector konfigurieren",
+          "description": "Discourse-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Basis-URL"
@@ -4312,7 +4312,7 @@
           }
         },
         "drupal_wiki": {
-          "description": "Drupal-Wiki-Connector konfigurieren",
+          "description": "Drupal-Wiki-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Basis-URL",
@@ -4331,7 +4331,7 @@
             },
             "everything_description": {
               "label": "Alles",
-              "description": "Dieser Connector indexiert alle Spaces, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "description": "Dieser Konnektor indexiert alle Spaces, auf die die angegebenen Zugangsdaten Zugriff haben!"
             },
             "spaces": {
               "label": "Space-IDs",
@@ -4344,7 +4344,7 @@
           }
         },
         "axero": {
-          "description": "Axero-Connector konfigurieren",
+          "description": "Axero-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Axero-Basis-URL",
@@ -4357,10 +4357,10 @@
           }
         },
         "productboard": {
-          "description": "Productboard-Connector konfigurieren"
+          "description": "Productboard-Konnektor konfigurieren"
         },
         "slack": {
-          "description": "Slack-Connector konfigurieren",
+          "description": "Slack-Konnektor konfigurieren",
           "fields": {
             "channels": {
               "label": "Kanäle",
@@ -4368,7 +4368,7 @@
             },
             "channel_regex_enabled": {
               "label": "Kanal-Regex aktivieren",
-              "description": "Wenn aktiviert, behandeln wir die oben angegebenen \"Kanäle\" als reguläre Ausdrücke. Die Nachrichten eines Kanals werden vom Connector abgerufen, wenn der Kanalname vollständig mit einem der angegebenen regulären Ausdrücke übereinstimmt.\n\nWenn Sie zum Beispiel `.*-support.*` als \"Kanal\" angeben, bezieht der Connector alle Kanäle ein, deren Name \"-support\" enthält."
+              "description": "Wenn aktiviert, behandeln wir die oben angegebenen \"Kanäle\" als reguläre Ausdrücke. Die Nachrichten eines Kanals werden vom Konnektor abgerufen, wenn der Kanalname vollständig mit einem der angegebenen regulären Ausdrücke übereinstimmt.\n\nWenn Sie zum Beispiel `.*-support.*` als \"Kanal\" angeben, bezieht der Konnektor alle Kanäle ein, deren Name \"-support\" enthält."
             },
             "exclude_channels": {
               "label": "Auszuschließende Kanäle",
@@ -4376,7 +4376,7 @@
             },
             "exclude_channel_regex_enabled": {
               "label": "Regex für auszuschließende Kanäle aktivieren",
-              "description": "Wenn aktiviert, behandeln wir die oben angegebenen \"auszuschließenden Kanäle\" als reguläre Ausdrücke. Ein Kanal wird ausgeschlossen, wenn sein Name vollständig mit einem der angegebenen regulären Ausdrücke übereinstimmt.\n\nWenn Sie zum Beispiel `.*-alerts` als \"auszuschließenden Kanal\" angeben, überspringt der Connector alle Kanäle, deren Name auf \"-alerts\" endet."
+              "description": "Wenn aktiviert, behandeln wir die oben angegebenen \"auszuschließenden Kanäle\" als reguläre Ausdrücke. Ein Kanal wird ausgeschlossen, wenn sein Name vollständig mit einem der angegebenen regulären Ausdrücke übereinstimmt.\n\nWenn Sie zum Beispiel `.*-alerts` als \"auszuschließenden Kanal\" angeben, überspringt der Konnektor alle Kanäle, deren Name auf \"-alerts\" endet."
             },
             "include_bot_messages": {
               "label": "Bot-Nachrichten einbeziehen",
@@ -4385,7 +4385,7 @@
           }
         },
         "slab": {
-          "description": "Slab-Connector konfigurieren",
+          "description": "Slab-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Basis-URL",
@@ -4394,10 +4394,10 @@
           }
         },
         "guru": {
-          "description": "Guru-Connector konfigurieren"
+          "description": "Guru-Konnektor konfigurieren"
         },
         "gong": {
-          "description": "Gong-Connector konfigurieren",
+          "description": "Gong-Konnektor konfigurieren",
           "fields": {
             "gong_base_url": {
               "label": "Gong-API-Basis-URL",
@@ -4411,7 +4411,7 @@
           }
         },
         "loopio": {
-          "description": "Loopio-Connector konfigurieren",
+          "description": "Loopio-Konnektor konfigurieren",
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio-Subdomain",
@@ -4425,7 +4425,7 @@
           }
         },
         "file": {
-          "description": "Datei-Connector konfigurieren",
+          "description": "Datei-Konnektor konfigurieren",
           "fields": {
             "file_locations": {
               "label": "Dateien"
@@ -4433,7 +4433,7 @@
           }
         },
         "zulip": {
-          "description": "Zulip-Connector konfigurieren",
+          "description": "Zulip-Konnektor konfigurieren",
           "fields": {
             "realm_name": {
               "label": "Realm-Name"
@@ -4444,10 +4444,10 @@
           }
         },
         "coda": {
-          "description": "Coda-Connector konfigurieren"
+          "description": "Coda-Konnektor konfigurieren"
         },
         "notion": {
-          "description": "Notion-Connector konfigurieren",
+          "description": "Notion-Konnektor konfigurieren",
           "fields": {
             "root_page_id": {
               "label": "ID der Stammseite",
@@ -4456,7 +4456,7 @@
           }
         },
         "hubspot": {
-          "description": "HubSpot-Connector konfigurieren",
+          "description": "HubSpot-Konnektor konfigurieren",
           "fields": {
             "object_types": {
               "label": "Objekttypen",
@@ -4471,7 +4471,7 @@
           }
         },
         "document360": {
-          "description": "Document360-Connector konfigurieren",
+          "description": "Document360-Konnektor konfigurieren",
           "fields": {
             "workspace": {
               "label": "Workspace"
@@ -4483,10 +4483,10 @@
           }
         },
         "clickup": {
-          "description": "ClickUp-Connector konfigurieren",
+          "description": "ClickUp-Konnektor konfigurieren",
           "fields": {
             "connector_type": {
-              "label": "Connector-Typ",
+              "label": "Konnektortyp",
               "options": {
                 "list": "Liste",
                 "folder": "Ordner",
@@ -4495,7 +4495,7 @@
               }
             },
             "connector_ids": {
-              "label": "Connector-IDs",
+              "label": "Konnektor-IDs",
               "description": "Geben Sie 0 oder mehr IDs an, aus denen indexiert wird."
             },
             "retrieve_task_comments": {
@@ -4505,7 +4505,7 @@
           }
         },
         "google_sites": {
-          "description": "Google-Sites-Connector konfigurieren",
+          "description": "Google-Sites-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "Basis-URL",
@@ -4518,7 +4518,7 @@
           }
         },
         "zendesk": {
-          "description": "Zendesk-Connector konfigurieren",
+          "description": "Zendesk-Konnektor konfigurieren",
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk-Subdomain",
@@ -4534,12 +4534,12 @@
             },
             "calls_per_minute": {
               "label": "API-Aufrufe pro Minute",
-              "description": "Begrenzt, wie viele Zendesk-API-Aufrufe dieser Connector pro Minute ausführen darf (gilt nur für diesen Connector). Standardwerte siehe: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+              "description": "Begrenzt, wie viele Zendesk-API-Aufrufe dieser Konnektor pro Minute ausführen darf (gilt nur für diesen Konnektor). Standardwerte siehe: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
             }
           }
         },
         "box": {
-          "description": "Box-Connector konfigurieren",
+          "description": "Box-Konnektor konfigurieren",
           "fields": {
             "folder_ids": {
               "label": "Ordner",
@@ -4552,10 +4552,10 @@
           }
         },
         "dropbox": {
-          "description": "Dropbox-Connector konfigurieren"
+          "description": "Dropbox-Konnektor konfigurieren"
         },
         "s3": {
-          "description": "S3-Connector konfigurieren",
+          "description": "S3-Konnektor konfigurieren",
           "fields": {
             "bucket_name": {
               "label": "Bucket-Name"
@@ -4573,7 +4573,7 @@
           }
         },
         "r2": {
-          "description": "R2-Connector konfigurieren",
+          "description": "R2-Konnektor konfigurieren",
           "fields": {
             "bucket_name": {
               "label": "Bucket-Name"
@@ -4591,7 +4591,7 @@
           }
         },
         "google_cloud_storage": {
-          "description": "Google-Cloud-Storage-Connector konfigurieren",
+          "description": "Google-Cloud-Storage-Konnektor konfigurieren",
           "fields": {
             "bucket_name": {
               "label": "Bucket-Name",
@@ -4606,7 +4606,7 @@
           }
         },
         "oci_storage": {
-          "description": "OCI-Storage-Connector konfigurieren",
+          "description": "OCI-Storage-Konnektor konfigurieren",
           "fields": {
             "bucket_name": {
               "label": "Bucket-Name"
@@ -4620,7 +4620,7 @@
           }
         },
         "wikipedia": {
-          "description": "Wikipedia-Connector konfigurieren",
+          "description": "Wikipedia-Konnektor konfigurieren",
           "fields": {
             "language_code": {
               "label": "Sprachcode",
@@ -4641,7 +4641,7 @@
           }
         },
         "xenforo": {
-          "description": "Xenforo-Connector konfigurieren",
+          "description": "Xenforo-Konnektor konfigurieren",
           "fields": {
             "base_url": {
               "label": "URL",
@@ -4650,7 +4650,7 @@
           }
         },
         "asana": {
-          "description": "Asana-Connector konfigurieren",
+          "description": "Asana-Konnektor konfigurieren",
           "fields": {
             "asana_workspace_id": {
               "label": "Workspace-ID",
@@ -4667,7 +4667,7 @@
           }
         },
         "mediawiki": {
-          "description": "MediaWiki-Connector konfigurieren",
+          "description": "MediaWiki-Konnektor konfigurieren",
           "fields": {
             "language_code": {
               "label": "Sprachcode",
@@ -4691,7 +4691,7 @@
           }
         },
         "discord": {
-          "description": "Discord-Connector konfigurieren",
+          "description": "Discord-Konnektor konfigurieren",
           "fields": {
             "server_ids": {
               "label": "Server-IDs",
@@ -4708,7 +4708,7 @@
           }
         },
         "freshdesk": {
-          "description": "Freshdesk-Connector konfigurieren",
+          "description": "Freshdesk-Konnektor konfigurieren",
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk-Domain",
@@ -4718,10 +4718,10 @@
           }
         },
         "fireflies": {
-          "description": "Fireflies-Connector konfigurieren"
+          "description": "Fireflies-Konnektor konfigurieren"
         },
         "braintrust": {
-          "description": "Braintrust-Connector konfigurieren",
+          "description": "Braintrust-Konnektor konfigurieren",
           "fields": {
             "project_name": {
               "label": "Projektname",
@@ -4734,7 +4734,7 @@
           }
         },
         "canvas": {
-          "description": "Canvas-Connector konfigurieren",
+          "description": "Canvas-Konnektor konfigurieren",
           "fields": {
             "canvas_base_url": {
               "label": "Canvas-Basis-URL",
@@ -4743,7 +4743,7 @@
           }
         },
         "egnyte": {
-          "description": "Egnyte-Connector konfigurieren",
+          "description": "Egnyte-Konnektor konfigurieren",
           "fields": {
             "domain": {
               "label": "Egnyte-Domain",
@@ -4757,7 +4757,7 @@
           }
         },
         "airtable": {
-          "description": "Airtable-Connector konfigurieren",
+          "description": "Airtable-Konnektor konfigurieren",
           "fields": {
             "airtable_scope": {
               "label": "Zu indexierende Airtable-Inhalte",
@@ -4772,7 +4772,7 @@
             },
             "everything_description": {
               "label": "Alles",
-              "description": "Dieser Connector erkennt und indexiert automatisch alle Bases und Tabellen, auf die Ihr API-Token Zugriff hat."
+              "description": "Dieser Konnektor erkennt und indexiert automatisch alle Bases und Tabellen, auf die Ihr API-Token Zugriff hat."
             },
             "airtable_url": {
               "label": "Airtable-URL",
@@ -4789,7 +4789,7 @@
           }
         },
         "highspot": {
-          "description": "Highspot-Connector konfigurieren",
+          "description": "Highspot-Konnektor konfigurieren",
           "fields": {
             "highspot_url": {
               "label": "Highspot-URL",
@@ -4812,12 +4812,12 @@
             },
             "everything": {
               "label": "Alles",
-              "description": "Dieser Connector indexiert alle Spots, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "description": "Dieser Konnektor indexiert alle Spots, auf die die angegebenen Zugangsdaten Zugriff haben!"
             }
           }
         },
         "imap": {
-          "description": "E-Mail-Connector konfigurieren",
+          "description": "E-Mail-Konnektor konfigurieren",
           "fields": {
             "host": {
               "label": "IMAP-Server-Host",
@@ -5127,7 +5127,7 @@
         "share": {
           "admins": {
             "label": "Admins",
-            "description": "Alle Admins können dieses Konto wiederverwenden, um Connectoren zu erstellen.",
+            "description": "Alle Admins können dieses Konto wiederverwenden, um Konnektoren zu erstellen.",
             "suffix": "(Standard)"
           },
           "adminsAndGroups": {
@@ -5137,7 +5137,7 @@
           "onlyMe": {
             "label": "Nur ich"
           },
-          "description": "Erlaube Gruppen, dieses Konto zum Erstellen von Konnektoren wiederzuverwenden.",
+          "description": "Erlauben Sie Gruppen, dieses Konto zum Erstellen von Konnektoren wiederzuverwenden.",
           "title": "Dieses Konto teilen"
         },
         "submitError": {
@@ -5204,13 +5204,13 @@
       },
       "hints": {
         "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
-        "githubBaseUrl": "Optional. Gib den Host deines Servers an, z. B. https://github.example.com. Für github.com leer lassen.",
-        "gongBaseUrl": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
+        "githubBaseUrl": "Optional. Geben Sie den Host Ihres Servers an, z. B. https://github.example.com. Für github.com leer lassen.",
+        "gongBaseUrl": "Optional. Für Daten außerhalb der USA geben Sie den Host Ihrer Region an, z. B. https://[region].api.gong.io.",
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
-        "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
+        "lumappsServiceUser": "Der Benutzer, in dessen Namen indexiert wird.",
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
-        "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
-        "pfxFile": "Lade die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
+        "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
+        "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
         "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein."
       },
@@ -5226,12 +5226,12 @@
           "oauth": "OAuth"
         },
         "descriptions": {
-          "sharepointClientSecret": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Client-Secret. Geben Sie die Client-ID und das Client-Secret an.",
-          "sharepointCertificate": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Zertifikat. Geben Sie die Client-ID, die Verzeichnis-ID, das Zertifikatspasswort und die PFX-Daten an.",
-          "teamsClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an. Nur Kanalnachrichten und Mitglieder: SharePoint lehnt ein Secret ab, daher benötigt „Anhänge einbeziehen“ die Zertifikatsoption.",
-          "teamsCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
-          "outlookClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
-          "outlookCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
+          "sharepointClientSecret": "In diesem Modus authentifiziert sich der SharePoint-Konnektor mit einem Client-Secret. Geben Sie die Client-ID und das Client-Secret an.",
+          "sharepointCertificate": "In diesem Modus authentifiziert sich der SharePoint-Konnektor mit einem Zertifikat. Geben Sie die Client-ID, die Verzeichnis-ID, das Zertifikatspasswort und die PFX-Daten an.",
+          "teamsClientSecret": "Der Konnektor meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an. Nur Kanalnachrichten und Mitglieder: SharePoint lehnt ein Secret ab, daher benötigt „Anhänge einbeziehen“ die Zertifikatsoption.",
+          "teamsCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
+          "outlookClientSecret": "Der Konnektor meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
+          "outlookCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
           "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
         }
       },
@@ -5926,7 +5926,7 @@
           "message": "Validierung der Zugangsdaten fehlgeschlagen: {message}"
         },
         "credentials": {
-          "description": "Gib die Zugangsdaten für diesen Konnektor ein.",
+          "description": "Geben Sie die Zugangsdaten für diesen Konnektor ein.",
           "heading": "Zugangsdaten"
         },
         "delete": {
@@ -5934,7 +5934,7 @@
           "success": "Föderierter Konnektor erfolgreich gelöscht!"
         },
         "deleteConfirm": {
-          "message": "Möchtest du diesen föderierten Konnektor wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+          "message": "Möchten Sie diesen föderierten Konnektor wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
         },
         "deleteError": {
           "toast": "Fehler beim Löschen des Konnektors: {error}"
@@ -5990,7 +5990,7 @@
           "success": "Föderierter Konnektor erfolgreich aktualisiert!"
         },
         "validateBeforeEdit": {
-          "message": "Gib vor der Validierung neue Zugangsdaten ein."
+          "message": "Geben Sie vor der Validierung neue Zugangsdaten ein."
         },
         "validateButton": {
           "label": "Validieren",
@@ -6777,9 +6777,9 @@
           "label": "Auf neue und aktualisierte Dokumente anwenden"
         },
         "applyReindex": {
-          "label": "Anwenden & neu indizieren",
+          "label": "Anwenden & neu indexieren",
           "statusesLoading": "Konnektor-Status wird geladen…",
-          "statusesFailed": "Konnektor-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
+          "statusesFailed": "Konnektor-Status konnte nicht geladen werden — bitte vor dem Neuindexieren erneut versuchen."
         },
         "applyWithoutReindex": {
           "label": "Ohne Neuindexierung anwenden"
@@ -6820,11 +6820,11 @@
         }
       },
       "cancelReindexModal": {
-        "description": "Beim Abbrechen wird das vorherige Embedding-Modell wiederhergestellt und der gesamte Fortschritt der Neuindizierung geht verloren.",
+        "description": "Beim Abbrechen wird das vorherige Embedding-Modell wiederhergestellt und der gesamte Fortschritt der Neuindexierung geht verloren.",
         "submit": {
           "label": "Abbrechen"
         },
-        "title": "Neuindizierung abbrechen"
+        "title": "Neuindexierung abbrechen"
       },
       "captioningModel": {
         "description": "Dieses Modell wird zur Analyse von Bildern bei der Indexierung verwendet.",
@@ -6836,7 +6836,7 @@
           "title": "Wählen Sie, wie Contextual Retrieval deaktiviert wird"
         },
         "contextualModelMissing": {
-          "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indizieren — ohne ein solches Modell kann die Neuindizierung nicht laufen.",
+          "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indexieren — ohne ein solches Modell kann die Neuindexierung nicht laufen.",
           "title": "Wählen Sie ein LLM für Contextual Retrieval"
         },
         "contextualModelOnly": {
@@ -6844,8 +6844,8 @@
           "title": "Wählen Sie, wie dieses LLM für Contextual Retrieval angewendet wird"
         },
         "default": {
-          "description": "Änderungen an den Embedding- oder Retrieval-Einstellungen erfordern eine vollständige Neuindizierung aller Dokumente, damit sie wirksam werden. Das kann je nach Korpusgröße **Stunden oder Tage** dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
-          "title": "Änderungen erfordern eine vollständige Neuindizierung."
+          "description": "Änderungen an den Embedding- oder Retrieval-Einstellungen erfordern eine vollständige Neuindexierung aller Dokumente, damit sie wirksam werden. Das kann je nach Korpusgröße **Stunden oder Tage** dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Änderungen erfordern eine vollständige Neuindexierung."
         },
         "doNotReindex": {
           "description": "Bildverarbeitungseinstellungen wirken nur auf Dokumente, die ab jetzt indexiert werden. Vorhandene Dokumente werden nicht aktualisiert, sofern Sie keine vollständige Neuindexierung ausführen.\n\nDie Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows).",
@@ -6855,7 +6855,7 @@
           "label": "oder"
         },
         "quantizationOnly": {
-          "description": "Nur die Vektorquantisierung hat sich geändert. Onyx baut den Index daher aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als eine vollständige Neuindizierung.",
+          "description": "Nur die Vektorquantisierung hat sich geändert. Onyx baut den Index daher aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als eine vollständige Neuindexierung.",
           "title": "Der Index wird neu aufgebaut."
         },
         "reindex": {
@@ -6872,7 +6872,7 @@
         "title": "LLM für Contextual Retrieval"
       },
       "contextualRetrieval": {
-        "description": "Fügen Sie jedem indizierten Chunk Kontext auf Dokumentebene hinzu, um die Relevanz der Hybridsuche zu verbessern. Dies kann die Embedding-Kosten deutlich erhöhen.",
+        "description": "Fügen Sie jedem indexierten Chunk Kontext auf Dokumentebene hinzu, um die Relevanz der Hybridsuche zu verbessern. Dies kann die Embedding-Kosten deutlich erhöhen.",
         "noModelsTooltip": "Contextual Retrieval ist deaktiviert, weil keine Modelle konfiguriert sind. Richten Sie zuerst ein [Sprachmodell]({link}) ein.",
         "title": "Contextual Retrieval"
       },
@@ -6894,9 +6894,9 @@
           "status": "Status",
           "type": "Typ"
         },
-        "description": "Konnektoren und Benutzerdateien, deren letzter Versuch der Neuindizierung fehlgeschlagen ist (automatischer neuer Versuch) oder pausiert wurde (zum erneuten Versuch fortsetzen).",
+        "description": "Konnektoren und Benutzerdateien, deren letzter Versuch der Neuindexierung fehlgeschlagen ist (automatischer neuer Versuch) oder pausiert wurde (zum erneuten Versuch fortsetzen).",
         "empty": "Nichts erfordert Ihre Aufmerksamkeit.",
-        "loadError": "Der Status der Neuindizierung konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
+        "loadError": "Der Status der Neuindexierung konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
         "loading": "Wird geladen…",
         "resumeButton": {
           "label": "Fortsetzen"
@@ -6913,7 +6913,7 @@
           "failed": "Fehlgeschlagen",
           "paused": "Pausiert"
         },
-        "title": "Neuindizierung: Aufmerksamkeit erforderlich",
+        "title": "Neuindexierung: Aufmerksamkeit erforderlich",
         "unknownError": "Unbekannter Fehler"
       },
       "fields": {
@@ -6942,7 +6942,7 @@
           "suffix": "optional"
         },
         "passagePrefix": {
-          "description": "Dies wird indizierten Dokument-Chunks vorangestellt, bevor sie an das Modell übergeben werden, sofern Ihr Embedding-Modell es erfordert. Falsche oder fehlende Präfixe verschlechtern die Qualität der Embeddings.",
+          "description": "Dies wird indexierten Dokument-Chunks vorangestellt, bevor sie an das Modell übergeben werden, sofern Ihr Embedding-Modell es erfordert. Falsche oder fehlende Präfixe verschlechtern die Qualität der Embeddings.",
           "placeholder": "z. B. 'passage: '",
           "title": "Passagen-Präfix"
         },
@@ -6964,14 +6964,14 @@
         "title": "Contextual Retrieval ab jetzt deaktivieren"
       },
       "header": {
-        "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
+        "description": "Konfigurieren Sie, wie Dokumente indexiert, eingebettet und für Suche und Retrieval vorbereitet werden."
       },
       "imageExtraction": {
         "description": "Bilder bei der Dokumentindexierung extrahieren und durchsuchbare Beschreibungen erzeugen.",
         "title": "Bilder extrahieren & beschreiben"
       },
       "imageProcessing": {
-        "description": "Verwenden Sie ein LLM-Modell, um Bilder während der Indizierung zu analysieren und mit Beschreibungen zu versehen.",
+        "description": "Verwenden Sie ein LLM-Modell, um Bilder während der Indexierung zu analysieren und mit Beschreibungen zu versehen.",
         "enableFirstTooltip": "Aktivieren Sie „Bilder extrahieren & beschreiben“, um dies zu konfigurieren.",
         "noModelSelected": "Kein Modell ausgewählt",
         "noVisionModelsTooltip": "Die Bildverarbeitung ist deaktiviert, weil keine Modelle mit Bildverständnis konfiguriert sind. Richten Sie zuerst ein [Sprachmodell]({link}) mit Bildverständnis ein.",
@@ -7032,7 +7032,7 @@
         }
       },
       "modelPicker": {
-        "cpuEstimateHint": "CPU-Geschwindigkeiten sind Schätzungen und hängen von Hardware und Dokumentgröße ab. RAM-Empfehlungen gelten für ein geladenes Modell, nicht für den gesamten Onyx-Stack. Planen Sie beim Neuindizieren mehr Speicher ein.",
+        "cpuEstimateHint": "CPU-Geschwindigkeiten sind Schätzungen und hängen von Hardware und Dokumentgröße ab. RAM-Empfehlungen gelten für ein geladenes Modell, nicht für den gesamten Onyx-Stack. Planen Sie beim Neuindexieren mehr Speicher ein.",
         "addCustomModel": {
           "label": "Benutzerdefiniertes Modell hinzufügen"
         },
@@ -7076,33 +7076,33 @@
         }
       },
       "multipass": {
-        "description": "Indizieren Sie Dokumente als Chunks unterschiedlicher Größe, um relevante Quellen besser zu erkennen.",
-        "disabledTooltip": "Die Multipass-Indizierung ist vorübergehend deaktiviert und wird in Zukunft verfügbar sein.",
+        "description": "Indexieren Sie Dokumente als Chunks unterschiedlicher Größe, um relevante Quellen besser zu erkennen.",
+        "disabledTooltip": "Die Multipass-Indexierung ist vorübergehend deaktiviert und wird in Zukunft verfügbar sein.",
         "tag": {
           "label": "vorübergehend nicht verfügbar"
         },
-        "title": "Multipass-Indizierung"
+        "title": "Multipass-Indexierung"
       },
       "progressBanner": {
         "attentionButton": {
           "label": "Einheiten anzeigen, die Aufmerksamkeit erfordern"
         },
         "cancelButton": {
-          "label": "Neuindizierung abbrechen & zurücksetzen"
+          "label": "Neuindexierung abbrechen & zurücksetzen"
         },
         "copyTitle": "Index wird neu aufgebaut…",
         "description": {
           "copy": "Onyx baut den Index aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als ein erneutes Embedding.",
-          "withModel": "Die neuen Embedding-Einstellungen (**{model}**) werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern.",
-          "withoutModel": "Die neuen Embedding-Einstellungen werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern."
+          "withModel": "Die neuen Embedding-Einstellungen (**{model}**) werden im Verlauf der Neuindexierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern.",
+          "withoutModel": "Die neuen Embedding-Einstellungen werden im Verlauf der Neuindexierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern."
         },
         "progress": {
-          "ariaLabel": "Fortschritt der Neuindizierung"
+          "ariaLabel": "Fortschritt der Neuindexierung"
         },
         "status": {
-          "label": "Status der Neuindizierung:"
+          "label": "Status der Neuindexierung:"
         },
-        "title": "Neuindizierung läuft…"
+        "title": "Neuindexierung läuft…"
       },
       "providerGroup": {
         "addConfig": {
@@ -7145,25 +7145,25 @@
       },
       "reindexBanner": {
         "cancelReindex": {
-          "label": "Neuindizierung abbrechen"
+          "label": "Neuindexierung abbrechen"
         },
         "description": "Wechsel zu **{model}**. Vorhandene Dokumente werden neu eingebettet — das kann je nach Korpusgröße Stunden oder Tage dauern. Das vorherige Modell beantwortet weiterhin Abfragen, bis die Umstellung abgeschlossen ist.",
         "seeConnectors": {
           "label": "Konnektoren anzeigen"
         },
-        "title": "Neuindizierung läuft"
+        "title": "Neuindexierung läuft"
       },
       "reindexing": {
-        "disabledTooltip": "Eine Neuindizierung läuft. Brechen Sie sie ab, um Änderungen vorzunehmen."
+        "disabledTooltip": "Eine Neuindexierung läuft. Brechen Sie sie ab, um Änderungen vorzunehmen."
       },
       "retrieval": {
-        "description": "Zusätzliche Indizierungsfunktionen, die die Suchgenauigkeit verbessern, indem sie festlegen, wie Dokumente in Chunks zerlegt und kontextualisiert werden. Dies kann die Embedding-Kosten erhöhen.",
+        "description": "Zusätzliche Indexierungsfunktionen, die die Suchgenauigkeit verbessern, indem sie festlegen, wie Dokumente in Chunks zerlegt und kontextualisiert werden. Dies kann die Embedding-Kosten erhöhen.",
         "title": "Retrieval-Optimierung"
       },
       "switchover": {
         "activeOnly": {
           "description": "Den aktuellen Dokumentindex mit den bestehenden Einstellungen weiter verwenden, bis alle **aktiven** (nicht pausierten/gelöschten) Konnektoren einen erfolgreichen Indexierungslauf abgeschlossen haben.",
-          "label": "Aktive Konnektoren neu indizieren, dann umstellen"
+          "label": "Aktive Konnektoren neu indexieren, dann umstellen"
         },
         "doNotReindex": {
           "description": "**Sicherste Option.** Änderungen gelten nur für neu indexierte Inhalte.",
@@ -7171,12 +7171,12 @@
         },
         "instant": {
           "description": "Den **aktuellen Dokumentindex sofort leeren** und zu den neuen Einstellungen wechseln. Alle Konnektoren müssen neu indexiert werden, bevor der Index wieder durchsuchbar ist.",
-          "label": "Vor der Neuindizierung umstellen"
+          "label": "Vor der Neuindexierung umstellen"
         },
         "placeholder": "Wählen Sie eine Umstellungsstrategie",
         "reindexAll": {
           "description": "Den aktuellen Dokumentindex mit den bestehenden Einstellungen weiter verwenden, bis alle Konnektoren einen erfolgreichen Indexierungslauf abgeschlossen haben.",
-          "label": "Alle Konnektoren neu indizieren, dann umstellen"
+          "label": "Alle Konnektoren neu indexieren, dann umstellen"
         },
         "reindexOptions": {
           "label": "Neuindexierungsoptionen"
@@ -7184,17 +7184,17 @@
       },
       "toasts": {
         "applyFailed": "Die Einstellungen konnten nicht angewendet werden",
-        "cancelReindexFailed": "Die Neuindizierung konnte nicht abgebrochen werden",
+        "cancelReindexFailed": "Die Neuindexierung konnte nicht abgebrochen werden",
         "captioningModelRequired": "Wählen Sie vor dem Anwenden ein Captioning-LLM.",
-        "contextualModelRequired": "Wählen Sie ein LLM für Contextual Retrieval, bevor Sie neu indizieren.",
+        "contextualModelRequired": "Wählen Sie ein LLM für Contextual Retrieval, bevor Sie neu indexieren.",
         "contextualModelUpdateFailed": "Das LLM für Contextual Retrieval konnte nicht aktualisiert werden",
         "contextualModelUpdated": "LLM für Contextual Retrieval aktualisiert",
         "contextualRetrievalDisableFailed": "Contextual Retrieval konnte nicht deaktiviert werden",
         "contextualRetrievalDisabled": "Contextual Retrieval deaktiviert",
         "modelNotFound": "Das ausgewählte Modell konnte nicht gefunden werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
-        "reindexCanceled": "Neuindizierung abgebrochen",
-        "reindexStarted": "Neuindizierung gestartet",
+        "reindexCanceled": "Neuindexierung abgebrochen",
+        "reindexStarted": "Neuindexierung gestartet",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Ein unbekannter Fehler ist aufgetreten"
@@ -7231,12 +7231,12 @@
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
-        "submit": "Löschen & neu indizieren",
-        "description": "{count, plural, one {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Dieser wird daher nicht in den neuen Index übernommen. {appName} löscht ihn zusammen mit den von ihm indizierten Dokumenten:} other {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Diese # werden daher nicht in den neuen Index übernommen. {appName} löscht sie zusammen mit den von ihnen indizierten Dokumenten:}}",
+        "submit": "Löschen & neu indexieren",
+        "description": "{count, plural, one {Beim Neuindexieren werden pausierte und ungültige Konnektoren übersprungen. Dieser wird daher nicht in den neuen Index übernommen. {appName} löscht ihn zusammen mit den von ihm indexierten Dokumenten:} other {Beim Neuindexieren werden pausierte und ungültige Konnektoren übersprungen. Diese # werden daher nicht in den neuen Index übernommen. {appName} löscht sie zusammen mit den von ihnen indexierten Dokumenten:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "ungültig",
         "statusPaused": "pausiert",
-        "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
+        "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindexierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindexierung erneut hinzu."
       },
       "modelDescriptions": {
         "cohereEmbedV5Pro": "Das Top-Embedding-Modell von Cohere. Das beste Verhältnis von Qualität und Kosten. 2048 Dimensionen.",
@@ -7429,13 +7429,13 @@
         },
         "empty": {
           "title": "Noch keine Konnektoren",
-          "description": "Besuche die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen.",
+          "description": "Besuchen Sie die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen.",
           "filteredTitle": "Keine Konnektoren entsprechen diesen Filtern."
         },
         "loadError": "Die Konnektoren konnten nicht geladen werden.",
         "units": "{count, plural, one {Konnektor} other {Konnektoren}}"
       },
-      "title": "Indexierungsstatus der Connectors"
+      "title": "Indexierungsstatus der Konnektoren"
     },
     "languageModels": {
       "availableProviders": {
@@ -8476,8 +8476,8 @@
     "security": {
       "adminControls": {
         "connectorGroupRestrictions": {
-          "description": "Connectors können die Mitgliedschaft in bestimmten Gruppen verlangen, nicht nur den Zugriff in der Quelle.",
-          "title": "Gruppenbeschränkungen für berechtigungssynchronisierte Connectors erlauben"
+          "description": "Konnektoren können die Mitgliedschaft in bestimmten Gruppen verlangen, nicht nur den Zugriff in der Quelle.",
+          "title": "Gruppenbeschränkungen für berechtigungssynchronisierte Konnektoren erlauben"
         },
         "incognito": {
           "description": "Inkognito-Chats erscheinen nie im Verlauf ihres Eigentümers. Der Gruppenzugriff wird pro Gruppe unter Gruppen konfiguriert.",
@@ -8844,8 +8844,8 @@
         }
       },
       "liteModeNotice": {
-        "description": "Diese Bereitstellung führt Onyx Lite aus. Onyx Lite hat keine Vektordatenbank — Konnektoren und die Dokumentenindizierung sind deaktiviert, und es wird nichts indiziert. Um Datenquellen zu verbinden und Dokumente zu indizieren, stellen Sie Onyx im **Standardmodus** bereit. Lesen Sie die [Bereitstellungsanleitung]({docsUrl}), um zu beginnen.",
-        "title": "Die Indizierung ist im Lite-Modus nicht verfügbar"
+        "description": "Diese Bereitstellung führt Onyx Lite aus. Onyx Lite hat keine Vektordatenbank — Konnektoren und die Dokumentenindexierung sind deaktiviert, und es wird nichts indexiert. Um Datenquellen zu verbinden und Dokumente zu indexieren, stellen Sie Onyx im **Standardmodus** bereit. Lesen Sie die [Bereitstellungsanleitung]({docsUrl}), um zu beginnen.",
+        "title": "Die Indexierung ist im Lite-Modus nicht verfügbar"
       },
       "providerCard": {
         "connectButton": {
@@ -10740,7 +10740,7 @@
       }
     },
     "connectorChecks": {
-      "lockReason": "Führen Sie oben die Connector-Prüfungen aus und beheben Sie alle Fehler, um fortzufahren.",
+      "lockReason": "Führen Sie oben die Konnektor-Prüfungen aus und beheben Sie alle Fehler, um fortzufahren.",
       "prompt": {
         "title": "Verbindung testen",
         "description": "{appName} führt Prüfungen durch, um die erforderlichen Berechtigungen zu bestätigen, bevor es weitergeht.",
@@ -10748,7 +10748,7 @@
           "label": "Prüfungen starten"
         }
       },
-      "title": "Connector-Prüfungen",
+      "title": "Konnektor-Prüfungen",
       "groups": {
         "failed": "{count} Fehlgeschlagen",
         "indeterminate": "{count} Nicht verifiziert",
@@ -10793,36 +10793,36 @@
       "state": {
         "inProgress": "Prüfungen laufen...",
         "completed": "Prüfungen abgeschlossen.",
-        "waiting": "Warten auf Connector-Einstellungen..."
+        "waiting": "Warten auf Konnektor-Einstellungen..."
       },
       "advisory": {
         "title": "Einige Inhalte werden nicht indexiert.",
-        "description": "**{count, plural, one {# nicht erforderliche Connector-Prüfung ist fehlgeschlagen.} other {# nicht erforderliche Connector-Prüfungen sind fehlgeschlagen.}}** Sie blockieren nicht die gesamte Indexierung des Connectors, aber die betroffenen Inhalte werden nicht indexiert.",
-        "proceed": "Du kannst den Connector trotzdem erstellen und diese Punkte später beheben.",
+        "description": "**{count, plural, one {# nicht erforderliche Konnektor-Prüfung ist fehlgeschlagen.} other {# nicht erforderliche Konnektor-Prüfungen sind fehlgeschlagen.}}** Sie blockieren nicht die gesamte Indexierung des Konnektors, aber die betroffenen Inhalte werden nicht indexiert.",
+        "proceed": "Sie können den Konnektor trotzdem erstellen und diese Punkte später beheben.",
         "viewButton": {
           "label": "Fehlgeschlagene Prüfungen anzeigen"
         },
         "proceedButton": {
-          "label": "Connector trotzdem erstellen"
+          "label": "Konnektor trotzdem erstellen"
         }
       }
     },
     "connectorEdit": {
       "editButton": {
-        "label": "Connector bearbeiten"
+        "label": "Konnektor bearbeiten"
       },
       "header": {
         "title": "{name} bearbeiten",
-        "description": "Ändern Sie die Einstellungen dieses {source}-Connectors. Sie prüfen den Plan, bevor die Änderungen angewendet werden.",
+        "description": "Ändern Sie die Einstellungen dieses {source}-Konnektors. Sie prüfen den Plan, bevor die Änderungen angewendet werden.",
         "reviewButton": {
           "label": "Änderungen prüfen"
         }
       },
       "loadError": {
-        "title": "Der Connector konnte nicht geladen werden",
-        "description": "Laden Sie die Seite neu oder kehren Sie zum Connector zurück.",
+        "title": "Der Konnektor konnte nicht geladen werden",
+        "description": "Laden Sie die Seite neu oder kehren Sie zum Konnektor zurück.",
         "backButton": {
-          "label": "Zurück zum Connector"
+          "label": "Zurück zum Konnektor"
         }
       },
       "credentialSwap": {
@@ -10832,7 +10832,7 @@
       "files": {
         "title": "Dateien",
         "description": "Fügen Sie Dateien hinzu oder entfernen Sie sie. Neue Dateien werden erst indexiert, nachdem Sie den Plan angewendet haben.",
-        "empty": "Der Connector hat keine Dateien.",
+        "empty": "Der Konnektor hat keine Dateien.",
         "addButton": {
           "label": "Dateien hinzufügen"
         },
@@ -10855,14 +10855,14 @@
       },
       "plan": {
         "title": "Plan prüfen",
-        "description": "{count, plural, one {Der Connector hat # indexiertes Dokument.} other {Der Connector hat # indexierte Dokumente.}}",
+        "description": "{count, plural, one {Der Konnektor hat # indexiertes Dokument.} other {Der Konnektor hat # indexierte Dokumente.}}",
         "changes": {
           "list": "Geändert: {fields}",
           "none": "Nichts wurde geändert."
         },
         "stale": {
-          "title": "Der Connector wurde geändert",
-          "description": "Der Connector wurde nach der Berechnung dieses Plans geändert. Berechnen Sie den Plan neu, bevor Sie ihn anwenden.",
+          "title": "Der Konnektor wurde geändert",
+          "description": "Der Konnektor wurde nach der Berechnung dieses Plans geändert. Berechnen Sie den Plan neu, bevor Sie ihn anwenden.",
           "replanButton": {
             "label": "Neu planen"
           }
@@ -11632,7 +11632,7 @@
     },
     "errorDisplay": {
       "anonymousDisabled": {
-        "toast": "Für dein Team ist der anonyme Zugriff nicht aktiviert."
+        "toast": "Für Ihr Team ist der anonyme Zugriff nicht aktiviert."
       },
       "generic": {
         "toast": "Ein Fehler ist aufgetreten."
@@ -11649,7 +11649,7 @@
         "label": "Anmelden"
       },
       "signinPrompt": {
-        "text": "Hast du bereits ein Konto?"
+        "text": "Haben Sie bereits ein Konto?"
       },
       "signupPrompt": {
         "text": "Neu bei {appName}?"
@@ -12271,7 +12271,7 @@
         },
         "input": {
           "ariaLabel": "Nachrichteneingabe",
-          "listeningPlaceholder": "Höre zu...",
+          "listeningPlaceholder": "Zuhören...",
           "placeholder": "Wie kann ich Ihnen heute helfen?",
           "queuedPlaceholder": "Pfeil nach oben drücken, um Nachrichten in der Warteschlange zu bearbeiten",
           "searchPlaceholder": "Verbundene Quellen durchsuchen",
@@ -13662,7 +13662,7 @@
     },
     "connectorMultiSelect": {
       "allSelected": {
-        "description": "Alle verfügbaren Konnektoren wurden ausgewählt. Entferne unten Konnektoren, um andere hinzuzufügen.",
+        "description": "Alle verfügbaren Konnektoren wurden ausgewählt. Entfernen Sie unten Konnektoren, um andere hinzuzufügen.",
         "placeholder": "Alle Konnektoren ausgewählt"
       },
       "documentSetHint": {
@@ -13675,10 +13675,10 @@
         "text": "Keine weiteren Konnektoren verfügbar"
       },
       "noPrivateConnectors": {
-        "text": "Keine privaten Konnektoren verfügbar. Erstelle zuerst einen privaten Konnektor."
+        "text": "Keine privaten Konnektoren verfügbar. Erstellen Sie zuerst einen privaten Konnektor."
       },
       "noneSelected": {
-        "text": "Keine Konnektoren ausgewählt. Suche und wähle oben Konnektoren aus."
+        "text": "Keine Konnektoren ausgewählt. Suchen und wählen Sie oben Konnektoren aus."
       },
       "removeConnector": {
         "tooltip": "Konnektor entfernen"
@@ -13753,7 +13753,7 @@
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {
-          "text": "Wenn du der Administrator bist, besuche bitte die Seite <billingLink>Admin-Abrechnung</billingLink>, um deine Lizenz zu {hadLicense, select, true {verlängern} other {aktivieren}}, registriere dich über Stripe oder wende dich an <supportLink>support@onyx.app</supportLink> für Unterstützung bei der Abrechnung."
+          "text": "Wenn Sie der Administrator sind, besuchen Sie bitte die Seite <billingLink>Admin-Abrechnung</billingLink>, um Ihre Lizenz zu {hadLicense, select, true {verlängern} other {aktivieren}}, registrieren Sie sich über Stripe oder wenden Sie sich an <supportLink>support@onyx.app</supportLink> für Unterstützung bei der Abrechnung."
         },
         "downgradeButton": {
           "label": "Auf Community herabstufen"
@@ -13762,68 +13762,68 @@
           "title": "Zugriff eingeschränkt"
         },
         "licenseLapse": {
-          "description": "Dein Zugriff auf {appName} wurde wegen einer abgelaufenen Lizenz vorübergehend ausgesetzt."
+          "description": "Ihr Zugriff auf {appName} wurde wegen einer abgelaufenen Lizenz vorübergehend ausgesetzt."
         },
         "licenseRequired": {
-          "description": "Für die Nutzung von {appName} ist eine Lizenz erforderlich. Deine Daten sind geschützt und stehen zur Verfügung, sobald eine Lizenz aktiviert ist."
+          "description": "Für die Nutzung von {appName} ist eine Lizenz erforderlich. Ihre Daten sind geschützt und stehen zur Verfügung, sobald eine Lizenz aktiviert ist."
         },
         "logoutButton": {
           "label": "Abmelden"
         },
         "manageSubscription": {
-          "description": "Als Administrator kannst du dein Abonnement über die Schaltfläche unten verwalten. Alle anderen Benutzer wenden sich bitte an ihren Administrator."
+          "description": "Als Administrator können Sie Ihr Abonnement über die Schaltfläche unten verwalten. Alle anderen Benutzer wenden sich bitte an ihren Administrator."
         },
         "obtainLicense": {
-          "description": "Um loszulegen, wende dich bitte an deinen Systemadministrator, um eine Lizenz zu erhalten."
+          "description": "Um loszulegen, wenden Sie sich bitte an Ihren Systemadministrator, um eine Lizenz zu erhalten."
         },
         "renewLicense": {
-          "description": "Um deinen Zugriff wiederherzustellen und {appName} weiter zu nutzen, wende dich bitte an deinen Systemadministrator, um die Lizenz zu verlängern."
+          "description": "Um Ihren Zugriff wiederherzustellen und {appName} weiter zu nutzen, wenden Sie sich bitte an Ihren Systemadministrator, um die Lizenz zu verlängern."
         },
         "resubscribeButton": {
           "label": "Erneut abonnieren",
           "loading": "Wird geladen..."
         },
         "resubscribeError": {
-          "text": "Fehler beim Öffnen der Seite zur erneuten Abonnierung. Bitte versuche es später erneut."
+          "text": "Fehler beim Öffnen der Seite zur erneuten Abonnierung. Bitte versuchen Sie es später erneut."
         },
         "seatLimit": {
-          "description": "Deine Organisation hat die lizenzierte Anzahl an Plätzen überschritten. Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
+          "description": "Ihre Organisation hat die lizenzierte Anzahl an Plätzen überschritten. Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
         },
         "seatLimitAdminHint": {
-          "text": "Als Administrator kannst du Benutzer auf der Seite <userLink>Benutzerverwaltung</userLink> verwalten oder deine Lizenz auf der Seite <billingLink>Admin-Abrechnung</billingLink> erweitern."
+          "text": "Als Administrator können Sie Benutzer auf der Seite <userLink>Benutzerverwaltung</userLink> verwalten oder Ihre Lizenz auf der Seite <billingLink>Admin-Abrechnung</billingLink> erweitern."
         },
         "seatLimitWithCounts": {
-          "description": "Deine Organisation hat die lizenzierte Anzahl an Plätzen überschritten ({used} Benutzer / {seats} Plätze). Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
+          "description": "Ihre Organisation hat die lizenzierte Anzahl an Plätzen überschritten ({used} Benutzer / {seats} Plätze). Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
         },
         "subscriptionLapse": {
-          "description": "Dein Zugriff auf {appName} wurde wegen eines abgelaufenen Abonnements vorübergehend ausgesetzt."
+          "description": "Ihr Zugriff auf {appName} wurde wegen eines abgelaufenen Abonnements vorübergehend ausgesetzt."
         },
         "updatePayment": {
-          "description": "Um deinen Zugriff wiederherzustellen und die leistungsstarken Funktionen von {appName} weiter zu nutzen, aktualisiere bitte deine Zahlungsinformationen."
+          "description": "Um Ihren Zugriff wiederherzustellen und die leistungsstarken Funktionen von {appName} weiter zu nutzen, aktualisieren Sie bitte Ihre Zahlungsinformationen."
         }
       },
       "configError": {
         "adminHint": {
-          "text": "Wenn du Administrator bist, findest du in unserer <docsLink>Dokumentation</docsLink> die richtigen Konfigurationsschritte. Wenn du Benutzer bist, wende dich bitte an deinen Administrator."
+          "text": "Wenn Sie Administrator sind, finden Sie in unserer <docsLink>Dokumentation</docsLink> die richtigen Konfigurationsschritte. Wenn Sie Benutzer sind, wenden Sie sich bitte an Ihren Administrator."
         },
         "heading": {
-          "description": "Beim Laden deiner {appName}-Einstellungen ist offenbar ein Problem aufgetreten. Das kann an einem Konfigurationsproblem oder einer unvollständigen Einrichtung liegen.",
+          "description": "Beim Laden Ihrer {appName}-Einstellungen ist offenbar ein Problem aufgetreten. Das kann an einem Konfigurationsproblem oder einer unvollständigen Einrichtung liegen.",
           "title": "Es ist ein Problem aufgetreten"
         }
       },
       "maintenance": {
         "apology": {
-          "description": "Wir entschuldigen uns für etwaige Unannehmlichkeiten und danken für deine Geduld."
+          "description": "Wir entschuldigen uns für etwaige Unannehmlichkeiten und danken für Ihre Geduld."
         },
         "checkBack": {
-          "description": "{appName} befindet sich derzeit in einem Wartungsfenster. Bitte schau in ein paar Minuten wieder vorbei."
+          "description": "{appName} befindet sich derzeit in einem Wartungsfenster. Bitte schauen Sie in ein paar Minuten wieder vorbei."
         },
         "heading": {
           "title": "Wartung läuft"
         }
       },
       "needHelp": {
-        "text": "Brauchst du Hilfe? Tritt unserer <discordLink>Discord-Community</discordLink> bei, um Unterstützung zu erhalten."
+        "text": "Brauchen Sie Hilfe? Treten Sie unserer <discordLink>Discord-Community</discordLink> bei, um Unterstützung zu erhalten."
       }
     },
     "errors": {
@@ -13880,7 +13880,7 @@
         "text": "Keine weiteren föderierten Konnektoren verfügbar"
       },
       "noneSelected": {
-        "text": "Keine föderierten Konnektoren ausgewählt. Suche und wähle oben Konnektoren aus."
+        "text": "Keine föderierten Konnektoren ausgewählt. Suchen und wählen Sie oben Konnektoren aus."
       },
       "realtimeSearchHint": {
         "description": "Dokumente aus den ausgewählten föderierten Konnektoren werden bei Abfragen in Echtzeit durchsucht."
@@ -13908,7 +13908,7 @@
       },
       "markdown": {
         "editorLabel": "Markdown",
-        "placeholder": "Gib hier dein Markdown ein...",
+        "placeholder": "Geben Sie hier Ihr Markdown ein...",
         "previewTab": "Vorschau",
         "writeTab": "Schreiben"
       },
@@ -13975,7 +13975,7 @@
     },
     "genericMultiSelect": {
       "loadFailed": {
-        "text": "{label} konnte nicht geladen werden. Bitte versuche es erneut."
+        "text": "{label} konnte nicht geladen werden. Bitte versuchen Sie es erneut."
       },
       "search": {
         "placeholder": "Suchen..."
@@ -13983,11 +13983,11 @@
     },
     "groupsMultiSelect": {
       "noGroups": {
-        "emptyMessage": "Keine Benutzergruppen verfügbar. Bitte erstelle zuerst eine Benutzergruppe."
+        "emptyMessage": "Keine Benutzergruppen verfügbar. Bitte erstellen Sie zuerst eine Benutzergruppe."
       },
       "userGroups": {
         "label": "Benutzergruppen",
-        "subtext": "Wähle aus, welche Benutzergruppen auf diese Ressource zugreifen können"
+        "subtext": "Wählen Sie aus, welche Benutzergruppen auf diese Ressource zugreifen können"
       }
     },
     "icons": {
@@ -14013,7 +14013,7 @@
     "isPublicSelector": {
       "assignGroups": {
         "label": "Gruppenzugriff für diesen {objectName} zuweisen",
-        "scopedSubtext": "Wähle eine oder mehrere der von dir verwalteten Gruppen aus, um Zugriff auf diesen {objectName} zu gewähren",
+        "scopedSubtext": "Wählen Sie eine oder mehrere der von Ihnen verwalteten Gruppen aus, um Zugriff auf diesen {objectName} zu gewähren",
         "visibleSubtext": "Dieser {objectName} ist für die unten ausgewählten Gruppen sichtbar/zugänglich"
       },
       "loading": {
@@ -14051,7 +14051,7 @@
     },
     "oauthCallback": {
       "authorizationFailed": {
-        "description": "Die Autorisierung wurde abgebrochen oder ist fehlgeschlagen. Bitte versuche es erneut.",
+        "description": "Die Autorisierung wurde abgebrochen oder ist fehlgeschlagen. Bitte versuchen Sie es erneut.",
         "title": "Autorisierung fehlgeschlagen"
       },
       "backButton": {
@@ -14061,18 +14061,18 @@
         "message": "Autorisierung konnte nicht abgeschlossen werden"
       },
       "genericError": {
-        "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+        "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "title": "Etwas ist schiefgelaufen"
       },
       "invalidRequest": {
-        "description": "Die Autorisierungsanfrage war unvollständig. Bitte versuche es erneut.",
+        "description": "Die Autorisierungsanfrage war unvollständig. Bitte versuchen Sie es erneut.",
         "title": "Ungültige Anfrage"
       },
       "loadingHint": {
         "text": "Das kann einen Moment dauern..."
       },
       "processing": {
-        "description": "Bitte warte, während wir die Einrichtung abschließen.",
+        "description": "Bitte warten Sie, während wir die Einrichtung abschließen.",
         "title": "Wird verarbeitet..."
       },
       "redirecting": {
@@ -14082,7 +14082,7 @@
         "text": "Dienst"
       },
       "success": {
-        "detailsTemplate": "Deine {serviceName}-Autorisierung wurde erfolgreich abgeschlossen.",
+        "detailsTemplate": "Ihre {serviceName}-Autorisierung wurde erfolgreich abgeschlossen.",
         "title": "Erfolgreich!"
       }
     },
@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "Globaler Standard"
       }
+    },
+    "appFooter": {
+      "slogan": "Open-Source-KI-Plattform"
     }
   },
   "craft": {
@@ -14210,15 +14213,15 @@
         "addButton": "Hinzufügen",
         "createButton": "Erstellen",
         "customApp": {
-          "description": "Zugangsdaten und Netzwerkzugriff für deine eigene Integration.",
+          "description": "Zugangsdaten und Netzwerkzugriff für Ihre eigene Integration.",
           "title": "Benutzerdefinierte App"
         },
         "mcpHint": {
-          "label": "Brauchst du stattdessen einen MCP-Server? Verbinde ihn unter „Aktionen“ und aktiviere ihn hier für Craft.",
+          "label": "Brauchen Sie stattdessen einen MCP-Server? Verbinden Sie ihn unter „Aktionen“ und aktivieren Sie ihn hier für Craft.",
           "openActionsButton": "Aktionen öffnen"
         },
         "modal": {
-          "description": "Stelle eine Integration deiner gesamten Organisation zur Verfügung. Integrierte Anbieter bringen Aktionen mit, die dem Craft-Agenten deren Nutzung beibringen; bereits konfigurierte Anbieter werden nicht aufgeführt.",
+          "description": "Stellen Sie eine Integration Ihrer gesamten Organisation zur Verfügung. Integrierte Anbieter bringen Aktionen mit, die dem Craft-Agenten deren Nutzung beibringen; bereits konfigurierte Anbieter werden nicht aufgeführt.",
           "title": "App hinzufügen"
         }
       },
@@ -14226,15 +14229,15 @@
         "associateButton": "Vorhandenen verknüpfen",
         "create": {
           "github": {
-            "description": "Wenn deine Skills in GitHub liegen, importiere sie zuerst auf der Skills-Seite und verknüpfe sie dann mit dieser App.",
+            "description": "Wenn Ihre Skills in GitHub liegen, importieren Sie sie zuerst auf der Skills-Seite und verknüpfen Sie sie dann mit dieser App.",
             "label": "Aus GitHub importieren"
           },
           "scratch": {
-            "description": "Schreibe Anweisungen und füge unterstützende Dateien hinzu.",
+            "description": "Schreiben Sie Anweisungen und fügen Sie unterstützende Dateien hinzu.",
             "label": "Von Grund auf beginnen"
           },
           "upload": {
-            "description": "Importiere eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
+            "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
             "label": "Skill hochladen"
           }
         },
@@ -14263,7 +14266,7 @@
         "title": "Verknüpfte Skills",
         "unavailable": {
           "duplicateName": "Ein Skill namens „{name}“ ist bereits verknüpft.",
-          "invalid": "Ungültiger Skill: Behebe das Problem, bevor du ihn verknüpfst.",
+          "invalid": "Ungültiger Skill: Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
           "otherApp": "Bereits mit der App „{name}“ verknüpft."
         },
         "unlink": {
@@ -14281,27 +14284,27 @@
         "emptyPolicies": "Dieser Anbieter hat keine Aktionen zum Konfigurieren.",
         "fields": {
           "name": {
-            "description": "Eine Bezeichnung für diese Verbindung. Verwende einen eindeutigen Namen, wenn du mehrere Instanzen desselben Anbieters hinzufügst (z. B. \"{name} — Engineering\").",
+            "description": "Eine Bezeichnung für diese Verbindung. Verwenden Sie einen eindeutigen Namen, wenn Sie mehrere Instanzen desselben Anbieters hinzufügen (z. B. \"{name} — Engineering\").",
             "label": "Name"
           }
         },
-        "managedDescription": "Von Onyx bereitgestellt: Lege fest, was der Agent tun darf.",
-        "managedNote": "Onyx verwaltet die Zugangsdaten. Lege Aktionsrichtlinien unter Berechtigungen fest. Mitglieder verbinden sich über Plugins.",
+        "managedDescription": "Von Onyx bereitgestellt: Legen Sie fest, was der Agent tun darf.",
+        "managedNote": "Onyx verwaltet die Zugangsdaten. Legen Sie Aktionsrichtlinien unter Berechtigungen fest. Mitglieder verbinden sich über Plugins.",
         "saveButton": "Speichern"
       },
       "customApp": {
         "cancelButton": "Abbrechen",
         "createButton": "Erstellen",
-        "createDescription": "Konfiguriere, wie der Egress-Proxy diese App erreicht und sich authentifiziert. Ein Skill ist nicht erforderlich.",
+        "createDescription": "Konfigurieren Sie, wie der Egress-Proxy diese App erreicht und sich authentifiziert. Ein Skill ist nicht erforderlich.",
         "createTitle": "Benutzerdefinierte App erstellen",
         "creatingButton": "Wird erstellt…",
         "disabled": {
-          "nameMissing": "Gib einen Namen ein, bevor du diese benutzerdefinierte App erstellst.",
-          "patternMissing": "Füge mindestens ein Upstream-URL-Muster hinzu. Gib ein Muster ein und drücke die Eingabetaste.",
-          "pristine": "Nimm vor dem Speichern eine Änderung vor.",
+          "nameMissing": "Geben Sie einen Namen ein, bevor Sie diese benutzerdefinierte App erstellen.",
+          "patternMissing": "Fügen Sie mindestens ein Upstream-URL-Muster hinzu. Geben Sie ein Muster ein und drücken Sie die Eingabetaste.",
+          "pristine": "Nehmen Sie vor dem Speichern eine Änderung vor.",
           "saving": "Ein Speichervorgang läuft bereits."
         },
-        "editDescription": "Aktualisiere die Gateway-Einstellungen und verwalte verknüpfte Skills.",
+        "editDescription": "Aktualisieren Sie die Gateway-Einstellungen und verwalten Sie verknüpfte Skills.",
         "editTitle": "{name} bearbeiten",
         "errors": {
           "saveFailedTitle": "Speichern nicht möglich"
@@ -14309,7 +14312,7 @@
         "fields": {
           "headers": {
             "addButton": "Header hinzufügen",
-            "description": "Optional: Header, die in ausgehende Anfragen eingefügt werden. Verwende '{placeholder}' für Werte, die der Nutzer (oder unten die Organisation) liefert, z. B. \"Bearer '{api_key}'\". Leer lassen, um die Upstream-Muster ohne Zugangsdaten freizugeben.",
+            "description": "Optional: Header, die in ausgehende Anfragen eingefügt werden. Verwenden Sie '{placeholder}' für Werte, die der Nutzer (oder unten die Organisation) liefert, z. B. \"Bearer '{api_key}'\". Leer lassen, um die Upstream-Muster ohne Zugangsdaten freizugeben.",
             "keyTitle": "Header",
             "label": "Header-Zugangsdaten-Muster",
             "valueTitle": "Wert"
@@ -14320,13 +14323,13 @@
           },
           "orgCredentials": {
             "addButton": "Zugangsdaten hinzufügen",
-            "description": "Optional: Werte, die deine Organisation für alle Nutzer vorausfüllt. Leer lassen, wenn jeder Nutzer eigene Zugangsdaten angibt.",
+            "description": "Optional: Werte, die Ihre Organisation für alle Nutzer vorausfüllt. Leer lassen, wenn jeder Nutzer eigene Zugangsdaten angibt.",
             "keyTitle": "Zugangsdaten-Schlüssel",
             "label": "Organisations-Zugangsdaten",
             "valueTitle": "Wert"
           },
           "upstreamPatterns": {
-            "description": "Ausgehende URLs, in die der Proxy Zugangsdaten einfügen darf. Verwende * für beliebige Zeichen (z. B. deckt https://api.example.com/* jeden Pfad dieses Hosts ab). Der Host muss wörtlich angegeben sein, keine Platzhalter vor dem ersten Schrägstrich. Gib ein Muster ein und drücke die Eingabetaste.",
+            "description": "Ausgehende URLs, in die der Proxy Zugangsdaten einfügen darf. Verwenden Sie * für beliebige Zeichen (z. B. deckt https://api.example.com/* jeden Pfad dieses Hosts ab). Der Host muss wörtlich angegeben sein, keine Platzhalter vor dem ersten Schrägstrich. Geben Sie ein Muster ein und drücken Sie die Eingabetaste.",
             "label": "Upstream-URL-Muster"
           }
         },
@@ -14337,11 +14340,11 @@
         }
       },
       "errors": {
-        "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Lade einen Skill mit anderem Namen hoch."
+        "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Laden Sie einen Skill mit anderem Namen hoch."
       },
       "mcpPolicy": {
-        "description": "Lege fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
-        "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktiviere Tools zuerst auf der MCP-Aktionsseite.",
+        "description": "Legen Sie fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
+        "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktivieren Sie Tools zuerst auf der MCP-Aktionsseite.",
         "saveButton": "Speichern",
         "title": "{name} bearbeiten"
       },
@@ -14357,17 +14360,17 @@
           "label": "Autorisierungscode wird eingetauscht…"
         },
         "success": {
-          "label": "Verbunden. Weiterleitung zurück zu deinen Apps…"
+          "label": "Verbunden. Weiterleitung zurück zu Ihren Apps…"
         },
         "title": "App wird verbunden"
       },
       "page": {
         "empty": {
-          "description": "Für deine Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
+          "description": "Für Ihre Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
           "title": "Noch nichts zu verbinden"
         },
         "header": {
-          "description": "Verbinde die Tools, die Onyx Craft während der Arbeit als Kontext nutzen kann.",
+          "description": "Verbinden Sie die Tools, die Onyx Craft während der Arbeit als Kontext nutzen kann.",
           "title": "Apps"
         },
         "loading": {
@@ -14377,7 +14380,7 @@
         "status": {
           "connected": "Verbunden",
           "connectedNeedsSkills": "Verbunden · nicht alle verknüpften Skills sind aktiviert",
-          "notAvailable": "Für dein Konto nicht verfügbar: Frag einen Admin",
+          "notAvailable": "Für Ihr Konto nicht verfügbar: Fragen Sie einen Admin",
           "skillWarningAriaLabel": "Skill-Einrichtung erforderlich",
           "skillWarningTooltip": "Nicht alle verknüpften Skills sind aktiviert. Diese App funktioniert möglicherweise nicht richtig.",
           "skillWarningSummary": "Nicht alle verknüpften Skills sind aktiviert."
@@ -14393,17 +14396,17 @@
           "autoApproveOption": "Automatisch genehmigen",
           "customOption": "Benutzerdefiniert",
           "defaultOption": "Standard",
-          "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Automatisch genehmigen“ führt sie ohne Rückfrage aus.",
+          "description": "Legen Sie fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Automatisch genehmigen“ führt sie ohne Rückfrage aus.",
           "title": "Berechtigungen"
         },
         "savingButton": "Wird gespeichert…",
         "advanced": {
-          "description": "Lege für jede Aktion einzeln eine Richtlinie fest.",
+          "description": "Legen Sie für jede Aktion einzeln eine Richtlinie fest.",
           "title": "Erweitert"
         }
       },
       "skillsStep": {
-        "description": "Optional: Verknüpfe vorhandene Skills oder erstelle einen für diese App.",
+        "description": "Optional: Verknüpfen Sie vorhandene Skills oder erstellen Sie einen für diese App.",
         "errors": {
           "saveFailedTitle": "Speichern nicht möglich"
         },
@@ -14416,7 +14419,7 @@
         "cancelButton": "Abbrechen",
         "connectButton": "Verbinden",
         "connectingButton": "Wird verbunden…",
-        "description": "Gib deine Zugangsdaten ein, um diese App für dein Konto zu autorisieren.",
+        "description": "Geben Sie Ihre Zugangsdaten ein, um diese App für Ihr Konto zu autorisieren.",
         "errors": {
           "connectFailedTitle": "Verbindung nicht möglich"
         },
@@ -14442,15 +14445,15 @@
       },
       "status": {
         "loading": "Ausgaben werden geladen…",
-        "incomplete": "Einige Ausgaben konnten nicht aufgelistet werden. Öffne Dateien, um den Arbeitsbereich zu durchsuchen.",
-        "error": "Ausgaben konnten nicht aktualisiert werden. Versuche es erneut."
+        "incomplete": "Einige Ausgaben konnten nicht aufgelistet werden. Öffnen Sie Dateien, um den Arbeitsbereich zu durchsuchen.",
+        "error": "Ausgaben konnten nicht aktualisiert werden. Versuchen Sie es erneut."
       }
     },
     "chatPanel": {
       "input": {
-        "continuePlaceholder": "Setze das Gespräch fort...",
+        "continuePlaceholder": "Gespräch fortsetzen...",
         "scheduledRunPlaceholder": "Geplante Ausführung läuft...",
-        "subagentPlaceholder": "Wechsle zum Hauptagenten, um eine Nachricht zu senden"
+        "subagentPlaceholder": "Wechseln Sie zum Hauptagenten, um eine Nachricht zu senden"
       },
       "openSidebar": {
         "ariaLabel": "Seitenleiste öffnen"
@@ -14466,9 +14469,9 @@
         "label": "Nach unten scrollen"
       },
       "toast": {
-        "operationWait": "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist.",
-        "sandboxWait": "Bitte warte, bis die Sandbox initialisiert ist",
-        "scheduledRunWait": "Bitte warte, bis die geplante Ausführung abgeschlossen ist."
+        "operationWait": "Bitte warten Sie, bis der aktuelle Vorgang abgeschlossen ist.",
+        "sandboxWait": "Bitte warten Sie, bis die Sandbox initialisiert ist",
+        "scheduledRunWait": "Bitte warten Sie, bis die geplante Ausführung abgeschlossen ist."
       },
       "loadError": {
         "title": "Die Sitzung konnte nicht geladen werden",
@@ -14479,7 +14482,7 @@
       },
       "settlementError": {
         "title": "Aufgabenabschluss konnte nicht bestätigt werden",
-        "description": "Versuche es erneut, um die Aufgabe zu prüfen und ihre gespeicherte Antwort zu laden."
+        "description": "Versuchen Sie es erneut, um die Aufgabe zu prüfen und ihre gespeicherte Antwort zu laden."
       }
     },
     "compaction": {
@@ -14489,7 +14492,7 @@
     },
     "connectDataBanner": {
       "cta": {
-        "label": "Verbinde deine Daten"
+        "label": "Daten verbinden"
       }
     },
     "debugLogs": {
@@ -14601,7 +14604,7 @@
         "label": "Dateien werden geladen..."
       },
       "preparing": {
-        "description": "Deine Entwicklungsumgebung wird eingerichtet",
+        "description": "Ihre Entwicklungsumgebung wird eingerichtet",
         "title": "Sandbox wird vorbereitet..."
       },
       "download": {
@@ -14700,7 +14703,7 @@
           "backButton": "Zurück",
           "ctaButton": "Craft an die Arbeit schicken",
           "nextButton": "Weiter",
-          "title": "Lerne Craft kennen"
+          "title": "Craft kennenlernen"
         },
         "outputs": {
           "ariaLabel": "Ergebnis: {name}",
@@ -14709,7 +14712,7 @@
             "label": "GitHub-PR"
           },
           "googleDoc": {
-            "caption": "In deinem Drive gespeichert",
+            "caption": "In Ihrem Drive gespeichert",
             "label": "Google-Dokument"
           },
           "liveApp": {
@@ -14718,52 +14721,52 @@
           }
         },
         "prompt": {
-          "label": "Dein Prompt"
+          "label": "Ihr Prompt"
         },
         "schedule": {
           "ariaLabel": "Geplante Aufgabe: führt diesen Prompt nach Zeitplan erneut aus",
-          "caption": "Läuft, während du weg bist",
+          "caption": "Läuft, während Sie weg sind",
           "label": "Jeden Montag, 8:00"
         },
         "sources": {
           "connectedAriaLabel": "Verbundene Quelle: {name}",
           "yourFiles": {
-            "ariaLabel": "Deine hochgeladenen Dateien",
-            "label": "Deine Dateien"
+            "ariaLabel": "Ihre hochgeladenen Dateien",
+            "label": "Ihre Dateien"
           }
         },
         "stages": {
           "constellation": {
-            "caption": "Klicke auf einen beliebigen Teil der Karte, um ihn erneut anzusehen.",
-            "title": "Das ist Craft. Du bist dran."
+            "caption": "Klicken Sie auf einen beliebigen Teil der Karte, um ihn erneut anzusehen.",
+            "title": "Das ist Craft. Jetzt sind Sie dran."
           },
           "machine": {
-            "caption": "Liest, was du sehen kannst. Nie deine Geheimnisse.",
+            "caption": "Liest, was Sie sehen können. Nie Ihre Geheimnisse.",
             "title": "Es arbeitet auf seiner eigenen Maschine."
           },
           "output": {
-            "caption": "Auf Abruf oder nach Zeitplan, während du weg bist.",
+            "caption": "Auf Abruf oder nach Zeitplan, während Sie weg sind.",
             "title": "Fertige Arbeit kommt heraus."
           },
           "prompt": {
-            "caption": "Beschreibe das Ergebnis, Craft erledigt den Rest.",
-            "title": "Gib Craft echte Arbeit."
+            "caption": "Beschreiben Sie das Ergebnis, Craft erledigt den Rest.",
+            "title": "Geben Sie Craft echte Arbeit."
           }
         },
         "team": {
-          "ariaLabel": "Dein Team: Ein Link teilt Crafts Arbeit",
+          "ariaLabel": "Ihr Team: Ein Link teilt Crafts Arbeit",
           "caption": "Ein Link teilt alles",
-          "label": "Dein Team"
+          "label": "Ihr Team"
         },
         "workspace": {
-          "approvalPill": "Wartet auf deine Freigabe",
+          "approvalPill": "Wartet auf Ihre Freigabe",
           "label": "Crafts Arbeitsbereich",
           "sandboxBadge": "Isolierte Sandbox"
         }
       },
       "llmLocked": {
         "backToChatButton": "Zurück zum Chat",
-        "description": "Onyx Craft benötigt einen Modellanbieter, den nur Admins einrichten können. Bitte deinen Admin, Anthropic, OpenAI oder OpenRouter zu verbinden.",
+        "description": "Onyx Craft benötigt einen Modellanbieter, den nur Admins einrichten können. Bitten Sie Ihren Admin, Anthropic, OpenAI oder OpenRouter zu verbinden.",
         "title": "Ein LLM-Anbieter ist erforderlich"
       },
       "llmSetup": {
@@ -14890,8 +14893,8 @@
         "button": "Schließen"
       },
       "modal": {
-        "description": "Sie ist nach einer Phase der Inaktivität eingeschlafen. Deine Arbeit ist gespeichert. Wecke sie, um weiterzumachen.",
-        "title": "Deine Sandbox ist eingeschlafen"
+        "description": "Die Sandbox ist nach einer Phase der Inaktivität eingeschlafen. Ihre Arbeit ist gespeichert. Wecken Sie sie, um weiterzumachen.",
+        "title": "Ihre Sandbox ist eingeschlafen"
       },
       "wake": {
         "button": "Sandbox aufwecken"
@@ -14925,9 +14928,9 @@
         "title": "{app} verbunden."
       },
       "error": {
-        "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+        "generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
         "notConfigurable": "Diese App kann von hier aus nicht eingerichtet werden.",
-        "popupBlocked": "Das Einrichtungsfenster konnte nicht geöffnet werden. Erlaube Pop-ups und versuche es erneut.",
+        "popupBlocked": "Das Einrichtungsfenster konnte nicht geöffnet werden. Erlauben Sie Pop-ups und versuchen Sie es erneut.",
         "startFailed": "Einrichtung konnte nicht gestartet werden"
       },
       "loading": {
@@ -14955,7 +14958,7 @@
         "label": "Organisation"
       },
       "private": {
-        "description": "Nur du kannst diese App sehen.",
+        "description": "Nur Sie können diese App sehen.",
         "label": "Privat"
       },
       "share": {
@@ -14997,7 +15000,7 @@
         "label": "Geplante Aufgaben"
       },
       "sessions": {
-        "empty": "Leg los! Der Sitzungsverlauf erscheint hier.",
+        "empty": "Legen Sie los! Der Sitzungsverlauf erscheint hier.",
         "title": "Sitzungen"
       },
       "skills": {
@@ -15013,8 +15016,8 @@
     },
     "skillsStale": {
       "notice": {
-        "description": "Lade diese Sitzung neu, um die neuesten Skills und App-Zugriffe zu übernehmen.",
-        "title": "Die Fähigkeiten deines Agenten haben sich geändert"
+        "description": "Laden Sie diese Sitzung neu, um die neuesten Skills und App-Zugriffe zu übernehmen.",
+        "title": "Die Fähigkeiten Ihres Agenten haben sich geändert"
       },
       "reload": {
         "button": "Neu laden",
@@ -15080,7 +15083,7 @@
           "prompt": {
             "description": "Diese Nachricht wird bei jedem Auslösen der Aufgabe an Craft gesendet.",
             "label": "Prompt",
-            "placeholder": "Beschreibe, was Craft bei jeder Ausführung tun soll..."
+            "placeholder": "Beschreiben Sie, was Craft bei jeder Ausführung tun soll..."
           },
           "schedule": {
             "label": "Zeitplan"
@@ -15120,7 +15123,7 @@
           "tryAgainButton": "Erneut versuchen"
         },
         "header": {
-          "description": "Führe Craft-Prompts nach Timer aus. Jedes Auslösen erstellt eine neue Sitzung, die im Hintergrund läuft.",
+          "description": "Führen Sie Craft-Prompts nach Timer aus. Jedes Auslösen erstellt eine neue Sitzung, die im Hintergrund läuft.",
           "title": "Geplante Aufgaben"
         },
         "newTaskButton": "Neue geplante Aufgabe",
@@ -15133,7 +15136,7 @@
         }
       },
       "newPage": {
-        "description": "Speichere Prompt und Zeitplan. Craft führt sie nach Timer aus.",
+        "description": "Speichern Sie Prompt und Zeitplan. Craft führt den Prompt dann nach Zeitplan aus.",
         "title": "Neue geplante Aufgabe"
       },
       "runHistory": {
@@ -15145,7 +15148,7 @@
           "trigger": "Auslöser"
         },
         "empty": {
-          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Einmal ausführen“."
+          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutzen Sie oben „Einmal ausführen“."
         },
         "errors": {
           "loadFailed": "Ausführungsverlauf konnte nicht geladen werden.",
@@ -15169,7 +15172,7 @@
         }
       },
       "scheduleEditor": {
-        "localTimeHint": "Zeiten verwenden deine lokale Zeitzone.",
+        "localTimeHint": "Zeiten verwenden Ihre lokale Zeitzone.",
         "dailyWeekly": {
           "atLabel": "Uhrzeit",
           "daysLabel": "Tage",
@@ -15298,7 +15301,7 @@
         "button": "Löschen",
         "entityTypeFile": "Datei",
         "entityTypeFolder": "Ordner",
-        "fileDetails": "Diese Datei wird aus deiner Bibliothek entfernt.",
+        "fileDetails": "Diese Datei wird aus Ihrer Bibliothek entfernt.",
         "folderDetails": "Dadurch werden der Ordner und sein gesamter Inhalt gelöscht."
       },
       "dropzone": {
@@ -15315,7 +15318,7 @@
         "label": "Dateien werden geladen…"
       },
       "modal": {
-        "description": "Dateien, die dein Agent in jeder Sitzung lesen kann.",
+        "description": "Dateien, die Ihr Agent in jeder Sitzung lesen kann.",
         "doneButton": "Fertig",
         "title": "Bibliothek"
       },
@@ -15327,7 +15330,7 @@
         "namePlaceholder": "Ordnernamen eingeben"
       },
       "search": {
-        "noResults": "Keine Dateien entsprechen deiner Suche",
+        "noResults": "Keine Dateien entsprechen Ihrer Suche",
         "placeholder": "Dateien suchen..."
       },
       "tree": {
@@ -15373,7 +15376,7 @@
     },
     "browserTab": {
       "localApp": {
-        "label": "Deine App ansehen"
+        "label": "Ihre App ansehen"
       },
       "home": {
         "title": "Apps",
@@ -15425,7 +15428,7 @@
         }
       },
       "browser": {
-        "placeholder": "Webapps in deiner Sandbox"
+        "placeholder": "Webapps in Ihrer Sandbox"
       },
       "reload": {
         "file": "Datei neu laden",
@@ -15499,7 +15502,7 @@
       "showAll": "Alle {count} Ergebnisse anzeigen",
       "app": "App",
       "unavailable": "Nicht mehr verfügbar",
-      "appTitle": "Vorschau deiner App"
+      "appTitle": "Vorschau Ihrer App"
     },
     "upgrade": {
       "title": "Craft erfordert einen Business-Plan",
@@ -15516,8 +15519,8 @@
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
-      "taskDescription": "Wähle die Plugins für diese Aufgabe und lege fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
-      "newTaskDescription": "Aktiviere ein Plugin, um mit deinen aktuellen Aktionseinstellungen zu beginnen.",
+      "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
+      "newTaskDescription": "Aktivieren Sie ein Plugin, um mit Ihren aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
       "workspace_managed": "Vom Arbeitsbereich verwaltet",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "+{count} weitere"
+    },
+    "sidebar": {
+      "open": "Seitenleiste öffnen",
+      "close": "Seitenleiste schließen"
     }
   },
   "settings": {
@@ -16254,7 +16261,7 @@
           "label": "Allgemein"
         },
         "llmGateway": {
-          "label": "LLM-Gateway"
+          "label": "LLM Gateway"
         },
         "usage": {
           "label": "Nutzung"
