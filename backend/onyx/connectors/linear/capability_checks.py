@@ -292,6 +292,7 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
         display_name: str,
         remediation: str,
         requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
@@ -304,6 +305,7 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
             requires_connector_config=requires_connector_config,
             remediation=remediation,
             docs_link=DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
             timeout_text=timeout_text,
         )
@@ -315,6 +317,7 @@ class _TokenCheck(_LinearCheck):
             check_id=SIGN_IN_CHECK_ID,
             display_name="Sign in to Linear",
             remediation="Check the API key, or reconnect through OAuth.",
+            validates_binding=True,
             fails_when_unreachable=True,
             timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )

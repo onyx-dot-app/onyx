@@ -599,7 +599,12 @@ With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a chec
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
 [[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
-When one has `FAILED` in the form's latest run, Create first opens an advisory
+The create form keeps its configuration locked until a run passes every check
+with `validates_binding` (`formUnlocked` in
+`web/src/lib/connectors/checks/hooks.ts`).
+Each source with named checks sets it on its sign-in check, and some sources also
+on a listing that runs after it (e.g. Jira's "List projects").
+When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory
 (`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
 that states the count and offers to show the checks card or to create the
 connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
