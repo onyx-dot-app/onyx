@@ -520,8 +520,8 @@ services:
       # A .env without MINIO_ROOT_* falls back to the S3_AWS_* pair.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}}
-    # 0 on an install that never held files here, or once MinIO is retired. An
-    # earlier release's .env lacks the variable, so its MinIO keeps running.
+    # Unset means 1, since a .env from a release before v5.0 lacks it and its MinIO
+    # still holds files. 0 on a fresh install or once MinIO is retired.
     deploy:
       replicas: ${MINIO_REPLICAS:-1}
     volumes:
@@ -540,7 +540,7 @@ services:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     restart: unless-stopped
     init: true
-    # It only has work while MinIO holds files, so it runs exactly when MinIO does.
+    # Shares MinIO's replica count, since it has no work once MinIO is retired or was never used.
     deploy:
       replicas: ${MINIO_REPLICAS:-1}
     depends_on:

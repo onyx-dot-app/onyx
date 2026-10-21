@@ -60,7 +60,7 @@ A hand-run upgrade from a release before v5.0 of an install on the bundled MinIO
 `S3_ENDPOINT_URL=http://minio:9000`) needs two more `.env` edits before `docker compose up`, since v5.0
 moves the bundled file store from MinIO to the object store and only `onyx-cli deploy upgrade` makes them
 for you: set `S3_ENDPOINT_URL=http://object-store:8333` and add `S3_LEGACY_ENDPOINT_URL=http://minio:9000`.
-Without them the app keeps its files in MinIO, which a later release removes. The `api_server` and
+Keep `MINIO_REPLICAS` unset or `1` until you retire MinIO, since it still holds the files. Without the two edits the app keeps its files in MinIO, which a later release removes. The `api_server` and
 `object-store-copy` logs warn about this at startup. External storage (S3, GCS, Azure) needs no change. See
 the [object store migration guide](https://docs.onyx.app/admins/advanced_configs/object_store_migration).
 
