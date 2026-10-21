@@ -36,7 +36,6 @@ interface DropdownListProps {
   mode: DropdownMode;
   container: HTMLElement | null | undefined;
   isOpen: boolean;
-  disabled: boolean;
   /** The list's accessible name. */
   label: string;
   floatingStyles: React.CSSProperties;
@@ -104,7 +103,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       mode,
       container,
       isOpen,
-      disabled,
       label,
       floatingStyles,
       isPositioned,
@@ -258,7 +256,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       };
     });
 
-    if (!presence.mounted || disabled || typeof document === "undefined") {
+    // A disabled dropdown is closed by the overlay, so its list still plays
+    // the exit: cutting it short here would replay it on re-enable.
+    if (!presence.mounted || typeof document === "undefined") {
       return null;
     }
 

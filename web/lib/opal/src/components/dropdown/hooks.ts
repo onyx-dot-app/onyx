@@ -483,6 +483,10 @@ export function useDropdownOverlay({
     },
     [openProp, onOpenChange, disabled]
   );
+  // Disabling closes an open list; it then exits like any other close.
+  useEffect(() => {
+    if (disabled) setIsOpen(false);
+  }, [disabled, setIsOpen]);
 
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);

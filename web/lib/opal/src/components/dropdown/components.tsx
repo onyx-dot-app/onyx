@@ -65,7 +65,7 @@ interface DropdownProps {
   /** Controlled open state. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** A disabled dropdown never opens and renders no list. */
+  /** A disabled dropdown never opens; disabling an open one closes it. */
   disabled?: boolean;
   /**
    * Prefix for the list's and the rows' element ids, so a form field can
@@ -547,7 +547,6 @@ function DropdownData(props: DropdownDataProps) {
   const closeOnSelect = props.closeOnSelect ?? values === undefined;
   const {
     id,
-    disabled,
     container,
     isOpen,
     setIsOpen,
@@ -939,7 +938,6 @@ function DropdownData(props: DropdownDataProps) {
         mode={mode}
         container={container}
         isOpen={isOpen}
-        disabled={disabled}
         label={label ?? ""}
         floatingStyles={floatingStyles}
         isPositioned={isPositioned}
