@@ -189,12 +189,16 @@ def record_cleanup_checkpoint__no_commit(
     db_session: Session,
     sandbox_id: UUID,
     checkpoint: SandboxCleanupCheckpoint,
+    *,
+    expected_status: Literal[
+        SandboxStatus.RUNNING, SandboxStatus.FAILED
+    ] = SandboxStatus.RUNNING,
 ) -> bool:
     result = db_session.execute(
         update(Sandbox)
         .where(
             Sandbox.id == sandbox_id,
-            Sandbox.status == SandboxStatus.RUNNING,
+            Sandbox.status == expected_status,
             Sandbox.provisioning_attempt_number
             == checkpoint.provisioning_attempt_number,
             Sandbox.last_heartbeat.is_not_distinct_from(checkpoint.last_heartbeat),
@@ -389,6 +393,15 @@ def user_has_stale_active_session(
         .limit(1)
     )
     return db_session.execute(stmt).first() is not None
+
+
+def user_has_build_sessions(db_session: Session, user_id: UUID) -> bool:
+    return (
+        db_session.scalar(
+            select(BuildSession.id).where(BuildSession.user_id == user_id).limit(1)
+        )
+        is not None
+    )
 
 
 def create_snapshot__no_commit(

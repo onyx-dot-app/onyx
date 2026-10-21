@@ -1079,6 +1079,8 @@ def sleep_sandbox(
             ):
                 return
             _require_cleanup_ownership(claim, session_creation_lock)
+            if check_cleanup_ownership is not None:
+                check_cleanup_ownership()
             sandbox_manager.terminate_observed_resources(
                 sandbox_id,
                 resources,

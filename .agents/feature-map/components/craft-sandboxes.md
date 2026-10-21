@@ -113,8 +113,8 @@ interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
 - Labels (`backend/onyx/server/features/build/sandbox/labels.py`):
   `LABEL_SANDBOX_ID` / `LABEL_TENANT_ID` (stamped onto the K8s Pod/Service, and
   used as the Docker manager's equivalent tag), `LABEL_PROVISIONING_ATTEMPT`
-  (read into resource inventory for cleanup ownership checks; database attempt
-  conditions still fence provisioning status writes), `LABEL_K8S_COMPONENT`
+  (read into resource inventory and compared with database attempts during cleanup;
+  conditional updates fence provisioning status writes), `LABEL_K8S_COMPONENT`
   (`"sandbox"`, the NetworkPolicy pod selector).
 - Snapshot storage layout (FileStore, `FileOrigin.SANDBOX_SNAPSHOT`,
   `backend/onyx/server/features/build/sandbox/snapshot_manager.py`):
@@ -442,7 +442,18 @@ symlink into it rather than copying (`session_workspace.py`).
 3. **Recovery** (`snapshot_opencode_history_before_recovery`,
    `sandbox_lifecycle.py:151`): best-effort opencode-history capture right
    before an unhealthy `RUNNING` sandbox is terminated for re-provisioning.
-4. **Manual API** (`POST /{session_id}/snapshot`,
+4. **Failed-runtime cleanup** (`session/resource_cleanup.py:_checkpoint_failed_runtime`):
+   capture prior session work before collecting a FAILED owner's older runtime.
+   Cleanup renews its claim with the session-flow lease before checkpoint calls,
+   so a full bulk-transfer timeout does not expire the claim.
+   It also checks and renews the held session-creation lock before and after
+   history capture, workspace listing, and each snapshot, including the final snapshot.
+   Losing either lock stops checkpointing before cleanup proof or deletion.
+   A checkpoint failure preserves resources for retry. Fresh Kubernetes pods with
+   current attempt labels do not need this checkpoint. Retained Docker volumes do.
+   Cleanup commits proof before deleting a runtime. A later sweep can reuse it
+   only when the runtime is absent and the attempt, storage identity, and heartbeat match.
+5. **Manual API** (`POST /{session_id}/snapshot`,
    `POST /{session_id}/opencode-history-snapshot`, §2): the history endpoint
    is a manual capture hook for tests and operators. No frontend code calls it.
 
@@ -492,8 +503,9 @@ lives in `/workspace/opencode-data`, an `emptyDir` destroyed with the pod. It is
 durable only from the moment it is captured into the sandbox-global snapshot
 described above. The capture points are: idle reap (always), periodic
 background snapshot (only when a session output snapshot also succeeded that
-tick, roughly every 15 minutes of active use at defaults), and best-effort
-recovery. **There is no per-turn capture.** Work that lives only in opencode's
+tick, roughly every 15 minutes of active use at defaults), best-effort recovery,
+and failed-runtime cleanup before it collects prior session work.
+**There is no per-turn capture.** Work that lives only in opencode's
 history (not in a session's `outputs/`) since the last successful capture is
 lost if the pod dies ungracefully (node eviction, OOM-kill, spot reclaim,
 crash) between captures.
@@ -504,12 +516,18 @@ The task first runs `session/resource_cleanup.py:reconcile_sandbox_resources`,
 even when no RUNNING row exists. It marks stale PROVISIONING attempts FAILED
 with a conditional update, so late finalization cannot report them RUNNING.
 It then inventories runtime resources. A successful per-resource DB read must
-find no owner, or an owner in SLEEPING or TERMINATED state.
-FAILED owners remain protected until checkpoint-aware collection is available.
+find no owner, or an owner in FAILED, SLEEPING, or TERMINATED state.
 RUNNING and live PROVISIONING owners remain protected. Resources get a 15-minute
 creation grace period. Each pass attempts at most 100 resource deletions under
 the same per-sandbox lock that provisioning uses. Errors retain the resource
 for retry and do not prevent independent resource cleanup.
+If a FAILED owner's resources can contain prior session work, cleanup checkpoints
+that work first. A checkpoint failure retains the resources for retry. A failed
+fresh Kubernetes pod from the current provisioning attempt has not admitted new
+user work and can be collected without repeating restoration snapshots.
+Docker workspace volumes require a checkpoint even when a new container mounts them.
+FAILED cleanup saves the same durable proof as idle cleanup, with a FAILED status
+fence. It checks each resource against current proof instead of a sweep-local map.
 Inventory failures stop reconciliation but do not skip snapshots or idle cleanup
 while the cleanup lease remains owned. Losing that lease aborts the task.
 
@@ -564,6 +582,9 @@ Detached legacy volumes require a matching network or Compose project label.
 The sandbox ID and volume name alone do not prove deployment ownership.
 Idle cleanup refuses to report sleep when existing storage has no owned inventory.
 Resources without enough ownership metadata require operator inspection.
+Legacy auth Secrets lack tenant labels. Cleanup requires a matching database
+owner or a sandbox resource with verified tenant labels before collecting them.
+An isolated legacy Secret with no such evidence remains intact and logs a warning.
 `delete_resource` checks the observed identity again. Kubernetes also requires
 the component label to be `sandbox` or `sandbox-opencode-auth` before deletion.
 Kubernetes deletes with UID

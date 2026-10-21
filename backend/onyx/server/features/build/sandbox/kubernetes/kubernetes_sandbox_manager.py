@@ -1337,27 +1337,40 @@ class KubernetesSandboxManager(SandboxManager):
             (SandboxResourceKind.SERVICE, self._core_api.list_namespaced_service),
             (SandboxResourceKind.SECRET, self._core_api.list_namespaced_secret),
         ):
+            resource_selector = selector
+            if kind == SandboxResourceKind.SECRET:
+                resource_selector = f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_AUTH}"
+                if sandbox_id is not None:
+                    resource_selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
             continuation = None
             while True:
                 page = list_resources(
                     namespace=self._namespace,
-                    label_selector=selector,
+                    label_selector=resource_selector,
                     limit=100,
                     _continue=continuation,
                     _request_timeout=remaining_request_timeout(deadline),
                 )
                 for item in page.items:
                     metadata = item.metadata
+                    labels = metadata.labels or {}
+                    legacy = (
+                        kind == SandboxResourceKind.SECRET
+                        and LABEL_TENANT_ID not in labels
+                    )
+                    resource_labels = (
+                        {**labels, LABEL_TENANT_ID: tenant_id} if legacy else labels
+                    )
                     resource = sandbox_resource_from_labels(
                         kind=kind,
                         name=metadata.name,
                         instance_id=metadata.uid,
                         created_at=metadata.creation_timestamp,
-                        labels=metadata.labels or {},
+                        labels=resource_labels,
                         tenant_id=tenant_id,
                     )
                     if resource is not None:
-                        yield resource
+                        yield resource.model_copy(update={"legacy_ownership": legacy})
                 continuation = page.metadata._continue
                 if not continuation:
                     break
@@ -1385,11 +1398,28 @@ class KubernetesSandboxManager(SandboxManager):
                 _request_timeout=remaining_request_timeout(deadline),
             )
             labels = current.metadata.labels or {}
+            legacy_auth = (
+                resource.legacy_ownership
+                and resource.kind == SandboxResourceKind.SECRET
+                and labels.get(LABEL_K8S_COMPONENT) == LABEL_K8S_COMPONENT_AUTH
+                and LABEL_TENANT_ID not in labels
+            )
             if (
                 current.metadata.uid != resource.instance_id
                 or labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
-                or labels.get(LABEL_TENANT_ID) != resource.tenant_id
-                or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+                or (
+                    not legacy_auth
+                    and labels.get(LABEL_TENANT_ID) != resource.tenant_id
+                )
+                or (
+                    not legacy_auth
+                    and labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+                )
+                or (
+                    resource.provisioning_attempt_number is not None
+                    and labels.get(LABEL_PROVISIONING_ATTEMPT)
+                    != str(resource.provisioning_attempt_number)
+                )
                 or labels.get(LABEL_K8S_COMPONENT)
                 not in {LABEL_K8S_COMPONENT_SANDBOX, LABEL_K8S_COMPONENT_AUTH}
             ):
