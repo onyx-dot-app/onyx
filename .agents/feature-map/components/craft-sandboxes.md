@@ -307,6 +307,12 @@ sandbox Pod into a Helm-rendered PodTemplate...") but **this has already
 shipped**: the template file and the `read_namespaced_pod_template` call both
 exist in the current tree. Treat that doc as historical rationale.
 
+The `onyx.sandboxApiUrl` Helm helper supplies the same `ONYX_SERVER_URL` to the
+API ConfigMap and sandbox PodTemplate. It defaults to the release's internal API
+Service URL, including the release namespace and Service port. An explicit
+`configMap.ONYX_SERVER_URL` overrides both. Kubernetes sandbox callbacks need no
+host gateway alias or public ingress by default.
+
 **The exec sidecar** (`_SIDECAR_CONTAINER_NAME = "sidecar"`) is a K8s
 "restartable init container" (`restartPolicy: Always` on an `initContainers`
 entry): it starts before the main container, keeps running for the pod's whole
@@ -777,3 +783,27 @@ Updates to an existing symlink are atomic. Replacing a legacy directory first re
 Container lookup and archive transfer retry transport and Engine server failures; rejected requests and extraction failures do not retry.
 Previous bundles remain available for 60 seconds so readers can finish.
 Cleanup accepts only direct bundle children and remains best effort under concurrent publication.
+
+### Local development lifecycle tools
+
+`deployment/helm/dev/dev.py` supplies shared Make and VS Code commands for image
+refresh, setup diagnostics, readiness, migrations, and data-preserving cluster pause/resume.
+`deployment/helm/dev/runtime.py` resolves the deployed API container's ConfigMaps,
+Secrets, and inline env settings. Personal `.env.k8s` entries override deployment defaults;
+the selected context, sandbox backend, and sandbox namespace stay pinned.
+Resolved secrets remain in process memory. No launch task writes an env file.
+`deployment/helm/dev/launch.py` starts both terminal and debugger API/worker processes
+with that configuration and preserves the existing reload implementations.
+
+Infrastructure startup waits for active Onyx controllers and the Telepresence manager.
+Application readiness checks the real API readiness response through the frontend proxy,
+then checks the frontend HTML page. It does not verify worker readiness, login, or licensing.
+The intercept command reuses an existing intercept. A known stale-agent identity failure
+allows one targeted rollout and retry; other failures propagate.
+
+Doctor checks prerequisites and effective configuration without printing secret values.
+The local overlay selects the dev sandbox image with `IfNotPresent` for all containers.
+Startup forwards `SANDBOX_IMAGE` overrides to Helm, and doctor detects template drift.
+Image refresh updates init and main containers together and does not recycle live pods.
+Cleanup previews checkout-labeled dangling images and never deletes volumes.
+See `docs/craft/dev/local-kubernetes.md` for command scope and cache retention.

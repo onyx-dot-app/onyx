@@ -284,6 +284,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 {{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
 {{- end }}
 
+{{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
+{{- define "onyx.sandboxApiUrl" -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
+{{- end }}
+
 {{- define "onyx.sandboxProxyHost" -}}
 {{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
 {{- end }}
