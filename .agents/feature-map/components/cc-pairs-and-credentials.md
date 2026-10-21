@@ -584,6 +584,10 @@ Existing coverage worth reading before adding more:
 
 ## 9. Footguns
 
+- The Google OAuth callback route selects Gmail or Drive from the `[connector]`
+  route parameter. Shared Google credentials return scopes for both sources.
+  Never select the connector by searching the full callback URL for `gmail`.
+
 - **The cc-pair/connector conflation is the single most common misreading of
   this code.** Grepping for "connector" and patching `Connector` fields when
   the actual operative row is `ConnectorCredentialPair` is a real trap: status,
