@@ -7,16 +7,25 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user, scope_exempt
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.db.cost_override import (
+    create_cost_override,
+    delete_cost_override,
+    fetch_cost_override,
+    fetch_cost_overrides,
+    update_cost_override,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
     fetch_default_model,
+    fetch_model_configuration_by_id,
 )
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.system_usage import (
@@ -47,15 +56,11 @@ from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
-from onyx.llm.cost_overrides import (
-    delete_override,
-    invalidate_override_cache,
-    list_overrides,
-    upsert_override,
-)
+from onyx.llm.cost_overrides import invalidate_override_cache
 from onyx.server.features.usage.models import (
     CostOverride,
-    CostOverrideUpsertRequest,
+    CostOverrideCreateRequest,
+    CostOverrideUpdateRequest,
     EffectiveCostBudget,
     ResetUsageRequest,
     ResetUsageResponse,
@@ -262,20 +267,31 @@ def get_my_usage(
     )
     available_model_prices: list[ModelPrice] = []
     accessible_model_configuration_ids: set[int] = set()
-    seen: set[tuple[str, str]] = set()
+    # Providers of one type list the same model name; one entry per distinct
+    # price, since an admin override can price one provider's copy differently.
+    seen: set[tuple[str, str, float | None, float | None, float | None]] = set()
     for provider in accessible_providers:
         for model_configuration in provider.model_configurations:
             if not model_configuration.is_visible:
                 continue
             if model_configuration.id is not None:
                 accessible_model_configuration_ids.add(model_configuration.id)
-            key = (provider.provider, model_configuration.name)
+            price = get_model_price_per_million(
+                model_configuration.name,
+                provider.provider,
+                db_session,
+                model_configuration_id=model_configuration.id,
+            )
+            key = (
+                provider.provider,
+                model_configuration.name,
+                price.input_per_mtok,
+                price.output_per_mtok,
+                price.cache_per_mtok,
+            )
             if key in seen:
                 continue
             seen.add(key)
-            price = get_model_price_per_million(
-                model_configuration.name, provider.provider, db_session
-            )
             if price.input_per_mtok is not None and price.output_per_mtok is not None:
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
@@ -287,7 +303,12 @@ def get_my_usage(
         and default_model.id in accessible_model_configuration_ids
     ):
         provider = default_model.llm_provider.provider
-        price = get_model_price_per_million(default_model.name, provider, db_session)
+        price = get_model_price_per_million(
+            default_model.name,
+            provider,
+            db_session,
+            model_configuration_id=default_model.id,
+        )
         if price.input_per_mtok is not None and price.output_per_mtok is not None:
             selected_model_price = price
 
@@ -428,38 +449,88 @@ def list_cost_overrides(
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[CostOverride]:
-    return [CostOverride.from_db(row) for row in list_overrides(db_session)]
+    return [CostOverride.from_db(row) for row in fetch_cost_overrides(db_session)]
 
 
-@router.put("")
-def upsert_cost_override(
-    payload: CostOverrideUpsertRequest,
+@router.post("")
+def create_cost_override_endpoint(
+    payload: CostOverrideCreateRequest,
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> CostOverride:
-    row = upsert_override(
-        db_session,
-        model=payload.model,
-        provider=payload.provider,
-        input_cost_per_mtok=payload.input_cost_per_mtok,
-        output_cost_per_mtok=payload.output_cost_per_mtok,
-        cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+    if (
+        fetch_model_configuration_by_id(db_session, payload.model_configuration_id)
+        is None
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "This model already has a cost override"
     )
-    db_session.commit()
+    if fetch_cost_override(db_session, payload.model_configuration_id) is not None:
+        raise conflict
+    try:
+        row = create_cost_override(
+            db_session,
+            model_configuration_id=payload.model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+        )
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create won the unique key after the check above.
+        db_session.rollback()
+        raise conflict
     invalidate_override_cache()
     return CostOverride.from_db(row)
 
 
-# {model:path} so slash-containing model ids (e.g. "bedrock/anthropic.claude")
-# match instead of 404-ing on the first path segment.
-@router.delete("/{model:path}")
-def delete_cost_override(
-    model: str,
-    provider: str = "",
+@router.put("/{model_configuration_id}")
+def update_cost_override_endpoint(
+    model_configuration_id: int,
+    payload: CostOverrideUpdateRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> CostOverride:
+    # Moving the override to another model: that model must exist and must not
+    # have an override of its own.
+    target = payload.model_configuration_id
+    moving = target is not None and target != model_configuration_id
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "That model already has a cost override"
+    )
+    if moving:
+        if fetch_model_configuration_by_id(db_session, target) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
+        if fetch_cost_override(db_session, target) is not None:
+            raise conflict
+    try:
+        row = update_cost_override(
+            db_session,
+            model_configuration_id=model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+            new_model_configuration_id=target if moving else None,
+        )
+        if row is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create or move took the target after the check above.
+        db_session.rollback()
+        raise conflict
+    invalidate_override_cache()
+    return CostOverride.from_db(row)
+
+
+@router.delete("/{model_configuration_id}")
+def delete_cost_override_endpoint(
+    model_configuration_id: int,
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if not delete_override(db_session, model, provider):
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No cost override for model {model}")
+    if not delete_cost_override(db_session, model_configuration_id):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
     db_session.commit()
     invalidate_override_cache()

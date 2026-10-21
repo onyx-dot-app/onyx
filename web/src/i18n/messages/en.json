@@ -4817,9 +4817,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "All providers"
-      },
       "deleteModal": {
         "description": "Usage of **{model}** ({provider}) will be priced at the built-in rate again.",
         "submit": {

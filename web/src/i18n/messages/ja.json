@@ -4817,9 +4817,6 @@
       }
     },
     "costOverrides": {
-      "allProviders": {
-        "label": "すべてのプロバイダー"
-      },
       "deleteModal": {
         "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
         "submit": {
