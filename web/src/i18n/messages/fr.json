@@ -2244,7 +2244,7 @@
         "title": "Options avancées"
       },
       "anonymousUsers": {
-        "description": "Autorisez tout le monde à démarrer des discussions sans se connecter. Ces personnes ne voient aucune autre discussion et ne peuvent ni créer des agents ni modifier les paramètres.",
+        "description": "Permettre à tous de démarrer des chats **sans se connecter**. Ils ne voient aucun autre chat et ne peuvent ni créer d'agents ni modifier les paramètres.",
         "title": "Autoriser les utilisateurs anonymes"
       },
       "autoDetectFilters": {
@@ -2277,8 +2277,8 @@
         "title": "Langue par défaut"
       },
       "disableDefaultChat": {
-        "description": "Cette option oblige les utilisateurs à toujours démarrer dans un agent. Les nouvelles discussions seront créées dans leur premier agent épinglé. Mettez des agents en avant pour aider les nouveaux utilisateurs à démarrer.",
-        "title": "Désactiver la discussion par défaut"
+        "description": "Cela supprime le chat par défaut. Les utilisateurs commenceront toujours dans un agent, et les nouveaux chats seront créés dans leur dernier agent actif. Définissez des [agents mis en avant](/admin/agents) pour aider les nouveaux utilisateurs à démarrer.",
+        "title": "Toujours commencer avec un agent"
       },
       "fileLimits": {
         "default": {

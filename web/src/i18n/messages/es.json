@@ -2244,7 +2244,7 @@
         "title": "Opciones avanzadas"
       },
       "anonymousUsers": {
-        "description": "Permite que cualquier persona inicie chats sin iniciar sesión. No ven ningún otro chat y no pueden crear agentes ni cambiar la configuración.",
+        "description": "Permite que cualquiera inicie chats **sin iniciar sesión**. No ven otros chats y no pueden crear agentes ni cambiar la configuración.",
         "title": "Permitir usuarios anónimos"
       },
       "autoDetectFilters": {
@@ -2277,8 +2277,8 @@
         "title": "Idioma predeterminado"
       },
       "disableDefaultChat": {
-        "description": "Esto obliga a los usuarios a empezar siempre dentro de un agente. Los chats nuevos se crearán en su primer agente fijado. Destaca algunos agentes para ayudar a los usuarios nuevos a empezar.",
-        "title": "Desactivar el chat predeterminado"
+        "description": "Esto elimina el chat predeterminado. Los usuarios siempre empezarán en un agente, y los chats nuevos se crearán en su último agente activo. Define [agentes destacados](/admin/agents) para ayudar a los nuevos usuarios a empezar.",
+        "title": "Empezar siempre con un agente"
       },
       "fileLimits": {
         "default": {

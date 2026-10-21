@@ -1245,7 +1245,7 @@ export default function ChatPreferencesPage() {
                 <Section>
                   <InputHorizontal
                     title={t("anonymousUsers.title")}
-                    description={t("anonymousUsers.description")}
+                    description={markdown(t("anonymousUsers.description"))}
                     withLabel
                   >
                     <InputSwitch
@@ -1260,7 +1260,7 @@ export default function ChatPreferencesPage() {
 
                   <InputHorizontal
                     title={t("disableDefaultChat.title")}
-                    description={t("disableDefaultChat.description")}
+                    description={markdown(t("disableDefaultChat.description"))}
                     withLabel
                   >
                     <InputSwitch

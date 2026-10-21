@@ -33,7 +33,7 @@ async function expandAdvancedOptions(page: Page): Promise<void> {
 }
 
 /**
- * Toggle the "Disable Default Chat" setting on the Chat Preferences page.
+ * Toggle the "Always Start with an Agent" setting on the Chat Preferences page.
  * Uses auto-save via the SwitchField.
  *
  * The switch is a SwitchField with name="disable_default_assistant" which renders
@@ -89,7 +89,7 @@ async function setDisableDefaultAssistantSetting(
   }
 
   throw new Error(
-    `Failed to persist Disable Default Chat setting after ${MAX_SETTING_SAVE_ATTEMPTS} attempts (expected ${isDisabled}, last=${lastCheckedState}).`
+    `Failed to persist Always Start with an Agent setting after ${MAX_SETTING_SAVE_ATTEMPTS} attempts (expected ${isDisabled}, last=${lastCheckedState}).`
   );
 }
 

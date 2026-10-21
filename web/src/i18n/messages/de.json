@@ -2244,7 +2244,7 @@
         "title": "Erweiterte Optionen"
       },
       "anonymousUsers": {
-        "description": "Erlauben Sie allen, ohne Anmeldung Chats zu starten. Diese Personen sehen keine anderen Chats und können keine Agenten erstellen oder Einstellungen ändern.",
+        "description": "Erlaubt allen, Chats **ohne Anmeldung** zu starten. Sie sehen keine anderen Chats und können keine Agenten erstellen oder Einstellungen ändern.",
         "title": "Anonyme Benutzer zulassen"
       },
       "autoDetectFilters": {
@@ -2277,8 +2277,8 @@
         "title": "Standardsprache"
       },
       "disableDefaultChat": {
-        "description": "Dadurch starten Benutzer immer in einem Agenten. Neue Chats werden in ihrem ersten angehefteten Agenten erstellt. Legen Sie empfohlene Agenten fest, um neuen Benutzern den Einstieg zu erleichtern.",
-        "title": "Standard-Chat deaktivieren"
+        "description": "Dies entfernt den Standard-Chat. Nutzer starten immer in einem Agenten, und neue Chats werden in ihrem zuletzt aktiven Agenten erstellt. Legen Sie [hervorgehobene Agenten](/admin/agents) fest, um neuen Nutzern den Einstieg zu erleichtern.",
+        "title": "Immer mit einem Agenten starten"
       },
       "fileLimits": {
         "default": {
