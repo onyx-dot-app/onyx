@@ -332,7 +332,7 @@
         "loadStage": "接続設定を読み込めませんでした",
         "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
-        "connectionFailed": "OAuthサーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
+        "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
         "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。",
         "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
       },

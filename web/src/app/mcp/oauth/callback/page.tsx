@@ -145,6 +145,13 @@ export default function MCPOAuthCallbackPage() {
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
+      if (stateParam) {
+        void completeMCPUserOAuth(null, stateParam, providerError).catch(
+          (error: unknown) => {
+            console.error("Failed to cancel MCP OAuth attempt:", error);
+          }
+        );
+      }
       setState({ phase: "error", error: cancelledError(t, errorDescription) });
       return;
     }

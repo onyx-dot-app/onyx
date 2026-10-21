@@ -62,7 +62,9 @@ interface MCPServerDetailsValues extends MCPServerConfigurationValues {
 }
 
 interface MCPServerDetailsPageProps {
-  onAuthenticate?: () => void;
+  onAuthenticate?: (
+    draft?: MCPServerUpdateRequest & { enable_chat?: boolean }
+  ) => void;
   active: boolean;
   variant?: "modal" | "page";
   readOnly?: boolean;
@@ -71,6 +73,7 @@ interface MCPServerDetailsPageProps {
   onSaved: (server: MCPServer) => Promise<void>;
   onBusyChange: (busy: boolean) => void;
   onDirtyChange: (dirty: boolean) => void;
+  onValuesChange?: () => void;
 }
 
 export default function MCPServerDetailsPage({
@@ -83,6 +86,7 @@ export default function MCPServerDetailsPage({
   onSaved,
   onBusyChange,
   onDirtyChange,
+  onValuesChange,
 }: MCPServerDetailsPageProps) {
   const formId = useId();
   const serverUrlErrorId = useId();
@@ -230,6 +234,16 @@ export default function MCPServerDetailsPage({
     }
 
     try {
+      if (urlChanged) {
+        if (!onAuthenticate)
+          throw new Error(t("addMcpModal.toasts.updateFailed"));
+        const draft: MCPServerUpdateRequest & { enable_chat?: boolean } = {
+          ...payload,
+        };
+        if (chatChanged) draft.enable_chat = values.enabled_in_chat;
+        onAuthenticate(draft);
+        return;
+      }
       const intent = needsAuthentication
         ? mintMcpChatEnableIntent({ userId: user?.id, serverId: server.id })
         : null;
@@ -264,8 +278,6 @@ export default function MCPServerDetailsPage({
             }
           )
         );
-        onAuthenticate?.();
-      } else if (urlChanged) {
         onAuthenticate?.();
       }
     } catch (error) {
@@ -308,7 +320,10 @@ export default function MCPServerDetailsPage({
               id={formId}
               className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-6"
             >
-              <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />
+              <MCPFormDirtyObserver
+                onDirtyChange={onDirtyChange}
+                onValuesChange={onValuesChange}
+              />
               <fieldset
                 disabled={isSubmitting || readOnly}
                 className="min-w-0 w-full"

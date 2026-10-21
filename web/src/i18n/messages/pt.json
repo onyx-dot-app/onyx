@@ -332,7 +332,7 @@
         "loadStage": "Não foi possível carregar as configurações da conexão",
         "clientRegistrationFailed": "O registro automático do cliente falhou. Use seu próprio cliente OAuth ou verifique os requisitos de configuração do provedor.",
         "discoveryFailed": "Não foi possível encontrar as configurações de login OAuth. Verifique a URL do servidor ou insira os endpoints do seu provedor.",
-        "connectionFailed": "Não foi possível acessar o servidor OAuth. Verifique a URL do servidor e tente novamente.",
+        "connectionFailed": "Não foi possível acessar o servidor. Verifique a URL do servidor e tente novamente.",
         "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente.",
         "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}"
       },

@@ -353,12 +353,18 @@ including hard links and OAuth returns. Closing returns to Plugins, not browser 
 Server configuration, Authentication, and Tools. All forms are inline. Tab changes
 retain drafts, and route navigation asks before discarding any unsaved edits.
 The `tab` query parameter links directly to each section. Saving server metadata
-stays on that tab; changing the URL opens Authentication. Authentication saves configuration, then runs the existing
-connection and tool-loading flow before opening Tools. Workspace availability and
+stays on that tab; changing the URL opens Authentication with an unsaved draft.
+Authentication validates the proposed connection and tools before publishing changes
+and opening Tools. Workspace availability and
 deletion stay in the directory. Saved configuration shows the server URL beneath the name. Users with edit permission
 can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
-Saving a changed URL opens Authentication to reconnect and discover tools. The page
-updates cached server data with the returned response before reloading, even if the reload fails.
+A changed URL clears credentials and header values in the form draft, without changing saved credentials.
+Changing Configuration fields again invalidates that proposal; save Configuration again before validating it.
+Successful authentication preserves unsaved Tools edits.
+In-form authentication or discovery failures retain the draft and leave the saved server intact.
+A failed full-page OAuth return requires restarting setup; it cannot restore the in-memory form draft.
+After validation succeeds, the returned response replaces cached server data before reloading,
+even if the reload fails.
 Tool discovery maps confirmed upstream HTTP 401 responses to a sanitized authentication error,
 including responses nested in transport exception groups. Runtime calls retain their original
 exceptions so rejected credentials can still be marked for replacement.
@@ -414,20 +420,28 @@ Continue opens Connection without database writes. Connection contains authentic
 client setup, custom headers, and advanced transport settings. Continue requires valid access settings on the Server step.
 Connect validates authentication and rechecks access. The name remains editable on the Server step.
 Public server metadata supplies
-the suggested name. Other servers use the URL hostname. Connect saves details and
-access, then saves authentication and starts the connection flow. Failed retries
-reuse the saved server ID and update its details. Back and Continue retain drafts for an
-unchanged URL. A changed URL clears credentials and checks the endpoint again.
+the suggested name. Other servers use the URL hostname. Connect submits details,
+access, authentication, and surface choices to `POST /admin/mcp/setup`. The server
+and tools are published only after authentication and tool discovery succeed.
+OAuth keeps an expiring attempt without creating a server.
+The payload uses the deployment’s credential-protection helper. The callback
+exchanges credentials and discovers tools before publishing. Failed attempts leave
+no partial server; provider denial consumes the attempt. Abandoned attempts expire.
+Back and Continue retain unsaved form drafts. A changed URL clears draft credentials
+and checks the endpoint again.
 Existing edit pages do not probe or replace saved authentication settings.
 Creation does not register an unsaved-draft navigation guard. Existing edit pages retain their guards.
 There is one production creation flow. The removed legacy wrapper is not kept
 for tests or stories. Authentication prepares and validates its payload before
-resolving a new server. Its form owner retains explicit OAuth setup choices
-when method-specific fields unmount.
-Completion and OAuth return open the
-server detail page.
+submitting the staged request. Its form owner retains explicit OAuth setup choices
+when method-specific fields unmount. Successful existing-server authentication and staged
+OAuth returns open Tools without repeating discovery. New setup without an OAuth
+redirect opens the saved server’s Configuration tab. Legacy OAuth returns that include
+`trigger_fetch=true` open Tools and repeat discovery.
+Existing-server authentication edits use the same staged flow:
+failed authentication or discovery preserves the saved configuration and credentials.
 
-Backend updates to a server URL clear shared and personal credentials, including
+Direct legacy backend URL updates clear shared and personal credentials, including
 OAuth registration, and resets connection status. Authentication then starts from
 the new saved server response and repeats discovery. Old credentials and masked
 values are not carried to the new endpoint. Existing tool rows remain intact.
@@ -453,7 +467,7 @@ Controls respect resource permissions,
 and managed external apps cannot be deleted. MCP deletion confirmation names
 the server and states that its tools are deleted for everyone in the organization.
 Enable for main Chat opens authentication when the server needs sign-in or has no
-discovered tools. Only an explicit Enable or creation Connect action records an enable intent.
+discovered tools. Only an explicit Enable action records an enable intent for an existing server.
 `web/src/sections/actions/mcpChatEnableIntent.ts` binds the one-time record to the user, server, and origin.
 The record expires after five minutes and is consumed before the workspace write.
 Admin OAuth uses the same tab to retain that record. Query flags alone never enable tools.
@@ -461,8 +475,10 @@ Missing or expired records require another explicit Enable action. Successful
 authentication and discovery then attach the tools to default Chat. Failed or
 cancelled authentication does not attach tools to default Chat. New full-admin
 setup selects discovered tools for default Chat and defaults Craft availability
-on when the deployment supports Craft. OAuth setup carries the same enable intent
-through its callback. The administrator uses the credentials saved by that setup.
+on when the deployment supports Craft. Staged setup stores those choices in the
+OAuth attempt and publishes the tool attachments with the server. Existing staged
+authentication submits Chat enablement only for a verified intent or an explicit
+Configuration change. The administrator uses the credentials saved by that setup.
 Successful completion refreshes existing member and agent caches, so the new
 connection appears without a manual reload. Ordinary reauthentication preserves
 later admin disable choices. Individual member sign-ins never change org settings.
@@ -632,7 +648,7 @@ inline, not a broken turn.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/admin/mcp/setup` | `setup_mcp_server` | Validate proposed settings and discover tools before publishing a new or existing server. OAuth returns an authorization URL. |
+| POST | `/admin/mcp/setup` | `setup_mcp_server` | Validate staged connection settings and discover tools before publishing a new server or changing an existing server. OAuth returns an authorization URL and publishes after callback success. |
 | POST | `/admin/mcp/probe` | `stream_admin_mcp_probe` | Credential-free MCP setup check for `MANAGE_ACTIONS`, including scoped managers. Streams NDJSON progress, then one result: public, OAuth, unknown authentication, or unreachable. No database writes. |
 | POST | `/admin/mcp/oauth/discover` | `discover_admin_oauth` | Read-only public metadata probe for a manageable server. Returns metadata status, automatic registration support, and discovered endpoints. |
 | POST | `/admin/mcp/servers/create` | `upsert_mcp_server` (calls `_upsert_mcp_server`) | Create, or edit when the body has `existing_server_id`. An edit can rotate admin credentials, OAuth client, transport, and access list. A new server defaults `is_public=True`. |
@@ -796,11 +812,13 @@ Tool (openapi_schema set) --tool_constructor.py--> build_custom_tools_from_...
 
 ### 4.1 MCP server lifecycle: admin configuration to a discovered tool set
 
-1. Admin submits the create/update form on `/admin/mcp-actions`. The frontend
-   posts to `/admin/mcp/servers/create` (`mcp/api.py:upsert_mcp_server`, which
-   calls `_upsert_mcp_server`). An edit sends `existing_server_id` to the same
-   endpoint. `/admin/mcp/servers/update` only renames the server and syncs its
-   selected tools.
+1. Admin setup and authentication edits post to `/admin/mcp/setup`.
+   The endpoint validates authentication and discovers tools before saving.
+   Existing edits send `existing_server_id`. Publication saves connection settings,
+   credentials, tools, and requested surface choices in one transaction.
+   Legacy callers can still use `/admin/mcp/servers/create`; that endpoint saves
+   configuration without staged discovery. `/admin/mcp/servers/update` renames
+   the server and syncs its selected tools.
 2. `_upsert_mcp_server` validates the URL
    (`_validate_mcp_server_url`), resolves credential fields against any
    existing values so a re-submit of a masked field does not blank it out
@@ -885,6 +903,25 @@ choice at server-creation time is what decides this, and it is visible on the
 `MCPServer` row, not implicit.
 
 ### 4.4 The MCP OAuth flow
+
+Admin setup and connection edits use `setup_oauth.py` before publishing any server changes.
+The pending request, registration, and PKCE verifier use the tenant-scoped
+`AuthorizationAttemptStore`, backed by shared Redis or PostgreSQL. Attempts expire after
+ten minutes and can be consumed once by their owner. Any API replica can handle
+the callback when replicas share cache and credential-protection configuration.
+The payload uses Onyx’s credential-protection helper. Encryption requires an
+Enterprise deployment with its encryption key configured.
+
+The callback exchanges credentials and discovers tools before publication.
+A configuration fingerprint rejects attempts that would replace newer saved settings,
+including action policies and default Chat tool selections. Publication locks their shared
+rows before checking the fingerprint and holds those locks until commit. Ordinary OAuth token refresh
+does not change that fingerprint. A valid grant, including one without a declared expiry, can validate edits with the same
+destination and OAuth configuration without another sign-in or a token refresh.
+`TransientTokenStorage` holds credentials within one request until publication succeeds.
+A crash after attempt consumption requires a new authorization attempt.
+
+The existing-server member sign-in and refresh flow follows these steps:
 
 OAuth connection config records the automatic or own-client setup choice separately from registered credentials.
 Admin authentication forms restore this choice after OAuth. Older records use registration metadata when available.
@@ -1265,16 +1302,3 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
   a client that tries to shortcut the flow by POSTing arbitrary
   `code`/`server_id` values without a matching stored attempt gets rejected
   at the fingerprint/connection-config-id checks (§4.4 step 3).
-
-### Staged OAuth support
-
-`setup_oauth.py` supplies transient token storage for proposed MCP connections.
-Setup attempts use credential encryption when Enterprise Edition has an encryption key configured.
-Otherwise their payload is Base64-encoded. Attempts expire after ten minutes and are bound to their owner and tenant.
-Each attempt can be consumed once. Provider and discovery helpers also support transient storage.
-
-The staged setup API publishes settings, credentials, tools, and requested surface choices in one transaction.
-Failed authentication or discovery leaves the saved connection unchanged. OAuth callbacks validate before publication.
-A configuration fingerprint prevents an old OAuth attempt from replacing newer edits.
-Publication locks shared policy and Chat rows before checking the fingerprint and holds them until commit.
-A valid OAuth grant, including one without a declared expiry, can validate edits without another sign-in.
