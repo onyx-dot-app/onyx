@@ -7,6 +7,15 @@ import {
   MOCK_LLM_PROVIDER_NAME,
   mockLlmApiBase,
 } from "@tests/e2e/utils/mockLlm";
+import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+
+// type-only import: loading the enum at runtime would pull app modules into the test runner
+type UserFileStatusValue = `${UserFileStatus}`;
+
+/** A `/user/projects/file/statuses` entry, with the status as its wire string. */
+type UserFileStatusEntry = Omit<ProjectFile, "status"> & {
+  status: UserFileStatusValue;
+};
 
 const E2E_LLM_PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -113,6 +122,7 @@ export interface CreateAgentOptions {
  * **Projects:**
  * - `createProject(name)` - Creates a project with a name
  * - `deleteProject(projectId)` - Deletes a project
+ * - `waitForUserFilesCompleted(fileIds)` - Waits until uploaded user files finish processing
  *
  * **Usage Example:**
  * ```typescript
@@ -1003,9 +1013,11 @@ export class OnyxApiClient {
 
   private async getGroupUserIds(groupId: number): Promise<string[]> {
     const response = await this.get("/manage/admin/user-group");
-    const groups = await response.json();
-    const group = groups.find((g: { id: number }) => g.id === groupId);
-    return (group?.users ?? []).map((user: { id: string }) => user.id);
+    const groups = await this.handleResponse<
+      Array<{ id: number; users: Array<{ id: string }> }>
+    >(response, "Failed to list user groups");
+    const group = groups.find((g) => g.id === groupId);
+    return (group?.users ?? []).map((user) => user.id);
   }
 
   async setGroupCcPairs(
@@ -2003,6 +2015,57 @@ export class OnyxApiClient {
     );
     this.log(`Created project: ${name} (ID: ${data.id})`);
     return data.id;
+  }
+
+  /**
+   * Polls until every given user file finishes processing. A page only polls
+   * the files it uploaded itself, so a file uploaded through the API must be
+   * done before the page loads, or the page shows "Processing..." forever.
+   *
+   * @param fileIds - The user file IDs to wait on
+   * @param timeout - Maximum time to wait in milliseconds (default: 60000)
+   * @throws Error if a file ends in a status other than COMPLETED, or on timeout
+   */
+  async waitForUserFilesCompleted(
+    fileIds: string[],
+    timeout: number = 60000
+  ): Promise<void> {
+    const pendingStatuses: ReadonlySet<UserFileStatusValue> = new Set([
+      "PROCESSING",
+      "INDEXING",
+    ]);
+    let files: UserFileStatusEntry[] = [];
+    await expect
+      .poll(
+        async () => {
+          const response = await this.post("/user/projects/file/statuses", {
+            file_ids: fileIds,
+          });
+          files = await this.handleResponse<UserFileStatusEntry[]>(
+            response,
+            "Failed to fetch user file statuses"
+          );
+          return (
+            files.length === fileIds.length &&
+            files.every((f) => !pendingStatuses.has(f.status))
+          );
+        },
+        {
+          message: `User files ${fileIds.join(", ")} did not finish processing`,
+          timeout,
+        }
+      )
+      .toBe(true);
+
+    const notCompleted = files.filter((f) => f.status !== "COMPLETED");
+    if (notCompleted.length > 0) {
+      throw new Error(
+        `User files did not complete: ${notCompleted
+          .map((f) => `${f.id}=${f.status}`)
+          .join(", ")}`
+      );
+    }
+    this.log(`User files completed: ${fileIds.join(", ")}`);
   }
 
   /**
