@@ -128,6 +128,18 @@ def _expected_site_hostnames(
     return {f"{tenant}.{suffix}", f"{tenant}{ONEDRIVE_HOST_SUFFIX}.{suffix}"}
 
 
+class SiteUrlFormatError(ConnectorValidationError):
+    """A site URL that is not https with a site path."""
+
+
+class SiteUrlBlockedError(ConnectorValidationError):
+    """A site URL the outbound URL guard rejects."""
+
+
+class SiteUrlHostError(ConnectorValidationError):
+    """A site URL off the cloud's suffix or the tenant's host."""
+
+
 def validate_content_types(
     include_site_documents: bool, include_site_pages: bool
 ) -> None:
@@ -150,7 +162,7 @@ def validate_site_url(
 ) -> None:
     """A full site URL, safe to request, on the tenant's host."""
     if not is_site_url_well_formed(site_url):
-        raise ConnectorValidationError(
+        raise SiteUrlFormatError(
             f"`{site_url}` is not a full SharePoint or OneDrive site URL "
             "(https://tenant.sharepoint.com/sites/name or /teams/name, "
             "https://tenant-my.sharepoint.com/personal/name)."
@@ -158,7 +170,7 @@ def validate_site_url(
     try:
         validate_outbound_http_url(site_url, https_only=True)
     except (SSRFException, ValueError) as e:
-        raise ConnectorValidationError(f"Invalid site URL '{site_url}': {e}") from e
+        raise SiteUrlBlockedError(f"Invalid site URL '{site_url}': {e}") from e
     validate_site_url_host(site_url, sharepoint_domain_suffix, tenant_domain)
 
 
@@ -175,14 +187,14 @@ def validate_site_url_host(
     suffix = sharepoint_domain_suffix.lower()
     hostname = (urlsplit(site_url).hostname or "").lower()
     if hostname != suffix and not hostname.endswith(f".{suffix}"):
-        raise ConnectorValidationError(
+        raise SiteUrlHostError(
             f"Site URL '{site_url}' must be on the '{suffix}' domain."
         )
     if tenant_domain is None:
         return
     expected = _expected_site_hostnames(tenant_domain, sharepoint_domain_suffix)
     if hostname not in expected:
-        raise ConnectorValidationError(
+        raise SiteUrlHostError(
             f"Site URL '{site_url}' is not on this tenant's SharePoint host "
             f"(expected one of: {', '.join(sorted(expected))})."
         )

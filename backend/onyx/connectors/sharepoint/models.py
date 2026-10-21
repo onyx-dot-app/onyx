@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.microsoft_utils.models import MicrosoftRowText
+
 
 class SharepointCredentials(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -34,3 +36,29 @@ class SitePagesPage(BaseModel):
 
     pages: list[dict[str, Any]]
     next_link: str | None = None
+
+
+class SiteUrlListing(BaseModel):
+    """The tenant's site listing, by web URL. ``complete`` is False when a
+    page cap stopped the read before the last page."""
+
+    site_urls: list[str]
+    complete: bool
+
+
+class EntraGroupRef(BaseModel):
+    id: str
+    name: str
+
+
+class SiteProblem(BaseModel):
+    site_url: str
+    row: MicrosoftRowText
+    message: str
+    denied: bool
+
+
+class LibraryProblem(BaseModel):
+    row: MicrosoftRowText
+    message: str
+    name: str
