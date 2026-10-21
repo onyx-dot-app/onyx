@@ -201,6 +201,19 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume. Without one, a model that the image
+  # does not bundle (only the default model is bundled; nomic is not) downloads
+  # again on every pod start. At startup, the model server copies the bundled
+  # model into the volume. The chart does not create the claim. With a
+  # ReadWriteOnce claim, keep replicaCount at 1 and set strategy.type: Recreate.
+  # Give indexCapability its own claim.
+  # volumes:
+  #   - name: hf-cache
+  #     persistentVolumeClaim:
+  #       claimName: onyx-inference-model-hf-cache
+  # volumeMounts:
+  #   - name: hf-cache
+  #     mountPath: /app/.cache/huggingface
   volumes: []
   volumeMounts: []
   service:
@@ -278,6 +291,7 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  # Optional Hugging Face cache volume: see inferenceCapability.volumes.
   volumes: []
   volumeMounts: []
   service:
@@ -624,10 +638,21 @@ api:
   # every replica at once, and a lone not-ready pod leaves the Service empty.
   # Do NOT put /health/ready on the liveness probe.
   #
-  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
-  # migration you expect, or it kills the pod mid-migration.
+  # Liveness and startup probes stay opt-in. /health answers only after startup:
+  # the migrations, then the wait for the model server to load a self-hosted
+  # embedding model, with a download if it is not cached (up to
+  # LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT, 1800 s by default). A livenessProbe
+  # with no startupProbe therefore restarts the pod during a download. Size the
+  # startupProbe (periodSeconds x failureThreshold) for the longest migration
+  # you expect plus that timeout.
   #
   # Example:
+  # startupProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  #   periodSeconds: 10
+  #   failureThreshold: 200  # 2000 s
   # readinessProbe:
   #   httpGet:
   #     path: /health/ready
