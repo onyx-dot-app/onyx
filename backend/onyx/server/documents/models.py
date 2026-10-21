@@ -22,6 +22,10 @@ from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CredentialCapabilityReport,
+    TwoStepRow,
+)
+from onyx.connectors.capability_checks.two_step import (
+    two_step_rows_of_results,
 )
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
@@ -599,6 +603,8 @@ class CheckRunSnapshot(BaseModel):
     trigger: CapabilityCheckTrigger
     # Empty until the run completes, and for a run that broke.
     check_results: list[CapabilityCheckResult]
+    # How each two-step row of ``check_results`` shows.
+    two_step_rows: list[TwoStepRow] = []
     # Why a run broke.
     error_message: str | None
     time_created: str
@@ -619,6 +625,7 @@ class CheckRunSnapshot(BaseModel):
             status=run.status,
             trigger=run.trigger,
             check_results=results,
+            two_step_rows=two_step_rows_of_results(results),
             error_message=run.error_message,
             time_created=run.time_created.isoformat(),
             time_started=run.time_created.isoformat(),
