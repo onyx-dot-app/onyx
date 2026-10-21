@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/bootstrap_agent_context.py\"",
+            "timeout": 45,
+            "statusMessage": "Bootstrap the Onyx agent context"
+          }
+        ]
+      }
+    ]
+  }
+}

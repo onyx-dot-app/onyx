@@ -2,5 +2,20 @@
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
     "claude-security@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/bootstrap_agent_context.py\"",
+            "timeout": 45,
+            "statusMessage": "Bootstrap the Onyx agent context"
+          }
+        ]
+      }
+    ]
   }
 }
