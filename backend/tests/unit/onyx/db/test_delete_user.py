@@ -40,6 +40,7 @@ def test_delete_user_nulls_out_document_set_ownership(
 ) -> None:
     user = _mock_user()
     db_session = MagicMock()
+    db_session.scalar.return_value = None
 
     query_chains: dict[type, MagicMock] = {}
 
@@ -77,6 +78,7 @@ def test_delete_user_cleans_up_join_tables(
 ) -> None:
     user = _mock_user()
     db_session = MagicMock()
+    db_session.scalar.return_value = None
 
     query_chains: dict[type, MagicMock] = {}
 
@@ -105,6 +107,7 @@ def test_delete_user_commits_and_removes_invited(
 ) -> None:
     user = _mock_user(email="deleted@example.com")
     db_session = MagicMock()
+    db_session.scalar.return_value = None
     db_session.query.return_value = _make_query_chain()
 
     delete_user_from_db(user, db_session)
@@ -127,6 +130,7 @@ def test_delete_user_deletes_oauth_accounts(
     oauth2 = MagicMock()
     user.oauth_accounts = [oauth1, oauth2]
     db_session = MagicMock()
+    db_session.scalar.return_value = None
     db_session.query.return_value = _make_query_chain()
 
     delete_user_from_db(user, db_session)

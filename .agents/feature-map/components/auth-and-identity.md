@@ -782,3 +782,17 @@ secrets/env.
   assumes "no session = no `User` object" will not notice an
   `AccountType.ANONYMOUS` or `AccountType.BOT` user flowing through the same
   code paths as a standard interactive user.
+
+### Private skill ownership on user deletion
+
+`db/users.py:delete_user_from_db__no_commit` rejects deletion while the user owns
+private custom skills. Transfer or delete those skills first. The
+`ck_private_skill_has_owner` database check also protects concurrent and direct writes.
+Public skills retain admin recovery after owner deletion; built-ins may remain ownerless.
+`UserManager.delete` uses the same database cleanup through its async session.
+No sandbox networking or worker thread runs during deletion.
+The last-admin leave flow flushes local cleanup before the control-plane call and
+rolls it back if the remote deletion fails.
+
+Constraint failures during private-skill owner deletion return the same conflict
+message for psycopg2 and asyncpg sessions, including assignments after the precheck.
