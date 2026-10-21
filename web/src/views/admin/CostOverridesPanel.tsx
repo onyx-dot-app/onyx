@@ -27,6 +27,7 @@ import {
 import { Hoverable } from "@opal/core";
 import { SvgPlus, SvgSettings, SvgTrash, SvgWallet, SvgX } from "@opal/icons";
 import { escapeMarkdown, markdown } from "@opal/utils";
+import type { CurrencyPrecision } from "@opal/types";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { getModelIcon, getProvider } from "@/lib/languageModels/utils";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
@@ -60,8 +61,8 @@ function getProviderDisplayName(
     : allProvidersLabel;
 }
 
-// Rates are entered to the cent per 1M tokens.
-const RATE_PRECISION = 2;
+// Negotiated rates often go below a cent per 1M tokens ($0.075, $0.01875).
+const RATE_PRECISION: CurrencyPrecision = "unlimited";
 
 function formatRate(value: number, locale: string): string {
   return `$${value.toLocaleString(locale, {
