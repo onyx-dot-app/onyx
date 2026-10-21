@@ -63,7 +63,7 @@ def test_source_without_named_checks_serves_its_fallback_node(
     # Postcondition: the one legacy fallback node, with no edges.
     response.raise_for_status()
     graph = response.json()
-    indexing = [node for node in graph["nodes"] if node["capability"] == "indexing"]
+    indexing = [node for node in graph["nodes"] if "indexing" in node["capabilities"]]
     assert [node["id"] for node in indexing] == ["bitbucket_connector_settings"]
     assert indexing[0]["is_fallback"] is True
     assert graph["edges"] == []

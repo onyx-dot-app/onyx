@@ -118,11 +118,13 @@ def has_named_capability_checks(source: DocumentSource) -> bool:
     return any(not check.is_fallback for check in get_capability_checks(source))
 
 
-def _graph_node(check: CapabilityCheck) -> CheckGraphNode:
+def _graph_node(
+    check: CapabilityCheck, capabilities: tuple[CredentialCapability, ...]
+) -> CheckGraphNode:
     return CheckGraphNode(
         id=check.check_id,
         display_name=check.display_name,
-        capability=check.capability,
+        capabilities=capabilities,
         required=check.required,
         requires_connector_instance=check.requires_connector_instance,
         requires_connector_config=check.requires_connector_config,
@@ -152,14 +154,23 @@ def get_check_graph(source: DocumentSource) -> CheckGraph:
     known. A dependency on a check that is not registered (an EE-only check on
     OSS) has no edge."""
     checks = get_capability_checks(source)
-    registered = {check.check_id for check in checks}
+    # Checks that share a check_id (one probe for several capabilities) are
+    # one node, in registration order.
+    first_by_id: dict[str, CapabilityCheck] = {}
+    capabilities_by_id: dict[str, list[CredentialCapability]] = {}
+    for check in checks:
+        first_by_id.setdefault(check.check_id, check)
+        capabilities_by_id.setdefault(check.check_id, []).append(check.capability)
     return CheckGraph(
         source=source,
-        nodes=tuple(_graph_node(check) for check in checks),
+        nodes=tuple(
+            _graph_node(check, tuple(capabilities_by_id[check_id]))
+            for check_id, check in first_by_id.items()
+        ),
         edges=tuple(
-            CheckGraphEdge(prerequisite=dependency, dependent=check.check_id)
-            for check in checks
+            CheckGraphEdge(prerequisite=dependency, dependent=check_id)
+            for check_id, check in first_by_id.items()
             for dependency in check.depends_on
-            if dependency in registered
+            if dependency in first_by_id
         ),
     )
