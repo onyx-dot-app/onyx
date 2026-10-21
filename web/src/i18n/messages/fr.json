@@ -2279,7 +2279,7 @@
         "title": "Recherche approfondie"
       },
       "defaultLanguage": {
-        "description": "La langue de l'interface pour les utilisateurs qui n'en ont pas choisi une dans leurs paramètres.",
+        "description": "Langue de l'interface pour les utilisateurs qui n'en ont pas défini dans leurs propres paramètres.",
         "title": "Langue par défaut"
       },
       "disableDefaultChat": {

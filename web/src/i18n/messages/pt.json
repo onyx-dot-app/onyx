@@ -2279,7 +2279,7 @@
         "title": "Pesquisa profunda"
       },
       "defaultLanguage": {
-        "description": "O idioma da interface para usuários que não escolheram um nas próprias configurações.",
+        "description": "Idioma da interface para usuários que não definiram um nas próprias configurações.",
         "title": "Idioma padrão"
       },
       "disableDefaultChat": {

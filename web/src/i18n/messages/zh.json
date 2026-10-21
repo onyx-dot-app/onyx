@@ -2279,7 +2279,7 @@
         "title": "深度研究"
       },
       "defaultLanguage": {
-        "description": "未在个人设置中选择语言的用户所使用的界面语言。",
+        "description": "适用于未在个人设置中设定语言的用户的界面语言。",
         "title": "默认语言"
       },
       "disableDefaultChat": {

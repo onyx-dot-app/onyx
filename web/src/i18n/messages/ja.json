@@ -2279,7 +2279,7 @@
         "title": "ディープリサーチ"
       },
       "defaultLanguage": {
-        "description": "自分の設定で言語を選択していないユーザーに適用される UI の言語です。",
+        "description": "個人設定で言語を設定していないユーザー向けの UI 言語。",
         "title": "既定の言語"
       },
       "disableDefaultChat": {

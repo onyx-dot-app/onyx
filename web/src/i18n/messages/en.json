@@ -2279,7 +2279,7 @@
         "title": "Deep Research"
       },
       "defaultLanguage": {
-        "description": "The UI language for users who have not chosen one in their own settings.",
+        "description": "UI language for users who have not set one in their own settings.",
         "title": "Default Language"
       },
       "disableDefaultChat": {
