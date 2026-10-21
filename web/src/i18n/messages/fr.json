@@ -327,8 +327,6 @@
         "saveAuthFailed": "Échec de l'enregistrement de la configuration d'authentification",
         "saveConfigFailed": "Échec de l'enregistrement de la configuration du serveur",
         "saveStage": "Impossible d’enregistrer les paramètres de connexion",
-        "oauthStage": "Impossible de lancer la connexion",
-        "discoveryStage": "Impossible de charger les outils du serveur",
         "loadStage": "Impossible de charger les paramètres de connexion",
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",

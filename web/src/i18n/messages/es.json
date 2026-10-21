@@ -327,8 +327,6 @@
         "saveAuthFailed": "No se pudo guardar la configuración de autenticación",
         "saveConfigFailed": "No se pudo guardar la configuración del servidor",
         "saveStage": "No se pudieron guardar los ajustes de conexión",
-        "oauthStage": "No se pudo iniciar el acceso",
-        "discoveryStage": "No se pudieron cargar las herramientas del servidor",
         "loadStage": "No se pudieron cargar los ajustes de conexión",
         "clientRegistrationFailed": "El registro automático del cliente falló. Usa tu propio cliente OAuth o revisa los requisitos de configuración del proveedor.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",

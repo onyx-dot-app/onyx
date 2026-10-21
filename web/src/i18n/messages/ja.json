@@ -327,8 +327,6 @@
         "saveAuthFailed": "認証設定の保存に失敗しました",
         "saveConfigFailed": "サーバー設定の保存に失敗しました",
         "saveStage": "接続設定を保存できませんでした",
-        "oauthStage": "サインインを開始できませんでした",
-        "discoveryStage": "サーバーのツールを読み込めませんでした",
         "loadStage": "接続設定を読み込めませんでした",
         "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
