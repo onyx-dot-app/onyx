@@ -284,6 +284,9 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    that must exist exactly once, not once per tenant) must inherit `PublicBase`
    and go in `alembic_tenants/`, or it will be silently duplicated into every
    tenant schema instead of shared.
+   `OAuthProviderClient` remains catalog-owned in cloud. On single-tenant installs,
+   its explicit schema is `POSTGRES_DEFAULT_SCHEMA`, so client registration works
+   before login without creating a table in `public` when a custom schema is set.
 5. **The index's tenant filter must never be dropped.** `_get_search_filters`
    (`document_index/opensearch/search.py`) adds a `{"term": {TENANT_ID_FIELD_NAME:
    ...}}` clause whenever `tenant_state.multitenant` is true, independently of and
