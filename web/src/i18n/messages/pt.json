@@ -923,7 +923,7 @@
       "status": {
         "connected": "Conectado",
         "workspace": "Conexão do espaço de trabalho",
-        "session": "Usa seu login",
+        "session": "Usa sua conta conectada",
         "none": "Pronto para usar",
         "oauth": "Conecte sua conta",
         "credentials": "Adicione suas credenciais",

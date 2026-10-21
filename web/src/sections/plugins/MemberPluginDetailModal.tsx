@@ -525,7 +525,7 @@ export function MemberPluginDetailContent({
   const connectionLabel =
     connection.kind === "connected"
       ? t(
-          `status.${connection.ownership === "user" ? "connected" : connection.ownership}`
+          `status.${connection.ownership === "user" ? "session" : connection.ownership}`
         )
       : t(`status.${connection.kind}`);
   const connectionTitle =
@@ -734,8 +734,7 @@ export function MemberPluginDetailContent({
                                 {connectionTitle}
                               </Text>
                               {connection.kind === "connected" &&
-                                (connection.ownership === "workspace" ||
-                                  connection.ownership === "session") && (
+                                connection.ownership !== "none" && (
                                   <Text font="secondary-body" color="text-03">
                                     {connectionLabel}
                                   </Text>

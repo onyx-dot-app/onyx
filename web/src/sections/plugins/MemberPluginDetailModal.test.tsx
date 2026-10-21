@@ -44,21 +44,33 @@ beforeEach(() => {
     .mockImplementation(async () => jsonResponse(approvalApp));
 });
 
-test.each([
-  { ownership: "session", text: "Ready to useUses your sign-in" },
-  { ownership: "workspace", text: "Ready to useWorkspace connection" },
-  { ownership: "none", text: "Ready to use" },
-  { ownership: "user", text: "Connected" },
-] as const)(
-  "connected MCP shows only relevant $ownership copy",
-  ({ ownership, text }) => {
-    show({
-      kind: "mcp",
-      server: memberServer(),
-      tools: [storedMcpTool],
-      connection: { kind: "connected", ownership },
-    });
-    expect(screen.getByRole("status").textContent).toBe(text);
+describe.each(["mcp", "openapi", "external-app"] as const)(
+  "%s connection copy",
+  (kind) => {
+    test.each([
+      { ownership: "session", text: "Ready to useUses your connected account" },
+      { ownership: "workspace", text: "Ready to useWorkspace connection" },
+      { ownership: "none", text: "Ready to use" },
+      { ownership: "user", text: "ConnectedUses your connected account" },
+    ] as const)(
+      "shows only relevant $ownership copy",
+      ({ ownership, text }) => {
+        const connection = { kind: "connected", ownership } as const;
+        show(
+          kind === "mcp"
+            ? {
+                kind,
+                server: memberServer(),
+                tools: [storedMcpTool],
+                connection,
+              }
+            : kind === "openapi"
+              ? { kind, tool: memberTool(), connection }
+              : { kind, app: memberApp({ authenticated: true }), connection }
+        );
+        expect(screen.getByRole("status").textContent).toBe(text);
+      }
+    );
   }
 );
 

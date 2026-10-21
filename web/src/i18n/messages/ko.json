@@ -923,7 +923,7 @@
       "status": {
         "connected": "연결됨",
         "workspace": "워크스페이스 연결",
-        "session": "현재 로그인 사용",
+        "session": "연결된 계정 사용",
         "none": "사용 준비됨",
         "oauth": "계정 연결",
         "credentials": "인증 정보 추가",
