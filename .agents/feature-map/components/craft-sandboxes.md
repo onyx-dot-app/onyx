@@ -480,9 +480,10 @@ session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
 already-deleted). The new archive is stored before any old blob is deleted.
 Pruning is best-effort. If `delete_snapshot` raises, the function logs a
 warning and keeps that old row, so more than one `Snapshot` row can remain.
-The new `Snapshot` row commits before any old blob is deleted. A failed commit
-leaves the prior committed archives intact. Pruned row deletions commit in a
-second transaction, so a pruning commit failure cannot remove the new reference.
+The new `Snapshot` row commits before any old blob is deleted. If this initial
+commit fails, prior committed archives remain intact. Pruned row deletions commit
+in a second transaction. If that commit fails, prior blobs may already be deleted,
+but the new reference remains committed.
 The sandbox-global opencode history snapshot is **not** versioned at all: it
 overwrites one fixed FileStore path each capture (§3).
 
@@ -569,7 +570,7 @@ the sandbox namespace. The proxy-resolution Role retains only Service `get`.
    completion marker so truncated output cannot report an empty workspace.
 2. **A snapshot write must not corrupt the previous one.** The new blob and DB
    reference commit before pruning begins (`create_session_snapshot_keep_latest`, §4.5).
-   A failed commit preserves the previous archive. Restore extracts
+   A failed initial reference commit preserves the previous archive. Restore extracts
    to a temp dir and atomically renames into place
    (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
 3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads
