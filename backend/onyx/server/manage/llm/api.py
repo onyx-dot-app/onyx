@@ -71,6 +71,10 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import (
+    AWS_EXTERNAL_ID_KWARG,
+    AWS_EXTERNAL_ID_KWARG_ENV_VAR_FORMAT,
+    AWS_ROLE_NAME_KWARG,
+    AWS_ROLE_NAME_KWARG_ENV_VAR_FORMAT,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
@@ -361,6 +365,55 @@ def _validate_llm_provider_change(
         )
 
 
+_BEDROCK_ASSUME_ROLE_CONFIG_KEYS = frozenset(
+    {
+        AWS_ROLE_NAME_KWARG,
+        AWS_ROLE_NAME_KWARG_ENV_VAR_FORMAT,
+        AWS_EXTERNAL_ID_KWARG,
+        AWS_EXTERNAL_ID_KWARG_ENV_VAR_FORMAT,
+    }
+)
+_ASSUME_ROLE_MULTI_TENANT_ERROR = (
+    "Assuming an AWS role is not supported in multi-tenant deployments."
+)
+
+
+def _reject_assume_role_in_multi_tenant(custom_config: dict[str, str] | None) -> None:
+    """Block cross-account role assumption on cloud.
+
+    The assumed role would be reached through the shared server identity, so
+    any tenant could assume roles that trust it.
+    """
+    if not MULTI_TENANT or not custom_config:
+        return
+    if any(custom_config.get(key) for key in _BEDROCK_ASSUME_ROLE_CONFIG_KEYS):
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, _ASSUME_ROLE_MULTI_TENANT_ERROR)
+
+
+def _assume_bedrock_role(
+    base_session: boto3.Session,
+    role_arn: str,
+    external_id: str | None,
+    region_name: str,
+) -> boto3.Session:
+    """Return a session for *role_arn*, assumed with *base_session* credentials."""
+    assume_role_kwargs: dict[str, Any] = {
+        "RoleArn": role_arn,
+        "RoleSessionName": "onyx-bedrock-model-fetch",
+    }
+    if external_id:
+        assume_role_kwargs["ExternalId"] = external_id
+    credentials = base_session.client("sts", region_name=region_name).assume_role(
+        **assume_role_kwargs
+    )["Credentials"]
+    return boto3.Session(
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
+        region_name=region_name,
+    )
+
+
 def _validate_and_normalize_vertex_auth(
     provider: str,
     custom_config: dict[str, str] | None,
@@ -497,6 +550,7 @@ def test_llm_configuration(
         provider=test_llm_request.provider,
         custom_config=test_custom_config,
     )
+    _reject_assume_role_in_multi_tenant(test_custom_config)
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -768,6 +822,7 @@ def put_llm_provider(
         provider=llm_provider_upsert_request.provider,
         custom_config=llm_provider_upsert_request.custom_config,
     )
+    _reject_assume_role_in_multi_tenant(llm_provider_upsert_request.custom_config)
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
@@ -1491,6 +1546,8 @@ def get_bedrock_available_models(
     bearer_token = _resolve_bedrock_bearer_token(
         request.aws_bearer_token_bedrock, request.provider_id, db_session
     )
+    if MULTI_TENANT and (request.aws_role_name or request.aws_external_id):
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, _ASSUME_ROLE_MULTI_TENANT_ERROR)
 
     try:
         # Precedence: bearer → keys → IAM
@@ -1509,6 +1566,15 @@ def get_bedrock_available_models(
             )
         else:
             session = boto3.Session(region_name=request.aws_region_name)
+
+        # Bearer tokens are bound to one account, so a role only applies to SigV4 auth.
+        if request.aws_role_name and not bearer_token:
+            session = _assume_bedrock_role(
+                base_session=session,
+                role_arn=request.aws_role_name,
+                external_id=request.aws_external_id,
+                region_name=request.aws_region_name,
+            )
 
         try:
             bedrock = session.client("bedrock", config=client_config)

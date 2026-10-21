@@ -7508,6 +7508,10 @@
           "accessKeyIdField": {
             "title": "ID da chave de acesso da AWS"
           },
+          "assumeRoleField": {
+            "description": "Use uma função do Bedrock em outra conta da AWS. O {appName} assume essa função com as credenciais acima.",
+            "title": "ARN da função a assumir"
+          },
           "authMethodField": {
             "accessKey": {
               "description": "Para ambientes fora da AWS",
@@ -7523,6 +7527,10 @@
               "label": "Chave de API de longo prazo"
             },
             "title": "Método de autenticação"
+          },
+          "externalIdField": {
+            "description": "Somente se a política de confiança da função exigir um.",
+            "title": "ID externo"
           },
           "iamNotice": {
             "title": "O {appName} vai usar a função IAM associada ao ambiente em que está sendo executado para se autenticar."

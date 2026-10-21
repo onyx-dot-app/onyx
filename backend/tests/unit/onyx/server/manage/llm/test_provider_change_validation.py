@@ -10,7 +10,10 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.well_known_providers.constants import BIFROST_API_MODE_CONFIG_KEY
-from onyx.server.manage.llm.api import _validate_llm_provider_change
+from onyx.server.manage.llm.api import (
+    _reject_assume_role_in_multi_tenant,
+    _validate_llm_provider_change,
+)
 
 _BASE = "https://bifrost.example.com/v1"
 
@@ -78,3 +81,17 @@ def test_api_base_change_still_rejected() -> None:
 def test_single_tenant_skips_validation() -> None:
     # MULTI_TENANT is False in unit tests: everything passes.
     _validate(None, {"anything": "goes"})
+
+
+@patch("onyx.server.manage.llm.api.MULTI_TENANT", True)
+def test_assume_role_rejected_in_multi_tenant() -> None:
+    for key in ("AWS_ROLE_NAME", "aws_role_name", "AWS_EXTERNAL_ID"):
+        with pytest.raises(OnyxError):
+            _reject_assume_role_in_multi_tenant({key: "value"})
+    _reject_assume_role_in_multi_tenant({"AWS_REGION_NAME": "us-east-1"})
+
+
+def test_assume_role_allowed_single_tenant() -> None:
+    _reject_assume_role_in_multi_tenant(
+        {"AWS_ROLE_NAME": "arn:aws:iam::123456789012:role/bedrock"}
+    )

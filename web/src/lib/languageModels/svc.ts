@@ -246,6 +246,8 @@ export const fetchBedrockModels = async (
         aws_access_key_id: params.aws_access_key_id,
         aws_secret_access_key: params.aws_secret_access_key,
         aws_bearer_token_bedrock: params.aws_bearer_token_bedrock,
+        aws_role_name: params.aws_role_name,
+        aws_external_id: params.aws_external_id,
         provider_id: params.provider_id,
       }),
     });
@@ -661,6 +663,8 @@ export const fetchModels = async (
         aws_access_key_id: customConfig.AWS_ACCESS_KEY_ID,
         aws_secret_access_key: customConfig.AWS_SECRET_ACCESS_KEY,
         aws_bearer_token_bedrock: customConfig.AWS_BEARER_TOKEN_BEDROCK,
+        aws_role_name: customConfig.AWS_ROLE_NAME,
+        aws_external_id: customConfig.AWS_EXTERNAL_ID,
         provider_id: formValues.id,
       });
     case LLMProviderName.OLLAMA_CHAT:
