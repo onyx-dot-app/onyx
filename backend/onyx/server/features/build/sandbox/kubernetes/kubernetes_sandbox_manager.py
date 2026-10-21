@@ -1716,6 +1716,23 @@ echo "Session cleanup complete"
             )
             return False
 
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=self._get_pod_name(sandbox_id), namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            raise
+        labels = pod.metadata.labels or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        return True
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         """List UUID session directories under /workspace/sessions/ in the pod.
 

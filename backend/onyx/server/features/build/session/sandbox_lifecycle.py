@@ -822,10 +822,11 @@ def sleep_sandbox(
     before termination because snapshots can take minutes.
     """
     sandbox_id = sandbox.id
+    storage_exists = sandbox_manager.workspace_storage_exists(sandbox_id, tenant_id)
 
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
-    if sandbox_manager.supports_opencode_history_persistence:
+    if storage_exists and sandbox_manager.supports_opencode_history_persistence:
         try:
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
@@ -844,11 +845,15 @@ def sleep_sandbox(
         )
         return
     try:
-        session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
+        session_ids = (
+            list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            if storage_exists
+            else []
         )
     finally:
         if session_creation_lock.owned():
@@ -898,11 +903,15 @@ def sleep_sandbox(
         )
         return
     try:
-        current_session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
+        current_session_ids = (
+            list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            if storage_exists
+            else []
         )
         new_session_ids = set(current_session_ids) - set(session_ids)
         if new_session_ids:

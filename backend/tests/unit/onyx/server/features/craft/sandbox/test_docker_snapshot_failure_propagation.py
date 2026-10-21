@@ -91,6 +91,26 @@ def test_snapshot_requires_a_present_container(monkeypatch: pytest.MonkeyPatch) 
         manager.create_snapshot(uuid4(), uuid4(), "public")
 
 
+@pytest.mark.parametrize("volume_exists", [False, True])
+def test_storage_check_preserves_detached_volume(
+    volume_exists: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox_id = uuid4()
+    manager = object.__new__(dsm.DockerSandboxManager)
+    manager._docker = MagicMock()
+    monkeypatch.setattr(manager, "_get_container", lambda _id: None)
+    if volume_exists:
+        manager._docker.volumes.get.return_value.attrs = {
+            "Labels": {
+                dsm.LABEL_SANDBOX_ID: str(sandbox_id),
+                dsm.LABEL_TENANT_ID: "public",
+            }
+        }
+    else:
+        manager._docker.volumes.get.side_effect = dsm.NotFound("missing")
+    assert manager.workspace_storage_exists(sandbox_id, "public") == volume_exists
+
+
 def test_docker_archive_excludes_output_thumbnail_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

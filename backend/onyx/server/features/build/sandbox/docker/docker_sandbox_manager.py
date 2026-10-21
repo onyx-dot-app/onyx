@@ -1255,6 +1255,28 @@ echo "Session cleanup complete"
             return False
         return "WORKSPACE_FOUND" in result.stdout_text
 
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        container = self._get_container(sandbox_id)
+        if container is not None:
+            labels = container.labels or {}
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != tenant_id
+            ):
+                raise RuntimeError("Workspace storage ownership mismatch")
+            return True
+        try:
+            volume = self._docker.volumes.get(_sandbox_volume_name(sandbox_id))
+        except NotFound:
+            return False
+        labels = volume.attrs.get("Labels") or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        return True
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
         if container is None:
