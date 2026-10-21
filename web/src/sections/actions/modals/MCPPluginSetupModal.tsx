@@ -13,7 +13,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
-import { SvgCheck, SvgX } from "@opal/icons";
+import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -143,8 +143,9 @@ function MCPSetupSession({
   const lastProbe = useRef<Extract<ProbeState, { kind: "checked" }> | null>(
     null
   );
-  const urlInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const connectionPanel = useRef<HTMLDivElement>(null);
+  const serverPanel = useRef<HTMLDivElement>(null);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const normalizedUrl = endpoint(url);
   const leave = () => {
@@ -207,7 +208,11 @@ function MCPSetupSession({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (step === "server") urlInput.current?.focus();
+      if (
+        step === "server" &&
+        !serverPanel.current?.contains(document.activeElement)
+      )
+        nameInput.current?.focus();
       else if (
         step === "connection" &&
         !connectionPanel.current?.contains(document.activeElement)
@@ -348,6 +353,7 @@ function MCPSetupSession({
                     <>
                       <div
                         hidden={step !== "server"}
+                        ref={serverPanel}
                         className={connection ? styles.panel : undefined}
                         data-direction="back"
                       >
@@ -364,6 +370,7 @@ function MCPSetupSession({
                             <InputTypeIn
                               id="mcp-setup-initial-name"
                               name="name"
+                              ref={nameInput}
                               value={details.values.name}
                               onChange={details.handleChange}
                               placeholder={t("addMcpModal.name.title")}
@@ -378,7 +385,6 @@ function MCPSetupSession({
                               id="mcp-setup-url"
                               name="server_url"
                               type="url"
-                              ref={urlInput}
                               value={url}
                               placeholder={t("placeholders.mcpServerUrl")}
                               variant={
@@ -440,10 +446,13 @@ function MCPSetupSession({
                               ["authentication", "contacting_server"] as const
                             ).map((stage) => {
                               let state =
-                                checked?.kind === "oauth" ||
-                                checked?.kind === "public"
-                                  ? "success"
-                                  : (progress[stage] ?? "pending");
+                                probe.kind === "idle" ||
+                                probe.url !== normalizedUrl
+                                  ? "idle"
+                                  : checked?.kind === "oauth" ||
+                                      checked?.kind === "public"
+                                    ? "success"
+                                    : (progress[stage] ?? "pending");
                               if (
                                 checked?.kind === "unreachable" &&
                                 state === "pending"
@@ -464,6 +473,9 @@ function MCPSetupSession({
                                     aria-hidden="true"
                                     className={styles.statusIcon}
                                   >
+                                    <span data-icon="idle">
+                                      <SvgMinus className="size-4 text-text-02" />
+                                    </span>
                                     <span data-icon="pending">
                                       <IconLoader size={16} />
                                     </span>
@@ -497,13 +509,15 @@ function MCPSetupSession({
                                               ? "mcpAuthModal.transport.sseLabel"
                                               : "mcpAuthModal.transport.httpLabel"
                                           )
-                                      : t(
-                                          state === "pending"
-                                            ? "mcpSetup.stagePending"
-                                            : state === "success"
-                                              ? "mcpSetup.stageSuccess"
-                                              : "mcpSetup.stageError"
-                                        )}
+                                      : state === "idle"
+                                        ? undefined
+                                        : t(
+                                            state === "pending"
+                                              ? "mcpSetup.stagePending"
+                                              : state === "success"
+                                                ? "mcpSetup.stageSuccess"
+                                                : "mcpSetup.stageError"
+                                          )}
                                   </Text>
                                 </div>
                               );

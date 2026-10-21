@@ -502,13 +502,16 @@ test("starts with name and URL fields and shows detection before Continue withou
   const pending = deferred<MCPSetupProbeResult>();
   probeResponse = () => pending.promise;
   render(<SetupModal />);
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
+  );
   for (const label of [
     messages.actions.mcpAuthModal.authType.label,
     messages.actions.mcpAuthModal.transport.label,
   ]) {
     const row = (await screen.findByText(label)).closest("[data-stage]");
     expect(row).toBeVisible();
-    expect(row).toHaveAttribute("data-state", "pending");
+    expect(row).toHaveAttribute("data-state", "idle");
   }
   expect(probeUrls).toEqual([]);
   await enterUrl();
@@ -519,7 +522,7 @@ test("starts with name and URL fields and shows detection before Continue withou
     })
   ).not.toBeInTheDocument();
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  await screen.findByRole("status", {}, { timeout: 3000 });
+  await waitFor(() => expect(probeUrls).toHaveLength(1), { timeout: 3000 });
   expect(
     screen.getByText(messages.actions.mcpAuthModal.transport.label)
   ).toBeVisible();
@@ -743,11 +746,31 @@ test("debounces URL edits and discards a stale probe", async () => {
   probeResponse = (url) =>
     url.includes("first") ? stale.promise : Promise.resolve(oauthResult);
   render(<SetupModal />);
-  const input = await enterUrl("https://first.example.com/mcp");
+  const input = await enterUrl("https://discarded.example.com/mcp");
+  expect(probeUrls).toEqual([]);
+  expect(
+    screen
+      .getByText(messages.actions.mcpAuthModal.authType.label)
+      .closest("[data-stage]")
+  ).toHaveAttribute("data-state", "idle");
+  fireEvent.change(input, {
+    target: { value: "https://first.example.com/mcp" },
+  });
   await waitFor(
     () => expect(probeUrls).toEqual(["https://first.example.com/mcp"]),
     { timeout: 3000 }
   );
+  fireEvent.change(input, { target: { value: "" } });
+  for (const label of [
+    messages.actions.mcpAuthModal.authType.label,
+    messages.actions.mcpAuthModal.transport.label,
+  ]) {
+    expect(screen.getByText(label).closest("[data-stage]")).toHaveAttribute(
+      "data-state",
+      "idle"
+    );
+  }
+  expect(probeSignals[0]?.aborted).toBe(true);
   fireEvent.change(input, {
     target: { value: "https://second.example.com/mcp" },
   });
@@ -799,6 +822,31 @@ test("Back preserves connection credentials and final details without saving", a
   expect(writes).toEqual([]);
 });
 
+test("Back does not move focus after the user starts editing the URL", async () => {
+  probeResponse = async () => oauthResult;
+  render(<SetupModal />);
+  await openConnection();
+  const frames: FrameRequestCallback[] = [];
+  const requestFrame = jest
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: copy.back }));
+    const input = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+    input.focus();
+    act(() => frames.forEach((callback) => callback(0)));
+    expect(input).toHaveFocus();
+    expect(
+      screen.getByRole("textbox", { name: /^MCP Server URL/ })
+    ).toHaveValue("https://example.com/mcp");
+  } finally {
+    requestFrame.mockRestore();
+  }
+});
+
 test("returning to the URL preserves credentials until the endpoint changes", async () => {
   probeResponse = async () => oauthResult;
   render(<SetupModal />);
@@ -812,9 +860,7 @@ test("returning to the URL preserves credentials until the endpoint changes", as
   });
   await user.click(screen.getByRole("button", { name: copy.back }));
   await waitFor(() =>
-    expect(
-      screen.getByRole("textbox", { name: /^MCP Server URL/ })
-    ).toHaveFocus()
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
   );
   await user.click(screen.getByRole("button", { name: copy.continue }));
   expect(screen.getByRole("textbox", { name: /^Client ID/ })).toHaveValue(

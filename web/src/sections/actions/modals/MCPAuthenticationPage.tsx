@@ -475,11 +475,7 @@ export default function MCPAuthenticationPage({
                         .filter(
                           (type) =>
                             type !== MCPAuthenticationType.PT_OAUTH ||
-                            (isOAuthEnabled &&
-                              (!recommendation ||
-                                connectionSettingsOpen ||
-                                selectedAuthentication ===
-                                  MCPAuthenticationType.PT_OAUTH))
+                            isOAuthEnabled
                         )
                         .map((type) => ({
                           value: type,
