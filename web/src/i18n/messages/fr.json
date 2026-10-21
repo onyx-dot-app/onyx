@@ -3088,6 +3088,7 @@
             "errors": "Indexation terminée avec des erreurs.",
             "resolved": "Erreurs d'indexation résolues.",
             "succeeded": "Indexation terminée avec succès.",
+            "queued": "Indexation en file d'attente.",
             "inProgress": "Indexation en cours.",
             "canceled": "Indexation arrêtée."
           },
@@ -3099,6 +3100,7 @@
             "errors": "Autorisations synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des autorisations résolues.",
             "succeeded": "Permissions synchronisées avec succès.",
+            "queued": "Synchronisation des permissions en file d'attente.",
             "inProgress": "Synchronisation des permissions en cours.",
             "canceled": "Synchronisation des permissions arrêtée."
           },
@@ -3110,6 +3112,7 @@
             "errors": "Appartenances aux groupes synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues.",
             "succeeded": "Appartenances aux groupes synchronisées avec succès.",
+            "queued": "Synchronisation des appartenances aux groupes en file d'attente.",
             "inProgress": "Synchronisation des appartenances aux groupes.",
             "canceled": "Synchronisation des groupes arrêtée."
           },
@@ -3121,6 +3124,7 @@
             "errors": "Élagage terminé avec des erreurs.",
             "resolved": "Erreurs d'élagage résolues.",
             "succeeded": "Élagage terminé avec succès.",
+            "queued": "Élagage en file d'attente.",
             "inProgress": "Élagage en cours.",
             "canceled": "Élagage arrêté."
           },
@@ -3132,6 +3136,7 @@
             "errors": "Vérifications du connecteur terminées avec des erreurs.",
             "resolved": "Erreurs des vérifications du connecteur résolues.",
             "succeeded": "Vérifications du connecteur réussies.",
+            "queued": "Vérifications du connecteur en file d'attente.",
             "inProgress": "Vérifications du connecteur en cours.",
             "canceled": "Vérifications du connecteur arrêtées."
           }
