@@ -149,6 +149,43 @@ const SLICE_TIME_FORMAT = {
   minute: "2-digit",
   hourCycle: "h23",
 } as const;
+const DAY_LABEL_FORMAT = { month: "short", day: "numeric" } as const;
+const TIME_LABEL_FORMAT = {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+} as const;
+
+type Formatter = ReturnType<typeof useFormatter>;
+
+/** The browser's time zone. The ticks fall on its local times, while next-intl formats in the server's zone. */
+function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/** A slice or picked span in local time, such as "Oct 21, 09:00 – 09:20". */
+export function formatSliceRange(
+  format: Formatter,
+  from: Date,
+  to: Date
+): string {
+  return format.dateTimeRange(from, to, {
+    ...SLICE_TIME_FORMAT,
+    timeZone: localTimeZone(),
+  });
+}
+
+/** An axis label in local time: the date for day spacing, else the time. */
+export function formatTickLabel(
+  format: Formatter,
+  value: number,
+  tickMinutes: number
+): string {
+  return format.dateTime(new Date(value), {
+    ...(tickMinutes >= DAY_MINUTES ? DAY_LABEL_FORMAT : TIME_LABEL_FORMAT),
+    timeZone: localTimeZone(),
+  });
+}
 
 // The status strip draws this many hairline ticks under each bar, so a run reads as
 // thin ticks with gaps between them rather than a solid block.
@@ -170,6 +207,22 @@ interface Slice {
   /** The slice's middle, where its bar sits. */
   at: number;
   docs: number;
+}
+
+/** The slices that overlap `start` to `end`, plus one on each side, which the axis clips. Recharts sizes bars by the gap between points, so a lone slice draws no bar. */
+export function chartSlices(
+  docsIndexed: number[],
+  dataStart: number,
+  sliceMs: number,
+  start: number,
+  end: number
+): Slice[] {
+  return docsIndexed
+    .map((docs, index) => ({ at: dataStart + sliceMs * (index + 0.5), docs }))
+    .filter(
+      (slice) =>
+        slice.at + sliceMs * 1.5 > start && slice.at - sliceMs * 1.5 < end
+    );
 }
 
 /** The local times inside the window that are a whole multiple of `minutes` past local midnight, or every `minutes / DAY_MINUTES`th local midnight. */
@@ -292,10 +345,10 @@ export function ThroughputWindowPicker<W extends PickerWindow>({
             tooltip={t("rangeFilter")}
             onClear={onClearSelection}
           >
-            {format.dateTimeRange(
+            {formatSliceRange(
+              format,
               new Date(selection.since),
-              new Date(selection.until),
-              SLICE_TIME_FORMAT
+              new Date(selection.until)
             )}
           </FilterButton>
         )}
@@ -335,7 +388,7 @@ function SliceTooltip({ active, payload, sliceMs }: SliceTooltipProps) {
         {t("tooltip", { count: slice.docs })}
       </Text>
       <Text font="secondary-body" color="text-03">
-        {format.dateTimeRange(from, to, SLICE_TIME_FORMAT)}
+        {formatSliceRange(format, from, to)}
       </Text>
     </Card>
   );
@@ -373,18 +426,11 @@ export function ThroughputBars({
   const dataEnd = Date.parse(data.window_end);
   const sliceMs = (dataEnd - dataStart) / data.docs_indexed.length;
   const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
-  // A selection shows only the slices that overlap it, so the bars widen to fill the span and a
+  // A selection shows only the slices near it, so the bars widen to fill the span and a
   // slice that drifts half out as the window rolls keeps its bar, clipped at the axis, until it leaves.
   const start = selection === null ? dataStart : Date.parse(selection.since);
   const end = selection === null ? dataEnd : Date.parse(selection.until);
-  const slices: Slice[] = data.docs_indexed
-    .map((docs, index) => ({
-      at: dataStart + sliceMs * (index + 0.5),
-      docs,
-    }))
-    .filter(
-      (slice) => slice.at + sliceMs / 2 > start && slice.at - sliceMs / 2 < end
-    );
+  const slices = chartSlices(data.docs_indexed, dataStart, sliceMs, start, end);
   const tickMinutes =
     (selection === null ? TICK_MINUTES[range] : null) ??
     spanTickMinutes(end - start);
@@ -470,18 +516,9 @@ export function ThroughputBars({
               allowDataOverflow
               ticks={ticks}
               tickFormatter={(value: number) =>
-                !labelSet.has(value)
-                  ? ""
-                  : tickMinutes >= DAY_MINUTES
-                    ? format.dateTime(new Date(value), {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : format.dateTime(new Date(value), {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hourCycle: "h23",
-                      })
+                labelSet.has(value)
+                  ? formatTickLabel(format, value, tickMinutes)
+                  : ""
               }
               tick={{
                 fontSize: 10,
