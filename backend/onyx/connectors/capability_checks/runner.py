@@ -549,7 +549,9 @@ def _any_of_not_run_outcome(
 ) -> CheckOutcome | None:
     """The outcome of a check that its ``depends_on_any`` group stops: no
     member passed and at least one stopped it. The first such member, in the
-    order the check lists them, names the cause."""
+    order the check lists them, names the cause. A member without a result is
+    left out, as in ``depends_on``: creation runs each check alone, and
+    ``stop_blocked_results`` applies the rule once every result is in."""
     first_stop: CheckOutcome | None = None
     for member_id in check.depends_on_any:
         member = results_by_check_id.get(member_id)

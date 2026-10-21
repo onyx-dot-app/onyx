@@ -465,6 +465,27 @@ def test_an_any_of_member_without_a_verdict_is_left_out(left_out: _Check) -> Non
     assert stopped["content"].blocked_by == "shared"
 
 
+def test_an_any_of_check_run_alone_is_stopped_once_its_members_fail() -> None:
+    """Creation runs each check alone, so the any-of check runs without its
+    members; the rule applies when their results arrive."""
+    content = _any_of_content()
+    alone = _run([content])["content"]
+    assert content.calls == 1
+
+    results = stop_blocked_results(
+        [_Check("shared"), _Check("root"), content],
+        [
+            _result("shared", CapabilityCheckStatus.FAILED),
+            _result("root", CapabilityCheckStatus.FAILED),
+            alone,
+        ],
+    )
+
+    assert results[2].status == CapabilityCheckStatus.SKIPPED
+    assert results[2].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results[2].blocked_by == "shared"
+
+
 def test_an_any_of_member_stopped_by_its_dependency_passes_the_cause_on() -> None:
     results = _run(
         [
