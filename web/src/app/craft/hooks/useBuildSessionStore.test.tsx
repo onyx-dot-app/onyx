@@ -3537,6 +3537,66 @@ describe("session history races and discarded queued starts", () => {
   });
   afterEach(() => jest.useRealTimers());
 
+  it.each([1, 2])(
+    "keeps a failed active-turn read %s retryable instead of loading an idle session",
+    async (failedRead) => {
+      const fetchActive = jest.mocked(api.fetchActiveTurn);
+      if (failedRead === 2) fetchActive.mockResolvedValueOnce(null);
+      fetchActive.mockRejectedValueOnce(new Error("Turn status unavailable"));
+      const store = useBuildSessionStore.getState();
+      await store.loadSession(sessionId);
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        isLoaded: false,
+        loadError: "Turn status unavailable",
+        activeTurnId: null,
+      });
+      fetchActive.mockResolvedValue(active);
+      await store.loadSession(sessionId, { force: true });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        isLoaded: true,
+        loadError: null,
+        status: "running",
+        activeTurnId: active.turn_id,
+      });
+    }
+  );
+
+  it.each([1, 2])(
+    "ignores a failed status read %s after a newer turn takes ownership",
+    async (failedRead) => {
+      const pendingRead =
+        deferred<Awaited<ReturnType<typeof api.fetchActiveTurn>>>();
+      const fetchActive = jest.mocked(api.fetchActiveTurn);
+      if (failedRead === 2) fetchActive.mockResolvedValueOnce(null);
+      fetchActive.mockReturnValueOnce(pendingRead.promise);
+      const store = useBuildSessionStore.getState();
+      const loading = store.loadSession(sessionId);
+      await waitFor(() =>
+        expect(fetchActive).toHaveBeenCalledTimes(failedRead)
+      );
+      store.updateSessionData(sessionId, {
+        turnGeneration: 1,
+        status: "running",
+        activeTurnId: "new-turn",
+        activeTurnLocalOwner: true,
+      });
+      pendingRead.reject(new Error("Old status read failed"));
+      await loading;
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        loadError: null,
+        status: "running",
+        activeTurnId: "new-turn",
+        activeTurnLocalOwner: true,
+      });
+    }
+  );
+
   it.each(["lookup", "stream"] as const)(
     "adopts a successor after %s completion and keeps its partial answer active",
     async (source) => {

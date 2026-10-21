@@ -1189,7 +1189,7 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
-  it("appends a connect card stream item from a connect_app_request packet", async () => {
+  it("deduplicates a restored connect card and its live announcement", async () => {
     jest
       .mocked(fetchActiveTurn)
       .mockResolvedValue({ turn_id: "turn-thinking", turn_index: 0 } as never);
@@ -1201,6 +1201,18 @@ describe("useBuildStreaming thinking packets", () => {
           request_id: "req-1",
           external_app_id: 17,
           reason: "to schedule events",
+        } as never);
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: 17,
+          reason: "to schedule events",
+        } as never);
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-2",
+          external_app_id: 18,
+          reason: "to read documents",
         } as never);
         throw new DOMException("Subscription closed", "AbortError");
       });
@@ -1219,6 +1231,13 @@ describe("useBuildStreaming thinking packets", () => {
         requestId: "req-1",
         externalAppId: 17,
         reason: "to schedule events",
+      }),
+      expect.objectContaining({
+        type: "connect_app_request",
+        id: "req-2",
+        requestId: "req-2",
+        externalAppId: 18,
+        reason: "to read documents",
       }),
     ]);
   });

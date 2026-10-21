@@ -245,7 +245,7 @@ it.each([
   ).toHaveLength(1);
 });
 
-it("shows a failed metadata load and retries the session explicitly", async () => {
+it("blocks submission after a failed session load and offers an explicit retry", async () => {
   const original = useBuildSessionStore.getState().loadSession;
   const loadSession = jest.fn().mockResolvedValue(undefined);
   useBuildSessionStore.setState({ loadSession });
@@ -255,6 +255,8 @@ it("shows a failed metadata load and retries the session explicitly", async () =
   try {
     render(<BuildChatPanel existingSessionId={SESSION_ID} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Runtime unavailable");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
   } finally {
