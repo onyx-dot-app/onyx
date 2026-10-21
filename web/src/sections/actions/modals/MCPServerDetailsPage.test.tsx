@@ -669,7 +669,8 @@ describe("inline server configuration", () => {
     expect(endpoint).toHaveValue(configuredServer.server_url);
     expect(endpoint).not.toHaveAttribute("readonly");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
     expect(savedRequests[0]?.payload).not.toHaveProperty("server_url");
     expect(saved).toHaveBeenCalledWith(
       expect.objectContaining({ server_url: configuredServer.server_url })
@@ -700,7 +701,8 @@ describe("inline server configuration", () => {
     await user.clear(endpoint);
     await user.type(endpoint, "https://new.example.com/mcp");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
     expect(savedRequests[0]?.payload).toEqual({
       server_url: "https://new.example.com/mcp",
     });
