@@ -18,7 +18,7 @@ import messages from "@/i18n/messages/en.json";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import {
   mintMcpChatEnableIntent,
-  consumeMcpChatEnableIntent,
+  verifyMcpChatEnableIntent,
 } from "@/sections/actions/mcpChatEnableIntent";
 
 let mockUserId = "admin-user";
@@ -419,7 +419,7 @@ test("consumes an explicit Enable proof once after same-tab OAuth return", async
   const view = render(<MCPServerDetailPage serverId={7} />);
   await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
   expect(
-    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+    verifyMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(false);
   expect(mockReplace).toHaveBeenLastCalledWith(
     "/admin/plugins/mcp/7?tab=tools",
@@ -447,7 +447,7 @@ test("keeps the enable request after OAuth-return discovery fails", async () => 
     { scroll: false }
   );
   expect(
-    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+    verifyMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(true);
 });
 
@@ -504,7 +504,7 @@ test("uses the staged result without another discovery or Chat write", async () 
   expect(refreshMCPServerTools).not.toHaveBeenCalled();
   expect(mockUpdateTools).not.toHaveBeenCalled();
   expect(
-    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+    verifyMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(false);
 });
 
@@ -521,7 +521,7 @@ test("does not enable tools when opening authentication is cancelled", async () 
   expect(refreshMCPServerTools).not.toHaveBeenCalled();
   expect(mockUpdateTools).not.toHaveBeenCalled();
   expect(
-    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
+    verifyMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(false);
 });
 

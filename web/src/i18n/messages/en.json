@@ -327,8 +327,6 @@
         "saveAuthFailed": "Failed to save authentication configuration",
         "saveConfigFailed": "Failed to save server configuration",
         "saveStage": "Could not save connection settings",
-        "oauthStage": "Could not start sign-in",
-        "discoveryStage": "Could not load server tools",
         "loadStage": "Could not load connection settings",
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",

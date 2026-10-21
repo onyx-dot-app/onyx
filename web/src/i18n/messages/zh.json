@@ -327,8 +327,6 @@
         "saveAuthFailed": "保存身份验证配置失败",
         "saveConfigFailed": "保存服务器配置失败",
         "saveStage": "无法保存连接设置",
-        "oauthStage": "无法开始登录",
-        "discoveryStage": "无法加载服务器工具",
         "loadStage": "无法加载连接设置",
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",

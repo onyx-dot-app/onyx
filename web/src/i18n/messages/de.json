@@ -327,8 +327,6 @@
         "saveAuthFailed": "Die Authentifizierungskonfiguration konnte nicht gespeichert werden",
         "saveConfigFailed": "Die Serverkonfiguration konnte nicht gespeichert werden",
         "saveStage": "Verbindungseinstellungen konnten nicht gespeichert werden",
-        "oauthStage": "Anmeldung konnte nicht gestartet werden",
-        "discoveryStage": "Server-Tools konnten nicht geladen werden",
         "loadStage": "Verbindungseinstellungen konnten nicht geladen werden",
         "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
