@@ -160,6 +160,25 @@ def test_duplicate_create_conflicts(db_session: Session) -> None:
     assert again.json()["error_code"] == "CONFLICT"
 
 
+def test_racing_create_conflicts_instead_of_500(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent create can win the unique key after the pre-check."""
+    config_id = _seed_config(db_session)
+    client = TestClient(_make_app(db_session, _ADMIN))
+    body = {"model_configuration_id": config_id, **_rates()}
+    assert client.post(_BASE, json=body).status_code == 200
+
+    # The pre-check misses the existing row, as it would mid-race.
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_cost_override",
+        lambda _session, _model_configuration_id: None,
+    )
+    again = client.post(_BASE, json=body)
+    assert again.status_code == 409
+    assert again.json()["error_code"] == "CONFLICT"
+
+
 def test_create_for_missing_configuration_404s(db_session: Session) -> None:
     client = TestClient(_make_app(db_session, _ADMIN))
     resp = client.post(_BASE, json={"model_configuration_id": 999, **_rates()})

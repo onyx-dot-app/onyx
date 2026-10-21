@@ -7,6 +7,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -462,18 +463,24 @@ def create_cost_override_endpoint(
         is None
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
-    if fetch_cost_override(db_session, payload.model_configuration_id) is not None:
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT, "This model already has a cost override"
-        )
-    row = create_cost_override(
-        db_session,
-        model_configuration_id=payload.model_configuration_id,
-        input_cost_per_mtok=payload.input_cost_per_mtok,
-        output_cost_per_mtok=payload.output_cost_per_mtok,
-        cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "This model already has a cost override"
     )
-    db_session.commit()
+    if fetch_cost_override(db_session, payload.model_configuration_id) is not None:
+        raise conflict
+    try:
+        row = create_cost_override(
+            db_session,
+            model_configuration_id=payload.model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+        )
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create won the unique key after the check above.
+        db_session.rollback()
+        raise conflict
     invalidate_override_cache()
     return CostOverride.from_db(row)
 

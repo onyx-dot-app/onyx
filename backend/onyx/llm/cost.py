@@ -57,6 +57,9 @@ def _is_locally_hosted(model: str, provider: str | None) -> bool:
 class ModelPrice(BaseModel):
     model: str
     provider: str | None
+    # The saved model configuration this price is for, when known. Providers of
+    # one type can price the same model name differently (admin overrides).
+    model_configuration_id: int | None = None
     input_per_mtok: float | None
     output_per_mtok: float | None
     cache_per_mtok: float | None
@@ -82,6 +85,7 @@ def get_model_price_per_million(
             return ModelPrice(
                 model=model,
                 provider=provider,
+                model_configuration_id=model_configuration_id,
                 input_per_mtok=rates.input_cost_per_mtok,
                 output_per_mtok=rates.output_cost_per_mtok,
                 cache_per_mtok=rates.cache_read_cost_per_mtok,
@@ -91,6 +95,7 @@ def get_model_price_per_million(
         return ModelPrice(
             model=model,
             provider=provider,
+            model_configuration_id=model_configuration_id,
             input_per_mtok=0.0,
             output_per_mtok=0.0,
             cache_per_mtok=None,
@@ -105,6 +110,7 @@ def get_model_price_per_million(
         return ModelPrice(
             model=model,
             provider=provider,
+            model_configuration_id=model_configuration_id,
             input_per_mtok=None,
             output_per_mtok=None,
             cache_per_mtok=None,
@@ -116,6 +122,7 @@ def get_model_price_per_million(
     return ModelPrice(
         model=model,
         provider=provider,
+        model_configuration_id=model_configuration_id,
         input_per_mtok=_to_float(cost.get("input")),
         output_per_mtok=_to_float(cost.get("output")),
         cache_per_mtok=_to_float(cost.get("cache_read")),

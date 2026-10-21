@@ -7,6 +7,7 @@ import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { AdminLanguageModelsPage } from "@tests/e2e/pages/AdminLanguageModelsPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -214,16 +215,15 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
       ).toBeVisible({
         timeout: 10000,
       });
-      await expect(page.getByText(providerName)).toBeVisible();
+      const languageModelsPage = new AdminLanguageModelsPage(page);
+      await expect(languageModelsPage.providerCard(providerName)).toBeVisible();
 
       // Cost overrides are gated separately from the page, so reaching the page
       // is not evidence the panel loaded — assert the row, not just the heading.
-      await expect(page.getByText(override.modelDisplayName)).toBeVisible({
-        timeout: 10000,
-      });
       await expect(
-        page.getByText("Failed to load cost overrides.")
-      ).toBeHidden();
+        languageModelsPage.costOverrideCard(override.modelDisplayName)
+      ).toBeVisible({ timeout: 10000 });
+      await expect(languageModelsPage.costOverridesLoadError).toBeHidden();
 
       // Phase 3: Revoke MANAGE_LLMS — should redirect again
       await page.context().clearCookies();
