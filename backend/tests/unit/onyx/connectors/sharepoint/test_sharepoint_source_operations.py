@@ -419,6 +419,27 @@ def test_root_site_without_a_hostname_fails_validation() -> None:
         gateway.resolve_tenant_domain()
 
 
+def _reset_after_read(self: SharepointSourceOperations, name: str) -> Any:
+    """Another thread's REST rebuild resets the Graph gateway right after
+    each read of it."""
+    value = object.__getattribute__(self, name)
+    if name == "_graph_gateway" and value is not None:
+        object.__setattr__(self, name, None)
+    return value
+
+
+def test_a_reset_between_reads_does_not_return_no_gateway() -> None:
+    gateway = fake_gateway(get_json=lambda url, params: {})  # noqa: ARG005
+    graph = gateway._graph_gateway
+
+    with patch.object(
+        SharepointSourceOperations, "__getattribute__", _reset_after_read
+    ):
+        built = gateway._gateway()
+
+    assert built is graph
+
+
 @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))
 def test_auth_method_comes_from_the_credential(_build: MagicMock) -> None:
     assert fake_gateway().get_auth_method() is MicrosoftAuthMethod.CERTIFICATE
