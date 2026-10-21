@@ -44,6 +44,21 @@ export const SubCentRate: Story = {
   },
 };
 
+export const UnlimitedPrecision: Story = {
+  render: () => {
+    const [amount, setAmount] = useState<number | null>(0.01875);
+    return (
+      <div className="w-60">
+        <InputCurrency
+          value={amount}
+          onChange={setAmount}
+          precision="unlimited"
+        />
+      </div>
+    );
+  },
+};
+
 export const ZeroDecimalCurrency: Story = {
   render: () => {
     const [amount, setAmount] = useState<number | null>(1200);

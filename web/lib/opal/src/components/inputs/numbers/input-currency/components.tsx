@@ -3,7 +3,11 @@
 import "@opal/components/inputs/shared.css";
 import "@opal/components/inputs/numbers/input-currency/styles.css";
 import React from "react";
-import type { InputVariants } from "@opal/types";
+import type {
+  CurrencyCode,
+  CurrencyPrecision,
+  InputVariants,
+} from "@opal/types";
 import {
   SEGMENT_INPUT_PROPS,
   SegmentSeparator,
@@ -23,6 +27,49 @@ interface AmountSegments {
 const EMPTY_SEGMENTS: AmountSegments = { whole: "", fraction: "" };
 
 // Negative, non-finite and exponent-sized values render empty.
+// The most fraction digits a JS number and `toFixed` can show.
+const MAX_PRECISION = 20;
+
+// "unlimited" and anything above 20 → 20; negatives → 0; fractions round
+// down; NaN or no precision → the currency's usual decimals.
+function resolvePrecision(
+  precision: CurrencyPrecision | undefined,
+  currencyDigits: number
+): number {
+  if (precision === "unlimited") return MAX_PRECISION;
+  if (precision === undefined || Number.isNaN(precision)) return currencyDigits;
+  return Math.min(MAX_PRECISION, Math.max(0, Math.floor(precision)));
+}
+
+// The shortest decimal that reads back as `value`, without an exponent:
+// 0.075 → "0.075" (not toFixed's binary "0.0749…"), 1e-7 → "0.0000001".
+function toPlainDecimal(value: number): string {
+  const text = String(value);
+  const match = /^(\d+)(?:\.(\d+))?e([+-]\d+)$/.exec(text);
+  if (!match) return text;
+  const [, intPart = "", fracPart = "", exponent = "0"] = match;
+  const digits = intPart + fracPart;
+  const point = intPart.length + Number(exponent);
+  if (point <= 0) return `0.${"0".repeat(-point)}${digits}`;
+  if (point >= digits.length) return digits + "0".repeat(point - digits.length);
+  return `${digits.slice(0, point)}.${digits.slice(point)}`;
+}
+
+// Adds one to a digit string, carrying: "099" → "100", "99" → "100".
+function incrementDigits(digits: string): string {
+  const chars = digits.split("");
+  for (let i = chars.length - 1; i >= 0; i--) {
+    if (chars[i] !== "9") {
+      chars[i] = String(Number(chars[i]) + 1);
+      return chars.join("");
+    }
+    chars[i] = "0";
+  }
+  return `1${chars.join("")}`;
+}
+
+// Negative, non-finite and exponent-sized values render empty. Rounds half up
+// on the decimal digits, so 0.075 at precision 2 shows 0.08.
 function toSegments(
   value: number | null,
   precision: number,
@@ -31,8 +78,18 @@ function toSegments(
   if (value == null || !Number.isFinite(value) || value < 0 || value >= 1e21) {
     return EMPTY_SEGMENTS;
   }
-  const [whole = "", fraction = ""] = value.toFixed(precision).split(".");
-  // Trim trailing zeros, but keep the currency's usual decimals ("3" → "3.00").
+  let [whole = "", fraction = ""] = toPlainDecimal(value).split(".");
+  if (fraction.length > precision) {
+    const roundUp = (fraction[precision] ?? "0") >= "5";
+    fraction = fraction.slice(0, precision);
+    if (roundUp) {
+      const carried = incrementDigits(whole + fraction);
+      whole = carried.slice(0, carried.length - precision);
+      fraction = carried.slice(carried.length - precision);
+    }
+  }
+  // Keep the currency's usual decimals ("3" → "3.00"), drop other trailing zeros.
+  fraction = fraction.padEnd(minFractionDigits, "0");
   let end = fraction.length;
   while (end > minFractionDigits && fraction[end - 1] === "0") end--;
   return { whole, fraction: fraction.slice(0, end) };
@@ -79,14 +136,14 @@ interface InputCurrencyProps {
    * ISO 4217 code. Sets the symbol, its side and the default decimals.
    * @default "USD"
    */
-  currency?: string;
+  currency?: CurrencyCode;
 
   /**
    * Most digits the fraction segment accepts; typing more is blocked. Defaults
-   * to the currency's usual decimals (USD and EUR 2, JPY 0). Raise it for
-   * sub-cent rates; 0 hides the segment.
+   * to the currency's usual decimals (USD and EUR 2, JPY 0). Clamped to an
+   * integer in [0, 20]; `"unlimited"` is 20. 0 hides the segment.
    */
-  precision?: number;
+  precision?: CurrencyPrecision;
 
   /** Placeholders of the whole and fraction segments. */
   placeholder?: { whole?: string; fraction?: string };
@@ -117,7 +174,7 @@ function InputCurrency({
 }: InputCurrencyProps) {
   const strings = useOpalStrings();
   const parts = strings.inputCurrencyParts(currency);
-  const maxFraction = Math.max(0, precision ?? parts.fractionDigits);
+  const maxFraction = resolvePrecision(precision, parts.fractionDigits);
   const minFraction = Math.min(parts.fractionDigits, maxFraction);
   const showFraction = maxFraction > 0;
   const wholePlaceholder = placeholder?.whole ?? "0";

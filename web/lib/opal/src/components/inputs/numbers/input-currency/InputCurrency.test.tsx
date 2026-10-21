@@ -18,6 +18,44 @@ describe("display", () => {
     expect(screen.getByLabelText("Fractional amount")).toHaveValue("075");
   });
 
+  it("rounds the display half up on decimal digits", () => {
+    render(<InputCurrency value={0.075} onChange={() => {}} precision={2} />);
+    expect(screen.getByLabelText("Fractional amount")).toHaveValue("08");
+  });
+
+  it("shows every stored digit with unlimited precision", () => {
+    render(
+      <InputCurrency
+        value={0.0000001}
+        onChange={() => {}}
+        precision="unlimited"
+      />
+    );
+    expect(screen.getByLabelText("Whole amount")).toHaveValue("0");
+    expect(screen.getByLabelText("Fractional amount")).toHaveValue("0000001");
+  });
+
+  it.each([
+    ["unlimited", 20],
+    [25, 20],
+    [Infinity, 20],
+    [2.7, 2],
+    [Number.NaN, 2],
+  ] as const)("accepts %s as %i fraction digits", (precision, digits) => {
+    render(
+      <InputCurrency value={null} onChange={() => {}} precision={precision} />
+    );
+    expect(screen.getByLabelText("Fractional amount")).toHaveAttribute(
+      "maxLength",
+      String(digits)
+    );
+  });
+
+  it("hides the fraction segment for a negative precision", () => {
+    render(<InputCurrency value={3} onChange={() => {}} precision={-1} />);
+    expect(screen.queryByLabelText("Fractional amount")).toBeNull();
+  });
+
   it("keeps the number left to right on a right-to-left page", () => {
     render(
       <div dir="rtl">
