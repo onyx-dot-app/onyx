@@ -43,6 +43,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.outlook.capability_checks import (
     build_outlook_doc_permission_sync_checks,
     build_outlook_indexing_checks,
@@ -52,7 +53,6 @@ from onyx.connectors.outlook.models import (
     OutlookEventPage,
     OutlookFolderPage,
     OutlookMailboxPage,
-    OutlookTokenInfo,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
@@ -83,7 +83,9 @@ def _advisories(output: CheckOutput | None) -> list[str]:
 def _gateway() -> MagicMock:
     """A healthy tenant: one user with a readable mailbox holding one message."""
     gateway = create_autospec(OutlookSourceOperations, instance=True)
-    gateway.check_token.return_value = OutlookTokenInfo(expires_in=3599)
+    gateway.check_token.return_value = MicrosoftTokenInfo(
+        expires_in=3599, app_name="Onyx"
+    )
     gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[mailbox()])
     gateway.resolve_mailbox.return_value = mailbox()
     gateway.probe_mailbox.return_value = folder()

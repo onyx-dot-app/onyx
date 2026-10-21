@@ -12,10 +12,6 @@ from pydantic import BaseModel, ConfigDict
 from onyx.connectors.models import ConnectorFailure, Document, HierarchyNode
 
 
-class OutlookTokenInfo(BaseModel):
-    expires_in: int | None = None
-
-
 class OutlookMailbox(BaseModel):
     model_config = ConfigDict(frozen=True)
 

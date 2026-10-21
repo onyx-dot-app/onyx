@@ -36,13 +36,13 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError,
     MicrosoftGraphError,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
 from onyx.connectors.sharepoint.models import (
     SharepointDrive,
-    SharepointTokenInfo,
     SitePagesPage,
 )
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
@@ -89,7 +89,9 @@ def _gateway() -> MagicMock:
     """A healthy tenant: one site with one library holding one small file and
     one page."""
     gateway: MagicMock = create_autospec(SharepointSourceOperations, instance=True)
-    gateway.check_token.return_value = SharepointTokenInfo(expires_in=3599)
+    gateway.check_token.return_value = MicrosoftTokenInfo(
+        expires_in=3599, app_name="Onyx"
+    )
     gateway.list_site_urls.return_value = [SITE_URL, OTHER_SITE_URL]
     gateway.get_site_id.return_value = "site-id"
     gateway.list_drives.return_value = [DRIVE]

@@ -49,6 +49,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -1158,6 +1159,7 @@ def test_onedrive_drive_count_maps_listing_errors(
 
 def test_onedrive_named_capability_checks_pass_through_gateway() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.check_token.return_value = MicrosoftTokenInfo(expires_in=3599)
     gateway.list_users.return_value = OneDriveUserPage(users=[_user()])
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()

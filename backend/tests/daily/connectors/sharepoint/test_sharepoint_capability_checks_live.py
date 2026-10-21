@@ -105,7 +105,15 @@ def test_a_bad_secret_fails_the_token_check(
         _credentials(test_secrets, secret="not-the-secret"), _config([_site()])
     )
 
-    assert _statuses(results)["sharepoint_token_auth"] is CapabilityCheckStatus.FAILED
+    by_id: dict[str, CapabilityCheckResult] = {
+        result.check_id: result for result in results
+    }
+    assert by_id["sharepoint_token_auth"].status is CapabilityCheckStatus.FAILED
+    assert by_id["sharepoint_token_auth"].summary == (
+        "Secret or certificate was rejected"
+    )
+    # The probes after sign-in do not run.
+    assert by_id["sharepoint_documents_read"].blocked_by == "sharepoint_token_auth"
     assert verdict is CapabilityVerdict.FAILED
 
 

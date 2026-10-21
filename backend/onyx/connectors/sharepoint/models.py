@@ -14,12 +14,6 @@ class SharepointCredentials(BaseModel):
     sp_certificate_password: str | None = None
 
 
-class SharepointTokenInfo(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    expires_in: int | None
-
-
 class SharepointDrive(BaseModel):
     """A document library as Graph lists it. ``list_id`` is the SharePoint
     list behind it, which the permission reads address. Graph can list a

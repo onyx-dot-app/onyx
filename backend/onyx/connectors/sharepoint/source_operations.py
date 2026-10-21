@@ -78,6 +78,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
 )
 from onyx.connectors.microsoft_utils.models import (
     EntraMember,
+    MicrosoftTokenInfo,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
@@ -90,7 +91,6 @@ from onyx.connectors.sharepoint.connector_utils import (
 from onyx.connectors.sharepoint.models import (
     SharepointCredentials,
     SharepointDrive,
-    SharepointTokenInfo,
     SitePagesPage,
 )
 from onyx.connectors.source_operations import (
@@ -297,12 +297,8 @@ class SharepointSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> SharepointTokenInfo:
-        response: dict[str, Any] = self._gateway().token_response()
-        expires: int | str | None = response.get("expires_in")
-        return SharepointTokenInfo(
-            expires_in=int(expires) if expires is not None else None
-        )
+    def check_token(self) -> MicrosoftTokenInfo:
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={
