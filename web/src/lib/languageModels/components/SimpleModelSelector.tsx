@@ -78,6 +78,11 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
   disabled?: boolean;
+  /**
+   * Error chrome, e.g. while the models failed to load. Left undefined, the
+   * select flags a value outside its options itself; false turns that off.
+   */
+  isError?: boolean;
   placeholder?: InputSingleSelectProps["placeholder"];
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
@@ -102,6 +107,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   includeDecisionOnly = false,
   globalDefault,
   disabled,
+  isError,
   placeholder,
   modelPaging,
   container,
@@ -222,6 +228,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       value={toSelectValue(value)}
       defaultOption={defaultOption}
       disabled={disabled}
+      isError={isError}
       onValueChange={(next) => {
         const id = fromSelectValue(next);
         // The Global Default row stands for null, so picking it while

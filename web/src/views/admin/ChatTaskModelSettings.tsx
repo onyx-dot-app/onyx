@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
-import { LineLoader } from "@opal/loaders";
-import { InputHorizontal, Section, toast } from "@opal/layouts";
+import { Button } from "@opal/components";
+import { DropdownLoader } from "@opal/loaders";
+import { InputHorizontal, toast, useErrorToast } from "@opal/layouts";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { filterModelConfigurations } from "@/lib/languageModels/options";
@@ -94,21 +94,20 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
     }
   }
 
+  // Both rows share the listing, so they share one toast.
+  useErrorToast(error, {
+    id: "task-models-load-failed",
+    message: t("taskModels.loadFailed"),
+    retry: {
+      label: t("taskModels.retry.label"),
+      onRetry: () => void refetch(),
+    },
+  });
+
   let control: React.ReactNode;
-  if (error) {
-    control = (
-      <Section flexDirection="row" alignItems="center" width="fit" gap={2}>
-        <Text font="secondary-body" color="text-03">
-          {t("taskModels.loadFailed")}
-        </Text>
-        <Button prominence="secondary" onClick={() => void refetch()}>
-          {t("taskModels.retry.label")}
-        </Button>
-      </Section>
-    );
-  } else if (!llmProviders) {
-    control = <LineLoader />;
-  } else if (llmProviders.length === 0) {
+  if (!llmProviders && !error) {
+    control = <DropdownLoader />;
+  } else if (llmProviders?.length === 0) {
     control = (
       <Button href={ADMIN_ROUTES.LLM_MODELS.path} prominence="secondary">
         {t("taskModels.addProvider.label")}
@@ -123,11 +122,14 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
           // default, so no single model is named.
           description: t("taskModels.globalDefault.description"),
         }}
-        providers={filterModelConfigurations(llmProviders, {
-          keep: modelConfigId,
-        })}
+        providers={
+          llmProviders
+            ? filterModelConfigurations(llmProviders, { keep: modelConfigId })
+            : []
+        }
         value={modelConfigId}
-        disabled={isPending}
+        disabled={isPending || !!error}
+        isError={error ? true : undefined}
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
         onChange={(modelConfigurationId) => {
@@ -135,6 +137,7 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
             void handleChange(null);
             return;
           }
+          if (!llmProviders) return;
           const provider = findProviderOwningModelConfig(
             llmProviders,
             modelConfigurationId

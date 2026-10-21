@@ -248,17 +248,19 @@ describe("ChatTaskModelSettings", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  test("shows a provider-load failure and retries without changing defaults", async () => {
+  test("shows both selects in an error state when the listing fails", async () => {
     listingResponse = async () =>
       new Response(JSON.stringify({ detail: "Unavailable" }), { status: 503 });
-    const user = setupUser();
     render(<TaskModels />);
-    expect(
-      await screen.findAllByText("Could not load task models")
-    ).toHaveLength(2);
-    listingResponse = null;
-    await user.click(screen.getAllByRole("button", { name: "Retry" })[0]!);
-    expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("combobox")).toHaveLength(2)
+    );
+    screen
+      .getAllByRole("combobox")
+      .forEach((select) =>
+        expect(select).toHaveAttribute("aria-invalid", "true")
+      );
     expect(global.fetch).not.toHaveBeenCalledWith(
       "/api/admin/llm/default-chat-naming",
       expect.anything()
