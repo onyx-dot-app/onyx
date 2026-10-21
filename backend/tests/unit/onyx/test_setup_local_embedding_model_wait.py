@@ -89,10 +89,12 @@ def test_fails_when_a_request_is_still_waiting_at_the_deadline(
     encode: MagicMock,
 ) -> None:
     release = threading.Event()
+    started = threading.Event()
     request_threads: list[threading.Thread] = []
 
     def wait_for_release(**_: object) -> None:
         request_threads.append(threading.current_thread())
+        started.set()
         release.wait()
 
     encode.side_effect = wait_for_release
@@ -103,6 +105,8 @@ def test_fails_when_a_request_is_still_waiting_at_the_deadline(
         ):
             wait_for_local_embedding_model(_search_settings())
         # The waiting request must not keep the failed process from exiting.
+        # On a slow runner, the request thread can start after the deadline.
+        assert started.wait(timeout=5)
         assert [thread.daemon for thread in request_threads] == [True]
     finally:
         release.set()
