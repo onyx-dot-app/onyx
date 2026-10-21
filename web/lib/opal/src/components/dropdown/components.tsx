@@ -547,6 +547,7 @@ function DropdownData(props: DropdownDataProps) {
   const closeOnSelect = props.closeOnSelect ?? values === undefined;
   const {
     id,
+    disabled,
     container,
     isOpen,
     setIsOpen,
@@ -938,6 +939,7 @@ function DropdownData(props: DropdownDataProps) {
         mode={mode}
         container={container}
         isOpen={isOpen}
+        disabled={disabled}
         label={label ?? ""}
         floatingStyles={floatingStyles}
         isPositioned={isPositioned}

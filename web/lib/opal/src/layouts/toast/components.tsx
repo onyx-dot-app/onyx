@@ -185,6 +185,9 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   const handleClose = useCallback((id: string) => {
     toast._markLeaving(id);
     setTimeout(() => {
+      // A toast fired with this id while it left replaced it: keep that one.
+      const current = toastStore.getSnapshot().find((t) => t.id === id);
+      if (current && !current.leaving) return;
       toast.dismiss(id);
       setExpandedIds((prev) => {
         if (!prev.has(id)) return prev;

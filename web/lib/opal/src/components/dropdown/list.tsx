@@ -36,6 +36,8 @@ interface DropdownListProps {
   mode: DropdownMode;
   container: HTMLElement | null | undefined;
   isOpen: boolean;
+  /** A disabled dropdown's list is closed, even if its `open` is held. */
+  disabled: boolean;
   /** The list's accessible name. */
   label: string;
   floatingStyles: React.CSSProperties;
@@ -102,7 +104,8 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       listId,
       mode,
       container,
-      isOpen,
+      isOpen: isOpenProp,
+      disabled,
       label,
       floatingStyles,
       isPositioned,
@@ -129,6 +132,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     ref
   ) => {
     const strings = useOpalStrings();
+    // Disabling closes the list even when a parent holds `open`; it then
+    // plays its exit like any close, rather than vanishing mid-animation.
+    const isOpen = isOpenProp && !disabled;
     // The list stays mounted one exit animation longer than `isOpen`, so it
     // can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
@@ -256,8 +262,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       };
     });
 
-    // A disabled dropdown is closed by the overlay, so its list still plays
-    // the exit: cutting it short here would replay it on re-enable.
     if (!presence.mounted || typeof document === "undefined") {
       return null;
     }
