@@ -416,10 +416,12 @@ comment reads `# No longer used`. See §9.
    caller that mutates `reclaim_status` directly instead of going through these
    helpers can desynchronize `reclaim_stopped_reading_at` from the actual state.
 9. **`get_current_search_settings` returns the highest-id PRESENT row and raises
-    only when none exists.** `swap_index.py:_perform_index_swap` commits the old
-    row as PAST before it commits the new row as PRESENT. The transition briefly
-    has no PRESENT row. Do not build code that assumes exactly one PRESENT row at
-    every instant.
+    only when none exists.** `swap_index.py:_perform_index_swap` sets the old row
+    to PAST and the new row to PRESENT in one commit, with
+    `update_search_settings_status__no_commit`. Other sessions never read a state
+    with no PRESENT row. Keep any new status flip in the same commit. A port task
+    that fails setup before it claims its attempt marks it FAILED, so the next
+    `check_for_port` tick retries it.
 
 ---
 

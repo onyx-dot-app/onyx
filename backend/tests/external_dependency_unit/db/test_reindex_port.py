@@ -79,6 +79,7 @@ from onyx.db.port_attempt import (
     commit_port_cursor,
     count_consecutive_failed_port_attempts_no_progress,
     create_port_attempt,
+    fail_unstarted_port_attempt,
     get_active_port_attempt,
     get_latest_port_attempt,
     mark_port_in_progress,
@@ -840,6 +841,57 @@ def test_run_port_attempt_stops_when_canceled(
     # cursor/progress NOT advanced onto the terminal row (the commit_port_cursor guard)
     assert row.last_processed_doc_id is None
     assert row.docs_ported == 0
+
+
+def test_run_port_attempt_setup_failure_is_retried_next_tick(
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A setup error before the claim (e.g. no PRESENT row mid-swap) FAILs the
+    attempt. Left NOT_STARTED, it waits a full task TTL for a re-send, and the stall
+    watchdog does not cover it. FAILED lets the next check_for_port tick retry it."""
+    cc_pair, future_id = cc_pair_and_port_future
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    def _no_present(*_: object, **__: object) -> SearchSettings:
+        raise RuntimeError("No search settings specified; DB is not in a valid state.")
+
+    with (
+        patch.object(port_task, "get_current_search_settings", _no_present),
+        patch.object(port_task, "PortCopier") as copier_cls,
+    ):
+        run_port_attempt(attempt_id)
+
+    copier_cls.assert_not_called()
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.FAILED
+    assert row.error_msg is not None and "No search settings" in row.error_msg
+
+    result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1
+    celery_app.send_task.assert_called_once()
+    db_session.expire_all()
+    retry = get_active_port_attempt(db_session, cc_pair.id, future_id)
+    assert retry is not None and retry.id != attempt_id
+    assert retry.status == PortAttemptStatus.NOT_STARTED
+
+
+def test_fail_unstarted_port_attempt_leaves_claimed_attempt(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A duplicate task's setup failure must not fail an attempt that another
+    worker already claimed."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+    mark_port_in_progress(db_session, attempt_id)
+
+    assert fail_unstarted_port_attempt(db_session, attempt_id, "setup failed") is False
+
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None and row.status == PortAttemptStatus.IN_PROGRESS
 
 
 def test_cancel_active_port_attempts_on_supersede(

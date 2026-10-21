@@ -275,10 +275,19 @@ def update_secondary_search_settings(
     logger.info("Secondary search settings updated successfully")
 
 
-def update_search_settings_status(
+def update_search_settings_status__no_commit(
     search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
 ) -> None:
     search_settings.status = new_status
+    # Flush now so callers control the UPDATE order: the unique PRESENT index rejects
+    # a new PRESENT row while the old one is still PRESENT.
+    db_session.flush()
+
+
+def update_search_settings_status(
+    search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
+) -> None:
+    update_search_settings_status__no_commit(search_settings, new_status, db_session)
     db_session.commit()
 
 

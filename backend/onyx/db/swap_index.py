@@ -49,7 +49,7 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
-    update_search_settings_status,
+    update_search_settings_status__no_commit,
 )
 from onyx.db.user_file import (
     PortedUserScope,
@@ -120,17 +120,19 @@ def _perform_index_swap(
     ):
         new_search_settings.port_backfill_source_id = current_search_settings.id
 
-    # swap over search settings
-    update_search_settings_status(
+    # Swap both statuses (and the backfill pin above) in one commit. Two commits leave
+    # a window with no PRESENT row, and readers such as run_port_attempt fail in it.
+    update_search_settings_status__no_commit(
         search_settings=current_search_settings,
         new_status=IndexModelStatus.PAST,
         db_session=db_session,
     )
-    update_search_settings_status(
+    update_search_settings_status__no_commit(
         search_settings=new_search_settings,
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
+    db_session.commit()
 
     # FUTURE is now live: cancel stragglers that dropped out of the required set
     # (paused/INVALID) so they stop writing into the live index. Skip for INSTANT —

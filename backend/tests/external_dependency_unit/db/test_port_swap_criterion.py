@@ -7,6 +7,9 @@ in progress, and the deferred metadata-sync backlog has drained. The push-based
 Ingestion pair is gated on its port only (it never runs a connector index attempt).
 Mode C (INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
 
+`_perform_index_swap` must flip PRESENT -> PAST and FUTURE -> PRESENT in one
+commit, so no other session ever reads a state with no PRESENT row.
+
 `_port_swap_ready` is tested directly with an explicit required list (isolated
 from other cc_pairs); the `check_and_perform_index_swap` cases patch
 `_perform_index_swap` so no destructive real swap runs.
@@ -24,6 +27,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -33,8 +37,10 @@ from onyx.db.document import (
     mark_document_synced_secondary_pending,
     sample_ported_document_ids,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
+    IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
     UserFileStatus,
@@ -63,7 +69,12 @@ from onyx.db.port_attempt import (
     pause_port_attempt,
     request_port_cancel,
 )
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    update_search_settings_status__no_commit,
+)
 from onyx.db.swap_index import (
+    _perform_index_swap,
     _port_swap_ready,
     _required_cc_pairs_for_switchover,
     _verification_backoff_key,
@@ -349,6 +360,71 @@ def test_mode_c_swaps_immediately(
     # port-flow INSTANT swaps live WITHOUT the wipe: the port backfills the new
     # index, so cleanup_documents would destroy live data — the swap omits it.
     assert mock_swap.call_args.kwargs.get("cleanup_documents") is not True
+
+
+def test_instant_swap_never_commits_a_state_without_present(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """After each commit of the swap, a separate session must read exactly one
+    PRESENT row. With two commits, a port task that starts between them fails on
+    get_current_search_settings."""
+    _, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    future_ss.switchover_type = SwitchoverType.INSTANT
+    db_session.commit()
+    old_present_id = get_current_search_settings(db_session).id
+
+    # (PRESENT row count, PRESENT id, its backfill source) seen after each commit
+    observed: list[tuple[int, int | None, int | None]] = []
+
+    def _read_committed_state(_session: Session) -> None:
+        with get_session_with_current_tenant() as reader:
+            present_rows = (
+                reader.execute(
+                    select(SearchSettings).where(
+                        SearchSettings.status == IndexModelStatus.PRESENT
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            row = present_rows[0] if present_rows else None
+            observed.append(
+                (
+                    len(present_rows),
+                    row.id if row else None,
+                    row.port_backfill_source_id if row else None,
+                )
+            )
+
+    event.listen(db_session, "after_commit", _read_committed_state)
+    try:
+        with patch.object(swap_index, "get_default_document_index"):
+            result = _perform_index_swap(db_session, future_ss, all_cc_pairs=[])
+        assert result is not None and result.id == old_present_id
+    finally:
+        event.remove(db_session, "after_commit", _read_committed_state)
+        # Put the original PRESENT back before the fixture deletes the test row.
+        db_session.rollback()
+        restored_future = db_session.get(SearchSettings, future_id)
+        old_present = db_session.get(SearchSettings, old_present_id)
+        assert restored_future is not None and old_present is not None
+        if restored_future.status == IndexModelStatus.PRESENT:
+            update_search_settings_status__no_commit(
+                restored_future, IndexModelStatus.PAST, db_session
+            )
+        update_search_settings_status__no_commit(
+            old_present, IndexModelStatus.PRESENT, db_session
+        )
+        db_session.commit()
+
+    assert observed, "the swap made no commit"
+    assert all(count == 1 for count, _, _ in observed), observed
+    # The status flip and the backfill pin land in the same commit.
+    first_promoted = next(o for o in observed if o[1] == future_id)
+    assert first_promoted[2] == old_present_id
 
 
 def test_legacy_path_does_not_consult_port_helpers(
