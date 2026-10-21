@@ -101,10 +101,11 @@ def test_storage_check_preserves_detached_volume(
     monkeypatch.setattr(manager, "_get_container", lambda _id: None)
     if volume_exists:
         manager._docker.volumes.get.return_value.attrs = {
+            "CreatedAt": "2026-10-21T00:00:00Z",
             "Labels": {
                 dsm.LABEL_SANDBOX_ID: str(sandbox_id),
                 dsm.LABEL_TENANT_ID: "public",
-            }
+            },
         }
     else:
         manager._docker.volumes.get.side_effect = dsm.NotFound("missing")

@@ -197,6 +197,16 @@ class SandboxManager(_ServeMixin, ABC):
         """Return False only after confirming that workspace storage is absent."""
         raise NotImplementedError
 
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        """Confirm runtime presence independently of surviving workspace storage."""
+        raise NotImplementedError
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        """Identify the owned workspace instance, or confirm its absence."""
+        raise NotImplementedError
+
     def _ensure_document_preview_bundle(
         self, sandbox_id: UUID, run_command: Callable[[list[str]], str]
     ) -> None:

@@ -11,6 +11,7 @@ from onyx.auth.pat import hash_pat
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
 from onyx.db.pat import create_pat, revoke_pat
+from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -105,6 +106,7 @@ def begin_provisioning_attempt__no_commit(
     sandbox.status = SandboxStatus.PROVISIONING
     sandbox.provisioning_attempt_number += 1
     sandbox.provisioning_started_at = datetime.datetime.now(datetime.timezone.utc)
+    sandbox.cleanup_checkpoint = None
     db_session.flush()
     return sandbox.provisioning_attempt_number
 
@@ -129,6 +131,7 @@ def begin_recovery_attempt__no_commit(
             status=SandboxStatus.PROVISIONING,
             provisioning_attempt_number=expected_attempt_number + 1,
             provisioning_started_at=datetime.datetime.now(datetime.timezone.utc),
+            cleanup_checkpoint=None,
         )
     )
     if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
@@ -162,6 +165,29 @@ def finalize_provisioning_attempt__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
+def record_cleanup_checkpoint__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    checkpoint: SandboxCleanupCheckpoint,
+) -> bool:
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.status == SandboxStatus.RUNNING,
+            Sandbox.provisioning_attempt_number
+            == checkpoint.provisioning_attempt_number,
+        )
+        .values(
+            cleanup_checkpoint={
+                "provisioning_attempt_number": checkpoint.provisioning_attempt_number,
+                "storage_identity": checkpoint.storage_identity,
+            }
+        )
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def sleep_running_sandbox__no_commit(
     db_session: Session,
     sandbox_id: UUID,
@@ -178,7 +204,7 @@ def sleep_running_sandbox__no_commit(
             Sandbox.provisioning_attempt_number == attempt_number,
             Sandbox.status == SandboxStatus.RUNNING,
         )
-        .values(status=SandboxStatus.SLEEPING)
+        .values(status=SandboxStatus.SLEEPING, cleanup_checkpoint=None)
     )
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
