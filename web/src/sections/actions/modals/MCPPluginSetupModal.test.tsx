@@ -206,23 +206,30 @@ beforeEach(() => {
       return defaultChatFails
         ? json({ detail: "Chat configuration unavailable" }, 503)
         : json({ tool_ids: [], available_tools: [] });
-    if (path === "/api/admin/mcp/server" || path === "/api/admin/mcp/server/7")
+    if (path === "/api/admin/mcp/setup") {
+      if (oauthResponse) return oauthResponse;
+      if (defaultChatFails)
+        return json({ detail: "Chat configuration unavailable" }, 503);
+      if (toolsResponse) {
+        const response = await toolsResponse;
+        if (!response.ok) return response;
+      }
+      if (toolsFail) return json({ detail: "Tool listing failed" }, 502);
       return json({
-        id: 7,
-        name: "Analytics MCP",
-        server_url: "https://example.com/mcp",
-        owner: "admin@example.com",
-        status: MCPServerStatus.CREATED,
-        is_public: true,
-        groups: [],
-        users: [],
-        tool_count: 0,
+        status: "connected",
+        server: {
+          id: 7,
+          name: "Analytics MCP",
+          server_url: "https://example.com/mcp",
+          owner: "admin@example.com",
+          status: MCPServerStatus.CONNECTED,
+          is_public: true,
+          groups: [],
+          users: [],
+          tool_count: 1,
+        },
       });
-    if (path === "/api/admin/mcp/servers/create") return json({ server_id: 7 });
-    if (path === "/api/admin/mcp/oauth/connect")
-      return (
-        oauthResponse ?? json({ status: "already_authenticated", server_id: 7 })
-      );
+    }
     if (path === "/api/admin/mcp/servers") return json({ mcp_servers: [] });
     if (
       path === SWR_KEYS.mcpServers ||
@@ -230,16 +237,15 @@ beforeEach(() => {
       path === SWR_KEYS.agentMcpServers(1)
     )
       return json({ mcp_servers: [] });
-    if (path.includes("/status?")) return json({});
-    if (path.includes("/tools/snapshots?source=mcp"))
-      return (
-        toolsResponse ??
-        (toolsFail ? json({ detail: "Tool listing failed" }, 502) : json([]))
-      );
     throw new Error(`Unexpected request ${path}`);
   });
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  expect(writes.every((write) => write.path === "/api/admin/mcp/setup")).toBe(
+    true
+  );
+  jest.restoreAllMocks();
+});
 
 async function enterUrl(url = "https://example.com/mcp") {
   const input = await screen.findByRole("textbox", { name: /^MCP Server URL/ });
@@ -269,12 +275,10 @@ test.each([true, false])(
     await setupUser().click(screen.getByRole("button", { name: copy.connect }));
     await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
     expect(
-      writes.find(
-        (write) => write.path === "/api/admin/default-assistant/tools"
-      )?.body
-    ).toEqual({ tool_ids: [81], enabled: true });
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+    ).toEqual(expect.objectContaining({ enable_chat: true }));
     expect(
-      writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
     ).toEqual(expect.objectContaining({ available_in_craft: available }));
   }
 );
@@ -303,21 +307,20 @@ test.each([false, true])(
       )
     ).toBeUndefined();
     expect(
-      writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+      writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
     ).toEqual(expect.objectContaining({ available_in_craft: false }));
     if (oauth)
       expect(
-        writes.find((write) => write.path === "/api/admin/mcp/oauth/connect")
-          ?.body
+        writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
       ).toEqual(
         expect.objectContaining({
-          return_path: "/admin/plugins/mcp/7?trigger_fetch=true",
+          enable_chat: false,
         })
       );
   }
 );
 
-test("first OAuth setup carries the Chat enable intent and enables after already-authenticated discovery", async () => {
+test("first OAuth setup sends Chat availability with the staged request", async () => {
   probeResponse = async () => oauthResult;
   toolsResponse = Promise.resolve(new Response(JSON.stringify([{ id: 81 }])));
   render(<SetupModal />);
@@ -325,19 +328,16 @@ test("first OAuth setup carries the Chat enable intent and enables after already
   await setupUser().click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/oauth/connect")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({
-      server_id: 7,
-      return_path: expect.stringMatching(
-        /^\/admin\/plugins\/mcp\/7\?trigger_fetch=true&enable_chat=true&enable_chat_intent=[0-9a-f-]+$/
-      ),
+      enable_chat: true,
+      auth_type: "OAUTH",
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant/tools")
-      ?.body
-  ).toEqual({ tool_ids: [81], enabled: true });
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+  ).toEqual(expect.objectContaining({ enable_chat: true }));
 });
 
 test("personal API-key setup keeps the admin's credential personal while enabling Chat", async () => {
@@ -358,7 +358,7 @@ test("personal API-key setup keeps the admin's credential personal while enablin
   await user.click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/servers/create")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({
       auth_performer: "PER_USER",
@@ -366,9 +366,8 @@ test("personal API-key setup keeps the admin's credential personal while enablin
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant/tools")
-      ?.body
-  ).toEqual({ tool_ids: [81], enabled: true });
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
+  ).toEqual(expect.objectContaining({ enable_chat: true }));
 });
 
 test("a rejected Chat enable remains an actionable setup error, not success", async () => {
@@ -376,10 +375,7 @@ test("a rejected Chat enable remains an actionable setup error, not success", as
   jest.spyOn(console, "error").mockImplementation(() => undefined);
   const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
   jest.mocked(global.fetch).mockImplementation(async (input, init) => {
-    if (
-      String(input) === "/api/admin/default-assistant/tools" &&
-      init?.method === "PATCH"
-    )
+    if (String(input) === "/api/admin/mcp/setup" && init?.method === "POST")
       return new Response(JSON.stringify({ detail: "Enable failed" }), {
         status: 503,
       });
@@ -718,7 +714,7 @@ test("OAuth saves and failures never add an unload guard", async () => {
   await user.click(screen.getByRole("button", { name: copy.connect }));
   await waitFor(() =>
     expect(writes).toContainEqual(
-      expect.objectContaining({ path: "/api/admin/mcp/oauth/connect" })
+      expect.objectContaining({ path: "/api/admin/mcp/setup" })
     )
   );
   const savedUnload = new Event("beforeunload", { cancelable: true });
@@ -918,7 +914,7 @@ test("Back retains an explicit OAuth setup choice and a changed endpoint resets 
   expect(writes).toEqual([]);
 });
 
-test("Connect creates a scoped server once and a failed tool retry updates the same server", async () => {
+test("failed scoped setup retries with the edited draft without creating a partial server", async () => {
   authority(true);
   toolsFail = true;
   jest.spyOn(console, "error").mockImplementation(() => undefined);
@@ -943,7 +939,7 @@ test("Connect creates a scoped server once and a failed tool retry updates the s
     "Tool listing failed"
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/server")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(
     expect.objectContaining({ is_public: false, groups: [1], users: [] })
   );
@@ -959,10 +955,10 @@ test("Connect creates a scoped server once and a failed tool retry updates the s
     )
   );
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/server")
-  ).toHaveLength(1);
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
+  ).toHaveLength(2);
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/server/7")?.body
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")[1]?.body
   ).toEqual(
     expect.objectContaining({
       name: "Updated analytics",
@@ -1102,7 +1098,7 @@ test("unknown authentication needs an explicit choice before Connect can save", 
     )
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/mcp/servers/create")?.body
+    writes.find((write) => write.path === "/api/admin/mcp/setup")?.body
   ).toEqual(expect.objectContaining({ auth_type: "NONE" }));
 });
 
@@ -1218,16 +1214,15 @@ test("invalid manual OAuth JSON causes no writes and a corrected retry creates o
     )
   );
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/server")
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
   ).toHaveLength(1);
   expect(
-    writes.filter((write) => write.path === "/api/admin/mcp/servers/create")
+    writes.filter((write) => write.path === "/api/admin/mcp/setup")
   ).toEqual([
     {
-      path: "/api/admin/mcp/servers/create",
+      path: "/api/admin/mcp/setup",
       method: "POST",
       body: expect.objectContaining({
-        existing_server_id: 7,
         oauth_client_id: "manual-client",
         oauth_additional_auth_params: { prompt: "consent" },
       }),

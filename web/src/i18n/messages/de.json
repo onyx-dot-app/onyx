@@ -332,7 +332,7 @@
         "loadStage": "Verbindungseinstellungen konnten nicht geladen werden",
         "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
-        "connectionFailed": "Der OAuth-Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
+        "connectionFailed": "Der Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
         "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
         "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
       },

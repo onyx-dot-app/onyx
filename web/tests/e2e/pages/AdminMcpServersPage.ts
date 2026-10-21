@@ -150,19 +150,52 @@ export class AdminMcpServersPage {
     await expect(search).toBeEnabled();
   }
 
-  async connectAndWaitForCreation(): Promise<number> {
+  async connectAndWaitForSetup(): Promise<void> {
     const responsePromise = this.page.waitForResponse(
-      (resp) =>
-        new URL(resp.url()).pathname === "/api/admin/mcp/server" &&
-        resp.request().method() === "POST"
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/mcp/setup" &&
+        response.request().method() === "POST"
     );
     await this.clickConnect();
     const response = await responsePromise;
     expect(response.ok(), await response.text()).toBeTruthy();
-    const created = yup
-      .object({ id: yup.number().integer().positive().required() })
-      .validateSync(await response.json());
-    return created.id;
+    const body: unknown = await response.json();
+    const { status } = yup
+      .object({
+        status: yup
+          .string()
+          .oneOf(["connected", "authorization_required"])
+          .required(),
+      })
+      .validateSync(body);
+    if (status === "connected") {
+      yup
+        .object({
+          server: yup
+            .object({ id: yup.number().integer().positive().required() })
+            .required(),
+        })
+        .validateSync(body);
+    } else {
+      yup
+        .object({ authorization_url: yup.string().url().required() })
+        .validateSync(body);
+    }
+  }
+
+  async connectedServerId(): Promise<number> {
+    await expect(this.page).toHaveURL(/\/admin\/plugins\/mcp\/\d+(?:\?.*)?$/);
+    return yup
+      .number()
+      .integer()
+      .positive()
+      .required()
+      .validateSync(new URL(this.page.url()).pathname.split("/").pop());
+  }
+
+  async connectAndWaitForCreation(): Promise<number> {
+    await this.connectAndWaitForSetup();
+    return this.connectedServerId();
   }
 
   // ---------------------------------------------------------------------------

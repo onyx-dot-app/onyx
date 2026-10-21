@@ -332,7 +332,7 @@
         "loadStage": "Could not load connection settings",
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
-        "connectionFailed": "The OAuth server could not be reached. Check the server URL and try again.",
+        "connectionFailed": "The server could not be reached. Check the server URL and try again.",
         "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
