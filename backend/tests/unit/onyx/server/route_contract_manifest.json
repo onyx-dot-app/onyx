@@ -345,6 +345,7 @@
   "GET /settings": "basic +anonymous",
   "GET /skills": "basic",
   "GET /skills/custom/{skill_id}/edit": "basic",
+  "GET /skills/custom/{skill_id}/share": "basic",
   "GET /skills/{skill_id}": "basic",
   "GET /skills/{skill_id}/preview": "basic",
   "GET /tenants/anonymous-user-path": "admin",
