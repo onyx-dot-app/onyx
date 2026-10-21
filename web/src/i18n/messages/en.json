@@ -14976,7 +14976,8 @@
         "missingTaskId": "Missing task id.",
         "pauseButton": "Pause",
         "resumeButton": "Resume",
-        "runNowButton": "Run now",
+        "runHistoryTab": "Run history",
+        "runNowButton": "Run once",
         "toasts": {
           "deleteFailed": "Failed to delete task",
           "deleted": "Deleted \"{name}\".",
@@ -15071,7 +15072,7 @@
           "trigger": "Trigger"
         },
         "empty": {
-          "label": "No runs yet. The task will create one each time it fires, or use Run Now above."
+          "label": "No runs yet. The task will create one each time it fires, or use Run once above."
         },
         "errors": {
           "loadFailed": "Failed to load run history.",
@@ -15090,19 +15091,20 @@
           "notOpenableAriaLabel": "Not openable"
         },
         "trigger": {
-          "runNow": "Run Now",
+          "runNow": "Run once",
           "schedule": "Schedule"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Times use your local time zone.",
         "dailyWeekly": {
-          "atLabel": "At",
-          "daysLabel": "On these days",
+          "atLabel": "Time",
+          "daysLabel": "Days",
           "runsEveryDay": "Runs every day",
           "runsOn": "Runs on {days}"
         },
         "interval": {
-          "everyLabel": "Every"
+          "everyLabel": "Repeat every"
         },
         "intervalUnits": {
           "days": "days",
@@ -15441,8 +15443,8 @@
       "appTitle": "{name} Approval settings",
       "title": "Approval settings",
       "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations and new tasks; existing tasks keep their own settings.",
-      "taskDescription": "Only enabled apps are available to this task. Changes apply only to this task.",
-      "newTaskDescription": "Enable the apps this task can use. Each app starts with your current approval settings.",
+      "taskDescription": "Choose the plugins this task can use, then manage which actions run automatically. Changes apply only to this task.",
+      "newTaskDescription": "Enable a plugin to use your current action settings as a starting point.",
       "workspace_disabled": "Disabled for the workspace",
       "workspace_managed": "Managed by your workspace",
       "userManagement": "Let users manage approval settings",
@@ -15466,7 +15468,9 @@
       "disabledForTask": "Disabled for this task",
       "externalApp": "App",
       "mcpServer": "MCP server",
-      "taskAppsTitle": "Apps and MCP servers",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Plugin access",
+      "noEnabledApps": "No plugins enabled for this task.",
       "actionPolicies": "Approval settings",
       "policyCounts": "{auto} auto-approve · {ask} ask · {disabled} disabled",
       "manageActions": "Manage actions",

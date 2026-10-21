@@ -14976,7 +14976,8 @@
         "missingTaskId": "Aufgaben-ID fehlt.",
         "pauseButton": "Pausieren",
         "resumeButton": "Fortsetzen",
-        "runNowButton": "Jetzt ausführen",
+        "runHistoryTab": "Ausführungsverlauf",
+        "runNowButton": "Einmal ausführen",
         "toasts": {
           "deleteFailed": "Aufgabe konnte nicht gelöscht werden",
           "deleted": "„{name}“ gelöscht.",
@@ -15071,7 +15072,7 @@
           "trigger": "Auslöser"
         },
         "empty": {
-          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Jetzt ausführen“."
+          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Einmal ausführen“."
         },
         "errors": {
           "loadFailed": "Ausführungsverlauf konnte nicht geladen werden.",
@@ -15090,19 +15091,20 @@
           "notOpenableAriaLabel": "Nicht öffenbar"
         },
         "trigger": {
-          "runNow": "Jetzt ausführen",
+          "runNow": "Einmal ausführen",
           "schedule": "Zeitplan"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Zeiten verwenden deine lokale Zeitzone.",
         "dailyWeekly": {
-          "atLabel": "Um",
-          "daysLabel": "An diesen Tagen",
+          "atLabel": "Uhrzeit",
+          "daysLabel": "Tage",
           "runsEveryDay": "Läuft jeden Tag",
           "runsOn": "Läuft am {days}"
         },
         "interval": {
-          "everyLabel": "Alle"
+          "everyLabel": "Wiederholen alle"
         },
         "intervalUnits": {
           "days": "Tage",
@@ -15441,8 +15443,8 @@
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
-      "taskDescription": "Nur aktivierte Apps sind für diese Aufgabe verfügbar. Änderungen gelten nur für diese Aufgabe.",
-      "newTaskDescription": "Aktivieren Sie die Apps für diese Aufgabe. Jede App beginnt mit Ihren aktuellen Aktionseinstellungen.",
+      "taskDescription": "Wähle die Plugins für diese Aufgabe und lege fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
+      "newTaskDescription": "Aktiviere ein Plugin, um mit deinen aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
       "workspace_managed": "Vom Arbeitsbereich verwaltet",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
@@ -15466,7 +15468,9 @@
       "disabledForTask": "Für diese Aufgabe deaktiviert",
       "externalApp": "App",
       "mcpServer": "MCP-Server",
-      "taskAppsTitle": "Apps und MCP-Server",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Plugin-Zugriff",
+      "noEnabledApps": "Für diese Aufgabe sind keine Plugins aktiviert.",
       "actionPolicies": "Genehmigungseinstellungen",
       "policyCounts": "{auto} automatisch · {ask} nachfragen · {disabled} deaktiviert",
       "manageActions": "Aktionen verwalten",

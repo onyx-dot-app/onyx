@@ -14976,7 +14976,8 @@
         "missingTaskId": "Id de tâche manquant.",
         "pauseButton": "Mettre en pause",
         "resumeButton": "Reprendre",
-        "runNowButton": "Exécuter maintenant",
+        "runHistoryTab": "Historique des exécutions",
+        "runNowButton": "Exécuter une fois",
         "toasts": {
           "deleteFailed": "Échec de la suppression de la tâche",
           "deleted": "« {name} » supprimée.",
@@ -15071,7 +15072,7 @@
           "trigger": "Déclencheur"
         },
         "empty": {
-          "label": "Aucune exécution pour le moment. La tâche en créera une à chaque déclenchement, ou utilisez Exécuter maintenant ci-dessus."
+          "label": "Aucune exécution pour le moment. La tâche en créera une à chaque déclenchement, ou utilisez Exécuter une fois ci-dessus."
         },
         "errors": {
           "loadFailed": "Échec du chargement de l'historique des exécutions.",
@@ -15090,19 +15091,20 @@
           "notOpenableAriaLabel": "Impossible à ouvrir"
         },
         "trigger": {
-          "runNow": "Exécuter maintenant",
+          "runNow": "Exécuter une fois",
           "schedule": "Planification"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Les heures utilisent votre fuseau horaire local.",
         "dailyWeekly": {
-          "atLabel": "À",
-          "daysLabel": "Ces jours-là",
+          "atLabel": "Heure",
+          "daysLabel": "Jours",
           "runsEveryDay": "S'exécute tous les jours",
           "runsOn": "S'exécute le {days}"
         },
         "interval": {
-          "everyLabel": "Toutes les"
+          "everyLabel": "Répéter toutes les"
         },
         "intervalUnits": {
           "days": "jours",
@@ -15441,8 +15443,8 @@
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
       "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
-      "taskDescription": "Seules les applications activées sont disponibles pour cette tâche. Les modifications concernent uniquement cette tâche.",
-      "newTaskDescription": "Activez les applications que cette tâche peut utiliser. Chaque application reprend vos paramètres d’action actuels.",
+      "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
+      "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",
       "workspace_managed": "Géré par votre espace de travail",
       "userManagement": "Autoriser les utilisateurs à gérer les paramètres d’approbation",
@@ -15466,7 +15468,9 @@
       "disabledForTask": "Désactivée pour cette tâche",
       "externalApp": "Application",
       "mcpServer": "Serveur MCP",
-      "taskAppsTitle": "Applications et serveurs MCP",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Accès aux plugins",
+      "noEnabledApps": "Aucun plugin activé pour cette tâche.",
       "actionPolicies": "Paramètres d’approbation",
       "policyCounts": "{auto} automatiques · {ask} demander · {disabled} désactivées",
       "manageActions": "Gérer les actions",
