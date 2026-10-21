@@ -1,16 +1,17 @@
 # Loaders
 
-**Import:** `import { PageLoader, CardLoader, LineLoader, TextLoader, IconLoader } from "@opal/loaders";`
+**Import:** `import { PageLoader, CardLoader, DropdownLoader, LineLoader, TextLoader, IconLoader } from "@opal/loaders";`
 
 | Loader | Use it for |
 | ------ | ---------- |
 | `PageLoader` | A page or route that is loading: the Onyx mark with a label, centered. |
 | `CardLoader` | A card that has not loaded: a bordered card with a shimmering icon, title and description. |
+| `DropdownLoader` | A select or combo box that has not loaded: a shimmering block in the input's shape. |
 | `LineLoader` | Lines of text that have not loaded: shimmering rectangles. |
 | `TextLoader` | Real text for a status still in progress: the text itself shimmers. |
 | `IconLoader` | An inline spinner, e.g. beside a label or in a row. |
 
-`LineLoader`, `CardLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `LineLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
+`LineLoader`, `CardLoader`, `DropdownLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `DropdownLoader`, `LineLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
 
 ## CardLoader
 
@@ -21,6 +22,14 @@
 ```
 
 Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it forwards (`padding`, `rounding`, `color`, `border`, `borderColor`, `shadow`, `disabled`, `ref`, `data-*`). `children` and `expandable` are not accepted: the loader fills the body and is never expandable. Unset, the card is solid-bordered with `rounding={4}` and `padding={4}`. The inside imitates a `ContentAction` row; it is not a `Content`.
+
+## DropdownLoader
+
+```tsx
+<DropdownLoader />
+```
+
+No props. As tall (36px) and as rounded as an input, and fills its column, so in an `InputHorizontal` give the row `fillInput`.
 
 ## LineLoader
 

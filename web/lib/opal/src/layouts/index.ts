@@ -96,12 +96,15 @@ export {
 } from "@opal/layouts/toast/components";
 export {
   toast,
+  useErrorToast,
   useToast,
   useToastFromQuery,
   MAX_VISIBLE_TOASTS,
   type Toast,
+  type ToastAction,
   type ToastLevel,
   type ToastOptions,
+  type UseErrorToastOptions,
 } from "@opal/layouts/toast/store";
 
 /* ConfirmationModalLayout */

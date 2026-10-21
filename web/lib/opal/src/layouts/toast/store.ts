@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { SvgRefreshCw } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -8,7 +10,17 @@ import { useEffect, useSyncExternalStore } from "react";
 
 export type ToastLevel = "success" | "error" | "warning" | "info" | "default";
 
+/** An icon button left of the close button. A click runs it and closes. */
+export interface ToastAction {
+  icon: IconFunctionComponent;
+  /** The button's tooltip and accessible name. */
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastOptions {
+  /** Firing a toast with the id of a live one replaces it in place. */
+  id?: string;
   message: string;
   /** @default "info" */
   level?: ToastLevel;
@@ -17,6 +29,7 @@ export interface ToastOptions {
   duration?: number;
   /** Shows the close button. @default true */
   dismissible?: boolean;
+  action?: ToastAction;
 }
 
 export interface Toast extends ToastOptions {
@@ -58,7 +71,7 @@ function notify() {
 }
 
 function addToast(options: ToastOptions): string {
-  const id = `toast-${++nextId}-${Date.now()}`;
+  const id = options.id ?? `toast-${++nextId}-${Date.now()}`;
   const duration = options.duration ?? DEFAULT_DURATION;
 
   const level = options.level ?? "info";
@@ -78,7 +91,14 @@ function addToast(options: ToastOptions): string {
     console[method](`[Toast] ${entry.message}`);
   }
 
-  toasts = [...toasts, entry];
+  const existing = timers.get(id);
+  if (existing) {
+    clearTimeout(existing);
+    timers.delete(id);
+  }
+  toasts = toasts.some((t) => t.id === id)
+    ? toasts.map((t) => (t.id === id ? entry : t))
+    : [...toasts, entry];
   notify();
 
   if (duration !== Infinity) {
@@ -194,6 +214,49 @@ export const toast: ToastFn = Object.assign(toastBase, {
 // ---------------------------------------------------------------------------
 // React hooks
 // ---------------------------------------------------------------------------
+
+export interface UseErrorToastOptions {
+  /** The toast's id: callers sharing an id share one toast. */
+  id: string;
+  message: string;
+  /** Adds a retry button, with `label` as its tooltip. */
+  retry?: { label: string; onRetry: () => void };
+}
+
+/**
+ * Shows a persistent error toast while `error` is set, for a fetch that
+ * failed. A new error replaces it; it goes when the error clears or the
+ * caller unmounts.
+ */
+export function useErrorToast(
+  error: unknown,
+  { id, message, retry }: UseErrorToastOptions
+) {
+  // Read at click time, so an unstable callback does not re-raise the toast.
+  const onRetryRef = useRef(retry?.onRetry);
+  useEffect(() => {
+    onRetryRef.current = retry?.onRetry;
+  });
+  const retryLabel = retry?.label;
+  useEffect(() => {
+    if (error == null || error === false) return;
+    addToast({
+      id,
+      message,
+      level: "error",
+      duration: Infinity,
+      action:
+        retryLabel === undefined
+          ? undefined
+          : {
+              icon: SvgRefreshCw,
+              label: retryLabel,
+              onClick: () => onRetryRef.current?.(),
+            },
+    });
+    return () => removeToast(id);
+  }, [error, id, message, retryLabel]);
+}
 
 export function useToast() {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

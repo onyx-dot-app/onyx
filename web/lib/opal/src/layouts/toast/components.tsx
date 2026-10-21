@@ -90,6 +90,7 @@ function ToastCard({
   }, []);
   const truncated = useOverflow(title);
   const close = t.dismissible ? () => onClose(t.id) : undefined;
+  const action = t.action;
   const shared = {
     innerPadding: 1,
     variant: t.level ?? "info",
@@ -104,19 +105,34 @@ function ToastCard({
     <div ref={ref} className="opal-toast" data-leaving={t.leaving || undefined}>
       <div className="opal-toast-body">
         <div className="opal-toast-spacer">
-          {truncated ? (
+          {truncated || action ? (
             <MessageCard
               {...shared}
               rightChildren={
                 <Section flexDirection="row" gap={0}>
-                  <Button
-                    icon={ToastChevronIcon}
-                    prominence="internal"
-                    size="md"
-                    onClick={() => onToggle(t)}
-                    aria-label={strings.showFullMessage}
-                    aria-expanded={expanded}
-                  />
+                  {action && (
+                    <Button
+                      icon={action.icon}
+                      prominence="internal"
+                      size="md"
+                      tooltip={action.label}
+                      aria-label={action.label}
+                      onClick={() => {
+                        action.onClick();
+                        onClose(t.id);
+                      }}
+                    />
+                  )}
+                  {truncated && (
+                    <Button
+                      icon={ToastChevronIcon}
+                      prominence="internal"
+                      size="md"
+                      onClick={() => onToggle(t)}
+                      aria-label={strings.showFullMessage}
+                      aria-expanded={expanded}
+                    />
+                  )}
                   {close && (
                     <Button
                       icon={SvgX}
@@ -129,7 +145,9 @@ function ToastCard({
                 </Section>
               }
               bottomChildren={
-                expanded ? <ExpandedDetails message={t.message} /> : undefined
+                truncated && expanded ? (
+                  <ExpandedDetails message={t.message} />
+                ) : undefined
               }
             />
           ) : (
