@@ -2965,8 +2965,8 @@
           "queued": "排队中",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{minutes, number} 分钟）",
-          "rateFinished": "{rate} 文档/分钟（{minutes, number} 分钟）",
+          "finished": "{time}（{duration}）",
+          "rateFinished": "{rate} 文档/分钟（{duration}）",
           "membershipRate": "{rate} 成员关系/分钟"
         },
         "actions": {
@@ -3013,7 +3013,6 @@
           "label": "时间范围",
           "all": "全部时间",
           "h1": "过去 1 小时",
-          "h12": "过去 12 小时",
           "h24": "过去 24 小时",
           "d7": "过去 7 天",
           "d30": "过去 30 天"

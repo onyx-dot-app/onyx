@@ -66,7 +66,6 @@ export const SEARCH_MAX_LENGTH = 200;
 /** The windows the time filter offers, in hours. `null` is all time. */
 const WINDOWS = [
   { id: "all", hours: null },
-  { id: "h12", hours: 12 },
   { id: "h24", hours: 24 },
   { id: "d7", hours: 24 * 7 },
   { id: "d30", hours: 24 * 30 },

@@ -44,6 +44,8 @@ from onyx.db.index_attempt import (
     get_queued_index_attempts,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.cc_pair_runs_feed import (
     connector_supports_targeted_reindex,
     fetch_run_feed,
@@ -173,6 +175,11 @@ def get_indexing_overview(
     db_session: Session = Depends(get_session),
 ) -> IndexingOverviewResponse:
     """The overview card's figures and throughput over the readable pairs."""
+    # All time over every readable pair would load every attempt kept.
+    if window == CCPairThroughputWindow.ALL:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "The overview has no all-time window."
+        )
     pairs = _readable_cc_pairs(db_session, user)
     throughput = throughput_of(db_session, list(pairs), window)
     return IndexingOverviewResponse(
