@@ -16,6 +16,7 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckNotApplicableError,
     CheckOutput,
     CredentialCapability,
     form_config,
@@ -339,13 +340,15 @@ class _TokenCheck(_LinearCheck):
 
 
 class _TeamsCheck(_LinearCheck):
+    """With no team selected, also on a config-less run, it does not apply, so
+    it does not stop the issues sample."""
+
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_TEAMS_CHECK_ID,
             display_name="Find selected teams",
-            requires_connector_config=True,
             remediation=(
                 "Check each team key, or connect as a member of the team if it is private."
             ),
@@ -356,6 +359,8 @@ class _TeamsCheck(_LinearCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         keys: list[str] = normalize_team_keys(config_from_context(context).team_keys)
+        if not keys:
+            raise CheckNotApplicableError("No teams are selected.")
         missing: list[str] = probe(
             lambda: missing_team_keys(gateway_from_context(context), keys),
             "The configured teams could not be checked.",
@@ -372,13 +377,15 @@ class _TeamsCheck(_LinearCheck):
 
 
 class _ProjectsCheck(_LinearCheck):
+    """With no project selected, also on a config-less run, it does not apply,
+    so it does not stop the issues sample."""
+
     config_class = LinearConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_PROJECTS_CHECK_ID,
             display_name="Find selected projects",
-            requires_connector_config=True,
             remediation=(
                 "Check each project name or URL, or connect as a member of the "
                 "project's team if it is private."
@@ -390,6 +397,8 @@ class _ProjectsCheck(_LinearCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         names, slug_ids = project_scope(config_from_context(context).projects)
+        if not names and not slug_ids:
+            raise CheckNotApplicableError("No projects are selected.")
         missing: list[str] = probe(
             lambda: missing_projects(gateway_from_context(context), names, slug_ids),
             "The configured projects could not be checked.",
