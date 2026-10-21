@@ -492,6 +492,102 @@ def test_project_roles_read_skips_public_projects() -> None:
     gateway.get_project_role.assert_not_called()
 
 
+# --- sampling several projects ---
+
+_ALL_PROJECTS = {**_CONFIG, "project_key": ""}
+_OPEN_SCHEME = {"permissions": [_browse({"type": "applicationRole"})]}
+_GROUP_SCHEME = {"permissions": [_browse({"type": "group", "parameter": "devs"})]}
+_ROLE_SCHEME = {"permissions": [_browse({"type": "projectRole", "value": "10003"})]}
+_SAMPLE_CHECK_IDS = ["jira_project_roles_read", "jira_permission_user_emails"]
+
+
+def _schemes_by_project(gateway: MagicMock, schemes: dict[str, dict[str, Any]]) -> None:
+    gateway.list_projects.return_value = [{"key": key} for key in schemes]
+
+    def _scheme(*, project_key: str, **_: bool) -> dict[str, Any]:
+        return schemes[project_key]
+
+    gateway.get_project_permission_scheme.side_effect = _scheme
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_move_past_an_open_project(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "ROLE": _ROLE_SCHEME})
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+    gateway.get_project_role.assert_called_with(
+        project_key="ROLE", role_id="10003", fast=True
+    )
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_move_past_an_open_project_of_a_jql_scope(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "ROLE": _ROLE_SCHEME})
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1", "2", "3"], next_page_token=None
+    )
+    gateway.bulk_fetch_issues.return_value = [
+        {"fields": {"project": {"key": key}}} for key in ("OPEN", "OPEN", "ROLE")
+    ]
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+    assert gateway.get_project_permission_scheme.call_count == 2
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_more_projects_exist(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway,
+        {
+            f"P{index}": _OPEN_SCHEME if index % 2 else _GROUP_SCHEME
+            for index in range(8)
+        },
+    )
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith("Checked 5 of 8 projects")
+    assert gateway.get_project_permission_scheme.call_count == 5
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_skip_when_every_project_was_read(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED, result
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_skip_an_open_configured_project(check_id: str) -> None:
+    gateway = _gateway()
+    gateway.list_projects.return_value = [{"key": "OTHER"}]
+    gateway.get_project_permission_scheme.return_value = _OPEN_SCHEME
+
+    result = _run(check_id, gateway)
+
+    assert result.status == CapabilityCheckStatus.SKIPPED, result
+    assert result.summary == "AS is open to all users"
+    gateway.get_project_permission_scheme.assert_called_once_with(
+        project_key="AS", fast=True
+    )
+
+
 # --- group sync ---
 
 
