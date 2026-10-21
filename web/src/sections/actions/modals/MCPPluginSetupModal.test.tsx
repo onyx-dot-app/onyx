@@ -502,6 +502,9 @@ test("starts with name and URL fields and shows detection before Continue withou
   const pending = deferred<MCPSetupProbeResult>();
   probeResponse = () => pending.promise;
   render(<SetupModal />);
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
+  );
   for (const label of [
     messages.actions.mcpAuthModal.authType.label,
     messages.actions.mcpAuthModal.transport.label,
@@ -832,9 +835,7 @@ test("returning to the URL preserves credentials until the endpoint changes", as
   });
   await user.click(screen.getByRole("button", { name: copy.back }));
   await waitFor(() =>
-    expect(
-      screen.getByRole("textbox", { name: /^MCP Server URL/ })
-    ).toHaveFocus()
+    expect(screen.getByRole("textbox", { name: "Server Name" })).toHaveFocus()
   );
   await user.click(screen.getByRole("button", { name: copy.continue }));
   expect(screen.getByRole("textbox", { name: /^Client ID/ })).toHaveValue(

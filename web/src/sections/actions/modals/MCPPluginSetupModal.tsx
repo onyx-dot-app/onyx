@@ -143,7 +143,7 @@ function MCPSetupSession({
   const lastProbe = useRef<Extract<ProbeState, { kind: "checked" }> | null>(
     null
   );
-  const urlInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const connectionPanel = useRef<HTMLDivElement>(null);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const normalizedUrl = endpoint(url);
@@ -207,7 +207,7 @@ function MCPSetupSession({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (step === "server") urlInput.current?.focus();
+      if (step === "server") nameInput.current?.focus();
       else if (
         step === "connection" &&
         !connectionPanel.current?.contains(document.activeElement)
@@ -364,6 +364,7 @@ function MCPSetupSession({
                             <InputTypeIn
                               id="mcp-setup-initial-name"
                               name="name"
+                              ref={nameInput}
                               value={details.values.name}
                               onChange={details.handleChange}
                               placeholder={t("addMcpModal.name.title")}
@@ -378,7 +379,6 @@ function MCPSetupSession({
                               id="mcp-setup-url"
                               name="server_url"
                               type="url"
-                              ref={urlInput}
                               value={url}
                               placeholder={t("placeholders.mcpServerUrl")}
                               variant={

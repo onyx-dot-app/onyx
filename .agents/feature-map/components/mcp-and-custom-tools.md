@@ -391,6 +391,7 @@ A real MCP initialization or authentication challenge completes contact. Authent
 completes after tools load anonymously or OAuth metadata resolves. Unknown authentication
 fails that row. Unreachable servers fail contact and leave authentication pending.
 Closing the stream cancels its probe task. The first setup page places access controls and Chat/Craft availability below a divider, before authentication.
+Server Name receives focus when setup opens and when returning from authentication to the first page.
 Authentication method and connection transport rows show neutral minus icons during URL entry and the 700-millisecond debounce. Spinners start only when a valid URL probe starts. Clearing or changing the URL resets both rows immediately. Failed probes stop pending spinners. The modal discards
 responses for an earlier URL and never advances automatically.
 The credential-free check initializes MCP and lists tools through Streamable HTTP,
