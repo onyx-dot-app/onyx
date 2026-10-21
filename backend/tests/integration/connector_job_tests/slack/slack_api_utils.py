@@ -17,7 +17,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.web import SlackResponse
 
-from onyx.connectors.slack.connector import _build_doc_id
+from onyx.connectors.slack.connector import build_slack_doc_id
 from onyx.connectors.slack.models import ChannelType, MessageType
 
 _SLACK_LIMIT = 900
@@ -267,7 +267,9 @@ class SlackManager:
             channel=channel_id,
             text=message,
         )
-        return _build_doc_id(channel_id=channel_id, thread_ts=cast(str, response["ts"]))
+        return build_slack_doc_id(
+            channel_id=channel_id, thread_ts=cast(str, response["ts"])
+        )
 
     @staticmethod
     def remove_message_from_channel(

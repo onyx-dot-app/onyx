@@ -156,11 +156,16 @@ def _try_claim_slot(
         channel=lock_channel_id, text=claim.model_dump_json()
     )
     posted = PostedClaim(claim=claim, ts=response["ts"])
-    time.sleep(_CLAIM_SETTLE_SECONDS)
-
-    winner = _winning_claims(_read_live_claims(slack_client, lock_channel_id)).get(
-        claim.slot
-    )
+    # Until the caller owns the claim, release it on any failure, so it does not
+    # hold one of the few slots until the TTL.
+    try:
+        time.sleep(_CLAIM_SETTLE_SECONDS)
+        winner = _winning_claims(_read_live_claims(slack_client, lock_channel_id)).get(
+            claim.slot
+        )
+    except BaseException:
+        _release_claim(slack_client, lock_channel_id, posted.ts)
+        raise
     if winner and winner.ts == posted.ts:
         return posted
     _release_claim(slack_client, lock_channel_id, posted.ts)
