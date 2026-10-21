@@ -8568,7 +8568,7 @@
           },
           "title": "SSRF-Schutz",
           "validateAll": {
-            "description": "Am strengsten. Alle ausgehenden Anfragen erreichen keine privaten oder internen IP-Adressen, einschließlich Web-Konnektoren.",
+            "description": "Am strengsten. Ausgehende Anfragen, einschließlich Web-Konnektoren, erreichen keine privaten oder internen IP-Adressen. Ausnahme: Benutzerdefinierte Werkzeuge können weiterhin private Netzwerkadressen erreichen. Loopback, Link-Local und Cloud-Metadaten bleiben blockiert.",
             "label": "Alle Anfragen prüfen"
           },
           "validateLlm": {
