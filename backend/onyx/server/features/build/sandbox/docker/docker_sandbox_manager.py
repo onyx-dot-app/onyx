@@ -1143,16 +1143,17 @@ class DockerSandboxManager(SandboxManager):
                 f"{LABEL_TENANT_ID}={tenant_id}",
             ]
         }
-        for kind, items in (
-            (
-                SandboxResourceKind.CONTAINER,
-                self._cleanup_docker.containers.list(all=True, filters=filters),
-            ),
-            (
-                SandboxResourceKind.VOLUME,
-                self._cleanup_docker.volumes.list(filters=filters),
-            ),
+        for kind in (
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
         ):
+            remaining_request_timeout(deadline)
+            items = (
+                self._cleanup_docker.containers.list(all=True, filters=filters)
+                if kind == SandboxResourceKind.CONTAINER
+                else self._cleanup_docker.volumes.list(filters=filters)
+            )
+            remaining_request_timeout(deadline)
             for item in items:
                 remaining_request_timeout(deadline)
                 labels = (

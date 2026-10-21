@@ -157,6 +157,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
+    CONNECT_TIMEOUT_SECONDS,
     POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
     RPC_TIMEOUT_SECONDS,
@@ -723,6 +724,7 @@ class KubernetesSandboxManager(SandboxManager):
                 follow=True,
                 tail_lines=tail_lines,
                 _preload_content=False,  # required for streaming response
+                _request_timeout=(CONNECT_TIMEOUT_SECONDS, None),
             )
         except ApiException as e:
             logger.warning(

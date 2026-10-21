@@ -112,7 +112,8 @@ interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
 - Labels (`backend/onyx/server/features/build/sandbox/labels.py`):
   `LABEL_SANDBOX_ID` / `LABEL_TENANT_ID` (stamped onto the K8s Pod/Service, and
   used as the Docker manager's equivalent tag), `LABEL_PROVISIONING_ATTEMPT`
-  (operator-facing only, never read programmatically), `LABEL_K8S_COMPONENT`
+  (read into resource inventory for cleanup ownership checks; database attempt
+  conditions still fence provisioning status writes), `LABEL_K8S_COMPONENT`
   (`"sandbox"`, the NetworkPolicy pod selector).
 - Snapshot storage layout (FileStore, `FileOrigin.SANDBOX_SNAPSHOT`,
   `backend/onyx/server/features/build/sandbox/snapshot_manager.py`):
