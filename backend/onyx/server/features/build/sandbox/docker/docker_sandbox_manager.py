@@ -1258,12 +1258,13 @@ echo "Session cleanup complete"
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
         if container is None:
-            return []
+            raise RuntimeError(
+                f"Cannot discover workspaces without sandbox {sandbox_id}"
+            )
         try:
             result = _run_in_container_as_sandbox_user(
                 container,
-                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
-                check=False,
+                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/"],
             )
         except ExecError as e:
             logger.warning(
@@ -1271,7 +1272,9 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
         out: list[UUID] = []
         for line in result.stdout_text.strip().split("\n"):
             line = line.strip()
@@ -1291,8 +1294,7 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
-            logger.info("create_snapshot: sandbox %s has no container.", sandbox_id)
-            return None
+            raise RuntimeError(f"Cannot snapshot missing sandbox {sandbox_id}")
 
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
@@ -1302,14 +1304,20 @@ echo "Session cleanup complete"
                 [
                     "/bin/sh",
                     "-c",
-                    f'[ -d "{session_path}/outputs" ] && echo OK || echo EMPTY',
+                    f'if [ -d "{session_path}/outputs" ] || [ -d "{session_path}/attachments" ]; '
+                    "then printf OK; else printf EMPTY; fi",
                 ],
-                check=False,
             )
-        except ExecError:
+        except ExecError as e:
+            raise RuntimeError(
+                f"Snapshot discovery failed for session {session_id}"
+            ) from e
+        if probe.stdout_text.strip() == "EMPTY":
             return None
-        if "OK" not in probe.stdout_text:
-            return None
+        if probe.stdout_text.strip() != "OK":
+            raise RuntimeError(
+                f"Incomplete snapshot discovery for session {session_id}"
+            )
 
         # Stream tar bytes out of the container through FileStore.
         tar_cmd = [

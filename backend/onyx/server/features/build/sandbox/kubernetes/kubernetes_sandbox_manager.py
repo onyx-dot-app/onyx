@@ -1727,7 +1727,7 @@ echo "Session cleanup complete"
         exec_command = [
             "/bin/sh",
             "-c",
-            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+            "ls -1 /workspace/sessions/ && printf '\\nONYX_WORKSPACE_LIST_COMPLETE\\n'",
         ]
 
         try:
@@ -1741,6 +1741,7 @@ echo "Session cleanup complete"
                 stdin=False,
                 stdout=True,
                 tty=False,
+                _request_timeout=RPC_TIMEOUT_SECONDS,
             )
         except ApiException as e:
             logger.warning(
@@ -1748,10 +1749,18 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
+
+        lines = resp.strip().splitlines()
+        if not lines or lines[-1] != "ONYX_WORKSPACE_LIST_COMPLETE":
+            raise RuntimeError(
+                f"Incomplete workspace discovery for sandbox {sandbox_id}"
+            )
 
         result: list[UUID] = []
-        for raw_line in resp.strip().split("\n"):
+        for raw_line in lines[:-1]:
             line = raw_line.strip()
             if not line:
                 continue
