@@ -164,7 +164,11 @@ describe("typing", () => {
       const onChange = await typeSeparatorAt(1, { precision: 6 });
       expect(screen.getByLabelText("Whole amount")).toHaveValue("1");
       expect(screen.getByLabelText("Fractional amount")).toHaveValue("234");
-      expect(screen.getByLabelText("Fractional amount")).toHaveFocus();
+      const fraction =
+        screen.getByLabelText<HTMLInputElement>("Fractional amount");
+      expect(fraction).toHaveFocus();
+      // The caret sits just after the separator, ahead of the moved digits.
+      expect(fraction.selectionStart).toBe(0);
       expect(onChange).toHaveBeenLastCalledWith(1.234);
     });
 

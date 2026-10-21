@@ -195,6 +195,20 @@ function InputCurrency({
   const wholeRef = React.useRef<HTMLInputElement>(null);
   const fractionRef = React.useRef<HTMLInputElement>(null);
 
+  // A caret position to restore once the next segments render lands. Applied
+  // in a layout effect, synchronously after React writes the value and before
+  // any later input event, so it can never overwrite a newer caret move.
+  const pendingCaretRef = React.useRef<{
+    input: HTMLInputElement;
+    position: number;
+  } | null>(null);
+  React.useLayoutEffect(() => {
+    const pending = pendingCaretRef.current;
+    if (!pending) return;
+    pendingCaretRef.current = null;
+    pending.input.setSelectionRange(pending.position, pending.position);
+  }, [segments]);
+
   // Resync when the value differs from the draft, so the echo of our own
   // onChange never reformats the segment being typed in. A precision change
   // always rebuilds: the draft may hold digits the new precision hides.
@@ -280,7 +294,7 @@ function InputCurrency({
     fraction.focus();
     if (moved) {
       // Caret just after the separator, ahead of the moved digits.
-      requestAnimationFrame(() => fraction.setSelectionRange(0, 0));
+      pendingCaretRef.current = { input: fraction, position: 0 };
     } else {
       fraction.select();
     }
@@ -336,7 +350,7 @@ function InputCurrency({
         segment === "fraction" ? inserted.slice(0, maxFraction) : inserted;
       update({ ...segments, [segment]: next });
       const caret = Math.min(start + first.length, next.length);
-      requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+      pendingCaretRef.current = { input, position: caret };
     };
   }
 
