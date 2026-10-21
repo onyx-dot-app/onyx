@@ -11,7 +11,8 @@ first message names the builder, whose copy is the thread document, and
 import base64
 import binascii
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from onyx.connectors.outlook.models import (
     DocumentPlan,
@@ -63,6 +64,66 @@ def is_thread_root(conversation_index: str) -> bool:
 
 def thread_document_id(key: str) -> str:
     return f"{THREAD_DOCUMENT_ID_PREFIX}{key}"
+
+
+def _key_bytes(key: str) -> bytes | None:
+    """The thread root a key encodes, None when it is not one."""
+    try:
+        raw = base64.urlsafe_b64decode(key + "=" * (-len(key) % 4))
+    except (binascii.Error, ValueError):
+        return None
+    return raw if len(raw) == _ROOT_BYTES else None
+
+
+@dataclass(frozen=True)
+class ThreadDocumentRef:
+    """What a thread document id names: the thread, and for a copy or an own
+    document the mailbox in its id."""
+
+    key: str
+    mailbox_id: str | None = None
+    own: bool = False
+
+
+def parse_thread_document_id(document_id: str) -> ThreadDocumentRef | None:
+    """The parts of an id made by ``thread_document_id``, ``copy_document_id``
+    or ``own_document_id``. None for anything else."""
+    if not document_id.startswith(THREAD_DOCUMENT_ID_PREFIX):
+        return None
+    parts = document_id.removeprefix(THREAD_DOCUMENT_ID_PREFIX).split(":")
+    own = len(parts) == 3 and f":{parts[2]}" == OWN_DOCUMENT_SUFFIX
+    if len(parts) > 2 and not own:
+        return None
+    if any(not part for part in parts) or _key_bytes(parts[0]) is None:
+        return None
+    return ThreadDocumentRef(
+        key=parts[0], mailbox_id=parts[1] if len(parts) > 1 else None, own=own
+    )
+
+
+# The header's five time bytes, after its reserved byte 0x01 ([MS-OXOMSG]
+# 2.2.1.3, PidTagConversationIndex). The spec stores FILETIME bits 63..24.
+# Outlook clients and older Exchange store bits 55..16 instead (Appendix A,
+# note 2), which drops the top byte. That byte is 0x01 for every date from
+# 1829 to 2057, so a first time byte of 0x01 marks the spec layout.
+_HEADER_TIME = slice(1, 6)
+_FILETIME_TOP_BYTE = 0x01
+_FILETIME_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
+
+
+def thread_started_at(key: str) -> datetime | None:
+    """When the thread's conversation index was made, to the second or
+    better. Every message of the thread arrives at or after it. None when
+    the key is not one."""
+    root = _key_bytes(key)
+    if root is None:
+        return None
+    stored = int.from_bytes(root[_HEADER_TIME], "big")
+    if root[_HEADER_TIME.start] == _FILETIME_TOP_BYTE:
+        filetime = stored << 24
+    else:
+        filetime = (_FILETIME_TOP_BYTE << 56) | (stored << 16)
+    return _FILETIME_EPOCH + timedelta(microseconds=filetime // 10)
 
 
 def copy_document_id(key: str, mailbox: OutlookMailbox) -> str:
@@ -150,6 +211,12 @@ def designated_builder(
     return next((m for m in candidates if is_available(m)), None)
 
 
+def thread_root(rows: Iterable[ThreadListing]) -> ThreadListing | None:
+    """The copy's first message of the thread, the one that names its builder."""
+    roots: list[ThreadListing] = [row for row in rows if row.is_root]
+    return min(roots, key=_row_order) if roots else None
+
+
 def _named_ids(row: ThreadListing) -> set[str]:
     return {mailbox.id for mailbox in row.named}
 
@@ -178,8 +245,7 @@ def plan_documents(
     if not kept:
         return []
     key: str = kept[0].key
-    roots: list[ThreadListing] = [row for row in rows if row.is_root]
-    root: ThreadListing | None = min(roots, key=_row_order) if roots else None
+    root: ThreadListing | None = thread_root(rows)
     builder: OutlookMailbox | None = (
         designated_builder(root, is_available) if root is not None else None
     )
