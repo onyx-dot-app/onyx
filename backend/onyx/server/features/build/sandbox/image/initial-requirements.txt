@@ -10,7 +10,7 @@ anyio==4.14.2
     # via
     #   starlette
     #   watchfiles
-certifi==2026.6.17
+certifi==2026.10.19
     # via requests
 cffi==2.0.0
     # via cryptography
