@@ -481,8 +481,9 @@ export type CurrencyCode =
 
 /**
  * Fraction digits an amount field accepts. A number is clamped to an integer
- * in [0, 20]: 20 is the most a JS number and `toFixed` can show. `"unlimited"`
- * is 20, spelled out for callers with no business limit. Like
+ * in [0, 15]: amounts are JS numbers, which hold up to 15 significant digits
+ * exactly. `"unlimited"` is 15, spelled out for callers with no business
+ * limit. Like
  * {@link Rounding}'s `"full"`, it is a string because a literal `Infinity`
  * would widen the union back to `number`.
  */

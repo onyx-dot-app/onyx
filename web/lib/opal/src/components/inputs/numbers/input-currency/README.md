@@ -28,7 +28,7 @@ Segmented currency amount field on the shared `.opal-input` chrome. Mono segment
 | `value`         | `number \| null`                         | —                         | The amount (required, controlled). Negative values render empty.            |
 | `onChange`      | `(value: number \| null) => void`        | —                         | Fires on each edit, `null` when cleared                                      |
 | `currency`      | `CurrencyCode`                                 | `"USD"`                   | ISO 4217 code. Sets the symbol, its side and the default decimals.          |
-| `precision`     | `CurrencyPrecision`                                 | the currency's (USD `2`)  | Most fraction digits; typing more is blocked. Clamped to an integer in [0, 20]; `"unlimited"` is 20. `0` hides the fraction segment. |
+| `precision`     | `CurrencyPrecision`                                 | the currency's (USD `2`)  | Most fraction digits; typing more is blocked. Clamped to an integer in [0, 15]; `"unlimited"` is 15. Amounts are JS numbers, which hold up to 15 significant digits exactly. `0` hides the fraction segment. |
 | `placeholder`   | `{ whole?: string; fraction?: string }`  | `"0"` / `"00"`            | Segment placeholders                                                        |
 | `error`         | `boolean`                                | `false`                   | Error chrome on the field                                                   |
 | `disabled`      | `boolean`                                | `false`                   | Disabled chrome, segments inert                                             |

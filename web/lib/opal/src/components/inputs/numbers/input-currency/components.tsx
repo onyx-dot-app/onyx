@@ -27,10 +27,11 @@ interface AmountSegments {
 const EMPTY_SEGMENTS: AmountSegments = { whole: "", fraction: "" };
 
 // Negative, non-finite and exponent-sized values render empty.
-// The most fraction digits a JS number and `toFixed` can show.
-const MAX_PRECISION = 20;
+// The value is a JS number, which reproduces any decimal of up to 15
+// significant digits exactly; more would round in onChange.
+const MAX_PRECISION = 15;
 
-// "unlimited" and anything above 20 → 20; negatives → 0; fractions round
+// "unlimited" and anything above 15 → 15; negatives → 0; fractions round
 // down; NaN or no precision → the currency's usual decimals.
 function resolvePrecision(
   precision: CurrencyPrecision | undefined,
@@ -141,7 +142,8 @@ interface InputCurrencyProps {
   /**
    * Most digits the fraction segment accepts; typing more is blocked. Defaults
    * to the currency's usual decimals (USD and EUR 2, JPY 0). Clamped to an
-   * integer in [0, 20]; `"unlimited"` is 20. 0 hides the segment.
+   * integer in [0, 15]; `"unlimited"` is 15, the most digits a JS number
+   * holds exactly. 0 hides the segment.
    */
   precision?: CurrencyPrecision;
 

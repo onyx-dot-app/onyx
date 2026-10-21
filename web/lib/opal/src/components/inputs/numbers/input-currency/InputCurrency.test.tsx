@@ -36,9 +36,9 @@ describe("display", () => {
   });
 
   it.each([
-    ["unlimited", 20],
-    [25, 20],
-    [Infinity, 20],
+    ["unlimited", 15],
+    [25, 15],
+    [Infinity, 15],
     [2.7, 2],
     [Number.NaN, 2],
   ] as const)("accepts %s as %i fraction digits", (precision, digits) => {
