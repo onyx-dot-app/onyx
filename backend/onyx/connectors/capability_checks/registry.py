@@ -1,3 +1,5 @@
+from functools import cache
+
 from onyx.configs.constants import DocumentSource
 
 # Re-exported: existing callers resolve applicability through the registry; the
@@ -10,6 +12,11 @@ from onyx.connectors.capability_checks.generic_row import (
     GENERIC_CHECK_NAME,
     GENERIC_PASS_LINE,
     generic_row_error,
+)
+from onyx.connectors.capability_checks.graph import (
+    CheckGraph,
+    CheckGraphEdge,
+    CheckGraphNode,
 )
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -126,3 +133,61 @@ def has_named_capability_checks(source: DocumentSource) -> bool:
     """True when the source registers named checks beyond the legacy fallback,
     so a full run reports more than the blocking validation already recorded."""
     return any(not check.is_fallback for check in get_capability_checks(source))
+
+
+def _graph_node(
+    check: CapabilityCheck, capabilities: tuple[CredentialCapability, ...]
+) -> CheckGraphNode:
+    return CheckGraphNode(
+        id=check.check_id,
+        display_name=check.display_name,
+        capabilities=capabilities,
+        required=check.required,
+        requires_connector_instance=check.requires_connector_instance,
+        requires_connector_config=check.requires_connector_config,
+        requires_fields=tuple(sorted(check.requires_fields)),
+        access_types=(
+            tuple(sorted(check.access_types, key=lambda access: access.value))
+            if check.access_types is not None
+            else None
+        ),
+        timeout_seconds=check.timeout_seconds,
+        remediation=check.remediation,
+        docs_link=check.docs_link,
+        validates_binding=check.validates_binding,
+        discovery=check.discovery,
+        fails_when_unreachable=check.fails_when_unreachable,
+        depends_on=check.depends_on,
+        row_id=check.row_id,
+        conditional=type(check).applies is not CapabilityCheck.applies,
+        is_fallback=check.is_fallback,
+    )
+
+
+@cache
+def get_check_graph(source: DocumentSource) -> CheckGraph:
+    """The DAG of the checks registered for ``source``. Built once per
+    process: the registry, and so the graph, is fixed once the edition is
+    known. A dependency on a check that is not registered (an EE-only check on
+    OSS) has no edge."""
+    checks = get_capability_checks(source)
+    # Checks that share a check_id (one probe for several capabilities) are
+    # one node, in registration order.
+    first_by_id: dict[str, CapabilityCheck] = {}
+    capabilities_by_id: dict[str, list[CredentialCapability]] = {}
+    for check in checks:
+        first_by_id.setdefault(check.check_id, check)
+        capabilities_by_id.setdefault(check.check_id, []).append(check.capability)
+    return CheckGraph(
+        source=source,
+        nodes=tuple(
+            _graph_node(check, tuple(capabilities_by_id[check_id]))
+            for check_id, check in first_by_id.items()
+        ),
+        edges=tuple(
+            CheckGraphEdge(prerequisite=dependency, dependent=check_id)
+            for check_id, check in first_by_id.items()
+            for dependency in check.depends_on
+            if dependency in first_by_id
+        ),
+    )
