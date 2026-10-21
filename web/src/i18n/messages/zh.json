@@ -15977,6 +15977,10 @@
     "tabs": {
       "scrollLeft": "向左滚动标签",
       "scrollRight": "向右滚动标签"
+    },
+    "toast": {
+      "moreCount": "还有 {count} 条",
+      "showLess": "收起"
     }
   },
   "settings": {

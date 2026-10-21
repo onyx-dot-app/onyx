@@ -15977,6 +15977,10 @@
     "tabs": {
       "scrollLeft": "Rolar abas para a esquerda",
       "scrollRight": "Rolar abas para a direita"
+    },
+    "toast": {
+      "moreCount": "+{count} mais",
+      "showLess": "Mostrar menos"
     }
   },
   "settings": {

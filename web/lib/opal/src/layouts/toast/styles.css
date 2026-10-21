@@ -1,7 +1,21 @@
 /* ============================================================================
-   Toast — a toast slides down into place as it arrives, and fades out before
-   its space closes as it leaves, so the toasts around it move smoothly.
+   Toast — a stack like a phone's notifications. The newest slides in at the
+   top and pushes the others down; past three, the oldest tuck into a pile
+   below. A leaving toast slides off toward the end side and fades, then its
+   space closes so the toasts below move up.
    ============================================================================ */
+
+.opal-toast-stack {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+}
+
+/* The open pile lists every toast; past this height the stack scrolls. */
+.opal-toast-stack[data-open] {
+  max-height: 70vh;
+  overflow-y: auto;
+}
 
 /* The lift matches a pinned StickyBox: a drop-shadow follows the card's
    rounded shape. The grid row is the toast's space in the stack. */
@@ -14,13 +28,67 @@
   width: 100%;
   filter: drop-shadow(0px 2px 12px var(--shadow-02));
   animation: opal-toast-open 200ms ease-out;
+  /* Moving into or out of the pile. */
+  transition:
+    grid-template-rows 300ms ease,
+    padding 300ms ease,
+    margin 300ms ease,
+    opacity 300ms ease;
+  /* The end side: right in LTR, left in RTL. */
+  --opal-toast-exit-x: 100%;
 }
 
-/* Leaving: fade at full height, then close the now-empty space. */
+.opal-toast:dir(rtl) {
+  --opal-toast-exit-x: -100%;
+}
+
+/* In the pile: the toast's row closes and its card slides up behind the
+   toast above, so only its bottom edge shows, 0.375rem below the one above.
+   Each layer down is narrower. Piling and rising are the same motion, so a
+   toast is one element throughout. */
+.opal-toast[data-pile] {
+  grid-template-rows: 0fr;
+  padding-bottom: 0.375rem;
+}
+
+.opal-toast[data-pile] .opal-toast-spacer {
+  padding-bottom: 0;
+  translate: 0 calc(-100% + 0.375rem);
+  scale: 0.96;
+}
+
+/* The first layer takes the gap under the last toast, so its edge hangs
+   from that toast. */
+.opal-toast[data-pile="1"] {
+  margin-top: -0.5rem;
+}
+
+.opal-toast[data-pile="2"] .opal-toast-spacer {
+  scale: 0.92;
+}
+
+/* Deeper layers wait out of sight behind the second. */
+.opal-toast[data-pile="deep"] {
+  padding-bottom: 0;
+  opacity: 0;
+}
+
+.opal-toast[data-pile="deep"] .opal-toast-spacer {
+  scale: 0.88;
+}
+
+/* Leaving: slide off toward the end side and fade at full height (200ms),
+   then close the now-empty space (300ms), in step with the pile's 300ms
+   transitions, so a toast rising out of the pile fills it exactly. */
 .opal-toast[data-leaving] {
   grid-template-rows: 0fr;
   opacity: 0;
-  animation: opal-toast-leave 400ms ease-in-out;
+  animation: opal-toast-leave 500ms ease;
+}
+
+.opal-toast[data-leaving] .opal-toast-spacer {
+  translate: var(--opal-toast-exit-x) 0;
+  animation: opal-toast-slide-out 500ms ease;
 }
 
 /* No clipping: min-height 0 lets the row reach 0, and min-width 0 keeps a
@@ -35,6 +103,11 @@
    so its bottom edge stays on the row's: the card comes in from the top. */
 .opal-toast-spacer {
   padding-bottom: 0.5rem;
+  transform-origin: bottom center;
+  transition:
+    translate 300ms ease,
+    scale 300ms ease,
+    padding 300ms ease;
   animation: opal-toast-slide-in 200ms ease-out;
 }
 
@@ -58,12 +131,22 @@
   }
 }
 
+@keyframes opal-toast-slide-out {
+  0% {
+    translate: 0 0;
+  }
+  40%,
+  100% {
+    translate: var(--opal-toast-exit-x) 0;
+  }
+}
+
 @keyframes opal-toast-leave {
   0% {
     grid-template-rows: 1fr;
     opacity: 1;
   }
-  50% {
+  40% {
     grid-template-rows: 1fr;
     opacity: 0;
   }
@@ -71,6 +154,16 @@
     grid-template-rows: 0fr;
     opacity: 0;
   }
+}
+
+/* The pile: the edges of the tucked toasts peek out under the stack, layered
+   like cards, with the count below. */
+.opal-toast-pile {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 /* The expand toggle's chevron points right, and turns down while open. */
@@ -85,8 +178,10 @@
 @media (prefers-reduced-motion: reduce) {
   .opal-toast,
   .opal-toast[data-leaving],
-  .opal-toast-spacer {
+  .opal-toast-spacer,
+  .opal-toast[data-leaving] .opal-toast-spacer {
     animation: none;
+    transition: none;
   }
 
   .opal-toast-chevron {

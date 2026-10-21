@@ -55,6 +55,8 @@ export default function OpalStringsBridge({
       remove: t("common.remove"),
       removeItem: (title) => t("common.removeItem", { title }),
       showFullMessage: t("common.showFullMessage"),
+      toastMoreCount: (count) => t("toast.moreCount", { count }),
+      toastShowLess: t("toast.showLess"),
       selectAnOption: t("common.selectAnOption"),
       openCalendar: t("common.openCalendar"),
       month: t("input.month"),

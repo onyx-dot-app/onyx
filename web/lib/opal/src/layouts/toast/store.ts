@@ -41,6 +41,12 @@ export interface Toast extends ToastOptions {
   createdAt: number;
   /** True while the exit animation plays. */
   leaving?: boolean;
+  /**
+   * True once a leaving toast has slid away and its space starts to close.
+   * Until then it keeps its slot, so the next toast rises out of the pile as
+   * the stack moves up, in one motion.
+   */
+  collapsing?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,8 +54,10 @@ export interface Toast extends ToastOptions {
 // ---------------------------------------------------------------------------
 
 export const MAX_VISIBLE_TOASTS = 3;
-// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
-const LEAVE_DURATION_MS = 400;
+// Matches opal-toast-leave in styles.css: a 200ms slide and fade, then a
+// 300ms collapse in step with the pile's transitions.
+const LEAVE_SLIDE_MS = 200;
+const LEAVE_DURATION_MS = 500;
 const DEFAULT_DURATION = 4000;
 const TOAST_CONSOLE_METHOD: Record<
   ToastLevel,
@@ -68,12 +76,70 @@ const TOAST_CONSOLE_METHOD: Record<
 
 let toasts: Toast[] = [];
 const subscribers = new Set<() => void>();
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Auto-dismiss counts down only while a toast is on show: a toast collapsed
+// into the pile, or any toast while the pile is expanded, keeps the time it
+// has left and resumes when it shows again.
+const remaining = new Map<string, number>();
+const running = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout>; startedAt: number }
+>();
+let timersPaused = false;
 
 let nextId = 0;
 
 function notify() {
   subscribers.forEach((cb) => cb());
+}
+
+function startTimer(id: string): void {
+  const left = remaining.get(id);
+  if (left === undefined || left === Infinity || running.has(id)) return;
+  const timer = setTimeout(() => {
+    running.delete(id);
+    remaining.delete(id);
+    closeToast(id);
+  }, left);
+  running.set(id, { timer, startedAt: Date.now() });
+}
+
+function pauseTimer(id: string): void {
+  const run = running.get(id);
+  if (!run) return;
+  clearTimeout(run.timer);
+  running.delete(id);
+  const left = remaining.get(id);
+  if (left !== undefined) {
+    remaining.set(id, Math.max(0, left - (Date.now() - run.startedAt)));
+  }
+}
+
+function forgetTimer(id: string): void {
+  const run = running.get(id);
+  if (run) clearTimeout(run.timer);
+  running.delete(id);
+  remaining.delete(id);
+}
+
+/** Runs the timers of the toasts on show and pauses the rest. */
+function syncTimers(): void {
+  const shown = new Set(
+    timersPaused ? [] : shownToasts(toasts).map((t) => t.id)
+  );
+  for (const t of toasts) {
+    if (t.leaving) continue;
+    if (shown.has(t.id)) startTimer(t.id);
+    else pauseTimer(t.id);
+  }
+}
+
+/**
+ * The toasts holding the stack's slots: the newest MAX_VISIBLE_TOASTS, where
+ * a leaving toast holds its slot until its space starts to close.
+ */
+export function shownToasts(list: Toast[]): Toast[] {
+  return list.filter((t) => !t.collapsing).slice(-MAX_VISIBLE_TOASTS);
 }
 
 function addToast(options: ToastOptions): string {
@@ -97,34 +163,22 @@ function addToast(options: ToastOptions): string {
     console[method](`[Toast] ${entry.message}`);
   }
 
-  const existing = timers.get(id);
-  if (existing) {
-    clearTimeout(existing);
-    timers.delete(id);
-  }
+  forgetTimer(id);
+  remaining.set(id, duration);
   toasts = toasts.some((t) => t.id === id)
     ? toasts.map((t) => (t.id === id ? entry : t))
     : [...toasts, entry];
   notify();
-
-  if (duration !== Infinity) {
-    const timer = setTimeout(() => {
-      closeToast(id);
-    }, duration);
-    timers.set(id, timer);
-  }
+  syncTimers();
 
   return id;
 }
 
 function removeToast(id: string): void {
-  const timer = timers.get(id);
-  if (timer) {
-    clearTimeout(timer);
-    timers.delete(id);
-  }
+  forgetTimer(id);
   toasts = toasts.filter((t) => t.id !== id);
   notify();
+  syncTimers();
 }
 
 /**
@@ -135,35 +189,37 @@ function removeToast(id: string): void {
 function closeToast(id: string): void {
   const current = toasts.find((t) => t.id === id);
   if (!current || current.leaving) return;
-  const timer = timers.get(id);
-  if (timer) {
-    clearTimeout(timer);
-    timers.delete(id);
-  }
+  forgetTimer(id);
   markLeaving(id);
-  // Toasts are replaced, never changed, so this entry identifies this close.
-  const leavingEntry = toasts.find((t) => t.id === id);
+  // Toasts are replaced, never changed, so the entry identifies this close.
+  // A toast fired with this id while this one left replaces it and leaves on
+  // its own timers: each step here touches only the entry this close made.
+  let entry = toasts.find((t) => t.id === id);
   setTimeout(() => {
-    // A toast fired with this id while this one left replaced it, and may
-    // be leaving on its own timer: remove only the entry this close started.
-    if (toasts.find((t) => t.id === id) !== leavingEntry) return;
+    if (toasts.find((t) => t.id === id) !== entry) return;
+    // Slid away: its space closes, and the next toast rises out of the pile
+    // into the freed slot. That toast's timer starts now.
+    toasts = toasts.map((t) => (t.id === id ? { ...t, collapsing: true } : t));
+    entry = toasts.find((t) => t.id === id);
+    notify();
+    syncTimers();
+  }, LEAVE_SLIDE_MS);
+  setTimeout(() => {
+    if (toasts.find((t) => t.id === id) !== entry) return;
     removeToast(id);
   }, LEAVE_DURATION_MS);
 }
 
 function setAutoDismiss(id: string, duration: number): void {
-  const existing = timers.get(id);
-  if (existing) {
-    clearTimeout(existing);
-    timers.delete(id);
-  }
-  if (duration === Infinity) {
-    return;
-  }
-  const timer = setTimeout(() => {
-    closeToast(id);
-  }, duration);
-  timers.set(id, timer);
+  forgetTimer(id);
+  remaining.set(id, duration);
+  syncTimers();
+}
+
+/** Pauses every timer, e.g. while the pile is expanded for reading. */
+function setTimersPaused(paused: boolean): void {
+  timersPaused = paused;
+  syncTimers();
 }
 
 function markLeaving(id: string): void {
@@ -172,8 +228,9 @@ function markLeaving(id: string): void {
 }
 
 function clearAll(): void {
-  timers.forEach((timer) => clearTimeout(timer));
-  timers.clear();
+  running.forEach((run) => clearTimeout(run.timer));
+  running.clear();
+  remaining.clear();
   toasts = [];
   notify();
 }
@@ -345,4 +402,5 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
 export const toastStore = {
   subscribe,
   getSnapshot,
+  setTimersPaused,
 };
