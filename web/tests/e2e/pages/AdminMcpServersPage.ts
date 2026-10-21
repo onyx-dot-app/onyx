@@ -1,4 +1,4 @@
-import { type Page, type Locator, expect } from "@playwright/test";
+import { type Page, type Locator, type Route, expect } from "@playwright/test";
 import * as yup from "yup";
 import { AdminPluginsPage } from "@tests/e2e/pages/AdminPluginsPage";
 
@@ -150,19 +150,68 @@ export class AdminMcpServersPage {
     await expect(search).toBeEnabled();
   }
 
+  async connectAndWaitForSetup(): Promise<void> {
+    const setupRoute = "**/api/admin/mcp/setup";
+    let responseText = "";
+    const captureResponse = async (route: Route): Promise<void> => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      responseText = await response.text();
+      await route.fulfill({ response, body: responseText });
+    };
+    await this.page.route(setupRoute, captureResponse);
+    try {
+      const responsePromise = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/admin/mcp/setup" &&
+          response.request().method() === "POST"
+      );
+      await this.clickConnect();
+      const response = await responsePromise;
+      expect(response.ok(), responseText).toBeTruthy();
+    } finally {
+      await this.page.unroute(setupRoute, captureResponse);
+    }
+    const body: unknown = JSON.parse(responseText);
+    const { status } = yup
+      .object({
+        status: yup
+          .string()
+          .oneOf(["connected", "authorization_required"])
+          .required(),
+      })
+      .validateSync(body);
+    if (status === "connected") {
+      yup
+        .object({
+          server: yup
+            .object({ id: yup.number().integer().positive().required() })
+            .required(),
+        })
+        .validateSync(body);
+    } else {
+      yup
+        .object({ authorization_url: yup.string().url().required() })
+        .validateSync(body);
+    }
+  }
+
+  async connectedServerId(): Promise<number> {
+    await expect(this.page).toHaveURL(/\/admin\/plugins\/mcp\/\d+(?:\?.*)?$/);
+    return yup
+      .number()
+      .integer()
+      .positive()
+      .required()
+      .validateSync(new URL(this.page.url()).pathname.split("/").pop());
+  }
+
   async connectAndWaitForCreation(): Promise<number> {
-    const responsePromise = this.page.waitForResponse(
-      (resp) =>
-        new URL(resp.url()).pathname === "/api/admin/mcp/server" &&
-        resp.request().method() === "POST"
-    );
-    await this.clickConnect();
-    const response = await responsePromise;
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const created = yup
-      .object({ id: yup.number().integer().positive().required() })
-      .validateSync(await response.json());
-    return created.id;
+    await this.connectAndWaitForSetup();
+    return this.connectedServerId();
   }
 
   // ---------------------------------------------------------------------------

@@ -332,7 +332,7 @@
         "loadStage": "无法加载连接设置",
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
-        "connectionFailed": "无法连接 OAuth 服务器。请检查服务器 URL 后重试。",
+        "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
         "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
         "oauthInitFailed": "发起 OAuth 失败：{detail}"
       },

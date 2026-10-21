@@ -692,7 +692,7 @@ describe("inline server configuration", () => {
     expect(authenticate).not.toHaveBeenCalled();
   });
 
-  test("saves an edited endpoint and opens authentication", async () => {
+  test("stages an edited endpoint and metadata for authentication without saving", async () => {
     const { saved, authenticate } = renderDetailsPage();
     const user = setupUser();
     const endpoint = await screen.findByRole("textbox", {
@@ -700,16 +700,53 @@ describe("inline server configuration", () => {
     });
     await user.clear(endpoint);
     await user.type(endpoint, "https://new.example.com/mcp");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
-    expect(savedRequests).toHaveLength(1);
-    expect(savedRequests[0]?.payload).toEqual({
-      server_url: "https://new.example.com/mcp",
+    const name = screen.getByRole("textbox", {
+      name: messages.actions.addMcpModal.name.title,
     });
-    expect(saved).toHaveBeenCalledWith(
-      expect.objectContaining({ server_url: "https://new.example.com/mcp" })
+    await user.clear(name);
+    await user.type(name, "Draft MCP");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(authenticate).toHaveBeenCalledWith({
+        server_url: "https://new.example.com/mcp",
+        name: "Draft MCP",
+      })
     );
-    expect(authenticate).toHaveBeenCalledTimes(1);
+    expect(savedRequests).toHaveLength(0);
+    expect(saved).not.toHaveBeenCalled();
+    expect(endpoint).toHaveValue("https://new.example.com/mcp");
+  });
+
+  test("stages Chat availability with a changed URL without updating the saved agent", async () => {
+    defaultToolIds = [99];
+    const { authenticate } = renderDetailsPage({
+      permissions: [
+        Permission.MANAGE_ACTIONS,
+        Permission.FULL_ADMIN_PANEL_ACCESS,
+      ],
+      server: {
+        ...configuredServer,
+        permissions: { edit: true, authenticate: true },
+      },
+    });
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.clear(endpoint);
+    await user.type(endpoint, "https://new.example.com/mcp");
+    await user.click(
+      screen.getByRole("switch", { name: "Enable in default Chat" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(authenticate).toHaveBeenCalledWith({
+        server_url: "https://new.example.com/mcp",
+        enable_chat: true,
+      })
+    );
+    expect(savedRequests).toEqual([]);
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   test.each(["", "not-a-url", "ftp://example.com/mcp"])(

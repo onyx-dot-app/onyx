@@ -1357,7 +1357,7 @@ export class OnyxApiClient {
   /**
    * Create (or update, via `existing_server_id`) an MCP server with its auth
    * configuration in a single call. Covers admin shared-key, per-user template,
-   * and OAuth-stub servers. Mirrors the frontend `upsertMCPServer` payload.
+   * and OAuth-stub servers. Uses the legacy server-creation API for fixture setup.
    * Returns the new server id.
    */
   async createMcpServerWithAuth(

@@ -11,6 +11,7 @@ import {
   MCPAuthenticationType,
   MCPServerStatus,
   type MCPServer,
+  type MCPServerUpdateRequest,
 } from "@/lib/mcp/types";
 import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
 import messages from "@/i18n/messages/en.json";
@@ -22,6 +23,7 @@ import {
 
 let mockUserId = "admin-user";
 let mockSavedServer: MCPServer | undefined;
+const mockAuthenticate = jest.fn<Promise<MCPServer>, []>();
 jest.mock("@/providers/UserProvider", () => {
   const actual = jest.requireActual<typeof import("@/providers/UserProvider")>(
     "@/providers/UserProvider"
@@ -72,13 +74,17 @@ jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
   default: function MockDetails({
     server,
     onDirtyChange,
+    onValuesChange,
     onSaved,
+    onAuthenticate,
     readOnly,
   }: {
     server: MCPServer;
     readOnly?: boolean;
     onDirtyChange: (dirty: boolean) => void;
     onSaved: (server: MCPServer) => Promise<void>;
+    onAuthenticate: (draft: MCPServerUpdateRequest) => void;
+    onValuesChange?: () => void;
   }) {
     return (
       <div>
@@ -86,8 +92,19 @@ jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
           disabled={readOnly}
           aria-label="Server draft"
           defaultValue={server.name}
-          onChange={() => onDirtyChange(true)}
+          onChange={() => {
+            onDirtyChange(true);
+            onValuesChange?.();
+          }}
         />
+        <button
+          onClick={() => {
+            onDirtyChange(false);
+            onValuesChange?.();
+          }}
+        >
+          Revert configuration
+        </button>
         <button
           disabled={readOnly}
           onClick={() => {
@@ -96,6 +113,17 @@ jest.mock("@/sections/actions/modals/MCPServerDetailsPage", () => ({
           }}
         >
           Save server draft
+        </button>
+        <button
+          onClick={() => {
+            onDirtyChange(true);
+            onAuthenticate({
+              server_url: "https://new.example.com/mcp",
+              name: "Draft MCP",
+            });
+          }}
+        >
+          Stage URL draft
         </button>
       </div>
     );
@@ -106,12 +134,16 @@ jest.mock("@/sections/actions/modals/MCPAuthenticationPage", () => ({
   default: function MockAuth({
     mcpServer,
     onDirtyChange,
-    onTriggerFetchTools,
+    onSaved,
+    configurationDraft,
+    onAuthorize,
     onComplete,
   }: {
     mcpServer: MCPServer;
     onDirtyChange: (dirty: boolean) => void;
-    onTriggerFetchTools: (serverId: number) => Promise<void>;
+    onSaved: (server: MCPServer) => Promise<void>;
+    configurationDraft?: MCPServerUpdateRequest;
+    onAuthorize?: (url: string) => void;
     onComplete: () => void;
   }) {
     return (
@@ -119,14 +151,20 @@ jest.mock("@/sections/actions/modals/MCPAuthenticationPage", () => ({
         <input
           aria-label="Authentication draft"
           data-server-url={mcpServer.server_url}
+          data-auth-headers={JSON.stringify(mcpServer.auth_template?.headers)}
+          data-configuration-name={configurationDraft?.name}
           data-server-status={mcpServer.status}
           data-has-credentials={!!mcpServer.admin_credentials}
           onChange={() => onDirtyChange(true)}
         />
+        <button onClick={() => onAuthorize?.(window.location.href)}>
+          Continue OAuth
+        </button>
         <button
           onClick={async () => {
             try {
-              await onTriggerFetchTools(7);
+              const saved = await mockAuthenticate();
+              await onSaved(saved);
               onComplete();
             } catch {}
           }}
@@ -188,6 +226,7 @@ beforeEach(() => {
   mockFullAdmin = true;
   mockSearchParams = new URLSearchParams();
   mockUpdateTools.mockResolvedValue(undefined);
+  mockAuthenticate.mockResolvedValue(server);
   jest.mocked(refreshMCPServerTools).mockResolvedValue([]);
   jest.mocked(updateMCPServerStatus).mockResolvedValue();
   jest
@@ -428,41 +467,24 @@ test("does not apply a previous user's intent after an account change during dis
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
 
-test("enables discovered tools after in-place authentication succeeds", async () => {
+test("uses the staged result without another discovery or Chat write", async () => {
   const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
   mockSearchParams = new URLSearchParams(
     `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
   );
-  jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
   const user = setupUser();
   render(<MCPServerDetailPage serverId={7} />);
   await user.click(
     await screen.findByRole("button", { name: "Authenticate server" })
   );
-  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
-  expect(mockReplace).toHaveBeenLastCalledWith(
-    "/admin/plugins/mcp/7?tab=tools",
-    { scroll: false }
+  await waitFor(() =>
+    expect(mockReplace).toHaveBeenLastCalledWith(
+      "/admin/plugins/mcp/7?tab=tools",
+      { scroll: false }
+    )
   );
-});
-
-test("keeps the enable request for a retry after the Chat update fails", async () => {
-  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
-  mockSearchParams = new URLSearchParams(
-    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
-  );
-  jest.mocked(refreshMCPServerTools).mockResolvedValue([discoveredTool]);
-  mockUpdateTools.mockRejectedValueOnce(new Error("Update failed"));
-  const user = setupUser();
-  render(<MCPServerDetailPage serverId={7} />);
-  const authenticate = await screen.findByRole("button", {
-    name: "Authenticate server",
-  });
-  await user.click(authenticate);
-  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(authenticate).toBeEnabled());
-  await user.click(authenticate);
-  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledTimes(2));
+  expect(refreshMCPServerTools).not.toHaveBeenCalled();
+  expect(mockUpdateTools).not.toHaveBeenCalled();
   expect(
     consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
   ).toBe(false);
@@ -497,29 +519,96 @@ test("ordinary authentication does not enable main Chat", async () => {
   expect(mockUpdateTools).not.toHaveBeenCalled();
 });
 
-test("keeps the enable request for a retry after authentication discovery fails", async () => {
-  const token = mintMcpChatEnableIntent({ userId: mockUserId, serverId: 7 });
-  mockSearchParams = new URLSearchParams(
-    `tab=authentication&enable_chat=true&enable_chat_intent=${token}`
-  );
-  jest
-    .mocked(refreshMCPServerTools)
-    .mockRejectedValueOnce(new Error("Unauthenticated"))
-    .mockResolvedValue([discoveredTool]);
+test("authentication without a URL change preserves unrelated configuration drafts", async () => {
   const user = setupUser();
   render(<MCPServerDetailPage serverId={7} />);
-  const authenticate = await screen.findByRole("button", {
-    name: "Authenticate server",
-  });
-  await user.click(authenticate);
-  await waitFor(() => expect(refreshMCPServerTools).toHaveBeenCalledTimes(1));
-  expect(mockUpdateTools).not.toHaveBeenCalled();
-  await waitFor(() => expect(authenticate).toBeEnabled());
-  await user.click(authenticate);
-  await waitFor(() => expect(mockUpdateTools).toHaveBeenCalledWith([81], true));
+  const draft = await screen.findByRole("textbox", { name: "Server draft" });
+  await user.clear(draft);
+  await user.type(draft, "Unsaved name");
+  await user.click(
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
+  );
+  await user.click(screen.getByRole("button", { name: "Authenticate server" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("tab", { name: messages.actions.mcpTools.title })
+    ).toHaveAttribute("aria-selected", "true")
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.configuration })
+  );
+  expect(screen.getByRole("textbox", { name: "Server draft" })).toHaveValue(
+    "Unsaved name"
+  );
+  await user.click(screen.getByRole("button", { name: "Close" }));
   expect(
-    consumeMcpChatEnableIntent(token, { userId: mockUserId, serverId: 7 })
-  ).toBe(false);
+    screen.getByRole("dialog", {
+      name: messages.chat.modals.unsavedChanges.header.title,
+    })
+  ).toBeVisible();
+});
+
+test("saving configuration with the original URL clears an older URL proposal", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.configuration })
+  );
+  await user.click(screen.getByRole("button", { name: "Save server draft" }));
+  await user.click(
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
+  );
+  const auth = screen.getByRole("textbox", { name: "Authentication draft" });
+  expect(auth).toHaveAttribute("data-server-url", server.server_url);
+  expect(auth).not.toHaveAttribute("data-configuration-name");
+});
+
+test("keeps staged URL and metadata after failure and clears them on success", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  const auth = await screen.findByRole("textbox", {
+    name: "Authentication draft",
+  });
+  expect(auth).toHaveAttribute(
+    "data-server-url",
+    "https://new.example.com/mcp"
+  );
+  expect(auth).toHaveAttribute("data-configuration-name", "Draft MCP");
+  expect(auth).toHaveAttribute("data-has-credentials", "false");
+  mockAuthenticate.mockRejectedValueOnce(new Error("Discovery failed"));
+  await user.click(screen.getByRole("button", { name: "Authenticate server" }));
+  expect(auth).toHaveAttribute("data-configuration-name", "Draft MCP");
+  expect(screen.getByRole("dialog", { name: /^Example MCP/ })).toBeVisible();
+  mockAuthenticate.mockResolvedValueOnce({
+    ...server,
+    name: "Draft MCP",
+    server_url: "https://new.example.com/mcp",
+  });
+  await user.click(screen.getByRole("button", { name: "Authenticate server" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("tab", { name: messages.actions.mcpTools.title })
+    ).toHaveAttribute("aria-selected", "true")
+  );
+  await user.click(
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
+  );
+  expect(
+    screen.getByRole("textbox", { name: "Authentication draft" })
+  ).not.toHaveAttribute("data-configuration-name");
+  expect(refreshMCPServerTools).not.toHaveBeenCalled();
 });
 
 test("ignores forged enable intent without full admin authority", async () => {
@@ -607,7 +696,9 @@ test("retains server and authentication drafts across inline tabs", async () => 
   const name = await screen.findByRole("textbox", { name: "Server draft" });
   await user.type(name, " changed");
   await user.click(
-    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
   );
   const credential = await screen.findByRole("textbox", {
     name: "Authentication draft",
@@ -620,7 +711,9 @@ test("retains server and authentication drafts across inline tabs", async () => 
     "Example MCP changed"
   );
   await user.click(
-    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
   );
   expect(
     screen.getByRole("textbox", { name: "Authentication draft" })
@@ -675,7 +768,9 @@ test("uses returned endpoint and cleared credentials when reload after URL save 
   });
   await user.click(screen.getByRole("button", { name: "Save server draft" }));
   await user.click(
-    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
   );
   const auth = await screen.findByRole("textbox", {
     name: "Authentication draft",
@@ -689,4 +784,121 @@ test("uses returned endpoint and cleared credentials when reload after URL save 
     MCPServerStatus.AWAITING_AUTH
   );
   expect(auth).toHaveAttribute("data-has-credentials", "false");
+});
+
+test("reverting configuration without saving clears the staged URL", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.configuration })
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Revert configuration" })
+  );
+  await user.click(
+    screen.getByRole("tab", {
+      name: messages.actions.mcpDetail.authentication,
+    })
+  );
+  expect(
+    screen.getByRole("textbox", { name: "Authentication draft" })
+  ).toHaveAttribute("data-server-url", server.server_url);
+});
+
+test("URL changes require reentry of header literals even when they contain placeholders", async () => {
+  jest.mocked(global.fetch).mockImplementation(async () =>
+    json({
+      ...server,
+      auth_template: {
+        headers: { Authorization: "Bearer old-secret-{user_email}" },
+        required_fields: [],
+      },
+    })
+  );
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  expect(
+    screen.getByRole("textbox", { name: "Authentication draft" })
+  ).toHaveAttribute("data-auth-headers", JSON.stringify({ Authorization: "" }));
+});
+test("intentional OAuth continuation removes the unsaved draft unload warning", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  const before = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(before);
+  expect(before.defaultPrevented).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Continue OAuth" }));
+  const after = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(after);
+  expect(after.defaultPrevented).toBe(false);
+});
+
+test("editing Configuration after staging invalidates the older proposal", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.configuration })
+  );
+  await user.type(
+    screen.getByRole("textbox", { name: "Server draft" }),
+    " newer"
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+  );
+  expect(
+    screen.getByRole("textbox", { name: "Authentication draft" })
+  ).not.toHaveAttribute("data-configuration-name");
+  await user.click(screen.getByRole("button", { name: "Authenticate server" }));
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.configuration })
+  );
+  expect(screen.getByRole("textbox", { name: "Server draft" })).toHaveValue(
+    server.name + " newer"
+  );
+});
+
+test("URL authentication preserves an existing tool draft and its close guard", async () => {
+  const user = setupUser();
+  render(<MCPServerDetailPage serverId={7} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Stage URL draft" })
+  );
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpTools.title })
+  );
+  const draft = screen.getByRole("button", { name: "Draft tool change" });
+  await user.click(draft);
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpDetail.authentication })
+  );
+  mockAuthenticate.mockResolvedValueOnce({
+    ...server,
+    server_url: "https://new.example.com/mcp",
+  });
+  await user.click(screen.getByRole("button", { name: "Authenticate server" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("tab", { name: messages.actions.mcpTools.title })
+    ).toHaveAttribute("aria-selected", "true")
+  );
+  expect(screen.getByRole("button", { name: "Draft tool change" })).toBe(draft);
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  expect(
+    screen.getByRole("button", {
+      name: messages.chat.modals.unsavedChanges.cancelButton.label,
+    })
+  ).toBeVisible();
 });
