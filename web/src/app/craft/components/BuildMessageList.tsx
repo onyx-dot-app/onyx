@@ -517,7 +517,11 @@ export default function BuildMessageList({
                   {streamRender?.nodes}
                 </AnimatePresence>
               )}
-              {showStreamCursor && <BlinkingBar />}
+              {showStreamCursor && (
+                <div className="h-9 flex items-center">
+                  <BlinkingBar />
+                </div>
+              )}
               {trailingAssistantSlot}
             </div>
           </div>

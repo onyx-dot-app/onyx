@@ -108,3 +108,43 @@ def test_restore_consumed_requests_and_exclude_resolved_or_expired(
             connect_app.clear_pending(request.request_id, cache)
         cache.delete(connect_app._session_key(session_id))
         cache.delete(connect_app._announce_key(session_id))
+
+
+def test_session_index_outlives_long_request_when_short_request_is_added() -> None:
+    cache = _cache()
+    session_id = str(uuid4())
+    index_key = connect_app._session_key(session_id)
+    requests = [
+        connect_app.ConnectAppRequest(request_id=str(uuid4()), external_app_id=app_id)
+        for app_id in (17, 18)
+    ]
+    long_ttl = connect_app._PENDING_TTL_S * 2
+    try:
+        for request, lifetime in zip(requests, (long_ttl, 180), strict=True):
+            connect_app.stash_pending(
+                request.request_id,
+                connect_app.ConnectAppPending(
+                    build_session_id=session_id,
+                    opencode_session_id="oc-1",
+                    perm_id=request.request_id,
+                    directory=f"/workspace/sessions/{session_id}",
+                    request=request,
+                    expires_at=time.time() + lifetime,
+                ),
+                cache,
+            )
+            assert cache.ttl(index_key) >= cache.ttl(
+                connect_app._pending_key(requests[0].request_id)
+            )
+            if request == requests[0]:
+                # Older workers capped the index even when a request lived longer.
+                cache.expire(index_key, connect_app._PENDING_TTL_S)
+
+        assert {
+            request.request_id
+            for request in connect_app.list_pending_requests(session_id, cache)
+        } == {request.request_id for request in requests}
+    finally:
+        for request in requests:
+            connect_app.clear_pending(request.request_id, cache)
+        cache.delete(index_key)

@@ -154,6 +154,7 @@ class _TurnState:
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    connect_app_request_ids: set[str] = field(default_factory=set)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
     summary_message_ids: set[str] = field(default_factory=set)
 
@@ -1458,6 +1459,13 @@ class OpencodeServeClient:
             raise
         finally:
             self._event_bus.unsubscribe(sub)
+            if state.connect_app_request_ids:
+                try:
+                    cache = get_cache_backend(tenant_id=get_current_tenant_id())
+                    for request_id in state.connect_app_request_ids:
+                        connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for ended turn")
 
     def _wait_for_event_stream_ready(
         self,
@@ -1820,6 +1828,7 @@ class OpencodeServeClient:
                 ),
                 cache,
             )
+            state.connect_app_request_ids.add(request_id)
             connect_app.announce_request(
                 build_session_id,
                 request,

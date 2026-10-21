@@ -40,6 +40,8 @@ disconnected (see §5, §9).
 Connected app setup cards link to **App permissions**. This opens Tools > Approval settings in plugin details, without delaying authentication.
 New attachments restore pending connection cards from the session's cache index.
 The pending record includes the card data and expires with the permission wait.
+The index lasts at least as long as its longest-lived pending request.
+Turn cleanup removes only that turn's requests, including when the user stops it.
 Resolved and expired requests are excluded. Request IDs deduplicate restored and live announcements.
 The editor covers external apps and MCP servers. Workspace-disabled actions
 remain visible and locked. Task editors use the same action rows with
