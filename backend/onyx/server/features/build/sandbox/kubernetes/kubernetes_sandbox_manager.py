@@ -416,18 +416,6 @@ class KubernetesSandboxManager(SandboxManager):
             return None
         return base64.b64decode(raw).decode("utf-8")
 
-    def _delete_opencode_password_secret(self, sandbox_id: str | UUID) -> None:
-        """Delete the per-pod opencode-serve auth Secret. Idempotent."""
-        secret_name = self._get_opencode_secret_name(sandbox_id)
-        try:
-            self._core_api.delete_namespaced_secret(
-                name=secret_name, namespace=self._namespace
-            )
-            logger.info("Deleted opencode auth secret %s", secret_name)
-        except ApiException as e:
-            if e.status not in (404, 410):
-                raise
-
     def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
         """Get the internal cluster URL for a session's Next.js server.
 
@@ -1244,7 +1232,7 @@ class KubernetesSandboxManager(SandboxManager):
         polls until the resource returns 404 (not found).
 
         Args:
-            resource_type: Type of resource ("pod" or "service")
+            resource_type: Type of resource ("pod", "service", or "secret")
             name: Name of the resource
             timeout: Maximum time to wait in seconds
 
@@ -1253,7 +1241,7 @@ class KubernetesSandboxManager(SandboxManager):
         """
         start_time = time.monotonic()
 
-        while time.monotonic() - start_time < timeout:
+        while True:
             try:
                 if resource_type == "pod":
                     self._core_api.read_namespaced_pod(
@@ -1275,8 +1263,6 @@ class KubernetesSandboxManager(SandboxManager):
 
                 # Resource still exists, wait and retry
                 logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
-                time.sleep(POLL_INTERVAL_SECONDS)
-
             except ApiException as e:
                 if e.status == 404:
                     # Resource is gone
@@ -1288,7 +1274,10 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.warning(
                     "Error checking %s %s status: %s", resource_type, name, e
                 )
-                time.sleep(POLL_INTERVAL_SECONDS)
+            remaining = timeout - (time.monotonic() - start_time)
+            if remaining <= 0:
+                break
+            time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
 
         logger.warning(
             "Timeout waiting for %s %s to be deleted after %ss",
