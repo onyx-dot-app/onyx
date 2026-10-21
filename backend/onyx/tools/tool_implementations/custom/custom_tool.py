@@ -12,9 +12,9 @@ from onyx.agents.tools import ToolInvocation
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, ToolContext
 from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
 from onyx.server.security.store import get_security_settings
+from onyx.tools.interface import Tool, ToolContext
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
     MESSAGE_ID_PLACEHOLDER,
@@ -165,6 +165,18 @@ class CustomTool(Tool):
         reader = csv.DictReader(csv_file)
         return list(reader)
 
+    def _failed_response(self, status_code: int | None, message: str) -> ToolResult:
+        return ToolResult(
+            content=message,
+            is_error=True,
+            details=CustomToolCallSummary(
+                tool_name=self._name,
+                response_type="text",
+                tool_result=None,
+                error=CustomToolErrorInfo(status_code=status_code, message=message),
+            ),
+        )
+
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
@@ -206,7 +218,6 @@ class CustomTool(Tool):
         except (SSRFException, ValueError) as e:
             logger.warning("%s request blocked: %s", self._name, e)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=(
                     f"The {self._name} tool could not run because its destination "
@@ -240,7 +251,6 @@ class CustomTool(Tool):
                 response.headers.get("Location"),
             )
             return self._failed_response(
-                placement,
                 status_code=response.status_code,
                 message=(
                     f"The {self._name} tool failed because the server sent a "

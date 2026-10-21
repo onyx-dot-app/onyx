@@ -238,7 +238,9 @@ class ChatTurnExecution:
                 if index == 0 and self._response_future is not None
                 else Future[ChatResponseOutcome](),
             )
-            emitter = Emitter(self._publish, persistence.model_index)
+            emitter = Emitter(
+                self._publish, persistence.model_index, self._query_observation
+            )
             try:
                 worker = start_thread_future(
                     lambda persistence=persistence, emitter=emitter: self._run_response(
