@@ -78,6 +78,23 @@ export async function triggerIndexing(
   }
 }
 
+/** Starts a permission sync on a perm-synced pair. Resolves to `null` once the
+ * server takes it, else to its error detail or `fallback`. */
+export async function triggerPermissionSync(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/cc-pair/${ccPairId}/sync-permissions`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // File and Google Sites connectors: upload, create, link, run
 // ---------------------------------------------------------------------------

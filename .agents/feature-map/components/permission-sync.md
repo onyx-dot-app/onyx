@@ -255,7 +255,9 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
 
 The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
 `/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
-for a cc_pair that is not perm-synced. The indexing pipeline
+for a cc_pair that is not perm-synced. The connector page's Manage Index menu
+offers Sync Permissions on a perm-synced pair, which posts `sync-permissions`
+and is disabled while `permission_syncing` is true. The indexing pipeline
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
 

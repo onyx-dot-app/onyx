@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Eliminar",
-          "tooltip": {
-            "active": "Pausa el conector antes de eliminarlo"
-          }
+          "label": "Eliminar"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "Iniciar indexación",
           "description": "Omitir las comprobaciones del conector e indexar ahora."
+        },
+        "syncPermissions": {
+          "label": "Sincronizar permisos",
+          "description": "Obtener ahora de la fuente quién puede leer cada documento.",
+          "tooltip": {
+            "syncing": "Ya hay una sincronización de permisos en curso"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "No se pudo actualizar la frecuencia de comprobación del conector",
         "runResolved": "Marcado como resuelto.",
         "runResolveFailed": "No se pudo resolver: {message}",
-        "runsResolved": "{count, plural, one {# ejecución marcada como resuelta} other {# ejecuciones marcadas como resueltas}}."
+        "runsResolved": "{count, plural, one {# ejecución marcada como resuelta} other {# ejecuciones marcadas como resueltas}}.",
+        "permissionSyncStarted": "Sincronización de permisos iniciada",
+        "permissionSyncFailed": "No se pudo iniciar la sincronización de permisos"
       },
       "backButton": {
         "label": "Todos los conectores"

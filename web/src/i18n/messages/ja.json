@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除",
-          "tooltip": {
-            "active": "削除する前にコネクターを一時停止してください"
-          }
+          "label": "削除"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "インデックス作成を開始",
           "description": "コネクターのチェックをスキップして、今すぐインデックスを作成します。"
+        },
+        "syncPermissions": {
+          "label": "権限を同期",
+          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "tooltip": {
+            "syncing": "権限の同期はすでに実行中です"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
         "runResolved": "解決済みにしました。",
         "runResolveFailed": "解決できませんでした: {message}",
-        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。"
+        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。",
+        "permissionSyncStarted": "権限の同期を開始しました",
+        "permissionSyncFailed": "権限の同期を開始できませんでした"
       },
       "backButton": {
         "label": "すべてのコネクタ"

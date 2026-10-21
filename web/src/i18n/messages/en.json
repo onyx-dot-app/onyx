@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Delete",
-          "tooltip": {
-            "active": "Pause the connector before deleting"
-          }
+          "label": "Delete"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "Start Indexing",
           "description": "Skip connector checks and index now."
+        },
+        "syncPermissions": {
+          "label": "Sync Permissions",
+          "description": "Pull who can read each doc from the source now.",
+          "tooltip": {
+            "syncing": "A permission sync is already running"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
-        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved."
+        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved.",
+        "permissionSyncStarted": "Permission sync started",
+        "permissionSyncFailed": "Failed to start the permission sync"
       },
       "backButton": {
         "label": "All Connectors"

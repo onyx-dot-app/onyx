@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "删除",
-          "tooltip": {
-            "active": "删除前请先暂停连接器"
-          }
+          "label": "删除"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "开始索引",
           "description": "跳过连接器检查并立即索引。"
+        },
+        "syncPermissions": {
+          "label": "同步权限",
+          "description": "立即从来源拉取每个文档的可读用户。",
+          "tooltip": {
+            "syncing": "权限同步已在运行"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "已标记为已解决。",
         "runResolveFailed": "无法解决：{message}",
-        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
+        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。",
+        "permissionSyncStarted": "已开始同步权限",
+        "permissionSyncFailed": "无法开始同步权限"
       },
       "backButton": {
         "label": "所有连接器"

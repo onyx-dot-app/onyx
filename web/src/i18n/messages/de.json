@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Löschen",
-          "tooltip": {
-            "active": "Pausieren Sie den Konnektor vor dem Löschen"
-          }
+          "label": "Löschen"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "Indexierung starten",
           "description": "Konnektorprüfungen überspringen und jetzt indexieren."
+        },
+        "syncPermissions": {
+          "label": "Berechtigungen synchronisieren",
+          "description": "Jetzt aus der Quelle abrufen, wer welches Dokument lesen darf.",
+          "tooltip": {
+            "syncing": "Eine Berechtigungssynchronisierung läuft bereits"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
         "runResolved": "Als behoben markiert.",
         "runResolveFailed": "Konnte nicht als behoben markiert werden: {message}",
-        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
+        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert.",
+        "permissionSyncStarted": "Berechtigungssynchronisierung gestartet",
+        "permissionSyncFailed": "Die Berechtigungssynchronisierung konnte nicht gestartet werden"
       },
       "backButton": {
         "label": "Alle Konnektoren"

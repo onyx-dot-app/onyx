@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "삭제",
-          "tooltip": {
-            "active": "삭제하기 전에 커넥터를 일시 중지하세요"
-          }
+          "label": "삭제"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "인덱싱 시작",
           "description": "커넥터 검사를 건너뛰고 지금 인덱싱합니다."
+        },
+        "syncPermissions": {
+          "label": "권한 동기화",
+          "description": "각 문서를 읽을 수 있는 사용자를 지금 소스에서 가져옵니다.",
+          "tooltip": {
+            "syncing": "권한 동기화가 이미 실행 중입니다"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
         "runResolved": "해결됨으로 표시했습니다.",
         "runResolveFailed": "해결하지 못했습니다: {message}",
-        "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다."
+        "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다.",
+        "permissionSyncStarted": "권한 동기화를 시작했습니다",
+        "permissionSyncFailed": "권한 동기화를 시작하지 못했습니다"
       },
       "backButton": {
         "label": "모든 커넥터"

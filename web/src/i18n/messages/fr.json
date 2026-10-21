@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Supprimer",
-          "tooltip": {
-            "active": "Mettez le connecteur en pause avant de le supprimer"
-          }
+          "label": "Supprimer"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "Démarrer l'indexation",
           "description": "Ignorer les vérifications du connecteur et indexer maintenant."
+        },
+        "syncPermissions": {
+          "label": "Synchroniser les autorisations",
+          "description": "Récupérer maintenant depuis la source qui peut lire chaque document.",
+          "tooltip": {
+            "syncing": "Une synchronisation des autorisations est déjà en cours"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
         "runResolved": "Marqué comme résolu.",
         "runResolveFailed": "Impossible de résoudre : {message}",
-        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}."
+        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}.",
+        "permissionSyncStarted": "Synchronisation des autorisations lancée",
+        "permissionSyncFailed": "Impossible de lancer la synchronisation des autorisations"
       },
       "backButton": {
         "label": "Tous les connecteurs"
