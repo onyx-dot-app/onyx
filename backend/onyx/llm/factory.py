@@ -466,6 +466,8 @@ def get_llm(
     supports_images: bool | None = None,
     is_router: bool = False,
 ) -> LitellmLLM:
+    if provider == LlmProviderNames.TYPESAFE:
+        raise ValueError("TypeSafe AI does not support chat generation")
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 

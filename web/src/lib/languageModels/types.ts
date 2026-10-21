@@ -59,6 +59,7 @@ export interface ModelConfiguration {
 }
 
 export enum LLMProviderName {
+  TYPESAFE = "typesafe",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
   OLLAMA_CHAT = "ollama_chat",
