@@ -14,7 +14,9 @@
 `port_copy.py`, `string_filtering.py`, `cc_pair_ids_backfill.py`),
 `backend/onyx/db/search_settings.py`, `swap_index.py`,
 `backend/onyx/natural_language_processing/search_nlp_models.py`,
-`backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/`
+`backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/`,
+`backend/shared_configs/embedding_models.py`, `backend/model_server/embedding_model_loader.py`,
+`backend/model_server/voyage_nano.py`
 
 **Does not own:** the retrieval orchestration that decides what to search and how to
 merge results across sources ([[internal-search]]), or the chunking/embedding pipeline
@@ -40,9 +42,13 @@ in the banner, but cannot trigger a popup. See `backend/onyx/document_index/open
 for thresholds, timeouts, and recovery behavior.
 
 An admin experiences it directly on the embedding-model page. They pick a new
-embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
-and more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. Bifrost
-always runs the test, because its model ID is free text. From that point,
+embedding model and start a re-index. The picker lists only the selectable models of
+the registry (self-hosted Granite, Voyage 4 Nano and Nemotron; Cohere, OpenAI, Google
+and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure and Bifrost are in
+a collapsed Advanced section. A legacy model (for example nomic, E5, Cohere v3) shows
+only while it is the current model. It can re-index, but it cannot be chosen as a new
+target. Before the re-index starts, the API embeds a fixed test string with the stored
+provider settings for Bifrost and for every selectable cloud model. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),
@@ -64,7 +70,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 |---|---|---|---|
 | GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
-| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost it first embeds a test string and rejects a failed call or a dimension mismatch. |
+| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost and every selectable cloud model, it first embeds a test string with the stored provider settings (`_validate_cloud_embedding_model`) and rejects a failed call or a dimension mismatch. `_check_embedding_model_target` then refuses a legacy model or an unknown OpenAI, Cohere, Google or Voyage model as a new target with `INVALID_INPUT`. A re-index with the PRESENT model is allowed. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |
 | GET | `/search-settings/get-current-search-settings` | | The PRESENT row. |
@@ -100,6 +106,7 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 | `OPENSEARCH_EXPLAIN_ENABLED` | false | Adds scoring breakdowns; documented as roughly 1000x slower for hybrid search in practice. |
 | `PIT_KEEP_ALIVE` | `"5m"` | Point-in-time lease used by the reindex port's consistent scan. |
 | `VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT` | true | Whether multi-tenant cloud checks/creates the index on every `OpenSearchDocumentIndex` construction. |
+| `LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT` | 1800 | Seconds that API server startup (`setup.py:wait_for_local_embedding_model`) waits until the inference model server embeds with the PRESENT self-hosted model. The model server downloads the model first if it is not cached. Startup fails when the wait runs out. `0` disables the wait. There is no wait for cloud models, with `MULTI_TENANT`, `INTEGRATION_TESTS_MODE` or `DISABLE_MODEL_SERVER`. |
 
 ---
 
@@ -377,6 +384,17 @@ query-time embedding, pulling `model_name`, `normalize`, `query_prefix`,
 `reduced_dimension` straight off the `SearchSettings` row. Separate `server_host`
 values are used depending on whether the call is from indexing or inference.
 
+The registry in `backend/shared_configs/embedding_models.py` lists each known model as
+SELECTABLE or LEGACY, with its dimension, prefixes, normalization and, for self-hosted
+models, a pinned Hugging Face revision. `web/src/lib/searchSettings/constants.ts` must
+match it (`backend/tests/unit/shared_configs/test_web_embedding_model_registry_parity.py`). On the model server,
+`model_server/embedding_model_loader.py` loads a self-hosted registry model at its pinned
+revision, in float32 on CPU-only hosts, and checks the output dimension.
+`voyageai/voyage-4-nano` also gets bidirectional attention and its 1024-to-2048
+projection (`model_server/voyage_nano.py`). Every other name keeps the plain
+`SentenceTransformer` call. All models load from the cache first, then from Hugging
+Face. The model-server image bundles only the default model, Granite.
+
 `RerankingModel` (`search_nlp_models.py`) is a fully implemented class (local
 cross-encoder plus direct API paths for Cohere/Bedrock) with **no active call site**.
 Its only instantiation in the codebase is inside
@@ -460,6 +478,7 @@ comment reads `# No longer used`. See §9.
 | changes hybrid weights or subqueries | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
 | adds a filter | `_get_search_filters` and every one of its private helper functions that builds one clause; the hybrid, keyword, semantic, and random query builders all call the same function, so a filter added there applies everywhere automatically, but a filter added ad hoc to just one query builder will not |
 | changes `SearchSettings` | `create_search_settings`, `update_search_settings`, the reindex request models in `server/manage/search_settings.py`, and `EmbeddingModel.from_db_model` if the field feeds the embedder |
+| adds an embedding model or changes its registry entry | the web registry in `web/src/lib/searchSettings/constants.ts` (parity test), the card copy in every locale, `_check_embedding_model_target`, and for a new default the bake in `backend/Dockerfile.model_server`. Do not change the dimension or prefixes of a model that indexes already use. |
 | touches the swap state machine (`IndexModelStatus` or `IndexReclaimStatus`) | `swap_index.py:_perform_index_swap`, every `advance_to_*` helper's prior-state guard, and the reclaim beat task; a broken guard can double-delete or skip the soak window |
 | changes `get_default_document_index` or `OpenSearchIndexPair` fan-out rules | every caller, since most pass `None` as the secondary; a change to which calls reach the secondary affects the port backfill and swap-time deletes |
 
