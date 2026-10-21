@@ -329,7 +329,11 @@ function OverrideRow({ override }: OverrideRowProps) {
     model: override.model,
   };
 
+  // Blocks a second click while the first delete is in flight.
+  const [deleting, setDeleting] = useState(false);
+
   async function handleDelete() {
+    setDeleting(true);
     try {
       await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
@@ -339,6 +343,8 @@ function OverrideRow({ override }: OverrideRowProps) {
       console.error("Failed to remove cost override", e);
       const message = e instanceof Error ? e.message : t("toasts.unknownError");
       toast.error(t("toasts.removeFailed", { message }));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -356,7 +362,7 @@ function OverrideRow({ override }: OverrideRowProps) {
           )}
           onClose={() => deleteModal.toggle(false)}
           submit={
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" onClick={handleDelete} disabled={deleting}>
               {t("deleteModal.submit.label")}
             </Button>
           }
@@ -394,7 +400,13 @@ function OverrideRow({ override }: OverrideRowProps) {
               variant="section"
               padding={2}
               rightChildren={
-                <div className="flex flex-row">
+                <Section
+                  flexDirection="row"
+                  alignItems="stretch"
+                  width="fit"
+                  height="fit"
+                  gap={0}
+                >
                   <Hoverable.Item group="OverrideRow" variant="appear-on-hover">
                     <Button
                       icon={SvgTrash}
@@ -415,7 +427,7 @@ function OverrideRow({ override }: OverrideRowProps) {
                       setEditing(true);
                     }}
                   />
-                </div>
+                </Section>
               }
             />
             {/* Lines up under the description: ContentAction padding (0.5rem) plus
