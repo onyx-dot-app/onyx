@@ -29,7 +29,7 @@ Props: `descriptionLines` (default `1`), plus the plain-mode `Card` props it for
 <DropdownLoader />
 ```
 
-No props. As tall (36px) and as rounded as an input, and fills its column, so in an `InputHorizontal` give the row `fillInput`.
+No props. As tall (36px) and as rounded as an input, with its border, and fills its column, so in an `InputHorizontal` give the row `fillInput`.
 
 ## LineLoader
 
