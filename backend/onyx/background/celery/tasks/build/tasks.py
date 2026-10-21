@@ -19,6 +19,9 @@ from onyx.server.features.build.db.sandbox import (
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.session.resource_cleanup import (
+    reconcile_sandbox_resources,
+)
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -27,6 +30,11 @@ TIMEOUT_SECONDS = 6000
 # its latest snapshot is older than idle_timeout/4 (15 min at the default 1h),
 # so the data-loss bound scales with the pace of sandboxes going to sleep.
 SNAPSHOT_INTERVAL_DIVISOR = 4
+
+
+def _check_cleanup_lease(lock: RedisLock) -> None:
+    if not lock.owned():
+        raise RuntimeError("Sandbox cleanup lease lost")
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -70,6 +78,13 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
     try:
         sandbox_manager = get_sandbox_manager()
+
+        reconcile_sandbox_resources(
+            sandbox_manager,
+            tenant_id,
+            time.monotonic() + TIMEOUT_SECONDS,
+            lambda: _check_cleanup_lease(lock),
+        )
 
         with get_session_with_current_tenant() as db_session:
             running_sandboxes = get_running_sandboxes(db_session)

@@ -50,7 +50,6 @@ import tarfile
 import tempfile
 import time
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -59,8 +58,6 @@ from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
-from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
@@ -112,6 +109,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -119,7 +117,6 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     RetriableWriteError,
     SandboxInfo,
-    SandboxProvisionContentionError,
     SandboxResource,
     SandboxResourceKind,
     SnapshotResult,
@@ -201,54 +198,6 @@ _OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
-
-
-def _provisioning_lock_key(sandbox_id: UUID) -> str:
-    return f"sandbox_provision_{sandbox_id}"
-
-
-@contextmanager
-def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
-    """Serialize pod creation + startup restore for one sandbox across
-    api-server replicas. Acquisition is non-blocking: the numbered-attempt
-    reservation already guarantees at most one live attempt per sandbox, so a
-    held lock means a superseded attempt's tail — the caller retries rather
-    than waiting it out.
-    TTL equals the provision deadline (the lock never outlives the work it
-    guards); expiry falls open to provision()'s 409/pod-exists fallbacks.
-    Fails open on cache outages."""
-    try:
-        lock = get_cache_backend(tenant_id=tenant_id).lock(
-            _provisioning_lock_key(sandbox_id),
-            timeout=PROVISION_DEADLINE_SECONDS,
-        )
-        acquired = lock.acquire(blocking=False)
-    except CACHE_TRANSIENT_ERRORS as e:
-        logger.warning(
-            "Provisioning lock unavailable for sandbox %s (%s); "
-            "proceeding without cross-replica serialization",
-            sandbox_id,
-            e,
-        )
-        yield
-        return
-
-    if not acquired:
-        raise SandboxProvisionContentionError(
-            f"A concurrent provisioner holds the lock for sandbox {sandbox_id}"
-        )
-    try:
-        yield
-    finally:
-        try:
-            if lock.owned():
-                lock.release()
-        except CACHE_TRANSIENT_ERRORS:
-            logger.warning(
-                "Provisioning lock release failed for sandbox %s; relying on TTL",
-                sandbox_id,
-                exc_info=True,
-            )
 
 
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
@@ -1058,7 +1007,7 @@ class KubernetesSandboxManager(SandboxManager):
                 "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
             )
 
-        with _provisioning_lock(sandbox_id, tenant_id):
+        with sandbox_provision_lock(sandbox_id, tenant_id):
             # Every phase below (service churn, scheduling + image pull,
             # history restore, readiness, opencode-serve bind) draws from this
             # one deadline: slow phases leave less budget for later ones
