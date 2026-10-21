@@ -48,6 +48,8 @@ export interface Toast extends ToastOptions {
 // ---------------------------------------------------------------------------
 
 export const MAX_VISIBLE_TOASTS = 3;
+// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
+const LEAVE_DURATION_MS = 400;
 const DEFAULT_DURATION = 4000;
 const TOAST_CONSOLE_METHOD: Record<
   ToastLevel,
@@ -107,7 +109,7 @@ function addToast(options: ToastOptions): string {
 
   if (duration !== Infinity) {
     const timer = setTimeout(() => {
-      removeToast(id);
+      closeToast(id);
     }, duration);
     timers.set(id, timer);
   }
@@ -125,6 +127,28 @@ function removeToast(id: string): void {
   notify();
 }
 
+/**
+ * Animates a toast out, then removes it. Every close goes through here: the
+ * close button, a timeout, `toast.dismiss`, and `useErrorToast` when its
+ * error clears.
+ */
+function closeToast(id: string): void {
+  const current = toasts.find((t) => t.id === id);
+  if (!current || current.leaving) return;
+  const timer = timers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    timers.delete(id);
+  }
+  markLeaving(id);
+  setTimeout(() => {
+    // A toast fired with this id while it left replaced it: keep that one.
+    const latest = toasts.find((t) => t.id === id);
+    if (latest && !latest.leaving) return;
+    removeToast(id);
+  }, LEAVE_DURATION_MS);
+}
+
 function setAutoDismiss(id: string, duration: number): void {
   const existing = timers.get(id);
   if (existing) {
@@ -135,7 +159,7 @@ function setAutoDismiss(id: string, duration: number): void {
     return;
   }
   const timer = setTimeout(() => {
-    removeToast(id);
+    closeToast(id);
   }, duration);
   timers.set(id, timer);
 }
@@ -185,15 +209,15 @@ interface ToastFn {
     message: string,
     opts?: Omit<ToastOptions, "message" | "level">
   ) => string;
+  /** Animates the toast out, then removes it. */
   dismiss: (id: string) => void;
+  /** Removes every toast at once, without animating. */
   clearAll: () => void;
   /**
    * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make
    * the toast persistent.
    */
   setAutoDismiss: (id: string, duration: number) => void;
-  /** @internal Flags the toast as leaving so the exit animation plays. Caller dismisses after the animation. */
-  _markLeaving: (id: string) => void;
 }
 
 function toastBase(options: ToastOptions): string {
@@ -209,10 +233,9 @@ export const toast: ToastFn = Object.assign(toastBase, {
     addToast({ ...opts, message, level: "warning" }),
   info: (message: string, opts?: Omit<ToastOptions, "message" | "level">) =>
     addToast({ ...opts, message, level: "info" }),
-  dismiss: removeToast,
+  dismiss: closeToast,
   clearAll,
   setAutoDismiss,
-  _markLeaving: markLeaving,
 });
 
 // ---------------------------------------------------------------------------
@@ -266,7 +289,7 @@ export function useErrorToast(
   // between two errors.
   useEffect(() => {
     if (!hasError) return;
-    return () => removeToast(id);
+    return () => closeToast(id);
   }, [hasError, id]);
 }
 

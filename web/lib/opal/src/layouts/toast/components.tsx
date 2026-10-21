@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/layouts/toast/styles.css";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
 import { Button, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -17,8 +17,6 @@ import {
 import SvgChevronRight from "@opal/icons/chevron-right";
 import { Section } from "@opal/layouts/general/components";
 
-// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
-const LEAVE_DURATION = 400;
 // How long a toast lingers after the user expands it. Long enough to read a
 // multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
@@ -179,20 +177,17 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   );
   const visible = allToasts.filter((t) => t.leaving || shownIds.has(t.id));
 
+  // A gone toast leaves no expanded state behind for a later one with its id.
+  useEffect(() => {
+    setExpandedIds((prev) => {
+      const live = new Set(allToasts.map((t) => t.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [allToasts]);
+
   const handleClose = useCallback((id: string) => {
-    toast._markLeaving(id);
-    setTimeout(() => {
-      // A toast fired with this id while it left replaced it: keep that one.
-      const current = toastStore.getSnapshot().find((t) => t.id === id);
-      if (current && !current.leaving) return;
-      toast.dismiss(id);
-      setExpandedIds((prev) => {
-        if (!prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }, LEAVE_DURATION);
+    toast.dismiss(id);
   }, []);
 
   const handleToggle = useCallback((t: Toast) => {
