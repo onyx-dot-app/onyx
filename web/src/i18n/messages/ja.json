@@ -12438,6 +12438,9 @@
         "authFailedStatus": {
           "text": "{toolName} の認証に失敗しました (HTTP {statusCode})"
         },
+        "blockedStatus": {
+          "text": "{toolName} はブロックされました"
+        },
         "completedStatus": {
           "text": "{toolName} が完了しました"
         },
