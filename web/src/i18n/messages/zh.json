@@ -2240,11 +2240,12 @@
         "label": "测试版"
       },
       "connectors": {
+        "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
         "empty": {
           "title": "尚未设置连接器"
         },
         "manageAllButton": {
-          "label": "管理全部"
+          "label": "管理连接器"
         },
         "title": "连接器"
       },
