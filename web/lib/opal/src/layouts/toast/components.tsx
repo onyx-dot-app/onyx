@@ -3,7 +3,7 @@
 import "@opal/layouts/toast/styles.css";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, MessageCard, Tag, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { useOpalStrings } from "@opal/strings";
@@ -205,23 +205,6 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
     [...piled].reverse().map((t, index) => [t.id, index + 1])
   );
   const DEEP = MAX_PILE_DEPTH_SHOWN + 1;
-  const [pileOpen, setPileOpen] = useState(false);
-
-  // An empty pile closes, and an open pile holds every timer for reading.
-  useEffect(() => {
-    if (pileCount === 0) setPileOpen(false);
-  }, [pileCount]);
-  useEffect(() => {
-    toastStore.setTimersPaused(pileOpen);
-  }, [pileOpen]);
-  useEffect(() => {
-    if (!pileOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPileOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pileOpen]);
 
   // A gone toast leaves no expanded state behind for a later one with its id.
   useEffect(() => {
@@ -256,7 +239,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       data-testid="toast-container"
       className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
-      <div className="opal-toast-stack" data-open={pileOpen || undefined}>
+      <div className="opal-toast-stack">
         {[...allToasts].reverse().map((t, index) => (
           <ToastCard
             key={t.id}
@@ -265,13 +248,11 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
             // the order, so a card stays behind the one above it throughout.
             layer={allToasts.length - index}
             pileDepth={
-              pileOpen
-                ? undefined
-                : t.leaving
-                  ? t.leavingFromPile
-                    ? DEEP
-                    : undefined
-                  : pileDepths.get(t.id)
+              t.leaving
+                ? t.leavingFromPile
+                  ? DEEP
+                  : undefined
+                : pileDepths.get(t.id)
             }
             errorAppendix={errorAppendix}
             expanded={expandedIds.has(t.id)}
@@ -280,18 +261,15 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
           />
         ))}
       </div>
+      {/* A count, not a control: the pile does not expand (see the README's
+          design decisions). */}
       {pileCount > 0 && (
-        <div className="opal-toast-pile">
-          <Button
-            prominence="secondary"
-            size="sm"
-            aria-expanded={pileOpen}
-            onClick={() => setPileOpen((open) => !open)}
-          >
-            {pileOpen
-              ? strings.toastShowLess
-              : strings.toastMoreCount(pileCount)}
-          </Button>
+        <div className="opal-toast-pile-count">
+          <Tag
+            title={strings.toastMoreCount(pileCount)}
+            color="white"
+            size="md"
+          />
         </div>
       )}
     </div>

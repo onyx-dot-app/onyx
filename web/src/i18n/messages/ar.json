@@ -15979,8 +15979,7 @@
       "scrollRight": "تمرير التبويبات لليمين"
     },
     "toast": {
-      "moreCount": "+{count} أخرى",
-      "showLess": "عرض أقل"
+      "moreCount": "+{count} أخرى"
     }
   },
   "settings": {

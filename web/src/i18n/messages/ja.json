@@ -15979,8 +15979,7 @@
       "scrollRight": "タブを右にスクロール"
     },
     "toast": {
-      "moreCount": "他 {count} 件",
-      "showLess": "表示を減らす"
+      "moreCount": "他 {count} 件"
     }
   },
   "settings": {

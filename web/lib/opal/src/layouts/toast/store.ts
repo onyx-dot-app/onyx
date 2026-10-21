@@ -82,15 +82,13 @@ const TOAST_CONSOLE_METHOD: Record<
 let toasts: Toast[] = [];
 const subscribers = new Set<() => void>();
 
-// Auto-dismiss counts down only while a toast is on show: a toast collapsed
-// into the pile, or any toast while the pile is expanded, keeps the time it
-// has left and resumes when it shows again.
+// Auto-dismiss counts down only while a toast is on show: a piled toast keeps
+// the time it has left and resumes when it rises back into a slot.
 const remaining = new Map<string, number>();
 const running = new Map<
   string,
   { timer: ReturnType<typeof setTimeout>; startedAt: number }
 >();
-let timersPaused = false;
 
 let nextId = 0;
 
@@ -129,9 +127,7 @@ function forgetTimer(id: string): void {
 
 /** Runs the timers of the toasts on show and pauses the rest. */
 function syncTimers(): void {
-  const shown = new Set(
-    timersPaused ? [] : shownToasts(toasts).map((t) => t.id)
-  );
+  const shown = new Set(shownToasts(toasts).map((t) => t.id));
   for (const t of toasts) {
     if (t.leaving) continue;
     if (shown.has(t.id)) startTimer(t.id);
@@ -218,12 +214,6 @@ function closeToast(id: string): void {
 function setAutoDismiss(id: string, duration: number): void {
   forgetTimer(id);
   remaining.set(id, duration);
-  syncTimers();
-}
-
-/** Pauses every timer, e.g. while the pile is expanded for reading. */
-function setTimersPaused(paused: boolean): void {
-  timersPaused = paused;
   syncTimers();
 }
 
@@ -410,5 +400,4 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
 export const toastStore = {
   subscribe,
   getSnapshot,
-  setTimersPaused,
 };

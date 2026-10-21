@@ -15979,8 +15979,7 @@
       "scrollRight": "탭을 오른쪽으로 스크롤"
     },
     "toast": {
-      "moreCount": "+{count}개 더",
-      "showLess": "간략히 보기"
+      "moreCount": "+{count}개 더"
     }
   },
   "settings": {

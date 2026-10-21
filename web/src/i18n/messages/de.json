@@ -15979,8 +15979,7 @@
       "scrollRight": "Tabs nach rechts scrollen"
     },
     "toast": {
-      "moreCount": "+{count} weitere",
-      "showLess": "Weniger anzeigen"
+      "moreCount": "+{count} weitere"
     }
   },
   "settings": {
