@@ -478,6 +478,11 @@ export interface CostOverrideCreate extends CostOverrideRates {
   model_configuration_id: number;
 }
 
+/** PUT body: new rates, and optionally another model to move the override to. */
+export interface CostOverrideUpdate extends CostOverrideRates {
+  model_configuration_id?: number;
+}
+
 /**
  * A provider whose names are copy rather than brand names. Its names come from
  * `admin.languageModels.providers.<key>`; show them with `useProviderNames`.

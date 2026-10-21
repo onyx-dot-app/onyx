@@ -109,7 +109,7 @@ Every route in this router carries `Depends(_reject_if_multi_tenant)`
 | GET | `/admin/usage/system` | `get_system_usage` | Non-user (system-attributed) usage, e.g. contextual RAG. |
 | POST | `/admin/usage/reset` | `reset_usage` | Clears one user's usage across every active rate-limit window. |
 | GET/POST | `/admin/cost-overrides` | `list_cost_overrides`, `create_cost_override_endpoint` | Per-model-configuration price overrides used by cost computation. Create returns 409 when the configuration already has one. |
-| PUT/DELETE | `/admin/cost-overrides/{model_configuration_id}` | `update_cost_override_endpoint`, `delete_cost_override_endpoint` | Set or remove one configuration's override. |
+| PUT/DELETE | `/admin/cost-overrides/{model_configuration_id}` | `update_cost_override_endpoint`, `delete_cost_override_endpoint` | Set or remove one configuration's override. `PUT` can also move it to another configuration (`model_configuration_id` in the body): 404 if that configuration is missing, 409 if it already has an override. |
 
 ### Hooks endpoints (`ee/onyx/server/features/hooks/api.py`, prefix `/admin/hooks`)
 

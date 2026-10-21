@@ -60,7 +60,7 @@ from onyx.llm.cost_overrides import invalidate_override_cache
 from onyx.server.features.usage.models import (
     CostOverride,
     CostOverrideCreateRequest,
-    CostOverrideRatesRequest,
+    CostOverrideUpdateRequest,
     EffectiveCostBudget,
     ResetUsageRequest,
     ResetUsageResponse,
@@ -488,20 +488,38 @@ def create_cost_override_endpoint(
 @router.put("/{model_configuration_id}")
 def update_cost_override_endpoint(
     model_configuration_id: int,
-    payload: CostOverrideRatesRequest,
+    payload: CostOverrideUpdateRequest,
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> CostOverride:
-    row = update_cost_override(
-        db_session,
-        model_configuration_id=model_configuration_id,
-        input_cost_per_mtok=payload.input_cost_per_mtok,
-        output_cost_per_mtok=payload.output_cost_per_mtok,
-        cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+    # Moving the override to another model: that model must exist and must not
+    # have an override of its own.
+    target = payload.model_configuration_id
+    moving = target is not None and target != model_configuration_id
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "That model already has a cost override"
     )
-    if row is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
-    db_session.commit()
+    if moving:
+        if fetch_model_configuration_by_id(db_session, target) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
+        if fetch_cost_override(db_session, target) is not None:
+            raise conflict
+    try:
+        row = update_cost_override(
+            db_session,
+            model_configuration_id=model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+            new_model_configuration_id=target if moving else None,
+        )
+        if row is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create or move took the target after the check above.
+        db_session.rollback()
+        raise conflict
     invalidate_override_cache()
     return CostOverride.from_db(row)
 

@@ -90,7 +90,7 @@ const overrideValidationSchema = Yup.object({
 });
 
 interface OverrideModalProps {
-  // Editing locks the model: an override belongs to one model configuration.
+  // The override being edited; its model can change to one without an override.
   existing?: CostOverride;
   onClose: () => void;
 }
@@ -106,10 +106,12 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
   // search field can take focus.
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
 
-  // A model has at most one override, so a new one offers only the models
-  // without one; editing keeps the full list to show the locked model.
+  // A model has at most one override, so the picker offers only the models
+  // without one, plus the model of the override being edited.
   const takenIds = new Set(
-    isEdit ? [] : (costOverrides ?? []).map((o) => o.model_configuration_id)
+    (costOverrides ?? [])
+      .map((o) => o.model_configuration_id)
+      .filter((id) => id !== existing?.model_configuration_id)
   );
   const providers = filterModelConfigurations(llmProviders ?? [], {
     visibleOnly: false,
@@ -143,7 +145,10 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
     };
     try {
       const saved = existing
-        ? await updateCostOverride(existing.model_configuration_id, rates)
+        ? await updateCostOverride(existing.model_configuration_id, {
+            ...rates,
+            model_configuration_id: values.modelConfigId,
+          })
         : await createCostOverride({
             model_configuration_id: values.modelConfigId,
             ...rates,
@@ -202,7 +207,6 @@ function OverrideModal({ existing, onClose }: OverrideModalProps) {
                   ) : (
                     <SimpleModelSelector
                       nullable={!isEdit}
-                      disabled={isEdit}
                       providers={providers}
                       value={values.modelConfigId}
                       grouped={!hideProviderGrouping}

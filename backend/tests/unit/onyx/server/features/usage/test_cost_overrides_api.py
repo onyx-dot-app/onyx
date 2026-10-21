@@ -195,6 +195,79 @@ def test_update_without_override_404s(db_session: Session) -> None:
     assert resp.json()["error_code"] == "NOT_FOUND"
 
 
+def test_update_moves_override_to_another_model(db_session: Session) -> None:
+    source = _seed_config(db_session, model="gpt-4o")
+    target = _seed_config(db_session, model="gpt-4.1", provider_name="Team B")
+    client = TestClient(_make_app(db_session, _ADMIN))
+    assert (
+        client.post(
+            _BASE, json={"model_configuration_id": source, **_rates()}
+        ).status_code
+        == 200
+    )
+
+    moved = client.put(
+        f"{_BASE}/{source}",
+        json={"model_configuration_id": target, **_rates(3.0, 12.0)},
+    )
+    assert moved.status_code == 200
+    body = moved.json()
+    assert body["model_configuration_id"] == target
+    assert body["model_name"] == "gpt-4.1"
+    assert body["input_cost_per_mtok"] == 3.0
+
+    listed = client.get(_BASE).json()
+    assert [row["model_configuration_id"] for row in listed] == [target]
+
+
+def test_update_to_the_same_model_keeps_it(db_session: Session) -> None:
+    config_id = _seed_config(db_session)
+    client = TestClient(_make_app(db_session, _ADMIN))
+    client.post(_BASE, json={"model_configuration_id": config_id, **_rates()})
+
+    resp = client.put(
+        f"{_BASE}/{config_id}",
+        json={"model_configuration_id": config_id, **_rates(4.0, 8.0)},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model_configuration_id"] == config_id
+    assert resp.json()["input_cost_per_mtok"] == 4.0
+
+
+def test_move_to_missing_model_404s(db_session: Session) -> None:
+    config_id = _seed_config(db_session)
+    client = TestClient(_make_app(db_session, _ADMIN))
+    client.post(_BASE, json={"model_configuration_id": config_id, **_rates()})
+
+    resp = client.put(
+        f"{_BASE}/{config_id}",
+        json={"model_configuration_id": config_id + 999, **_rates()},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error_code"] == "NOT_FOUND"
+
+
+def test_move_onto_a_model_with_an_override_conflicts(db_session: Session) -> None:
+    source = _seed_config(db_session, model="gpt-4o")
+    target = _seed_config(db_session, model="gpt-4.1", provider_name="Team B")
+    client = TestClient(_make_app(db_session, _ADMIN))
+    for config_id in (source, target):
+        client.post(_BASE, json={"model_configuration_id": config_id, **_rates()})
+
+    resp = client.put(
+        f"{_BASE}/{source}",
+        json={"model_configuration_id": target, **_rates(3.0, 12.0)},
+    )
+    assert resp.status_code == 409
+    assert resp.json()["error_code"] == "CONFLICT"
+    # Neither override changed.
+    rates = {
+        row["model_configuration_id"]: row["input_cost_per_mtok"]
+        for row in client.get(_BASE).json()
+    }
+    assert rates == {source: 2.5, target: 2.5}
+
+
 def test_delete_removes_then_404(db_session: Session) -> None:
     config_id = _seed_config(db_session, model="claude-haiku-4-5")
     client = TestClient(_make_app(db_session, _ADMIN))

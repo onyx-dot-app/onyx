@@ -21,6 +21,11 @@ class CostOverrideCreateRequest(CostOverrideRatesRequest):
     model_configuration_id: int
 
 
+class CostOverrideUpdateRequest(CostOverrideRatesRequest):
+    # Moves the override to another model configuration; None keeps its model.
+    model_configuration_id: int | None = None
+
+
 class CostOverride(BaseModel):
     model_configuration_id: int
     # The model's API name, and the name the admin UI shows.

@@ -69,13 +69,18 @@ def update_cost_override(
     input_cost_per_mtok: float,
     output_cost_per_mtok: float,
     cache_read_cost_per_mtok: float | None = None,
+    new_model_configuration_id: int | None = None,
 ) -> ModelCostOverride | None:
-    """Sets an existing override's rates; None if the configuration has none.
-    The caller commits and invalidates the override cache."""
+    """Sets an existing override's rates, and moves it to
+    `new_model_configuration_id` when given; None if the configuration has no
+    override. The caller checks the target, commits and invalidates the
+    override cache."""
     _check_rates(input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok)
     row = fetch_cost_override(db_session, model_configuration_id)
     if row is None:
         return None
+    if new_model_configuration_id is not None:
+        row.model_configuration_id = new_model_configuration_id
     row.input_cost_per_mtok = input_cost_per_mtok
     row.output_cost_per_mtok = output_cost_per_mtok
     row.cache_read_cost_per_mtok = cache_read_cost_per_mtok

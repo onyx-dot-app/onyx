@@ -7,7 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   CostOverride,
   CostOverrideCreate,
-  CostOverrideRates,
+  CostOverrideUpdate,
 } from "@/lib/languageModels/types";
 
 /**
@@ -32,7 +32,7 @@ export function useCostOverrides() {
 async function sendOverride(
   url: string,
   method: "POST" | "PUT",
-  body: CostOverrideCreate | CostOverrideRates
+  body: CostOverrideCreate | CostOverrideUpdate
 ): Promise<CostOverride> {
   const response = await fetch(url, {
     method,
@@ -59,17 +59,19 @@ export async function createCostOverride(
 }
 
 /**
- * Sets an existing override's rates.
- * @throws Error with the API detail message on failure.
+ * Sets an existing override's rates, and moves it to `body.model_configuration_id`
+ * when that is another model.
+ * @throws Error with the API detail message on failure, including a 409 when
+ * the target model already has an override.
  */
 export async function updateCostOverride(
   modelConfigurationId: number,
-  rates: CostOverrideRates
+  body: CostOverrideUpdate
 ): Promise<CostOverride> {
   return sendOverride(
     `${SWR_KEYS.costOverrides}/${modelConfigurationId}`,
     "PUT",
-    rates
+    body
   );
 }
 
