@@ -15496,7 +15496,6 @@
       "actionPolicies": "Paramètres d’approbation",
       "policyCounts": "{auto} automatiques · {ask} demander · {disabled} désactivées",
       "manageActions": "Gérer les actions",
-      "viewActions": "Voir les actions",
       "taskModalDescription": "Les modifications s’appliquent lorsque vous enregistrez la tâche. Les restrictions de l’espace de travail s’appliquent toujours.",
       "searchActions": "Rechercher des actions",
       "setPermissions": "Définir les autorisations",

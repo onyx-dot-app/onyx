@@ -15496,7 +15496,6 @@
       "actionPolicies": "승인 설정",
       "policyCounts": "자동 승인 {auto} · 확인 {ask} · 비활성 {disabled}",
       "manageActions": "작업 관리",
-      "viewActions": "작업 보기",
       "taskModalDescription": "변경 사항은 예약 작업을 저장할 때 적용됩니다. 워크스페이스 제한은 항상 적용됩니다.",
       "searchActions": "작업 검색",
       "setPermissions": "권한 설정",

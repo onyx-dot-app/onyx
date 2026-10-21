@@ -15496,7 +15496,6 @@
       "actionPolicies": "Genehmigungseinstellungen",
       "policyCounts": "{auto} automatisch · {ask} nachfragen · {disabled} deaktiviert",
       "manageActions": "Aktionen verwalten",
-      "viewActions": "Aktionen anzeigen",
       "taskModalDescription": "Änderungen gelten, wenn Sie die Aufgabe speichern. Workspace-Einschränkungen gelten immer.",
       "searchActions": "Aktionen suchen",
       "setPermissions": "Berechtigungen festlegen",

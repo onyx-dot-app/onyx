@@ -15496,7 +15496,6 @@
       "actionPolicies": "审批设置",
       "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
       "manageActions": "管理操作",
-      "viewActions": "查看操作",
       "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
       "searchActions": "搜索操作",
       "setPermissions": "设置权限",

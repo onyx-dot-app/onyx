@@ -15496,7 +15496,6 @@
       "actionPolicies": "Ajustes de aprobación",
       "policyCounts": "{auto} automáticas · {ask} preguntar · {disabled} desactivadas",
       "manageActions": "Gestionar acciones",
-      "viewActions": "Ver acciones",
       "taskModalDescription": "Los cambios se aplican al guardar la tarea. Las restricciones del espacio de trabajo siempre se aplican.",
       "searchActions": "Buscar acciones",
       "setPermissions": "Establecer permisos",
