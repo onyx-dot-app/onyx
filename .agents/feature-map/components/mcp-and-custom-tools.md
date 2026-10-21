@@ -357,8 +357,8 @@ stays on that tab; changing the URL opens Authentication. Authentication saves c
 connection and tool-loading flow before opening Tools. Workspace availability and
 deletion stay in the directory. Saved configuration shows the server URL beneath the name. Users with edit permission
 can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
-Saving a changed URL opens Authentication to reconnect and discover tools. The returned
-server replaces cached credentials before reloading, even if the reload fails.
+Saving a changed URL opens Authentication to reconnect and discover tools. The page
+updates cached server data with the returned response before reloading, even if the reload fails.
 Metadata-only saves omit the URL.
 Metadata-only saves preserve existing access grants, including after a plan downgrade.
 Changing restricted access still requires the applicable plan and permissions.
