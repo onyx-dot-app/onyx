@@ -2,12 +2,19 @@
 
 import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputSwitch, Tag, Tooltip } from "@opal/components";
+import { Button, Card, InputSwitch, Tag, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { SvgBlocks, SvgEdit, SvgPlug, SvgTrash, SvgUser } from "@opal/icons";
+import {
+  SvgBlocks,
+  SvgEdit,
+  SvgPlug,
+  SvgShare,
+  SvgTrash,
+  SvgUser,
+} from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
-import { Card } from "@/refresh-components/cards";
+import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
@@ -50,6 +57,7 @@ export interface SkillCardProps {
   hasEnabledNameConflict?: boolean;
   onClick?: (item: SkillCardItem) => void;
   onEdit?: (item: CustomSkillCardItem) => void;
+  onShare?: (item: CustomSkillCardItem) => void;
   onDelete?: (item: CustomSkillCardItem) => void;
   onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
   enablementPending?: boolean;
@@ -60,6 +68,7 @@ export default function SkillCard({
   hasEnabledNameConflict = false,
   onClick,
   onEdit,
+  onShare,
   onDelete,
   onEnabledChange,
   enablementPending = false,
@@ -71,6 +80,10 @@ export default function SkillCard({
   const handleClick = useCallback(() => {
     onClick?.(item);
   }, [onClick, item]);
+
+  const { isAdmin } = useUser();
+  const isRequired =
+    item.source === "custom" && item.skill.installation_policy === "REQUIRED";
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
@@ -139,19 +152,32 @@ export default function SkillCard({
 
   return (
     <Tooltip tooltip={tooltip} side="top">
-      <Interactive.Simple onClick={handleClick} group="group/SkillCard">
+      <Interactive.Simple
+        role="button"
+        tabIndex={0}
+        aria-label={item.name}
+        onClick={handleClick}
+        onKeyDown={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            (event.key === "Enter" || event.key === " ")
+          ) {
+            event.preventDefault();
+            handleClick();
+          }
+        }}
+        group="group/SkillCard"
+      >
         <Card
-          variant={
+          disabled={
             isInvalid ||
             isBuiltinUnavailable ||
             (isDependencyUnavailable && !item.enabled)
-              ? "disabled"
-              : isInactive
-                ? "secondary"
-                : "primary"
           }
+          color={isInactive ? "transparent" : "background-tint-00"}
+          border="solid"
+          rounding={4}
           padding={0}
-          gap={0}
           height="full"
         >
           <div
@@ -176,6 +202,23 @@ export default function SkillCard({
                     gap={1}
                     className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
                   >
+                    {onShare && (
+                      <Button
+                        prominence="secondary"
+                        size="sm"
+                        icon={SvgShare}
+                        tooltip={skillCopy(
+                          "editor.management.sharing.edit.label"
+                        )}
+                        aria-label={skillCopy(
+                          "editor.management.sharing.edit.label"
+                        )}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onShare(item);
+                        }}
+                      />
+                    )}
                     <Button
                       prominence="secondary"
                       size="sm"
@@ -183,7 +226,7 @@ export default function SkillCard({
                       tooltip={t("skill.edit.tooltip")}
                       onClick={handleEditClick}
                     />
-                    {onDelete && (
+                    {onDelete && (!isRequired || isAdmin) && (
                       <Button
                         prominence="secondary"
                         variant="danger"
@@ -214,6 +257,13 @@ export default function SkillCard({
               />
             </div>
             <div className="p-0.5 pe-1.5 flex items-center gap-1">
+              {isRequired && (
+                <Tag
+                  title={skillCopy("modals.share.installation.required")}
+                  tooltip={t("skill.tags.required.tooltip")}
+                  color="blue"
+                />
+              )}
               {item.can_toggle && (
                 <div
                   role="presentation"

@@ -11896,6 +11896,9 @@
         "personal": {
           "label": "個人用"
         },
+        "required": {
+          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
+        },
         "unavailable": {
           "label": "利用できません - クリックして詳細を表示"
         }
@@ -16754,21 +16757,11 @@
         "title": "スキルを利用できません"
       },
       "management": {
-        "description": "このスキルを使用できるユーザーを管理します。",
-        "externalApp": {
-          "manage": {
-            "label": "アプリ設定で管理"
-          },
-          "readyDescription": "このスキルはアプリ「{appName}」を使用します。",
-          "title": "外部アプリ"
-        },
         "sharing": {
           "edit": {
             "label": "共有を編集"
-          },
-          "title": "共有"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存する前に説明を追加してください。",
@@ -16778,21 +16771,6 @@
         "noPermission": "このスキルの詳細を編集する権限がありません。",
         "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "組織内の全員がこのスキルを使用および編集できます。",
-          "title": "組織",
-          "viewerDescription": "組織内の全員がこのスキルを使用できます。"
-        },
-        "personal": {
-          "description": "このスキルを使用できるのはあなただけです。",
-          "title": "個人"
-        },
-        "shares": {
-          "description": "選択したユーザーとグループのみがこのスキルを使用できます。",
-          "title": "{count, plural, one {# 件の共有} other {# 件の共有}}"
-        }
       },
       "toasts": {
         "created": "「{name}」を作成しました",
@@ -16973,7 +16951,6 @@
         },
         "externalAppNotice": "このスキルがアプリ「{appName}」に関連付けられている間は、組織全体への閲覧者アクセスが必要です。",
         "header": {
-          "title": "*{name}* を共有",
           "transferTitle": "*{name}* を譲渡"
         },
         "loading": {
@@ -16985,7 +16962,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新"
+          "ariaLabel": "{name} のアクセス権を更新",
+          "canUse": "使用可能",
+          "canEdit": "編集可能"
         },
         "saveButton": {
           "label": "保存"
@@ -17007,7 +16986,23 @@
         },
         "transferredToast": {
           "message": "所有権を譲渡しました。"
-        }
+        },
+        "installation": {
+          "title": "インストール",
+          "available": "インストール可能",
+          "default": "デフォルトでインストール",
+          "required": "必須",
+          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
+          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
+          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
+        },
+        "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
+        "accessTitle": "アクセス範囲",
+        "peopleTitle": "アクセスできるユーザー",
+        "manageIndividualAccess": "個別のアクセスを管理",
+        "individualAccessTitle": "個別のアクセス",
+        "ownershipTitle": "所有権"
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"

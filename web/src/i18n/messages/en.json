@@ -11896,6 +11896,9 @@
         "personal": {
           "label": "Personal"
         },
+        "required": {
+          "tooltip": "Your organization admin requires you to have this skill."
+        },
         "unavailable": {
           "label": "Unavailable - click to learn more"
         }
@@ -16754,21 +16757,11 @@
         "title": "Skill unavailable"
       },
       "management": {
-        "description": "Control who can use this skill.",
-        "externalApp": {
-          "manage": {
-            "label": "Manage in app settings"
-          },
-          "readyDescription": "This skill uses app “{appName}”.",
-          "title": "External app"
-        },
         "sharing": {
           "edit": {
             "label": "Edit sharing"
-          },
-          "title": "Sharing"
-        },
-        "title": "Management"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Add a description before saving.",
@@ -16778,21 +16771,6 @@
         "noPermission": "You don't have permission to edit this skill's details.",
         "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Everyone in your organization can use and edit this skill.",
-          "title": "Organization",
-          "viewerDescription": "Everyone in your organization can use this skill."
-        },
-        "personal": {
-          "description": "Only you can use this skill.",
-          "title": "Personal"
-        },
-        "shares": {
-          "description": "Only selected users and groups can use this skill.",
-          "title": "{count, plural, one {# share} other {# shares}}"
-        }
       },
       "toasts": {
         "created": "Created \"{name}\"",
@@ -16973,7 +16951,6 @@
         },
         "externalAppNotice": "Organization-wide viewer access is required while this skill is associated with app “{appName}”.",
         "header": {
-          "title": "Share *{name}*",
           "transferTitle": "Transfer *{name}*"
         },
         "loading": {
@@ -16985,7 +16962,9 @@
         },
         "ownerLabel": "Owner",
         "permissionMenu": {
-          "ariaLabel": "Update access for {name}"
+          "ariaLabel": "Update access for {name}",
+          "canUse": "Can use",
+          "canEdit": "Can edit"
         },
         "saveButton": {
           "label": "Save"
@@ -17007,7 +16986,23 @@
         },
         "transferredToast": {
           "message": "Ownership transferred."
-        }
+        },
+        "installation": {
+          "title": "Installation",
+          "available": "Available to install",
+          "default": "Installed by default",
+          "required": "Required",
+          "availableDescription": "Users can install or uninstall anytime.",
+          "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
+          "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
+          "description": "Choose how this skill is installed for everyone with access."
+        },
+        "description": "Choose who can use this skill and how it is installed.",
+        "accessTitle": "Who can access",
+        "peopleTitle": "People with access",
+        "manageIndividualAccess": "Manage individual access",
+        "individualAccessTitle": "Individual access",
+        "ownershipTitle": "Ownership"
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"

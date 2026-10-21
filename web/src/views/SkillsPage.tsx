@@ -35,6 +35,7 @@ import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
@@ -66,6 +67,7 @@ export default function SkillsPage() {
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
+  const [sharingSkillId, setSharingSkillId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -453,6 +455,7 @@ export default function SkillsPage() {
                           !item.enabled && enabledItemByName.has(item.name)
                         }
                         onEdit={handleEdit}
+                        onShare={(skill) => setSharingSkillId(skill.id)}
                         onDelete={setDeleteTarget}
                         onClick={setPreviewTarget}
                         onEnabledChange={(skill, enabled) =>
@@ -474,6 +477,18 @@ export default function SkillsPage() {
           </>
         )}
       </SettingsLayouts.Body>
+
+      {sharingSkillId && (
+        <ShareSkillModal
+          mode="edit"
+          skillId={sharingSkillId}
+          open={sharingSkillId !== null}
+          onClose={() => setSharingSkillId(null)}
+          onSaved={() => {
+            void refresh();
+          }}
+        />
+      )}
 
       <CreateSkillModal
         open={createOpen}

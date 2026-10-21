@@ -11896,6 +11896,9 @@
         "personal": {
           "label": "개인"
         },
+        "required": {
+          "tooltip": "조직 관리자가 이 스킬을 필수로 지정했습니다."
+        },
         "unavailable": {
           "label": "사용 불가 - 클릭하여 자세히 보기"
         }
@@ -16754,21 +16757,11 @@
         "title": "스킬 사용 불가"
       },
       "management": {
-        "description": "이 스킬을 사용할 수 있는 사람을 관리하세요.",
-        "externalApp": {
-          "manage": {
-            "label": "앱 설정에서 관리"
-          },
-          "readyDescription": "이 스킬은 앱 “{appName}”을 사용합니다.",
-          "title": "외부 앱"
-        },
         "sharing": {
           "edit": {
             "label": "공유 편집"
-          },
-          "title": "공유"
-        },
-        "title": "관리"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "저장하기 전에 설명을 추가하세요.",
@@ -16778,21 +16771,6 @@
         "noPermission": "이 스킬의 세부 정보를 편집할 권한이 없습니다.",
         "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "조직의 모든 구성원이 이 스킬을 사용하고 편집할 수 있습니다.",
-          "title": "조직",
-          "viewerDescription": "조직의 모든 구성원이 이 스킬을 사용할 수 있습니다."
-        },
-        "personal": {
-          "description": "나만 이 스킬을 사용할 수 있습니다.",
-          "title": "개인"
-        },
-        "shares": {
-          "description": "선택한 사용자와 그룹만 이 스킬을 사용할 수 있습니다.",
-          "title": "{count, plural, one {공유 #건} other {공유 #건}}"
-        }
       },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
@@ -16973,7 +16951,6 @@
         },
         "externalAppNotice": "이 스킬이 “{appName}” 앱과 연결되어 있는 동안에는 조직 전체 뷰어 권한이 필요합니다.",
         "header": {
-          "title": "*{name}* 공유",
           "transferTitle": "*{name}* 이전"
         },
         "loading": {
@@ -16985,7 +16962,9 @@
         },
         "ownerLabel": "소유자",
         "permissionMenu": {
-          "ariaLabel": "{name}의 접근 권한 변경"
+          "ariaLabel": "{name}의 접근 권한 변경",
+          "canUse": "사용 가능",
+          "canEdit": "편집 가능"
         },
         "saveButton": {
           "label": "저장"
@@ -17007,7 +16986,23 @@
         },
         "transferredToast": {
           "message": "소유권을 이전했습니다."
-        }
+        },
+        "installation": {
+          "title": "설치",
+          "available": "설치 가능",
+          "default": "기본 설치",
+          "required": "필수",
+          "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
+          "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
+          "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
+          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
+        },
+        "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
+        "accessTitle": "액세스할 수 있는 사용자",
+        "peopleTitle": "액세스 권한이 있는 사용자",
+        "manageIndividualAccess": "개별 액세스 관리",
+        "individualAccessTitle": "개별 액세스",
+        "ownershipTitle": "소유권"
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
