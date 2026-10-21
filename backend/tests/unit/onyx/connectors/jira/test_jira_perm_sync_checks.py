@@ -574,6 +574,45 @@ def test_sampled_checks_skip_when_every_project_was_read(check_id: str) -> None:
 
 
 @pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_leave_out_an_unreadable_later_project(check_id: str) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway, {"OPEN": _OPEN_SCHEME, "HIDDEN": {}, "ROLE": _ROLE_SCHEME}
+    )
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(403),
+        _ROLE_SCHEME,
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.PASSED, result
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_a_project_cannot_be_read(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "HIDDEN": {}})
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(403),
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith(
+        "Checked 1 of 2 projects (1 more could not be read)"
+    )
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
 def test_sampled_checks_skip_an_open_configured_project(check_id: str) -> None:
     gateway = _gateway()
     gateway.list_projects.return_value = [{"key": "OTHER"}]

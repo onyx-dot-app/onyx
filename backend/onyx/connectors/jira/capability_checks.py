@@ -76,6 +76,9 @@ from onyx.connectors.jira.utils import (
     get_issue_field,
 )
 from onyx.connectors.source_operations import SourceOperations
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
 _TIMEOUT_TEXT = CheckRowText(
@@ -1087,18 +1090,30 @@ def _check_sampled_projects(
     """Runs ``check_project`` on the probe projects in order and returns the
     result of the first that has something to test. ``check_project`` raises
     ``NothingToCheckError`` for a project with nothing to test. When no project
-    has anything, the check skips only if the probe read the full scope."""
+    has anything, the check skips only if it read the full scope. A later
+    project whose scheme Onyx cannot read is left out, not failed."""
     sample, scheme = _read_scheme_for_dependent_check(context, config)
     skipped: list[NothingToCheckError] = []
+    unreadable: int = 0
     for index, project_key in enumerate(sample.project_keys):
         if index:
-            scheme = _read_permission_scheme(context, config, project_key)
+            try:
+                scheme = _read_permission_scheme(context, config, project_key)
+            except (ConnectorValidationError, UnexpectedValidationError) as e:
+                logger.warning(
+                    "Jira check skipped project %s: cannot read its permission "
+                    "scheme: %s",
+                    project_key,
+                    e,
+                )
+                unreadable += 1
+                continue
         try:
             return check_project(project_key, scheme)
         except NothingToCheckError as e:
             skipped.append(e)
-    read: int = len(sample.project_keys)
-    if sample.covers_scope:
+    read: int = len(sample.project_keys) - unreadable
+    if sample.covers_scope and not unreadable:
         if read == 1:
             raise skipped[0]
         raise NothingToCheckError(
@@ -1111,6 +1126,8 @@ def _check_sampled_projects(
         if sample.total is not None
         else f"Checked {read} projects, and the JQL query matches more"
     )
+    if unreadable:
+        checked += f" ({unreadable} more could not be read)"
     raise InconclusiveValidationError(
         f"{checked}. None of them {missing}, so Onyx cannot verify the rest.",
         summary=incomplete_summary,
