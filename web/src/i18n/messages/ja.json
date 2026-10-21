@@ -1249,6 +1249,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "言語モデルでチャット設定を管理",
+      "decisionModel": {
+        "title": "判断モデル",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
+        "clear": "解除",
+        "notConfigured": "未設定",
+        "saved": "判断モデルを更新しました",
+        "saveFailed": "判断モデルを更新できませんでした"
+      },
+      "header": {
+        "title": "判断モデル",
+        "description": "判断モデルのプロバイダーを管理し、必要に応じてモデルを選択します。"
+      },
+      "providers": {
+        "title": "プロバイダー",
+        "description": "プロバイダーを接続するか、判断モデルを管理します。",
+        "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
+        "edit": "設定",
+        "connect": "接続"
+      },
+      "loadFailed": "判断モデルを読み込めませんでした。",
+      "retry": "再試行",
+      "saveFailed": "接続を保存できませんでした。",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7679,10 +7707,16 @@
             "label": "モデルをもっと見る"
           },
           "refetch": {
+            "label": "モデルを更新",
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
             "defaultLabel": "デフォルトモデル",
+            "decisionTag": {
+              "label": "判断",
+              "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
+              "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
+            },
             "renameButton": {
               "tooltip": "名前を変更"
             },
@@ -16433,6 +16467,9 @@
         },
         "languageModels": {
           "label": "言語モデル"
+        },
+        "decisionModels": {
+          "label": "判断モデル"
         },
         "llmGateway": {
           "label": "LLM ゲートウェイ"

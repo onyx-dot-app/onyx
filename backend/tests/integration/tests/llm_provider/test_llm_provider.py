@@ -13,6 +13,7 @@ from onyx.llm.model_capabilities import (
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
+from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
@@ -75,6 +76,8 @@ def assert_response_is_equivalent(
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
+            "supports_chat": model_supports_chat(provider_name, req.name),
+            "supports_decisions": model_supports_decisions(provider_name, req.name),
             "supports_image_input": catalog_model_supports_image_input(
                 req.name, provider_name
             ),

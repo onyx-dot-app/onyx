@@ -387,6 +387,10 @@ comment reads `# No longer used`. See §9.
 
 ## 5. Contracts and invariants
 
+Contextual Retrieval requires a model with the CHAT capability. The search-settings
+API and contextual default setter reject decision-only model configurations before
+saving them. See [[llm-providers]] for the independent decision-model selection.
+
 1. **A write must target the index of the generation it belongs to.** Docprocessing
    passes the attempt's own `SearchSettings` to `get_default_document_index(..., None)`.
    `OpenSearchIndexPair.index` writes to the primary only, so a caller that passes the

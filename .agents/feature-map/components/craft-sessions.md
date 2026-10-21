@@ -640,6 +640,10 @@ send_message / reconcile_session_llm_config     session/manager.py
                  → first visible model
 ```
 
+Every candidate must support chat. Decision-only models cannot become a
+session selection, configured default, or automatic fallback. Models that
+support both chat and decisions remain eligible.
+
 Priority, per `llm_config.py:_select_gateway_default`: (1) the session's own
 persisted `agent_provider`/`agent_model`, if still visible and accessible;
 (2) the admin's Craft default (`fetch_default_model(..., LLMModelFlowType.CRAFT)`,

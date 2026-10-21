@@ -14,6 +14,7 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
+  type DefaultModel,
   LLMProviderName,
   type ModelConfiguration,
   type OllamaModelResponse,
@@ -141,6 +142,22 @@ export async function deleteDefaultChatNamingModel(): Promise<void> {
     method: "DELETE",
   });
 
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function saveDecisionModel(
+  model: DefaultModel | null
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/decision-model", {
+    method: model ? "POST" : "DELETE",
+    ...(model && {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(model),
+    }),
+  });
   if (!response.ok) {
     const errorData: ErrorResponseBody = await response.json();
     throw new Error(errorData.detail);
@@ -339,6 +356,33 @@ export const fetchOllamaModels = async (
  * Fetches OpenRouter models directly without any form state dependencies.
  * Uses snake_case params to match API structure.
  */
+export async function fetchTypeSafeModels(params: {
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}): Promise<ModelConfiguration[]> {
+  const response = await fetch("/api/admin/llm/typesafe/available-models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: params.api_key,
+      provider_id: params.provider_id,
+    }),
+    signal: params.signal,
+  });
+  if (!response.ok) {
+    const error: ErrorResponseBody = await response.json();
+    throw new Error(error.detail || error.message || response.statusText);
+  }
+  const models: OpenRouterModelResponse[] = await response.json();
+  return models.map((model) => ({
+    ...model,
+    is_visible: true,
+    supports_reasoning: false,
+    effectiveDisplayName: model.display_name || model.name,
+  }));
+}
+
 export const fetchOpenRouterModels = async (
   params: OpenRouterFetchParams
 ): Promise<{ models: ModelConfiguration[]; error?: string }> => {
@@ -387,6 +431,8 @@ export const fetchOpenRouterModels = async (
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
       is_router: modelData.is_router,
+      supports_chat: modelData.supports_chat,
+      supports_decisions: modelData.supports_decisions,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 

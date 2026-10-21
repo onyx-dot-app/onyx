@@ -35,6 +35,13 @@ test("omits Plugins without action management access", () => {
   expect(links).toEqual(["/admin/agents"]);
 });
 
+test("shows Decision Models to an LLM manager", () => {
+  const links = buildItems([Permission.MANAGE_LLMS], flags, null).map(
+    (item) => item.link
+  );
+  expect(links).toContain("/admin/decision-models");
+});
+
 test("full admins see the canonical link and no legacy action links", () => {
   const actionLinks = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],

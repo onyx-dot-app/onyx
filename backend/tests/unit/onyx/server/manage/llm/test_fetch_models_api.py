@@ -438,10 +438,15 @@ class TestGetOpenRouterAvailableModels:
         mock_session = MagicMock()
         mock_provider = MagicMock()
         mock_provider.id = 1
+        mock_provider.provider = "openrouter"
         mock_provider.model_configurations = []
 
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
@@ -489,10 +494,15 @@ class TestGetOpenRouterAvailableModels:
 
         mock_provider = MagicMock()
         mock_provider.id = 1
+        mock_provider.provider = "openrouter"
         mock_provider.model_configurations = [existing_model]
 
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
             patch(
                 "onyx.db.llm.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
