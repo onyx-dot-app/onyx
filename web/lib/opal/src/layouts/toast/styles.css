@@ -11,10 +11,23 @@
   flex-direction: column;
 }
 
-/* The open pile lists every toast; past this height the stack scrolls. */
+/* The open pile lists every toast; past this height the stack scrolls. A
+   scroll box clips, so it carries room for the cards' shadows on every side
+   (taken back by a negative margin, so nothing moves), and hides sideways
+   overflow, where a leaving toast slides off. The list scrolls by wheel and
+   touch without showing bars. */
 .opal-toast-stack[data-open] {
+  width: calc(100% + 2rem);
   max-height: 70vh;
+  overflow-x: hidden;
   overflow-y: auto;
+  margin: -0.75rem -1rem;
+  padding: 0.75rem 1rem;
+  scrollbar-width: none;
+}
+
+.opal-toast-stack[data-open]::-webkit-scrollbar {
+  display: none;
 }
 
 /* The lift matches a pinned StickyBox: a drop-shadow follows the card's
