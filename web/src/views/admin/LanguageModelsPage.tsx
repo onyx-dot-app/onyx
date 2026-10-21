@@ -619,9 +619,7 @@ export default function LanguageModelsPage() {
             <Section alignItems="stretch">
               <InputHorizontal
                 title={t("defaultModel.title")}
-                description={t("defaultModel.description", {
-                  appName: settings.appName,
-                })}
+                description={t("defaultModel.description")}
                 center
                 withLabel
               >

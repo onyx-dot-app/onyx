@@ -7427,7 +7427,7 @@
         "title": "暂时无法新增 LLM 配置。"
       },
       "defaultModel": {
-        "description": "{appName} 将在您的对话中默认使用此模型。",
+        "description": "默认用于新会话。",
         "title": "默认模型"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "允许用户在对话的模型选择器中调整模型回答前的推理程度。",
+        "description": "允许用户按会话覆盖模型的默认推理级别。",
         "title": "推理控制"
       },
       "temperature": {
-        "description": "允许用户在对话的模型选择器中调整模型回复的温度（创造性）。",
+        "description": "允许用户按会话覆盖模型的默认温度。",
         "title": "温度控制"
       }
     },

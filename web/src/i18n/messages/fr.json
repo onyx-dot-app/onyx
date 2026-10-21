@@ -7427,7 +7427,7 @@
         "title": "La configuration de nouveaux LLM est temporairement indisponible."
       },
       "defaultModel": {
-        "description": "Ce modèle sera utilisé par défaut par {appName} dans vos discussions.",
+        "description": "Utilisé par défaut pour les nouvelles sessions.",
         "title": "Modèle par défaut"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "Permettez aux utilisateurs d'ajuster le niveau de raisonnement du modèle avant sa réponse, depuis le sélecteur de modèle dans la discussion.",
+        "description": "Permettre aux utilisateurs de remplacer le niveau de raisonnement par défaut du modèle pour chaque session.",
         "title": "Contrôle du raisonnement"
       },
       "temperature": {
-        "description": "Permettez aux utilisateurs d'ajuster la température (créativité) des réponses du modèle depuis le sélecteur de modèle dans la discussion.",
+        "description": "Permettre aux utilisateurs de remplacer la température par défaut du modèle pour chaque session.",
         "title": "Contrôle de la température"
       }
     },

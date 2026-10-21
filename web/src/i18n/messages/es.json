@@ -7427,7 +7427,7 @@
         "title": "La configuración de nuevos LLM no está disponible temporalmente."
       },
       "defaultModel": {
-        "description": "{appName} usará este modelo de forma predeterminada en tus chats.",
+        "description": "Se usa de forma predeterminada en las sesiones nuevas.",
         "title": "Modelo predeterminado"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "Permite que los usuarios ajusten cuánto razona el modelo antes de responder, desde el selector de modelos del chat.",
+        "description": "Permite a los usuarios anular el nivel de razonamiento predeterminado del modelo en cada sesión.",
         "title": "Control del razonamiento"
       },
       "temperature": {
-        "description": "Permite que los usuarios ajusten la temperatura (creatividad) de las respuestas del modelo desde el selector de modelos del chat.",
+        "description": "Permite a los usuarios anular la temperatura predeterminada del modelo en cada sesión.",
         "title": "Control de la temperatura"
       }
     },

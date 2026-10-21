@@ -7427,7 +7427,7 @@
         "title": "New LLM configuration temporarily unavailable."
       },
       "defaultModel": {
-        "description": "This model will be used by {appName} by default in your chats.",
+        "description": "Used for new sessions by default.",
         "title": "Default Model"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "Let users adjust how much reasoning the model performs before answering, from the model picker in chat.",
+        "description": "Allow users to override the default model reasoning level per session.",
         "title": "Reasoning Control"
       },
       "temperature": {
-        "description": "Let users adjust the temperature (creativity) of model responses from the model picker in chat.",
+        "description": "Allow users to override the default model temperature per session.",
         "title": "Temperature Control"
       }
     },

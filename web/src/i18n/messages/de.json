@@ -7427,7 +7427,7 @@
         "title": "Neue LLM-Konfiguration vorübergehend nicht verfügbar."
       },
       "defaultModel": {
-        "description": "Dieses Modell wird von {appName} standardmäßig in Ihren Chats verwendet.",
+        "description": "Wird standardmäßig für neue Sitzungen verwendet.",
         "title": "Standardmodell"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "Lassen Sie Benutzer über die Modellauswahl im Chat anpassen, wie viel Reasoning das Modell vor der Antwort ausführt.",
+        "description": "Nutzern erlauben, die Standard-Reasoning-Stufe des Modells pro Sitzung zu überschreiben.",
         "title": "Reasoning-Steuerung"
       },
       "temperature": {
-        "description": "Lassen Sie Benutzer die Temperatur (Kreativität) der Modellantworten über die Modellauswahl im Chat anpassen.",
+        "description": "Nutzern erlauben, die Standardtemperatur des Modells pro Sitzung zu überschreiben.",
         "title": "Temperatursteuerung"
       }
     },

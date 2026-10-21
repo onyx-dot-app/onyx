@@ -7427,7 +7427,7 @@
         "title": "새 LLM 구성을 일시적으로 사용할 수 없습니다."
       },
       "defaultModel": {
-        "description": "{appName}가 채팅에서 이 모델을 기본으로 사용합니다.",
+        "description": "새 세션에 기본으로 사용됩니다.",
         "title": "기본 모델"
       },
       "deleteModal": {
@@ -7968,11 +7968,11 @@
         }
       },
       "reasoning": {
-        "description": "채팅의 모델 선택기에서 모델이 답변 전에 수행할 추론의 양을 사용자가 조절할 수 있게 합니다.",
+        "description": "사용자가 세션마다 모델의 기본 추론 수준을 재정의할 수 있도록 합니다.",
         "title": "추론 제어"
       },
       "temperature": {
-        "description": "채팅의 모델 선택기에서 모델 응답의 temperature(창의성)를 사용자가 조절할 수 있게 합니다.",
+        "description": "사용자가 세션마다 모델의 기본 온도를 재정의할 수 있도록 합니다.",
         "title": "Temperature 제어"
       }
     },
