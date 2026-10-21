@@ -13,10 +13,13 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
 from onyx.natural_language_processing.search_nlp_models import (
+    _VERTEX_BATCH_TOKEN_BUDGET,
+    _VERTEX_BYTES_PER_TOKEN,
     CloudEmbedding,
     EmbeddingModel,
     EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
+    _batch_texts_for_vertex,
     clean_model_name,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
@@ -459,6 +462,206 @@ async def test_cloud_embedding_retries_on_vertex_429() -> None:
         f"but the provider was called {call_count} time(s)"
     )
     assert result == [[0.1, 0.2, 0.3]]
+
+
+# ------------------------------------------------------------------------------
+# Vertex per-request token budget
+#
+# Vertex caps a request on the SUM of tokens across every input (20k), not on
+# the number of inputs. auto_truncate only clamps each input on its own, so a
+# batch of legally-sized chunks can still be rejected outright.
+# ------------------------------------------------------------------------------
+
+# Verbatim from a production indexing failure against text-embedding-005.
+_VERTEX_TOKEN_LIMIT_MESSAGE = (
+    "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Unable to "
+    "submit request because the input token count is 26720 but the model "
+    "supports up to 20000. Reduce the input token count and try again.', "
+    "'status': 'INVALID_ARGUMENT'}}"
+)
+
+# An English chunk at DOC_EMBEDDING_CONTEXT_SIZE: ~4 bytes per token.
+_ENGLISH_CHUNK = "word " * 512
+# A CJK chunk of the same token count: ~3 bytes per character, ~1 token each.
+_CJK_CHUNK = "\u6587" * 512
+
+
+def _real_token_count(text: str) -> int:
+    """What Vertex would actually charge, for the fixtures above."""
+    if text is _CJK_CHUNK:
+        return 512
+    return len(text.split())
+
+
+class TestVertexBatchTokenBudget:
+    def test_fifty_full_chunks_no_longer_overflow_the_request_cap(self) -> None:
+        """The regression: 50 x 512-token chunks is ~25k tokens, over the 20k cap."""
+        texts = [_ENGLISH_CHUNK] * 50
+
+        batches = _batch_texts_for_vertex(texts, max_inputs=50)
+
+        assert len(batches) > 1, "50 full chunks must not go out as one request"
+        for batch in batches:
+            real_tokens = sum(_real_token_count(text) for text in batch)
+            assert real_tokens < 20_000
+
+    def test_cjk_chunks_stay_under_the_cap(self) -> None:
+        """CJK costs ~1 token per 3 bytes, the worst case for the estimate."""
+        batches = _batch_texts_for_vertex([_CJK_CHUNK] * 50, max_inputs=50)
+
+        for batch in batches:
+            assert sum(_real_token_count(text) for text in batch) < 20_000
+
+    def test_input_count_still_caps_small_texts(self) -> None:
+        """Short texts never reach the token budget, so max_inputs governs."""
+        batches = _batch_texts_for_vertex(["hi"] * 130, max_inputs=50)
+
+        assert [len(batch) for batch in batches] == [50, 50, 30]
+
+    def test_text_over_the_whole_budget_goes_out_alone(self) -> None:
+        """auto_truncate clamps it server-side; it must not drag others down."""
+        oversized = "x" * (_VERTEX_BATCH_TOKEN_BUDGET * _VERTEX_BYTES_PER_TOKEN + 1)
+
+        batches = _batch_texts_for_vertex(["a", oversized, "b"], max_inputs=50)
+
+        assert batches == [["a"], [oversized], ["b"]]
+
+    def test_every_text_is_kept_exactly_once_and_in_order(self) -> None:
+        texts = [f"text_{i}" * (i % 7 + 1) for i in range(200)]
+
+        batches = _batch_texts_for_vertex(texts, max_inputs=50)
+
+        assert [text for batch in batches for text in batch] == texts
+
+    def test_empty_input_produces_no_batches(self) -> None:
+        assert _batch_texts_for_vertex([], max_inputs=50) == []
+
+
+def _vertex_client_rejecting_batches_over(max_inputs: int) -> MagicMock:
+    """A genai client that enforces a cap on inputs per request."""
+    from google.genai.errors import ClientError
+
+    client = MagicMock()
+
+    async def embed_content(**kwargs: Any) -> MagicMock:
+        contents = kwargs["contents"]
+        if len(contents) > max_inputs:
+            raise ClientError(400, {"message": _VERTEX_TOKEN_LIMIT_MESSAGE})
+        return _build_google_embed_response([[float(len(contents))]] * len(contents))
+
+    client.aio.models.embed_content = AsyncMock(side_effect=embed_content)
+    client.aio.aclose = AsyncMock()
+    return client
+
+
+@pytest.mark.asyncio
+async def test_vertex_embed_splits_a_batch_the_model_still_rejects() -> None:
+    """The byte estimate can under-count, so the overflow error halves the batch."""
+    client = _vertex_client_rejecting_batches_over(2)
+
+    with (
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(spec=Credentials),
+        ),
+        patch("google.genai.Client", return_value=client),
+    ):
+        embedding = CloudEmbedding(
+            '{"project_id":"test-project"}', EmbeddingProvider.GOOGLE
+        )
+        try:
+            result = await embedding._embed_vertex(
+                [f"text_{i}" for i in range(8)],
+                "text-embedding-005",
+                "RETRIEVAL_DOCUMENT",
+                None,
+            )
+        finally:
+            await embedding.aclose()
+
+    assert len(result) == 8, "every input must come back, once, after splitting"
+    sent = [
+        len(call.kwargs["contents"])
+        for call in client.aio.models.embed_content.await_args_list
+    ]
+    assert sent[0] == 8, "the budgeted batch is tried first"
+    accepted = [size for size in sent if size <= 2]
+    assert sum(accepted) == 8, "halving must continue until every input is accepted"
+
+
+@pytest.mark.asyncio
+async def test_vertex_embed_preserves_order_across_splits() -> None:
+    """Halving must not reorder embeddings relative to their inputs."""
+    from google.genai.errors import ClientError
+
+    client = MagicMock()
+
+    async def embed_content(**kwargs: Any) -> MagicMock:
+        contents = kwargs["contents"]
+        if len(contents) > 1:
+            raise ClientError(400, {"message": _VERTEX_TOKEN_LIMIT_MESSAGE})
+        text = contents[0].parts[0].text
+        return _build_google_embed_response([_embedding_for_text(text)])
+
+    client.aio.models.embed_content = AsyncMock(side_effect=embed_content)
+    client.aio.aclose = AsyncMock()
+
+    with (
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(spec=Credentials),
+        ),
+        patch("google.genai.Client", return_value=client),
+    ):
+        embedding = CloudEmbedding(
+            '{"project_id":"test-project"}', EmbeddingProvider.GOOGLE
+        )
+        try:
+            result = await embedding._embed_vertex(
+                [_text_for_idx(i) for i in range(7)],
+                "text-embedding-005",
+                "RETRIEVAL_DOCUMENT",
+                None,
+            )
+        finally:
+            await embedding.aclose()
+
+    assert result == [_embedding_for_idx(i) for i in range(7)]
+
+
+@pytest.mark.asyncio
+async def test_vertex_embed_does_not_split_on_unrelated_errors() -> None:
+    """Only the token-count rejection is retried; auth errors fail fast."""
+    from google.genai.errors import ClientError
+
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(
+        side_effect=ClientError(403, {"message": "403 PERMISSION_DENIED."})
+    )
+    client.aio.aclose = AsyncMock()
+
+    with (
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(spec=Credentials),
+        ),
+        patch("google.genai.Client", return_value=client),
+    ):
+        embedding = CloudEmbedding(
+            '{"project_id":"test-project"}', EmbeddingProvider.GOOGLE
+        )
+        try:
+            with pytest.raises(ClientError):
+                await embedding._embed_vertex(
+                    [f"text_{i}" for i in range(4)],
+                    "text-embedding-005",
+                    "RETRIEVAL_DOCUMENT",
+                    None,
+                )
+        finally:
+            await embedding.aclose()
+
+    assert client.aio.models.embed_content.await_count == 1, "must not retry a 403"
 
 
 # ------------------------------------------------------------------------------

@@ -105,8 +105,9 @@ API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", 
 MODEL_SERVER_CONNECT_TIMEOUT = int(os.environ.get("MODEL_SERVER_CONNECT_TIMEOUT", "30"))
 MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600"))
 
-# Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
-# NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
+# Upper bound on inputs per VertexAI embedding request. The request also has a
+# total-token cap, which the embedding code budgets for separately, so a batch
+# may hold fewer inputs than this.
 VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
     os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
 )
