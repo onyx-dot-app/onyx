@@ -166,7 +166,7 @@ references the `(connector_id, credential_id)` pair directly.
 | `name` | str | |
 | `status` | `ConnectorCredentialPairStatus` | `SCHEDULED`, `INITIAL_INDEXING`, `ACTIVE`, `PAUSED`, `DELETING`, `INVALID`. See §5. |
 | `access_type` | `AccessType` | `public` / `private` / `sync` / `sync_restricted`. `sync_restricted` is perm sync narrowed to members of the pair's data-access groups. See §5. |
-| `in_repeated_error_state` | bool | Orthogonal to `status`: a cc-pair can be `ACTIVE` and still be erroring on every attempt. |
+| `in_repeated_error_state` | bool | Orthogonal to `status`: a cc-pair can be `ACTIVE` and still be erroring on every attempt. The beat sets it after `NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE` failed attempts in a row, or one for a connector without `refresh_freq`, and alerts admins. A success clears it, and so does resolving the pair's latest failed attempt, which also clears the alert but leaves a Cloud auto-pause in place. A resolved failure breaks the streak. |
 | `auto_sync_options` | JSONB, nullable | Source-specific config for [[permission-sync]] (e.g. Google Drive customer id / domain). |
 | `last_time_perm_sync`, `last_time_external_group_sync`, `last_time_hierarchy_fetch`, `last_successful_index_time`, `last_pruned` | datetime, nullable | Watermarks each background job reads and writes. |
 | `total_docs_indexed` | int | |

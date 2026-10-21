@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT, DocumentSource
+from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.connector_edit_requests import get_reindex_request_backoff
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
+    CCPairRunKind,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
@@ -18,7 +20,7 @@ from onyx.db.index_attempt import (
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
 )
-from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.models import Connector, ConnectorCredentialPair, SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -147,29 +149,57 @@ class IndexingCallback(IndexingHeartbeatInterface):
 # handled by validate_active_indexing_attempts in the main indexing tasks module.
 
 
+def failures_before_repeated_error_state(connector: Connector) -> int:
+    """How many failed attempts in a row flag a pair. A connector without a
+    refresh_freq does not retry on its own, so one failure is enough."""
+    if connector.refresh_freq is None:
+        return 1
+    return NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+
+
+def repeated_error_alert(
+    connector_name: str, source: str, failures_needed: int
+) -> tuple[str, str]:
+    """The flagged connector alert's title and description."""
+    if failures_needed == 1:
+        return (
+            f"Connector '{connector_name}' has failed",
+            f"The {source} connector failed and has been flagged. "
+            "Check its indexing history and credentials.",
+        )
+    return (
+        f"Connector '{connector_name}' has entered repeated error state",
+        f"The {source} connector has failed repeatedly and has been flagged. "
+        "Check its indexing history and credentials.",
+    )
+
+
 def is_in_repeated_error_state(
     cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
 ) -> bool:
-    """Checks if the cc pair / search setting combination is in a repeated error state."""
-    # if the connector doesn't have a refresh_freq, a single failed attempt is enough
-    number_of_failed_attempts_in_a_row_needed = (
-        NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
-        if cc_pair.connector.refresh_freq is not None
-        else 1
-    )
-
+    """Whether the pair's latest attempts under the search settings all failed,
+    enough of them in a row to flag it. A failure an admin resolved breaks the
+    streak, so resolving the latest one keeps the beat from flagging it again."""
+    failures_needed = failures_before_repeated_error_state(cc_pair.connector)
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair.id,
         search_settings_id=search_settings_id,
-        limit=number_of_failed_attempts_in_a_row_needed,
+        limit=failures_needed,
         db_session=db_session,
     )
-    return len(
-        most_recent_index_attempts
-    ) >= number_of_failed_attempts_in_a_row_needed and all(
-        attempt.status == IndexingStatus.FAILED
+    if len(most_recent_index_attempts) < failures_needed or any(
+        attempt.status != IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
+    ):
+        return False
+    resolved = get_resolution_times(
+        db_session,
+        [
+            (CCPairRunKind.INDEXING, attempt.id)
+            for attempt in most_recent_index_attempts
+        ],
     )
+    return not resolved
 
 
 def _is_reindex_request_due(

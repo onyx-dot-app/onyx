@@ -31,7 +31,10 @@ from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
 from sqlalchemy.sql.dml import ReturningInsert
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.cc_pair_run_resolution import run_is_resolved
+from onyx.db.cc_pair_run_resolution import (
+    clear_resolved_repeated_error_states__no_commit,
+    run_is_resolved,
+)
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
     CapabilityCheckRunStatus,
@@ -776,13 +779,15 @@ def resolve_matching_runs__no_commit(
 ) -> dict[int, int]:
     """Marks every run of ``kinds`` the filters keep resolved, one INSERT from
     SELECT per filter and kind, and returns how many it marked per pair. A run
-    resolved before keeps its first resolution and is not counted."""
+    resolved before keeps its first resolution and is not counted. Clears the
+    repeated error flag of a pair whose latest failure it resolves."""
     resolved: Counter[int] = Counter()
     for run_filter in run_filters:
         settled = _settled(run_filter)
         for kind in kinds:
             stmt = _resolution_insert(kind, settled, user_id)
             resolved.update(db_session.scalars(stmt).all())
+    clear_resolved_repeated_error_states__no_commit(db_session, resolved.keys())
     return dict(resolved)
 
 

@@ -36,7 +36,9 @@ from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (  
 )
 from onyx.background.celery.tasks.docprocessing.utils import (
     IndexingCallback,
+    failures_before_repeated_error_state,
     is_in_repeated_error_state,
+    repeated_error_alert,
     should_index,
 )
 from onyx.background.celery.tasks.models import DocProcessingContext
@@ -1263,20 +1265,23 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         or f"CC pair {cc_pair.id}"
                     )
                     source = cc_pair.connector.source.value
+                    failures_needed = failures_before_repeated_error_state(
+                        cc_pair.connector
+                    )
+                    alert_title, alert_description = repeated_error_alert(
+                        connector_name, source, failures_needed
+                    )
                     notify_admins_of_connector_alert(
                         db_session=db_session,
                         cc_pair_id=cc_pair.id,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
-                        title=f"Connector '{connector_name}' has entered repeated error state",
-                        description=(
-                            f"The {source} connector has failed repeatedly "
-                            f"and has been flagged. Check its indexing "
-                            f"history and credentials."
-                        ),
+                        title=alert_title,
+                        description=alert_description,
                     )
 
                     task_logger.error(
-                        f"Connector entered repeated error state: "
+                        f"Connector flagged in error state: "
+                        f"failed_attempts_in_a_row={failures_needed} "
                         f"cc_pair={cc_pair.id} "
                         f"connector={cc_pair.connector.name} "
                         f"source={source}"
