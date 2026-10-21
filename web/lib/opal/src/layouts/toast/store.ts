@@ -10,7 +10,11 @@ import type { IconFunctionComponent } from "@opal/types";
 
 export type ToastLevel = "success" | "error" | "warning" | "info" | "default";
 
-/** An icon button left of the close button. A click runs it and closes. */
+/**
+ * An icon button left of the close button. A click runs it and the toast
+ * stays: a retry that fails again replaces it in place. An action that should
+ * close the toast dismisses it in `onClick`.
+ */
 export interface ToastAction {
   icon: IconFunctionComponent;
   /** The button's tooltip and accessible name. */
@@ -238,8 +242,11 @@ export function useErrorToast(
     onRetryRef.current = retry?.onRetry;
   });
   const retryLabel = retry?.label;
+  const hasError = error != null && error !== false;
+  // Each error raises the toast. One already shown is replaced in place, so
+  // a retry that fails again leaves it standing rather than replaying it.
   useEffect(() => {
-    if (error == null || error === false) return;
+    if (!hasError) return;
     addToast({
       id,
       message,
@@ -254,8 +261,13 @@ export function useErrorToast(
               onClick: () => onRetryRef.current?.(),
             },
     });
+  }, [error, hasError, id, message, retryLabel]);
+  // Removed only when the error clears or the caller unmounts, never
+  // between two errors.
+  useEffect(() => {
+    if (!hasError) return;
     return () => removeToast(id);
-  }, [error, id, message, retryLabel]);
+  }, [hasError, id]);
 }
 
 export function useToast() {

@@ -117,10 +117,7 @@ function ToastCard({
                       size="md"
                       tooltip={action.label}
                       aria-label={action.label}
-                      onClick={() => {
-                        action.onClick();
-                        onClose(t.id);
-                      }}
+                      onClick={action.onClick}
                     />
                   )}
                   {truncated && (
