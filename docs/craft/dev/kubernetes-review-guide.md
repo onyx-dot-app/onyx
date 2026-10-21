@@ -117,7 +117,7 @@ Related files:
 
 - Live kind and Telepresence checks covered startup, intercept reuse, hot reload, readiness, doctor, and migrations.
 - Three Craft smoke tests covered sandbox provisioning, file upload/readback, and app previews through the frontend.
-- 76 Craft Helm tests, 25 workflow tests, Helm lint, type checks, and pre-commit checks passed locally.
+- 76 Craft Helm tests, 27 workflow tests, Helm lint, type checks, and pre-commit checks passed locally.
 - These smoke tests did not call a real LLM.
 - Image refresh updates future sandbox pods. Existing pods retain their images and callback settings.
 - Retain an existing callback URL override until affected sandboxes are safely removed or recreated.

@@ -39,7 +39,15 @@ Use `.env.k8s` only for personal overrides. Remove old service entries to follow
 Launch tasks never rewrite this file. Resolved secrets stay in process memory.
 
 The default cluster is `onyx-dev`; application services use `onyx`, and sandbox pods use `onyx-sandboxes`.
-Pass `CLUSTER_NAME=my-cluster NAMESPACE=onyx` to Make when selecting another local environment.
+For another environment, export its variables before running Make or standalone commands:
+
+```bash
+export CLUSTER_NAME=my-cluster
+export NAMESPACE=onyx
+make craft-up
+```
+
+Keep these exports in each terminal used for that environment.
 Use explicit `kubectl --context kind-<cluster>` arguments for inspection and recovery.
 
 Telepresence provides access to cluster services from local application processes.

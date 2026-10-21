@@ -38,13 +38,19 @@ class ImageInfo(TypedDict):
     Config: ImageConfig
 
 
-def run(*args: str, capture: bool = False, cwd: Path = ROOT) -> str:
-    """Run a development command and propagate failures."""
+def run(
+    *args: str,
+    capture: bool = False,
+    cwd: Path = ROOT,
+    timeout: float | None = 120,
+) -> str:
+    """Bound short commands; callers can allow longer builds, loads, and cleanup."""
     result = subprocess.run(
         args,
         cwd=cwd,
         check=True,
         text=True,
+        timeout=timeout,
         stdout=subprocess.PIPE if capture else None,
     )
     return result.stdout.strip() if capture else ""
@@ -64,6 +70,7 @@ def source_hash(context: str) -> str:
             context,
         ],
         cwd=ROOT,
+        timeout=120,
     ).split(b"\0")
     digest = hashlib.sha256()
     for name in sorted(set(paths) - {b""}):
@@ -87,7 +94,12 @@ def nodes(cluster: str) -> list[str]:
     return result
 
 
-def kube(args: argparse.Namespace, *command: str, capture: bool = False) -> str:
+def kube(
+    args: argparse.Namespace,
+    *command: str,
+    capture: bool = False,
+    timeout: float = 120,
+) -> str:
     """Run kubectl against the selected local cluster and namespace."""
     return run(
         "kubectl",
@@ -98,6 +110,7 @@ def kube(args: argparse.Namespace, *command: str, capture: bool = False) -> str:
         args.namespace,
         *command,
         capture=capture,
+        timeout=timeout,
     )
 
 
@@ -108,6 +121,7 @@ def inspect_image(image: str) -> ImageInfo | None:
         ["docker", "image", "inspect", image],
         capture_output=True,
         text=True,
+        timeout=120,
     )
     if result.returncode:
         if "No such image" in result.stderr or "No such object" in result.stderr:
@@ -152,10 +166,19 @@ def images(args: argparse.Namespace) -> int:
                 "-t",
                 image,
                 str(ROOT / context),
+                timeout=None,
             )
         else:
             print(f"Reusing {image}; no build needed")
-        run("kind", "load", "docker-image", image, "--name", args.cluster_name)
+        run(
+            "kind",
+            "load",
+            "docker-image",
+            image,
+            "--name",
+            args.cluster_name,
+            timeout=None,
+        )
         if args.load_only:
             continue
         if name == "backend":
@@ -209,6 +232,7 @@ def images(args: argparse.Namespace) -> int:
                     f"deployment/{deployment}",
                     "--timeout=180s",
                     "--request-timeout=200s",
+                    timeout=210,
                 )
         else:
             template = json.loads(
@@ -562,7 +586,7 @@ def clean(args: argparse.Namespace) -> None:
             flush=True,
         )
         if args.apply:
-            run("docker", "image", "rm", image)
+            run("docker", "image", "rm", image, timeout=None)
     if args.build_cache:
         print(
             "Build cache cleanup affects the selected Docker builder, across all projects.",
@@ -582,6 +606,7 @@ def clean(args: argparse.Namespace) -> None:
                 "until=168h",
                 "--keep-storage",
                 "10GB",
+                timeout=None,
             )
     print("Volumes, tagged images and kind runtime images are preserved.")
 
@@ -624,6 +649,7 @@ def pause_resume(args: argparse.Namespace) -> None:
             "--all",
             "--timeout=180s",
             "--request-timeout=200s",
+            timeout=210,
         )
         cluster_runtime(args).infrastructure_ready()
         cluster_runtime(args).connect()
@@ -681,6 +707,7 @@ def migrate(args: argparse.Namespace) -> None:
         cwd=ROOT / "backend",
         env=env,
         check=True,
+        timeout=120,
     )
     if args.operation == "upgrade":
         subprocess.run(
@@ -688,12 +715,14 @@ def migrate(args: argparse.Namespace) -> None:
             cwd=ROOT / "backend",
             env=env,
             check=True,
+            timeout=None,
         )
         subprocess.run(
             [str(binary), "-m", "alembic", "current"],
             cwd=ROOT / "backend",
             env=env,
             check=True,
+            timeout=120,
         )
 
 

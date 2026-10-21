@@ -800,7 +800,9 @@ Application readiness checks the real API readiness response through the fronten
 then checks the frontend HTML page. It does not verify worker readiness, login, or licensing.
 The intercept command reuses an existing intercept. A known stale-agent identity failure
 allows one targeted rollout and retry after command failures or timeouts; unrelated failures propagate.
+A failed log probe preserves the original intercept failure. Captured command errors show stderr, never configuration stdout.
 Migration upgrades detect this checkout's API launcher even when its relative script path outlives a directory change.
+Short probes have process timeouts. Builds, image loads, cleanup, and migration upgrades allow longer execution; rollout deadlines remain bounded.
 
 Doctor checks prerequisites and effective configuration without printing secret values.
 The local overlay selects the dev sandbox image with `IfNotPresent` for all containers.

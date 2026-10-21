@@ -238,11 +238,14 @@ class DevTests(unittest.TestCase):
                 "inspect_image",
                 return_value={"Config": {"Labels": {dev.SOURCE_LABEL: "old"}}},
             ),
-            patch.object(dev, "run", side_effect=run),
+            patch.object(dev, "run", side_effect=run) as commands,
         ):
             self.assertEqual(dev.images(options()), 0)
         build = next(call for call in calls if call[:2] == ("docker", "build"))
         self.assertIn(f"{dev.LABEL}=true", build)
+        for call in commands.call_args_list:
+            if call.args[:2] in (("docker", "build"), ("kind", "load")):
+                self.assertIsNone(call.kwargs["timeout"])
         command = next(call for call in calls if "patch" in call)
         self.assertIn("kind-test", command)
         self.assertIn("sandboxes", command)
@@ -263,6 +266,7 @@ class DevTests(unittest.TestCase):
             any(call.args[:2] == ("docker", "build") for call in run.call_args_list)
         )
         self.assertEqual(run.call_count, 1)
+        self.assertIsNone(run.call_args.kwargs["timeout"])
 
     def test_reuse_missing_image_fails_without_building(self) -> None:
         """Do not silently build when the caller requires an existing image."""
@@ -475,6 +479,8 @@ class DevTests(unittest.TestCase):
                 "onyx-pg-rw.onyx.svc.cluster.local",
             )
             self.assertIn("kind-test", connect.call_args.args)
+            self.assertEqual(migrate.call_args_list[0].kwargs["timeout"], 120)
+            self.assertIsNone(migrate.call_args_list[1].kwargs["timeout"])
 
 
 if __name__ == "__main__":

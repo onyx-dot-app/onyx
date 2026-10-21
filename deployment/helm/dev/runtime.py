@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -29,15 +30,23 @@ class Cluster:
 
     def command(self, *args: str, capture: bool = True, timeout: float = 30) -> str:
         """Run a bounded command, keeping captured configuration and secrets out of terminal output."""
-        result = subprocess.run(
-            args,
-            cwd=self.root,
-            check=True,
-            text=True,
-            timeout=timeout,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=subprocess.PIPE if capture else None,
-        )
+        try:
+            result = subprocess.run(
+                args,
+                cwd=self.root,
+                check=True,
+                text=True,
+                timeout=timeout,
+                stdout=subprocess.PIPE if capture else None,
+                stderr=subprocess.PIPE if capture else None,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if capture and exc.stderr:
+                message = exc.stderr
+                if isinstance(message, bytes):
+                    message = message.decode(errors="replace")
+                print(message.strip(), file=sys.stderr)
+            raise
         return result.stdout.strip() if capture else ""
 
     def kube(
@@ -383,16 +392,19 @@ class Cluster:
                 )
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 # Retry once only for the known stale-agent identity failure.
-                logs = self.kube(
-                    "logs",
-                    "-l",
-                    "app=api-server,app.kubernetes.io/instance=onyx",
-                    "-c",
-                    "traffic-agent",
-                    "--since=2m",
-                    "--tail=1",
-                    "--prefix=true",
-                )
+                try:
+                    logs = self.kube(
+                        "logs",
+                        "-l",
+                        "app=api-server,app.kubernetes.io/instance=onyx",
+                        "-c",
+                        "traffic-agent",
+                        "--since=2m",
+                        "--tail=1",
+                        "--prefix=true",
+                    )
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    logs = ""
                 if not re.search(
                     r'code = NotFound desc = Session "agent:|code = PermissionDenied desc = agent session .*bound to another workload identity',
                     logs,

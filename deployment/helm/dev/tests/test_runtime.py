@@ -18,6 +18,36 @@ from runtime import Cluster, application_ready  # noqa: E402
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_command_errors_report_stderr_without_disclosing_configuration(
+        self,
+    ) -> None:
+        """Retain actionable errors while captured configuration stays private."""
+        for failure in (
+            subprocess.CalledProcessError(
+                1, ["kubectl"], output="private-config", stderr="permission denied"
+            ),
+            subprocess.TimeoutExpired(
+                ["kubectl"], 30, output=b"private-config", stderr=b"request timed out"
+            ),
+        ):
+            output, errors = io.StringIO(), io.StringIO()
+            with (
+                self.subTest(failure=type(failure).__name__),
+                patch("runtime.subprocess.run", side_effect=failure),
+                contextlib.redirect_stdout(output),
+                contextlib.redirect_stderr(errors),
+            ):
+                with self.assertRaises(type(failure)) as raised:
+                    Cluster(Path.cwd()).command("kubectl")
+            self.assertIs(raised.exception, failure)
+            self.assertIn(
+                "permission denied"
+                if isinstance(failure, subprocess.CalledProcessError)
+                else "request timed out",
+                errors.getvalue(),
+            )
+            self.assertNotIn("private-config", output.getvalue() + errors.getvalue())
+
     def test_deployed_sources_and_local_overrides_keep_secrets_in_memory(self) -> None:
         """Match Kubernetes precedence without writing resolved credentials to local files."""
         workload = {
@@ -274,6 +304,29 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 Cluster(Path.cwd()).intercept()
         self.assertEqual(command.call_count, 2)
+
+    def test_failed_stale_agent_log_probe_preserves_the_intercept_failure(self) -> None:
+        """Do not mask intercept failures when the diagnostic container is unavailable."""
+        for probe_failure in (
+            subprocess.CalledProcessError(1, ["kubectl", "logs"]),
+            subprocess.TimeoutExpired(["kubectl", "logs"], 30),
+        ):
+            original = subprocess.TimeoutExpired(["telepresence", "intercept"], 150)
+            with (
+                self.subTest(probe=type(probe_failure).__name__),
+                patch.object(Cluster, "connect"),
+                patch.object(
+                    Cluster, "api_workload", return_value={"metadata": {"name": "api"}}
+                ),
+                patch.object(Cluster, "intercept_active", return_value=False),
+                patch.object(Cluster, "command", side_effect=original) as command,
+                patch.object(Cluster, "kube", side_effect=probe_failure) as kube,
+            ):
+                with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                    Cluster(Path.cwd()).intercept()
+                self.assertIs(raised.exception, original)
+                self.assertEqual(command.call_count, 1)
+                self.assertEqual(kube.call_count, 1)
 
     def test_migrations_reject_overrides_to_another_database(self) -> None:
         """Prevent personal overrides from redirecting migrations away from the selected database."""
