@@ -68,12 +68,13 @@ label a card for tests or analytics:
 <Card data-card>…</Card>
 ```
 
-A card owns how it looks, not what the surrounding app calls it — `data-*` is the
-app's namespace, and silently dropping it is worse than either forwarding or
-rejecting it. Only `data-*` is picked up. `className` and `style` stay out, so the
-card's appearance is still its own; behavioural props such as `onClick` are a
-deliberate API decision rather than something inherited by a rest spread (use
-`SelectCard` for an interactive card).
+Card forwards standard div attributes, DOM events, and accessibility attributes to
+its root in both modes. It merges `className` with its own classes. Inline `style`
+is not part of the public API; use the card's appearance props.
+
+This supports composition with `Interactive.Simple`, which supplies click handlers
+and hover classes. Callers must supply keyboard handlers, `role`, and `tabIndex`
+when they make a card interactive. Card does not add button behavior on its own.
 
 The card's own `data-color`, `data-border`, `data-shadow`, and
 `data-opal-status-border` are written after the forwarded attributes, so a caller
@@ -160,7 +161,7 @@ Because Card doesn't own the trigger, it also doesn't generate IDs or ARIA attri
 ## Complete prop reference
 
 ```ts
-type CardBaseProps = {
+type CardBaseProps = Omit<React.HTMLAttributes<HTMLDivElement>, "color" | "style"> & {
   padding?: Spacing;
   rounding?: Rounding;
   color?: CardColor;
