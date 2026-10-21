@@ -436,6 +436,9 @@ export function useLanguageModelsForCurrentAgent() {
  * or need to display admin-only metadata. **Do not use in user-facing UI**
  * — use `useLanguageModels` instead.
  *
+ * Pass `revalidateIfStale` on pages whose providers other pages can delete
+ * (Voice removes linked Zoom providers), so a cached list refetches on mount.
+ *
  * @returns
  * - `llmProviders`: Provider views carrying only each provider's first page
  *    of models (see `next_model_configuration_offset`), or `undefined` while
@@ -450,7 +453,9 @@ export function useLanguageModelsForCurrentAgent() {
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
-export function useAdminLanguageModels() {
+export function useAdminLanguageModels({
+  revalidateIfStale = false,
+}: { revalidateIfStale?: boolean } = {}) {
   const {
     data: raw,
     error,
@@ -460,7 +465,7 @@ export function useAdminLanguageModels() {
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
-      revalidateIfStale: false,
+      revalidateIfStale,
       dedupingInterval: 60000,
     }
   );

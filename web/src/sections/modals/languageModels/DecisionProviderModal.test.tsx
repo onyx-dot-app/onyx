@@ -74,6 +74,7 @@ it("edits only decision models and never assigns a chat default", async () => {
   );
 
   expect(await screen.findByText("OpenAI Decisions")).toBeInTheDocument();
+  expect(screen.queryByText(/Configure \*/)).not.toBeInTheDocument();
   expect(screen.queryByText("Chat Model")).not.toBeInTheDocument();
   expect(screen.queryByText("Auto-update models")).not.toBeInTheDocument();
   expect(

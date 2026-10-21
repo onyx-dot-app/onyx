@@ -181,7 +181,7 @@ function DecisionModelsContent() {
     llmProviders,
     error: providersError,
     refetch: refetchProviders,
-  } = useAdminLanguageModels();
+  } = useAdminLanguageModels({ revalidateIfStale: true });
 
   if (error || providersError) {
     return (

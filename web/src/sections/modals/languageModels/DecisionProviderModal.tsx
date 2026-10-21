@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Form, Formik, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
+import { markdown } from "@opal/utils";
 import { Button, Card, InputCheckbox, Modal, Text } from "@opal/components";
 import { InputDivider, InputHorizontal, Section, toast } from "@opal/layouts";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
@@ -116,9 +117,11 @@ function DecisionProviderFields({
             icon={icon}
             title={
               existingLlmProvider
-                ? t("setup.title.configure", {
-                    provider: existingLlmProvider.name ?? productName,
-                  })
+                ? markdown(
+                    t("setup.title.configure", {
+                      provider: existingLlmProvider.name ?? productName,
+                    })
+                  )
                 : t("setup.title.create", { product: productName })
             }
             description={tDecision("providers.description")}

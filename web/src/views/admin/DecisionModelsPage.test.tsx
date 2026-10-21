@@ -137,3 +137,24 @@ it("requires clearing the selected decision model before removing its provider",
     fetchSpy.mock.calls.every(([, init]) => init?.method !== "DELETE")
   ).toBe(true);
 });
+
+it("refetches a cached provider list that another page made stale", async () => {
+  mockApi();
+  render(<DecisionModelsPage />, {
+    swrConfig: {
+      provider: () =>
+        new Map([
+          [
+            SWR_KEYS.adminLlmProvidersPaged,
+            { data: { providers: [savedTypeSafe], default_text: null } },
+          ],
+        ]),
+    },
+  });
+  await waitFor(() =>
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(3)
+  );
+  expect(
+    screen.queryByRole("button", { name: "Configure" })
+  ).not.toBeInTheDocument();
+});
