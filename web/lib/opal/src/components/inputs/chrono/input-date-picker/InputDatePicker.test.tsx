@@ -25,6 +25,15 @@ describe("typing", () => {
     expect(fields.onChange).toHaveBeenCalledWith(new Date(2026, 9, 19));
   });
 
+  it("keeps the day when separators follow full parts", async () => {
+    const user = setupUser();
+    const fields = renderEmpty();
+    await user.click(fields.month);
+    await user.keyboard("10/19/2026{Enter}");
+    expect(fields.day).toHaveValue("19");
+    expect(fields.onChange).toHaveBeenCalledWith(new Date(2026, 9, 19));
+  });
+
   it("moves on when a separator follows a one-digit part", async () => {
     const user = setupUser();
     const fields = renderEmpty();

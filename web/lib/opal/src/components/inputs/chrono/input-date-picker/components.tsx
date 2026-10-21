@@ -219,6 +219,9 @@ function InputDatePicker({
         }
         return;
       }
+      // A separator in an empty segment does nothing, so typing 10/19/2026
+      // does not skip the day after 10 fills the month and moves focus on.
+      if (segments[field.part] === "") return;
 
       const before = raw.slice(0, separatorAt).replace(/\D/g, "");
       const moved = raw.slice(separatorAt + 1).replace(/\D/g, "");
