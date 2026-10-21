@@ -17,7 +17,9 @@ returns.
 
 from typing import Any, NoReturn
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -25,7 +27,6 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckOutput,
     CheckRowText,
-    CredentialCapability,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -47,7 +48,6 @@ from onyx.connectors.notion.source_operations import (
 )
 from onyx.connectors.source_operations import SourceOperations
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/notion"
 _ERROR_DETAIL_CHARS = 300
 # Keeps a row's line short when it names a page or database.
 _TITLE_CHARS = 24
@@ -64,19 +64,6 @@ _CAPABILITIES_HINT = (
 )
 _READ_CONTENT = "Read content"
 _READ_USERS = "Read user information"
-
-_AUTH_CHECK_ID = "notion_auth"
-_SHARED_CONTENT_CHECK_ID = "notion_shared_content"
-_ROOT_PAGE_CHECK_ID = "notion_root_page"
-# check_id to the checks it runs after. The shared-content and root-page
-# checks are alternatives: only one applies to a config.
-_DEPENDS_ON: dict[str, tuple[str, ...]] = {
-    _SHARED_CONTENT_CHECK_ID: (_AUTH_CHECK_ID,),
-    _ROOT_PAGE_CHECK_ID: (_AUTH_CHECK_ID,),
-    "notion_page_content": (_SHARED_CONTENT_CHECK_ID, _ROOT_PAGE_CHECK_ID),
-    "notion_database_rows": (_AUTH_CHECK_ID,),
-    "notion_user_info": (_AUTH_CHECK_ID,),
-}
 
 
 def _gateway(context: CapabilityCheckContext) -> NotionSourceOperations:
@@ -244,26 +231,9 @@ _PAGE_CONTENT_DENIED_ROW = CheckRowText(
 
 
 class _NotionCheck(CapabilityCheck[NotionConnectorConfig]):
-    def __init__(
-        self,
-        *,
-        check_id: str,
-        display_name: str,
-        remediation: str,
-        required: bool = True,
-        fails_when_unreachable: bool = False,
-    ) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id=check_id,
-            display_name=display_name,
-            depends_on=_DEPENDS_ON.get(check_id, ()),
-            required=required,
-            requires_connector_instance=False,
-            remediation=remediation,
-            docs_link=_DOCS_LINK,
-            fails_when_unreachable=fails_when_unreachable,
-        )
+    def __init__(self, *, check_id: str) -> None:
+        # Metadata and dependencies come from the Notion check graph.
+        self.init_from_graph(check_node(DocumentSource.NOTION, check_id))
 
 
 def _signed_in_line(bot_user: dict[str, Any]) -> str:
@@ -279,16 +249,7 @@ class _AuthCheck(_NotionCheck):
     """Reads the token's bot user, as indexing does to name the workspace."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_AUTH_CHECK_ID,
-            display_name="Sign in to Notion",
-            remediation=(
-                "Copy the Internal Integration Secret from the integration's "
-                "settings in Notion (Integrations > the integration > "
-                "Configuration) and update the credential."
-            ),
-            fails_when_unreachable=True,
-        )
+        super().__init__(check_id="notion_auth")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
@@ -334,11 +295,7 @@ class _SharedContentCheck(_NotionCheck):
     config_class = NotionConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_SHARED_CONTENT_CHECK_ID,
-            display_name="Find shared pages",
-            remediation=_SHARE_HINT,
-        )
+        super().__init__(check_id="notion_shared_content")
 
     def applies(self, form_state: FormState[NotionConnectorConfig]) -> bool:
         return not _root_page_id(form_state.config)
@@ -383,15 +340,7 @@ class _RootPageCheck(_NotionCheck):
     config_class = NotionConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id=_ROOT_PAGE_CHECK_ID,
-            display_name="Find root page",
-            remediation=(
-                "Use the 32-character ID at the end of the page URL. Then share the "
-                "page with the integration: open the page, select the ••• menu > "
-                "Connections, and add the integration."
-            ),
-        )
+        super().__init__(check_id="notion_root_page")
 
     def applies(self, form_state: FormState[NotionConnectorConfig]) -> bool:
         # An empty root page ID means "every shared page", not a missing value.
@@ -454,14 +403,7 @@ class _PageContentCheck(_NotionCheck):
     config_class = NotionConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="notion_page_content",
-            display_name="Sample page content",
-            remediation=(
-                f"{_CAPABILITIES_HINT} and select 'Read content'. Then share the "
-                "pages to index with the integration."
-            ),
-        )
+        super().__init__(check_id="notion_page_content")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: NotionSourceOperations = _gateway(context)
@@ -557,15 +499,7 @@ class _DatabaseRowsCheck(_NotionCheck):
     lists its data sources, and each data source is queried for its rows."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="notion_database_rows",
-            display_name="Sample database rows",
-            required=False,
-            remediation=(
-                "Share the databases to index with the integration (••• menu > "
-                f"Connections). {_CAPABILITIES_HINT} and select 'Read content'."
-            ),
-        )
+        super().__init__(check_id="notion_database_rows")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: NotionSourceOperations = _gateway(context)
@@ -636,15 +570,7 @@ class _UserInfoCheck(_NotionCheck):
     email."""
 
     def __init__(self) -> None:
-        super().__init__(
-            check_id="notion_user_info",
-            display_name="Read user names",
-            required=False,
-            remediation=(
-                f"{_CAPABILITIES_HINT} and select 'Read user information without "
-                "email addresses'. Onyx does not need email addresses."
-            ),
-        )
+        super().__init__(check_id="notion_user_info")
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:

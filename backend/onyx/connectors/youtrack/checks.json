@@ -1,0 +1,32 @@
+{
+  "source": "youtrack",
+  "nodes": [
+    {
+      "id": "youtrack_token",
+      "display_name": "YouTrack accepts the URL and token",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Check the YouTrack URL, including the context path on YouTrack Server, and that the permanent token is valid."
+    },
+    {
+      "id": "youtrack_projects",
+      "display_name": "Configured projects are readable",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Check each project short name, or give the token's user access to the project."
+    },
+    {
+      "id": "youtrack_issues",
+      "display_name": "Issues and comments are readable",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Give the token's user Read Issue and Read Issue Comment."
+    }
+  ]
+}

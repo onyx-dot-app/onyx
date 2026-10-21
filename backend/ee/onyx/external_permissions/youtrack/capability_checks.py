@@ -8,6 +8,8 @@ from ee.onyx.external_permissions.youtrack.access import (
     ProjectReaders,
     RoleGrants,
 )
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.graph import check_node
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -16,7 +18,6 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.youtrack.capability_checks import (
     PROBE_PAGE_SIZE,
-    REQUIRED_FIELDS,
     config_from_context,
     gateway_from_context,
     probe,
@@ -38,14 +39,8 @@ class _RestrictedIssuesCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self, capability: CredentialCapability) -> None:
-        super().__init__(
-            capability=capability,
-            # One id for both capabilities, so the runner reads roles once.
-            check_id="youtrack_reads_restricted",
-            display_name="The token's user reads every issue, restricted ones too",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation=_ADMIN_REMEDIATION,
+        self.init_from_graph(
+            check_node(DocumentSource.YOUTRACK, "youtrack_reads_restricted"), capability
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -81,13 +76,8 @@ class _IssueVisibilityCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self, capability: CredentialCapability) -> None:
-        super().__init__(
-            capability=capability,
-            check_id="youtrack_issue_visibility",
-            display_name="Issue visibility settings are readable",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation="Give the token's user Read Issue in every project to sync.",
+        self.init_from_graph(
+            check_node(DocumentSource.YOUTRACK, "youtrack_issue_visibility"), capability
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
@@ -110,13 +100,8 @@ class _UserEmailsCheck(CapabilityCheck[YouTrackConnectorConfig]):
     config_class = YouTrackConnectorConfig
 
     def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
-            check_id="youtrack_user_emails",
-            display_name="Users' emails are readable",
-            requires_connector_instance=False,
-            requires_fields=REQUIRED_FIELDS,
-            remediation=_ADMIN_REMEDIATION,
+        self.init_from_graph(
+            check_node(DocumentSource.YOUTRACK, "youtrack_user_emails")
         )
 
     def run(self, context: CapabilityCheckContext) -> None:

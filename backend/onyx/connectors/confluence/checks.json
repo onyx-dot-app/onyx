@@ -1,0 +1,168 @@
+{
+  "source": "confluence",
+  "nodes": [
+    {
+      "id": "confluence_auth",
+      "display_name": "Sign in to Confluence",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Check the site URL and the Cloud setting. For an API token, use the email of the token's Atlassian account. Create a new token if it expired. For a scoped API token, turn on 'Using scoped token'.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "validates_binding": true,
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "confluence_scoped_token_auth",
+      "display_name": "Sign in to Confluence",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Scoped API tokens work only with Confluence Cloud. Check the site URL, and create a new scoped token if it expired.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "validates_binding": true,
+      "fails_when_unreachable": true,
+      "row_id": "confluence_auth"
+    },
+    {
+      "id": "confluence_spaces_visible",
+      "display_name": "List spaces",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user view permission on the spaces to index. OAuth: the `read:space:confluence` scope. Scoped API token: the `read:confluence-space.summary` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "validates_binding": true,
+      "depends_on": [
+        "confluence_auth",
+        "confluence_scoped_token_auth"
+      ]
+    },
+    {
+      "id": "confluence_space_listing",
+      "display_name": "List spaces",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user view permission on the spaces to index.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "discovery": true,
+      "depends_on": [
+        "confluence_spaces_visible"
+      ],
+      "row_id": "confluence_spaces_visible"
+    },
+    {
+      "id": "confluence_configured_space",
+      "display_name": "Find selected spaces",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Use the space key, not the space name (e.g. `KB`; keys are case sensitive), and give the token's user view permission on it.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ]
+    },
+    {
+      "id": "confluence_configured_page",
+      "display_name": "Find selected pages",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Use the number after /pages/ in the page URL, and give the token's user view permission on the page and its space.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ]
+    },
+    {
+      "id": "confluence_cql_query",
+      "display_name": "Run CQL query",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Select only pages: join `type=page` to the other filters with AND. Use no lastModified filter and no ORDER BY. Test the query in Confluence search.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ]
+    },
+    {
+      "id": "confluence_content_read",
+      "display_name": "Sample page content",
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user view permission on the pages to index. OAuth: the `read:confluence-content.all` and `search:confluence` scopes.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible",
+        "confluence_configured_space",
+        "confluence_configured_page",
+        "confluence_cql_query"
+      ]
+    },
+    {
+      "id": "confluence_comments_read",
+      "display_name": "Sample comments",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Without comments, pages index without their comments. OAuth: the `read:confluence-content.all` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_content_read"
+      ]
+    },
+    {
+      "id": "confluence_attachments_read",
+      "display_name": "Sample attachments",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Without attachment access, attachments are not indexed. OAuth: the `readonly:content.attachment:confluence` scope. To skip attachments, turn off 'Include attachments'.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_content_read"
+      ]
+    },
+    {
+      "id": "confluence_user_names",
+      "display_name": "Read user names",
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Without user details, mentions index as 'Unknown Confluence User'. OAuth: the `read:confluence-user` scope. API tokens: the user needs permission to view user profiles.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_content_read"
+      ]
+    }
+  ]
+}

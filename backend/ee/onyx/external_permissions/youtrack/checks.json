@@ -1,0 +1,43 @@
+{
+  "source": "youtrack",
+  "nodes": [
+    {
+      "id": "youtrack_reads_restricted",
+      "display_name": "The token's user reads every issue, restricted ones too",
+      "capabilities": [
+        "doc_permission_sync",
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Use a permanent token of a System Admin, or of a user with Low-level Admin Read plus Read Issue, Read Issue Comment and Override Visibility Restrictions in every project to sync."
+    },
+    {
+      "id": "youtrack_issue_visibility",
+      "display_name": "Issue visibility settings are readable",
+      "capabilities": [
+        "doc_permission_sync",
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Give the token's user Read Issue in every project to sync."
+    },
+    {
+      "id": "youtrack_user_emails",
+      "display_name": "Users' emails are readable",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "base_url"
+      ],
+      "remediation": "Use a permanent token of a System Admin, or of a user with Low-level Admin Read plus Read Issue, Read Issue Comment and Override Visibility Restrictions in every project to sync."
+    }
+  ]
+}

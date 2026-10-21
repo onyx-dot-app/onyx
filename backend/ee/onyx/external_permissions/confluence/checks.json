@@ -1,0 +1,263 @@
+{
+  "source": "confluence",
+  "nodes": [
+    {
+      "id": "confluence_page_restrictions_read",
+      "display_name": "Read page restrictions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user view permission on the pages to sync. OAuth: the `read:confluence-content.permission` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_content_read"
+      ]
+    },
+    {
+      "id": "confluence_restrictions_batch_read",
+      "display_name": "Batch-read restrictions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "No action is necessary: permission sync is slower but correct. To make it fast again, delete or publish the draft, outdated or trashed parent pages (CONFCLOUD-77618).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_page_restrictions_read"
+      ]
+    },
+    {
+      "id": "confluence_space_permissions_read",
+      "display_name": "Read space permissions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Make the token's user a space admin of every space to sync, or a Confluence admin. OAuth: the `read:confluence-space.summary` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ]
+    },
+    {
+      "id": "confluence_space_permissions_read_dc_rest",
+      "display_name": "Read space permissions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Make the token's user a space admin of every space to sync, or a Confluence admin. Without admin rights this API returns HTTP 500 (CONFSERVER-99908).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ],
+      "row_id": "confluence_space_permissions_read"
+    },
+    {
+      "id": "confluence_space_permissions_read_dc_jsonrpc",
+      "display_name": "Read space permissions",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Turn on 'Remote API (XML-RPC & SOAP)' in General Configuration > Further Configuration, and turn off 'Secure administrator sessions' (WebSudo) in Security Configuration, or upgrade to Data Center 9.1+. Make the token's user a space admin of every space to sync, or a Confluence admin.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_spaces_visible"
+      ],
+      "row_id": "confluence_space_permissions_read"
+    },
+    {
+      "id": "confluence_permission_user_emails",
+      "display_name": "Read user emails",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Atlassian returns a user's email only when the user's profile shows it to anyone (Profile and visibility > Contact), or when the organization makes emails visible to apps. Users without a visible email get no access in Onyx.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_space_permissions_read",
+        "confluence_space_permissions_read_dc_rest",
+        "confluence_space_permissions_read_dc_jsonrpc"
+      ]
+    },
+    {
+      "id": "confluence_permission_user_emails_dc",
+      "display_name": "Read user emails",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Confluence Data Center returns emails only when 'Email address visibility' (General Configuration > Security Configuration) allows it. Set it to 'Public', or to 'Only visible to site administrators' with a Confluence admin as the token's user.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_space_permissions_read",
+        "confluence_space_permissions_read_dc_rest",
+        "confluence_space_permissions_read_dc_jsonrpc"
+      ],
+      "row_id": "confluence_permission_user_emails"
+    },
+    {
+      "id": "confluence_anonymous_space_access",
+      "display_name": "Read anonymous access",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "required": false,
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Without it, spaces open to anonymous users sync as not public. Make the token's user a Confluence admin (CONFSERVER-99908).",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_space_permissions_read",
+        "confluence_space_permissions_read_dc_rest",
+        "confluence_space_permissions_read_dc_jsonrpc"
+      ]
+    },
+    {
+      "id": "confluence_user_listing",
+      "display_name": "List users",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user the global permission to browse users. OAuth: the `read:confluence-user` scope. Data Center before 10.1 can list too few users (CONFSERVER-95999); set CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE to list them.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_auth",
+        "confluence_scoped_token_auth"
+      ]
+    },
+    {
+      "id": "confluence_group_membership",
+      "display_name": "Read group members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user the global permission to browse users. OAuth: the `read:confluence-groups` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_user_listing",
+        "confluence_user_listing_dc"
+      ]
+    },
+    {
+      "id": "confluence_group_user_emails",
+      "display_name": "Read member emails",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Atlassian returns a user's email only when the user's profile shows it to anyone (Profile and visibility > Contact), or when the organization makes emails visible to apps. Users without a visible email get no access in Onyx.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_user_listing",
+        "confluence_user_listing_dc"
+      ]
+    },
+    {
+      "id": "confluence_user_listing_dc",
+      "display_name": "List users",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user the global permission to browse users. OAuth: the `read:confluence-user` scope. Data Center before 10.1 can list too few users (CONFSERVER-95999); set CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE to list them.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_auth",
+        "confluence_scoped_token_auth"
+      ],
+      "row_id": "confluence_user_listing"
+    },
+    {
+      "id": "confluence_group_membership_dc",
+      "display_name": "Read group members",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Give the token's user the global permission to browse users. OAuth: the `read:confluence-groups` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_user_listing",
+        "confluence_user_listing_dc"
+      ],
+      "row_id": "confluence_group_membership"
+    },
+    {
+      "id": "confluence_group_user_emails_dc",
+      "display_name": "Read member emails",
+      "capabilities": [
+        "external_group_sync"
+      ],
+      "requires_connector_instance": false,
+      "requires_fields": [
+        "is_cloud",
+        "wiki_base"
+      ],
+      "remediation": "Confluence Data Center returns emails only when 'Email address visibility' (General Configuration > Security Configuration) allows it. Set it to 'Public', or to 'Only visible to site administrators' with a Confluence admin as the token's user.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/confluence",
+      "depends_on": [
+        "confluence_user_listing",
+        "confluence_user_listing_dc"
+      ],
+      "row_id": "confluence_group_user_emails"
+    }
+  ]
+}

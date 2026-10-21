@@ -1,0 +1,66 @@
+{
+  "source": "notion",
+  "nodes": [
+    {
+      "id": "notion_auth",
+      "display_name": "Sign in to Notion",
+      "requires_connector_instance": false,
+      "remediation": "Copy the Internal Integration Secret from the integration's settings in Notion (Integrations > the integration > Configuration) and update the credential.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "notion_shared_content",
+      "display_name": "Find shared pages",
+      "requires_connector_instance": false,
+      "remediation": "In Notion, open each top-level page or database to index, select the ••• menu > Connections, and add the integration. Its child pages are shared with it too.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "depends_on": [
+        "notion_auth"
+      ]
+    },
+    {
+      "id": "notion_root_page",
+      "display_name": "Find root page",
+      "requires_connector_instance": false,
+      "remediation": "Use the 32-character ID at the end of the page URL. Then share the page with the integration: open the page, select the ••• menu > Connections, and add the integration.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "depends_on": [
+        "notion_auth"
+      ]
+    },
+    {
+      "id": "notion_page_content",
+      "display_name": "Sample page content",
+      "requires_connector_instance": false,
+      "remediation": "In Notion, open the integration's settings (Integrations > the integration > Capabilities) and select 'Read content'. Then share the pages to index with the integration.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "depends_on": [
+        "notion_shared_content",
+        "notion_root_page"
+      ]
+    },
+    {
+      "id": "notion_database_rows",
+      "display_name": "Sample database rows",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Share the databases to index with the integration (••• menu > Connections). In Notion, open the integration's settings (Integrations > the integration > Capabilities) and select 'Read content'.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "depends_on": [
+        "notion_auth"
+      ]
+    },
+    {
+      "id": "notion_user_info",
+      "display_name": "Read user names",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "In Notion, open the integration's settings (Integrations > the integration > Capabilities) and select 'Read user information without email addresses'. Onyx does not need email addresses.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/notion",
+      "depends_on": [
+        "notion_auth"
+      ]
+    }
+  ]
+}

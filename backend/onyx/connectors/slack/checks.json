@@ -1,0 +1,120 @@
+{
+  "source": "slack",
+  "nodes": [
+    {
+      "id": "slack_token_auth",
+      "display_name": "Sign in to Slack",
+      "requires_connector_instance": false,
+      "remediation": "Create a bot token (`xoxb-...`) for the Slack app and paste it into the credential.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "validates_binding": true,
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "slack_channel_patterns",
+      "display_name": "Compile channel patterns",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "remediation": "Fix the channel regex in the connector settings.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed"
+    },
+    {
+      "id": "slack_grid_workspace_listing",
+      "display_name": "List Grid workspaces",
+      "requires_connector_instance": false,
+      "remediation": "Add the `team:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "validates_binding": true,
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_public_channel_listing",
+      "display_name": "List public channels",
+      "requires_connector_instance": false,
+      "remediation": "Add the `channels:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_message_history_read",
+      "display_name": "Sample public messages",
+      "requires_connector_instance": false,
+      "remediation": "Add the `channels:history` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_public_channel_listing"
+      ]
+    },
+    {
+      "id": "slack_channel_join_scope",
+      "display_name": "Join public channels",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `channels:join` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace. Alternatively, manually invite the bot (`/invite @<bot>`) to every channel that should be indexed. Do not dismiss this warning unless the bot is already a member of every such channel.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_configured_channels_visible",
+      "display_name": "Find selected channels",
+      "requires_connector_instance": false,
+      "requires_connector_config": true,
+      "timeout_seconds": 1800.0,
+      "remediation": "Fix the channel name, or invite the bot to the private channel (`/invite @<bot>` in Slack) and grant `groups:read`.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_public_channel_listing"
+      ]
+    },
+    {
+      "id": "slack_private_channel_listing",
+      "display_name": "List private channels",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `groups:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_private_message_history_read",
+      "display_name": "Sample private messages",
+      "requires_connector_instance": false,
+      "remediation": "Add the `groups:history` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_private_channel_listing"
+      ]
+    },
+    {
+      "id": "slack_user_profile_read",
+      "display_name": "Read user profiles",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Add the `users:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "depends_on": [
+        "slack_token_auth"
+      ]
+    },
+    {
+      "id": "slack_readable_channel_listing",
+      "display_name": "List public channels",
+      "requires_connector_instance": false,
+      "remediation": "Add the `channels:read` bot scope under OAuth & Permissions in the Slack app settings and reinstall the app to the workspace.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed",
+      "discovery": true,
+      "depends_on": [
+        "slack_token_auth"
+      ],
+      "row_id": "slack_public_channel_listing"
+    }
+  ]
+}

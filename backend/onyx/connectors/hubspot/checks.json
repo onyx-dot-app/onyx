@@ -1,0 +1,75 @@
+{
+  "source": "hubspot",
+  "nodes": [
+    {
+      "id": "hubspot_token",
+      "display_name": "Sign in to HubSpot",
+      "requires_connector_instance": false,
+      "remediation": "Create a private app in HubSpot and paste its access token.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "fails_when_unreachable": true
+    },
+    {
+      "id": "hubspot_tickets_readable",
+      "display_name": "Read tickets",
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the `tickets` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_companies_readable",
+      "display_name": "Read companies",
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the `crm.objects.companies.read` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_deals_readable",
+      "display_name": "Read deals",
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the `crm.objects.deals.read` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_contacts_readable",
+      "display_name": "Read contacts",
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the `crm.objects.contacts.read` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_associations",
+      "display_name": "List linked records",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the read scope of every object type the connector indexes.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_notes",
+      "display_name": "Sample notes",
+      "required": false,
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the read scope of every object type the connector indexes.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    }
+  ]
+}

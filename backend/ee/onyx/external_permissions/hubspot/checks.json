@@ -1,0 +1,30 @@
+{
+  "source": "hubspot",
+  "nodes": [
+    {
+      "id": "hubspot_users",
+      "display_name": "List users",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "remediation": "Grant the private app the `settings.users.read` scope.",
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_token"
+      ]
+    },
+    {
+      "id": "hubspot_record_viewers",
+      "display_name": "Read record viewers",
+      "capabilities": [
+        "doc_permission_sync"
+      ],
+      "requires_connector_instance": false,
+      "docs_link": "https://docs.onyx.app/admins/connectors/official/hubspot",
+      "depends_on": [
+        "hubspot_users"
+      ]
+    }
+  ]
+}
