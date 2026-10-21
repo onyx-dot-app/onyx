@@ -11,7 +11,10 @@ import type {
 import {
   SEGMENT_INPUT_PROPS,
   SegmentSeparator,
+  cleanPastedText,
   makeSegmentKeyDownHandler,
+  toAsciiDigits,
+  usePendingCaret,
 } from "@opal/components/inputs/segmented";
 import { useOpalStrings } from "@opal/strings";
 
@@ -94,14 +97,6 @@ function toSegments(
   let end = fraction.length;
   while (end > minFractionDigits && fraction[end - 1] === "0") end--;
   return { whole, fraction: fraction.slice(0, end) };
-}
-
-// Arabic-Indic (U+0660) and Extended Arabic-Indic (U+06F0) digits, which the
-// Arabic locale types, read as their ASCII digits.
-function toAsciiDigits(text: string): string {
-  return text.replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) =>
-    String((digit.charCodeAt(0) - 0x0660) % 0x90)
-  );
 }
 
 // "0007" reads "7" and "0000" reads "0": leading zeros never change the amount.
@@ -195,19 +190,7 @@ function InputCurrency({
   const wholeRef = React.useRef<HTMLInputElement>(null);
   const fractionRef = React.useRef<HTMLInputElement>(null);
 
-  // A caret position to restore once the next segments render lands. Applied
-  // in a layout effect, synchronously after React writes the value and before
-  // any later input event, so it can never overwrite a newer caret move.
-  const pendingCaretRef = React.useRef<{
-    input: HTMLInputElement;
-    position: number;
-  } | null>(null);
-  React.useLayoutEffect(() => {
-    const pending = pendingCaretRef.current;
-    if (!pending) return;
-    pendingCaretRef.current = null;
-    pending.input.setSelectionRange(pending.position, pending.position);
-  }, [segments]);
+  const pendingCaretRef = usePendingCaret(segments);
 
   // Resync when the value differs from the draft, so the echo of our own
   // onChange never reformats the segment being typed in. A precision change
@@ -320,14 +303,10 @@ function InputCurrency({
   function handlePaste(segment: keyof AmountSegments) {
     return (e: React.ClipboardEvent<HTMLInputElement>) => {
       e.preventDefault();
-      const text = [parts.symbol, currency, parts.group]
-        .reduce(
-          (rest, token) => rest.split(token).join(""),
-          toAsciiDigits(e.clipboardData.getData("text"))
-        )
-        // Whitespace, and the invisible direction marks some locales put
-        // around amounts (Arabic's "\u200F١٢٫٥٠ US$").
-        .replace(/[\s\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
+      const text = [parts.symbol, currency, parts.group].reduce(
+        (rest, token) => rest.split(token).join(""),
+        cleanPastedText(e.clipboardData.getData("text"))
+      );
       const pieces = text.split(parts.decimal);
       if (
         pieces.length > 2 ||
