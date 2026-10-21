@@ -41,7 +41,11 @@ function renderStatus(error: CustomToolErrorInfo) {
       {(results) => (
         <div>
           {results.map((result, index) => (
-            <div key={index} data-surface={result.surfaceBackground}>
+            <div
+              key={index}
+              data-surface={result.surfaceBackground}
+              data-collapsible={String(result.supportsCollapsible)}
+            >
               {result.status}
               {result.content}
             </div>
@@ -64,6 +68,9 @@ describe("CustomToolRenderer", () => {
     expect(
       screen.getByText("get_meta_data was blocked").closest("[data-surface]")
     ).toHaveAttribute("data-surface", "error");
+    expect(
+      screen.getByText("get_meta_data was blocked").closest("[data-surface]")
+    ).toHaveAttribute("data-collapsible", "false");
   });
 
   test("shows an HTTP failure with its status code", () => {

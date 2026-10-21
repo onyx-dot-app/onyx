@@ -270,22 +270,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  // Blocked destination: keep the status header visible on the error surface
-  if (error && error.status_code === null) {
-    return children([
-      {
-        icon,
-        status,
-        supportsCollapsible: true,
-        noPaddingRight: true,
-        surfaceBackground: "error" as const,
-        content,
-      },
-    ]);
-  }
-
-  // Auth error: always render FULL with error surface
-  if (error?.is_auth_error) {
+  // Blocked destination or auth error: always render FULL with error surface
+  if (error && (error.status_code === null || error.is_auth_error)) {
     return children([
       {
         icon,
