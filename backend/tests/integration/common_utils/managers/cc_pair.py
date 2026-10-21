@@ -1,4 +1,5 @@
 import time
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -625,8 +626,15 @@ class CCPairManager:
         should_wait_for_group_sync: bool = True,
         # Sometimes waiting for a document index sync is not necessary
         should_wait_for_index_sync: bool = True,
+        # Docs whose permission change must reach the index before this returns
+        doc_ids: Collection[str] | None = None,
     ) -> None:
-        """after: The task register time must be after this time."""
+        """after: The task register time must be after this time.
+
+        The index wait passes when `number_of_updated_docs` docs are synced and
+        every doc in `doc_ids` is synced. Pass `doc_ids` when a test checks the
+        access of specific docs, since any other doc can fill the count.
+        """
         doc_synced = False
         group_synced = False
         start = time.monotonic()
@@ -681,25 +689,29 @@ class CCPairManager:
                 cc_pair=cc_pair,
                 user_performing_action=user_performing_action,
             )
-            synced_docs = 0
-            for doc_sync_status in doc_sync_statuses:
+            synced_doc_ids = {
+                doc_sync_status.doc_id
+                for doc_sync_status in doc_sync_statuses
                 if (
                     doc_sync_status.last_synced is not None
                     and doc_sync_status.last_modified is not None
                     and doc_sync_status.last_synced >= doc_sync_status.last_modified
                     and doc_sync_status.last_synced >= after
                     and doc_sync_status.last_modified >= after
-                ):
-                    synced_docs += 1
+                )
+            }
+            missing_doc_ids = set(doc_ids or ()) - synced_doc_ids
 
-            if synced_docs >= number_of_updated_docs:
+            if len(synced_doc_ids) >= number_of_updated_docs and not missing_doc_ids:
                 print(f"all docs synced: cc_pair={cc_pair.id}")
                 break
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
-                    f"Document index sync was not completed within {timeout} seconds"
+                    f"Document index sync was not completed within {timeout} seconds. "
+                    f"synced={len(synced_doc_ids)} expected={number_of_updated_docs} "
+                    f"missing_doc_ids={sorted(missing_doc_ids)}"
                 )
 
             print(

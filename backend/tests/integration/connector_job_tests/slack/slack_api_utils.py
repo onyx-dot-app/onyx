@@ -17,6 +17,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.web import SlackResponse
 
+from onyx.connectors.slack.connector import _build_doc_id
 from onyx.connectors.slack.models import ChannelType, MessageType
 
 _SLACK_LIMIT = 900
@@ -259,12 +260,14 @@ class SlackManager:
     @staticmethod
     def add_message_to_channel(
         slack_client: WebClient, channel: ChannelType, message: str
-    ) -> None:
+    ) -> str:
+        """Returns the id of the Onyx document that indexing makes from the message."""
         channel_id = _get_slack_channel_id(channel)
-        slack_client.chat_postMessage(
+        response = slack_client.chat_postMessage(
             channel=channel_id,
             text=message,
         )
+        return _build_doc_id(channel_id=channel_id, thread_ts=cast(str, response["ts"]))
 
     @staticmethod
     def remove_message_from_channel(

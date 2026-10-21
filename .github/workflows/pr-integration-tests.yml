@@ -338,7 +338,8 @@ jobs:
       # which trips OpenSearch's high disk watermark and blocks index
       # creation mid-run.
       - volume=100gb
-    timeout-minutes: 25
+    # Fits all retry attempts of the test step (3 x 20 min) plus setup and log upload.
+    timeout-minutes: 70
 
     strategy:
       fail-fast: false
@@ -573,7 +574,8 @@ jobs:
         "extras=ecr-cache",
         "volume=100gb",
       ]
-    timeout-minutes: 10
+    # Fits all retry attempts of the test step (3 x 8 min) plus setup.
+    timeout-minutes: 30
 
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -622,7 +624,7 @@ jobs:
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
-          timeout_minutes: 20
+          timeout_minutes: 8
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
