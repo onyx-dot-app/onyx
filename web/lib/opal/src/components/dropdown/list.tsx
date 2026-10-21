@@ -130,7 +130,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     },
     ref
   ) => {
-    const strings = useOpalStrings();
     // The list stays mounted one exit animation longer than `isOpen`, so it
     // can animate out without living in the tree while closed.
     const presence = usePresence(isOpen);
