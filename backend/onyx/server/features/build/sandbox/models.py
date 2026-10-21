@@ -1,6 +1,7 @@
 """Pydantic models for sandbox module communication."""
 
 from datetime import datetime
+from enum import Enum
 from typing import TypeAlias
 from uuid import UUID
 
@@ -13,6 +14,28 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
+
+
+class SandboxResourceKind(str, Enum):
+    POD = "pod"
+    SERVICE = "service"
+    SECRET = "secret"
+    CONTAINER = "container"
+    VOLUME = "volume"
+
+
+class SandboxResource(BaseModel):
+    """Observed resource identity. Never derive a deletion target from a UUID prefix."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: SandboxResourceKind
+    name: str
+    instance_id: str
+    sandbox_id: UUID
+    tenant_id: str
+    created_at: datetime
+    provisioning_attempt_number: int | None = None
 
 
 class PromptAttachment(BaseModel):

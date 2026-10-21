@@ -11,7 +11,7 @@
 **Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
 **Owns:**
 `backend/onyx/server/features/build/sandbox/base.py`, `factory.py`, `models.py`,
-`labels.py`, `session_workspace.py`, `snapshot_manager.py`, `serve_transport.py`,
+`labels.py`, `resources.py`, `session_workspace.py`, `snapshot_manager.py`, `serve_transport.py`,
 `event_schema.py`, `nextjs_dev.py` (spec only; the runtime lives in
 `[[craft-webapp-proxy]]`),
 `backend/onyx/server/features/build/sandbox/kubernetes/` (`kubernetes_sandbox_manager.py`,
@@ -523,6 +523,20 @@ Kubernetes checks each resource once even after the shared deletion wait budget 
 Kubernetes waits for Pod, Service, and Secret absence within one teardown budget.
 A deletion error or wait timeout aborts sleep. The row stays eligible for retry,
 and session ports remain allocated until termination succeeds.
+
+`SandboxManager.iter_resources` inventories resources with full sandbox and tenant
+labels. Kubernetes uses namespace-scoped, paginated lists of Pods, Services, and
+Secrets. New auth Secrets carry tenant and attempt labels. Docker scopes containers
+and volumes by sandbox network, with a Compose project fallback for older resources.
+Resources without enough ownership metadata require operator inspection.
+`delete_resource` checks the observed identity again. Kubernetes deletes with UID
+and resource-version preconditions. Docker deletes containers by ID and checks
+volume creation time. It refuses volume removal while a container uses the volume.
+Runtime Kubernetes clients have request deadlines and disable hidden HTTP retries.
+Docker inventory and deletion use a separate client with a 15-second timeout.
+Bulk restoration retains its existing client timeout.
+Readiness watches use the remaining provisioning budget rather than the default
+short REST timeout, so slow image pulls can still finish within that budget.
 
 ---
 
