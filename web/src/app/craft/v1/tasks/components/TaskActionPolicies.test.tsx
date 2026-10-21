@@ -654,3 +654,23 @@ it("allows an enabled plugin to be edited and disabled when connection data fail
     { gated_app_id: 1, enabled: false, action_policies: { send: "ALWAYS" } },
   ]);
 });
+
+it("allows an enabled disconnected plugin to be disabled without reconnecting", async () => {
+  mockConnected = false;
+  mockData = initialData.map((app) => ({ ...app, enabled: true }));
+  const user = setupUser();
+  render(<Form taskId="task" />);
+  const toggle = screen.getByRole("switch", {
+    name: "Enable Slack for this task",
+  });
+  expect(toggle).toBeChecked();
+  expect(screen.getByRole("button", { name: "Connect Slack" })).toBeVisible();
+  await user.click(toggle);
+  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Connect Slack" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenCalledWith([
+    { gated_app_id: 1, enabled: false, action_policies: { send: "ALWAYS" } },
+  ]);
+});

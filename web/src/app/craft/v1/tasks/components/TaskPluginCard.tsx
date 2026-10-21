@@ -126,7 +126,7 @@ export default function TaskPluginCard({
                     }
                     onClick={onEdit}
                   />
-                  {needsConnection ? (
+                  {needsConnection && (
                     <Button
                       icon={SvgPlug}
                       size="sm"
@@ -139,7 +139,8 @@ export default function TaskPluginCard({
                       })}
                       onClick={onConnect}
                     />
-                  ) : (
+                  )}
+                  {(!needsConnection || enabled) && (
                     <InputSwitch
                       checked={enabled}
                       disabled={unavailable}

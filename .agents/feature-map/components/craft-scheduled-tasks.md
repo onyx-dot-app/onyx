@@ -46,7 +46,8 @@ The Plugins section uses a card grid with task enable switches and action settin
 Clicking a connected plugin card opens action settings, even when disabled for the task.
 Clicking a disconnected card opens its connection dialog. The toggle only changes task enablement.
 Plugins that need a connection show an orange dot after the name and an outlined plug button.
-Their plug button replaces the enable switch and opens the shared connection dialog.
+Their plug button opens the shared connection dialog. Disabled plugins show it instead of the enable switch.
+Already-enabled plugins retain the switch so users can turn them off without reconnecting.
 The enable switch returns after connection. Failed connection-data requests expose a retry action.
 Connected, enabled cards use a white surface; disabled or disconnected cards use the gray page surface.
 Unknown connection data cannot enable a plugin, but enabled plugins can still be edited or disabled.
@@ -131,7 +132,7 @@ run could saturate would stall dispatch for every tenant
 - `ScheduledTaskEnabledApp`: membership keyed by `(scheduled_task_id, gated_app_id)`.
   Missing membership blocks every action in that app, including workspace-managed actions.
 - `ScheduledTaskActionPolicy`: one choice per `(scheduled_task_id, gated_app_id, action_id)`.
-  New tasks copy personal choices when an app is first enabled. Existing tasks retain their choices, including empty maps that require approval. Workspace restrictions remain live.
+  New tasks copy personal choices, including untouched actions, on the first action edit or enable. Existing tasks retain their choices, including empty maps that require approval. Workspace restrictions remain live.
 
 - `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`/`SLACK`): set at
   session-create time (`SCHEDULED` by the executor). The normal Craft sidebar query
@@ -237,7 +238,7 @@ sweeper does not send a notification.
 The task editor shows a Plugins card grid with separate connection, enable, and action controls.
 New tasks start with all plugins off. Disabled cards show "Disabled for this task"; enabled cards show action counts.
 Connected cards open action settings, including when disabled for the task. Their gear button opens the same modal.
-Disconnected cards show an orange dot and a connection button instead of the enable switch.
+Disconnected cards show an orange dot and a connection button. Already-enabled plugins retain the switch until turned off.
 Clicking these cards opens the shared connection dialog. Unknown connection data cannot enable a plugin, but enabled plugins can still be edited or disabled.
 For new tasks, the first action edit or enable copies current personal choices, including untouched actions.
 Existing tasks keep their saved choices, including an empty map that defaults to Ask.
