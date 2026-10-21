@@ -360,6 +360,8 @@ class ResponsePresenter:
             (event.parent_message_id or "", event.parent_tool_call_id or "")
         )
         if isinstance(event, MessageStartEvent):
+            if event.parent_run_id is None:
+                self.emitter.llm_step_started()
             if parent is not None:
                 parent.has_child_output = True
             self.renderers[event.run_id] = MessageRenderer(
