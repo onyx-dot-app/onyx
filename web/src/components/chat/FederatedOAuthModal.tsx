@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import { Card, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";

@@ -1,9 +1,12 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.models import Tool
-from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
+from onyx.server.features.tool.tool_visibility import (
+    get_tool_visibility_config,
+    is_openapi_tool,
+)
 from onyx.utils.encryption import mask_string
 
 
@@ -38,6 +41,11 @@ class ToolSnapshot(BaseModel):
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
     enabled: bool = True
+    user_enabled_in_chat: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description="Whether this tool is selected for the default assistant.",
+    )
 
     # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
     permissions: dict[str, bool] = Field(default_factory=dict)
@@ -68,7 +76,7 @@ class ToolSnapshot(BaseModel):
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
-            enabled=tool.enabled,
+            enabled=tool.enabled or is_openapi_tool(tool),
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,
             agent_creation_selectable=(
@@ -78,12 +86,18 @@ class ToolSnapshot(BaseModel):
         )
 
 
+class ToolUserPreferences(BaseModel):
+    enabled_in_chat: bool
+
+
 class Header(BaseModel):
     key: str
     value: str
 
 
 class CustomToolCreate(BaseModel):
+    default_chat_enabled: bool | None = None
+    enabled: bool = True
     name: str
     description: str | None = None
     definition: dict[str, Any]
@@ -91,8 +105,19 @@ class CustomToolCreate(BaseModel):
     passthrough_auth: bool
     oauth_config_id: int | None = None
 
+    @field_validator("enabled")
+    @classmethod
+    def require_enabled(cls, enabled: bool) -> bool:
+        if not enabled:
+            raise ValueError(
+                "OpenAPI plugins remain available to custom agents. "
+                "Use the default Chat configuration to control main Chat availability."
+            )
+        return enabled
+
 
 class CustomToolUpdate(BaseModel):
+    default_chat_enabled: bool | None = None
     name: str | None = None
     description: str | None = None
     definition: dict[str, Any] | None = None

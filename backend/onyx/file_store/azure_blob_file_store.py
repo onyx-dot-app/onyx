@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import uuid
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
@@ -49,6 +50,8 @@ class AzureBlobBackedFileStore(FileStore):
         account_key: str | None = None,
     ) -> None:
         self._blob_service_client: BlobServiceClient | None = None
+        # Shared across threads, so the first operations build one client.
+        self._client_lock = threading.Lock()
         self._container_name = container_name
         self._azure_prefix = azure_prefix or "onyx-files"
         self._connection_string = connection_string
@@ -89,7 +92,9 @@ class AzureBlobBackedFileStore(FileStore):
         3. DefaultAzureCredential — AKS Workload Identity, managed identity,
            environment credentials, or local `az login`.
         """
-        if self._blob_service_client is None:
+        with self._client_lock:
+            if self._blob_service_client is not None:
+                return self._blob_service_client
             try:
                 from azure.storage.blob import BlobServiceClient
 
@@ -125,7 +130,7 @@ class AzureBlobBackedFileStore(FileStore):
                     f"Failed to initialize Azure Blob client: {e}"
                 ) from e
 
-        return self._blob_service_client
+            return self._blob_service_client
 
     def _get_object_key(self, file_name: str) -> str:
         """Generate blob name from file name with tenant ID prefix.

@@ -67,6 +67,7 @@ from onyx.connectors.salesforce.utils import (
     MODIFIED_FIELD,
     NAME_FIELD,
     USER_OBJECT_TYPE,
+    resolve_parent_object_types,
     validate_sf_identifier,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -87,7 +88,6 @@ def _convert_to_metadata_value(value: Any) -> str | list[str]:
     return str(value)
 
 
-_DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
 _SALESFORCE_AUTHORIZATION_PATH = "/services/oauth2/authorize"
 _OAUTH_RESPONSE_TYPE = "code"
 _OAUTH_SCOPE = "api refresh_token"
@@ -343,11 +343,7 @@ class SalesforceConnector(
         else:
             self.custom_query_config = None
             # Use the traditional requested_objects approach
-            self.parent_object_list = (
-                [obj.strip().capitalize() for obj in requested_objects]
-                if requested_objects
-                else _DEFAULT_PARENT_OBJECT_TYPES
-            )
+            self.parent_object_list = resolve_parent_object_types(requested_objects)
 
     def load_credentials(
         self,

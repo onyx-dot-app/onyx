@@ -580,8 +580,6 @@ DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
 
-MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
-
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
@@ -908,6 +906,8 @@ if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
     )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+# Per-user set of live session tokens, used to revoke all of a user's sessions.
+REDIS_USER_SESSIONS_KEY_PREFIX = "fastapi_users_user_sessions:"
 
 # Rate limiting for auth endpoints
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
@@ -1556,6 +1556,17 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
 
+# When true, connectors replace the content of spreadsheets and other tabular
+# files (xlsx, Google Sheets, CSV, TSV) with a "<content-skipped>" placeholder
+# at fetch time, so each file indexes as its title only. The sheets are not
+# parsed, but the raw file is still downloaded and stored. Docprocessing applies
+# the same replacement to tabular sections that still reach it, e.g. in batches
+# staged before this was set. Bounds the embedding cost of large spreadsheets.
+# User uploads keep their content. Set it on docfetching and docprocessing.
+SKIP_SPREADSHEET_CONTENT = (
+    os.environ.get("SKIP_SPREADSHEET_CONTENT", "").lower() == "true"
+)
+
 # Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
 # docfetching watchdog terminates the worker and fails the attempt with a clear
 # error, pre-empting a kernel OOM kill of the whole pod — which would also kill
@@ -1628,6 +1639,28 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
 # Peak Memory ~= 100 B * MAX_CELLS
 MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
+
+# A sheet whose rows fit in this many chunks keeps all its rows verbatim;
+# bigger sheets get a profile instead.
+TABULAR_FULL_ROWS_MAX_CHUNKS = max(
+    0, int(os.environ.get("TABULAR_FULL_ROWS_MAX_CHUNKS") or 3)
+)
+# Chunks of frequent text values added for each large sheet.
+TABULAR_VALUE_CHUNKS_PER_SHEET = max(
+    0, int(os.environ.get("TABULAR_VALUE_CHUNKS_PER_SHEET") or 2)
+)
+# Upper bound on the chunks of one workbook or CSV file.
+TABULAR_MAX_CHUNKS_PER_WORKBOOK = max(
+    1, int(os.environ.get("TABULAR_MAX_CHUNKS_PER_WORKBOOK") or 24)
+)
+
+# Arms the one-time migration that re-chunks tabular documents indexed with the
+# previous strategy. Only arms it: the KV record decides whether work remains,
+# so leaving this true across restarts does not re-run a finished migration.
+TABULAR_RECHUNK_ENABLED = (
+    os.environ.get("TABULAR_RECHUNK_ENABLED", "").lower() == "true"
 )
 
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
@@ -1710,6 +1743,10 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
+# A full permission or group sync of a large source can take longer than other jobs
+PERMISSION_SYNC_TIMEOUT = int(
+    os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
+)
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
@@ -1822,11 +1859,6 @@ except json.JSONDecodeError:
 AUTO_LLM_CONFIG_URL = os.environ.get(
     "AUTO_LLM_CONFIG_URL",
     "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/onyx/llm/well_known_providers/recommended-models.json",
-)
-
-# How often to check for auto LLM model updates (in seconds)
-AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
-    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
 )
 
 #####
@@ -1957,6 +1989,17 @@ MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
+
+# Global limit on indexing embedding requests (see embedding_rate_limit.py).
+# The window is stored in Redis, one entry per request, so the request count
+# is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
+DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60
+# How long one indexing embedding request may wait for the rate limit or a
+# provider's rate limit before its batch fails. Cloud workers are shared by all
+# tenants, so they give up quickly.
+EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS = 60 if MULTI_TENANT else 6 * 60 * 60
+MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000
+MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60
 
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))

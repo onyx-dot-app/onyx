@@ -8,10 +8,6 @@ import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  LLMProviderResponse,
-  LLMProviderView,
-} from "@/lib/languageModels/types";
-import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
 } from "@/views/admin/ImageGenerationPage/constants";
@@ -35,16 +31,6 @@ const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
-  const {
-    data: llmProviderResponse,
-    error: llmError,
-    mutate: refetchProviders,
-  } = useSWR<LLMProviderResponse<LLMProviderView>>(
-    SWR_KEYS.llmProvidersWithImageGen,
-    errorHandlingFetcher
-  );
-  const llmProviders = llmProviderResponse?.providers ?? [];
-
   const {
     data: configs = [],
     error: configError,
@@ -159,7 +145,6 @@ export default function ImageGenerationContent() {
         t("disconnectSuccess.message", { title: disconnectProvider.title })
       );
       refetchConfigs();
-      refetchProviders();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
@@ -175,7 +160,6 @@ export default function ImageGenerationContent() {
     toast.success(t("configureSuccess.message"));
     setEditConfig(null);
     refetchConfigs();
-    refetchProviders();
   };
 
   // Compute replacement options when disconnecting an active provider
@@ -208,7 +192,7 @@ export default function ImageGenerationContent() {
     }
   }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (llmError || configError) {
+  if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
@@ -362,7 +346,6 @@ export default function ImageGenerationContent() {
           {getImageGenForm({
             modal: modal,
             imageProvider: activeProvider,
-            existingProviders: llmProviders,
             existingConfig: editConfig || undefined,
             onSuccess: handleModalSuccess,
           })}

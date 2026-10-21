@@ -1,4 +1,6 @@
-from sqlalchemy import String, and_, case, cast, func, select, update
+from datetime import timedelta
+
+from sqlalchemy import ColumnElement, String, and_, case, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -6,7 +8,12 @@ from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin, FileType
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord, IndexAttempt
-from onyx.file_store.constants import INCOGNITO_SESSION_METADATA_KEY
+from onyx.file_store.constants import (
+    CONTENT_SHA256_METADATA_KEY,
+    INCOGNITO_SESSION_METADATA_KEY,
+    STAGED_FOR_CC_PAIR_METADATA_KEY,
+)
+from onyx.file_store.models import StoredFileFacts
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 
 
@@ -67,6 +74,24 @@ def get_filerecords_by_file_ids(
     return list(
         db_session.scalars(select(FileRecord).where(FileRecord.file_id.in_(file_ids)))
     )
+
+
+def get_stored_file_facts(
+    db_session: Session, file_ids: list[str]
+) -> dict[str, StoredFileFacts]:
+    """The facts of each given file that has a record, by file id."""
+    facts: dict[str, StoredFileFacts] = {}
+    for record in get_filerecords_by_file_ids(file_ids, db_session):
+        metadata = (
+            record.file_metadata if isinstance(record.file_metadata, dict) else {}
+        )
+        content_sha256 = metadata.get(CONTENT_SHA256_METADATA_KEY)
+        facts[record.file_id] = StoredFileFacts(
+            display_name=record.display_name or record.file_id,
+            file_type=record.file_type,
+            content_sha256=content_sha256 if isinstance(content_sha256, str) else None,
+        )
+    return facts
 
 
 def get_object_keys_with_records(
@@ -278,3 +303,73 @@ def get_session_ids_with_incognito_files(
         # sample draws from a subquery.
         stmt = select(stmt.subquery()).order_by(func.random()).limit(limit)
     return list(db_session.scalars(stmt))
+
+
+def _staged_for_cc_pair(
+    cc_pair_id: int, file_ids: list[str], staged_within: timedelta
+) -> ColumnElement[bool]:
+    return and_(
+        FileRecord.file_id.in_(file_ids),
+        FileRecord.file_metadata[STAGED_FOR_CC_PAIR_METADATA_KEY].astext
+        == str(cc_pair_id),
+        FileRecord.created_at > func.now() - staged_within,
+    )
+
+
+def get_file_ids_staged_for_cc_pair(
+    db_session: Session,
+    cc_pair_id: int,
+    file_ids: list[str],
+    staged_within: timedelta,
+) -> set[str]:
+    """The given files that were staged for this pair's edit less than
+    ``staged_within`` ago."""
+    if not file_ids:
+        return set()
+    return set(
+        db_session.scalars(
+            select(FileRecord.file_id).where(
+                _staged_for_cc_pair(cc_pair_id, file_ids, staged_within)
+            )
+        )
+    )
+
+
+def unmark_staged_files__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    file_ids: list[str],
+    staged_within: timedelta,
+) -> set[str]:
+    """Removes the staged mark from the given files staged for this pair less
+    than ``staged_within`` ago. Returns the files it unmarked."""
+    if not file_ids:
+        return set()
+    return set(
+        db_session.scalars(
+            update(FileRecord)
+            .where(_staged_for_cc_pair(cc_pair_id, file_ids, staged_within))
+            .values(
+                file_metadata=FileRecord.file_metadata.op("-")(
+                    STAGED_FOR_CC_PAIR_METADATA_KEY
+                )
+            )
+            .returning(FileRecord.file_id)
+        )
+    )
+
+
+def get_expired_staged_file_ids(
+    db_session: Session, staged_before: timedelta, limit: int
+) -> list[str]:
+    """Up to ``limit`` files still marked as staged that were saved more than
+    ``staged_before`` ago, oldest first."""
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id)
+            .where(FileRecord.file_metadata.has_key(STAGED_FOR_CC_PAIR_METADATA_KEY))
+            .where(FileRecord.created_at < func.now() - staged_before)
+            .order_by(FileRecord.created_at)
+            .limit(limit)
+        )
+    )

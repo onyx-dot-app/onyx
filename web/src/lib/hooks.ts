@@ -8,7 +8,8 @@ import {
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
-import { ValidSources } from "@/lib/connectors/types/source";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import {
@@ -20,7 +21,6 @@ import {
   useState,
 } from "react";
 import { InputDateRangePickerValue } from "@opal/components";
-import { SourceMetadata } from "@/lib/search/types";
 import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
@@ -35,7 +35,6 @@ import {
   ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
-import { getConfiguredSources } from "@/lib/sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
@@ -883,7 +882,10 @@ export function useLlmManager(
 EE Only APIs
 */
 
-export const useUserGroups = (): {
+/** `enabled: false` skips the request, e.g. below the plan groups need. */
+export const useUserGroups = (
+  enabled: boolean = true
+): {
   data: UserGroup[] | undefined;
   isLoading: boolean;
   error: string;
@@ -892,7 +894,7 @@ export const useUserGroups = (): {
   const settings = useSettings();
   const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading && settings.enterprise !== null;
+    enabled && !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

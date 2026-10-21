@@ -2,6 +2,8 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairAccessMode,
+  CCPairIdsBackfillStatus,
   EmbeddingModelSpec,
   EmbeddingProviderName,
   ReindexErrorRow,
@@ -11,6 +13,11 @@ import {
   type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
+
+/** Mirrors backend `TestEmbeddingResponse`. */
+interface TestEmbeddingResponse {
+  dimension: number;
+}
 
 interface TestEmbeddingArgs {
   provider_type: string;
@@ -57,6 +64,10 @@ export async function testEmbedding({
  * `apiVersion` and `deploymentName` are Azure-specific — backend's
  * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
  * non-Azure providers should pass `null`.
+ *
+ * Returns the vector length of the test embedding, or `null` when no test ran.
+ * `alwaysTest` runs the test even when the stored key is kept, for providers
+ * whose model is free text (Bifrost).
  */
 export async function connectEmbeddingProvider({
   providerType,
@@ -66,6 +77,7 @@ export async function connectEmbeddingProvider({
   apiVersion,
   deploymentName,
   vertexConfig,
+  alwaysTest = false,
 }: {
   providerType: string;
   apiKey: string | null;
@@ -74,9 +86,11 @@ export async function connectEmbeddingProvider({
   apiVersion: string | null;
   deploymentName: string | null;
   vertexConfig?: VertexEmbeddingConfig | null;
-}): Promise<void> {
+  alwaysTest?: boolean;
+}): Promise<number | null> {
   const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
-  if (apiKey !== null || vertexConfig != null) {
+  let dimension: number | null = null;
+  if (alwaysTest || apiKey !== null || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -91,6 +105,8 @@ export async function connectEmbeddingProvider({
       const err: ErrorResponseBody = await testResponse.json();
       throw new Error(err.detail ?? "Embedding test failed");
     }
+    const result: TestEmbeddingResponse = await testResponse.json();
+    dimension = result.dimension;
   }
 
   // A null input preserves the stored key, except when switching to Workload
@@ -119,6 +135,7 @@ export async function connectEmbeddingProvider({
     const err: ErrorResponseBody = await saveResponse.json();
     throw new Error(err.detail ?? "Failed to save provider");
   }
+  return dimension;
 }
 
 /**
@@ -212,7 +229,7 @@ export async function setNewSearchSettings({
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
-  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
+  // (openai/cohere/voyage/google/litellm/azure/bifrost). Self-hosted models live
   // under the frontend's EmbeddingProviderName for UI grouping (icon,
   // docs link), but the backend expects provider_type=null for them.
   const providerType = isCloudBased(providerName) ? providerName : null;
@@ -252,4 +269,20 @@ export async function updateInferenceSettings(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+}
+
+/** Sets the search access mode. Returns the updated backfill status. */
+export async function updateCCPairAccessMode(
+  mode: CCPairAccessMode
+): Promise<CCPairIdsBackfillStatus> {
+  const response = await fetch("/api/search-settings/cc-pair-access-mode", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to update the search access mode");
+  }
+  return response.json();
 }

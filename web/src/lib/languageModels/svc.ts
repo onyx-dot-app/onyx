@@ -117,6 +117,66 @@ export async function deleteDefaultCraftModel(): Promise<void> {
   }
 }
 
+export async function setDefaultChatNamingModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-chat-naming", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function deleteDefaultChatNamingModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-chat-naming", {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function setDefaultSearchSelectionModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-search-selection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
+export async function deleteDefaultSearchSelectionModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-search-selection", {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response.json();
+    throw new Error(errorData.detail);
+  }
+}
+
 /**
  * Delete an LLM provider.
  * @param providerId - The provider ID to delete
@@ -326,6 +386,7 @@ export const fetchOpenRouterModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      is_router: modelData.is_router,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
@@ -848,3 +909,22 @@ export const fetchPortkeyModels = async (
     return { models: [], error: errorMessage };
   }
 };
+
+export async function updateModelRouting(update: {
+  model_routing_enabled?: boolean;
+  model_routing_model_configuration_id?: number | null;
+}): Promise<void> {
+  const response: Response = await fetch("/api/admin/llm/model-routing", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response
+      .json()
+      .catch(() => ({}));
+    throw new Error(
+      errorData.detail || errorData.message || "Failed to update model routing"
+    );
+  }
+}

@@ -1,20 +1,35 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  type KeyboardEvent,
+} from "react";
+import { useFormatter, useTranslations } from "next-intl";
+import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
-import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
+import { SelectCard, Text } from "@opal/components";
+import { SvgFileText } from "@opal/icons";
+import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
+import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
 import { Section } from "@/layouts/general-layouts";
-import { fetchPptxPreview } from "@/app/craft/services/apiServices";
-import { getArtifactUrl } from "@/lib/build/client";
+import {
+  fetchPptxPreview,
+  buildArtifactUrl,
+} from "@/app/craft/services/apiServices";
 
 interface PptxPreviewProps {
+  onRefreshingChange?: (isRefreshing: boolean) => void;
+  initialSlide?: number;
+  onSlideChange?: (slide: number) => void;
   sessionId: string;
   filePath: string;
+  revision?: string;
   refreshKey?: number;
+  isActive?: boolean;
 }
 
 /**
@@ -25,64 +40,75 @@ interface PptxPreviewProps {
 export default function PptxPreview({
   sessionId,
   filePath,
+  revision,
   refreshKey,
+  isActive = true,
+  onRefreshingChange,
+  initialSlide = 0,
+  onSlideChange,
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [imageLoading, setImageLoading] = useState(true);
+  const format: ReturnType<typeof useFormatter> = useFormatter();
+  const selectedThumbnailRef = useRef<HTMLDivElement>(null);
+  const [currentSlide, setCurrentSlide] = useState(initialSlide);
+  const [showThumbnails, setShowThumbnails] = useState(true);
 
-  const { data, error, isLoading, mutate } = useSWR(
+  const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
-    () => fetchPptxPreview(sessionId, filePath),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 10000,
-    }
+    async () => ({
+      ...(await fetchPptxPreview(sessionId, filePath)),
+      imageRevision: crypto.randomUUID(),
+    }),
+    { revision, refreshKey, isActive, onRefreshingChange }
   );
 
   const slideCount = data?.slide_count ?? 0;
+  const activeSlide = Math.max(
+    0,
+    Math.min(currentSlide, Math.max(0, slideCount - 1))
+  );
 
-  const goToPrev = useCallback(() => {
-    setCurrentSlide((prev) => Math.max(0, prev - 1));
-  }, []);
+  // Keep the selection in bounds before rendering a replacement deck.
+  if (data && currentSlide !== activeSlide) setCurrentSlide(activeSlide);
 
-  const goToNext = useCallback(() => {
-    setCurrentSlide((prev) => Math.min(slideCount - 1, prev + 1));
-  }, [slideCount]);
-
-  // Reset slide index when file changes
   useEffect(() => {
-    setCurrentSlide(0);
-  }, [filePath]);
-
-  // Reset image loading state when slide changes
-  useEffect(() => {
-    setImageLoading(true);
-  }, [currentSlide, data]);
-
-  // Re-fetch when refreshKey changes
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0) {
-      mutate();
+    if (isActive) {
+      selectedThumbnailRef.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
     }
-  }, [refreshKey, mutate]);
+  }, [activeSlide, data?.imageRevision, isActive]);
 
-  // Keyboard navigation
+  const hasSlides = slideCount > 0;
+  const reportSlide = useEffectEvent(() => onSlideChange?.(activeSlide));
+  // Persist accepted selection, including bounds changes after a deck replacement.
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Horizontal arrows follow the reading direction, so RTL swaps them.
-      const isRtl = document.documentElement.dir === "rtl";
-      if (e.key === (isRtl ? "ArrowRight" : "ArrowLeft")) {
-        goToPrev();
-      } else if (e.key === (isRtl ? "ArrowLeft" : "ArrowRight")) {
-        goToNext();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToPrev, goToNext]);
+    if (hasSlides) reportSlide();
+  }, [hasSlides, activeSlide]);
 
-  if (isLoading) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!isActive || event.defaultPrevented) return;
+    // Horizontal arrows follow the reading direction.
+    const isRtl = document.documentElement.dir === "rtl";
+    if (
+      event.key === "ArrowUp" ||
+      event.key === (isRtl ? "ArrowRight" : "ArrowLeft")
+    ) {
+      event.preventDefault();
+      setCurrentSlide((slide) => Math.max(0, slide - 1));
+    } else if (
+      event.key === "ArrowDown" ||
+      event.key === (isRtl ? "ArrowLeft" : "ArrowRight")
+    ) {
+      event.preventDefault();
+      setCurrentSlide((slide) =>
+        Math.min(Math.max(0, slideCount - 1), slide + 1)
+      );
+    }
+  }
+
+  if (!data && isLoading && isActive) {
     return (
       <Section
         height="full"
@@ -97,7 +123,7 @@ export default function PptxPreview({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <Section
         height="full"
@@ -134,69 +160,131 @@ export default function PptxPreview({
     );
   }
 
-  const slidePath = data.slide_paths[currentSlide] ?? "";
-  const slideUrl = getArtifactUrl(sessionId, slidePath);
+  const slidePath = data.slide_paths[activeSlide] ?? "";
+  // Local refresh counters can repeat after reloads; each response needs fresh images.
+  const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Slide image */}
-      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-        {imageLoading && (
-          <div className="absolute">
-            <Text font="secondary-body" color="text-03">
-              {t("loadingSlide.label")}
-            </Text>
-          </div>
-        )}
-        <img
-          src={slideUrl}
-          alt={t("slide.counter", {
-            current: currentSlide + 1,
-            total: slideCount,
-          })}
-          className={cn(
-            "max-w-full max-h-full object-contain transition-opacity",
-            imageLoading ? "opacity-0" : "opacity-100"
-          )}
-          onLoad={() => setImageLoading(false)}
-          onError={() => setImageLoading(false)}
-        />
-      </div>
-
-      {/* Navigation bar */}
-      {slideCount > 1 && (
-        <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
-          <button
-            onClick={goToPrev}
-            disabled={currentSlide === 0}
-            className={cn(
-              "p-1 rounded-sm",
-              currentSlide === 0
-                ? "opacity-30 cursor-not-allowed"
-                : "hover:bg-background-neutral-03 cursor-pointer"
-            )}
-          >
-            <SvgChevronLeft size={16} className="stroke-text-02" />
-          </button>
+    <div className="relative h-full min-h-0 flex flex-col overflow-hidden">
+      {error && (
+        <div role="alert" className="shrink-0 px-3 py-2">
           <Text font="secondary-body" color="text-03">
-            {t("slide.counter", {
-              current: currentSlide + 1,
+            {t("error.title")}
+          </Text>
+        </div>
+      )}
+      <DocumentPreviewControls
+        label={t("controls.label")}
+        previousLabel={t("previous.label")}
+        nextLabel={t("next.label")}
+        thumbnailsLabel={t("thumbnails.toggle")}
+        counter={t("slide.counter", {
+          current: activeSlide + 1,
+          total: slideCount,
+        })}
+        page={activeSlide + 1}
+        pageCount={slideCount}
+        showThumbnails={showThumbnails}
+        onToggleThumbnails={() => setShowThumbnails((value) => !value)}
+        onPageChange={(page) => setCurrentSlide(page - 1)}
+      />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <PreviewSidebar
+          hidden={!showThumbnails}
+          label={t("resize.ariaLabel")}
+          initialWidth={112}
+        >
+          <div
+            role="toolbar"
+            aria-label={t("slides.label")}
+            aria-orientation="vertical"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            className="h-full overflow-y-auto overscroll-contain p-2"
+          >
+            <div className="flex flex-col gap-2">
+              {data.slide_paths.map((path, index) => (
+                <SelectCard
+                  key={path}
+                  ref={index === activeSlide ? selectedThumbnailRef : undefined}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t("slide.counter", {
+                    current: index + 1,
+                    total: slideCount,
+                  })}
+                  aria-current={index === activeSlide ? "true" : undefined}
+                  state={index === activeSlide ? "selected" : "empty"}
+                  padding={1}
+                  rounding={2}
+                  onClick={() => setCurrentSlide(index)}
+                >
+                  <div className="flex flex-col gap-1">
+                    <img
+                      src={`${buildArtifactUrl(sessionId, path)}?revision=${data.imageRevision}`}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full aspect-video object-contain rounded-04 bg-background-neutral-02"
+                    />
+                    <Text font="secondary-body" color="text-03">
+                      {format.number(index + 1)}
+                    </Text>
+                  </div>
+                </SelectCard>
+              ))}
+            </div>
+          </div>
+        </PreviewSidebar>
+        <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
+          <SlideImage
+            key={slideUrl}
+            src={slideUrl}
+            alt={t("slide.counter", {
+              current: activeSlide + 1,
               total: slideCount,
             })}
-          </Text>
-          <button
-            onClick={goToNext}
-            disabled={currentSlide === slideCount - 1}
-            className={cn(
-              "p-1 rounded-sm",
-              currentSlide === slideCount - 1
-                ? "opacity-30 cursor-not-allowed"
-                : "hover:bg-background-neutral-03 cursor-pointer"
-            )}
-          >
-            <SvgChevronRight size={16} className="stroke-text-02" />
-          </button>
+          />
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface SlideImageProps {
+  src: string;
+  alt: string;
+}
+
+function SlideImage({ src, alt }: SlideImageProps) {
+  const t = useTranslations("craft.pptxPreview");
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading"
+  );
+  return (
+    <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
+      {status === "loading" && (
+        <div className="absolute">
+          <Text font="secondary-body" color="text-03">
+            {t("loadingSlide.label")}
+          </Text>
+        </div>
+      )}
+      {status === "failed" ? (
+        <Text font="secondary-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className={cn(
+            "max-w-full max-h-full object-contain transition-opacity",
+            status === "loading" ? "opacity-0" : "opacity-100"
+          )}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("failed")}
+        />
       )}
     </div>
   );

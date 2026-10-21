@@ -66,10 +66,6 @@ class OneDriveDrive(BaseModel):
     web_url: str | None = None
 
 
-class OneDriveTokenInfo(BaseModel):
-    expires_in: int | None = None
-
-
 class OneDriveDiscoveredFile(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -145,3 +141,16 @@ class OneDriveCheckpoint(ConnectorCheckpoint):
     current_drive_delta_resync_attempted: bool = False
     delta_started: bool = False
     delta_pages: int = 0
+
+
+class Opened(BaseModel):
+    """The user whose OneDrive answered a probe."""
+
+    user: OneDriveUser
+    drive: OneDriveDrive
+
+
+class UserProblem(BaseModel):
+    identifier: str
+    message: str
+    locked: bool

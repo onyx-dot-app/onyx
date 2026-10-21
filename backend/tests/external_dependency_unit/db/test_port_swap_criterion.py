@@ -58,10 +58,8 @@ from onyx.db.port_attempt import (
     cancel_active_port_attempts,
     create_port_attempt,
     get_active_port_attempt,
-    mark_port_canceled,
-    mark_port_failed,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
     pause_port_attempt,
     request_port_cancel,
 )
@@ -118,7 +116,7 @@ def _make_success_port(
         db_session, cc_pair_id, ss_id, up_to_doc_id=up_to_doc_id
     )
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt.id)
     assert row is not None and row.time_completed is not None
@@ -161,7 +159,9 @@ def _pause_unit(db_session: Session, cc_pair_id: int, ss_id: int) -> None:
     """Park a connector unit at PAUSED (FAILED -> PAUSED) for the swap-gate tests."""
     attempt = create_port_attempt(db_session, cc_pair_id, ss_id)
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_failed(db_session, attempt.id, error_msg="durable")
+    mark_port_terminal(
+        db_session, attempt.id, PortAttemptStatus.FAILED, error_msg="durable"
+    )
     assert pause_port_attempt(db_session, attempt.id) is True
 
 
@@ -196,7 +196,9 @@ def test_port_swap_paused_user_blocks(
     try:
         attempt = create_port_attempt(db_session, None, future_id, port_user_id=user.id)
         mark_port_in_progress(db_session, attempt.id)
-        mark_port_failed(db_session, attempt.id, error_msg="durable")
+        mark_port_terminal(
+            db_session, attempt.id, PortAttemptStatus.FAILED, error_msg="durable"
+        )
         assert pause_port_attempt(db_session, attempt.id) is True
 
         # no required connectors; the single required user is PAUSED -> blocked
@@ -419,7 +421,7 @@ def test_request_cancel_in_progress_flags_but_stays_active(
 def test_in_progress_ack_unblocks_waiter(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """The task's ack (mark_port_canceled) is what flips the row terminal and lets
+    """The task's ack (mark_port_terminal with CANCELED) is what flips the row terminal and lets
     the waiter proceed — get_active_port_attempt returns None only after it."""
     cc_pair, future_id = cc_pair_and_future
     attempt = create_port_attempt(db_session, cc_pair.id, future_id)
@@ -427,7 +429,7 @@ def test_in_progress_ack_unblocks_waiter(
     request_port_cancel(db_session, attempt.id)
     assert get_active_port_attempt(db_session, cc_pair.id, future_id) is not None
 
-    mark_port_canceled(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.CANCELED)
 
     assert _port_row(db_session, attempt.id).status == PortAttemptStatus.CANCELED
     assert get_active_port_attempt(db_session, cc_pair.id, future_id) is None
@@ -439,7 +441,7 @@ def test_request_cancel_terminal_is_noop(
     cc_pair, future_id = cc_pair_and_future
     attempt = create_port_attempt(db_session, cc_pair.id, future_id)
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
 
     request_port_cancel(db_session, attempt.id)
 
@@ -460,7 +462,7 @@ def test_mark_in_progress_rejects_duplicate_and_terminal(
     assert mark_port_in_progress(db_session, attempt.id) is True
     assert mark_port_in_progress(db_session, attempt.id) is False  # duplicate
 
-    mark_port_canceled(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.CANCELED)
     assert mark_port_in_progress(db_session, attempt.id) is False  # terminal
 
 
@@ -902,7 +904,7 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
             up_to_doc_id=_ALL_FILES_BOUND,
         )
         mark_port_in_progress(db_session, attempt.id)
-        mark_port_succeeded(db_session, attempt.id)
+        mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
         db_session.expire_all()
         _clear_verification_backoff(future_id)
 

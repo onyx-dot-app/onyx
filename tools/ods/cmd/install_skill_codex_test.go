@@ -24,7 +24,7 @@ func TestInstallCodexSkillsCompilesEnforcedAndExcludesTheFile(t *testing.T) {
 	writeSkill(t, source, "enforced", "rule-b", "second", "Do B.")
 	writeSkill(t, source, "skills", "on-demand", "db work", "Use sessions.")
 
-	skills, err := discoverLLMContextSkills(source)
+	skills, err := discoverAgentContextSkills(source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestInstallCodexSkillsSymlinksNativeSkills(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	link := filepath.Join(home, agentsSkillsDir, "on-demand")
+	link := filepath.Join(repoRoot, projectSkillsDir, "on-demand")
 	target, err := os.Readlink(link)
 	if err != nil {
 		t.Fatalf("expected %s to be a symlink: %v", link, err)
@@ -139,8 +139,8 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 }
 
 func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
-	home, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	_, repoRoot := skillEnv(t)
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--agent", "codex")
@@ -152,7 +152,7 @@ func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
 	if !strings.Contains(compiled, "## style") {
 		t.Fatalf("enforced skill missing from the compiled file: %q", compiled)
 	}
-	link := filepath.Join(home, agentsSkillsDir, "review")
+	link := filepath.Join(repoRoot, projectSkillsDir, "review")
 	if _, err := os.Readlink(link); err != nil {
 		t.Fatalf("expected the on-demand skill to be symlinked: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestExcludeAgentsLocalAppendsToAnExistingListWithoutTrailingNewline(t *test
 	excludePath := filepath.Join(repoRoot, ".git", "info", "exclude")
 	deployWriteFile(t, excludePath, "*.tmp")
 
-	if err := excludeAgentsLocal(repoRoot); err != nil {
+	if err := excludeFromGit(repoRoot, agentsLocalFile); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +232,7 @@ func requireNonRoot(t *testing.T) {
 
 func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 	// .claude exists as a file, so creating the directory fails.
 	deployWriteFile(t, filepath.Join(repoRoot, ".claude"), "in the way")
@@ -296,7 +296,7 @@ func TestLinkManualSkillsRemovesStaleLinksIntoTheSourceOnly(t *testing.T) {
 	writeSkill(t, source, "skills", "kept", "still here", "Body.")
 	// A link into the source whose skill is gone, a link elsewhere, and a
 	// real directory the user made themselves.
-	skillsDir := filepath.Join(home, agentsSkillsDir)
+	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
 	deployWriteFile(t, filepath.Join(source, "skills", "removed", "SKILL.md"), "old")
 	staleTarget := filepath.Join(source, "skills", "removed")
 	stale := filepath.Join(skillsDir, "removed")

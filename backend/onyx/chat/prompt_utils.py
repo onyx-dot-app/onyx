@@ -60,7 +60,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
     )
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def calculate_reserved_tokens(
     db_session: Session,
     persona_system_prompt: str,

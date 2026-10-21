@@ -61,7 +61,7 @@ jest.mock("@opal/layouts/toast/store", () => {
 // Mock useTierAtLeast — return false so the test exercises the
 // non-paid-tier code path, matching the prior usePaidEnterpriseFeaturesEnabled
 // mock behavior.
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
   useTierAtLeast: () => false,
 }));
 

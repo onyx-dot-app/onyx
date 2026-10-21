@@ -4,9 +4,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_documents_by_source
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
-from onyx.server.features.build.db.user_library import list_user_files
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.utils.logger import setup_logger
@@ -21,7 +22,9 @@ def build_user_library_fileset(user_id: UUID, db_session: Session) -> FileSet:
     files: FileSet = {}
     file_store = get_default_file_store()
 
-    for doc in list_user_files(db_session, user_id):
+    for doc in get_documents_by_source(
+        db_session=db_session, source=DocumentSource.CRAFT_FILE, creator_id=user_id
+    ):
         meta = doc.doc_metadata or {}
         if meta.get("is_directory") or meta.get("sync_disabled"):
             continue

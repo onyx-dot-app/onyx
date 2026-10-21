@@ -11,7 +11,14 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, ShadowDiv, Spacer, Text, Tooltip } from "@opal/components";
+import {
+  Button,
+  Divider,
+  ShadowDiv,
+  Spacer,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
@@ -183,7 +190,7 @@ function SidebarHeader({
         prominence="tertiary"
         aria-label={foldLabel}
         tooltip={foldLabel}
-        tooltipSide={folded ? "right" : "bottom"}
+        tooltipSide={folded ? "end" : "bottom"}
         size="md"
         onClick={toggleFolded}
       />
@@ -199,7 +206,7 @@ function SidebarHeader({
   // sidebar can still be opened where there is no hover to reveal anything —
   // touch devices and keyboard navigation.
   const foldedLogoButton = (
-    <Tooltip tooltip={foldLabel} side="right">
+    <Tooltip tooltip={foldLabel} side="end">
       <Interactive.Stateless
         prominence="tertiary"
         type="button"
@@ -371,6 +378,14 @@ function SidebarSection({
 }
 
 // ---------------------------------------------------------------------------
+// Divider — horizontal rule between groups in the sidebar
+// ---------------------------------------------------------------------------
+
+function SidebarDivider() {
+  return <Divider paddingParallel={2} paddingPerpendicular={2} />;
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -380,5 +395,6 @@ export {
   SidebarBody as Body,
   SidebarFooter as Footer,
   SidebarSection as Section,
+  SidebarDivider as Divider,
 };
 export type { SidebarRootProps };

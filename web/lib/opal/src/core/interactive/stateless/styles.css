@@ -14,7 +14,19 @@
 
    Interaction override: `data-interaction="hover"` and `data-interaction="active"`
    allow JS-controlled visual state overrides without actual pointer events.
+
+   Keyboard focus paints the hover state in place of the browser's ring; a
+   ring is for inputs only. Inside a pointer-mode container (see
+   `useGridNavigation`) focus does not paint.
 ============================================================================ */
+
+.interactive:is(
+  [data-interactive-variant="default"],
+  [data-interactive-variant="action"],
+  [data-interactive-variant="danger"]
+):focus-visible {
+  outline: none;
+}
 
 /* ---------------------------------------------------------------------------
    Default + Primary
@@ -27,6 +39,11 @@
 .interactive[data-interactive-variant="default"][data-interactive-prominence="primary"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="primary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="default"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
   [data-disabled],
@@ -62,6 +79,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -82,6 +104,16 @@
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
+/* An open secondary popup trigger keeps its rest fill and takes a border-05
+   outline. `aria-haspopup` gates it: a Collapsible or disclosure toggle also
+   sets the open state but opens no popup. */
+.interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][aria-haspopup]:not(
+  [aria-haspopup="false"]
+):not([data-disabled]):is([data-state="open"], [aria-expanded="true"]) {
+  @apply border-border-05;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
 .interactive[data-interactive-variant="default"][data-interactive-prominence="secondary"][data-disabled] {
   @apply bg-background-neutral-03;
   --interactive-foreground: var(--text-01);
@@ -99,6 +131,11 @@
 .interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="default"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
   [data-disabled],
@@ -138,6 +175,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="default"][data-interactive-prominence="internal"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="default"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -176,6 +218,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="primary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="action"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -209,6 +256,11 @@
 .interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="action"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
   [data-disabled],
@@ -244,6 +296,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="action"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -277,6 +334,11 @@
 .interactive[data-interactive-variant="action"][data-interactive-prominence="internal"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="action"][data-interactive-prominence="internal"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="action"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
   [data-disabled],
@@ -312,6 +374,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="primary"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -345,6 +412,11 @@
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="secondary"][data-interaction="hover"]:not(
   [data-disabled],
@@ -380,6 +452,11 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="tertiary"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -413,6 +490,11 @@
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"]:focus-visible:not(
+  [data-disabled],
+  [data-passive],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="danger"][data-interactive-prominence="internal"][data-interaction="hover"]:not(
   [data-disabled],

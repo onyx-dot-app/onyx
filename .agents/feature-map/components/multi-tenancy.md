@@ -217,7 +217,7 @@ shape:
 
 - `background/indexing/job_client.py` (indexing subprocess dispatch)
 - `background/periodic_poller.py`
-- `background/celery/tasks/docprocessing/tasks.py`, `monitoring/tasks.py`
+- `background/celery/tasks/docprocessing/tasks.py`
 - `tracing/processors/user_usage_processor.py`
 - `sandbox_proxy/resolvers/mcp_server.py`
 - `onyxbot/slack/listener.py`, `onyxbot/slack/utils.py`, `onyxbot/discord/cache.py`,

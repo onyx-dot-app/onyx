@@ -2074,17 +2074,17 @@ def _create_image_gen_config(
     admin_user: DATestUser,
     image_provider_id: str,
     model_name: str,
-    source_llm_provider_id: int,
     is_default: bool = False,
 ) -> dict:
-    """Utility function to create an image generation config using clone mode."""
+    """Utility function to create an image generation config."""
     response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config",
         headers=admin_user.headers,
         json={
             "image_provider_id": image_provider_id,
             "model_name": model_name,
-            "source_llm_provider_id": source_llm_provider_id,
+            "provider": "openai",
+            "api_key": "sk-test-image-gen-key",
             "is_default": is_default,
         },
     )
@@ -2201,12 +2201,11 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         vision_provider["id"], admin_user, "gpt-4-vision-preview"
     )
 
-    # Step 3: Create image generation config using clone mode from regular provider
+    # Step 3: Create image generation config
     _create_image_gen_config(
         admin_user=admin_user,
         image_provider_id=image_gen_provider_id,
         model_name="gpt-image-1",
-        source_llm_provider_id=regular_provider["id"],
         is_default=True,
     )
 

@@ -13,6 +13,7 @@ catalogue is only asked for when a recording names a rule.
 from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
+import requests
 from pydantic import ValidationError
 
 from onyx.access.models import ExternalAccess
@@ -27,10 +28,15 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingSettings,
     ZoomShareRecording,
 )
-from onyx.connectors.zoom.recordings.models import user_does_not_exist
+from onyx.connectors.zoom.recordings.models import (
+    definitely_absent,
+    user_does_not_exist,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+AccessResolver = Callable[[ZoomRecordingEntry], ExternalAccess]
 
 # Zoom's `authentication_option` for "Only people with access". It never appears
 # in the rule catalogue, and it arrives with `share_recording` still "publicly",
@@ -99,6 +105,12 @@ class ZoomAccessListUnavailable(Exception):
     the whole attempt."""
 
 
+class ZoomRecordingGone(Exception):
+    """The recording's own settings answered not found, so it was deleted after
+    it was listed. A not-found from any other call says nothing about the
+    recording, so it is not turned into this."""
+
+
 def approved_registrant_emails(
     registrants: Sequence[ZoomRecordingRegistrant],
 ) -> list[str]:
@@ -143,11 +155,18 @@ def resolve_recording_access(
     treat_link_access_as_public: bool,
     rule_grant: Callable[[str], RuleGrant | None],
     owner_email: str | None,
+    add_prefix: bool,
 ) -> ExternalAccess:
     """Raises ZoomAccessListUnavailable rather than answering with an empty
-    list, which would read as nobody having access."""
+    list, which would read as nobody having access.
+
+    add_prefix is True on the indexing path, whose group ids reach the index as
+    written, and False on the doc-sync path, where upsert_document_external_perms
+    adds the source prefix itself. Prefixed twice, an id matches no group the
+    group sync filled.
+    """
     try:
-        settings = client.get_recording_settings(recording.uuid)
+        settings = _recording_settings(client, recording.uuid)
         grant = _link_access(
             settings, recording.uuid, treat_link_access_as_public, rule_grant
         )
@@ -175,12 +194,9 @@ def resolve_recording_access(
             f"the registered viewers of {recording.uuid}",
             approved_registrant_emails(registrants),
         )
-    # Prefixed with the source here because this is the indexing path; the
-    # group sync's membership rows get the same prefix on the way in.
-    groups = {
-        build_ext_group_name_for_onyx(build_domain_group_id(d), DocumentSource.ZOOM)
-        for d in grant.domains
-    }
+    groups = {build_domain_group_id(d) for d in grant.domains}
+    if add_prefix:
+        groups = {build_ext_group_name_for_onyx(g, DocumentSource.ZOOM) for g in groups}
 
     if not emails and not groups and not grant.public:
         raise ZoomAccessListUnavailable(
@@ -203,6 +219,17 @@ def resolve_recording_access(
             ExternalAccess.MAX_NUM_ENTRIES,
         )
     return access
+
+
+def _recording_settings(client: ZoomClient, uuid: str) -> ZoomRecordingSettings:
+    try:
+        return client.get_recording_settings(uuid)
+    except requests.HTTPError as e:
+        if definitely_absent(e):
+            raise ZoomRecordingGone(
+                f"Zoom recording {uuid} is gone since it was listed"
+            ) from e
+        raise
 
 
 def _link_access(

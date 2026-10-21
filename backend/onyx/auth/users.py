@@ -1,11 +1,10 @@
 import contextvars
 import hashlib
 import os
-import random
 import secrets
 import string
 import uuid
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -58,6 +57,7 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
+from redis.exceptions import WatchError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -102,6 +102,7 @@ from onyx.configs.app_configs import (
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
     REDIS_AUTH_KEY_PREFIX,
+    REDIS_USER_SESSIONS_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
@@ -121,6 +122,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.api_key import fetch_api_key_auth_result, is_api_key_email_address
 from onyx.db.auth import (
+    delete_access_tokens_for_user,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -141,6 +143,7 @@ from onyx.db.pat import resolve_pat
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    delete_user_from_db__no_commit,
     fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
@@ -169,10 +172,8 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
-    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
-    optional_telemetry,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
@@ -265,27 +266,32 @@ def get_display_email(email: str | None, space_less: bool = False) -> str:
     return email or ""
 
 
+_GENERATED_PASSWORD_DEFAULT_LENGTH = 12
+
+
 def generate_password() -> str:
-    lowercase_letters = string.ascii_lowercase
-    uppercase_letters = string.ascii_uppercase
-    digits = string.digits
-    special_characters = string.punctuation
-
-    # Ensure at least one of each required character type
-    password = [
-        secrets.choice(uppercase_letters),
-        secrets.choice(digits),
-        secrets.choice(special_characters),
-    ]
-
-    # Fill the rest with a mix of characters
-    remaining_length = 12 - len(password)
-    all_characters = lowercase_letters + uppercase_letters + digits + special_characters
-    password.extend(secrets.choice(all_characters) for _ in range(remaining_length))
-
-    # Shuffle the password to randomize the position of the required characters
-    random.shuffle(password)
-
+    """Random password that satisfies the configured password policy, so
+    `validate_password` accepts it (admin reset, JWT user provisioning)."""
+    settings = get_security_settings()
+    length = min(
+        max(_GENERATED_PASSWORD_DEFAULT_LENGTH, settings.password_min_length),
+        settings.password_max_length,
+    )
+    # One of each class satisfies every require_* flag. The policy floors
+    # password_max_length at 4, so all four always fit. Specials come only from
+    # PASSWORD_SPECIAL_CHARS, the set validate_password accepts.
+    character_classes = (
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        PASSWORD_SPECIAL_CHARS,
+    )
+    password = [secrets.choice(chars) for chars in character_classes]
+    all_characters = "".join(character_classes)
+    password.extend(
+        secrets.choice(all_characters) for _ in range(length - len(password))
+    )
+    secrets.SystemRandom().shuffle(password)
     return "".join(password)
 
 
@@ -598,6 +604,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    async def delete(
+        self,
+        user: User,
+        request: Request | None = None,
+    ) -> None:
+        await self.on_before_delete(user, request)
+        await self.user_db.session.run_sync(
+            partial(delete_user_from_db__no_commit, user)
+        )
+        await self.user_db.session.commit()
+        await self.on_after_delete(user, request)
 
     @asynccontextmanager
     async def _tenant_session_with_bound_user_db(
@@ -1005,7 +1023,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             oauth_account_dict,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1409,11 +1427,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         logger.debug("User %s has registered.", user.id)
-        optional_telemetry(
-            record_type=RecordType.SIGN_UP,
-            data={"action": "create"},
-            user_id=str(user.id),
-        )
 
         emit_audit_event(
             AuditAction.REGISTER,
@@ -1471,6 +1484,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        await self.revoke_sessions(user)
         emit_audit_event(
             AuditAction.PASSWORD_RESET,
             AuditOutcome.SUCCESS,
@@ -1535,7 +1549,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1615,30 +1629,31 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return user
 
     async def reset_password_as_admin(self, user_id: uuid.UUID) -> str:
-        """Admin-only. Generate a random password for a user and return it."""
+        """Admin-only. Generate a random password for a user, sign out all of
+        their sessions, and return the password."""
         user = await self.get(user_id)
         new_password = generate_password()
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user)
         return new_password
 
     async def change_password_if_old_matches(
-        self, user: User, old_password: str, new_password: str
+        self,
+        user: User,
+        old_password: str,
+        new_password: str,
+        keep_token: str | None = None,
     ) -> None:
         """
-        For normal users to change password if they know the old one.
+        For normal users to change password if they know the old one. Signs
+        out the user's other sessions; ``keep_token`` is the caller's session.
         Raises 400 if old password doesn't match.
         """
         verified, updated_password_hash = self.password_helper.verify_and_update(
             old_password, user.hashed_password
         )
         if not verified:
-            # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
-
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid current password",
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid current password")
 
         # If the hash was upgraded behind the scenes, we can keep it before setting the new password:
         if updated_password_hash:
@@ -1646,6 +1661,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Now apply and validate the new password
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user, keep_token=keep_token)
+
+    async def revoke_sessions(self, user: User, keep_token: str | None = None) -> None:
+        """
+        Signs out every session of ``user`` (cookie and mobile bearer) except
+        ``keep_token``. JWT sessions are stateless and stay valid until expiry.
+        """
+        if AUTH_BACKEND == AuthBackend.REDIS:
+            await TenantAwareRedisStrategy().revoke_user_sessions(
+                str(user.id), keep_token=keep_token
+            )
+        elif AUTH_BACKEND == AuthBackend.POSTGRES:
+            await delete_access_tokens_for_user(
+                self.user_db.session, user.id, keep_token=keep_token
+            )
+        else:
+            logger.warning(
+                "Cannot revoke sessions for user %s: JWT sessions are stateless",
+                user.id,
+            )
 
 
 async def get_user_manager(
@@ -1675,6 +1710,13 @@ cookie_transport = CookieTransport(
 bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
 
 
+def get_session_token_from_request(request: Request) -> str | None:
+    """The session token ``optional_user`` accepted for this request, if any.
+    None for API key / PAT requests."""
+    token = request.scope.get("state", {}).get("authenticated_session_token")
+    return token if isinstance(token, str) and token else None
+
+
 T = TypeVar("T", covariant=True)
 ID = TypeVar("ID", contravariant=True)
 
@@ -1689,6 +1731,9 @@ class RefreshableStrategy(Protocol):
         Returns either the same token with extended expiration or a new token.
         """
         ...
+
+
+_REFRESH_WATCH_ATTEMPTS = 3
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
@@ -1727,7 +1772,57 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
+        await self._index_session(str(user.id), token)
         return token
+
+    async def _index_session(self, user_id: str, token: str) -> None:
+        # Per-user set of session tokens, so revoke_user_sessions needs no scan.
+        # It lives as long as the user's newest session; members whose token
+        # key has expired are pruned here.
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = list(
+            await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        )
+        if members:
+            pipe = redis.pipeline(transaction=False)
+            for member in members:
+                member_token = member.decode() if isinstance(member, bytes) else member
+                pipe.exists(f"{self.key_prefix}{member_token}")
+            exists = await pipe.execute()
+            expired = [m for m, found in zip(members, exists, strict=True) if not found]
+            if expired:
+                await cast(Awaitable[int], redis.srem(index_key, *expired))
+        await cast(Awaitable[int], redis.sadd(index_key, token))
+        ttl = physical_session_ttl_seconds(self.lifetime_seconds)
+        if ttl is not None:
+            await redis.expire(index_key, ttl)
+
+    async def revoke_user_sessions(
+        self, user_id: str, keep_token: str | None = None
+    ) -> None:
+        """
+        Tombstones every indexed session of the user except ``keep_token``.
+        Sessions written before the index existed are not covered until they
+        are refreshed.
+        """
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        for member in members:
+            token = member.decode() if isinstance(member, bytes) else member
+            if token == keep_token:
+                continue
+            token_key = f"{self.key_prefix}{token}"
+            raw_value = await redis.get(token_key)
+            result = classify_session_token_value(raw_value)
+            if not isinstance(result, SessionRejection) and result.sub == user_id:
+                await redis.set(
+                    token_key,
+                    build_session_tombstone_value(raw_value, fallback_user_id=user_id),
+                    ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+                )
+            await cast(Awaitable[int], redis.srem(index_key, member))
 
     async def read_token(
         self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
@@ -1769,6 +1864,10 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
         )
+        await cast(
+            Awaitable[int],
+            redis.srem(f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user.id}", token),
+        )
 
     async def refresh_token(self, token: Optional[str], user: User) -> str:
         """Refreshes a token by extending its expiration time in Redis."""
@@ -1779,25 +1878,45 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 
-        raw_value = await redis.get(token_key)
-        result = classify_session_token_value(raw_value)
-        if isinstance(result, SessionRejection) or result.sub is None:
-            # Only a live session is extendable; mint a fresh one otherwise.
-            return await self.write_token(user)
+        # WATCH makes the extend fail if a revoke/logout tombstone lands
+        # between the read and the write, so a revoked session is never revived.
+        for _ in range(_REFRESH_WATCH_ATTEMPTS):
+            async with redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(token_key)
+                raw_value = await pipe.get(token_key)
+                result = classify_session_token_value(raw_value)
+                if isinstance(result, SessionRejection) or result.sub is None:
+                    # Never extend or replace a revoked, expired or unknown
+                    # session.
+                    if isinstance(result, SessionRejection):
+                        record_session_rejection(result)
+                    raise build_session_rejection_error() or OnyxError(
+                        OnyxErrorCode.UNAUTHENTICATED
+                    )
 
-        # Extend the logical expiry; keep the original issue time.
-        now = datetime.now(timezone.utc)
-        await redis.set(
-            token_key,
-            build_session_token_value(
-                user_id=result.sub,
-                tenant_id=result.tenant_id,
-                issued_at=result.issued_at or now,
-                expires_at=compute_session_expires_at(now, self.lifetime_seconds),
-            ),
-            ex=physical_session_ttl_seconds(self.lifetime_seconds),
-        )
+                # Extend the logical expiry; keep the original issue time.
+                now = datetime.now(timezone.utc)
+                pipe.multi()
+                pipe.set(
+                    token_key,
+                    build_session_token_value(
+                        user_id=result.sub,
+                        tenant_id=result.tenant_id,
+                        issued_at=result.issued_at or now,
+                        expires_at=compute_session_expires_at(
+                            now, self.lifetime_seconds
+                        ),
+                    ),
+                    ex=physical_session_ttl_seconds(self.lifetime_seconds),
+                )
+                try:
+                    await pipe.execute()
+                except WatchError:
+                    continue
+            await self._index_session(result.sub, token)
+            return token
 
+        # Persistent contention: leave the session as it is.
         return token
 
 
@@ -1821,8 +1940,8 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
         access_token = await self._access_token_db.get_by_token(token)
 
         if access_token is None:
-            # Token not found, create new one
-            return await self.write_token(user)
+            # Deleted by logout or revocation; never mint a replacement.
+            raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
         # Update expiration time
         new_expires = datetime.now(timezone.utc) + timedelta(
@@ -2030,11 +2149,13 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                             user.email,
                         )
                         return await backend.transport.get_login_response(new_token)
+                    except OnyxError:
+                        raise
                     except Exception as e:
+                        # No logout/login fallback: it could mint a session
+                        # after a concurrent revoke. The client logs in again.
                         logger.error("Error refreshing session token: %s", str(e))
-                        # Fallback to logout and login if refresh fails
-                        await backend.logout(strategy, user, token)
-                        return await backend.login(strategy, user)
+                        raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
                 # Fallback: logout and login again
                 logger.info(
@@ -2042,6 +2163,8 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 )
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
+            except OnyxError:
+                raise
             except Exception as e:
                 logger.error("Unexpected error in refresh endpoint: %s", str(e))
                 raise HTTPException(
@@ -3058,7 +3181,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     @router.get(
         "/callback",
         name=callback_route_name,

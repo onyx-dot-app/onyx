@@ -264,6 +264,42 @@ class TestSyncModelConfigurations:
             assert mock_session.execute.call_count == 1  # One VISION flow insert
             mock_session.commit.assert_called_once()
 
+    def test_marks_existing_model_as_router(self) -> None:
+        """An existing row gains is_router when the source newly reports it
+        (e.g. a row synced before router detection existed). Returns 0 new
+        models but commits the flag."""
+        mock_existing_model = _make_existing_model(
+            "openrouter/auto", [LLMModelFlowType.CHAT]
+        )
+        mock_existing_model.is_router = False
+
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = [mock_existing_model]
+
+        mock_session = MagicMock()
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
+        ):
+            models = [
+                SyncModelEntry(
+                    name="openrouter/auto",
+                    display_name="Auto Router",
+                    is_router=True,
+                ),
+            ]
+
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=models,
+            )
+
+            assert result == 0
+            assert mock_existing_model.is_router is True
+            mock_session.commit.assert_called_once()
+
     def test_does_not_remove_flows(self) -> None:
         """Capability flags are only added, never removed: a model that already
         has VISION keeps it even if the source omits it this fetch."""

@@ -229,7 +229,10 @@ function InputTime({
                 )}
                 onKeyDown={handleSegmentKeyDown(
                   part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null
+                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                  i < segmentParts.length - 1
+                    ? segmentRefs[segmentParts[i + 1]!]
+                    : null
                 )}
               />
             </React.Fragment>
@@ -237,12 +240,20 @@ function InputTime({
         </div>
 
         {clearable && value && !disabled && (
-          <div className="opal-input-segmented-actions">
+          <div
+            role="presentation"
+            className="opal-input-segmented-actions"
+            // Escape on an action returns focus to the field's first segment.
+            onKeyDown={(event) => {
+              if (event.key === "Escape") hoursRef.current?.focus();
+            }}
+          >
             <Button
               icon={SvgX}
-              prominence="internal"
+              prominence="tertiary"
               size="sm"
               tooltip={strings.clear}
+              aria-label={strings.clear}
               onClick={() => onChange(null)}
             />
           </div>

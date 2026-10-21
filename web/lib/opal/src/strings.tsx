@@ -1,6 +1,10 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
+import {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
 
 /**
  * Labels Opal renders itself. Hosts translate them via `OpalStringsProvider`.
@@ -15,8 +19,23 @@ export type OpalStrings = {
   copied: string;
   copyCode: string;
   clear: string;
-  attachFile: string;
   clearFile: string;
+  /** InputSingleUpload's placeholder when its caller gives none. */
+  inputUploadPlaceholder: string;
+  /** InputMultiUpload's placeholder when its caller gives none. */
+  inputMultiUploadPlaceholder: string;
+  /** InputMultiUpload's copy while files are dragged and it holds none. */
+  inputMultiUploadDropToAdd: string;
+  /** InputMultiUpload's copy while files are dragged over it and it holds some. */
+  inputMultiUploadDropToAddMore: string;
+  /** InputSingleUpload's label for a value that was pasted, not uploaded. */
+  inputUploadPasted: string;
+  /** InputSingleUpload's label for a value set from outside, such as a saved one. */
+  inputUploadAttached: string;
+  /** InputSingleUpload's copy while a file is dragged and it holds none. */
+  inputUploadDropToAdd: string;
+  /** InputSingleUpload's copy while a file is dragged over it and it holds one. */
+  inputUploadDropToReplace: string;
   clearFilter: string;
   date: string;
   dateRange: string;
@@ -51,6 +70,7 @@ export type OpalStrings = {
   collapsibleExpand: string;
   collapsibleFoldSection: (title: string) => string;
   collapsibleExpandSection: (title: string) => string;
+  dividerViewAll: string;
   contentOptional: string;
   previousPage: string;
   nextPage: string;
@@ -106,6 +126,14 @@ export type OpalStrings = {
   formatNumber: (value: number) => string;
   /** Inverse of formatNumber for typed input: a whole number in the locale digits (ASCII always accepted), else null. */
   parseNumber: (text: string) => number | null;
+  /** InputCurrency: label of the whole field. */
+  inputCurrencyAmount: string;
+  /** InputCurrency: label of the whole-number segment. */
+  inputCurrencyWhole: string;
+  /** InputCurrency: label of the fraction segment. */
+  inputCurrencyFraction: string;
+  /** InputCurrency: how the locale writes amounts in `currency` (an ISO 4217 code). */
+  inputCurrencyParts: (currency: string) => CurrencyParts;
   /** Table footer summary, e.g. "Showing 1~10 of 22", as text chunks around the two styled nodes. */
   showing: (range: ReactNode, total: ReactNode) => ReactNode;
   /** Pagination count summary, e.g. "1~10 of 22", same chunk shape as `showing`. */
@@ -121,8 +149,15 @@ export const defaultOpalStrings: OpalStrings = {
   copied: "Copied!",
   copyCode: "Copy code",
   clear: "Clear",
-  attachFile: "Attach file",
   clearFile: "Clear file",
+  inputUploadPlaceholder: "Add a file…",
+  inputMultiUploadPlaceholder: "Add files…",
+  inputMultiUploadDropToAdd: "Drop files here to add",
+  inputMultiUploadDropToAddMore: "Drop here to add more files",
+  inputUploadPasted: "Pasted text",
+  inputUploadAttached: "File attached",
+  inputUploadDropToAdd: "Drop file here to add",
+  inputUploadDropToReplace: "Drop here to replace file",
   clearFilter: "Clear filter",
   date: "Date",
   dateRange: "Date range",
@@ -157,6 +192,7 @@ export const defaultOpalStrings: OpalStrings = {
   collapsibleExpand: "Expand",
   collapsibleFoldSection: (title) => `Fold ${title}`,
   collapsibleExpandSection: (title) => `Expand ${title}`,
+  dividerViewAll: "View All",
   contentOptional: "(Optional)",
   previousPage: "Previous page",
   nextPage: "Next page",
@@ -216,6 +252,10 @@ export const defaultOpalStrings: OpalStrings = {
   keyValueRemovePair: (label, index) => `Remove ${label} pair ${index}`,
   formatNumber: (value) => String(value),
   parseNumber: (text) => (/^\d+$/.test(text) ? Number(text) : null),
+  inputCurrencyAmount: "Amount",
+  inputCurrencyWhole: "Whole amount",
+  inputCurrencyFraction: "Fractional amount",
+  inputCurrencyParts: (currency) => getCurrencyParts("en-US", currency),
   showing: (range, total) => ["Showing ", range, " of ", total],
   rangeOfTotal: (range, total) => [range, " of ", total],
 };

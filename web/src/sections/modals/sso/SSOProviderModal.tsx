@@ -2,7 +2,7 @@
 
 import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { Form, Formik, useField } from "formik";
+import { Form, Formik, useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import {
@@ -35,7 +35,7 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import SwitchField from "@/refresh-components/form/SwitchField";
+import { InputSwitchField } from "@opal/form";
 import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
@@ -217,20 +217,15 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   );
 }
 
-function ConfigInput({
-  field,
-  isEditing,
-}: {
-  field: SSOConfigField;
-  isEditing: boolean;
-}) {
+function ConfigInput({ field }: { field: SSOConfigField }) {
   const t = useTranslations("admin.ssoProviders");
+  const { initialValues } = useFormikContext<SSOProviderFormValues>();
   const name = `config.${field.name}`;
   const placeholder = field.placeholderKey
     ? t(field.placeholderKey)
-    : field.placeholder;
+    : undefined;
   if (field.kind === "switch") {
-    return <SwitchField name={name} />;
+    return <InputSwitchField name={name} />;
   }
   if (field.kind === "chips") {
     return <TagListField name={name} placeholder={placeholder} />;
@@ -239,11 +234,15 @@ function ConfigInput({
     return <InputTextAreaField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "password") {
+    // On edit, the initial value is the backend's masked stored secret.
+    const stored = initialValues.config[field.name];
     return (
       <PasswordInputTypeInField
         name={name}
         placeholder={placeholder}
-        isNonRevealable={isEditing}
+        existingValue={
+          typeof stored === "string" && stored ? stored : undefined
+        }
       />
     );
   }
@@ -389,7 +388,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   >
                     <InputTypeInField
                       name="name"
-                      placeholder="company-a"
+                      placeholder={t("modals.provider.nameField.placeholder")}
                       variant={isEditing ? "disabled" : undefined}
                     />
                   </InputVertical>
@@ -422,7 +421,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       description={t(field.descriptionKey)}
                       withLabel={`config.${field.name}`}
                     >
-                      <ConfigInput field={field} isEditing={isEditing} />
+                      <ConfigInput field={field} />
                     </InputVertical>
                   ))}
 

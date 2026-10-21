@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -17,7 +18,8 @@ const customToolResponse = `{
 	"passthrough_auth": false,
 	"mcp_server_id": null,
 	"oauth_config_id": null,
-	"enabled": true
+	"enabled": true,
+	"default_chat_enabled": false
 }`
 
 func TestCreateCustomToolSendsFullBody(t *testing.T) {
@@ -135,20 +137,32 @@ func TestValidateCustomToolDefinitionReturnsMethods(t *testing.T) {
 	}
 }
 
-func TestSetCustomToolEnabledSendsSingletonList(t *testing.T) {
-	c, captured := newTestServer(t, http.StatusOK, `{"updated_count": 1, "tool_ids": [7]}`)
-	if err := c.SetCustomToolEnabled(context.Background(), 7, false); err != nil {
-		t.Fatal(err)
-	}
-	if captured.Method != http.MethodPatch || captured.Path != "/admin/tool/status" {
-		t.Errorf("%s %s", captured.Method, captured.Path)
-	}
-	body := bodyAsMap(t, captured.Body)
-	ids, ok := body["tool_ids"].([]any)
-	if !ok || len(ids) != 1 || ids[0].(float64) != 7 {
-		t.Errorf("tool_ids = %v, want [7]", body["tool_ids"])
-	}
-	if body["enabled"] != false {
-		t.Errorf("enabled = %v, want false", body["enabled"])
+func TestCustomToolWritesDefaultChatAvailability(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, method := range []string{http.MethodPost, http.MethodPut} {
+			t.Run(fmt.Sprintf("%s/%t", method, enabled), func(t *testing.T) {
+				c, captured := newTestServer(t, http.StatusOK, customToolResponse)
+				req := CustomToolWrite{Name: "weather", DefaultChatEnabled: enabled}
+				var err error
+				if method == http.MethodPost {
+					_, err = c.CreateCustomTool(context.Background(), req)
+				} else {
+					_, err = c.UpdateCustomTool(context.Background(), 7, req)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				body := bodyAsMap(t, captured.Body)
+				if body["default_chat_enabled"] != enabled {
+					t.Fatalf("default_chat_enabled = %v, want %v", body["default_chat_enabled"], enabled)
+				}
+				if _, exists := body["enabled"]; exists {
+					t.Fatal("must not send legacy global enabled")
+				}
+				if captured.Method != method {
+					t.Fatalf("method = %s, want %s", captured.Method, method)
+				}
+			})
+		}
 	}
 }

@@ -4,17 +4,11 @@ import hashlib
 import io
 import zipfile
 from collections.abc import Iterable
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import GatedAppKind
-from onyx.db.external_app import (
-    get_connectable_apps_for_user,
-    get_external_app_by_skill_id,
-)
-from onyx.db.gated_app import get_action_policies
+from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -41,7 +35,12 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
+from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.content import iter_builtin_skill_files
+from onyx.skills.rendering import (
+    render_company_search_skill,
+    render_external_app_files,
+)
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
     validate_stored_custom_skill,
@@ -51,8 +50,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
-
-_EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
 def compute_skill_runtime_hash(
@@ -76,23 +73,13 @@ def compute_skill_runtime_hash(
     return digest.hexdigest()
 
 
-def _is_excluded(path: Path, source_dir: Path) -> bool:
-    rel = path.relative_to(source_dir)
-    for part in rel.parts:
-        if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
-            return True
-    # Template sources are rendered separately; never ship them raw.
-    if path.suffix == ".template":
-        return True
-    return False
-
-
 def _add_static_builtin(
     files: FileSet, skill: Skill, definition: BuiltInSkillDefinition
 ) -> None:
     source_dir = definition.source_dir
-    for path in source_dir.rglob("*"):
-        if not path.is_file() or _is_excluded(path, source_dir):
+    for path in iter_builtin_skill_files(source_dir):
+        # Template sources are rendered separately; never ship them raw.
+        if path.suffix == TEMPLATE_SUFFIX:
             continue
         rel = path.relative_to(source_dir)
         files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
@@ -117,15 +104,11 @@ def _render_template(
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
-        external_app = get_external_app_by_skill_id(db_session, skill.id)
-        stored = (
-            get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
-            if external_app
-            else {}
+        rendered = render_external_app_files(
+            db_session, skill, app_type, definition.source_dir
         )
-        template = (definition.source_dir / "SKILL.md.template").read_text()
-        rendered = render_external_app_skill(template, app_type, stored)
-        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
+        for name, content in rendered.items():
+            files[f"{skill.name}/{name}"] = content.encode("utf-8")
         return
 
     logger.warning(

@@ -1,4 +1,8 @@
 import { renderHook, act } from "@testing-library/react";
+import {
+  type SourceMetadata,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import {
   selectedSourcesFrom,
@@ -6,8 +10,6 @@ import {
   toggleSourceSelection,
   normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
-import type { SourceMetadata } from "@/lib/search/types";
-import { ValidSources } from "@/lib/connectors/types/source";
 
 const CHAT_KEY = "onyx:tools:chat:abc";
 

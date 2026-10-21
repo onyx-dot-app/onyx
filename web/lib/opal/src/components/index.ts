@@ -85,17 +85,35 @@ export {
   type InputImageProps,
 } from "@opal/components/inputs/input-image/components";
 
+/* InputCurrency */
+export {
+  InputCurrency,
+  type InputCurrencyProps,
+} from "@opal/components/inputs/numbers/input-currency/components";
+export {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
+
 /* InputNumber */
 export {
   default as InputNumber,
   type InputNumberProps,
-} from "@opal/components/inputs/input-number/components";
+} from "@opal/components/inputs/numbers/input-number/components";
 
-/* InputFile */
+/* InputSingleUpload */
 export {
-  default as InputFile,
-  type InputFileProps,
-} from "@opal/components/inputs/input-file/components";
+  default as InputSingleUpload,
+  type InputSingleUploadProps,
+  type InputSingleUploadTextProps,
+  type InputSingleUploadFileProps,
+} from "@opal/components/inputs/uploads/input-single-upload/components";
+
+/* InputMultiUpload */
+export {
+  default as InputMultiUpload,
+  type InputMultiUploadProps,
+} from "@opal/components/inputs/uploads/input-multi-upload/components";
 
 /* InputList */
 export {
@@ -121,6 +139,7 @@ export {
   TAG_COLORS,
   TAG_REMOVE_CLASS,
   type TagProps,
+  type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
 
@@ -189,6 +208,9 @@ export {
 export {
   Collapsible,
   type CollapsibleProps,
+  type CollapsibleRootProps,
+  type CollapsibleTriggerProps,
+  type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
 /* MessageCard */
@@ -322,6 +344,7 @@ export {
   type DropdownSide,
 } from "@opal/components/dropdown/types";
 export { useDropdownViews } from "@opal/components/dropdown/context";
+export { SelectChevron } from "@opal/components/inputs/dropdowns/SelectChevron";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";

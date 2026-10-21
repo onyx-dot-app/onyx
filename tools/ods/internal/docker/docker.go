@@ -9,47 +9,15 @@ import (
 	"strings"
 )
 
-// legacyPostgresContainerNames are fallback names tried after the
-// project-specific name.
-var legacyPostgresContainerNames = []string{
-	"onyx_postgres",                  // From restart_containers.sh
-	"onyx-relational_db-1",           // Docker compose default project name
-	"onyx-stack-relational_db-1",     // Docker compose with stack project name
-	"docker_compose-relational_db-1", // Legacy docker compose naming
-	"relational_db",                  // Service name only
-}
-
-// FindPostgresContainer finds a running PostgreSQL container. It tries the
-// project-specific name first, then legacy names, then falls back to searching
-// by image.
+// FindPostgresContainer finds only the selected project's PostgreSQL container.
 func FindPostgresContainer(projectName string) (string, error) {
-	projectContainer := fmt.Sprintf("%s-relational_db-1", projectName)
+	if strings.TrimSpace(projectName) == "" {
+		return "", fmt.Errorf("a PostgreSQL project must be selected")
+	}
+	projectName = NormalizeProjectName(projectName)
+	projectContainer := ContainerName(projectName, "relational_db")
 	if isContainerRunning(projectContainer) {
 		return projectContainer, nil
-	}
-
-	for _, name := range legacyPostgresContainerNames {
-		if isContainerRunning(name) {
-			return name, nil
-		}
-	}
-
-	// Fall back to searching for any postgres container by image name. Try
-	// multiple filters since the image name may vary (postgres,
-	// postgres:15.2-alpine, etc.)
-	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}\t{{.Image}}")
-	output, err := cmd.Output()
-	if err == nil {
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, line := range lines {
-			parts := strings.Split(line, "\t")
-			if len(parts) >= 2 {
-				name, image := parts[0], parts[1]
-				if strings.Contains(image, "postgres") {
-					return name, nil
-				}
-			}
-		}
 	}
 
 	return "", fmt.Errorf("no running PostgreSQL container found for project %q; try: ods compose dev", projectName)
@@ -165,11 +133,4 @@ func GetHostPort(container string, containerPort int) (int, error) {
 		return 0, fmt.Errorf("invalid port number in docker port output: %s", line)
 	}
 	return port, nil
-}
-
-// IsPortExposed checks if a container port is exposed to the host.
-func IsPortExposed(container string, containerPort string) bool {
-	port, _ := strconv.Atoi(containerPort)
-	_, err := GetHostPort(container, port)
-	return err == nil
 }

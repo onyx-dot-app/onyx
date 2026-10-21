@@ -57,6 +57,7 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.craft_session import CRAFT_SESSION_ID_CONTEXTVAR
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,
@@ -665,6 +666,21 @@ def _assert_gateway_trace(active: Any) -> None:
         "flow": LLMFlow.CRAFT_LLM_GENERATION.value,
         "model": "test",
     }
+
+
+def test_stream_worker_trace_sees_bound_craft_session() -> None:
+    """The worker runs on its own thread; the bound session must follow it."""
+    traces: list[Any] = []
+    token = CRAFT_SESSION_ID_CONTEXTVAR.set("sess-1")
+    try:
+        with _capture_trace_at_generation_span(traces):
+            frames = list(_gateway_stream(_reasoning_stream_llm()))
+    finally:
+        CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    (active,) = traces
+    assert (active.export() or {})["metadata"]["craft_session_id"] == "sess-1"
 
 
 def test_stream_worker_opens_trace_before_generation_span() -> None:

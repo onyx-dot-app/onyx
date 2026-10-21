@@ -10,9 +10,8 @@ import { Section } from "@/layouts/general-layouts";
 import { ContentAction, toast } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
-import { Button, MessageCard } from "@opal/components";
+import { Button, MessageCard, Card } from "@opal/components";
 import { SvgServer } from "@opal/icons";
 import { InputSingleSelect } from "@opal/components";
 import {
@@ -89,63 +88,65 @@ function GuildDetailContent({
         </Callout>
       )}
 
-      <Card variant={disabled ? "disabled" : "primary"}>
-        <ContentAction
-          title={t("channels.section.title")}
-          description={t("channels.section.description")}
-          sizePreset="main-content"
-          variant="section"
-          rightChildren={
-            isRegistered && !channelsLoading && !channelsError ? (
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                alignItems="center"
-                width="fit"
-                gap={2}
-              >
-                <Button
-                  disabled={disabled}
-                  prominence="secondary"
-                  onClick={handleEnableAll}
+      <Card border="solid" rounding={4} disabled={disabled}>
+        <Section alignItems="start" height="fit">
+          <ContentAction
+            title={t("channels.section.title")}
+            description={t("channels.section.description")}
+            sizePreset="main-content"
+            variant="section"
+            rightChildren={
+              isRegistered && !channelsLoading && !channelsError ? (
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  alignItems="center"
+                  width="fit"
+                  gap={2}
                 >
-                  {t("channels.enableAllButton.label")}
-                </Button>
-                <Button
-                  disabled={disabled}
-                  prominence="secondary"
-                  onClick={handleDisableAll}
-                >
-                  {t("channels.disableAllButton.label")}
-                </Button>
-              </Section>
-            ) : undefined
-          }
-        />
-
-        {!isRegistered ? (
-          <Text text03 secondaryBody>
-            {t("channels.awaitingRegistration.text")}
-          </Text>
-        ) : channelsLoading ? (
-          <div className="flex justify-center py-12">
-            <IconLoader className="h-6 w-6" />
-          </div>
-        ) : channelsError ? (
-          <ErrorCallout
-            errorTitle={t("error.loadChannels.title")}
-            errorMsg={
-              channelsError?.info?.detail || t("error.loadChannels.message")
+                  <Button
+                    disabled={disabled}
+                    prominence="secondary"
+                    onClick={handleEnableAll}
+                  >
+                    {t("channels.enableAllButton.label")}
+                  </Button>
+                  <Button
+                    disabled={disabled}
+                    prominence="secondary"
+                    onClick={handleDisableAll}
+                  >
+                    {t("channels.disableAllButton.label")}
+                  </Button>
+                </Section>
+              ) : undefined
             }
           />
-        ) : (
-          <DiscordChannelsTable
-            channels={localChannels}
-            personas={personas}
-            onChannelUpdate={onChannelUpdate}
-            disabled={disabled}
-          />
-        )}
+
+          {!isRegistered ? (
+            <Text text03 secondaryBody>
+              {t("channels.awaitingRegistration.text")}
+            </Text>
+          ) : channelsLoading ? (
+            <div className="flex justify-center py-12">
+              <IconLoader className="h-6 w-6" />
+            </div>
+          ) : channelsError ? (
+            <ErrorCallout
+              errorTitle={t("error.loadChannels.title")}
+              errorMsg={
+                channelsError?.info?.detail || t("error.loadChannels.message")
+              }
+            />
+          ) : (
+            <DiscordChannelsTable
+              channels={localChannels}
+              personas={personas}
+              onChannelUpdate={onChannelUpdate}
+              disabled={disabled}
+            />
+          )}
+        </Section>
       </Card>
     </>
   );
@@ -358,36 +359,38 @@ export default function Page({ params }: Props) {
       />
       <SettingsLayouts.Body>
         {/* Default Agent Selector */}
-        <Card variant={!guild?.enabled ? "disabled" : "primary"}>
-          <ContentAction
-            title={t("defaultAgent.section.title")}
-            description={t("defaultAgent.section.description")}
-            sizePreset="main-content"
-            variant="section"
-            rightChildren={
-              <InputSingleSelect
-                value={guild?.default_persona_id?.toString() ?? "default"}
-                onValueChange={(value: string) =>
-                  handleDefaultPersonaChange(
-                    value === "default" ? null : parseInt(value)
-                  )
-                }
-                disabled={isUpdating || !guild?.enabled || personasLoading}
-                defaultOption="default"
-                placeholder={t("defaultAgent.select.placeholder")}
-                options={[
-                  {
-                    value: "default",
-                    title: t("defaultAgent.select.default.label"),
-                  },
-                  ...agents.map((persona) => ({
-                    value: persona.id.toString(),
-                    title: persona.name,
-                  })),
-                ]}
-              />
-            }
-          />
+        <Card border="solid" rounding={4} disabled={!guild?.enabled}>
+          <Section alignItems="start" height="fit">
+            <ContentAction
+              title={t("defaultAgent.section.title")}
+              description={t("defaultAgent.section.description")}
+              sizePreset="main-content"
+              variant="section"
+              rightChildren={
+                <InputSingleSelect
+                  value={guild?.default_persona_id?.toString() ?? "default"}
+                  onValueChange={(value: string) =>
+                    handleDefaultPersonaChange(
+                      value === "default" ? null : parseInt(value)
+                    )
+                  }
+                  disabled={isUpdating || !guild?.enabled || personasLoading}
+                  defaultOption="default"
+                  placeholder={t("defaultAgent.select.placeholder")}
+                  options={[
+                    {
+                      value: "default",
+                      title: t("defaultAgent.select.default.label"),
+                    },
+                    ...agents.map((persona) => ({
+                      value: persona.id.toString(),
+                      title: persona.name,
+                    })),
+                  ]}
+                />
+              }
+            />
+          </Section>
         </Card>
 
         <GuildDetailContent

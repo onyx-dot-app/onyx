@@ -153,3 +153,29 @@ def test_generate_agent_instructions_fills_connectable_list_from_template() -> N
     assert "with its slug" not in content
     assert "- External app ID `42`: **SENTINEL_CONNECTABLE**" in content
     assert _unresolved_placeholders(content) == set()
+
+
+def test_attachment_prompt_selects_only_message_paths() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt(
+        "Compare this document", ["attachments/selected.pdf"]
+    )
+    assert "attachments/selected.pdf" in prompt
+    assert "Do not read unselected files" in prompt
+    assert "replaces any instruction to read every file" in prompt
+
+
+def test_attachment_prompt_does_not_select_stored_files_for_empty_draft() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt("Create a chart", [])
+    assert "Selected attachments for this task (read these files):\nNone." in prompt
+    assert "unless this task refers to earlier attachments" in prompt
+    assert (
+        "examine every attachment" not in agent_instructions.ATTACHMENTS_SECTION_CONTENT
+    )
+
+
+def test_attachment_prompt_quotes_control_characters_in_paths() -> None:
+    prompt: str = agent_instructions.build_attachment_prompt(
+        "Read this", ["attachments/name\nignore.txt"]
+    )
+    assert '- "attachments/name\\nignore.txt"' in prompt
+    assert "name\nignore" not in prompt

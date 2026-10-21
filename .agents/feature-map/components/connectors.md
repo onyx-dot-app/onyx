@@ -43,7 +43,8 @@ Drive. Saving creates the connector and kicks off an initial index run. The
 admin watches the connector's status move from indexing to a document count and
 a "last successful index" timestamp on the connector status page. From then on,
 a background job polls for new and changed documents on a schedule the admin
-sets, and a separate job prunes documents that were deleted at the source.
+sets, and a separate job prunes documents that were deleted at the source, or
+that fall before the connector's indexing start.
 
 For connectors that implement `validate_connector_settings` or named capability
 checks (§4), the admin sees a validation error at connector-creation time if
@@ -67,8 +68,8 @@ shows only when an index run fails or returns nothing.
 
 | File | Holds |
 |---|---|
-| `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. |
-| `web/src/lib/sources.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source, read by `getSourceMetadata`/`isValidSource`-style helpers. |
+| `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. Its copy (labels, descriptions, tab and option names) is message keys under `admin.connectorsList` (`connectors.<source>.fields.<field>...`); `useConnectorConfiguration` returns the translated config, which every rendering and validation path uses. |
+| `web/src/lib/connectors/constants.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source. `getSourceMetadata`, `isValidSource` and the other getters live in `web/src/lib/connectors/utils.ts`; `SourceMetadata` and `SourceCategory` in `web/src/lib/connectors/types/source.ts`. |
 
 `backend/onyx/connectors/README.md:96,113` names exactly these two files as the
 frontend changes a new connector requires.
@@ -78,16 +79,18 @@ frontend changes a new connector requires.
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/admin/connector` | Create a `Connector` row (`create_connector_from_model`). |
-| PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. |
+| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. The pairing validation applies the credential use rule (§4.9) before it builds the connector. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
+| POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new account's `credential_json`, which is saved as (or updates) the user's draft first; the response returns the draft's `credential_id` (`server/documents/draft_credentials.py`). |
+| PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. Applies the credential use rule (§4.9) to every credential the connector is paired with. |
 | DELETE | `/admin/connector/{connector_id}` | |
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
 | GET | `/admin/connector/status`, `/admin/connector/indexing-status` (POST) | Status and index-attempt history for the admin UI. |
 | GET | `/admin/connector/failed-indexing-status` | |
-| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. |
+| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. The GET lists one page of the file list (`page_num`, `page_size`, plus `total_items` in the response) and resolves file records and legacy sizes for that page only; without `page_size` it still returns every file, as unpaginated callers expect. A zip can hold thousands of files, so both admin file lists page through them (`InlineFileManagement.tsx` over this route, `EditFileLocations.tsx` over the form's own list). |
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
-| POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
+| POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. A Microsoft `.pfx` certificate travels in `credential_json` as base64 text, the form the private-key upload stores; `resolve_form_credential` checks it as PKCS#12 (`private_key_types.validate_pkcs12_credential_value`). The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. A run starts only when the credential use rule (§4.9) allows the form's config. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
@@ -144,7 +147,16 @@ encryption. This component only consumes the pairing at run time (§4).
   `ImageSection.image_file_id` points at a file-store blob. `TabularSection`
   stages a CSV in the file store (`csv_file_id`) and is streamed row-by-row at
   chunk time so a large sheet never sits on the worker heap
-  (`TabularSection.materialize_text`).
+  (`TabularSection.materialize_text`). When `SKIP_SPREADSHEET_CONTENT` is true,
+  `cross_connector_utils/tabular_section_utils.py:tabular_file_to_sections`
+  returns one `<content-skipped>` `TextSection` instead and parses and stages
+  nothing, so the file indexes as its title only.
+  `extract_and_stage_tabular_file` still stages the raw file. Google Drive,
+  SharePoint/OneDrive (`microsoft_utils/drive_items.py`), blob, Drupal Wiki and
+  the file connector pass the setting. The placeholder is part of the content
+  hash, so a file is re-indexed the next time it is fetched after the setting
+  changes. Docprocessing replaces tabular sections that still reach it in the
+  same way ([[indexing-pipeline]] §4.3).
 - **`DocumentBase`** / **`Document`** (`Document` requires `id`, `source`,
   `sections`, `semantic_identifier`, and `metadata`. On `DocumentBase`, `id` and
   `source` are optional, and the other three are still required. The remaining
@@ -295,6 +307,14 @@ loads `all_indexed_document_ids` for the cc-pair from Postgres, calls
 `doc_ids_to_remove = all_indexed_document_ids - all_connector_doc_ids.keys()`.
 See §5 for the invariant this depends on.
 
+When the pair has an `indexing_start`, `extract_ids_from_runnable_connector`
+lists only the documents from that time on, if
+`connectors/interfaces.py:prune_listing_honors_indexing_start` says the
+connector's listing filters by the same date as indexing. A slim connector
+opts in with `BaseConnector.slim_listing_honors_indexing_start`. Such a prune
+also removes documents that still exist at the source but were last updated
+before the start. Other connectors list every document.
+
 ### 4.6 Three representative shapes
 
 Do not read all 58 connectors. These three (chosen for the README) span the
@@ -304,7 +324,7 @@ range:
 |---|---|---|---|
 | Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has a `source_operations.py` gateway (`ConfluenceSourceOperations`) and registers named capability checks. |
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
-| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. `external_access` is assigned inline on yielded documents, not in a separate pass. |
+| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. The checks chain a `SlackApiError` to a `SourceApiError` (`slack_api_error_detail`) that carries the request and Slack's response body, so a check's Error Details show them. `external_access` is assigned inline on yielded documents, not in a separate pass. |
 
 ### 4.6.1 Outlook: one document per mail thread
 
@@ -313,36 +333,96 @@ not a source object but a thread shared across mailboxes, so its run has a
 shape the table above does not cover:
 
 - **Thread key.** Every message copy carries a `conversationIndex`; its 22-byte
-  root is the same in every mailbox that holds the thread (`threads.py:thread_key`).
-  Copies are matched message by message on the Internet Message-ID
+  root is the same in every mailbox that holds the thread (`threads.py:thread_key`),
+  and the first message's index is the root alone (`is_thread_root`). Copies
+  are matched message by message on the Internet Message-ID
   (`OutlookMessageIdentity.match_id`).
-- **Listing, then bucketing, then building.** Each mailbox's folders are read
-  through delta pages of metadata only. The rows go to a per-run `ThreadTable`
-  in the file store (`listing-N.jsonl`), are re-read and hashed by thread key
-  into buckets of 50k rows (`bucket-B-C.jsonl`, resumable through
-  a manifest file), and each bucket is grouped so every copy of a thread is in
-  hand without holding the tenant in memory. The checkpoint
-  (`OutlookCheckpoint`) holds cursors and counters only, 202 KB at 3,000
-  mailboxes in the synthetic scale run.
-- **Builder and readers.** Candidates are the copies holding the thread's newest
-  message. The builder is the largest candidate (`threads.py:choose_builder`),
-  its newest 100 indexable messages (found among the newest 500) make the
-  document `outlook-thread:<key>`, and the
-  readers are the candidates holding every one of them (`readers_of`). A copy
-  that lacks a message (a private reply it never received) gets
-  `outlook-thread:<key>:<mailbox id>`, readable by its owner only
-  (`partial_copies`).
-- **Polls.** Only mailboxes with new mail are listed. Every holder of the
-  newest message is among them, so builder and readers are complete, but a
-  holder that received none of the new mail is not. `_unlisted_copies` finds
-  those from the builder's sender and recipients within the run's mailbox
-  roster (a file in the table), looks each up by Message-ID
-  (`find_message_by_internet_message_id`) and writes its own document, or
-  counts it as a reader when it holds every message of the thread's.
-- **Prune and permission sync.** `_slim_docs` runs the same listing, bucketing
-  and grouping read-only and yields ids and readers, so the slim diff (§4.5)
-  and the doc sync see the same documents indexing built, eight mailboxes side
-  by side like the listing.
+- **Decided per mailbox, from headers.** Each mailbox is walked on its own,
+  eight side by side. Its folders are read through delta pages of metadata
+  with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
+  step, and the rows are held in the connector process (`_MailboxListing`)
+  until the last folder is done. The checkpoint (`OutlookCheckpoint`) holds
+  cursors only; a process that resumes an attempt has no listing for the
+  mailboxes in flight and walks them again from the start (`_resumable`).
+  Nothing is written outside the process: no file store, no database.
+- **Builder, readers, copies.** `threads.py:plan_documents` turns one
+  mailbox's copy of a thread into documents. The first message names the
+  builder (`designated_builder`: its sender when the run walks that mailbox,
+  else the lowest named mailbox id, passing over any mailbox the run cannot
+  open, probed once per process by `_mailbox_available`). The builder's
+  newest 100 indexable messages make `outlook-thread:<key>`, readable by the
+  mailboxes named on every one of them: named, not holding, so a recipient
+  who deleted a message or never received it still reads the thread. A mailbox the first message names but a later message
+  left out gets `outlook-thread:<key>:<mailbox id>` from the builder, holding
+  the messages that name it. Whatever the builder cannot see, a copy without
+  the first message, a thread whose first message names no walked mailbox, a
+  holder it does not name, or a reply that left the builder out, is written
+  by its own mailbox as `outlook-thread:<key>:<mailbox id>:own`.
+- **Known limits.** The builder's copy is the thread. A reply the builder
+  deleted or filed in an excluded folder is indexed nowhere, since the other
+  holders assume a message naming the builder is the builder's to write. A
+  thread whose builder mailbox no longer holds its first message is not
+  built at all; the other holders keep only their own documents of the
+  replies that left the builder out. The
+  builder's first message sits in its Sent Items, so excluding that folder
+  has the same effect on every thread the mailbox started. The listing in
+  memory is bounded by one mailbox per worker, eight at once, and by
+  `MAX_LISTING_ROWS_PER_MAILBOX` (250k): a larger mailbox is a recorded
+  failure for indexing and aborts a slim walk. A checkpoint from the earlier
+  table-based walk starts the attempt over.
+- **Polls.** Only messages in the window are listed, so each conversation
+  with new mail is read whole through its outline (`_conversation_outline`),
+  the oldest message fetched separately when the outline stops short of it,
+  and decided by the same function. Readers come from the newest 100
+  messages, so the daily permission sync can widen a document's readers
+  before the next poll rebuilds its text.
+- **Prune and permission sync.** `_slim_docs` lists each mailbox the same way,
+  in memory one mailbox per worker, and yields the ids and readers
+  `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
+  documents indexing built.
+
+### 4.6.2 Teams: channels side by side, then organizers
+
+`teams/connector.py:TeamsConnector` indexes four kinds of document from one
+credential: channel threads, channel files, meeting transcripts and the days
+of meeting chats.
+
+- **Teams, then channels.** The first step lists every team
+  (`listing.collect_all_teams`). The first team step probes the export API
+  once and keeps the answer in `TeamsCheckpoint.export`. With it, a team step
+  streams four teams at a time, the documents of each team yielded as it finishes (`export.py:ExportSource`): every message of
+  every channel changed in the window, replies included, grouped into threads;
+  a thread whose root was created inside the window is complete in the stream,
+  an older one that changed anywhere gets its replies from Graph, and its root
+  too when the stream lacks it. A team whose stream Graph refuses, or that
+  streams past 100k messages, goes to the channel walk; a probe team that is gone or locked walks its channels and the next team probes again, and a 402 mid-stream sends every team left to the channel walk.
+  An app the export API refuses walks every team the same way: the team's
+  channels into `todo_channels`, then a channel
+  step walks one delta page of up to `max_workers` channels at once
+  (`TeamsCheckpoint.active`, `_channel_step`, `_advance_channel`), the roots
+  of the page, one replies call per root and the images pasted into them.
+  Cursors are advanced on copies and written back only when every channel
+  finished its page, so a raise in one leaves the step to be retried. A
+  checkpoint saved by the one-channel walk joins `active` when it is loaded.
+- **Files.** After a channel's last page, or its team's export stream, its
+  library is read on a worker thread, `max_workers` workers draining the
+  finished channels a channel at a time, each file yielded as it is read
+  (`FileSource.index`): the folder children, each file's text,
+  and its readers through a SharePoint REST context kept per site and per
+  thread, so the files of several channels are read side by side.
+- **Organizers.** The meeting side follows the channels: a page of licensed
+  users per step, then 32 organizers per step drained by eight workers from a
+  queue (`sources.drain`), each organizer read for its transcripts and the
+  days of its meeting chats that changed. On a poll, never the first index,
+  one chats export stream per organizer says which chats changed
+  (`meeting_chats.fetch_touched_days`), so a quiet chat costs no request; an
+  app the export API refuses, or a stream refused or past 250k messages, asks
+  each chat what changed. A slow organizer holds back only its own worker.
+- **Prune and permission sync.** `_slim_docs` relists the channels through the
+  delta, ids only and no replies, in batches of four channels per worker that
+  `max_workers` workers drain, with or without readers (file readers come
+  through a SharePoint REST context kept per site and per thread), then the
+  organizers the same way.
 
 ### 4.7 The `SourceOperations` gateway pattern
 
@@ -355,8 +435,20 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a gateway today
-(`<source>/source_operations.py`); most connectors still call their SDK directly.
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have
+a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
+SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
+under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
+permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
+The SharePoint, OneDrive and Outlook checks share their sign-in probe
+(`microsoft_utils/sign_in.py`) and row text (`microsoft_utils/check_text.py`),
+and every probe after sign-in depends on it. `MicrosoftGraphError` is a
+`SourceApiError` that carries the request and the response body, so a check's
+Error Details show them.
+The GitHub gateway calls the REST API through PyGithub's requester and parses the
+JSON into the models in `github/models.py`, so no PyGithub object leaves it.
+Its `GitHubApiError` is a `SourceApiError` that carries the request and the
+response body, so a check's Error Details show them.
 
 ### 4.8 Capabilities and capability checks
 
@@ -364,15 +456,48 @@ calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a 
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, and Outlook register real ones
-today; every other source gets a synthesized fallback wrapping
-`validate_connector_settings`). A source with named checks must have a
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
+register real ones today; every other source gets a synthesized fallback wrapping
+`validate_connector_settings`, the generic "Test connection" row of
+`capability_checks/generic_row.py`. A source whose connector keeps the no-op
+`validate_connector_settings` (`factory.py:source_has_settings_probe`) gets no
+INDEXING check, so its plan and runs hold no row). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
 instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
 sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
-`INDETERMINATE`, never to `FAILED`. `CapabilityCheckTrigger`
+`INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
+rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
+It also carries an `error_detail` (`models.py:check_error_detail`): the HTTP
+status, request and a bounded response excerpt of the first `SourceApiError`
+or `requests.HTTPError` in the exception chain, and a stack trace for a
+timeout, an unreachable source or an unexpected error. URL query strings and
+the run's credential values are removed from the excerpt and the trace.
+A source gateway's API error subclasses `exceptions.py:SourceApiError`.
+A result's row text is `summary` (a short line) and `description` (up to three
+lines). A check's `ValidationError` can carry both, and the runner falls back to
+a default for a timeout, a rate limit, an unreachable source or an unexpected
+error, and to the "Not run: …" line for a stopped check. `message` stays the
+full text. A passing check gives its line in `CheckOutput.summary`. Checks that
+share a `row_id` are one row on the form: the variants of a probe (token types,
+deployments) and a probe's discovery step.
+One exception: on a form run (a draft run or a pair dry run) a sign-in check
+that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
+source. Stored reports may still hold the legacy `INDETERMINATE`, which reads
+as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
+`run_order` runs dependencies first. A dependency that `FAILED`, is
+`INCOMPLETE` or did not run stops the check: it is `SKIPPED` with a
+`not_run_reason` and `blocked_by`. After a rate limit, the rest of the run is
+`SKIPPED` too. A probe whose sample cannot decide raises
+`InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
+proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
+`not_run_reason: nothing_in_scope`, still a row). An empty scope fails the
+first check that reads it. A Find that found only some selected items returns
+`CheckOutput(partial=True)`: `INCOMPLETE`, and the checks after it still run. Creation runs its checks side by side, then applies the same rule
+(`stop_blocked_results`). `merge_capability_results` applies it again when a
+background run adds results to earlier ones. In a draft run, a check waits while a dependency
+waits (`draft_runs.py:wait_for_dependencies`). `CapabilityCheckTrigger`
 (`backend/onyx/db/enums.py`): `MANUAL`, `CREDENTIAL_CREATED`,
 `CC_PAIR_VALIDATION`, `INDEXING_ATTEMPT`, `PERM_SYNC_ATTEMPT`. The simpler,
 existing blocking-validation path in `factory.py:validate_ccpair_for_user`
@@ -387,18 +512,75 @@ For a source with named checks, a pairing at creation or credential swap
 `validate_connector_settings`/`validate_perm_sync` calls.
 `capability_checks/creation.py:validate_pairing_with_named_checks` runs the named
 checks instead and stores the full report. Only a required check that `FAILED`
-within the blocking budget blocks the pairing. Indexing and perm-sync attempts keep
+within the blocking budget blocks the pairing. A check whose dependency did not
+finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
-reuse their result at creation when the form is unchanged. The plan endpoint
+reuse their result at creation when the form is unchanged. A check the draft
+run is still running is not started again: the draft task marks its pending
+results in flight, creation waits for them within its blocking budget, and the
+background run of unfinished checks waits for them too. A newer run with the
+same draft key supersedes an older one, and the cancel endpoint does the same
+without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
+
+A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
+structured information about what the credential and config reach, such as a
+count (`CountFinding`) or a list of named options for a config field
+(`OptionsFinding`, at most `MAX_FINDING_OPTIONS`). A finding has a closed `key`
+that the frontend turns into a localized label, and an optional `field_name`.
+The runner puts findings on `CapabilityCheckResult.findings`, so they are stored
+in the report JSON, in the draft-run snapshot (`DraftCheckState.findings`) and in
+the draft result cache, and creation copies cached findings into the new pair's
+report. A stored finding with a type or key this version does not know is
+dropped when read. Findings hold container names, ids and counts only: never
+document content, and users only as a count. With the workspace security setting
+`allow_connector_check_findings` off (`capability_checks/findings_setting.py`), the
+runner keeps no findings, cached findings are not reused, and report, draft-run and
+edit-plan responses hide findings stored earlier.
+
+A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
+much longer than validation, such as a listing of every space. It is never
+required and never counts toward a verdict. The runner runs it after the
+validation checks of the same run, and skips it (`applicable=False`) when a
+required check failed or findings are off. Creation does not run it: a cached
+draft result is reused, else it is recorded as not run, so neither creation nor
+the first index attempt waits on it. `findings.py:bounded_options` and
+`bounded_count` read a listing lazily up to a cap.
 
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
-[[indexing-pipeline]] §4.2.
+[[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
+When one has `FAILED` in the form's latest run, Create first opens an advisory
+(`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
+that states the count and offers to show the checks card or to create the
+connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
+When an edit changes the config, the credential or the access type, the plan modal
+(`web/src/views/admin/connectors/EditConnectorPage/EditPlanModal.tsx`) lists every
+check of the blocking validation with the checks card's rows, titled with the outcome;
+a check that did not finish in time shows as pending. Apply records the validation as
+a check run with trigger `CONNECTOR_CONFIG_UPDATE`, which the pair's run feed lists.
+
+An admin can start the held attempt from the connector page's status card
+(`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps
+`ConnectorCredentialPair.indexing_hold_released_at`; `get_first_indexing_hold`
+ignores a report whose run started before the stamp, so a later run holds again.
+
+Every run of a scope's checks also writes a `capability_check_run` row
+(`db/credential_capability.py`): the RUNNING mark opens it, the completion
+closes it as `PASSED` or `FAILED` (a required, applicable check failed) with the
+report, a failure mark or the stale sweep closes it as `FAILED_TO_RUN` with the
+reason. `Connector.check_freq` (the schedule section's "Run Checks Every", saved
+through the pair `property` route as `check_frequency`) makes the
+`CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS` beat task start a pair's checks with
+trigger `SCHEDULED` once that long has passed since its last run. The connector
+page's run feed (`GET /admin/cc-pair/{id}/runs`, `db/cc_pair_runs.py`) lists
+these runs as kind `checks`, with a popover of the results, and the pair's
+prunes as kind `pruning` from its `sync_record` rows, which now carry the
+`error_message` a failed prune generator recorded.
 
 ### 4.9 Typed configs and credential families
 
@@ -406,7 +588,75 @@ Every registry entry has a `ConnectorConfig` (`connector_config.py`). Each field
 mirrors one `__init__` kwarg of the connector. A config may inherit a
 `CredentialBinding` model for fields whose valid values depend on the account behind
 the credential, such as a site URL. `factory.py:validate_credential_binding` checks
-those fields at pairing and on config edit.
+those fields at pairing and on config edit, against what the credential itself
+records (for example the site of a Confluence OAuth grant).
+
+`factory.py:assert_user_can_use_credential` is the rule for who may use a
+credential with a config. Every pairing, credential swap, edit and check run
+applies it before it builds a connector. A user may use the credential when:
+
+- they own it, or it has no owner and they hold `MANAGE_CONNECTORS` globally;
+- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and the config's
+  bound values, as the binding model validates them, equal those of a pair of
+  the same source that uses the credential. A credential with no pair is for
+  its owner only. A config-less run still needs such a pair;
+- the caller passes the pair the user edits or operates, and that pair already
+  uses the credential with the same bound values; or
+- the credential is visible and its source has no real secret
+  (`CREDENTIAL_PERMISSIONS_TO_IGNORE`).
+
+The comparison skips a binding's `credential_derived_fields`: values the form
+takes from the credential and `validate_credential` pins to it, such as Google
+Drive's `credential_kind`.
+
+The pairs are the record of the bound values; the credential stores none. The
+rule runs in `validate_ccpair_for_user` (its `user` is None only for system
+work), `validate_connector_credential_bindings`,
+`server/documents/capability_check_runs.py:start_capability_check_run` and
+`start_draft_capability_check_run` (create-form draft runs and cc-pair dry
+runs), and `edit_plan/state.py:fetch_proposed_credential` (edit plan and
+apply). A refusal is `CREDENTIAL_NOT_FOUND` when the credential is not visible
+and `INSUFFICIENT_PERMISSIONS` when the bound values match no pair.
+
+A realm (where an account works: its site, host or subdomain) lives in the
+credential only, and the connector reads it from there. The connector config does
+not hold it. On the add-connector form the realm is a form-only field
+(`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
+spec's `realm` fields). The form shows it above the account section, copies it into
+a new account's values, and disables saved accounts whose stored realm differs
+(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+request that sends form values as connector config: Create, check runs and plans,
+and binding checks.
+
+A source's credential spec (`web/src/lib/credentials/constants.ts`) shapes the new
+account. Gmail and Google Drive share `GOOGLE_ACCOUNT_SPEC`: a "Service Account" tab
+(`google_primary_admin`, then `google_service_account_key`, a `jsonFile` field that
+holds the key file's text) and an "OAuth" tab. The OAuth method is `ownSetup`: its
+tab renders `GoogleOAuthSetup` (`AddConnectorPage/form/google/GoogleOAuthSetup.tsx`),
+whose Google sign-in saves the account itself, so the form saves no draft for it. A
+saved Google account's tab comes from its keys, since an uploaded OAuth app and a
+service account both store `authentication_method: "uploaded"`. `draft_credentials.py`
+rejects a Google-family draft whose key is not a service-account key's JSON text.
+
+Google discovery clients use `google_utils/resources.py:get_google_service` with a
+`GoogleService` enum. Each member pairs its API name with its version: Docs v1,
+Drive v3, Admin directory_v1, or Gmail v1. The helper preserves service-account
+impersonation and passes OAuth credentials through unchanged.
+
+A config also picks how the cc-pair status page breaks the documents down by
+hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
+the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)
+lists the top-level nodes: the children of the source's root node. A named node
+without documents shows as not indexed (`doc_count: null`). `hierarchy_node_key` maps
+a stored `raw_node_id` to the id that the config uses. Confluence lists every space
+plus the configured space (`space`) or page (`page_id`). A page node's raw id is the
+page URL, so its key is the numeric page id. Space keys match without case
+(`case_insensitive_keys`). A leaf page has no hierarchy node, so a configured
+page without a node shows its document (`nodes_can_be_documents`). STUB nodes are
+never listed. `other_doc_count` holds the
+indexed documents in no listed node's subtree; a document under two listed rows (a
+page inside a space) is in both rows, but never in "other". The counts come from
+`db/hierarchy.py:get_subtree_document_counts_for_cc_pair`.
 
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,
@@ -502,12 +752,12 @@ family keep the source's shape and stay usable by that source only.
 
 | If your change... | Also check |
 |---|---|
-| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/sources.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
+| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`, with its copy under `admin.connectorsList.connectors.<source>` in every locale), `web/src/lib/connectors/constants.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
 | changes the `Document`/`Section`/`SlimDocument` model | every connector that constructs one directly (no central factory does this for them); [[indexing-pipeline]]'s consumption of the new/changed field; the dedup logic keyed on `Document.id` and `content_hash` |
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
 | changes `capabilities.py` or the `CredentialCapability` enum | `capability_checks/applicability.py`, `registry.py`, `runner.py`, and the `credential_capability_report` schema; the admin UI surface that reads capability reports |
-| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook` `source_operations.py`) and the import-fence test guarding SDK imports |
+| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github`, `youtrack` `source_operations.py`) and the import-fence test guarding SDK imports |
 | changes pruning's diff logic | the invariant in §5.5; verify a connector auth failure still raises rather than producing an empty slim result |
 | touches `credentials_provider.py` | the Redis lock TTL and rotation semantics for every `CredentialsConnector`; static-credential paths used by daily tests |
 
@@ -556,7 +806,9 @@ lack of a key, ask instead. The shared helper
 
 - No `ConnectorMissingException` at run time for a source with a registry entry.
 - Index count matches the source's actual document count after a full run.
-- A prune run removes only documents actually deleted at the source.
+- A prune run removes only documents deleted at the source, or, for a
+  connector whose listing honors the indexing start, documents last updated
+  before it.
 - A resumed checkpointed run does not reprocess documents from before the
   checkpoint, and does not skip documents added after it.
 
@@ -597,8 +849,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, and Outlook have a gateway; most connectors still make source-API calls inline, so the
-  "one file that talks to the source" guarantee only holds for those four today.
+  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack have a gateway; most connectors still make source-API
+  calls inline, so the "one file that talks to the source" guarantee only holds for those twelve today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

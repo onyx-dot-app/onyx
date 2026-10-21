@@ -2172,6 +2172,29 @@ def read_dc_jsonrpc_space_subjects(
     )
 
 
+def has_anonymous_space_read(anonymous_permissions: list[dict[str, Any]]) -> bool:
+    """Whether the anonymous role has 'read' on the space.
+
+    The DC 9.1+ anonymous-permissions endpoint returns either a flat list of
+    {operation: {operationKey, targetType}} entries or a nested
+    {operations: [...]} envelope, depending on patch version. Accept both.
+    """
+    candidates: list[dict[str, Any]] = []
+    for entry in anonymous_permissions:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(operations := entry.get("operations"), list):
+            candidates.extend(op for op in operations if isinstance(op, dict))
+        if isinstance(operation := entry.get("operation"), dict):
+            candidates.append(operation)
+
+    return any(
+        op.get("operationKey") == SPACE_PERMISSION_OPERATION_READ
+        and op.get("targetType") == SPACE_PERMISSION_TARGET_TYPE_SPACE
+        for op in candidates
+    )
+
+
 def read_dc_space_subjects(
     gateway: ConfluenceSourceOperations, space_key: str
 ) -> ConfluenceDcSpaceSubjects:

@@ -478,7 +478,6 @@ export function EmailPasswordForm({
                   <PasswordInputTypeInField
                     name="password"
                     placeholder={t("emailPasswordForm.password.placeholder")}
-                    mask="native"
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"

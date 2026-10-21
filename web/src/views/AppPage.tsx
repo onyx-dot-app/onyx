@@ -6,6 +6,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,14 @@ import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
+import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  applyChatPluginIntent,
+  chatPluginIntentLoadState,
+  chatPluginsForAgent,
+  parseChatPluginIntent,
+  withoutChatPluginIntent,
+} from "@/lib/plugins/chat";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -31,9 +40,7 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/types";
 import { FederatedConnectorDetail } from "@/lib/types";
-import { ValidSources } from "@/lib/connectors/types/source";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
@@ -201,6 +208,64 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [searchParams, router]);
 
   const toolConfiguration = useToolConfiguration();
+  const pluginCopy = useTranslations("actions.memberPlugins");
+  const memberPlugins = useMemberPlugins({
+    agentId: activeAgent?.id,
+    surface: "chat",
+  });
+  const handledPluginIntent = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (!params.has("pluginKind") && !params.has("pluginId")) {
+      handledPluginIntent.current = null;
+      return;
+    }
+    const reference = parseChatPluginIntent(params);
+    const intentLoadState = reference
+      ? chatPluginIntentLoadState(reference, memberPlugins)
+      : null;
+    if (!toolConfiguration.ready) return;
+    if (
+      reference &&
+      (!activeAgent ||
+        isLoadingAgents ||
+        isLoadingChatSessions ||
+        intentLoadState === "loading")
+    ) {
+      return;
+    }
+    const intentKey = `${pathname}?${params}`;
+    if (handledPluginIntent.current === intentKey) return;
+    handledPluginIntent.current = intentKey;
+    if (!reference) {
+      toast.error(pluginCopy("chat.intent.invalid"));
+    } else if (
+      !activeAgent ||
+      intentLoadState === "error" ||
+      !applyChatPluginIntent(
+        reference,
+        chatPluginsForAgent(memberPlugins.plugins, activeAgent),
+        toolConfiguration
+      )
+    ) {
+      toast.error(pluginCopy("chat.intent.unavailable"));
+    }
+    const remaining = withoutChatPluginIntent(params).toString();
+    router.replace(remaining ? `/app?${remaining}` : "/app", {
+      scroll: false,
+    });
+  }, [
+    activeAgent,
+    isLoadingAgents,
+    isLoadingChatSessions,
+    memberPlugins,
+    pathname,
+    pluginCopy,
+    router,
+    searchParams,
+    toolConfiguration,
+  ]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -431,6 +496,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     toolConfiguration,
     availableAgents: agents,
     activeAgent,
+    memberPlugins: memberPlugins.plugins,
     existingChatSessionId: currentChatSessionId,
     selectedDocuments,
     searchParams,
@@ -1010,6 +1076,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )}
                       <AppInputBar
                         toolConfiguration={toolConfiguration}
+                        memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

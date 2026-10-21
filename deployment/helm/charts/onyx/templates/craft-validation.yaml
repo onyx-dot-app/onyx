@@ -13,6 +13,10 @@
 {{- if ne (toString (dig "enabled" false $sandboxPushSecret)) "true" }}
 {{- fail "auth.sandboxPushSecret.enabled must be true when configMap.ENABLE_CRAFT is enabled" }}
 {{- end }}
+{{- $proxy := .Values.sandboxProxy | default dict }}
+{{- if and (or $proxy.egressAllowIPv6 $proxy.allowGlobalClients (contains ":" ($proxy.listenHost | default "0.0.0.0"))) (empty $proxy.internalCIDRs) }}
+{{- fail "sandboxProxy.internalCIDRs must include internal VPC, pod, Service, and node networks when IPv6 or global proxy clients are enabled" }}
+{{- end }}
 # Craft chart validation passed.
 {{- else }}
 # Craft chart validation skipped.

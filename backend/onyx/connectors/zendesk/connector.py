@@ -393,6 +393,8 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
 class ZendeskConnector(
     SlimConnectorWithPermSync, CheckpointedConnector[ZendeskConnectorCheckpoint]
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         content_type: str = "articles",

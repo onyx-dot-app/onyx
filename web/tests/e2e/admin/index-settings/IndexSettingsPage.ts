@@ -264,6 +264,16 @@ export class IndexSettingsPage {
   // Vector quantization
   // ---------------------------------------------------------------------------
 
+  /** The staged-change banner calls a quantization-only change a rebuild. */
+  async expectQuantizationRebuildBanner(): Promise<void> {
+    await expect(
+      this.page.getByText("The index will be rebuilt.")
+    ).toBeVisible();
+    await expect(this.page.getByText("A full re-index will run.")).toHaveCount(
+      0
+    );
+  }
+
   /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */
   async selectVectorQuantization(label: string): Promise<void> {
     await this.page

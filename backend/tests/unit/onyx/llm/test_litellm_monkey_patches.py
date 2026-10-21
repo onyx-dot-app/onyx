@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
     OpenAiResponsesToChatCompletionStreamIterator,
@@ -474,12 +475,13 @@ _TOOL_HISTORY: list[Any] = [
 ]
 
 
-def test_disabled_thinking_survives_tool_call_history() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     """Upstream drops any thinking param once tool calls arrive without thinking
-    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    blocks. Off thinking cannot cause the error that guard exists for, and
     dropping it hands the Claude 5 line back its default effort."""
-    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert body["thinking"] == {"type": "disabled"}
+    body = _anthropic_body({"type": off_type}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": off_type}
 
 
 def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
@@ -503,13 +505,37 @@ def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
     return data.get("additionalModelRequestFields")
 
 
-def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> None:
     """Converse carries its own copy of the upstream drop, and puts thinking
     under additionalModelRequestFields rather than at the top level."""
-    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert fields == {"thinking": {"type": "disabled"}}
+    fields = _converse_fields({"type": off_type}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": off_type}}
 
 
 def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
     assert not (fields or {}).get("thinking")
+
+
+def test_openrouter_chunk_parser_keeps_served_model() -> None:
+    from litellm.llms.openrouter.chat.transformation import (
+        OpenRouterChatCompletionStreamingHandler,
+    )
+
+    apply_monkey_patches()
+    handler = OpenRouterChatCompletionStreamingHandler(
+        streaming_response=iter([]), sync_stream=True
+    )
+    chunk = {
+        "id": "gen-1",
+        "created": 1762544600,
+        "model": "deepseek/deepseek-v4-flash",
+        "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}],
+    }
+
+    parsed = handler.chunk_parser(chunk)
+
+    assert parsed.provider_specific_fields == {
+        "routed_model": "deepseek/deepseek-v4-flash"
+    }

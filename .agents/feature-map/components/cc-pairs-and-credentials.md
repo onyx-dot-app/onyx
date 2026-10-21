@@ -67,19 +67,25 @@ deletion units.
 | Method | Path | Handler | File |
 |---|---|---|---|
 | POST | `/manage/admin/connector` | `create_connector_from_model` | `server/documents/connector.py` |
-| POST | `/manage/admin/connector-with-mock-credential` | | `server/documents/connector.py` |
+| POST | `/manage/admin/connector-with-mock-credential` | `create_connector_with_mock_credential`; `?paused=true` creates the pair paused and starts no indexing | `server/documents/connector.py` |
 | DELETE | `/manage/admin/connector/{connector_id}` | `delete_connector_by_id` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector/run-once` | | Triggers one manual index attempt. |
-| POST | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
+| POST | `/manage/admin/connector/indexing-status` | | Pairs grouped by source with per-source pages; backs the Index Settings page's connector list. |
+| GET | `/manage/admin/index-monitoring/overview` | `get_indexing_overview` | `server/documents/index_monitoring.py`. The indexing status page's overview card: how many readable pairs index now and are active, the documents indexed in a window (`1h`, `12h`, `24h`, `7d`) against the documents held, and the window's throughput across them. |
+| GET | `/manage/admin/index-monitoring/connectors` | `get_indexing_connectors` | `server/documents/index_monitoring.py`. The indexing status page's list: the readable pairs with their latest index attempt, each in one of five buckets (indexing, failed, paused, scheduled, indexed), sorted by bucket, then source, then name, searched by name and filtered by bucket, with the bucket counts and, for admins, the federated connectors. |
+| GET | `/manage/admin/index-monitoring/runs` | `get_indexing_runs` | `server/documents/index_monitoring.py`. The readable pairs' index attempts and permission syncs as one feed, newest first, with the same filters as a pair's `/runs`; each run names its pair and whether the caller may resolve its document errors. Backs the status page's Activities card. |
+| POST | `/manage/admin/index-monitoring/runs/resolve` | `resolve_indexing_runs` | `server/documents/index_monitoring.py`. Marks resolved every open run of one activity level (`failures` or `errors`), or of both when the body names no `level`, that the fleet feed lists for the body's `q`, `since` and `kinds`, on the pairs the caller holds `CCPairAccessLevel.OPERATE` on. Needs `MANAGE_CONNECTORS` (global or scoped). One INSERT from SELECT per kind over the feed's own builders (`resolve_matching_runs__no_commit`, `db/cc_pair_runs.py`); a run resolved before keeps its first resolution and is not counted. Returns `resolved_count` and the `cc_pair_ids` it marked runs on, so the client refetches only those feeds. Backs the activity panel's "Resolve all shown". |
+| GET | `/manage/admin/index-monitoring/runs/resolvable-count` | `get_resolvable_indexing_runs_count` | How many runs `/runs/resolve` would mark for the same `level` (optional, both levels without it), `q`, `since` and `kinds` (query params), on the same operated pairs (`count_matching_runs`, `db/cc_pair_runs.py`). The activity panel shows "Resolve all shown" only when it is above zero and states it in the confirm. |
 | POST | `/manage/connector-request` | | Public "request a connector" form. |
 | POST | `/manage/credential`, `POST /manage/credential/private-key` | `create_credential_from_model` | `server/documents/credential.py` |
 | GET | `/manage/credential`, `/manage/credential/{id}` | `list_credentials`, `get_credential_by_id` | `server/documents/credential.py` |
-| PATCH | `/manage/credential/{id}` | `update_credential_from_model` | |
-| PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Admin-only, any user's credential. |
+| PATCH | `/manage/credential/{id}` | `update_credential_from_model` | Changes the values. Keeps the owner. |
+| PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Global `MANAGE_CONNECTORS` only. Changes a credential the caller can edit (§4.7). Keeps the owner. |
+| PUT | `/manage/admin/credential/{id}/sharing` | `update_credential_sharing_endpoint` | Changes `admin_public`, `groups` (EE) and the name of a credential the caller can edit (§4.7). Checks the groups exist and runs `assert_within_scope` on the stored and requested groups. CE refuses groups. |
 | DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | |
 | DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
-| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Admin listing, masked. |
+| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`. |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
 | PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
@@ -87,7 +93,14 @@ deletion units.
 | PUT | `/manage/admin/cc-pair/{id}/status` | `update_cc_pair_status` | Pause/resume only. |
 | PUT | `/manage/admin/cc-pair/{id}/name`, `PUT .../property` | | |
 | POST | `/manage/admin/cc-pair/{id}/prune` | `prune_cc_pair` | |
-| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../errors`, `.../permission-sync-attempts`, `.../external-group-sync-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/errors` | `get_cc_pair_indexing_errors` | The pair's indexing errors, newest first, paged. `include_resolved` adds resolved ones, `index_attempt_id` keeps one attempt's, and `q` matches the message or document id. Each error carries `document_name`, the indexed document's `semantic_id`, or null when the document has no row. |
+| GET | `/manage/admin/cc-pair/{id}/runs` | `get_cc_pair_runs` | The pair's index attempts plus, for a perm-synced pair, its document permission and group syncs, as one feed newest first. One SQL union pages it (`db/cc_pair_runs.py`). Index attempts come from the current search settings and, during a model switch, the FUTURE ones too, so the switch's document errors show before the swap; `is_new_model` on the attempt marks them, and the activity panel tags them "New model". Throughput and the indexing-pairs count stay on the current settings. Filters: time window (`since`, plus an exclusive `until` that a click on a throughput chart slice sets, on the connector page and the status page's history panel; a run still in progress is listed whatever its age), kinds, status groups, error text (an index attempt's document errors included), `errors` (runs with open document errors, runs whose document errors were all resolved, or runs with none), `superseded`, and `resolved`. A failed run is superseded when a newer run of the same kind has succeeded or failed on the same history (a run still in progress, canceled or interrupted supersedes nothing): the same pair (an index attempt also under the same search settings, targeted reindexes excluded; a check run on the same credential and connector; a group sync on the same source when its source logs one sync for all its pairs). `superseded=false` leaves those runs out, `true` keeps only them, or with `errors` adds them to what `errors` keeps. A run is resolved when an admin marked it so (`cc_pair_run_resolution`, one row per kind and run id, `db/cc_pair_run_resolution.py`); `resolved` reads those runs the same way `superseded` reads superseded ones, and each run carries `resolved_at`. A resolved run keeps its status. The activity panel's levels each have open and closed runs: failures are failed runs neither resolved nor superseded, and its closed runs are the resolved or superseded failures; errors are runs with open document errors that are not resolved, and its closed runs are the resolved ones plus the runs whose document errors were all resolved; other has no closed runs. The panel's "Resolved" toggle, beside its level dropdown, shows each level's closed runs in place of its open ones, each element faded on a neutral card, with a "Resolved" badge; level counts stay open runs only. An open failure or error card shows a single "Resolve" action on hover or focus. A search drops the superseded filter, so old failures stay findable under failures. Status counts ignore the status filter and honor the rest, superseded included. A source whose group sync covers all its pairs shows that source's group syncs on every pair. The status page's expanded connector row lists the newest page of this feed (search only, no filters or pages), and its View Logs button opens the history panel on that pair. |
+| POST | `/manage/admin/cc-pair/{id}/runs/resolve` | `resolve_cc_pair_runs` | Marks runs of the pair's feed resolved, given as kind and run id. Each must have failed or hold open document errors. Needs `MANAGE_CONNECTORS` (global or scoped) and `CCPairAccessLevel.OPERATE`, as the targeted reindex does; `can_resolve_runs` on the fleet feed's `CCPairRef` says the caller has both. A run resolved before keeps its first resolution. |
+| POST | `/manage/admin/cc-pair/{id}/runs/resolve-matching` | `resolve_matching_cc_pair_runs` | The pair's variant of `/index-monitoring/runs/resolve`: marks resolved every open run of the level, or of both levels, that the pair's feed lists for the filter, with the same permissions as `/runs/resolve`, and returns `resolved_count` and `cc_pair_ids`. The activity panel's "Resolve all shown" button, beside its level dropdown, shows when the level shown is All Levels, failures or errors, the Resolved view is off, and the matching `resolvable-count` is above zero. It is disabled until the list and count match the search typed. The confirm states that count and fixes the level and search when it opens, then posts them and refreshes the feeds. |
+| GET | `/manage/admin/cc-pair/{id}/runs/resolvable-count` | `get_resolvable_cc_pair_runs_count` | The pair's variant of `/index-monitoring/runs/resolvable-count`, with the permissions of `resolve-matching`. |
+| POST | `/manage/admin/index-attempt/{id}/cancel` | `cancel_index_attempt` | Cancels one running or queued attempt. Needs `CCPairAccessLevel.OPERATE`. Shares the pause route's cancel helper. |
+| GET | `/manage/admin/cc-pair/{id}/hierarchy-breakdown` | `get_cc_pair_hierarchy_breakdown` | `server/documents/hierarchy_breakdown.py`. Node type → `{raw_node_id, display_name, link, doc_count}` rows: the pair's indexed documents in each node's subtree. `other_doc_count`: the indexed documents in no listed node's subtree. `null` until a full index run of the pair succeeds (under any search settings). Computed live; a separate route so the detail page stays fast. See [[connectors]] §4.9. |
 | POST | `/manage/admin/deletion-attempt` | `create_deletion_attempt_for_connector_id` | `server/manage/administrative.py`. **The real deletion trigger.** Needs `CCPairAccessLevel.EDIT` on the pair. |
 | POST, GET | `/manage/admin/indexing/targeted-reindex`, `/manage/admin/indexing/targeted-reindex/{job_id}` | `server/documents/targeted_reindex.py` | Reindex only the documents that previously failed, and read the job. |
 | POST, GET | `/manage/admin/credential/{id}/capability-check`, `/capability-report`, `/manage/admin/credential/capability-reports`, `/manage/admin/credential/{id}/binding-check` | `server/documents/credential_capabilities.py` | Test a credential/connector combination without indexing. See [[connectors]] §4.8. |
@@ -131,9 +144,10 @@ Connector id `0` is a permanent seeded row for the Ingestion API
 | `source` | `DocumentSource` | Must be usable by the paired connector(s). A compatible family credential may have a different source (`credential_families.py:is_credential_usable_for_source`, checked in `credentials.py:swap_credentials_connector` on swap). |
 | `credential_json` | `SensitiveValue[dict] | None`, column type `EncryptedJson()` | The secret. Never a plain dict at rest; wrapped so every read requires an explicit `.get_value(apply_mask=...)` call. |
 | `user_id` | UUID, nullable, FK `user.id` ON DELETE CASCADE | Owner. `None` for the seeded public credential and for admin-created shared credentials. |
-| `admin_public` | bool, default `True` | If true, any admin can use this credential regardless of owner. |
-| `curator_public` | bool, default `False` | If true, curators (see [[access-control]]) can use it within their scope. |
-| `time_created`, `time_updated` | | |
+| `admin_public` | bool, default `True` | If true, every global `MANAGE_CONNECTORS` holder can use this credential regardless of owner. Group managers do not count. See §4.7. |
+| `curator_public` | bool, default `False` | Kept for older clients. Grants no access. A scoped manager cannot set it (`assert_within_scope` treats it as public). |
+| `is_draft` | bool, default `False` | A new account in a connector form, saved before its connector (`server/documents/draft_credentials.py`). Credential listings and lookups leave drafts out; only the owner's form reads its own. `POST /admin/connector-with-credential` promotes it, and `CLEANUP_STALE_DRAFT_CREDENTIALS` deletes drafts unchanged for 7 days. See [[connectors]]. |
+| `time_created`, `time_updated` | | A draft's `time_updated` names it in the draft check-result cache, so promotion keeps it. |
 
 ### `connector_credential_pair`
 
@@ -168,7 +182,7 @@ references the `(connector_id, credential_id)` pair directly.
 | `document_set__connector_credential_pair` | `(document_set_id, connector_credential_pair_id, is_current)` | `is_current=False` rows are the prior membership set, deleted once the document set finishes resyncing (`models.py:DocumentSet__ConnectorCredentialPair`). |
 | `user_group__connector_credential_pair` | `(user_group_id, cc_pair_id, is_current)`, plus `role` | Same current/prior pattern. The groups that manage the pair. `role` is `ConnectorManageRole` (`EDITOR` changes and deletes, `OPERATOR` schedules and monitors). |
 | `user_group__cc_pair_data_access` | `(cc_pair_id, user_group_id)` | The data-access groups: who may read the pair's documents (`models.py:UserGroup__CCPairDataAccess`). |
-| `credential__user_group` | `(credential_id, user_group_id)` | Which groups may **use** a credential, independent of which groups can see the cc-pair's documents. |
+| `credential__user_group` | `(credential_id, user_group_id)` | Which groups may **use** a credential (EE), independent of which groups can see the cc-pair's documents. See §4.7. |
 | `document_by_connector_credential_pair` | `(id=document_id, connector_id, credential_id)` | The fan-out table: one row per (document, cc-pair) that indexed it. `get_document_connector_count` (`db/document.py:get_document_connector_count`) counts these rows to decide whether a document is orphaned on deletion. See §5. |
 | `hierarchy_node_by_connector_credential_pair` | `(hierarchy_node_id, connector_id, credential_id)` | Folder/space tree ownership, cleaned up the same way during pruning. |
 
@@ -223,7 +237,7 @@ Connector (1) ---< ConnectorCredentialPair >--- (1) Credential
 `PUT /manage/connector/{connector_id}/credential/{credential_id}` →
 `cc_pair.py:associate_credential_to_connector` →
 `connector_credential_pair.py:add_credential_to_connector`. This validates the
-credential belongs to the user (or is public/curator-shared), validates
+user can use the credential (§4.7), validates
 `AccessType.SYNC` is gated to sources that support it and requires the
 business tier (`fetch_ee_implementation_or_noop("onyx.utils.tier", ...)`),
 then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`. The gate applies to both `SYNC` and `SYNC_RESTRICTED` (`AccessType.is_perm_synced`). The call also writes the manage-access groups and data-access groups.
@@ -285,6 +299,12 @@ those fields are not secrets. `reject_masked_credentials` and
 `restore_masked_credentials` handle the round-trip so a client editing a
 credential form can submit the masked placeholder back unchanged without
 overwriting the real secret with the mask string.
+
+The credential endpoints (`server/documents/credential.py`), the cc-pair full
+info and `GET /manage/admin/connector/status` also mask a credential the caller
+cannot edit (§4.7), whatever the setting: `credential.py:credential_ids_to_mask`.
+A user a credential is shared with can reuse it but never reads its secret.
+The user-group and document-set responses still follow the setting only.
 
 Every internal caller that needs the real secret (the connector runtime via
 `credentials_provider.py:OnyxDBCredentialsProvider.get_credentials`, OAuth
@@ -366,6 +386,33 @@ It has one live call site, `server/documents/connector.py:get_currently_failed_i
 which uses it to compute the `is_deletable` field the admin UI shows per connector.
 It does not block the delete call; see §9.
 
+### 4.7 Credential access and sharing
+
+`db/credentials.py:_add_user_filters` decides which credentials a user can
+reach, at one of two `CredentialAccessLevel`s. Drafts are hidden from all but
+their owner's form.
+
+| Who | USE (list, fetch, pair) | EDIT (change values, sharing, delete) |
+|---|---|---|
+| The owner | Yes | Yes |
+| Global `MANAGE_CONNECTORS` holder ("admin") | No owner, `admin_public`, or a `CREDENTIAL_PERMISSIONS_TO_IGNORE` source | Same as USE |
+| Manager of a group in `credential__user_group`, or member of it who holds global `MANAGE_CONNECTORS` (EE) | Yes | No |
+| Anyone else | No | No |
+
+The group clause comes from
+`fetch_versioned_implementation("onyx.db.credentials", "_build_credential_group_access_clause")`:
+CE returns `false()`, EE (`ee/onyx/db/credentials.py`) matches the user's
+managed groups (`scoped_group_ids_subquery`), or all their non-default groups
+when they hold global `MANAGE_CONNECTORS`. `validate_credential_group_ids` has
+the same split: CE refuses groups, EE checks they exist. Both create paths and
+`PUT /manage/admin/credential/{id}/sharing` call it through
+`server/documents/credential.py:assert_credential_sharing_allowed`.
+
+USE access lets a user see a shared credential. To pair it, swap to it, edit
+its bound fields or run checks with it, a non-owner must also keep the bound
+values of a pair that uses it: see [[connectors]] §4.9
+(`factory.py:assert_user_can_use_credential`).
+
 ---
 
 ## 5. Contracts and invariants
@@ -379,8 +426,11 @@ It does not block the delete call; see §9.
    Verified: every admin/user-facing credential endpoint routes through
    `CredentialSnapshot.from_credential_db_model` gated by
    `MASK_CREDENTIAL_PREFIX` (default `True`). Setting `MASK_CREDENTIAL_PREFIX=False`
-   removes this protection for every credential-listing endpoint at once; it
-   is a single global toggle, not per-request. A change that adds a new
+   shows plaintext only to callers who can edit the credential (§4.3, §4.7):
+   the credential endpoints, the cc-pair full info and the connector status
+   still mask a credential the caller cannot edit
+   (`credential.py:credential_ids_to_mask`). The user-group and document-set
+   responses follow the global toggle alone. A change that adds a new
    credential-reading endpoint must call `.get_value(apply_mask=...)`
    explicitly (the type system forces this) and must default to masked.
 3. **Encryption depends on whether EE code is loaded, not on the
@@ -564,6 +614,8 @@ Existing coverage worth reading before adding more:
   nothing.
 - **`admin_public` and `curator_public` are independent booleans on
   `Credential`**, not an enum; a credential can be both, neither, or either.
+  Only `admin_public` grants access; `curator_public` is stored and grants
+  nothing (§4.7).
   Confusing this with the cc-pair's own `access_type` (which governs document
   visibility, not credential usability) is a distinct and separate scoping
   question.

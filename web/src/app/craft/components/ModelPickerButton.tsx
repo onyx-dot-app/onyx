@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { SelectButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -41,10 +42,12 @@ export default function ModelPickerButton({
   onChange,
   disabled = false,
   fallbackToDefault = true,
-  placeholder = "Select model",
+  placeholder: placeholderProp,
   persistSelection = true,
   loading = false,
 }: ModelPickerButtonProps) {
+  const tModelSelectors = useTranslations("common.modelSelectors");
+  const placeholder = placeholderProp ?? tModelSelectors("placeholder");
   const { llmProviders, defaultText, defaultCraft } = useLanguageModels();
   const { user } = useUser();
 

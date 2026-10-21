@@ -92,7 +92,7 @@ Cross-cutting services every feature depends on.
 | ✅ | [multi-tenancy](components/multi-tenancy.md) | Tenant isolation, shards, schema-per-tenant. |
 | ✅ | [background-jobs](components/background-jobs.md) | Celery apps, queues, beat schedules, locking, the task conventions. |
 | ✅ | [editions-and-gating](components/editions-and-gating.md) | CE vs EE, feature flags, licensing, gated apps. |
-| ✅ | [observability](components/observability.md) | Metrics, tracing, audit logging, LLM usage and cost. |
+| ✅ | [observability](components/observability.md) | Metrics, tracing, audit logging, LLM usage and cost, fleet telemetry. |
 | ✅ | [rate-and-usage-limits](components/rate-and-usage-limits.md) | Token rate limits, usage limits, invite limits. |
 | ✅ | [notifications](components/notifications.md) | In-app notifications, release notes, admin banners. |
 | ✅ | [billing](components/billing.md) | Plans, checkout, license activation, seat and usage billing. |

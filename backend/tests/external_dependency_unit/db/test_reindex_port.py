@@ -81,10 +81,8 @@ from onyx.db.port_attempt import (
     create_port_attempt,
     get_active_port_attempt,
     get_latest_port_attempt,
-    mark_port_canceled,
-    mark_port_failed,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
     pause_port_attempt,
     port_backfill_has_pending_work,
     request_port_cancel,
@@ -282,7 +280,7 @@ def test_port_attempt_lifecycle_helpers(
     assert row is not None
     assert row.last_processed_doc_id == "doc-80" and row.docs_ported == 80
 
-    mark_port_succeeded(db_session, attempt_id)
+    mark_port_terminal(db_session, attempt_id, PortAttemptStatus.SUCCESS)
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
@@ -301,8 +299,12 @@ def test_port_attempt_terminal_is_first_write_wins(
     attempt = create_port_attempt(db_session, cc_pair.id, ss.id)
     mark_port_in_progress(db_session, attempt.id)
 
-    mark_port_failed(db_session, attempt.id, error_msg="stalled")
-    mark_port_succeeded(db_session, attempt.id)  # no-op: already terminal
+    mark_port_terminal(
+        db_session, attempt.id, PortAttemptStatus.FAILED, error_msg="stalled"
+    )
+    mark_port_terminal(
+        db_session, attempt.id, PortAttemptStatus.SUCCESS
+    )  # no-op: already terminal
 
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt.id)
@@ -819,7 +821,9 @@ def test_run_port_attempt_stops_when_canceled(
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
     def copy_then_cancel(ids: list[str], **_: object) -> tuple[int, bool]:
-        mark_port_canceled(db_session, attempt_id)  # operator cancels after batch 1
+        mark_port_terminal(
+            db_session, attempt_id, PortAttemptStatus.CANCELED
+        )  # operator cancels after batch 1
         return len(ids), False
 
     mock_copier = MagicMock()
@@ -1222,7 +1226,9 @@ def test_check_for_port_resumes_failed_cursor(
     commit_port_cursor(
         db_session, failed.id, last_processed_doc_id="portdoc-042", docs_ported=42
     )
-    mark_port_failed(db_session, failed.id, error_msg="boom")
+    mark_port_terminal(
+        db_session, failed.id, PortAttemptStatus.FAILED, error_msg="boom"
+    )
 
     result, _ = _run_check_for_port(cc_pair, future_id)
 
@@ -1488,7 +1494,7 @@ def _fail_port_at(
         db_session, cc_pair_id, future_id, resume_from_doc_id=cursor
     )
     mark_port_in_progress(db_session, a.id)
-    mark_port_failed(db_session, a.id, error_msg="durable")
+    mark_port_terminal(db_session, a.id, PortAttemptStatus.FAILED, error_msg="durable")
     return a.id
 
 
@@ -1512,7 +1518,7 @@ def test_consecutive_failed_no_progress_streak(
         db_session, cc_pair.id, future_id, resume_from_doc_id="doc-9"
     )
     mark_port_in_progress(db_session, ok.id)
-    mark_port_succeeded(db_session, ok.id)
+    mark_port_terminal(db_session, ok.id, PortAttemptStatus.SUCCESS)
     assert streak(db_session, cc_pair.id, future_id) == 0
 
 
@@ -1574,7 +1580,7 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
     # required pair's port is done (SUCCESS, none active)
     attempt = create_port_attempt(db_session, required_pair.id, future_id)
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
 
     invalid_pair = make_cc_pair(db_session)
     try:
@@ -1929,7 +1935,12 @@ def test_pause_port_attempt_from_failed_preserves_cursor_and_error(
     commit_port_cursor(
         db_session, failed.id, last_processed_doc_id="portdoc-007", docs_ported=7
     )
-    mark_port_failed(db_session, failed.id, error_msg="embedding key over quota")
+    mark_port_terminal(
+        db_session,
+        failed.id,
+        PortAttemptStatus.FAILED,
+        error_msg="embedding key over quota",
+    )
 
     assert pause_port_attempt(db_session, failed.id) is True
 
@@ -1961,7 +1972,7 @@ def test_pause_port_attempt_noop_from_non_failed(
     status: PortAttemptStatus,
 ) -> None:
     """Gates strictly on == FAILED: any other source (e.g. a racing resume/cancel) is an
-    untouched no-op -- why it can't route through the terminal-guarded _mark_terminal."""
+    untouched no-op -- why it can't route through the terminal-guarded mark_port_terminal."""
     pair = make_cc_pair(db_session)
     ss = get_current_search_settings(db_session)
     try:
@@ -1997,7 +2008,9 @@ def test_commit_port_cursor_stops_on_paused(
     commit_port_cursor(
         db_session, attempt.id, last_processed_doc_id="portdoc-003", docs_ported=3
     )
-    mark_port_failed(db_session, attempt.id, error_msg="boom")
+    mark_port_terminal(
+        db_session, attempt.id, PortAttemptStatus.FAILED, error_msg="boom"
+    )
     assert pause_port_attempt(db_session, attempt.id) is True
 
     assert (
@@ -2023,7 +2036,9 @@ def _paused_unit(
         db_session, cc_pair_id, future_id, resume_from_doc_id=cursor
     )
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_failed(db_session, attempt.id, error_msg="durable")
+    mark_port_terminal(
+        db_session, attempt.id, PortAttemptStatus.FAILED, error_msg="durable"
+    )
     assert pause_port_attempt(db_session, attempt.id) is True
     return attempt.id
 
@@ -2136,7 +2151,9 @@ def test_resume_paused_port_attempt_from_cursor_and_streak_reset(
     )
 
     mark_port_in_progress(db_session, resumed.id)
-    mark_port_failed(db_session, resumed.id, error_msg="again")
+    mark_port_terminal(
+        db_session, resumed.id, PortAttemptStatus.FAILED, error_msg="again"
+    )
     # one fresh failure -> streak 1 (the PAUSED history row broke the prior run)
     assert (
         count_consecutive_failed_port_attempts_no_progress(
@@ -2236,21 +2253,25 @@ def test_resume_twice_only_mints_one_attempt(
     )
 
 
-def test_mark_terminal_refuses_paused_attempt(
+def test_mark_port_terminal_refuses_paused_attempt(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A wedged worker that un-wedges after its attempt was auto-paused can't drive it
-    terminal: mark_port_succeeded / mark_port_failed no-op on a PAUSED (resting) row, so it
+    terminal: mark_port_terminal no-op on a PAUSED (resting) row, so it
     stays PAUSED and keeps blocking the swap until an operator Resume."""
     cc_pair, future_id = cc_pair_and_future
     paused_id = _paused_unit(db_session, cc_pair.id, future_id, "doc-7")
 
-    mark_port_succeeded(db_session, paused_id)  # wedged worker's late success
+    mark_port_terminal(
+        db_session, paused_id, PortAttemptStatus.SUCCESS
+    )  # wedged worker's late success
     db_session.expire_all()
     row = db_session.get(PortAttempt, paused_id)
     assert row is not None and row.status == PortAttemptStatus.PAUSED
 
-    mark_port_failed(db_session, paused_id, error_msg="late stall")
+    mark_port_terminal(
+        db_session, paused_id, PortAttemptStatus.FAILED, error_msg="late stall"
+    )
     db_session.expire_all()
     row = db_session.get(PortAttempt, paused_id)
     assert row is not None and row.status == PortAttemptStatus.PAUSED

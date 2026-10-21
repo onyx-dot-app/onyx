@@ -10,9 +10,9 @@ from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, LLMModelFlowType
 from onyx.db.llm import (
-    fetch_default_contextual_rag_model,
+    fetch_default_model,
     update_default_contextual_model,
     upsert_llm_provider,
 )
@@ -328,7 +328,7 @@ def test_contextual_off_applies_without_a_reindex(
 ) -> None:
     mc_id = _enable_contextual_rag_on_current(db_session)
     current_id = get_current_search_settings(db_session).id
-    assert fetch_default_contextual_rag_model(db_session) is not None
+    assert fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is not None
 
     with patch(
         "onyx.server.manage.search_settings.emit_audit_event"
@@ -347,7 +347,7 @@ def test_contextual_off_applies_without_a_reindex(
     assert current.contextual_rag_model_configuration_id == mc_id
     assert response.contextual_rag_model_configuration_id == mc_id
     assert get_secondary_search_settings(db_session) is None
-    assert fetch_default_contextual_rag_model(db_session) is None
+    assert fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG) is None
     audit_args, audit_kwargs = mock_emit_audit_event.call_args
     assert audit_args == (
         AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
@@ -449,7 +449,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings and swapping to PRESENT,
-    fetch_default_contextual_rag_model should match the PRESENT settings and
+    fetch_default_model should match the PRESENT settings and
     run_indexing_pipeline should resolve the LLM from those PRESENT settings."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
@@ -464,7 +464,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     )
 
     # PRESENT still has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is None
 
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
@@ -474,7 +474,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     assert old_settings is not None, "Swap should have occurred"
 
     # Now PRESENT has contextual RAG enabled, default should match
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is not None
     assert default_model.name == TEST_MODEL_NAME
 
@@ -525,7 +525,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     )
 
     # PRESENT still has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is None
 
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
@@ -535,7 +535,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     assert old_settings is not None, "Swap should have occurred"
 
     # Now PRESENT has contextual RAG enabled, default should match
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is not None
     assert default_model.name == TEST_MODEL_NAME
 
@@ -570,7 +570,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         "model_configuration_id": updated_mc_id,
     }
 
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is not None
     assert default_model.name == UPDATED_MODEL_NAME
 
@@ -610,7 +610,7 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     )
 
     # PRESENT has contextual RAG disabled, so default should be None
-    default_model = fetch_default_contextual_rag_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
     assert default_model is None
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)

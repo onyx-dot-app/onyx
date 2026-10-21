@@ -1,5 +1,6 @@
 import type { RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
+import type { TagProps } from "@opal/components/tag/components";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /**
@@ -16,6 +17,12 @@ export type SelectOption = {
   suffix?: string;
   icon?: IconFunctionComponent;
   disabled?: boolean;
+  /** Tag beside the title, like a plan badge. */
+  tag?: TagProps;
+  /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
+  tooltip?: string | RichStr;
+  /** Makes the row a link: picking it follows `href` instead of selecting it. */
+  href?: string;
 };
 
 /**
@@ -71,6 +78,11 @@ type InputSingleBaseProps = Omit<
   rightChildren?: React.ReactNode;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Where the list portals to. Inside a modal, pass the modal content so the
+   * list sits within its focus trap and the search field can take focus.
+   */
+  container?: HTMLElement | null;
 };
 
 /**

@@ -229,6 +229,7 @@ module "eks" {
 
   iam_role_permissions_boundary = var.iam_role_permissions_boundary
   iam_role_path                 = var.iam_role_path
+  cluster_admin_principal_arn   = var.cluster_admin_principal_arn
 
   # Attach RDS IAM connect policy to the same IRSA role used by S3 access
   enable_rds_iam_for_service_account = var.enable_iam_auth

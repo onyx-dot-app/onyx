@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Generator
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import Table, create_engine
@@ -156,6 +156,101 @@ class TestComputeCostCents:
 
         assert input_cents == pytest.approx(1.08)
         assert output_cents == 0
+
+    def test_long_context_tier_rates_apply_above_the_threshold(self) -> None:
+        """claude-haiku-5-5 bills 5x above 100k context tokens. Below it,
+        base rates apply."""
+        base_in, base_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=90_000,
+            completion_tokens=1_000,
+        )
+        # 90k * $0.1/Mtok + 1k * $0.5/Mtok
+        assert base_in == pytest.approx(0.9)
+        assert base_out == pytest.approx(0.05)
+
+        tiered_in, tiered_out = compute_cost_cents(
+            "claude-haiku-5-5",
+            "anthropic",
+            prompt_tokens=150_000,
+            completion_tokens=1_000,
+        )
+        # 150k * $0.5/Mtok + 1k * $2.5/Mtok — fivefold tier rates.
+        assert tiered_in == pytest.approx(7.5)
+        assert tiered_out == pytest.approx(0.25)
+
+    def test_explicit_tier_threshold_beats_legacy_200k_block(self) -> None:
+        """Entries vendoring both `context_over_200k` and a `tiers` block with
+        a different threshold bill the explicit tier — the legacy block only
+        fills in when no context tiers exist."""
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "context_over_200k": {"input": 4.0, "output": 15.0},
+            "tiers": [
+                {
+                    "tier": {"type": "context", "size": 272_000},
+                    "input": 4.0,
+                    "output": 15.0,
+                }
+            ],
+        }
+        # 250k clears the stale 200k legacy claim but not the real 272k tier.
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=250_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(250_000 * 2.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 10.0 / 1_000_000 * 100)
+
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=300_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(300_000 * 4.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 15.0 / 1_000_000 * 100)
+
+    def test_legacy_200k_block_applies_when_no_tier_entries(self) -> None:
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "context_over_200k": {"input": 4.0, "output": 15.0},
+        }
+        in_cents, _ = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=250_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(250_000 * 4.0 / 1_000_000 * 100)
+
+    def test_negative_tier_rate_defers_to_base_rate(self) -> None:
+        """A -1 'unknown price' sentinel in a tier rate behaves like a missing
+        rate — the base rate applies instead of recording zero."""
+        cost = {
+            "input": 2.0,
+            "output": 10.0,
+            "tiers": [
+                {"tier": {"type": "context", "size": 100}, "input": -1, "output": -1}
+            ],
+        }
+        in_cents, out_cents = cost_mod._catalog_cost_cents(
+            cost,
+            prompt_tokens=1_000,
+            completion_tokens=1_000,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert in_cents == pytest.approx(1_000 * 2.0 / 1_000_000 * 100)
+        assert out_cents == pytest.approx(1_000 * 10.0 / 1_000_000 * 100)
 
     def test_bedrock_model_priced_via_provider(
         self, monkeypatch: pytest.MonkeyPatch
@@ -409,6 +504,53 @@ class TestOverride:
         # $1.00 = 100 cents in, $2.00 = 200 cents out.
         assert in_cents == pytest.approx(100.0)
         assert out_cents == pytest.approx(200.0)
+
+    @staticmethod
+    def _served_catalog(_provider: str, model: str) -> dict[str, Any] | None:
+        if model == "deepseek/deepseek-v4-flash":
+            return {"input": 1.0, "output": 2.0}
+        return None
+
+    def test_served_model_prices_from_catalog(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
+
+        in_cents, out_cents = compute_cost_cents(
+            model="openrouter/auto",
+            served_model="deepseek/deepseek-v4-flash",
+            provider="openrouter",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(100.0)
+        assert out_cents == pytest.approx(200.0)
+
+    def test_router_override_wins_over_served_model(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
+        db_session.add(
+            ModelCostOverride(
+                model="openrouter/auto",
+                provider="openrouter",
+                input_cost_per_mtok=5.0,
+                output_cost_per_mtok=6.0,
+            )
+        )
+        db_session.commit()
+
+        in_cents, out_cents = compute_cost_cents(
+            model="openrouter/auto",
+            served_model="deepseek/deepseek-v4-flash",
+            provider="openrouter",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(500.0)
+        assert out_cents == pytest.approx(600.0)
 
     def test_override_counts_cache_reads_as_input(self, db_session: Session) -> None:
         db_session.add(

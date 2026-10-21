@@ -22,7 +22,7 @@ It takes keyboard focus, so the tooltip opens on focus as well as on hover.
 | `default` | `text-03`           |
 | `info`    | `status-info-05`    |
 | `success` | `status-success-05` |
-| `warning` | `theme-amber-05`    |
+| `warning` | `status-warning-05` |
 | `error`   | `status-error-05`   |
 
 ## Usage

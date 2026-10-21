@@ -1,17 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { setCCPairStatus } from "@/lib/ccPair";
+import { toast } from "@opal/layouts";
+import useSWRInfinite from "swr/infinite";
+import {
+  resolveCCPairRuns,
+  resolveMatchingRuns,
+  setCCPairStatus,
+} from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type {
   CCPairFullInfo,
-  CCPairSyncAttemptsResponse,
+  CCPairRun,
+  CCPairRunErrors,
+  CCPairRef,
+  CCPairRunLevel,
+  CCPairRunsQuery,
+  CCPairRunStatusGroup,
+  IndexingRun,
 } from "@/lib/connectors/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  resolveAllErrorsForCCPair,
+  resolveErrors,
+} from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 // ---------------------------------------------------------------------------
@@ -19,7 +35,9 @@ import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 // ---------------------------------------------------------------------------
 
 /** Pauses, resumes, or re-enables a cc-pair, confirming first when it is invalid. */
-export function useStatusChange(ccPair: CCPairFullInfo | null) {
+export function useStatusChange(
+  ccPair: Pick<CCPairFullInfo, "id" | "name" | "status"> | null
+) {
   const t = useTranslations("admin.connector");
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -33,8 +51,15 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
       // Call the backend to update the status
       await setCCPairStatus(ccPair.id, newStatus);
 
-      // Use mutate to revalidate the status on the backend
-      await mutate(buildCCPairInfoUrl(ccPair.id));
+      // The status page lists the pair's state too.
+      await Promise.all([
+        mutate(buildCCPairInfoUrl(ccPair.id)),
+        mutate(
+          (cached) =>
+            typeof cached === "string" &&
+            cached.startsWith(SWR_KEYS.indexMonitoringConnectorsPrefix)
+        ),
+      ]);
     } catch (error) {
       console.error("Failed to update status", error);
     } finally {
@@ -84,125 +109,379 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 }
 
 // ---------------------------------------------------------------------------
-// useSyncAttemptsPaginatedFetch
+// useActivityItems
 // ---------------------------------------------------------------------------
 
-/**
- * Thin wrapper around `usePaginatedFetch` that adapts the
- * `CCPairSyncAttemptsResponse` shape used by both per-cc-pair sync-attempt
- * endpoints (`/permission-sync-attempts` and
- * `/external-group-sync-attempts`).
- *
- * The standard `usePaginatedFetch` hook expects `{ items, total_items }`,
- * which is a strict subset of `CCPairSyncAttemptsResponse` — so the
- * underlying paginated fetch works against either endpoint without
- * modification, ignoring the extra `applicable` field on the wire.
- *
- * Surfacing `applicable` requires a separate read because
- * `usePaginatedFetch` does not expose the raw response. The applicability
- * value is invariant per (cc_pair, sync_kind), so a single SWR probe with
- * `page_size=1` is the cheapest correct way to read it. SWR's URL-keyed
- * cache shares the result across concurrent renders.
- *
- * @see plans/permission-sync-attempt-tabs.md (PR C, option B)
- */
+/** Which level of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
+export type ActivityGroup = "failures" | "errors" | "other";
 
-const ATTEMPTS_REFRESH_INTERVAL_MS = 5000;
-
-interface PaginatedItem {
-  id: number | string;
+interface ActivityGroupQuery {
+  statusGroups: CCPairRunStatusGroup[] | null;
+  errors: CCPairRunErrors | null;
+  superseded: boolean | null;
+  resolved: boolean | null;
 }
 
-export interface UseSyncAttemptsPaginatedFetchConfig {
-  /**
-   * Base API URL for the sync-attempts endpoint, without query params.
-   * E.g. `/api/manage/admin/cc-pair/123/permission-sync-attempts`.
-   * Should be sourced from `SWR_KEYS` so that any future `mutate()` callers
-   * can target the same key.
-   */
-  endpoint: string;
-  /**
-   * SWR cache key for the applicability probe (the `?page_num=0&page_size=1`
-   * read). Must be a `SWR_KEYS` entry so that callers wanting to force-refresh
-   * the probe can do so without re-deriving the URL inline. See the
-   * `ccPair*SyncAttemptsProbe` builders in `web/src/lib/swr-keys.ts`.
-   */
-  swrProbeKey: string;
-  itemsPerPage: number;
-  pagesPerBatch: number;
+const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
+
+/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or followed by a newer run of its kind, a closed
+ * error run was resolved or had all its document errors resolved, and nothing in "other" is open, so it has no closed runs. */
+const ACTIVITY_GROUP_QUERY = {
+  failures: {
+    open: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: false,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: ["failed"],
+      errors: null,
+      superseded: true,
+      resolved: true,
+    },
+  },
+  errors: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "unresolved",
+      superseded: null,
+      resolved: false,
+    },
+    closed: {
+      statusGroups: NOT_FAILED,
+      errors: "resolved",
+      superseded: null,
+      resolved: true,
+    },
+  },
+  other: {
+    open: {
+      statusGroups: NOT_FAILED,
+      errors: "none",
+      superseded: null,
+      resolved: null,
+    },
+    closed: null,
+  },
+} satisfies Record<
+  ActivityGroup,
+  { open: ActivityGroupQuery; closed: ActivityGroupQuery | null }
+>;
+
+const ACTIVITY_PAGE_SIZE = 20;
+
+/** Which pairs an activity feed reads: one pair, with what the viewer may resolve on it, or every readable one. */
+export type ActivityScope =
+  | { ccPairId: number; canResolve: boolean; canResolveRuns: boolean }
+  | "fleet";
+
+/** One run in an activity panel, with the pair it ran on and what the viewer may do to it. */
+export interface ActivityItem {
+  ccPairId: number;
+  run: CCPairRun;
+  /** Set when the feed spans pairs, so the card names the pair. */
+  connector: CCPairRef | undefined;
+  /** The viewer may re-fetch single documents of the run's pair. */
+  canResolve: boolean;
+  /** The viewer may mark the run resolved. */
+  canResolveRuns: boolean;
 }
 
-export interface UseSyncAttemptsPaginatedFetchReturn<T extends PaginatedItem> {
-  /**
-   * `null` while the applicability probe is in flight; `true`/`false`
-   * once known. The two non-null values map to "render the table" vs
-   * "render the not-applicable message" — they are NOT redundant with
-   * `items.length === 0`, see `CCPairSyncAttemptsResponse`.
-   */
-  applicable: boolean | null;
-  applicableError: Error | null;
-  applicableIsLoading: boolean;
-
-  // Standard pagination state, only meaningful when `applicable === true`.
-  // The underlying endpoint short-circuits to `items=[], total_items=0`
-  // when not applicable, so reading these in that state is harmless but
-  // misleading — gate on `applicable` first.
-  currentPageData: T[] | null;
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  goToPage: (page: number) => void;
-  refresh: () => Promise<void>;
+export interface ActivityGroupState {
+  group: ActivityGroup;
+  /** Lists the level's resolved and superseded runs rather than its open ones. */
+  closed: boolean;
+  runs: ActivityItem[];
+  /** Runs in the group, loaded or not. */
+  total: number;
+  loaded: boolean;
+  failed: boolean;
   isLoading: boolean;
-  error: Error | null;
+  /** Older runs than the pages loaded so far. */
+  hasMore: boolean;
+  more: () => void;
 }
 
-interface ApplicabilityProbeResponse {
-  applicable: boolean;
+/** A page of either feed. A pair's feed returns bare runs, the fleet's wraps each with its pair. */
+interface FeedPage {
+  items: (CCPairRun | IndexingRun)[];
+  total_items: number;
 }
 
-export function useSyncAttemptsPaginatedFetch<T extends PaginatedItem>({
-  endpoint,
-  swrProbeKey,
-  itemsPerPage,
-  pagesPerBatch,
-}: UseSyncAttemptsPaginatedFetchConfig): UseSyncAttemptsPaginatedFetchReturn<T> {
-  const {
-    data: probeData,
-    error: probeError,
-    isLoading: applicableIsLoading,
-  } = useSWR<CCPairSyncAttemptsResponse<T> | ApplicabilityProbeResponse>(
-    swrProbeKey,
-    errorHandlingFetcher
-  );
-
-  const applicable = probeData ? probeData.applicable : null;
-
-  // Once we know the source has no applicable sync, stop polling — the
-  // backend will keep returning `applicable=false, items=[]` every 5s
-  // for the rest of the session otherwise.
-  const refreshIntervalInMs =
-    applicable === false ? 0 : ATTEMPTS_REFRESH_INTERVAL_MS;
-
-  const paginated = usePaginatedFetch<T>({
-    endpoint,
-    itemsPerPage,
-    pagesPerBatch,
-    refreshIntervalInMs,
-  });
-
+function itemOf(
+  run: CCPairRun | IndexingRun,
+  scope: ActivityScope
+): ActivityItem {
+  if ("cc_pair" in run) {
+    return {
+      ccPairId: run.cc_pair.id,
+      run: run.run,
+      connector: run.cc_pair,
+      canResolve: run.cc_pair.can_resolve,
+      canResolveRuns: run.cc_pair.can_resolve_runs,
+    };
+  }
+  // A bare run only comes from a pair's own feed.
+  const pair = scope === "fleet" ? null : scope;
+  if (pair === null)
+    throw new Error("A fleet feed returned a run without its pair");
   return {
-    applicable,
-    applicableError: (probeError as Error | undefined) ?? null,
-    applicableIsLoading,
-
-    currentPageData: paginated.currentPageData,
-    currentPage: paginated.currentPage,
-    totalPages: paginated.totalPages,
-    totalItems: paginated.totalItems,
-    goToPage: paginated.goToPage,
-    refresh: paginated.refresh,
-    isLoading: paginated.isLoading,
-    error: paginated.error,
+    ccPairId: pair.ccPairId,
+    run,
+    connector: undefined,
+    canResolve: pair.canResolve,
+    canResolveRuns: pair.canResolveRuns,
   };
+}
+
+interface ActivityFeed {
+  ccPairId: number | null;
+  revalidate: () => Promise<void>;
+}
+
+// SWR's key-filter mutate skips useSWRInfinite keys, so each mounted feed registers its own revalidate.
+const activityFeeds = new Set<ActivityFeed>();
+
+/** The creation times an activity feed keeps, as ISO times. `until` is exclusive. */
+export interface ActivityTimeRange {
+  since: string | null;
+  until: string | null;
+}
+
+const ALL_TIME: ActivityTimeRange = { since: null, until: null };
+
+/** One activity level of the scope, its open runs or its `closed` ones, polled while `enabled`. `more` loads the next page and a new search starts over. */
+export function useActivityItems(
+  scope: ActivityScope,
+  group: ActivityGroup,
+  closed: boolean,
+  q: string,
+  enabled: boolean,
+  pollMs: number,
+  range: ActivityTimeRange = ALL_TIME
+): ActivityGroupState {
+  const { since, until } = range;
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const pair = scope === "fleet" ? null : scope;
+  // Primitives, so a scope rebuilt every render does not remap the runs.
+  const canResolve = pair?.canResolve ?? null;
+  const canResolveRuns = pair?.canResolveRuns ?? null;
+  const groupQuery = ACTIVITY_GROUP_QUERY[group][closed ? "closed" : "open"];
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<FeedPage>(
+      (pageIndex, previous: FeedPage | null) => {
+        if (!enabled || groupQuery === null) return null;
+        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+          return null;
+        }
+        const query: CCPairRunsQuery = {
+          pageNum: pageIndex,
+          pageSize: ACTIVITY_PAGE_SIZE,
+          since,
+          until,
+          kinds: null,
+          q,
+          ...groupQuery,
+          // A search finds old failures too, under the failures group. The closed feed keeps its superseded ones.
+          superseded: q && !closed ? null : groupQuery.superseded,
+        };
+        return ccPairId === null
+          ? SWR_KEYS.indexMonitoringRuns(query)
+          : SWR_KEYS.ccPairRuns(ccPairId, query);
+      },
+      errorHandlingFetcher,
+      { refreshInterval: pollMs, keepPreviousData: true }
+    );
+  useEffect(() => {
+    void setSize(1);
+  }, [q, since, until, setSize]);
+  useEffect(() => {
+    const feed: ActivityFeed = {
+      ccPairId,
+      revalidate: async () => {
+        await mutate();
+      },
+    };
+    activityFeeds.add(feed);
+    return () => {
+      activityFeeds.delete(feed);
+    };
+  }, [ccPairId, mutate]);
+  // Polling shifts the offsets, so a run can land on two pages.
+  const runs = useMemo(() => {
+    const itemScope: ActivityScope =
+      ccPairId === null || canResolve === null || canResolveRuns === null
+        ? "fleet"
+        : { ccPairId, canResolve, canResolveRuns };
+    const seen = new Set<string>();
+    return (data ?? []).flatMap((page) =>
+      page.items
+        .map((run) => itemOf(run, itemScope))
+        .filter((item) => {
+          const key = `${item.run.kind}-${item.run.attempt.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+    );
+  }, [data, ccPairId, canResolve, canResolveRuns]);
+  const first = data?.[0];
+  const last = data?.[data.length - 1];
+  return {
+    group,
+    closed,
+    runs,
+    total: first?.total_items ?? 0,
+    loaded: first !== undefined,
+    failed: error !== undefined,
+    isLoading,
+    hasMore:
+      first !== undefined &&
+      last !== undefined &&
+      runs.length < first.total_items &&
+      last.items.length === ACTIVITY_PAGE_SIZE,
+    more: () => void setSize(size + 1),
+  };
+}
+
+/** Refetches the fleet feed and the given pairs' feeds. */
+function refreshFeeds(ccPairIds: number[]) {
+  const prefixes = [
+    SWR_KEYS.indexMonitoringRunsPrefix,
+    SWR_KEYS.indexMonitoringResolvableRunsCountPrefix,
+    ...ccPairIds.flatMap((ccPairId) => [
+      SWR_KEYS.ccPairIndexingErrors(ccPairId),
+      SWR_KEYS.ccPairRunsPrefix(ccPairId),
+      SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId),
+    ]),
+  ];
+  return Promise.all([
+    mutate(
+      (key) =>
+        typeof key === "string" &&
+        prefixes.some((prefix) => key.startsWith(prefix))
+    ),
+    ...Array.from(activityFeeds)
+      .filter(
+        (feed) => feed.ccPairId === null || ccPairIds.includes(feed.ccPairId)
+      )
+      .map((feed) => feed.revalidate()),
+  ]);
+}
+
+/** How many open runs of the level, or of every level when `level` is null, the batch resolve would mark for the search, on the pair or the pairs the caller operates. Disabled, it fetches nothing. */
+export function useResolvableRunsCount(
+  scope: ActivityScope,
+  enabled: boolean,
+  level: CCPairRunLevel | null,
+  q: string,
+  timeRange: ActivityTimeRange,
+  pollMs: number
+): { count: number; isLoading: boolean } {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const { data, isLoading } = useSWR<{ count: number }>(
+    !enabled
+      ? null
+      : ccPairId === null
+        ? SWR_KEYS.indexMonitoringResolvableRunsCount(
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          )
+        : SWR_KEYS.ccPairResolvableRunsCount(
+            ccPairId,
+            level,
+            q,
+            timeRange.since,
+            timeRange.until
+          ),
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
+  return { count: data?.count ?? 0, isLoading };
+}
+
+// ---------------------------------------------------------------------------
+// useResolveRunErrors
+// ---------------------------------------------------------------------------
+
+/** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
+export function useResolveRunErrors() {
+  const tToasts = useTranslations("admin.connector.toasts");
+  const [resolving, setResolving] = useState(false);
+
+  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  async function resolve(item: ActivityItem, errorIds: number[] | null) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      const result =
+        errorIds === null
+          ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
+          : await resolveErrors(errorIds);
+      if (result.total_error_ids === 0) {
+        toast.success(tToasts("noUnresolvedErrors"));
+      } else {
+        toast.success(
+          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
+        );
+      }
+      await refreshFeeds([item.ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("targetedReindexFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  // Marks the run resolved without a targeted reindex: it keeps its status.
+  async function resolveRun(item: ActivityItem) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      await resolveCCPairRuns(item.ccPairId, [
+        { kind: item.run.kind, attempt_id: item.run.attempt.id },
+      ]);
+      toast.success(tToasts("runResolved"));
+      await refreshFeeds([item.ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  // Marks every open run of the level, or of every level, the panel lists for the search resolved.
+  async function resolveMatching(
+    scope: ActivityScope,
+    level: CCPairRunLevel | null,
+    q: string,
+    timeRange: ActivityTimeRange
+  ) {
+    if (resolving) return;
+    setResolving(true);
+    const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+    try {
+      const result = await resolveMatchingRuns(ccPairId, {
+        level,
+        q: q || null,
+        since: timeRange.since,
+        until: timeRange.until,
+        kinds: null,
+      });
+      toast.success(tToasts("runsResolved", { count: result.resolved_count }));
+      await refreshFeeds(ccPairId === null ? result.cc_pair_ids : [ccPairId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("runResolveFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  return { resolving, resolve, resolveRun, resolveMatching };
 }

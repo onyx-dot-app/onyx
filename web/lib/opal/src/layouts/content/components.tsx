@@ -129,6 +129,10 @@ type XlContentProps = ContentBaseProps & {
   moreIcon1?: IconFunctionComponent;
   /** Optional tertiary icon rendered in the icon row (ContentXl only). */
   moreIcon2?: IconFunctionComponent;
+  /** Tag rendered inline after the description (ContentXl only). */
+  descriptionTag?: TagProps;
+  /** When an editable title shows its pencil: on hover, or at rest too (ContentXl only). Default: `"hover"`. */
+  editButton?: "hover" | "rest";
 };
 
 type LgContentProps = ContentBaseProps & {

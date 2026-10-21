@@ -9,7 +9,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits. Declared before the first FROM so it applies to every base image below.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
@@ -54,7 +54,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS os
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS os
 
 # Install runtime system dependencies only (no build toolchain). This stage is
 # everything the shipped image holds outside the lockfiles, so the audit gate

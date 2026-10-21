@@ -311,7 +311,7 @@ def upsert_cloud_embedding_provider(
                     existing_provider.provider_type,
                     None,
                     existing_provider.vertex_config,
-                ).requires_api_key
+                ).uses_api_key
             ):
                 updates["vertex_config"] = None
             else:
@@ -477,12 +477,6 @@ def upsert_llm_provider(
         ]
     )
 
-    # Every deployment default lives on a flow row pointing at a model, and
-    # _update_default_model__no_commit makes that model visible, so a model
-    # holding any default must stay present and visible. Checking only the chat
-    # default let an edit hide the model contextual RAG or Craft still resolves
-    # to, since neither resolver looks at is_visible.
-    #
     # Only the visible-to-hidden transition is refused, not the steady state. A
     # default can already sit on a hidden model — sync_auto_mode_models hides
     # models dropped from the recommendations and re-points only the chat
@@ -501,7 +495,12 @@ def upsert_llm_provider(
                 f"Cannot remove the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before removing."
             )
-        if mc.is_visible and not requested_visibility.get(name, True):
+        if (
+            held_flows
+            - {LLMModelFlowType.CHAT_NAMING, LLMModelFlowType.SEARCH_SELECTION}
+            and mc.is_visible
+            and not requested_visibility.get(name, True)
+        ):
             raise ValueError(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."
@@ -554,6 +553,8 @@ def upsert_llm_provider(
                 else existing.temperature_default
             )
             ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
+            # Router status is additive like the capability flags.
+            existing.is_router = existing.is_router or model_config.is_router
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -589,6 +590,7 @@ def upsert_llm_provider(
                     reasoning_effort_max=model_config.reasoning_effort_max,
                     reasoning_effort_default=model_config.reasoning_effort_default,
                     temperature_default=model_config.temperature_default,
+                    is_router=model_config.is_router,
                 )
             )
     insert_new_model_configurations__no_commit(
@@ -651,7 +653,7 @@ def sync_model_configurations(
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_models: list[NewModelConfiguration] = []
-    upgraded_flow_count = 0
+    upgraded_count: int = 0
     for model in models:
         existing = existing_by_name.get(model.name)
         if existing is None:
@@ -669,9 +671,15 @@ def sync_model_configurations(
                     is_visible=False,
                     max_input_tokens=model.max_input_tokens,
                     display_name=model.display_name,
+                    is_router=model.is_router,
                 )
             )
             continue
+
+        # Router status is additive like the capability flags.
+        if model.is_router and not existing.is_router:
+            existing.is_router = True
+            upgraded_count += 1
 
         # Existing model: add newly-reported capability flags (additive only).
         # TODO(ENG-4233): durable admin flow removals.
@@ -691,12 +699,12 @@ def sync_model_configurations(
                 model_configuration_id=existing.id,
                 flow_type=flow_type,
             )
-            upgraded_flow_count += 1
+            upgraded_count += 1
 
     insert_new_model_configurations__no_commit(db_session, provider.id, new_models)
     new_count = len(new_models)
 
-    if new_count > 0 or upgraded_flow_count > 0:
+    if new_count > 0 or upgraded_count > 0:
         db_session.commit()
 
     return new_count
@@ -820,9 +828,10 @@ def fetch_model_configurations_page(
     name_query: str | None = None,
 ) -> dict[int, ModelConfigurationWindow]:
     """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
-    visible first then by name. `name_query` narrows each provider to models
-    whose name or display names contain it, so a picker can search models it
-    has not paged in yet."""
+    visible first (routers before other visible models, so a picker's router
+    tab sees them all on page one) then by name. `name_query` narrows each
+    provider to models whose name or display names contain it, so a picker can
+    search models it has not paged in yet."""
     if not provider_ids:
         return {}
 
@@ -832,6 +841,7 @@ def fetch_model_configurations_page(
             partition_by=ModelConfiguration.llm_provider_id,
             order_by=(
                 ModelConfiguration.is_visible.desc(),
+                ModelConfiguration.is_router.desc(),
                 ModelConfiguration.name,
                 ModelConfiguration.id,
             ),
@@ -1121,30 +1131,6 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CHAT)
-
-
-def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.VISION)
-
-
-def fetch_default_contextual_rag_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
-
-
-def fetch_default_chat_naming_model(
-    db_session: Session,
-) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
-
-
-def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
-
-
 def fetch_default_flows_by_model_id(
     db_session: Session,
 ) -> dict[int, set[LLMModelFlowType]]:
@@ -1193,6 +1179,59 @@ def fetch_model_configuration_by_id(
         .options(selectinload(ModelConfiguration.llm_provider))
         .where(ModelConfiguration.id == model_configuration_id)
     )
+
+
+def fetch_llm_providers_with_router_models(
+    db_session: Session,
+) -> list[LLMProviderModel]:
+    """Providers that own at least one router model configuration, each with
+    only its router rows loaded (`provider.model_configurations` is routers
+    only). For pickers offering a routing target without paging a whole
+    catalog."""
+    return list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.model_configurations.any(
+                    ModelConfiguration.is_router == True  # noqa: E712
+                )
+            )
+            .options(
+                selectinload(
+                    LLMProviderModel.model_configurations.and_(
+                        ModelConfiguration.is_router == True  # noqa: E712
+                    )
+                )
+            )
+            .order_by(LLMProviderModel.id)
+        )
+    )
+
+
+def mark_model_configuration_visible(
+    db_session: Session, model_configuration: ModelConfiguration
+) -> bool:
+    """Flip `is_visible` on and commit. False when it was already visible, so
+    the caller can skip downstream work like cache invalidation."""
+    if model_configuration.is_visible:
+        return False
+    model_configuration.is_visible = True
+    db_session.commit()
+    return True
+
+
+def require_router_model_configuration(
+    db_session: Session, model_configuration_id: int
+) -> ModelConfiguration:
+    model_configuration: ModelConfiguration | None = fetch_model_configuration_by_id(
+        db_session, model_configuration_id
+    )
+    if model_configuration is None or not model_configuration.is_router:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Model routing requires a router model configuration.",
+        )
+    return model_configuration
 
 
 def fetch_llm_provider_view(
@@ -1270,17 +1309,6 @@ def remove_llm_provider(
         db_session.flush()
 
 
-def update_default_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    _update_default_model(
-        db_session,
-        provider_id,
-        model_name,
-        LLMModelFlowType.CHAT,
-    )
-
-
 def update_default_vision_provider(
     provider_id: int, vision_model: str, db_session: Session
 ) -> None:
@@ -1300,7 +1328,7 @@ def update_default_vision_provider(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
 
-    _update_default_model(
+    update_default_model(
         db_session=db_session,
         provider_id=provider_id,
         model=vision_model,
@@ -1308,38 +1336,19 @@ def update_default_vision_provider(
     )
 
 
-def update_default_chat_naming_provider(
-    provider_id: int, chat_naming_model: str, db_session: Session
+def update_default_pointer_model(
+    provider_id: int,
+    model_name: str,
+    db_session: Session,
+    flow_type: LLMModelFlowType,
 ) -> None:
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
-    _update_default_model(
-        db_session=db_session,
-        provider_id=provider_id,
-        model=chat_naming_model,
-        flow_type=LLMModelFlowType.CHAT_NAMING,
-    )
-
-
-def update_default_craft_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    # CRAFT is a pointer flow, not a capability: nothing populates it during
-    # provider upsert, so the row has to be created before it can be defaulted.
     model_config = db_session.scalar(
         select(ModelConfiguration).where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == model_name,
         )
     )
-    if not model_config:
+    if model_config is None:
         raise ValueError(
             f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
         )
@@ -1347,16 +1356,10 @@ def update_default_craft_provider(
     create_new_flow_mapping__no_commit(
         db_session=db_session,
         model_configuration_id=model_config.id,
-        flow_type=LLMModelFlowType.CRAFT,
+        flow_type=flow_type,
     )
     db_session.flush()
-
-    _update_default_model(
-        db_session,
-        provider_id,
-        model_name,
-        LLMModelFlowType.CRAFT,
-    )
+    update_default_model(db_session, provider_id, model_name, flow_type)
 
 
 def update_no_default_chat_naming_provider(
@@ -1399,6 +1402,18 @@ def update_no_default_contextual_rag_provider(
     db_session.commit()
 
 
+def update_no_default_search_selection_provider(db_session: Session) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.SEARCH_SELECTION,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
+
+
 def update_default_contextual_model(
     db_session: Session,
     enable_contextual_rag: bool,
@@ -1422,7 +1437,7 @@ def update_default_contextual_model(
         model_configuration_id=model_config.id,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
-    _update_default_model(
+    update_default_model(
         db_session=db_session,
         provider_id=model_config.llm_provider_id,
         model=model_config.name,
@@ -1517,14 +1532,14 @@ def sync_auto_mode_models(
     # Update the default if this provider currently holds the global CHAT default.
     # This runs before the models the config dropped are hidden, so a model that
     # gives up the chat default here can still be hidden below.
-    # We flush (but don't commit) so that _update_default_model can see the new
+    # We flush (but don't commit) so that update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
     db_session.flush()
 
     recommended_default = llm_recommendations.get_default_model(provider.provider)
     if recommended_default:
-        current_default = fetch_default_llm_model(db_session)
+        current_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
         if (
             current_default
@@ -1539,12 +1554,6 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    # Reconcile the visibility of the models the config dropped. A model still
-    # holding a deployment default stays visible: only the chat default is
-    # re-pointed above, so hiding the rest would strand a default on a model the
-    # admin can no longer see or change. Every other write path keeps a default
-    # model visible.
-    #
     # Both statements test the default in SQL rather than from a snapshot read
     # here. A default assigned between the two would otherwise be missed, and
     # the model hidden anyway. They synchronize the session because sessions are
@@ -1561,6 +1570,9 @@ def sync_auto_mode_models(
             .where(
                 LLMModelFlow.model_configuration_id == ModelConfiguration.id,
                 LLMModelFlow.is_default == True,  # noqa: E712
+                LLMModelFlow.llm_model_flow_type.not_in(
+                    [LLMModelFlowType.CHAT_NAMING, LLMModelFlowType.SEARCH_SELECTION]
+                ),
             )
             .exists()
         )
@@ -1645,6 +1657,7 @@ class NewModelConfiguration(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
+    is_router: bool = False
 
 
 # Rows per INSERT. Keeps bind-parameter counts modest while tens of
@@ -1680,6 +1693,7 @@ def insert_new_model_configurations__no_commit(
                         "reasoning_effort_max": model.reasoning_effort_max,
                         "reasoning_effort_default": model.reasoning_effort_default,
                         "temperature_default": model.temperature_default,
+                        "is_router": model.is_router,
                     }
                     for model in chunk
                 ]
@@ -1780,9 +1794,6 @@ def update_model_configuration__no_commit(
         for flow_type in supported_flows
         if flow_type not in model_configuration.llm_model_flow_types
     }
-    # Only the capability-derived flows are reconciled here. The pointer flows —
-    # CONTEXTUAL_RAG, CHAT_NAMING and CRAFT — are set by their own endpoints and
-    # are implied by no supports_* field, so they are never in supported_flows.
     # Without this filter an ordinary provider update deletes them, and the
     # deployment default each one carries goes with it.
     reconciled_flows = {
@@ -1850,10 +1861,14 @@ def _update_default_model__no_commit(
     )
 
     new_default.is_default = True
-    model_config.is_visible = True
+    if flow_type not in {
+        LLMModelFlowType.CHAT_NAMING,
+        LLMModelFlowType.SEARCH_SELECTION,
+    }:
+        model_config.is_visible = True
 
 
-def _update_default_model(
+def update_default_model(
     db_session: Session,
     provider_id: int,
     model: str,

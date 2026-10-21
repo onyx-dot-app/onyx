@@ -4,6 +4,7 @@ else fails the attempt so it is retried."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import Enum
 from typing import Any
 
 import requests
@@ -11,6 +12,7 @@ from office365.runtime.client_request_exception import ClientRequestException
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.graph_client import is_permanent_refusal
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.teams.models import ChannelRef
 from onyx.utils.logger import setup_logger
@@ -18,13 +20,55 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def status(error: requests.RequestException) -> int | None:
+# The SharePoint permission reads raise MicrosoftGraphError, the rest of the
+# connector the SDK's or the raw request's exception.
+Refusal = requests.RequestException | MicrosoftGraphError
+REFUSALS = (requests.HTTPError, ClientRequestException, MicrosoftGraphError)
+
+
+def status(error: Refusal) -> int | None:
+    if isinstance(error, MicrosoftGraphError):
+        return error.status
     return error.response.status_code if error.response is not None else None
 
 
-def is_permanent(error: requests.RequestException) -> bool:
+def is_permanent(error: Refusal) -> bool:
     """Teams' name for the shared Graph classifier."""
+    if isinstance(error, MicrosoftGraphError):
+        return error.is_permanent_refusal
     return is_permanent_refusal(error)
+
+
+# Graph meters the export API for some tenants and refuses it to them with
+# 402.
+_PAYMENT_REQUIRED = 402
+
+
+def is_export_refusal(error: requests.RequestException) -> bool:
+    """Graph refuses the export API to an app without the approval, and with
+    402 to a tenant it meters. Anything else is an outage."""
+    return is_permanent(error) or status(error) == _PAYMENT_REQUIRED
+
+
+class ExportProbe(Enum):
+    """What one probe of the export API says."""
+
+    ANSWERS = "answers"
+    # 403 or 402: every probe of this tenant would say the same.
+    REFUSED_TO_APP = "refused_to_app"
+    # 404 or 423: the probed team or user is gone or locked, nothing more.
+    REFUSED_FOR_ITEM = "refused_for_item"
+
+
+def is_metered_refusal(error: requests.RequestException) -> bool:
+    """402 applies to the whole tenant, not to the team or user it came from."""
+    return status(error) == _PAYMENT_REQUIRED
+
+
+def export_probe_refusal(error: requests.RequestException) -> ExportProbe:
+    if status(error) in (403, _PAYMENT_REQUIRED):
+        return ExportProbe.REFUSED_TO_APP
+    return ExportProbe.REFUSED_FOR_ITEM
 
 
 @contextmanager
@@ -34,7 +78,7 @@ def channel_context(channel: ChannelRef, call: str) -> Iterator[None]:
     out. A transient refusal passes through and the attempt retries it."""
     try:
         yield
-    except (requests.HTTPError, ClientRequestException) as e:
+    except REFUSALS as e:
         if not is_permanent(e):
             raise
         raise ConnectorValidationError(
@@ -42,9 +86,7 @@ def channel_context(channel: ChannelRef, call: str) -> Iterator[None]:
         ) from e
 
 
-def channel_refusal(
-    channel: ChannelRef, call: str, error: requests.RequestException
-) -> str:
+def channel_refusal(channel: ChannelRef, call: str, error: Refusal) -> str:
     """Names the channel and the call, since a channel id alone sends the admin
     looking through Graph for the team and tab it belongs to."""
     return (
@@ -60,7 +102,7 @@ GRANT_BY_CALL = {
 }
 
 
-def channel_remedy(call: str, error: requests.RequestException) -> str:
+def channel_remedy(call: str, error: Refusal) -> str:
     """404 is a channel that is gone or invisible to the app, 423 a locked or
     archived team, 403 a grant."""
     if status(error) in (404, 423):
@@ -79,7 +121,7 @@ def channel_failure(
         failed_entity=EntityFailure(entity_id=channel.id),
         failure_message=(
             channel_refusal(channel, call, error)
-            if isinstance(error, requests.RequestException)
+            if isinstance(error, Refusal)
             else f"Could not read {named}: {error}"
         ),
         exception=error,

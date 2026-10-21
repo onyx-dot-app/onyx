@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import (
     count_error_rows_for_index_attempt,
@@ -41,6 +42,7 @@ class IndexingCoordination:
         # None creates the attempt without its docfetching task, to send later.
         celery_task_id: str | None,
         from_beginning: bool = False,
+        backfill: BackfillSpec | None = None,
     ) -> int | None:
         """
         Try to create a new index attempt for the given CC pair and search settings.
@@ -53,7 +55,8 @@ class IndexingCoordination:
             # Check for existing active full-run attempts (the "fence" check).
             # Targeted reindex attempts are allowed to overlap with a full crawl
             # by design (per-doc row-locks handle write conflicts), so they're
-            # excluded here.
+            # excluded here. A backfill runs the connector like a full run, so
+            # it fences and is fenced.
             existing_attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(
@@ -83,14 +86,16 @@ class IndexingCoordination:
                 from_beginning=from_beginning,
                 db_session=db_session,
                 celery_task_id=celery_task_id,
+                backfill=backfill,
             )
 
             logger.info(
-                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s",
+                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s is_backfill=%s",
                 cc_pair_id,
                 search_settings_id,
                 attempt_id,
                 celery_task_id,
+                backfill is not None,
             )
 
             return attempt_id

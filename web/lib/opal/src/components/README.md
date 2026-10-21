@@ -22,7 +22,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [OpenButton](./buttons/open-button/)           | Trigger button with rotating chevron for popovers            | [README](./buttons/open-button/README.md)      |
 | [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |
 | [InputDateRangePicker](./inputs/chrono/input-date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/chrono/input-date-range-picker/README.md) |
-| [InputFile](./inputs/input-file/)              | Text field that doubles as a file picker                     | [README](./inputs/input-file/README.md)        |
+| [InputSingleUpload](./inputs/uploads/input-single-upload/)              | Upload control in the input chrome: pick, drop or paste      | [README](./inputs/uploads/input-single-upload/README.md)        |
+| [InputMultiUpload](./inputs/uploads/input-multi-upload/)                | Upload control for many files, shown as removable tags       | [README](./inputs/uploads/input-multi-upload/README.md)         |
 | [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
@@ -33,7 +34,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [InputTypeInTag](./inputs/texts/input-type-in-tag/) | Chips-in-input free tagging (Figma Input/Tags) | [README](./inputs/texts/input-type-in-tag/README.md) |
 | [InputCheckbox](./inputs/booleans/input-checkbox/) | Checkbox with checked/indeterminate states | [README](./inputs/booleans/input-checkbox/README.md) |
 | [InputSwitch](./inputs/booleans/input-switch/) | On/off toggle switch | [README](./inputs/booleans/input-switch/README.md) |
-| [InputNumber](./inputs/input-number/)          | Number field with steppers and reset                         | [README](./inputs/input-number/README.md)      |
+| [InputNumber](./inputs/numbers/input-number/)          | Number field with steppers and reset                         | [README](./inputs/numbers/input-number/README.md)      |
+| [InputCurrency](./inputs/numbers/input-currency/) | Segmented currency amount field (whole . fraction) | [README](./inputs/numbers/input-currency/README.md) |
 | [InputList](./inputs/input-list/)   | Type-and-Enter list builder with removable chips below       | [README](./inputs/input-list/README.md)  |
 
 ## Adding new components

@@ -4,13 +4,13 @@ concurrency:
   cancel-in-progress: true
 
 # Requires deployment/helm/charts/onyx/Chart.yaml `version` to be bumped above the
-# version on main whenever the packaged chart changes. helm-chart-releases.yml
-# republishes the chart on every push to main that touches the charts, and will
+# version on main and release descriptions updated whenever the chart changes.
+# helm-chart-releases.yml republishes the chart on every push to main that touches the charts, and will
 # NOT overwrite an already-published version, so a chart change that reuses
 # main's version is silently never released. This gate prevents that.
 #
-# Uses native path filtering: the workflow only runs when watched chart files
-# change (onyx-cnpg-crds is bundled into the onyx chart via Chart.lock, so it
+# Uses native path filtering for chart files and the release checker
+# itself (onyx-cnpg-crds is bundled into the onyx chart via Chart.lock, so it
 # counts too). Because of this it cannot be a *required* branch-protection check
 # -- a required check that is filtered out on unrelated PRs stays stuck "pending"
 # and blocks merges. It is enforced as a visible failing check on chart PRs.
@@ -24,6 +24,9 @@ on:
     paths:
       - "deployment/helm/charts/onyx/**"
       - "deployment/helm/charts/onyx-cnpg-crds/**"
+      - "tools/helm/**"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/pr-helm-chart-version.yml"
 
 permissions:
   contents: read
@@ -36,46 +39,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Require Chart.yaml version bump above main
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Test the Helm release checker
         run: |
-          set -euo pipefail
+          python -m pip install PyYAML==6.0.3 semver==3.0.4
+          python -m unittest discover -s tools/helm -v
 
-          CHART_FILE="deployment/helm/charts/onyx/Chart.yaml"
+      - name: Refresh main release baseline
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
-          # Compare against the current tip of main (what the release publishes
-          # from), so concurrent PRs can't both ship the same new version.
-          git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
-
-          # Top-level `version:` only (dependency versions are indented; appVersion differs).
-          extract_version() {
-            awk '/^version:/ {print $2; exit}' | tr -d "\"'"
-          }
-
-          NEW_VERSION="$(extract_version < "$CHART_FILE" || true)"
-          MAIN_VERSION="$(git show origin/main:"$CHART_FILE" 2>/dev/null | extract_version || true)"
-
-          echo "main version: ${MAIN_VERSION:-<none>}"
-          echo "PR version:   ${NEW_VERSION:-<none>}"
-
-          SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*$'
-          if [[ ! "$NEW_VERSION" =~ $SEMVER_RE ]]; then
-            echo "::error file=$CHART_FILE::'version: ${NEW_VERSION:-<empty>}' is not valid semver."
-            exit 1
-          fi
-
-          # Chart not on main yet (new chart): any valid semver is acceptable.
-          if [[ -z "$MAIN_VERSION" ]]; then
-            echo "No version on main (new chart). Version '$NEW_VERSION' accepted."
-            exit 0
-          fi
-
-          # NEW_VERSION must be a strict semver increase over main's version.
-          GREATER="$(printf '%s\n%s\n' "$MAIN_VERSION" "$NEW_VERSION" | sort -V | tail -n1)"
-          if [[ "$NEW_VERSION" == "$MAIN_VERSION" || "$GREATER" != "$NEW_VERSION" ]]; then
-            echo "::error file=$CHART_FILE::Helm chart files changed but version $NEW_VERSION is not greater than main's $MAIN_VERSION. Bump 'version' in $CHART_FILE above $MAIN_VERSION so the chart re-publishes on merge to main."
-            exit 1
-          fi
-
-          echo "Chart version $MAIN_VERSION (main) -> $NEW_VERSION (PR). Check passed."
+      - name: Require chart version and release description updates
+        uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
+        with:
+          prek-version: '0.3.4'
+          extra-args: helm-release --all-files

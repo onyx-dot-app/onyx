@@ -79,6 +79,9 @@ interface TagFieldProps extends TagFieldBaseProps {
   /** Receives the wrapper element (a select's floating reference). */
   rootRef?: (node: HTMLDivElement | null) => void;
 
+  /** The list this field opens is open: it keeps its focused border. */
+  open?: boolean;
+
   /** The text input, when the caller must focus or read it. */
   inputRef?: React.RefObject<HTMLInputElement | null>;
 
@@ -138,6 +141,7 @@ function TagField({
   maxRows = 2,
   focusOnMount = false,
   rootRef,
+  open = false,
   inputRef: inputRefProp,
   onInputKeyDown,
   onEnter,
@@ -255,6 +259,17 @@ function TagField({
   // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
+    // Escape on a control in the field (a chip, the clear button, a
+    // chevron) returns focus to the field, even when a tooltip or popover
+    // consumed the key to close itself.
+    if (
+      event.key === "Escape" &&
+      target !== inputRef.current &&
+      target !== triggerRef.current
+    ) {
+      focusField();
+      return;
+    }
     if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
     const buttons = removeButtons();
     const index = buttons.indexOf(target as HTMLButtonElement);
@@ -288,6 +303,7 @@ function TagField({
       role="presentation"
       className="opal-input opal-input-type-in-tag"
       data-variant={disabled ? "disabled" : variant}
+      data-open={open || undefined}
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
@@ -369,19 +385,21 @@ function TagField({
           />
         )}
       </div>
+      {children}
+      {/* The clear action is always the field's last control. */}
       {onClear !== undefined && !disabled && (
         <Button
-          prominence="internal"
+          prominence="tertiary"
           icon={SvgX}
-          size="xs"
+          size="sm"
           tooltip={strings.clear}
+          aria-label={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
             onClear();
           }}
         />
       )}
-      {children}
     </div>
   );
 }

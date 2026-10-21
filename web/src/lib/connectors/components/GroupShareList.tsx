@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   InputSingleComboBox,
+  Tag,
   Table,
   type TableColumn,
 } from "@opal/components";
@@ -12,6 +13,8 @@ import { Content, InputErrorText, Section } from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 
 /** A fixed row shown before the picked groups, which cannot be removed. */
 export interface GroupShareLockedRow {
@@ -40,25 +43,39 @@ export interface GroupShareGroup {
   name: string;
 }
 
-interface GroupShareListProps {
+interface GroupShareListBaseProps {
   /** Formik field holding the selected group ids. */
   name: "groups" | "data_access_group_ids";
-  /** The table's accessible name; it has no visible header. */
   label: string;
   placeholder: string;
-  /** Fixed rows shown before the selected groups (e.g. "Admins"). */
-  lockedRows?: GroupShareLockedRow[];
-  /**
-   * Each picked group's trailing control, in place of the remove button,
-   * e.g. a role menu. `remove` drops the group.
-   */
-  rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
+  /**
+   * The tier groups need. Below it the workspace has no groups to pick, so
+   * the picker offers only an upgrade link.
+   */
+  requiredTier?: Tier;
 }
 
+type GroupShareListProps = GroupShareListBaseProps &
+  (
+    | { variant: "pills"; lockedRows?: never; rowAction?: never }
+    | {
+        variant?: "rows";
+        /** Fixed rows shown before the selected groups (e.g. "Admins"). */
+        lockedRows?: GroupShareLockedRow[];
+        /**
+         * Each picked group's trailing control, in place of the remove button,
+         * e.g. a role menu. `remove` drops the group.
+         */
+        rowAction?: (
+          group: GroupShareGroup,
+          remove: () => void
+        ) => React.ReactNode;
+      }
+  );
+
 /**
- * A group combo box over a table of the groups already added. Each row shows
- * the group's member count and a remove button.
+ * Search for groups, then show selections as table rows or removable pills.
  */
 export default function GroupShareList({
   name,
@@ -67,9 +84,14 @@ export default function GroupShareList({
   lockedRows = [],
   rowAction,
   disabled,
+  requiredTier = Tier.COMMUNITY,
+  variant = "rows",
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
-  const { data: userGroups, isLoading, error } = useUserGroups();
+  const locked: boolean = !useTierAtLeast(requiredTier);
+  const lockForTier = useTierLockedOptions(requiredTier);
+  // Below the tier the groups request is refused, so it is not sent.
+  const { data: userGroups, isLoading, error } = useUserGroups(!locked);
   // Without the groups there is nothing to pick from, and the rows already
   // added cannot show; say so rather than show an empty picker.
   const loadFailed = !isLoading && !!error;
@@ -84,6 +106,18 @@ export default function GroupShareList({
       description: t("memberCount", { count: group.users.length }),
       icon: SvgUsers,
     }));
+
+  // Below the tier the fixed rows sit locked under the upgrade link, so the
+  // list names what the plan adds to.
+  const lockedOptions = lockedRows.map((row) => ({
+    value: row.id,
+    title: row.name,
+    description:
+      row.memberCount === undefined
+        ? undefined
+        : t("memberCount", { count: row.memberCount }),
+    icon: row.icon,
+  }));
 
   const rows: GroupShareRow[] = [
     ...lockedRows,
@@ -202,12 +236,33 @@ export default function GroupShareList({
       <InputSingleComboBox
         value=""
         onValueChange={addGroup}
-        options={options}
+        options={locked ? lockForTier(lockedOptions) : options}
         placeholder={placeholder}
         disabled={disabled || isLoading || loadFailed}
       />
+      {variant === "pills" && rows.length > 0 && (
+        <div
+          role="group"
+          aria-label={label}
+          className="flex max-h-40 flex-wrap gap-2 overflow-y-auto p-1"
+        >
+          {rows.map((row) => {
+            const groupId = row.groupId;
+            return groupId === undefined ? null : (
+              <Tag
+                key={row.id}
+                title={row.name}
+                icon={row.icon}
+                size="md"
+                onRemove={() => removeGroup(groupId)}
+                disabled={disabled || isLoading || loadFailed}
+              />
+            );
+          })}
+        </div>
+      )}
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
-      {rows.length > 0 && (
+      {variant === "rows" && rows.length > 0 && (
         <Table
           label={label}
           items={rows}

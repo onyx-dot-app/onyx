@@ -9,6 +9,7 @@ function counts(
     running: 0,
     passed: 0,
     failed: 0,
+    incomplete: 0,
     indeterminate: 0,
     skipped: 0,
     waiting: 0,
@@ -69,4 +70,14 @@ it("passes an empty ring for a finished run with nothing to check", () => {
     complete: 0,
     counted: 0,
   });
+});
+
+it("counts incomplete and legacy indeterminate checks as one warning", () => {
+  const progress = checksProgress(
+    counts({ incomplete: 1, indeterminate: 1, passed: 1 }),
+    "passed"
+  );
+
+  expect(progress.ring?.warning).toBe(2);
+  expect(progress.complete).toBe(3);
 });

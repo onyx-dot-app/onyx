@@ -89,14 +89,14 @@ export const TooltipSides: Story = {
       <LinkButton href="/" tooltip="Tooltip on top" tooltipSide="top">
         top
       </LinkButton>
-      <LinkButton href="/" tooltip="Tooltip on right" tooltipSide="right">
-        right
+      <LinkButton href="/" tooltip="Tooltip at the end" tooltipSide="end">
+        end
       </LinkButton>
       <LinkButton href="/" tooltip="Tooltip on bottom" tooltipSide="bottom">
         bottom
       </LinkButton>
-      <LinkButton href="/" tooltip="Tooltip on left" tooltipSide="left">
-        left
+      <LinkButton href="/" tooltip="Tooltip at the start" tooltipSide="start">
+        start
       </LinkButton>
     </div>
   ),

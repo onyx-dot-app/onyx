@@ -109,13 +109,18 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.exceptions import litellm_exception_to_safe_error
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_llm_for_persona,
+    get_llm_token_counter,
+    get_search_selection_llm,
+)
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -144,6 +149,7 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time, log_generator_function_time
@@ -160,9 +166,7 @@ APPROX_CHARS_PER_TOKEN = 4
 
 def _collect_available_file_ids(
     chat_history: list[ChatMessage],
-    project_id: int | None,
-    user_id: UUID | None,
-    db_session: Session,
+    context_user_files: list[UserFile],
 ) -> AvailableFiles:
     """Collect all file IDs the FileReaderTool should be allowed to access.
 
@@ -181,14 +185,7 @@ def _collect_available_file_ids(
             except (ValueError, KeyError):
                 pass
 
-    if project_id:
-        user_files = get_user_files_from_project(
-            project_id=project_id,
-            user_id=user_id,
-            db_session=db_session,
-        )
-        for uf in user_files:
-            user_file_ids.add(uf.id)
+    user_file_ids.update(file.id for file in context_user_files)
 
     return AvailableFiles(
         user_file_ids=list(user_file_ids),
@@ -311,25 +308,25 @@ def resolve_context_user_files(
     user_id: UUID | None,
     db_session: Session,
 ) -> list[UserFile]:
-    """Apply the precedence rule to decide which user files to load.
-
-    A custom persona fully supersedes the project.  When a chat uses a
-    custom persona, the project is purely organisational — its files are
-    never loaded and never made searchable.
-
-    Custom persona → persona's own user_files (may be empty).
-    Default persona inside a project → project files.
-    Otherwise → empty list.
-    """
-    if persona.id != DEFAULT_PERSONA_ID:
-        return list(persona.user_files) if persona.user_files else []
+    """Combine project files with a custom persona's files, without duplicates."""
+    user_files: list[UserFile] = []
     if project_id:
-        return get_user_files_from_project(
-            project_id=project_id,
-            user_id=user_id,
-            db_session=db_session,
+        user_files.extend(
+            get_user_files_from_project(
+                project_id=project_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
         )
-    return []
+    if persona.id != DEFAULT_PERSONA_ID and persona.user_files:
+        user_files.extend(persona.user_files)
+    seen_ids: set[UUID] = set()
+    selected_files: list[UserFile] = []
+    for user_file in user_files:
+        if user_file.id not in seen_ids:
+            seen_ids.add(user_file.id)
+            selected_files.append(user_file)
+    return selected_files
 
 
 def _empty_extracted_context_files() -> ExtractedContextFiles:
@@ -527,26 +524,19 @@ def determine_search_params(
     project_id: int | None,
     extracted_context_files: ExtractedContextFiles,
 ) -> SearchParams:
-    """Decide which search filter IDs and search-tool usage apply for a chat turn.
+    """Search both file scopes when their combined contents exceed the prompt budget.
 
-    A custom persona fully supersedes the project — project files are never
-    searchable and the search tool config is entirely controlled by the
-    persona.  The project_id filter is only set for the default persona.
-
-    For the default persona inside a project:
-      - Files overflow  → ENABLED  (vector DB scopes to these files)
-      - Files fit       → DISABLED (content already in prompt)
-      - No files at all → DISABLED (nothing to search)
+    Custom personas keep their search-tool policy. Default personas in projects
+    enable search only when the project files need retrieval.
     """
     is_custom_persona = persona_id != DEFAULT_PERSONA_ID
 
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
     if extracted_context_files.use_as_search_filter:
+        project_id_filter = project_id
         if is_custom_persona:
             persona_id_filter = persona_id
-        else:
-            project_id_filter = project_id
 
     search_usage = SearchToolUsage.AUTO
     if not is_custom_persona and project_id:
@@ -807,14 +797,19 @@ def build_chat_turn(
         )
         chat_history.append(user_message)
 
+    context_user_files = resolve_context_user_files(
+        persona=persona,
+        project_id=chat_session.project_id,
+        user_id=user_id,
+        db_session=db_session,
+    )
+
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
     # via the FileReaderTool.
     available_files = _collect_available_file_ids(
         chat_history=chat_history,
-        project_id=chat_session.project_id,
-        user_id=user_id,
-        db_session=db_session,
+        context_user_files=context_user_files,
     )
 
     # Find applicable summary for the current branch
@@ -870,8 +865,11 @@ def build_chat_turn(
     # Reserve against the placeholder-substituted text — the same final form
     # run_llm_loop sends to the model — so long directory values can't
     # invalidate the reservation.
+    replacement_system_prompt: str = (
+        (persona.system_prompt or "") if persona.replace_base_system_prompt else ""
+    )
     max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
-        (persona.system_prompt or "") + (custom_agent_prompt or ""),
+        replacement_system_prompt + (custom_agent_prompt or ""),
         user_memory_context.user_info.placeholder_values,
     )
     reserved_token_count = calculate_reserved_tokens(
@@ -880,16 +878,6 @@ def build_chat_turn(
         token_counter=token_counter,
         files=new_msg_req.file_descriptors,
         user_memory_context=prompt_memory_context,
-    )
-
-    # Determine which user files to use. A custom persona fully supersedes the project —
-    # project files are never loaded or searchable when a custom persona is in play.
-    # Only the default persona inside a project uses the project's files.
-    context_user_files = resolve_context_user_files(
-        persona=persona,
-        project_id=chat_session.project_id,
-        user_id=user_id,
-        db_session=db_session,
     )
 
     # Use the smallest context window across models for safety (harmless for N=1).
@@ -906,13 +894,6 @@ def build_chat_turn(
         project_id=chat_session.project_id,
         extracted_context_files=extracted_context_files,
     )
-
-    # Also grant access to persona-attached user files for FileReaderTool
-    if persona.user_files:
-        existing = set(available_files.user_file_ids)
-        for uf in persona.user_files:
-            if uf.id not in existing:
-                available_files.user_file_ids.append(uf.id)
 
     all_tools = get_tools(db_session)
     tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
@@ -933,7 +914,11 @@ def build_chat_turn(
     # construct_tools skips disabled tools, and a forced id it did not build fails
     # the whole message. Callers name the forced tool from the persona's attached
     # tools, which stay attached when an admin disables one.
-    if forced_tool_id in {tool.id for tool in all_tools if not tool.enabled}:
+    if forced_tool_id in {
+        tool.id
+        for tool in all_tools
+        if not is_tool_available_for_persona(tool, persona.id)
+    }:
         forced_tool_id = None
 
     # TODO(nmgarza5): Once summarization is done, we don't need to load all files from the beginning.
@@ -1110,6 +1095,7 @@ def build_chat_turn(
         slack_context=slack_context,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
+        litellm_additional_headers=litellm_additional_headers,
     )
 
 
@@ -1157,6 +1143,7 @@ def _run_models(
     user: User,
     external_state_container: ChatStateContainer | None = None,
     stream_buffer: StreamBufferWriter | None = None,
+    query_observation: QueryObservation | None = None,
 ) -> AnswerStream:
     """Stream packets from one or more LLM loops running in parallel worker threads.
 
@@ -1331,6 +1318,7 @@ def _run_models(
             model_idx=model_idx,
             merged_queue=merged_queue,
             drain_done=drain_done,
+            query_observation=query_observation,
         )
         sc = state_containers[model_idx]
         model_llm = setup.llms[model_idx]
@@ -1345,6 +1333,14 @@ def _run_models(
                 emitter=model_emitter,
                 user=user,
                 llm=model_llm,
+                selection_llm_factory=partial(
+                    get_search_selection_llm,
+                    fallback=model_llm,
+                    additional_headers=setup.litellm_additional_headers,
+                    policy_fn=partial(
+                        incognito_llm_request_policy, setup.incognito_record_mode
+                    ),
+                ),
                 search_tool_config=SearchToolConfig(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
                     project_id_filter=setup.search_params.project_id_filter,
@@ -1479,6 +1475,8 @@ def _run_models(
 
     def _publish(item: Packet | StreamingError) -> None:
         """Fan one outbound item to the stream buffer and, while attached, the reader."""
+        if query_observation is not None:
+            query_observation.observe_packet(item)
         if stream_buffer is not None:
             try:
                 stream_buffer.append_line(get_json_line(item.model_dump()))
@@ -1586,6 +1584,8 @@ def _run_models(
                 )
             )
         finally:
+            if query_observation is not None:
+                query_observation.finish()
             # Mark done before _run_post_steps clears the fence so resume
             # readers never see a fence-less, not-done buffer and drop the tail.
             if stream_buffer is not None:
@@ -1608,7 +1608,14 @@ def _run_models(
         args=(_drain_to_completion,),
         name="chat-stream-writer",
     )
-    writer_thread.start()
+    if query_observation is not None:
+        query_observation.writer_owned = True
+    try:
+        writer_thread.start()
+    except Exception:
+        if query_observation is not None:
+            query_observation.writer_owned = False
+        raise
 
     def _read_stream() -> AnswerStream:
         # ── Reader: tail the tee while the client is attached ────────────────
@@ -1652,6 +1659,7 @@ def _stream_chat_turn(
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
+    query_observation: QueryObservation | None = None,
 ) -> AnswerStream:
     """Private implementation for single-model and multi-model chat turn streaming.
 
@@ -1780,6 +1788,7 @@ def _stream_chat_turn(
             user=user,
             external_state_container=external_state_container,
             stream_buffer=stream_buffer,
+            query_observation=query_observation,
         )
         run_started = True
         yield from run_stream
@@ -1870,6 +1879,7 @@ def _stream_chat_turn(
 
 
 @log_generator_function_time()
+@telemetry_chat
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1879,12 +1889,14 @@ def handle_stream_message_objects(
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
+    *,
+    query_observation: QueryObservation | None = None,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
-    Emits a ``latency`` telemetry record for the whole turn once the stream is
-    exhausted or closed. Callers must pass ``user`` as a keyword argument so the
-    record carries the user id.
+    Emits one fleet ``query`` record when server execution ends, including after
+    client disconnects. Callers pass ``new_msg_req`` as a keyword argument
+    so the record names the request channel.
     """
     yield from _stream_chat_turn(
         new_msg_req=new_msg_req,
@@ -1896,6 +1908,7 @@ def handle_stream_message_objects(
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,
+        query_observation=query_observation,
     )
 
 
@@ -1914,6 +1927,7 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
 
 
 @log_generator_function_time()
+@telemetry_chat
 def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1921,6 +1935,8 @@ def handle_multi_model_stream(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
+    *,
+    query_observation: QueryObservation | None = None,
 ) -> AnswerStream:
     """Thin wrapper for side-by-side multi-model comparison (2–3 models).
 
@@ -1958,6 +1974,7 @@ def handle_multi_model_stream(
         new_msg_req=new_msg_req,
         user=user,
         llm_overrides=llm_overrides,
+        query_observation=query_observation,
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,

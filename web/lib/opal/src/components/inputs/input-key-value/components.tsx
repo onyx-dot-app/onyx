@@ -68,9 +68,15 @@
  * ```
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@opal/utils";
-import { InputTypeIn } from "@opal/components";
+import { InputPasswordTypeIn, InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import { Text } from "@opal/components/text/components";
@@ -103,6 +109,7 @@ interface KeyValueInputItemProps {
   onRemove: () => void;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
+  valueType: NonNullable<KeyValueInputProps["valueType"]>;
   error?: KeyValueError;
   canRemove: boolean;
   index: number;
@@ -114,18 +121,34 @@ function KeyValueInputItem({
   onRemove,
   keyPlaceholder,
   valuePlaceholder,
+  valueType,
   error,
   canRemove,
   index,
 }: KeyValueInputItemProps) {
   const strings = useOpalStrings();
+  const [credential, setCredential] = useState({ ...item, revision: 0 });
+  if (
+    valueType === "password" &&
+    (credential.key !== item.key || credential.value !== item.value)
+  ) {
+    setCredential({ ...item, revision: credential.revision + 1 });
+  }
+  function updateItem(next: KeyValue) {
+    if (valueType === "password") {
+      setCredential({ ...next, revision: credential.revision });
+    }
+    onChange(next);
+  }
+  const ValueInput =
+    valueType === "password" ? InputPasswordTypeIn : InputTypeIn;
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
           placeholder={keyPlaceholder}
           value={item.key}
-          onChange={(e) => onChange({ ...item, key: e.target.value })}
+          onChange={(e) => updateItem({ ...item, key: e.target.value })}
           aria-label={strings.keyValueInput(
             keyPlaceholder || strings.keyValueKey,
             index + 1
@@ -135,10 +158,11 @@ function KeyValueInputItem({
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
       <div className="flex flex-col gap-y-0.5">
-        <InputTypeIn
+        <ValueInput
+          key={credential.revision}
           placeholder={valuePlaceholder}
           value={item.value}
-          onChange={(e) => onChange({ ...item, value: e.target.value })}
+          onChange={(e) => updateItem({ ...item, value: e.target.value })}
           aria-label={strings.keyValueInput(
             valuePlaceholder || strings.keyValueValue,
             index + 1
@@ -176,6 +200,8 @@ export interface KeyValueInputProps extends WithoutStyles<
   /** Placeholder for the value input */
   valuePlaceholder?: string;
 
+  valueType?: "text" | "password";
+
   /** Array of key-value pairs */
   items: KeyValue[];
 
@@ -200,6 +226,7 @@ export default function KeyValueInput({
   valueTitle: valueTitleProp,
   keyPlaceholder,
   valuePlaceholder,
+  valueType = "text",
   items = [],
   onChange,
   mode = "line",
@@ -350,12 +377,15 @@ export default function KeyValueInput({
 
           {items.map((item, index) => (
             <KeyValueInputItem
-              key={index}
+              key={
+                valueType === "password" ? `${items.length}-${index}` : index
+              }
               item={item}
               onChange={(next) => handleItemChange(index, next)}
               onRemove={() => handleRemove(index)}
               keyPlaceholder={keyPlaceholder}
               valuePlaceholder={valuePlaceholder}
+              valueType={valueType}
               error={errors[index]}
               canRemove={canRemoveItems}
               index={index}

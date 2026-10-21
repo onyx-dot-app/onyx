@@ -24,8 +24,6 @@ export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
 
-export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
-
 /* Enterprise-only settings */
 export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
   process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;

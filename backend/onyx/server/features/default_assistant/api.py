@@ -16,6 +16,7 @@ from onyx.server.features.default_assistant.models import (
     DefaultAssistantConfiguration,
     DefaultAssistantUpdateRequest,
 )
+from onyx.server.features.tool.tool_visibility import is_default_chat_tool_selected
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -38,7 +39,9 @@ def get_default_assistant_configuration(
         raise HTTPException(status_code=404, detail="Default assistant not found")
 
     # Extract DB tool IDs from the persona's tools
-    tool_ids = [tool.id for tool in persona.tools]
+    tool_ids = [
+        tool.id for tool in persona.tools if is_default_chat_tool_selected(tool)
+    ]
 
     return DefaultAssistantConfiguration(
         tool_ids=tool_ids,
@@ -80,7 +83,11 @@ def update_default_assistant(
         )
 
         # Return the updated configuration
-        tool_ids = [tool.id for tool in updated_persona.tools]
+        tool_ids = [
+            tool.id
+            for tool in updated_persona.tools
+            if is_default_chat_tool_selected(tool)
+        ]
         return DefaultAssistantConfiguration(
             tool_ids=tool_ids,
             system_prompt=updated_persona.system_prompt,

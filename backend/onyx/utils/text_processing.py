@@ -127,12 +127,34 @@ def escape_quotes(original_json_str: str) -> str:
     return "".join(result)
 
 
+_BRACE_RE = re.compile(r"[{}]")
+_WHITESPACE_RE = re.compile(r"\s*")
+_CODE_FENCE = "```"
+# Each top-level brace span may decode candidates totalling this multiple of
+# its own length. Deep nesting stays linear, and one deep object cannot use up
+# the work that later, separate objects need.
+_JSON_DECODE_BUDGET_PER_CHAR = 16
+
+
+def _balanced_brace_spans(text: str) -> list[tuple[int, int]]:
+    """Return (start, end) spans of balanced braces, ordered by start, in one pass."""
+    spans: list[tuple[int, int]] = []
+    open_positions: list[int] = []
+    for match in _BRACE_RE.finditer(text):
+        if match.group() == "{":
+            open_positions.append(match.start())
+        elif open_positions:
+            spans.append((open_positions.pop(), match.end()))
+    spans.sort()
+    return spans
+
+
 def find_all_json_objects(text: str) -> list[dict]:
     """Find all JSON objects in text using balanced brace matching.
 
-    Iterates through the text, and for each '{' found, attempts to find its
-    matching '}' by counting brace depth. Each balanced substring is then
-    validated as JSON. This includes nested JSON objects within other objects.
+    Each balanced '{...}' substring (counting braces only) is validated as JSON.
+    This includes nested JSON objects within other objects. Runs in time linear
+    in the text length.
 
     Use case: Parsing LLM output that may contain multiple JSON objects, or when
     the LLM/serving layer outputs function calls in non-standard formats
@@ -145,38 +167,74 @@ def find_all_json_objects(text: str) -> list[dict]:
         A list of all successfully parsed JSON objects (dicts only).
     """
     json_objects: list[dict] = []
-    i = 0
+    group_end = -1
+    budget = 0
 
-    while i < len(text):
-        if text[i] == "{":
-            # Try to find a matching closing brace
-            brace_count = 0
-            start = i
-            for j in range(i, len(text)):
-                if text[j] == "{":
-                    brace_count += 1
-                elif text[j] == "}":
-                    brace_count -= 1
-                    if brace_count == 0:
-                        # Found potential JSON object
-                        candidate = text[start : j + 1]
-                        try:
-                            parsed = json.loads(candidate)
-                            if isinstance(parsed, dict):
-                                json_objects.append(parsed)
-                        except json.JSONDecodeError:
-                            pass
-                        break
-        i += 1
+    for start, end in _balanced_brace_spans(text):
+        if start >= group_end:
+            # A new top-level span: it always gets a decode.
+            group_end = end
+            budget = _JSON_DECODE_BUDGET_PER_CHAR * (end - start)
+        elif budget <= 0:
+            continue
+        # A candidate costs its length: the slice copy plus a decode (and any
+        # error position lookup) bounded by the slice.
+        budget -= end - start
+        try:
+            parsed = json.loads(text[start:end])
+        except (json.JSONDecodeError, RecursionError):
+            continue
+        if isinstance(parsed, dict):
+            json_objects.append(parsed)
 
     return json_objects
+
+
+def _find_fenced_json_span(content: str) -> tuple[int, int] | None:
+    """Find the span matched by ```(?:json)?\\s*(\\{.*\\})\\s*``` (DOTALL) in linear time."""
+    brace_start = -1
+    fence = content.find(_CODE_FENCE)
+    while fence != -1:
+        pos = fence + len(_CODE_FENCE)
+        if content.startswith("json", pos):
+            after_json = _WHITESPACE_RE.match(content, pos + 4)
+            if after_json and content.startswith("{", after_json.end()):
+                brace_start = after_json.end()
+                break
+        after_fence = _WHITESPACE_RE.match(content, pos)
+        if after_fence and content.startswith("{", after_fence.end()):
+            brace_start = after_fence.end()
+            break
+        fence = content.find(_CODE_FENCE, fence + 1)
+    if brace_start == -1:
+        return None
+
+    # Greedy: the last closing fence that follows a '}' after the opening brace.
+    closing = content.rfind(_CODE_FENCE)
+    while closing > brace_start:
+        brace_end = closing - 1
+        while brace_end > brace_start and content[brace_end].isspace():
+            brace_end -= 1
+        if brace_end > brace_start and content[brace_end] == "}":
+            return brace_start, brace_end + 1
+        closing = content.rfind(_CODE_FENCE, 0, closing + len(_CODE_FENCE) - 1)
+    return None
+
+
+def _loads_dict(candidate: str) -> dict | None:
+    try:
+        result = json.loads(candidate)
+    except (json.JSONDecodeError, RecursionError):
+        return None
+    return result if isinstance(result, dict) else None
 
 
 def parse_llm_json_response(content: str) -> dict | None:
     """Parse a single JSON object from LLM output, handling markdown code blocks.
 
     Designed for LLM responses that typically contain exactly one JSON object,
-    possibly wrapped in markdown formatting.
+    possibly wrapped in markdown formatting. Runs in time linear in the content
+    length.
 
     Tries extraction in order:
     1. JSON inside markdown code block (```json ... ``` or ``` ... ```)
@@ -189,34 +247,20 @@ def parse_llm_json_response(content: str) -> dict | None:
     Returns:
         The parsed JSON dict if found, None otherwise.
     """
-    # Try to find JSON in markdown code block first
-    # Use greedy .* (not .*?) to match nested objects correctly within code block bounds
-    json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
-    if json_match:
-        try:
-            result = json.loads(json_match.group(1))
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            pass
-
-    # Try to parse the entire content as JSON
-    try:
-        result = json.loads(content)
-        if isinstance(result, dict):
+    fenced_span = _find_fenced_json_span(content)
+    if fenced_span:
+        result = _loads_dict(content[fenced_span[0] : fenced_span[1]])
+        if result is not None:
             return result
-    except json.JSONDecodeError:
-        pass
 
-    # Try to find any JSON object in the content
-    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-    if json_match:
-        try:
-            result = json.loads(json_match.group(0))
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            pass
+    result = _loads_dict(content)
+    if result is not None:
+        return result
+
+    first_brace = content.find("{")
+    last_brace = content.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        return _loads_dict(content[first_brace : last_brace + 1])
 
     return None
 

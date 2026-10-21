@@ -12,7 +12,7 @@ import type {
   EditorPayload,
   IntervalPayload,
   IntervalUnit,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 // 0=Sun..6=Sat (cron convention). Short labels come from the
 // craft.tasks.scheduleEditor.weekdays message namespace.

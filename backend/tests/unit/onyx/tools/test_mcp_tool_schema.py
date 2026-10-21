@@ -130,6 +130,7 @@ def _make_tool(
         auth_type=auth_type,
         transport=None,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
         oauth_authorization_endpoint=None,
         oauth_token_endpoint=None,
     )
@@ -234,7 +235,7 @@ class TestMCPToolLLMNames:
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value='{"ok": true}',
         ) as mock_call_mcp_tool:
             mcp_tool.run(Placement(turn_index=0))
 

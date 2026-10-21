@@ -22,7 +22,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion-2.0",
       "open_weights": false,
       "reasoning": true,
@@ -50,7 +49,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion-3.0",
       "open_weights": false,
       "reasoning": true,
@@ -78,7 +76,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion-3.0-Mini",
       "open_weights": false,
       "reasoning": true,
@@ -106,7 +103,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion 3.5",
       "open_weights": false,
       "reasoning": true,
@@ -134,7 +130,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion 3.5 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -162,7 +157,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Aion-RP 1.0 (8B)",
       "open_weights": false,
       "reasoning": false,
@@ -193,7 +187,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nova 2 Lite",
       "open_weights": false,
       "reasoning": true,
@@ -222,7 +215,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nova Lite 1.0",
       "open_weights": false,
       "reasoning": false,
@@ -250,7 +242,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nova Micro 1.0",
       "open_weights": false,
       "reasoning": false,
@@ -280,7 +271,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nova Premier 1.0",
       "open_weights": false,
       "reasoning": false,
@@ -309,7 +299,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nova Pro 1.0",
       "open_weights": false,
       "reasoning": false,
@@ -336,7 +325,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Magnum v4 72B",
       "open_weights": true,
       "reasoning": false,
@@ -350,7 +338,6 @@
       "cost": {
         "cache_read": 1,
         "cache_write": 12.5,
-        "cache_write_above_1hr": 20.0,
         "input": 10,
         "output": 50
       },
@@ -369,7 +356,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Fable 5",
       "open_weights": false,
       "reasoning": true,
@@ -383,7 +369,6 @@
       "cost": {
         "cache_read": 0.25,
         "cache_write": 12.5,
-        "cache_write_above_1hr": 20.0,
         "input": 10,
         "output": 50
       },
@@ -402,7 +387,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Fable 5.1",
       "open_weights": false,
       "reasoning": true,
@@ -468,7 +452,6 @@
       "cost": {
         "cache_read": 0.1,
         "cache_write": 1.25,
-        "cache_write_above_1hr": 2.0,
         "input": 1,
         "output": 5
       },
@@ -487,7 +470,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Haiku 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -522,13 +504,80 @@
       "structured_output": true,
       "tool_call": true
     },
+    "anthropic/claude-haiku-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "anthropic/claude-haiku-5.5:batch": {
+      "cost": {
+        "cache_read": 0.005,
+        "cache_write": 0.0625,
+        "input": 0.049999999999999996,
+        "output": 0.25
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "file"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Anthropic: Claude Haiku 5.5 (batch)",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "anthropic/claude-opus-4.1": {
       "attachment": true,
       "cost": {
         "cache_read": 1.5,
         "cache_write": 18.75,
-        "cache_write_above_1hr": 30.0,
-        "image_input": 0.0048,
         "input": 15,
         "output": 75
       },
@@ -547,7 +596,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 4.1 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -587,7 +635,6 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -606,7 +653,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -646,7 +692,6 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "cache_write_above_1hr": 10.0,
         "context_over_200k": {
           "cache_read": 1,
           "cache_write": 12.5,
@@ -683,7 +728,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -723,7 +767,6 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "cache_write_above_1hr": 10.0,
         "context_over_200k": {
           "cache_read": 1,
           "cache_write": 12.5,
@@ -760,7 +803,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 4.7",
       "open_weights": false,
       "reasoning": true,
@@ -800,7 +842,6 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -819,13 +860,12 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 4.8",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-05-28",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "anthropic/claude-opus-4.8:batch": {
@@ -859,7 +899,6 @@
       "cost": {
         "cache_read": 0.5,
         "cache_write": 6.25,
-        "cache_write_above_1hr": 10.0,
         "input": 5,
         "output": 25
       },
@@ -878,13 +917,12 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 5",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-07-24",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "anthropic/claude-opus-5.5": {
@@ -892,7 +930,6 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 5,
-        "cache_write_above_1hr": 8.0,
         "input": 4,
         "output": 20
       },
@@ -911,13 +948,12 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus 5.5",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-22",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "anthropic/claude-opus-5.5:batch": {
@@ -972,71 +1008,17 @@
       "structured_output": true,
       "tool_call": true
     },
-    "anthropic/claude-sonnet-4": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.3,
-        "cache_write": 3.75,
-        "cache_write_above_1hr": 6.0,
-        "context_over_200k": {
-          "cache_read": 0.6,
-          "cache_write": 7.5,
-          "input": 6,
-          "output": 22.5
-        },
-        "image_input": 0.0048,
-        "input": 3,
-        "output": 15,
-        "tiers": [
-          {
-            "cache_read": 0.6,
-            "cache_write": 7.5,
-            "input": 6,
-            "output": 22.5,
-            "tier": {
-              "size": 200000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "claude-sonnet",
-      "limit": {
-        "context": 200000,
-        "output": 64000
-      },
-      "modalities": {
-        "input": [
-          "image",
-          "text",
-          "pdf"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Claude Sonnet 4",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-05-22",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": true
-    },
     "anthropic/claude-sonnet-4.5": {
       "attachment": true,
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
-        "cache_write_above_1hr": 6.0,
         "context_over_200k": {
           "cache_read": 0.6,
           "cache_write": 7.5,
           "input": 6,
           "output": 22.5
         },
-        "image_input": 0.0048,
         "input": 3,
         "output": 15,
         "tiers": [
@@ -1067,7 +1049,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Sonnet 4.5 (latest)",
       "open_weights": false,
       "reasoning": true,
@@ -1107,7 +1088,6 @@
       "cost": {
         "cache_read": 0.3,
         "cache_write": 3.75,
-        "cache_write_above_1hr": 6.0,
         "context_over_200k": {
           "cache_read": 0.6,
           "cache_write": 7.5,
@@ -1144,7 +1124,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Sonnet 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -1184,7 +1163,6 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 2.5,
-        "cache_write_above_1hr": 4.0,
         "input": 2,
         "output": 10
       },
@@ -1203,7 +1181,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Sonnet 5",
       "open_weights": false,
       "reasoning": true,
@@ -1215,9 +1192,8 @@
     "anthropic/claude-sonnet-5.5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
-        "cache_write_above_1hr": 4.0,
         "input": 2,
         "output": 10
       },
@@ -1236,18 +1212,17 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Sonnet 5.5",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-28",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "anthropic/claude-sonnet-5.5:batch": {
       "cost": {
-        "cache_read": 0.09999999999999999,
+        "cache_read": 0.049999999999999996,
         "cache_write": 1.25,
         "input": 1.0,
         "output": 5.0
@@ -1297,33 +1272,6 @@
       "structured_output": true,
       "tool_call": true
     },
-    "apodex/apodex-1.1-mini:free": {
-      "attachment": false,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "limit": {
-        "context": 262144,
-        "output": 235929
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Apodex 1.1 Mini (free)",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-10-01",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "arcee-ai/trinity-large-thinking": {
       "attachment": false,
       "cost": {
@@ -1344,7 +1292,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Trinity Large Thinking",
       "open_weights": true,
       "reasoning": true,
@@ -1352,35 +1299,6 @@
       "structured_output": false,
       "temperature": true,
       "tool_call": true
-    },
-    "baidu/ernie-4.5-vl-424b-a47b": {
-      "attachment": true,
-      "cost": {
-        "input": 0.42,
-        "output": 1.25
-      },
-      "family": "ernie",
-      "limit": {
-        "context": 123000,
-        "output": 16000
-      },
-      "modalities": {
-        "input": [
-          "image",
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "ERNIE 4.5 VL 424B A47B ",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-06-30",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": false
     },
     "bytedance-seed/seed-1.6": {
       "attachment": true,
@@ -1413,7 +1331,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 1.6",
       "open_weights": false,
       "reasoning": true,
@@ -1453,7 +1370,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 1.6 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -1483,7 +1399,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 2.1 Turbo",
       "open_weights": false,
       "reasoning": true,
@@ -1523,7 +1438,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 2.0 Code",
       "open_weights": false,
       "reasoning": true,
@@ -1563,7 +1477,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 2.0 Lite",
       "open_weights": false,
       "reasoning": true,
@@ -1603,7 +1516,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Seed 2.0 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -1632,7 +1544,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "UI-TARS 7B ",
       "open_weights": true,
       "reasoning": false,
@@ -1660,7 +1571,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Uncensored",
       "open_weights": true,
       "reasoning": false,
@@ -1688,7 +1598,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Command A",
       "open_weights": true,
       "reasoning": false,
@@ -1718,7 +1627,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Command A+",
       "open_weights": false,
       "reasoning": true,
@@ -1746,7 +1654,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Command R",
       "open_weights": true,
       "reasoning": false,
@@ -1774,7 +1681,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Command R+",
       "open_weights": true,
       "reasoning": false,
@@ -1802,7 +1708,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Command R7B",
       "open_weights": true,
       "reasoning": false,
@@ -1830,7 +1735,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "North Mini Code (free)",
       "open_weights": true,
       "reasoning": true,
@@ -1842,13 +1746,13 @@
     "deepseek/deepseek-chat": {
       "attachment": false,
       "cost": {
-        "input": 0.2574,
-        "output": 1.0287
+        "input": 0.32,
+        "output": 0.89
       },
       "family": "deepseek",
       "limit": {
         "context": 163840,
-        "output": 16000
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -1858,7 +1762,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek Chat",
       "open_weights": true,
       "reasoning": false,
@@ -1887,7 +1790,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V3 0324",
       "open_weights": true,
       "reasoning": false,
@@ -1916,41 +1818,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V3.1",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-21",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "deepseek/deepseek-r1": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.14,
-        "input": 0.7,
-        "output": 2.5
-      },
-      "family": "deepseek-thinking",
-      "limit": {
-        "context": 64000,
-        "output": 16000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "DeepSeek-R1",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-01-20",
-      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -1961,7 +1833,7 @@
         "input": 0.5,
         "output": 2.15
       },
-      "family": "deepseek",
+      "family": "deepseek-thinking",
       "limit": {
         "context": 163840,
         "output": 32768
@@ -1974,8 +1846,7 @@
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "R1 0528",
+      "name": "DeepSeek R1 0528",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-05-28",
@@ -1986,7 +1857,6 @@
     "deepseek/deepseek-v3.1-terminus": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.135,
         "input": 0.27,
         "output": 1
       },
@@ -2003,7 +1873,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V3.1 Terminus",
       "open_weights": true,
       "reasoning": true,
@@ -2032,7 +1901,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V3.2",
       "open_weights": true,
       "reasoning": true,
@@ -2044,7 +1912,6 @@
     "deepseek/deepseek-v3.2-exp": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.02,
         "input": 0.27,
         "output": 0.41
       },
@@ -2061,7 +1928,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V3.2 Exp",
       "open_weights": true,
       "reasoning": true,
@@ -2073,14 +1939,14 @@
     "deepseek/deepseek-v4-flash": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0299,
-        "input": 0.0299,
-        "output": 1.28
+        "cache_read": 0.0182,
+        "input": 0.091,
+        "output": 0.182
       },
       "family": "deepseek-flash",
       "limit": {
         "context": 1048576,
-        "output": 943718
+        "output": 943717
       },
       "modalities": {
         "input": [
@@ -2090,7 +1956,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -2102,9 +1967,9 @@
     "deepseek/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.015,
-        "output": 1.28
+        "cache_read": 0.042,
+        "input": 0.15,
+        "output": 0.15
       },
       "family": "deepseek-flash",
       "limit": {
@@ -2119,7 +1984,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Flash 0731",
       "open_weights": true,
       "reasoning": true,
@@ -2149,7 +2013,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Flash Vision Exp",
       "open_weights": true,
       "reasoning": true,
@@ -2161,9 +2024,9 @@
     "deepseek/deepseek-v4-pro": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0174,
-        "input": 0.2088,
-        "output": 0.4176
+        "cache_read": 0.036337,
+        "input": 0.436044,
+        "output": 0.872088
       },
       "family": "deepseek-thinking",
       "limit": {
@@ -2178,7 +2041,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
@@ -2197,7 +2059,7 @@
       "family": "deepseek-thinking",
       "limit": {
         "context": 1048576,
-        "output": 393216
+        "output": 384000
       },
       "modalities": {
         "input": [
@@ -2207,7 +2069,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
@@ -2219,9 +2080,9 @@
     "deepseek/deepseek-v4.1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.006,
-        "input": 0.3,
-        "output": 1.2
+        "cache_read": 0.0016,
+        "input": 0.0344,
+        "output": 0.08
       },
       "family": "deepseek-flash",
       "limit": {
@@ -2237,7 +2098,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4.1 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -2246,15 +2106,44 @@
       "temperature": true,
       "tool_call": true
     },
+    "deepseek/deepseek-v4.1-flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.003,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 393216
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deepseek/deepseek-v4.1-flash:batch": {
       "cost": {
-        "cache_read": 0.00336,
-        "input": 0.112,
-        "output": 0.33599999999999997
+        "cache_read": 0.004,
+        "input": 0.049999999999999996,
+        "output": 0.15
       },
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 384000
       },
       "modalities": {
         "input": [
@@ -2289,11 +2178,39 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Dots3-Note Preview (free)",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "elorian/glimpse": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.6,
+        "output": 3
+      },
+      "limit": {
+        "context": 262144,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Glimpse",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2318,7 +2235,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ember-1",
       "open_weights": false,
       "reasoning": true,
@@ -2354,7 +2270,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 2.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -2387,7 +2302,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana",
       "open_weights": false,
       "reasoning": false,
@@ -2423,7 +2337,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 2.5 Flash-Lite",
       "open_weights": false,
       "reasoning": true,
@@ -2531,7 +2444,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 2.5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -2582,7 +2494,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 2.5 Pro Preview 06-05",
       "open_weights": false,
       "reasoning": true,
@@ -2646,7 +2557,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3 Flash Preview",
       "open_weights": false,
       "reasoning": true,
@@ -2707,7 +2617,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -2741,7 +2650,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana Pro Preview",
       "open_weights": false,
       "reasoning": true,
@@ -2771,7 +2679,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
@@ -2801,7 +2708,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana 2 Preview",
       "open_weights": false,
       "reasoning": true,
@@ -2837,7 +2743,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -2867,7 +2772,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana 2 Lite",
       "open_weights": false,
       "reasoning": true,
@@ -2903,7 +2807,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -2983,7 +2886,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview",
       "open_weights": false,
       "reasoning": true,
@@ -3035,7 +2937,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.1 Pro Preview Custom Tools",
       "open_weights": false,
       "reasoning": true,
@@ -3098,7 +2999,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.5 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -3134,7 +3034,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.5 Flash Lite",
       "open_weights": false,
       "reasoning": true,
@@ -3226,7 +3125,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.6 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -3291,7 +3189,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.7 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -3332,12 +3229,12 @@
     "google/gemini-3.8-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.075,
+        "cache_read": 0.0825,
         "cache_write": 0.041667,
-        "image_input": 7.5e-07,
-        "input": 0.75,
-        "output": 3.75,
-        "reasoning": 3.75
+        "image_input": 8.25e-07,
+        "input": 0.825,
+        "output": 4.125,
+        "reasoning": 4.125
       },
       "family": "gemini-flash",
       "limit": {
@@ -3356,7 +3253,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini 3.8 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -3394,13 +3290,77 @@
       "structured_output": true,
       "tool_call": true
     },
+    "google/gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 0.1875,
+        "image_input": 2e-06,
+        "input": 2,
+        "output": 10,
+        "reasoning": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "google/gemini-4-argon:batch": {
+      "cost": {
+        "cache_read": 0.049999999999999996,
+        "cache_write": 0.1875,
+        "image_input": 1e-06,
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "audio",
+          "file",
+          "image",
+          "text",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Google: Gemini 4 Argon (batch)",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "google/gemini-nano-banana-2.1": {
       "attachment": true,
       "cost": {
         "input": 1.5,
         "output": 7.5
       },
-      "family": "nano-banana",
+      "family": "gemini-flash",
       "limit": {
         "context": 65536,
         "output": 58982
@@ -3411,11 +3371,10 @@
           "text"
         ],
         "output": [
-          "image",
-          "text"
+          "text",
+          "image"
         ]
       },
-      "mode": "chat",
       "name": "Nano Banana 2.1",
       "open_weights": false,
       "reasoning": true,
@@ -3443,7 +3402,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 2 27B",
       "open_weights": true,
       "reasoning": false,
@@ -3472,7 +3430,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 3 12B IT",
       "open_weights": true,
       "reasoning": false,
@@ -3486,7 +3443,7 @@
       "cost": {
         "cache_read": 0.04,
         "input": 0.08,
-        "output": 0.45
+        "output": 0.35
       },
       "family": "gemma",
       "limit": {
@@ -3502,7 +3459,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 3 27B IT",
       "open_weights": true,
       "reasoning": false,
@@ -3531,7 +3487,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 3 4B IT",
       "open_weights": true,
       "reasoning": false,
@@ -3543,9 +3498,9 @@
     "google/gemma-4-26b-a4b-it": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0425,
-        "input": 0.0765,
-        "output": 0.255
+        "cache_read": 0.05,
+        "input": 0.09,
+        "output": 0.3
       },
       "family": "gemma",
       "limit": {
@@ -3562,7 +3517,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 4 26B A4B IT",
       "open_weights": true,
       "reasoning": true,
@@ -3592,7 +3546,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 4 26B A4B  (free)",
       "open_weights": true,
       "reasoning": true,
@@ -3604,9 +3557,8 @@
     "google/gemma-4-31b-it": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
-        "input": 0.09,
-        "output": 0.34
+        "input": 0.2,
+        "output": 0.4
       },
       "family": "gemma",
       "limit": {
@@ -3623,7 +3575,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 4 31B IT",
       "open_weights": true,
       "reasoning": true,
@@ -3653,7 +3604,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemma 4 31B (free)",
       "open_weights": true,
       "reasoning": true,
@@ -3738,7 +3688,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MythoMax 13B",
       "open_weights": true,
       "reasoning": false,
@@ -3766,7 +3715,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Granite 4.0 Micro",
       "open_weights": true,
       "reasoning": false,
@@ -3795,7 +3743,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Granite 4.2 8B",
       "open_weights": true,
       "reasoning": true,
@@ -3824,7 +3771,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mercury 2",
       "open_weights": false,
       "reasoning": true,
@@ -3853,7 +3799,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mercury 2.5",
       "open_weights": false,
       "reasoning": true,
@@ -3882,7 +3827,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ling 3.0 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -3891,73 +3835,16 @@
       "temperature": true,
       "tool_call": true
     },
-    "inclusionai/ling-3.0-flash-fin": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.0084,
-        "input": 0.042,
-        "output": 0.1232
-      },
-      "family": "ling",
-      "limit": {
-        "context": 262144,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Ling 3.0 Flash Fin",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-08-27",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "inclusionai/ling-3.0-flash-sante:free": {
-      "attachment": false,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "ling",
-      "limit": {
-        "context": 262144,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Ling 3.0 Flash Sante (free)",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-09-04",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": true
-    },
     "inclusionai/ling-3.0-flash-vl": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0042,
-        "input": 0.021,
-        "output": 0.0616
+        "cache_read": 0.012,
+        "input": 0.06,
+        "output": 0.18
       },
       "family": "ling",
       "limit": {
-        "context": 262144,
+        "context": 131072,
         "output": 32768
       },
       "modalities": {
@@ -3970,7 +3857,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ling 3.0 Flash VL",
       "open_weights": true,
       "reasoning": true,
@@ -3982,13 +3868,14 @@
     "inclusionai/ling-3.1-flash": {
       "attachment": false,
       "cost": {
-        "input": 0,
-        "output": 0
+        "cache_read": 0.015,
+        "input": 0.075,
+        "output": 0.225
       },
       "family": "ling",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -3998,12 +3885,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ling 3.1 Flash",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-10-02",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -4026,7 +3912,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Schematron V2 Small",
       "open_weights": true,
       "reasoning": false,
@@ -4054,7 +3939,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Schematron V2 Turbo",
       "open_weights": true,
       "reasoning": false,
@@ -4062,35 +3946,6 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": false
-    },
-    "kwaipilot/kat-coder-pro-v2.5": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.15,
-        "input": 0.74,
-        "output": 2.96
-      },
-      "family": "kat-coder",
-      "limit": {
-        "context": 262144,
-        "output": 235929
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "KAT-Coder-Pro V2.5",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-07-10",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
     },
     "liquid/lfm-2.5-2.6b:free": {
       "attachment": false,
@@ -4111,11 +3966,38 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "LFM2.5-2.6B (free)",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-11",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "liquid/lfm-2.5-24b-a2b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.025,
+        "input": 0.05,
+        "output": 0.7
+      },
+      "family": "liquid",
+      "limit": {
+        "context": 128000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "LFM2.5-24B-A2B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4139,7 +4021,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Weaver (alpha)",
       "open_weights": false,
       "reasoning": false,
@@ -4168,7 +4049,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "LongCat 2.0",
       "open_weights": true,
       "reasoning": true,
@@ -4196,7 +4076,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama-3.1-70B-Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -4225,7 +4104,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama-3.1-8B-Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -4253,7 +4131,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3.2 1B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -4265,13 +4142,13 @@
     "meta-llama/llama-3.2-3b-instruct": {
       "attachment": false,
       "cost": {
-        "input": 0.05,
-        "output": 0.33
+        "input": 0.0509,
+        "output": 0.335
       },
       "family": "llama",
       "limit": {
         "context": 131072,
-        "output": 117964
+        "output": 72000
       },
       "modalities": {
         "input": [
@@ -4281,7 +4158,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3.2 3B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -4293,9 +4169,8 @@
     "meta-llama/llama-3.3-70b-instruct": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.11,
-        "input": 0.22,
-        "output": 0.5
+        "input": 0.1,
+        "output": 0.32
       },
       "family": "llama",
       "limit": {
@@ -4310,7 +4185,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama-3.3-70B-Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -4328,7 +4202,7 @@
       },
       "family": "llama",
       "limit": {
-        "context": 1048576,
+        "context": 524288,
         "output": 16384
       },
       "modalities": {
@@ -4340,7 +4214,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 4 Maverick",
       "open_weights": true,
       "reasoning": false,
@@ -4369,7 +4242,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 4 Scout",
       "open_weights": true,
       "reasoning": false,
@@ -4398,7 +4270,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama Guard 4 12B",
       "open_weights": true,
       "reasoning": false,
@@ -4428,7 +4299,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Glimmer 30B",
       "open_weights": true,
       "reasoning": true,
@@ -4460,7 +4330,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Spark 1.1",
       "open_weights": false,
       "reasoning": true,
@@ -4492,7 +4361,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Spark 1.2",
       "open_weights": false,
       "reasoning": true,
@@ -4524,7 +4392,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Spark 1.2 Contributor",
       "open_weights": false,
       "reasoning": true,
@@ -4556,7 +4423,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Spark 1.3",
       "open_weights": false,
       "reasoning": true,
@@ -4588,11 +4454,74 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Muse Spark 1.3 Contributor",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta/muse-spark-open": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.25,
+        "output": 4.25
+      },
+      "family": "muse",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Muse Spark Open",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "meta/muse-wonder": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 4,
+        "output": 20
+      },
+      "family": "muse",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf",
+          "audio"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Muse Wonder",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-12",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4616,39 +4545,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Phi 4",
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-01-10",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": false
-    },
-    "microsoft/wizardlm-2-8x22b": {
-      "attachment": false,
-      "cost": {
-        "input": 0.62,
-        "output": 0.62
-      },
-      "limit": {
-        "context": 65535,
-        "output": 8000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "WizardLM-2 8x22B",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-04-16",
-      "structured_output": false,
       "temperature": true,
       "tool_call": false
     },
@@ -4672,7 +4573,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-01",
       "open_weights": true,
       "reasoning": false,
@@ -4700,7 +4600,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax M1",
       "open_weights": false,
       "reasoning": true,
@@ -4712,13 +4611,13 @@
     "minimax/minimax-m2": {
       "attachment": false,
       "cost": {
-        "input": 0.3,
-        "output": 1.2
+        "input": 0.255,
+        "output": 1.02
       },
       "family": "minimax",
       "limit": {
         "context": 204800,
-        "output": 176947
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4728,7 +4627,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2",
       "open_weights": true,
       "reasoning": true,
@@ -4757,7 +4655,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2 Her",
       "open_weights": false,
       "reasoning": false,
@@ -4770,7 +4667,6 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.03,
-        "cache_write": 0.0,
         "input": 0.3,
         "output": 1.2
       },
@@ -4787,7 +4683,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2.1",
       "open_weights": true,
       "reasoning": true,
@@ -4799,14 +4694,14 @@
     "minimax/minimax-m2.5": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.027,
+        "cache_read": 0.03,
         "input": 0.27,
-        "output": 1.08
+        "output": 0.95
       },
       "family": "minimax",
       "limit": {
         "context": 204800,
-        "output": 128000
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -4816,7 +4711,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2.5",
       "open_weights": true,
       "reasoning": true,
@@ -4828,14 +4722,14 @@
     "minimax/minimax-m2.7": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.042,
-        "input": 0.21,
-        "output": 0.84
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "minimax",
       "limit": {
         "context": 204800,
-        "output": 176947
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4845,7 +4739,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M2.7",
       "open_weights": true,
       "reasoning": true,
@@ -4876,12 +4769,40 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiniMax-M3",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-01",
       "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "minimax/minimax-m3.1-flash:free": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 1000000,
+        "output": 524288
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax M3.1 Flash (free)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-19",
+      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -4906,11 +4827,10 @@
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "Codestral 2508",
+      "name": "Codestral 25.08",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-08-01",
+      "release_date": "2025-07-30",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -4943,7 +4863,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.04,
-        "image_input": 0.0,
         "input": 0.4,
         "output": 2
       },
@@ -4961,7 +4880,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Devstral 2",
       "open_weights": true,
       "reasoning": false,
@@ -4974,7 +4892,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.02,
-        "image_input": 0.0,
         "input": 0.2,
         "output": 0.2
       },
@@ -4992,7 +4909,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ministral 3 14B 2512",
       "open_weights": true,
       "reasoning": false,
@@ -5005,7 +4921,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.01,
-        "image_input": 0.0,
         "input": 0.1,
         "output": 0.1
       },
@@ -5023,7 +4938,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ministral 3 3B 2512",
       "open_weights": true,
       "reasoning": false,
@@ -5036,7 +4950,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.015,
-        "image_input": 0.0,
         "input": 0.15,
         "output": 0.15
       },
@@ -5054,7 +4967,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ministral 3 8B 2512",
       "open_weights": true,
       "reasoning": false,
@@ -5108,7 +5020,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Large",
       "open_weights": false,
       "reasoning": false,
@@ -5138,7 +5049,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Large 2407",
       "open_weights": false,
       "reasoning": false,
@@ -5169,7 +5079,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Large 3",
       "open_weights": true,
       "reasoning": false,
@@ -5212,7 +5121,7 @@
       },
       "family": "mistral-large",
       "limit": {
-        "context": 524288,
+        "context": 1048576,
         "output": 262144
       },
       "modalities": {
@@ -5224,7 +5133,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Large 4",
       "open_weights": false,
       "reasoning": true,
@@ -5255,7 +5163,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Medium 3",
       "open_weights": false,
       "reasoning": false,
@@ -5285,7 +5192,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Medium 3.5",
       "open_weights": false,
       "reasoning": true,
@@ -5340,7 +5246,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Medium 3.1",
       "open_weights": false,
       "reasoning": false,
@@ -5377,7 +5282,7 @@
     "mistralai/mistral-nemo": {
       "attachment": false,
       "cost": {
-        "input": 0.019,
+        "input": 0.029,
         "output": 0.03
       },
       "family": "mistral-nemo",
@@ -5393,7 +5298,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Nemo",
       "open_weights": true,
       "reasoning": false,
@@ -5423,7 +5327,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Saba",
       "open_weights": false,
       "reasoning": false,
@@ -5451,7 +5354,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Small 3",
       "open_weights": true,
       "reasoning": false,
@@ -5481,7 +5383,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Small 4",
       "open_weights": true,
       "reasoning": true,
@@ -5534,7 +5435,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Small 3.1 24B",
       "open_weights": true,
       "reasoning": false,
@@ -5563,7 +5463,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mistral Small 3.2 24B",
       "open_weights": true,
       "reasoning": false,
@@ -5593,7 +5492,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Mixtral 8x22B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -5624,7 +5522,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Voxtral Small 24B 2507",
       "open_weights": true,
       "reasoning": false,
@@ -5632,6 +5529,60 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "moondream/moondream3-preview": {
+      "attachment": true,
+      "cost": {
+        "input": 0.3,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Moondream 3 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": false
+    },
+    "moondream/moondream3.1-9b-a2b": {
+      "attachment": true,
+      "cost": {
+        "input": 0.3,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Moondream 3.1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": false
     },
     "moonshotai/kimi-k2": {
       "attachment": false,
@@ -5652,7 +5603,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2 0711",
       "open_weights": true,
       "reasoning": false,
@@ -5680,11 +5630,10 @@
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "Kimi K2 0905",
+      "name": "Kimi K2 Instruct 0905",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-09-04",
+      "release_date": "2025-09-05",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -5699,7 +5648,7 @@
       "family": "kimi-thinking",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 98304
       },
       "modalities": {
         "input": [
@@ -5709,7 +5658,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2 Thinking",
       "open_weights": true,
       "reasoning": true,
@@ -5721,9 +5669,9 @@
     "moonshotai/kimi-k2.5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.07,
-        "input": 0.45,
-        "output": 2.25
+        "cache_read": 0.15,
+        "input": 0.5,
+        "output": 2.5
       },
       "family": "kimi-k2",
       "limit": {
@@ -5739,7 +5687,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.5",
       "open_weights": true,
       "reasoning": true,
@@ -5751,9 +5698,9 @@
     "moonshotai/kimi-k2.6": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.16,
-        "input": 0.95,
-        "output": 4
+        "cache_read": 0.15,
+        "input": 0.65,
+        "output": 3.41
       },
       "family": "kimi-k2",
       "limit": {
@@ -5769,7 +5716,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -5799,7 +5745,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -5811,9 +5756,9 @@
     "moonshotai/kimi-k3": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.29,
-        "input": 0.89,
-        "output": 15
+        "cache_read": 0.21,
+        "input": 0.239,
+        "output": 11.936
       },
       "family": "kimi-k3",
       "limit": {
@@ -5830,7 +5775,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,
@@ -5872,8 +5816,8 @@
       },
       "family": "morph",
       "limit": {
-        "context": 81920,
-        "output": 38000
+        "context": 262144,
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -5883,12 +5827,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Morph V3 Fast",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-07-07",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": true,
       "tool_call": false
     },
@@ -5911,7 +5854,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Morph V3 Large",
       "open_weights": false,
       "reasoning": false,
@@ -5941,7 +5883,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nex-N2.5-Mini",
       "open_weights": true,
       "reasoning": true,
@@ -5971,7 +5912,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nex-N2.5-Pro",
       "open_weights": true,
       "reasoning": true,
@@ -5999,7 +5939,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hermes 3 405B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -6027,7 +5966,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hermes 3 70B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -6055,21 +5993,19 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hermes 4 405B",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-26",
-      "structured_output": false,
+      "structured_output": true,
       "temperature": true,
       "tool_call": false
     },
     "nvidia/nemotron-3-nano-30b-a3b": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.05,
-        "output": 0.2
+        "input": 0.06,
+        "output": 0.24
       },
       "family": "nemotron",
       "limit": {
@@ -6084,7 +6020,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Nano 30B A3B",
       "open_weights": true,
       "reasoning": true,
@@ -6115,7 +6050,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Nano Omni (free)",
       "open_weights": true,
       "reasoning": true,
@@ -6143,7 +6077,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Super 120B A12B",
       "open_weights": true,
       "reasoning": true,
@@ -6171,7 +6104,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Super (free)",
       "open_weights": true,
       "reasoning": true,
@@ -6183,14 +6115,14 @@
     "nvidia/nemotron-3-ultra-550b-a55b": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.1,
-        "input": 0.5,
-        "output": 2.2
+        "cache_read": 0.12,
+        "input": 0.6,
+        "output": 2.4
       },
       "family": "nemotron",
       "limit": {
         "context": 262144,
-        "output": 16384
+        "output": 182520
       },
       "modalities": {
         "input": [
@@ -6200,7 +6132,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Ultra 550B A55B",
       "open_weights": true,
       "reasoning": true,
@@ -6228,7 +6159,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3 Ultra (free)",
       "open_weights": true,
       "reasoning": true,
@@ -6257,7 +6187,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3.5 Content Safety",
       "open_weights": true,
       "reasoning": true,
@@ -6286,7 +6215,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3.5 Content Safety (free)",
       "open_weights": true,
       "reasoning": true,
@@ -6298,14 +6226,14 @@
     "nvidia/nemotron-3.5-lightning": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.06,
-        "output": 0.16
+        "cache_read": 0.04,
+        "input": 0.07,
+        "output": 0.2
       },
       "family": "nemotron",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -6315,7 +6243,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3.5 Lightning 30B A3B",
       "open_weights": true,
       "reasoning": true,
@@ -6343,7 +6270,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Nemotron 3.5 Lightning (free)",
       "open_weights": true,
       "reasoning": true,
@@ -6352,11 +6278,66 @@
       "temperature": true,
       "tool_call": true
     },
-    "nvidia/switchyard": {
+    "nvidia/nemotron-3.5-super-vl": {
+      "attachment": true,
       "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
+        "cache_read": 0.08,
+        "input": 0.1,
+        "output": 0.4
       },
+      "family": "nemotron",
+      "limit": {
+        "context": 1048576,
+        "output": 235929
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nemotron 3.5 Super VL",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/nemotron-3.5-super-vl:free": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "nemotron",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Nemotron 3.5 Super VL (free)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "nvidia/switchyard": {
       "limit": {
         "context": 1000000
       },
@@ -6393,7 +6374,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-3.5-turbo",
       "open_weights": false,
       "reasoning": false,
@@ -6421,7 +6401,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-3.5 Turbo (older v0613)",
       "open_weights": false,
       "reasoning": false,
@@ -6449,7 +6428,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-3.5 Turbo 16k",
       "open_weights": false,
       "reasoning": false,
@@ -6477,7 +6455,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-3.5 Turbo Instruct",
       "open_weights": false,
       "reasoning": false,
@@ -6527,7 +6504,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4",
       "open_weights": false,
       "reasoning": false,
@@ -6556,7 +6532,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4 Turbo",
       "open_weights": false,
       "reasoning": false,
@@ -6610,7 +6585,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4.1",
       "open_weights": false,
       "reasoning": false,
@@ -6641,7 +6615,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4.1 mini",
       "open_weights": false,
       "reasoning": false,
@@ -6697,7 +6670,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4.1 nano",
       "open_weights": false,
       "reasoning": false,
@@ -6778,7 +6750,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o",
       "open_weights": false,
       "reasoning": false,
@@ -6808,7 +6779,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o (2024-05-13)",
       "open_weights": false,
       "reasoning": false,
@@ -6839,7 +6809,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o (2024-08-06)",
       "open_weights": false,
       "reasoning": false,
@@ -6870,7 +6839,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o (2024-11-20)",
       "open_weights": false,
       "reasoning": false,
@@ -6901,7 +6869,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o mini",
       "open_weights": false,
       "reasoning": false,
@@ -6932,7 +6899,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-4o-mini (2024-07-18)",
       "open_weights": false,
       "reasoning": false,
@@ -7014,7 +6980,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5",
       "open_weights": false,
       "reasoning": true,
@@ -7046,7 +7011,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5 Image",
       "open_weights": false,
       "reasoning": true,
@@ -7078,7 +7042,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5 Image Mini",
       "open_weights": false,
       "reasoning": true,
@@ -7110,7 +7073,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5 Mini",
       "open_weights": false,
       "reasoning": true,
@@ -7167,7 +7129,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5 Nano",
       "open_weights": false,
       "reasoning": true,
@@ -7223,7 +7184,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -7279,7 +7239,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.1",
       "open_weights": false,
       "reasoning": true,
@@ -7310,7 +7269,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.1 Codex",
       "open_weights": false,
       "reasoning": true,
@@ -7341,7 +7299,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.1 Codex Max",
       "open_weights": false,
       "reasoning": true,
@@ -7372,7 +7329,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.1 Codex mini",
       "open_weights": false,
       "reasoning": true,
@@ -7410,7 +7366,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.175,
-        "image_input": 0.0,
         "input": 1.75,
         "output": 14
       },
@@ -7430,7 +7385,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.2",
       "open_weights": false,
       "reasoning": true,
@@ -7443,7 +7397,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.175,
-        "image_input": 0.0,
         "input": 1.75,
         "output": 14
       },
@@ -7462,7 +7415,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.2 Chat",
       "open_weights": false,
       "reasoning": false,
@@ -7493,7 +7445,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.2 Codex",
       "open_weights": false,
       "reasoning": true,
@@ -7505,7 +7456,6 @@
     "openai/gpt-5.2-pro": {
       "attachment": true,
       "cost": {
-        "image_input": 0.0,
         "input": 21,
         "output": 168
       },
@@ -7525,7 +7475,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.2 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -7606,7 +7555,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.3 Codex",
       "open_weights": false,
       "reasoning": true,
@@ -7654,7 +7602,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.4",
       "open_weights": false,
       "reasoning": true,
@@ -7686,7 +7633,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.4 Image 2",
       "open_weights": false,
       "reasoning": true,
@@ -7718,7 +7664,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.4 mini",
       "open_weights": false,
       "reasoning": true,
@@ -7775,7 +7720,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.4 nano",
       "open_weights": false,
       "reasoning": true,
@@ -7845,7 +7789,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.4 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -7942,7 +7885,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.5",
       "open_weights": false,
       "reasoning": true,
@@ -7987,7 +7929,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.5 Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8087,7 +8028,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Luna",
       "open_weights": false,
       "reasoning": true,
@@ -8138,7 +8078,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Luna Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8200,22 +8139,22 @@
     "openai/gpt-5.6-sol": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
-        "cache_write": 2.5,
+        "cache_read": 0.4,
+        "cache_write": 5,
         "context_over_200k": {
-          "cache_read": 0.4,
-          "cache_write": 5,
-          "input": 4,
-          "output": 15
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
         },
-        "input": 2,
-        "output": 10,
+        "input": 4,
+        "output": 20,
         "tiers": [
           {
-            "cache_read": 0.4,
-            "cache_write": 5,
-            "input": 4,
-            "output": 15,
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -8239,7 +8178,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -8251,22 +8189,22 @@
     "openai/gpt-5.6-sol-pro": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
-        "cache_write": 2.5,
+        "cache_read": 0.4,
+        "cache_write": 5,
         "context_over_200k": {
-          "cache_read": 0.4,
-          "cache_write": 5,
-          "input": 4,
-          "output": 15
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
         },
-        "input": 2,
-        "output": 10,
+        "input": 4,
+        "output": 20,
         "tiers": [
           {
-            "cache_read": 0.4,
-            "cache_write": 5,
-            "input": 4,
-            "output": 15,
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
             "tier": {
               "size": 272000,
               "type": "context"
@@ -8290,7 +8228,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Sol Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8301,10 +8238,10 @@
     },
     "openai/gpt-5.6-sol-pro:batch": {
       "cost": {
-        "cache_read": 0.09999999999999999,
-        "cache_write": 1.25,
-        "input": 1.0,
-        "output": 5.0
+        "cache_read": 0.19999999999999998,
+        "cache_write": 2.5,
+        "input": 2.0,
+        "output": 10.0
       },
       "limit": {
         "context": 1050000,
@@ -8327,10 +8264,10 @@
     },
     "openai/gpt-5.6-sol:batch": {
       "cost": {
-        "cache_read": 0.09999999999999999,
-        "cache_write": 1.25,
-        "input": 1.0,
-        "output": 5.0
+        "cache_read": 0.19999999999999998,
+        "cache_write": 2.5,
+        "input": 2.0,
+        "output": 10.0
       },
       "limit": {
         "context": 1050000,
@@ -8393,7 +8330,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Terra",
       "open_weights": false,
       "reasoning": true,
@@ -8444,7 +8380,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-5.6 Terra Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8570,7 +8505,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Astra",
       "open_weights": false,
       "reasoning": true,
@@ -8620,7 +8554,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Astra Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8723,7 +8656,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Luna",
       "open_weights": false,
       "reasoning": true,
@@ -8773,7 +8705,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Luna Pro",
       "open_weights": false,
       "reasoning": true,
@@ -8876,7 +8807,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -8926,7 +8856,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6 Sol Pro",
       "open_weights": false,
       "reasoning": true,
@@ -9029,7 +8958,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6.1 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -9079,13 +9007,64 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT-6.1 Sol Pro",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-29",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "openai/gpt-6.1-sol-pro:batch": {
+      "cost": {
+        "cache_read": 0.049999999999999996,
+        "cache_write": 1.25,
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "file",
+          "image",
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "OpenAI: GPT-6.1 Sol Pro (batch)",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "openai/gpt-6.1-sol:batch": {
+      "cost": {
+        "cache_read": 0.049999999999999996,
+        "cache_write": 1.25,
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 1050000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "file",
+          "image",
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "OpenAI: GPT-6.1 Sol (batch)",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "openai/gpt-audio": {
@@ -9109,7 +9088,6 @@
           "audio"
         ]
       },
-      "mode": "chat",
       "name": "GPT Audio",
       "open_weights": false,
       "reasoning": false,
@@ -9139,7 +9117,6 @@
           "audio"
         ]
       },
-      "mode": "chat",
       "name": "GPT Audio Mini",
       "open_weights": false,
       "reasoning": false,
@@ -9170,7 +9147,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Chat Latest",
       "open_weights": false,
       "reasoning": false,
@@ -9179,37 +9155,17 @@
       "temperature": false,
       "tool_call": true
     },
-    "openai/gpt-image-2": {
-      "cost": {
-        "input": 5.0
-      },
-      "mode": "image_generation",
-      "name": "openai/gpt-image-2"
-    },
-    "openai/gpt-image-2.5-flare": {
-      "cost": {
-        "input": 5.0
-      },
-      "mode": "image_generation",
-      "name": "openai/gpt-image-2.5-flare"
-    },
-    "openai/gpt-image-2.5-sunburst": {
-      "cost": {
-        "input": 5.0
-      },
-      "mode": "image_generation",
-      "name": "openai/gpt-image-2.5-sunburst"
-    },
     "openai/gpt-oss-120b": {
       "attachment": false,
       "cost": {
-        "input": 0.037,
-        "output": 0.17
+        "cache_read": 0.075,
+        "input": 0.15,
+        "output": 0.6
       },
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 117964
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -9219,7 +9175,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT OSS 120B",
       "open_weights": true,
       "reasoning": true,
@@ -9270,7 +9225,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -9321,7 +9275,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT OSS Safeguard 20B",
       "open_weights": true,
       "reasoning": true,
@@ -9352,7 +9305,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o1",
       "open_weights": false,
       "reasoning": true,
@@ -9382,7 +9334,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o1-pro",
       "open_weights": false,
       "reasoning": true,
@@ -9413,7 +9364,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o3",
       "open_weights": false,
       "reasoning": true,
@@ -9443,7 +9393,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o3-mini",
       "open_weights": false,
       "reasoning": true,
@@ -9473,7 +9422,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o3 Mini High",
       "open_weights": false,
       "reasoning": true,
@@ -9527,7 +9475,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o3-pro",
       "open_weights": false,
       "reasoning": true,
@@ -9583,7 +9530,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o4-mini",
       "open_weights": false,
       "reasoning": true,
@@ -9614,7 +9560,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "o4 Mini High",
       "open_weights": false,
       "reasoning": true,
@@ -9650,10 +9595,6 @@
     },
     "openrouter/auto": {
       "attachment": true,
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
       "family": "auto",
       "limit": {
         "context": 2000000,
@@ -9672,7 +9613,6 @@
           "image"
         ]
       },
-      "mode": "chat",
       "name": "Auto Router",
       "open_weights": false,
       "reasoning": true,
@@ -9683,10 +9623,6 @@
       "unbounded": true
     },
     "openrouter/auto-beta": {
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 2000000
       },
@@ -9711,10 +9647,6 @@
     },
     "openrouter/bodybuilder": {
       "attachment": false,
-      "cost": {
-        "input": 0.0,
-        "output": 0.0
-      },
       "limit": {
         "context": 128000,
         "output": 128000
@@ -9727,7 +9659,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Body Builder (beta)",
       "open_weights": false,
       "reasoning": false,
@@ -9757,7 +9688,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Free Models Router",
       "open_weights": false,
       "reasoning": true,
@@ -9769,10 +9699,6 @@
     },
     "openrouter/fusion": {
       "attachment": false,
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 1000000,
         "output": 128000
@@ -9796,10 +9722,6 @@
     },
     "openrouter/pareto-code": {
       "attachment": false,
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 2000000,
         "output": 200000
@@ -9841,7 +9763,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Perceptron Mk1",
       "open_weights": false,
       "reasoning": true,
@@ -9871,7 +9792,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Perceptron Mk1.5",
       "open_weights": false,
       "reasoning": true,
@@ -9900,7 +9820,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sonar",
       "open_weights": false,
       "reasoning": false,
@@ -9929,7 +9848,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sonar Deep Research",
       "open_weights": false,
       "reasoning": true,
@@ -9958,7 +9876,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sonar Pro",
       "open_weights": false,
       "reasoning": false,
@@ -9987,7 +9904,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sonar Pro Search",
       "open_weights": false,
       "reasoning": true,
@@ -10016,7 +9932,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sonar Reasoning Pro",
       "open_weights": false,
       "reasoning": true,
@@ -10045,7 +9960,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Laguna S 2.1",
       "open_weights": true,
       "reasoning": true,
@@ -10073,7 +9987,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Laguna S 2.1 (free)",
       "open_weights": true,
       "reasoning": true,
@@ -10102,7 +10015,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Laguna XS 2.1",
       "open_weights": true,
       "reasoning": true,
@@ -10130,7 +10042,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Laguna XS 2.1 (free)",
       "open_weights": true,
       "reasoning": true,
@@ -10159,7 +10070,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Ternary Bonsai 2 27B",
       "open_weights": true,
       "reasoning": true,
@@ -10187,7 +10097,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen2.5 72B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10215,7 +10124,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen2.5 7B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10243,7 +10151,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen2.5 Coder 32B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10291,55 +10198,10 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen Plus",
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-01-25",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen-plus-2025-07-28": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.052000000000000005,
-        "cache_write": 0.325,
-        "context_over_200k": {
-          "input": 0.78,
-          "output": 2.34
-        },
-        "input": 0.26,
-        "output": 0.78,
-        "tiers": [
-          {
-            "input": 0.78,
-            "output": 2.34,
-            "tier": {
-              "size": 256000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 1000000,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen Plus 0728",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-09-08",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -10365,7 +10227,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen2.5 VL 72B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10382,7 +10243,7 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 131072,
+        "context": 40960,
         "output": 16384
       },
       "modalities": {
@@ -10393,40 +10254,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 14B",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-04-28",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-235b-a22b": {
-      "attachment": false,
-      "cost": {
-        "input": 0.455,
-        "output": 1.82
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 131072,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 235B-A22B",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-04",
-      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -10449,7 +10281,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 235B A22B Instruct 2507",
       "open_weights": true,
       "reasoning": false,
@@ -10461,13 +10292,13 @@
     "qwen/qwen3-235b-a22b-thinking-2507": {
       "attachment": false,
       "cost": {
-        "input": 0.23,
-        "output": 2.3
+        "input": 0.45,
+        "output": 3.5
       },
       "family": "qwen",
       "limit": {
-        "context": 131072,
-        "output": 117964
+        "context": 128000,
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -10477,7 +10308,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 235B A22B Thinking 2507",
       "open_weights": true,
       "reasoning": true,
@@ -10494,7 +10324,7 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 131072,
+        "context": 40960,
         "output": 16384
       },
       "modalities": {
@@ -10505,7 +10335,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 30B A3B",
       "open_weights": true,
       "reasoning": true,
@@ -10517,7 +10346,7 @@
     "qwen/qwen3-30b-a3b-instruct-2507": {
       "attachment": false,
       "cost": {
-        "input": 0.1,
+        "input": 0.09,
         "output": 0.3
       },
       "family": "qwen",
@@ -10533,40 +10362,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 30B A3B Instruct 2507",
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-29",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-30b-a3b-thinking-2507": {
-      "attachment": false,
-      "cost": {
-        "input": 0.2,
-        "output": 2.4
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 81920,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 30B A3B Thinking 2507",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-08-28",
-      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -10589,40 +10389,11 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 32B",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-04",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-8b": {
-      "attachment": false,
-      "cost": {
-        "input": 0.117,
-        "output": 0.455
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 131072,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 8B",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-04-28",
-      "structured_output": false,
       "temperature": true,
       "tool_call": true
     },
@@ -10646,7 +10417,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 Coder 480B A35B",
       "open_weights": true,
       "reasoning": false,
@@ -10674,7 +10444,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3-Coder 30B-A3B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10726,7 +10495,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 Coder Flash",
       "open_weights": false,
       "reasoning": false,
@@ -10755,7 +10523,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 Coder Next",
       "open_weights": true,
       "reasoning": false,
@@ -10764,167 +10531,16 @@
       "temperature": true,
       "tool_call": true
     },
-    "qwen/qwen3-coder-plus": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.13,
-        "cache_write": 0.8125,
-        "input": 0.65,
-        "output": 3.25,
-        "tiers": [
-          {
-            "cache_read": 0.234,
-            "cache_write": 1.4625,
-            "input": 1.17,
-            "output": 5.85,
-            "tier": {
-              "size": 32000,
-              "type": "context"
-            }
-          },
-          {
-            "cache_read": 0.39,
-            "cache_write": 2.4375,
-            "input": 1.95,
-            "output": 9.75,
-            "tier": {
-              "size": 128000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 1000000,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 Coder Plus",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-07-23",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-max": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.156,
-        "cache_write": 0.975,
-        "input": 0.78,
-        "output": 3.9,
-        "tiers": [
-          {
-            "cache_read": 0.312,
-            "cache_write": 1.95,
-            "input": 1.56,
-            "output": 7.8,
-            "tier": {
-              "size": 32000,
-              "type": "context"
-            }
-          },
-          {
-            "cache_read": 0.39,
-            "cache_write": 2.4375,
-            "input": 1.95,
-            "output": 9.75,
-            "tier": {
-              "size": 128000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 Max",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-09-23",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-max-thinking": {
-      "attachment": false,
-      "cost": {
-        "input": 0.78,
-        "output": 3.9,
-        "tiers": [
-          {
-            "input": 1.56,
-            "output": 7.8,
-            "tier": {
-              "size": 32000,
-              "type": "context"
-            }
-          },
-          {
-            "input": 1.95,
-            "output": 9.75,
-            "tier": {
-              "size": 128000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 Max Thinking",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-02-09",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "qwen/qwen3-next-80b-a3b-instruct": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.07,
-        "input": 0.1,
+        "input": 0.09,
         "output": 1.1
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -10934,7 +10550,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3-Next 80B-A3B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -10952,7 +10567,7 @@
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -10962,7 +10577,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3-Next 80B-A3B (Thinking)",
       "open_weights": true,
       "reasoning": true,
@@ -10992,39 +10606,9 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 VL 235B A22B Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-09-23",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-vl-235b-a22b-thinking": {
-      "attachment": true,
-      "cost": {
-        "input": 0.4,
-        "output": 4
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 131072,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 VL 235B A22B Thinking",
-      "open_weights": true,
-      "reasoning": true,
       "release_date": "2025-09-23",
       "structured_output": true,
       "temperature": true,
@@ -11050,11 +10634,10 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 VL 30B A3B Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-10-06",
+      "release_date": "2025-10-04",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -11062,13 +10645,13 @@
     "qwen/qwen3-vl-30b-a3b-thinking": {
       "attachment": true,
       "cost": {
-        "input": 0.2,
-        "output": 2.4
+        "input": 0.29,
+        "output": 1
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11079,7 +10662,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 VL 30B A3B Thinking",
       "open_weights": true,
       "reasoning": true,
@@ -11088,45 +10670,17 @@
       "temperature": true,
       "tool_call": true
     },
-    "qwen/qwen3-vl-32b-instruct": {
-      "attachment": true,
-      "cost": {
-        "input": 0.104,
-        "output": 0.416
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 131072,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 VL 32B Instruct",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-10-23",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "qwen/qwen3-vl-8b-instruct": {
       "attachment": true,
       "cost": {
-        "input": 0.117,
-        "output": 0.455
+        "cache_read": 0.12,
+        "input": 0.25,
+        "output": 0.75
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11137,39 +10691,9 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3 VL 8B Instruct",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-10-14",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3-vl-8b-thinking": {
-      "attachment": true,
-      "cost": {
-        "input": 0.18,
-        "output": 2.1
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 131072,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "image",
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3 VL 8B Thinking",
-      "open_weights": true,
-      "reasoning": true,
       "release_date": "2025-10-14",
       "structured_output": true,
       "temperature": true,
@@ -11196,7 +10720,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 122B-A10B",
       "open_weights": true,
       "reasoning": true,
@@ -11208,8 +10731,9 @@
     "qwen/qwen3.5-27b": {
       "attachment": true,
       "cost": {
-        "input": 0.195,
-        "output": 1.56
+        "cache_read": 0.27,
+        "input": 0.27,
+        "output": 2.16
       },
       "family": "qwen",
       "limit": {
@@ -11226,7 +10750,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 27B",
       "open_weights": true,
       "reasoning": true,
@@ -11238,14 +10761,14 @@
     "qwen/qwen3.5-35b-a3b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.04,
-        "input": 0.08,
-        "output": 0.75
+        "cache_read": 0.05,
+        "input": 0.15,
+        "output": 1
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11257,7 +10780,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 35B-A3B",
       "open_weights": true,
       "reasoning": true,
@@ -11269,14 +10791,14 @@
     "qwen/qwen3.5-397b-a17b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.22,
-        "input": 0.45,
-        "output": 3
+        "cache_read": 0.3,
+        "input": 0.5,
+        "output": 3.6
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 81920
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11288,7 +10810,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 397B-A17B",
       "open_weights": true,
       "reasoning": true,
@@ -11318,7 +10839,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 9B",
       "open_weights": true,
       "reasoning": true,
@@ -11348,7 +10868,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5-Flash",
       "open_weights": false,
       "reasoning": true,
@@ -11392,7 +10911,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 Plus 2026-02-15",
       "open_weights": false,
       "reasoning": true,
@@ -11439,7 +10957,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.5 Plus 2026-04-20",
       "open_weights": false,
       "reasoning": true,
@@ -11451,14 +10968,14 @@
     "qwen/qwen3.6-27b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.32,
-        "output": 3.25
+        "cache_read": 0.025,
+        "input": 0.25,
+        "output": 2
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 262140
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -11470,7 +10987,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.6 27B",
       "open_weights": true,
       "reasoning": true,
@@ -11501,7 +11017,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.6 35B-A3B",
       "open_weights": true,
       "reasoning": true,
@@ -11548,51 +11063,10 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.6 Flash",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-27",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "qwen/qwen3.6-max-preview": {
-      "attachment": false,
-      "cost": {
-        "cache_write": 1.28375,
-        "input": 1.027,
-        "output": 6.162,
-        "tiers": [
-          {
-            "cache_write": 1.975,
-            "input": 1.58,
-            "output": 9.48,
-            "tier": {
-              "size": 128000,
-              "type": "context"
-            }
-          }
-        ]
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3.6 Max Preview",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-04-20",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -11635,7 +11109,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.6 Plus",
       "open_weights": false,
       "reasoning": true,
@@ -11690,7 +11163,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.7 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -11720,7 +11192,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.7 Max",
       "open_weights": false,
       "reasoning": true,
@@ -11769,13 +11240,35 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.7 Plus",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-06-02",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3.7-plus:batch": {
+      "cost": {
+        "input": 0.22999999999999998,
+        "output": 0.9199999999999999
+      },
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen: Qwen3.7 Plus (batch)",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "qwen/qwen3.8-2.4t-a95b": {
@@ -11798,7 +11291,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.8 2.4T A95B",
       "open_weights": true,
       "reasoning": true,
@@ -11810,15 +11302,14 @@
     "qwen/qwen3.8-27b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.085,
-        "cache_write": 0.53125,
-        "input": 0.425,
-        "output": 2.55
+        "cache_read": 0.05,
+        "input": 0.24,
+        "output": 2.2
       },
       "family": "qwen",
       "limit": {
         "context": 1000000,
-        "output": 131072
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11830,7 +11321,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.8 27B",
       "open_weights": true,
       "reasoning": true,
@@ -11843,7 +11333,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.016,
-        "cache_write": 0.2,
         "input": 0.15,
         "output": 0.47
       },
@@ -11862,7 +11351,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.8 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -11875,7 +11363,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.25,
-        "cache_write": 2.5,
         "input": 2,
         "output": 6
       },
@@ -11894,7 +11381,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.8 Max 0902",
       "open_weights": false,
       "reasoning": true,
@@ -11925,7 +11411,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen 3.8 Max Prime",
       "open_weights": false,
       "reasoning": true,
@@ -11957,11 +11442,38 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Qwen3.8 Omni Flash",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "reflection/beam-1.0-501b-a23b": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 3
+      },
+      "family": "beam",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Beam 1.0 501B A23B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-16",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -11987,7 +11499,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Reka Edge",
       "open_weights": true,
       "reasoning": false,
@@ -12015,7 +11526,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Reka Flash 3",
       "open_weights": true,
       "reasoning": true,
@@ -12042,7 +11552,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Relace Apply 3",
       "open_weights": false,
       "reasoning": false,
@@ -12069,7 +11578,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Relace Search",
       "open_weights": false,
       "reasoning": false,
@@ -12100,7 +11608,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Fugu Max",
       "open_weights": false,
       "reasoning": true,
@@ -12146,7 +11653,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Fugu Ultra",
       "open_weights": false,
       "reasoning": true,
@@ -12193,7 +11699,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Fugu Ultra v2",
       "open_weights": false,
       "reasoning": true,
@@ -12224,7 +11729,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Sakana Namazu",
       "open_weights": false,
       "reasoning": true,
@@ -12252,7 +11756,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3 8B Lunaris",
       "open_weights": true,
       "reasoning": false,
@@ -12280,41 +11783,68 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Llama 3.1 Euryale 70B v2.2",
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-28",
       "structured_output": true,
       "temperature": true,
-      "tool_call": true
+      "tool_call": false
     },
-    "sao10k/l3.3-euryale-70b": {
-      "attachment": false,
+    "scaledown/extract": {
+      "attachment": true,
       "cost": {
-        "input": 0.65,
-        "output": 0.75
+        "input": 0.04,
+        "output": 0
       },
-      "family": "llama",
       "limit": {
-        "context": 131072,
-        "output": 16384
+        "context": 1000000,
+        "output": 900000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image",
+          "pdf"
         ],
         "output": [
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "Llama 3.3 Euryale 70B",
-      "open_weights": true,
+      "name": "Extract",
+      "open_weights": false,
       "reasoning": false,
-      "release_date": "2024-12-18",
-      "structured_output": true,
-      "temperature": true,
+      "release_date": "2026-10-13",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": false
+    },
+    "scaledown/summarize": {
+      "attachment": true,
+      "cost": {
+        "input": 0.04,
+        "output": 0
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Summarize",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-13",
+      "structured_output": false,
+      "temperature": false,
       "tool_call": false
     },
     "stepfun/step-3.5-flash": {
@@ -12335,7 +11865,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Step 3.5 Flash",
       "open_weights": true,
       "reasoning": true,
@@ -12366,11 +11895,40 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Step 3.7 Flash",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-05-29",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "stepfun/step-5-preview": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 2.7
+      },
+      "limit": {
+        "context": 1048576,
+        "input": 1000000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Step 5 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-16",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -12394,7 +11952,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hunyuan A13B Instruct",
       "open_weights": true,
       "reasoning": true,
@@ -12422,7 +11979,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy-MT2-1.8B",
       "open_weights": true,
       "reasoning": false,
@@ -12450,7 +12006,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy-MT2-30B-A3B",
       "open_weights": true,
       "reasoning": false,
@@ -12478,7 +12033,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy-MT2-7B",
       "open_weights": true,
       "reasoning": false,
@@ -12490,9 +12044,9 @@
     "tencent/hy3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.020625,
-        "input": 0.0825,
-        "output": 0.33
+        "cache_read": 0.033,
+        "input": 0.132,
+        "output": 0.528
       },
       "family": "Hy",
       "limit": {
@@ -12508,7 +12062,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy3",
       "open_weights": true,
       "reasoning": true,
@@ -12537,7 +12090,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy3 preview",
       "open_weights": true,
       "reasoning": true,
@@ -12549,9 +12101,9 @@
     "tencent/hy4-preview": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0378,
-        "input": 0.7506,
-        "output": 2.2509
+        "cache_read": 0.042,
+        "input": 0.834,
+        "output": 2.501
       },
       "family": "Hy",
       "limit": {
@@ -12566,7 +12118,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Hy4 preview",
       "open_weights": true,
       "reasoning": true,
@@ -12594,7 +12145,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Cydonia 24B V4.1",
       "open_weights": true,
       "reasoning": false,
@@ -12622,7 +12172,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Skyfall 36B V2",
       "open_weights": true,
       "reasoning": false,
@@ -12649,7 +12198,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "UnslopNemo 12B",
       "open_weights": true,
       "reasoning": false,
@@ -12661,14 +12209,14 @@
     "thinkingmachines/inkling": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.16,
-        "input": 0.95,
+        "cache_read": 0.17,
+        "input": 1,
         "output": 4.05
       },
       "family": "ling",
       "limit": {
         "context": 524288,
-        "output": 262144
+        "output": 471859
       },
       "modalities": {
         "input": [
@@ -12680,7 +12228,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Inkling",
       "open_weights": true,
       "reasoning": true,
@@ -12711,7 +12258,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Inkling Small",
       "open_weights": true,
       "reasoning": true,
@@ -12741,7 +12287,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Inkling Small (free)",
       "open_weights": true,
       "reasoning": true,
@@ -12771,7 +12316,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Inkling (free)",
       "open_weights": true,
       "reasoning": true,
@@ -12780,23 +12324,7 @@
       "temperature": true,
       "tool_call": true
     },
-    "typesafe/jev-1.13": {
-      "cost": {
-        "input": 0.041999999999999996,
-        "output": 0.0
-      },
-      "limit": {
-        "context": 32000,
-        "output": 28800
-      },
-      "mode": "evaluation",
-      "name": "typesafe/jev-1.13"
-    },
     "typesafe/jev-router": {
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 1000000
       },
@@ -12818,36 +12346,7 @@
       "tool_call": true,
       "unbounded": true
     },
-    "unbiased/pareto": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.25,
-        "input": 2.5,
-        "output": 7.5
-      },
-      "limit": {
-        "context": 262144,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Pareto",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-09-17",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": true
-    },
-    "unbiased/pareto-26.10-preview": {
+    "unbiased/pareto-26.10": {
       "attachment": true,
       "cost": {
         "cache_read": 0.03,
@@ -12867,11 +12366,38 @@
           "text"
         ]
       },
-      "mode": "chat",
-      "name": "Pareto 26.10 Preview",
+      "name": "Pareto 26.10",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2026-10-01",
+      "release_date": "2026-10-15",
+      "structured_output": false,
+      "temperature": true,
+      "tool_call": true
+    },
+    "unbiased/pareto-26.9": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 2.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pareto 26.9",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-13",
       "structured_output": false,
       "temperature": true,
       "tool_call": true
@@ -12894,7 +12420,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "ReMM SLERP 13B",
       "open_weights": true,
       "reasoning": false,
@@ -12923,7 +12448,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Solar Mini 4",
       "open_weights": false,
       "reasoning": true,
@@ -12952,7 +12476,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Solar Pro 3",
       "open_weights": false,
       "reasoning": true,
@@ -12981,7 +12504,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Solar Pro 4",
       "open_weights": false,
       "reasoning": true,
@@ -13009,7 +12531,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Palmyra X5",
       "open_weights": false,
       "reasoning": false,
@@ -13056,7 +12577,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.20",
       "open_weights": false,
       "reasoning": true,
@@ -13103,7 +12623,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.20 Multi-Agent",
       "open_weights": false,
       "reasoning": true,
@@ -13150,7 +12669,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.3",
       "open_weights": false,
       "reasoning": true,
@@ -13222,7 +12740,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -13269,7 +12786,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -13316,7 +12832,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok 4.7",
       "open_weights": false,
       "reasoning": true,
@@ -13363,7 +12878,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok Build 0.1",
       "open_weights": false,
       "reasoning": true,
@@ -13376,7 +12890,6 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.0028,
-        "cache_write": 0.0,
         "input": 0.14,
         "output": 0.28
       },
@@ -13396,7 +12909,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiMo-V2.5",
       "open_weights": true,
       "reasoning": true,
@@ -13409,7 +12921,6 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.0036,
-        "cache_write": 0.0,
         "input": 0.435,
         "output": 0.87
       },
@@ -13426,7 +12937,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiMo-V2.5-Pro",
       "open_weights": true,
       "reasoning": true,
@@ -13458,7 +12968,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiMo-V2.6-Flash",
       "open_weights": true,
       "reasoning": true,
@@ -13490,7 +12999,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiMo-V2.6-Pro",
       "open_weights": true,
       "reasoning": true,
@@ -13522,11 +13030,37 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "MiMo-V2.6-Pro-UltraSpeed",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-21",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "xingchen-agi/xing4.0-29b-a4b:free": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "agi",
+      "limit": {
+        "context": 262144,
+        "output": 235929
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Xing4.0 29B A4B (free)",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-16",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -13551,7 +13085,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.5",
       "open_weights": true,
       "reasoning": true,
@@ -13580,7 +13113,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.5-Air",
       "open_weights": true,
       "reasoning": true,
@@ -13610,7 +13142,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.5V",
       "open_weights": true,
       "reasoning": true,
@@ -13622,14 +13153,14 @@
     "z-ai/glm-4.6": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.08,
-        "input": 0.43,
-        "output": 1.75
+        "cache_read": 0.11,
+        "input": 0.55,
+        "output": 2.2
       },
       "family": "glm",
       "limit": {
         "context": 204800,
-        "output": 16384
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -13639,7 +13170,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.6",
       "open_weights": true,
       "reasoning": true,
@@ -13651,7 +13181,7 @@
     "z-ai/glm-4.6v": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
+        "cache_read": 0.055,
         "input": 0.3,
         "output": 0.9
       },
@@ -13670,7 +13200,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.6V",
       "open_weights": true,
       "reasoning": true,
@@ -13682,10 +13211,9 @@
     "z-ai/glm-4.7": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.11,
-        "cache_write": 0.0,
-        "input": 0.6,
-        "output": 2.2
+        "cache_read": 0.099,
+        "input": 0.54,
+        "output": 1.98
       },
       "family": "glm",
       "limit": {
@@ -13700,7 +13228,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.7",
       "open_weights": true,
       "reasoning": true,
@@ -13712,8 +13239,6 @@
     "z-ai/glm-4.7-flash": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.01,
-        "cache_write": 0.0,
         "input": 0.0605,
         "output": 0.4
       },
@@ -13730,7 +13255,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-4.7-Flash",
       "open_weights": true,
       "reasoning": true,
@@ -13742,14 +13266,14 @@
     "z-ai/glm-5": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.12,
-        "input": 0.6,
-        "output": 1.92
+        "cache_read": 0.2,
+        "input": 1,
+        "output": 3.2
       },
       "family": "glm",
       "limit": {
         "context": 204800,
-        "output": 128000
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -13759,7 +13283,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
@@ -13788,7 +13311,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5-Turbo",
       "open_weights": false,
       "reasoning": true,
@@ -13800,15 +13322,14 @@
     "z-ai/glm-5.1": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.26,
-        "cache_write": 0.0,
-        "input": 1.4,
-        "output": 4.4
+        "cache_read": 0.1794,
+        "input": 0.966,
+        "output": 3.036
       },
       "family": "glm",
       "limit": {
         "context": 204800,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -13818,7 +13339,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5.1",
       "open_weights": true,
       "reasoning": true,
@@ -13830,38 +13350,9 @@
     "z-ai/glm-5.2": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.15,
-        "input": 0.152,
-        "output": 12
-      },
-      "family": "glm",
-      "limit": {
-        "context": 1048576,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "GLM-5.2",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-06-13",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "z-ai/glm-5.3": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.065,
-        "input": 0.07,
-        "output": 7
+        "cache_read": 0.14,
+        "input": 0.62,
+        "output": 2.42
       },
       "family": "glm",
       "limit": {
@@ -13876,7 +13367,34 @@
           "text"
         ]
       },
-      "mode": "chat",
+      "name": "GLM-5.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "z-ai/glm-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.078,
+        "input": 0.079,
+        "output": 1.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
       "name": "GLM-5.3",
       "open_weights": true,
       "reasoning": true,
@@ -13888,14 +13406,14 @@
     "z-ai/glm-5.3-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.15,
-        "output": 0.5
+        "cache_read": 0.006,
+        "input": 0.048,
+        "output": 0.16
       },
       "family": "glm-flash",
       "limit": {
         "context": 1048576,
-        "output": 943717
+        "output": 943718
       },
       "modalities": {
         "input": [
@@ -13907,7 +13425,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5.3-Flash",
       "open_weights": true,
       "reasoning": true,
@@ -13918,9 +13435,9 @@
     },
     "z-ai/glm-5.3-flash:batch": {
       "cost": {
-        "cache_read": 0.012,
-        "input": 0.06,
-        "output": 0.19999999999999998
+        "cache_read": 0.01,
+        "input": 0.049999999999999996,
+        "output": 0.18
       },
       "limit": {
         "context": 1048576,
@@ -13963,7 +13480,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM 5.3 FlashX",
       "open_weights": false,
       "reasoning": true,
@@ -13992,7 +13508,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM 5.3 Prime",
       "open_weights": false,
       "reasoning": true,
@@ -14046,7 +13561,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM-5V-Turbo",
       "open_weights": false,
       "reasoning": true,
@@ -14060,7 +13574,6 @@
       "cost": {
         "cache_read": 0.25,
         "cache_write": 12.5,
-        "cache_write_above_1hr": 20.0,
         "input": 10,
         "output": 50
       },
@@ -14079,7 +13592,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Fable Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14091,16 +13603,27 @@
     "~anthropic/claude-haiku-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 1.25,
-        "cache_write_above_1hr": 2.0,
-        "input": 1,
-        "output": 5
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
       },
       "family": "claude-haiku",
       "limit": {
-        "context": 200000,
-        "output": 64000
+        "context": 1000000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -14112,13 +13635,12 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Haiku Latest",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-27",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "~anthropic/claude-opus-latest": {
@@ -14126,7 +13648,6 @@
       "cost": {
         "cache_read": 0.2,
         "cache_write": 5,
-        "cache_write_above_1hr": 8.0,
         "input": 4,
         "output": 20
       },
@@ -14145,21 +13666,19 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Opus Latest",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-21",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "~anthropic/claude-sonnet-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
-        "cache_write_above_1hr": 4.0,
         "input": 2,
         "output": 10
       },
@@ -14178,21 +13697,20 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Claude Sonnet Latest",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-04-27",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "~deepseek/deepseek-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.002,
-        "input": 0.002,
-        "output": 2.4
+        "cache_read": 0.005,
+        "input": 0.043,
+        "output": 0.6
       },
       "family": "deepseek-flash",
       "limit": {
@@ -14208,7 +13726,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek Flash Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14220,9 +13737,9 @@
     "~deepseek/deepseek-pro-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.25,
-        "input": 0.2514,
-        "output": 4.2
+        "cache_read": 0.13,
+        "input": 0.1307,
+        "output": 8
       },
       "family": "deepseek",
       "limit": {
@@ -14237,7 +13754,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek Pro Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14249,9 +13765,9 @@
     "~deepseek/deepseek-v4-flash-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.015,
-        "output": 1.28
+        "cache_read": 0.003304,
+        "input": 0.00912,
+        "output": 0.12
       },
       "family": "deepseek",
       "limit": {
@@ -14266,7 +13782,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "DeepSeek V4 Flash Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14302,7 +13817,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini Flash Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14314,8 +13828,8 @@
     "~google/gemini-pro-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
-        "cache_write": 0.375,
+        "cache_read": 0.1,
+        "cache_write": 0.1875,
         "context_over_200k": {
           "cache_read": 0.4,
           "input": 4,
@@ -14323,8 +13837,8 @@
         },
         "image_input": 2e-06,
         "input": 2,
-        "output": 12,
-        "reasoning": 12,
+        "output": 10,
+        "reasoning": 10,
         "tiers": [
           {
             "cache_read": 0.4,
@@ -14340,7 +13854,7 @@
       "family": "gemini-pro",
       "limit": {
         "context": 1048576,
-        "output": 65536
+        "output": 943718
       },
       "modalities": {
         "input": [
@@ -14354,7 +13868,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Gemini Pro Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14366,8 +13879,8 @@
     "~moonshotai/kimi-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.45,
-        "input": 0.83,
+        "cache_read": 0.228,
+        "input": 0.238,
         "output": 13
       },
       "family": "kimi",
@@ -14385,7 +13898,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Kimi Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14435,7 +13947,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Astra Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14485,7 +13996,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Luna Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14516,7 +14026,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Mini Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14566,7 +14075,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Sol Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14616,13 +14124,40 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GPT Terra Latest",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-11",
       "structured_output": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "~unbiased/pareto-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.8,
+        "output": 3.2
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pareto Latest",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-13",
+      "structured_output": false,
+      "temperature": true,
       "tool_call": true
     },
     "~x-ai/grok-latest": {
@@ -14663,7 +14198,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "Grok Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14675,14 +14209,14 @@
     "~z-ai/glm-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0244,
-        "input": 0.0244,
-        "output": 0.5
+        "cache_read": 0.006,
+        "input": 0.048,
+        "output": 0.16
       },
       "family": "glm-flash",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 943718
       },
       "modalities": {
         "input": [
@@ -14694,7 +14228,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM Flash Latest",
       "open_weights": false,
       "reasoning": true,
@@ -14706,14 +14239,14 @@
     "~z-ai/glm-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.03,
-        "output": 12
+        "cache_read": 0.033,
+        "input": 0.053,
+        "output": 6
       },
       "family": "glm",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 943718
       },
       "modalities": {
         "input": [
@@ -14723,7 +14256,6 @@
           "text"
         ]
       },
-      "mode": "chat",
       "name": "GLM Latest",
       "open_weights": false,
       "reasoning": true,

@@ -26,6 +26,19 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`
   so touch devices still show the item.
 - `@opal/core` primitives (`Interactive`, `Disabled`) build components. App code does not use them.
+- Layout: `Section` from `@opal/layouts`, never a `<div>`/`<span>` with `flex`, `inline-flex`,
+  `grid`, `items-*`, `justify-*` or `gap-*` (oxlint `opal/no-layout-div`). `Content`, `ContentAction`,
+  `Card`, `InputHorizontal`/`InputVertical` and `Divider` cover the rest.
+- On `Section`, set spacing and size with props: `gap={n}`, `padding={n}`, `width`, `height`.
+  Section sets `gap` and `padding` as inline styles, so `p-*`, `px-*` and `gap-*` classes are silently
+  ignored (oxlint `opal/no-section-utility-classes`). Use margin classes for asymmetric spacing.
+
+oxlint enforces the import, icon and raw-element rules. Files that broke them when the rules
+landed are in the design-system baseline in `.oxlintrc.json`, where they only warn. Files with
+layout divs when `opal/no-layout-div` landed are in the layout baseline. Remove a file
+from the baseline once it is clean. Never add one. `opal/no-replaced-refresh-import` warns on each
+refresh-components import that Opal replaces. Migrate a file to Opal when you edit it. The
+`.agents/hooks/opal_migrate_on_edit.py` hook reports these problems to the agent after each edit.
 
 ## Rules with a reason
 
@@ -63,6 +76,10 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - `web/src/i18n/messages/en.json` is the source of truth. When you add or change a key, add your
   best translation to every other locale file in that directory. Missing or extra keys fail
   `types:check`. ICU shape must match across locales (`src/i18n/__tests__/catalog.test.ts`).
+- The `i18n-copy-changes` pre-commit hook requires each changed English message to have a changed translation in every locale.
+  It uses the pre-commit range base when supplied. Otherwise, it checks working edits against HEAD or clean checkouts against HEAD^.
+  Main push checks use the push event’s previous commit. The hook does not assess translation quality.
+  Run `python3 tools/i18n/check_copy_changes.py --base origin/main` from the repository root to check a branch.
 - Keys are stable identifiers: `<namespace>.<section>.<element>.<role>` in camelCase, for example
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.
@@ -89,6 +106,7 @@ the contract keeps Opal host-agnostic while the app supplies real translations.
 
 ## Tests
 
+- Craft: keep one test file per source file. Group related cases with section comments and scoped `describe` blocks.
 - Component tests (Jest + React Testing Library): `web/tests/README.md`.
 - E2E (Playwright): `web/tests/e2e/README.md` holds the hard rules (Page Object Model, locator
   priority).

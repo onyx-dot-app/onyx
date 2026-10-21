@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import AgentCard from "@/sections/agents/AgentCard";
 import { AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";

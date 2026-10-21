@@ -24,6 +24,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Fable 5",
       "open_weights": false,
       "reasoning": true,
@@ -54,6 +55,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Fable 5.1",
       "open_weights": false,
       "reasoning": true,
@@ -91,6 +93,50 @@
       "reasoning": true,
       "release_date": "2025-10-15",
       "temperature": true,
+      "tool_call": true
+    },
+    "claude-haiku-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "claude-opus-4.7": {
@@ -148,6 +194,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 4.8",
       "open_weights": false,
       "reasoning": true,
@@ -179,6 +226,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 5",
       "open_weights": false,
       "reasoning": true,
@@ -210,6 +258,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Opus 5.5",
       "open_weights": false,
       "reasoning": true,
@@ -241,6 +290,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -271,6 +321,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 5",
       "open_weights": false,
       "reasoning": true,
@@ -281,7 +332,7 @@
     "claude-sonnet-5.5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
         "input": 2,
         "output": 10
@@ -301,6 +352,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Claude Sonnet 5.5",
       "open_weights": false,
       "reasoning": true,
@@ -395,6 +447,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.7 Flash",
       "open_weights": false,
       "reasoning": true,
@@ -425,12 +478,46 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.8 Flash",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-02",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "gemini-4-argon": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 2,
+        "output": 10
+      },
+      "family": "gemini",
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "audio",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Gemini 4 Argon",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-13",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "gpt-5-mini": {
@@ -535,6 +622,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.4",
       "open_weights": false,
       "reasoning": true,
@@ -565,6 +653,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.4 mini",
       "open_weights": false,
       "reasoning": true,
@@ -595,6 +684,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.4 nano",
       "open_weights": false,
       "reasoning": true,
@@ -642,6 +732,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.5",
       "open_weights": false,
       "reasoning": true,
@@ -692,6 +783,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.6 Luna",
       "open_weights": false,
       "reasoning": true,
@@ -742,6 +834,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.6 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -792,6 +885,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-5.6 Terra",
       "open_weights": false,
       "reasoning": true,
@@ -842,6 +936,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-6 Astra",
       "open_weights": false,
       "reasoning": true,
@@ -892,6 +987,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-6 Luna",
       "open_weights": false,
       "reasoning": true,
@@ -942,6 +1038,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-6 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -992,6 +1089,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "GPT-6.1 Sol",
       "open_weights": false,
       "reasoning": true,
@@ -1038,6 +1136,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.5",
       "open_weights": false,
       "reasoning": true,
@@ -1084,6 +1183,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.6",
       "open_weights": false,
       "reasoning": true,
@@ -1131,6 +1231,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Grok 4.7",
       "open_weights": false,
       "reasoning": true,
@@ -1190,6 +1291,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3",
       "open_weights": true,
       "reasoning": true,
@@ -1250,6 +1352,7 @@
           "text"
         ]
       },
+      "mode": "responses",
       "name": "MAI-Code-1.1-Flash",
       "open_weights": false,
       "reasoning": true,

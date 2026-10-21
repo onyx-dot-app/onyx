@@ -4,7 +4,7 @@
 [`Card`](../card/README.md) and [`SelectCard`](../select-card/README.md).
 
 The animating body of an expandable card, built on [`Fold`](../../fold/README.md).
-A grid row moves between `0fr` and `1fr` with an opacity fade over 200ms, so the fold opens and closes on a pure
+A grid row moves between `0fr` and `1fr` and the content fades after it (see `Fold` for the timing), so the fold opens and closes on a pure
 CSS clock: no measured height, no state machine, no Radix, and the children
 are dropped once it closes.
 

@@ -26,7 +26,7 @@ def _make_mock_model(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model")
+@patch(f"{_FACTORY}.fetch_default_model")
 @patch(f"{_FACTORY}.model_supports_image_input", return_value=True)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.LLMProviderView")
@@ -50,7 +50,7 @@ def test_uses_the_default_vision_model(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model")
+@patch(f"{_FACTORY}.fetch_default_model")
 @patch(f"{_FACTORY}.model_supports_image_input", return_value=False)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.logger")
@@ -78,7 +78,7 @@ def test_returns_none_when_default_model_lacks_vision(
 
 
 @patch(f"{_FACTORY}.get_session_with_current_tenant")
-@patch(f"{_FACTORY}.fetch_default_vision_model", return_value=None)
+@patch(f"{_FACTORY}.fetch_default_model", return_value=None)
 @patch(f"{_FACTORY}.llm_from_provider")
 @patch(f"{_FACTORY}.logger")
 def test_returns_none_when_no_default_is_set(

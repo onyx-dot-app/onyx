@@ -30,14 +30,14 @@ def test_source_without_named_checks_plans_the_fallback_check(
     admin_user: DATestUser,
 ) -> None:
     # Under test: no credential, no form values.
-    response = _plan(admin_user, {"source": DocumentSource.GITHUB.value})
+    response = _plan(admin_user, {"source": DocumentSource.BITBUCKET.value})
 
     # Postcondition: the one fallback check, waiting for a complete config.
     response.raise_for_status()
     plan = response.json()
-    assert plan["source"] == DocumentSource.GITHUB.value
+    assert plan["source"] == DocumentSource.BITBUCKET.value
     assert [check["check_id"] for check in plan["checks"]] == [
-        "github_connector_settings"
+        "bitbucket_connector_settings"
     ]
     fallback = plan["checks"][0]
     assert fallback["required"] is True

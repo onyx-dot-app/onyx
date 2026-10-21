@@ -15,7 +15,13 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import organizers as organizers_module
 from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
@@ -72,6 +78,15 @@ NO_POLICY: Refusal = (
     "Forbidden",
     "No application access policy found for this app",
 )
+# How Graph refuses for want of a grant: the message names the missing role.
+MISSING_ROLE: Refusal = (
+    403,
+    "Forbidden",
+    "Missing role permissions on the request. API requires one of "
+    "'OnlineMeetingTranscript.Read.All'.",
+)
+# How Graph refuses when it names no cause: the whole message is "UnknownError".
+UNNAMED_403: Refusal = (403, "Forbidden", "UnknownError")
 PLAIN_403: Refusal = (403, "Forbidden", "Forbidden")
 # How Graph refuses a transcript's content when the organizer has no policy.
 NO_POLICY_ON_CONTENT: Refusal = (
@@ -213,7 +228,7 @@ def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
 
 
 @pytest.mark.parametrize(
-    ("workers", "steps"),
+    ("batch", "steps"),
     [
         # Each step sheds one batch from the checkpoint, so a resumed attempt
         # repeats one batch at most.
@@ -223,9 +238,9 @@ def test_a_transcript_becomes_a_document_with_its_meeting_and_readers() -> None:
     ],
 )
 def test_each_step_indexes_a_batch_of_organizers(
-    monkeypatch: pytest.MonkeyPatch, workers: int, steps: list[list[str]]
+    monkeypatch: pytest.MonkeyPatch, batch: int, steps: list[list[str]]
 ) -> None:
-    monkeypatch.setattr(organizers_module, "ORGANIZER_WORKERS", workers)
+    monkeypatch.setattr(organizers_module, "ORGANIZER_BATCH", batch)
     bobs_content = "users/user-2/onlineMeetings/meeting-2/transcripts/t2/content"
     bobs_transcript = {
         "id": "t2",
@@ -374,6 +389,22 @@ def test_a_content_refusal_for_want_of_a_policy_names_the_policy() -> None:
     assert "OnlineMeetingTranscript" not in items[0].failure_message
 
 
+def test_an_unnamed_refusal_is_blamed_on_microsoft() -> None:
+    # The grants would otherwise be blamed for a refusal that names no cause.
+    client: MagicMock = graph_client(
+        _routes(_transcript()),
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): UNNAMED_403},
+    )
+
+    items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert items[0].failed_document is not None
+    message: str = items[0].failure_message
+    assert "Microsoft's side" in message
+    assert "OnlineMeetingTranscript" not in message
+
+
 def test_the_tenant_setting_stops_the_walk() -> None:
     routes = _routes()
     routes.pop(_transcripts_url("user-1", WINDOW))
@@ -389,7 +420,8 @@ def test_the_tenant_setting_stops_the_walk() -> None:
     ("refusal", "named"),
     [
         (NO_POLICY, "application access policy"),
-        (PLAIN_403, "OnlineMeetingTranscript"),
+        (MISSING_ROLE, "OnlineMeetingTranscript"),
+        (UNNAMED_403, "Microsoft's side"),
         # A user who is gone: no grant to name, so the status and Graph's words.
         (404, "Graph answered 404. Graph said:"),
     ],
@@ -411,8 +443,8 @@ def test_a_refused_organizer_is_one_recorded_failure(
     assert items[0].failed_entity.entity_id == "user-1"
     assert named in items[0].failure_message
     # A refusal the connector cannot name still carries Graph's own words.
-    if refusal == PLAIN_403:
-        assert "Graph said: Forbidden, Forbidden" in items[0].failure_message
+    if refusal == UNNAMED_403:
+        assert "Graph said: Forbidden, UnknownError" in items[0].failure_message
 
 
 def test_documents_flow_before_a_later_listing_page_is_refused() -> None:
@@ -525,6 +557,19 @@ def test_a_refused_organizer_lists_nothing_and_the_slim_walk_goes_on() -> None:
     # The app lost user-1's transcripts, so none is listed and pruning removes
     # them. The other organizer is still listed.
     assert slim == [transcript_document_id("user-2", "t9")]
+
+
+def test_an_unnamed_listing_refusal_fails_the_slim_walk_instead_of_pruning() -> None:
+    routes: dict[str, Any] = {ALL_USERS_URL: {"value": [ADA]}}
+    refused: dict[str, Refusal] = {
+        _transcripts_url("user-1", LOOKBACK_WINDOW): UNNAMED_403
+    }
+    client: MagicMock = graph_client(routes, refused=refused)
+
+    # The app can still read these transcripts once Microsoft recovers, so the
+    # walk must not list nothing and let pruning remove them.
+    with pytest.raises(requests.HTTPError):
+        _slim_ids(connector(client, include_meeting_transcripts=True))
 
 
 def test_a_listing_refused_after_it_answered_fails_the_slim_walk() -> None:
@@ -689,6 +734,7 @@ def test_the_slim_walk_honors_a_stop_between_organizers(
 ) -> None:
     # One organizer per batch, so the order of the checks is not a thread race.
     monkeypatch.setattr(organizers_module, "ORGANIZER_WORKERS", 1)
+    monkeypatch.setattr(organizers_module, "ORGANIZER_BATCH", 1)
     routes = {
         ALL_USERS_URL: {"value": [ADA, BOB]},
         _transcripts_url("user-1", LOOKBACK_WINDOW): {"value": [_transcript()]},
@@ -891,6 +937,15 @@ def test_a_window_older_than_graph_serves_asks_for_nothing() -> None:
     assert client.execute_request_direct.call_count == 0
 
 
+def _probe_routes() -> dict[str, Any]:
+    """One organizer with one recent transcript: what the setup probe reads."""
+    return {
+        ALL_USERS_URL: {"value": [ADA]},
+        _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
+        MEETING_URL: _meeting(),
+    }
+
+
 class TestValidation:
     def _connector(
         self,
@@ -942,11 +997,7 @@ class TestValidation:
         assert "every enabled user" not in caplog.text
 
     def test_a_transcript_is_read_end_to_end(self) -> None:
-        routes = {
-            ALL_USERS_URL: {"value": [ADA]},
-            _transcripts_url("user-1", PROBE_WINDOW, 1): {"value": [_transcript()]},
-            MEETING_URL: _meeting(),
-        }
+        routes = _probe_routes()
 
         _validate_organizers(
             self._connector(
@@ -954,12 +1005,45 @@ class TestValidation:
             )
         )
 
+    def test_an_unnamed_refusal_does_not_block_setup(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        routes = _probe_routes()
+
+        with caplog.at_level(logging.WARNING):
+            _validate_organizers(
+                self._connector(
+                    routes,
+                    contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): UNNAMED_403},
+                )
+            )
+
+        assert "Microsoft's side" in caplog.text
+
+    def test_a_named_cause_still_fails_setup_with_an_unnamed_message(self) -> None:
+        routes = _probe_routes()
+        disabled_unnamed: Refusal = (
+            403,
+            "GraphAccessToTranscriptsDisabled",
+            "UnknownError",
+        )
+
+        with pytest.raises(ConnectorValidationError, match="turned off"):
+            _validate_organizers(
+                self._connector(
+                    routes,
+                    contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): disabled_unnamed},
+                )
+            )
+
     @pytest.mark.parametrize(
         ("refusal", "error", "named"),
         [
             (SETTING_OFF, ConnectorValidationError, "turned off"),
             (NO_POLICY, ConnectorValidationError, "access policy"),
-            (PLAIN_403, InsufficientPermissionsError, "OnlineMeetingTranscript"),
+            (MISSING_ROLE, InsufficientPermissionsError, "OnlineMeetingTranscript"),
+            (UNNAMED_403, UnexpectedValidationError, "Microsoft's side"),
+            (PLAIN_403, UnexpectedValidationError, "Microsoft's side"),
             (503, UnexpectedValidationError, "Could not read"),
         ],
     )
@@ -982,7 +1066,7 @@ class TestValidation:
             InsufficientPermissionsError, match="OnlineMeetings.Read.All"
         ):
             _validate_organizers(
-                self._connector(routes, refused={MEETING_URL: PLAIN_403})
+                self._connector(routes, refused={MEETING_URL: MISSING_ROLE})
             )
 
     def test_no_user_to_probe_keeps_the_pair_active(self) -> None:
@@ -1017,3 +1101,179 @@ class TestValidation:
             UnexpectedValidationError, match="Could not list organizers"
         ):
             _validate_organizers(self._connector({}, refused={ALL_USERS_URL: 503}))
+
+
+# ---------------------------------------------------------------------------
+# reindex: failed transcripts read again from the errors list
+# ---------------------------------------------------------------------------
+
+ORGANIZER_URL = f"users/user-1?{SELECT_USERS}"
+
+
+def _reindex_routes(*transcripts: dict[str, Any]) -> dict[str, Any]:
+    """The organizer's lookback listing and the organizer's own record."""
+    routes = _routes(*transcripts, window=LOOKBACK_WINDOW)
+    routes[ORGANIZER_URL] = ADA
+    return routes
+
+
+def _reindex(
+    teams_connector: TeamsConnector, *document_ids: str
+) -> list[Document | ConnectorFailure | HierarchyNode]:
+    errors: list[ConnectorFailure] = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=document_id),
+            failure_message="refused",
+        )
+        for document_id in document_ids
+    ]
+    return list(teams_connector.reindex(errors=errors))
+
+
+def test_reindex_reads_a_failed_transcript_again() -> None:
+    client = graph_client(
+        _reindex_routes(_transcript()),
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+    )
+
+    assert len(items) == 1 and isinstance(items[0], Document)
+    assert items[0].id == transcript_document_id("user-1", "t1")
+    assert "hello" in (items[0].sections[0].text or "")
+
+
+def test_reindex_stops_listing_once_every_wanted_transcript_is_found() -> None:
+    first_page = _transcripts_url("user-1", LOOKBACK_WINDOW)
+    second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
+    routes = _reindex_routes()
+    routes[first_page] = {
+        "value": [_transcript()],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
+    }
+    client = graph_client(
+        routes,
+        refused={second_page: 503},
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+    )
+
+    # The second page is never requested, so its outage does not matter.
+    assert len(items) == 1 and isinstance(items[0], Document)
+
+
+def test_reindex_reads_what_it_found_before_a_later_page_is_refused() -> None:
+    first_page = _transcripts_url("user-1", LOOKBACK_WINDOW)
+    second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
+    routes = _reindex_routes()
+    routes[first_page] = {
+        "value": [_transcript()],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
+    }
+    client = graph_client(
+        routes,
+        refused={second_page: UNNAMED_403},
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+        transcript_document_id("user-1", "t2"),
+    )
+
+    by_id: dict[str, Document | ConnectorFailure | HierarchyNode] = {}
+    for item in items:
+        if isinstance(item, Document):
+            by_id[item.id] = item
+        elif isinstance(item, ConnectorFailure) and item.failed_document:
+            by_id[item.failed_document.document_id] = item
+    found = by_id[transcript_document_id("user-1", "t1")]
+    missing = by_id[transcript_document_id("user-1", "t2")]
+    assert isinstance(found, Document)
+    assert isinstance(missing, ConnectorFailure)
+    assert "Could not list the meeting transcripts" in missing.failure_message
+
+
+def test_reindex_reports_a_transcript_graph_no_longer_lists() -> None:
+    items = _reindex(
+        connector(
+            graph_client(_reindex_routes(_transcript())),
+            include_meeting_transcripts=True,
+        ),
+        transcript_document_id("user-1", "t9"),
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert items[0].failed_document is not None
+    assert items[0].failed_document.document_id == transcript_document_id(
+        "user-1", "t9"
+    )
+    assert "no longer lists" in items[0].failure_message
+
+
+def test_reindex_reports_a_refused_listing_for_every_transcript_of_the_organizer() -> (
+    None
+):
+    routes = {ORGANIZER_URL: ADA}
+    refused = {_transcripts_url("user-1", LOOKBACK_WINDOW): UNNAMED_403}
+
+    items = _reindex(
+        connector(
+            graph_client(routes, refused=refused), include_meeting_transcripts=True
+        ),
+        transcript_document_id("user-1", "t1"),
+        transcript_document_id("user-1", "t2"),
+    )
+
+    assert len(items) == 2
+    for item in items:
+        assert isinstance(item, ConnectorFailure)
+        assert "Microsoft's side" in item.failure_message
+
+
+def test_reindex_reads_only_transcripts() -> None:
+    items = _reindex(
+        connector(graph_client({}), include_meeting_transcripts=True),
+        "teams-file:abc",
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert "Only meeting transcripts" in items[0].failure_message
+
+
+def test_reindex_with_transcripts_off_says_so() -> None:
+    items = _reindex(
+        connector(graph_client({})), transcript_document_id("user-1", "t1")
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert "is off" in items[0].failure_message
+
+
+@pytest.mark.parametrize(
+    ("refusal", "offers_retry"),
+    [
+        # Microsoft's refusal clears on its own, a missing grant does not.
+        (UNNAMED_403, True),
+        (MISSING_ROLE, False),
+    ],
+)
+def test_only_an_unnamed_content_refusal_points_at_the_errors_list(
+    refusal: Refusal, offers_retry: bool
+) -> None:
+    client = graph_client(
+        _routes(_transcript()), contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): refusal}
+    )
+
+    items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
+
+    assert isinstance(items[0], ConnectorFailure)
+    assert ("errors list" in items[0].failure_message) is offers_retry

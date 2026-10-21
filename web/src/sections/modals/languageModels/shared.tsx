@@ -3,13 +3,13 @@
 import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Formik, Form, useFormikContext } from "formik";
+import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
@@ -47,6 +47,7 @@ import {
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -115,6 +116,11 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const { initialValues } = useFormikContext<BaseLLMFormValues>();
+  // On edit, the initial value is the backend's masked stored key.
+  const storedValue: unknown = getIn(initialValues, name);
+  const existingValue =
+    typeof storedValue === "string" && storedValue ? storedValue : undefined;
   return (
     <InputPadder>
       <InputVertical
@@ -131,7 +137,7 @@ export function APIKeyField({
         }
         suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
-        <PasswordInputTypeInField name={name} />
+        <PasswordInputTypeInField name={name} existingValue={existingValue} />
       </InputVertical>
     </InputPadder>
   );
@@ -174,10 +180,11 @@ export interface APIBaseFieldProps {
 export function APIBaseField({
   optional = false,
   subDescription,
-  placeholder = "https://",
+  placeholder,
   rightChildren,
 }: APIBaseFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   return (
     <InputPadder>
       <InputVertical
@@ -188,7 +195,7 @@ export function APIBaseField({
       >
         <InputTypeInField
           name="api_base"
-          placeholder={placeholder}
+          placeholder={placeholder ?? tPlaceholders("url")}
           rightChildren={rightChildren}
         />
       </InputVertical>
@@ -1097,11 +1104,10 @@ function ModalWrapperInner({
         ? t("setup.submitButton.pristineTooltip")
         : undefined;
 
-  const {
-    icon: providerIcon,
-    companyName: providerDisplayName,
-    productName: providerProductName,
-  } = getProvider(providerName);
+  const providerEntry = getProvider(providerName);
+  const providerIcon = providerEntry.icon;
+  const { companyName: providerDisplayName, productName: providerProductName } =
+    useProviderNames()(providerEntry);
 
   const title = llmProvider
     ? markdown(

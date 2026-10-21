@@ -1,8 +1,6 @@
 import copy
-import re
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from enum import Enum
 from typing import Any
 from urllib.parse import quote
 
@@ -21,6 +19,11 @@ from onyx.connectors.confluence.access import (
     get_all_space_permissions,
     get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
+)
+from onyx.connectors.confluence.config import (
+    ConfluenceIndexingMode,
+    extract_page_id_from_url,
+    get_indexing_mode,
 )
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
@@ -129,15 +132,6 @@ PRUNING_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 _SLIM_ATTACHMENT_MAX_ATTEMPTS = 3
 
-# Confluence document_id is the page URL. Reindex inputs come from
-# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
-#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
-#   - /pages/viewpage.action?pageId=<id> (legacy Server)
-_PAGE_ID_FROM_URL_PATTERNS = [
-    re.compile(r"/pages/(\d+)(?:/|$)"),
-    re.compile(r"[?&]pageId=(\d+)"),
-]
-
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
@@ -153,28 +147,6 @@ def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
 def _http_status(e: HTTPError) -> int | None:
     # NOTE: requests.Response is falsy for error statuses, so compare to None.
     return e.response.status_code if e.response is not None else None
-
-
-class ConfluenceIndexingMode(str, Enum):
-    CQL = "cql"
-    PAGE = "page"
-    SPACE = "space"
-    EVERYTHING = "everything"
-
-
-def get_indexing_mode(
-    *, space: str, page_id: str, cql_query: str | None
-) -> ConfluenceIndexingMode:
-    """The scope the connector indexes. The config can hold values for several
-    modes (the form sends every tab's fields); the first set one wins, in this
-    order: CQL query, page id, space, everything. Blank values are not set."""
-    if cql_query and cql_query.strip():
-        return ConfluenceIndexingMode.CQL
-    if page_id.strip():
-        return ConfluenceIndexingMode.PAGE
-    if space.strip():
-        return ConfluenceIndexingMode.SPACE
-    return ConfluenceIndexingMode.EVERYTHING
 
 
 def build_base_page_cql(
@@ -250,14 +222,6 @@ class ConfluenceCheckpoint(ConnectorCheckpoint):
     next_page_url: str | None
 
 
-def _extract_page_id_from_url(doc_id: str) -> str | None:
-    for pat in _PAGE_ID_FROM_URL_PATTERNS:
-        match = pat.search(doc_id)
-        if match:
-            return match.group(1)
-    return None
-
-
 class ConfluenceConnector(
     CheckpointedConnector[ConfluenceCheckpoint],
     SlimConnector,
@@ -265,6 +229,8 @@ class ConfluenceConnector(
     CredentialsConnector,
     Resolver,
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         wiki_base: str,
@@ -997,7 +963,7 @@ class ConfluenceConnector(
             if failure.failed_document is None:
                 continue
             doc_id = failure.failed_document.document_id
-            page_id = _extract_page_id_from_url(doc_id)
+            page_id = extract_page_id_from_url(doc_id)
             if page_id is None:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(

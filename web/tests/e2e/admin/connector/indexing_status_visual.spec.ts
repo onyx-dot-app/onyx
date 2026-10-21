@@ -23,7 +23,6 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  * fresh context, so no explicit login is needed.
  */
 const CONNECTOR_NAME = "Visual Regression File Connector";
-const FILE_SOURCE_GROUP = "File";
 
 test.describe("Connector status page — visual @exclusive", () => {
   let ccPairId: number | null = null;
@@ -52,7 +51,7 @@ test.describe("Connector status page — visual @exclusive", () => {
 
       const statusPage = new IndexingStatusPage(page);
       await statusPage.goto();
-      await statusPage.waitForSourceGroup(FILE_SOURCE_GROUP);
+      await statusPage.waitForConnector(CONNECTOR_NAME);
       await statusPage.expectScreenshot(`admin-${theme}-indexing--status`);
     });
   }

@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -11,6 +12,10 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from onyx.access.models import ExternalAccess
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    CONTENT_SKIPPED_PLACEHOLDER,
+    tabular_file_to_sections,
+)
 from onyx.connectors.models import (
     Document,
     DocumentSource,
@@ -18,12 +23,18 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
+from onyx.document_index.chunk_content_enrichment import (
+    generate_enriched_content_for_chunk_embedding,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.document_ingestion import (
     DocumentIngestionResponse,
     DocumentIngestionSection,
+)
+from onyx.indexing.adapters.document_indexing_adapter import (
+    DocumentIndexingBatchAdapter,
 )
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -1165,6 +1176,78 @@ def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
     )
 
 
+def test_index_batch_skips_tabular_sections_that_reach_it() -> None:
+    """A tabular section that reaches docprocessing (for example, in a batch
+    staged before the option was set) becomes one placeholder before the change
+    gate. Other sections and documents stay."""
+    workbook = Document(
+        id="workbook",
+        title="Budget.xlsx",
+        semantic_identifier="Budget.xlsx",
+        sections=[
+            TextSection(text="Notes", link="notes-link"),
+            TabularSection(csv_file_id="sheet-1", link="sheet-1-link"),
+            TabularSection(csv_file_id="sheet-2", link="sheet-2-link"),
+        ],
+        source=DocumentSource.GOOGLE_DRIVE,
+        metadata={},
+    )
+    text_doc = _make_doc("text-doc")
+    adapter = MagicMock()
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = None
+
+    with patch(
+        f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+        side_effect=lambda documents: documents,
+    ):
+        index_doc_batch(
+            document_batch=[workbook, text_doc],
+            chunker=MagicMock(),
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            skip_spreadsheet_content=True,
+        )
+
+    prepared_workbook, prepared_text_doc = adapter.prepare.call_args.args[0]
+    assert prepared_workbook.sections == [
+        TextSection(text="Notes", link="notes-link"),
+        TextSection(text=CONTENT_SKIPPED_PLACEHOLDER, link="sheet-1-link"),
+    ]
+    assert prepared_text_doc == text_doc
+
+
+def test_skipped_spreadsheet_embeds_as_its_title(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
+    workbook = Document(
+        id="workbook",
+        title="Budget.xlsx",
+        semantic_identifier="Budget.xlsx",
+        sections=tabular_file_to_sections(
+            BytesIO(b"unused"),
+            file_name="Budget.xlsx",
+            stage=lambda _content, _content_type: "unused",
+            skip_content=True,
+        ),
+        source=DocumentSource.GOOGLE_DRIVE,
+        metadata={},
+    )
+    chunker = Chunker(tokenizer=embedder.embedding_model.tokenizer)
+
+    chunks = chunker.chunk(process_image_sections([workbook]))
+
+    assert len(chunks) == 1
+    assert chunks[0].content == CONTENT_SKIPPED_PLACEHOLDER
+    assert chunks[0].title_prefix.startswith("Budget.xlsx")
+    assert generate_enriched_content_for_chunk_embedding(chunks[0]).startswith(
+        chunks[0].title_prefix + CONTENT_SKIPPED_PLACEHOLDER
+    )
+
+
 class TestProcessImageSections:
     """Validate that parallel image summarization places results in the
     correct section positions — especially under concurrent execution."""
@@ -1662,3 +1745,107 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     assert len(future_docs) == 1
     assert future_docs[0].id == "doc1"
     assert "doc1" in future_hashes
+
+
+def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
+    """A failed write left the old chunks in place, so the new count would
+    describe an index state that does not exist - and would hide the document
+    from any sweep that looks for an outdated chunk count."""
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=None, doc_created_at=None),
+        MagicMock(id="failed", doc_updated_at=None, doc_created_at=None),
+    ]
+    enrichment = MagicMock(doc_id_to_new_chunk_cnt={"written": 3, "failed": 3})
+
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit") as update_chunk_count,
+        patch(f"{module}.update_docs_updated_at__no_commit"),
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=enrichment,
+            db_session=MagicMock(),
+            index_to_secondary=False,
+            failed_document_ids={"failed"},
+        )
+
+    assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
+def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:
+    """Docfetching resolves every connector document's node id, falling back to
+    the SOURCE node when the cache misses, and that fallback is indistinguishable
+    from a document that really sits at the root. Resolving the raw id refreshes
+    the cache and recovers the real ancestry, so it wins while it is there."""
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+    crawled = MagicMock(
+        id="crawled",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id="folder-abc",
+        # What docfetching fell back to when the raw id missed the cache.
+        parent_hierarchy_node_id=1,
+    )
+    rebuilt = MagicMock(
+        id="rebuilt",
+        source=DocumentSource.GOOGLE_DRIVE,
+        parent_hierarchy_raw_node_id=None,
+        parent_hierarchy_node_id=42,
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.get_redis_client"),
+        patch(f"{module}.get_ancestors_from_raw_id", return_value=[7, 1]) as from_raw,
+        patch(f"{module}.get_ancestors_from_node_id", return_value=[42]) as from_node,
+    ):
+        ancestors = adapter._get_ancestor_ids_for_documents(
+            [crawled, rebuilt], "t", MagicMock()
+        )
+
+    assert ancestors == {"crawled": [7, 1], "rebuilt": [42]}
+    assert from_raw.call_args.kwargs["parent_hierarchy_raw_node_id"] == "folder-abc"
+    assert from_node.call_args.kwargs["node_id"] == 42
+
+
+def test_content_hash_is_blind_to_tabular_content() -> None:
+    """A tabular document's hash never moves when its sheets change.
+
+    content_hash() walks TextSections and ImageSections only, so two workbooks
+    with different staged CSVs hash the same. This is why the tabular re-chunk
+    migration has to pass force_update: without it the content-hash gate skips
+    every spreadsheet and the migration is a silent no-op.
+    """
+
+    def _tabular_doc(csv_file_id: str) -> Document:
+        return Document(
+            id="book",
+            title="Book",
+            semantic_identifier="book.xlsx",
+            sections=[TabularSection(csv_file_id=csv_file_id, link="l")],
+            source=DocumentSource.FILE,
+            metadata={},
+        )
+
+    assert (
+        _tabular_doc("csv-v1").content_hash() == _tabular_doc("csv-v2").content_hash()
+    )

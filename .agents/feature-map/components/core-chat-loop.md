@@ -141,16 +141,24 @@ It never talks to an LLM.
 Returns a frozen `ChatTurnSetup` (`chat_state.py`). It is frozen and detached from
 the DB session on purpose: worker threads must not hold ORM objects.
 
-It resolves, in this order:
+Preparation resolves:
 - the session, the persona, and the LLM(s) via `get_llm_for_persona`
-- the custom agent prompt via `get_custom_agent_prompt(persona, chat_session)`. It may
-  come from the agent **or** the project. **A custom persona fully supersedes the
-  project.**
+- combined project and agent instructions via `get_custom_agent_prompt(persona, chat_session)`;
+  agent instructions take precedence on conflicts ([[projects]] §4.5)
 - user memories via `get_memories`
-- context files via `resolve_context_user_files` and `extract_context_files`
+- the combined project and agent file selection via `resolve_context_user_files`,
+  reused by prompt loading and tools; `extract_context_files` applies the shared budget
 - reserved token count via `calculate_reserved_tokens` (`chat/prompt_utils.py`)
 - the user message row via `create_new_chat_message`
 - assistant message IDs via `reserve_message_id` or `reserve_multi_model_message_ids`
+
+Setup clears a forced tool ID when `is_tool_available_for_persona` excludes its
+attached tool. Construction uses the same predicate, so both paths apply the same
+legacy-flag rule. Disabled MCP and built-in tools remain excluded. Legacy disabled
+OpenAPI tools remain excluded from default Chat, while configured custom agents
+can use and force them, subject to access and authentication. No migration changes
+these legacy flags; explicit default Chat selection normalizes them.
+See [[mcp-and-custom-tools]] §4.5 and [[agents-personas]] §4.5.
 
 ### 4.3 Execution: `_run_models`
 
@@ -161,6 +169,13 @@ the copy is a real bug class.
 Each worker gets:
 - its own `Emitter(model_idx=i, merged_queue, drain_done)`
 - its own `ChatStateContainer`
+
+Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
+Search keeps the answer client for rewrites and filters, resolving the separate
+client only for section selection and relevance classification after retrieval.
+The factory captures the session's pinned incognito policy and request headers.
+An unset SEARCH_SELECTION returns that same answer client and never falls back
+to the independent CHAT_NAMING designation.
 
 All workers write `(model_idx, packet)` tuples to **one shared `merged_queue`**.
 A single writer thread, `_drain_to_completion`, drains it and publishes packets to the
@@ -185,8 +200,8 @@ The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 
 - The custom agent prompt is a **user message**, not part of the system prompt, and
   it **moves** to sit just above the newest user message each turn. If
-  `persona.replace_base_system_prompt` is set, it replaces the system prompt instead
-  and stops moving.
+  `persona.replace_base_system_prompt` is set, agent instructions form the system
+  prompt; project instructions remain a separate moving user message.
 - The reminder is always **last**. Models attend hardest to the final tokens. The
   citation reminder lives here, and it stays until the turn ends.
 

@@ -19,7 +19,7 @@ func pullFixture(t *testing.T) (clone string) {
 	gittest.Git(t, remote, "add", "-A")
 	gittest.Git(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "one skill")
 
-	clone = filepath.Join(t.TempDir(), "onyx-llm-context")
+	clone = filepath.Join(t.TempDir(), "onyx-infra")
 	gittest.Git(t, t.TempDir(), "clone", "-q", remote, clone)
 
 	deployWriteFile(t, filepath.Join(remote, "skills", "fresh", "SKILL.md"), "fresh")
@@ -29,7 +29,7 @@ func pullFixture(t *testing.T) (clone string) {
 }
 
 func TestInstallSkill_pullsTheSourceByDefault(t *testing.T) {
-	home, _ := skillEnv(t)
+	_, repoRoot := skillEnv(t)
 	clone := pullFixture(t)
 
 	out, err := skillRun(t, "--source", clone)
@@ -41,13 +41,13 @@ func TestInstallSkill_pullsTheSourceByDefault(t *testing.T) {
 		t.Fatalf("expected a pull line, got %q", out)
 	}
 	// The skill that only existed on the remote was installed.
-	if _, err := os.Readlink(filepath.Join(home, ".claude", "skills", "fresh")); err != nil {
+	if _, err := os.Readlink(filepath.Join(repoRoot, projectSkillsDir, "fresh")); err != nil {
 		t.Fatalf("expected the pulled skill to be installed: %v", err)
 	}
 }
 
 func TestInstallSkill_noPullInstallsTheCheckoutAsItIs(t *testing.T) {
-	home, _ := skillEnv(t)
+	_, repoRoot := skillEnv(t)
 	clone := pullFixture(t)
 
 	out, err := skillRun(t, "--source", clone, "--no-pull")
@@ -58,10 +58,10 @@ func TestInstallSkill_noPullInstallsTheCheckoutAsItIs(t *testing.T) {
 	if strings.Contains(out, "Pulled  ") {
 		t.Fatalf("expected no pull, got %q", out)
 	}
-	if _, err := os.Lstat(filepath.Join(home, ".claude", "skills", "fresh")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "fresh")); !os.IsNotExist(err) {
 		t.Fatalf("the remote-only skill must not be installed: %v", err)
 	}
-	if _, err := os.Readlink(filepath.Join(home, ".claude", "skills", "review")); err != nil {
+	if _, err := os.Readlink(filepath.Join(repoRoot, projectSkillsDir, "review")); err != nil {
 		t.Fatalf("the local skill should still be installed: %v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestInstallSkill_failedPullWarnsAndInstallsTheLocalState(t *testing.T) {
 
 func TestInstallSkill_plainDirectorySourceInstallsWithoutUpdateNoise(t *testing.T) {
 	skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-llm-context")
+	source := filepath.Join(t.TempDir(), "onyx-infra")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source)
@@ -124,7 +124,7 @@ func TestInstallSkill_pullRefusesToOverwriteUncommittedEdits(t *testing.T) {
 }
 
 func TestInstallSkill_pullCarriesNonConflictingLocalEditsForward(t *testing.T) {
-	home, _ := skillEnv(t)
+	_, repoRoot := skillEnv(t)
 	clone := pullFixture(t)
 	// A dirty file the remote never touched: the fast-forward proceeds and
 	// the local edit survives it.
@@ -142,7 +142,7 @@ func TestInstallSkill_pullCarriesNonConflictingLocalEditsForward(t *testing.T) {
 	if got := skillReadFile(t, scratch); got != "my scratch notes" {
 		t.Fatalf("non-conflicting local edits must survive: %q", got)
 	}
-	if _, err := os.Readlink(filepath.Join(home, ".claude", "skills", "fresh")); err != nil {
+	if _, err := os.Readlink(filepath.Join(repoRoot, projectSkillsDir, "fresh")); err != nil {
 		t.Fatalf("expected the pulled skill to be installed: %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
@@ -23,7 +24,6 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-import { getSourceMetadata } from "@/lib/sources";
 import {
   Card,
   InputTextArea,
@@ -35,12 +35,7 @@ import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_ENDONYMS,
-  SUPPORTED_LOCALES,
-  type Locale,
-} from "@/i18n/config";
+import { LOCALE_ENDONYMS, LOCALE_OPTIONS, type Locale } from "@/i18n/config";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -79,8 +74,8 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import {
   ALL_REASONING_STOPS,
@@ -89,11 +84,11 @@ import {
   UNSET_REASONING_STOP,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
+import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers/utils";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import {
   filterModelConfigurations,
   findDefaultModelDisplayName,
@@ -137,6 +132,9 @@ interface CreatedTokenState {
   token: string;
   name: string;
 }
+
+// Select value for "no stored language". Never a locale code.
+const WORKSPACE_DEFAULT_LANGUAGE_VALUE = "workspace-default";
 
 interface ScopeGroup {
   label: string;
@@ -552,7 +550,10 @@ function GeneralSettings() {
     updateUserLanguage,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
+  const workspaceLanguage: Locale = useSettings().default_language;
+  // No stored language = follow the workspace default.
+  const currentLanguage: string =
+    user?.preferences?.language ?? WORKSPACE_DEFAULT_LANGUAGE_VALUE;
 
   const tBg = useTranslations("common.chatBackgrounds");
   const bgLabels: Record<string, string> = {
@@ -854,18 +855,27 @@ function GeneralSettings() {
                 <InputSingleSelect
                   value={currentLanguage}
                   onValueChange={(value) => {
-                    // SAFETY: the options below only carry SUPPORTED_LOCALES
-                    // values, so the select can't emit anything else.
-                    updateUserLanguage(value as Locale).catch(() => {
+                    // SAFETY: the options are LOCALE_OPTIONS plus the
+                    // workspace-default sentinel, so nothing else is emitted.
+                    const language: Locale | null =
+                      value === WORKSPACE_DEFAULT_LANGUAGE_VALUE
+                        ? null
+                        : (value as Locale);
+                    updateUserLanguage(language).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                  defaultOption={DEFAULT_LOCALE}
+                  defaultOption={WORKSPACE_DEFAULT_LANGUAGE_VALUE}
                   placeholder={tInputSelect("placeholder.fallback")}
-                  options={SUPPORTED_LOCALES.map((locale) => ({
-                    value: locale,
-                    title: LOCALE_ENDONYMS[locale],
-                  }))}
+                  options={[
+                    {
+                      value: WORKSPACE_DEFAULT_LANGUAGE_VALUE,
+                      title: t("language.workspaceDefault", {
+                        language: LOCALE_ENDONYMS[workspaceLanguage],
+                      }),
+                    },
+                    ...LOCALE_OPTIONS,
+                  ]}
                 />
               </InputHorizontal>
             </Section>

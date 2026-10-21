@@ -9,6 +9,7 @@ from onyx.configs.app_configs import (
     CONTINUE_ON_CONNECTOR_FAILURE,
     DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
+    SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -72,6 +73,8 @@ class DrupalWikiConnector(
     CheckpointedConnector[DrupalWikiCheckpoint],
     SlimConnector,
 ):
+    slim_listing_honors_indexing_start = True
+
     # Deprecated parameters that may exist in old connector configurations
     _DEPRECATED_PARAMS = {"drupal_wiki_scope", "include_all_spaces"}
 
@@ -305,6 +308,7 @@ class DrupalWikiConnector(
                             file_name=file_name,
                             stage=self.raw_file_callback,
                             link=download_url,
+                            skip_content=SKIP_SPREADSHEET_CONTENT,
                         )
                     )
                 except Exception:

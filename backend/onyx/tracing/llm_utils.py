@@ -112,6 +112,15 @@ def record_llm_request_params(params: GenerationRequestParams) -> None:
     span.span_data.request_params = params.model_dump(mode="json")
 
 
+def record_llm_routed_model(model: str) -> None:
+    """Record the model a router served on the active generation span so usage
+    is priced by it instead of the router's unpriced name."""
+    span = get_current_span()
+    if span is None or not isinstance(span.span_data, GenerationSpanData):
+        return
+    span.span_data.routed_model = model
+
+
 def record_llm_response(
     span: Span[GenerationSpanData],
     response: ModelResponse,

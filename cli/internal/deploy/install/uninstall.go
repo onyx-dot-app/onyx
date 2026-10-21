@@ -20,7 +20,11 @@ func RunUninstall(ctx context.Context, deps Deps, opts Options) error {
 }
 
 func (in *installer) runUninstall(ctx context.Context) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	if len(in.root.Ambiguous) > 0 {
 		return exitcodes.Newf(exitcodes.BadRequest,
 			"multiple Onyx installs found (%s and %s) — pass --dir to pick one",

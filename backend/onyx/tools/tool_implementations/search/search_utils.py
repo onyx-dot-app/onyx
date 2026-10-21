@@ -356,6 +356,7 @@ def expand_section_with_context(
     llm: LLM,
     document_index: DocumentIndex,
     expand_override: bool = False,
+    enforce_llm_input_budget: bool = False,
 ) -> InferenceSection | None:
     """Use LLM to classify section relevance and return expanded section with appropriate context.
 
@@ -411,6 +412,7 @@ def expand_section_with_context(
             llm=llm,
             section_above_text=section_above_text,
             section_below_text=section_below_text,
+            enforce_llm_input_budget=enforce_llm_input_budget,
         )
 
     # Now build the expanded section based on classification

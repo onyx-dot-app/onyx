@@ -235,6 +235,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
       maxRows={maxRows}
       focusOnMount={focusOnMount}
       rootRef={setAnchorRef}
+      open={isOpen}
       inputRef={inputRef}
       onInputKeyDown={onKeyDown}
       // A click opens either trigger; a second click closes a button

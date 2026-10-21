@@ -13,6 +13,7 @@ from fnmatch import fnmatchcase
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.zoom.client import MAX_LISTING_PAGES, ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector
@@ -28,7 +29,11 @@ def zoom_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    connector = ZoomConnector(**cc_pair.connector.connector_specific_config)
+    connector = ZoomConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(credential_json(cc_pair))
     if connector.client is None:
         raise ConnectorMissingCredentialError("Zoom")

@@ -251,8 +251,21 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- end }}
 
 {{/*
-"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
+Validate the firewall switch without treating false as an absent value.
 */}}
+{{- define "onyx.sandboxNetAdminLockdown" -}}
+{{- $sandboxPod := .Values.sandboxPod | default dict -}}
+{{- if hasKey $sandboxPod "netAdminLockdown" -}}
+{{- if not (kindIs "bool" $sandboxPod.netAdminLockdown) -}}
+{{- fail "sandboxPod.netAdminLockdown must be a boolean" -}}
+{{- end -}}
+{{- $sandboxPod.netAdminLockdown -}}
+{{- else -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/* "true" when ENABLE_CRAFT is set in configMap, empty otherwise. */}}
 {{- define "onyx.craftEnabled" -}}
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
@@ -290,8 +303,8 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 - { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
 - { name: https_proxy, value: "{{ $proxyUrl }}" }
 - { name: http_proxy, value: "{{ $proxyUrl }}" }
-- { name: NO_PROXY, value: "127.0.0.1,localhost" }
-- { name: no_proxy, value: "127.0.0.1,localhost" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost,::1" }
+- { name: no_proxy, value: "127.0.0.1,localhost,::1" }
 - { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
 - { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }

@@ -26,9 +26,11 @@ from onyx.cache.factory import get_cache_backend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_ABORT_TIMEOUT,
     OPENCODE_SERVE_CONNECT_TIMEOUT,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVE_SESSION_INIT_TIMEOUT,
     OPENCODE_SERVER_USERNAME,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -47,6 +49,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentThoughtChunk,
     Error,
     PromptResponse,
+    TextPartMetadata,
     ToolCallProgress,
     ToolCallStart,
 )
@@ -88,13 +91,14 @@ SandboxEvent = (
 class ClientTimeouts:
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
-    Defaults pull from ``configs.py`` so deployment can tune via env without
-    touching the client.
+    Defaults come from ``configs.py``. Session initialization has a separate
+    budget for cold directory startup.
     """
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
     event_read_timeout: float = OPENCODE_SERVE_EVENT_READ_TIMEOUT
+    session_init_timeout: float = OPENCODE_SERVE_SESSION_INIT_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -107,11 +111,12 @@ class ClientTimeouts:
 class _TurnState:
     """Mutable per-turn state used by the translator.
 
-    Lives only for the duration of one ``send_message`` call. Not exposed
-    outside this module.
+    Each prompt driver or live subscriber owns one instance.
     """
 
     session_id: str
+    # Live readers replace identified parts; durable writers consume deltas.
+    emit_part_snapshots: bool = False
     # ToolCallStart is emitted only on the FIRST sighting of a callID.
     seen_tool_calls: set[str] = field(default_factory=set)
     # PromptResponse is yielded at most once per turn; subsequent backstop
@@ -416,6 +421,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_thought_chunk",
                 "content": {"type": "text", "text": delta},
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     elif part_type == "text":
@@ -424,6 +430,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_message_chunk",
                 "content": {"type": "text", "text": delta},
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     # Other part types (step-start, step-finish, tool, ...) don't carry
@@ -461,7 +468,9 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         return state
     child_state = state.child_states.get(session_id)
     if child_state is None:
-        child_state = _TurnState(session_id=session_id)
+        child_state = _TurnState(
+            session_id=session_id, emit_part_snapshots=state.emit_part_snapshots
+        )
         state.child_states[session_id] = child_state
     return child_state
 
@@ -808,14 +817,18 @@ def _reconcile_part_text(
     if not isinstance(expected, str):
         return
     local = state.local_text.get(part_id, "")
-    if len(expected) > len(local):
+    if len(expected) >= len(local):
         tail = expected[len(local) :]
         state.local_text[part_id] = expected
-        if tail:
+        if tail or (state.emit_part_snapshots and expected):
+            metadata = TextPartMetadata(partId=part_id)
+            if state.emit_part_snapshots:
+                metadata["snapshotText"] = expected
             yield emit_class.model_validate(
                 {
                     "sessionUpdate": session_update,
                     "content": {"type": "text", "text": tail},
+                    "_meta": metadata,
                 }
             )
     elif len(expected) < len(local):
@@ -1159,6 +1172,12 @@ class OpencodeServeClient:
         response") are retried with short backoff before bubbling up.
         """
         directory_params = {"directory": directory}
+        # Both lookup and creation can initialize a cold directory-scoped Instance.
+        initialization_timeout = httpx.Timeout(
+            self._timeouts.session_init_timeout,
+            connect=self._timeouts.connect_timeout,
+            pool=self._timeouts.connect_timeout,
+        )
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
@@ -1166,6 +1185,7 @@ class OpencodeServeClient:
                 "GET",
                 f"/session/{opencode_session_id}",
                 params=directory_params,
+                timeout=initialization_timeout,
                 idempotent=True,
             )
             if r.status_code == 200:
@@ -1201,6 +1221,7 @@ class OpencodeServeClient:
             "POST",
             "/session",
             params=directory_params,
+            timeout=initialization_timeout,
             json=body,
             idempotent=False,
         )
@@ -1284,6 +1305,7 @@ class OpencodeServeClient:
                 f"/session/{opencode_session_id}/abort",
                 params={"directory": directory},
                 json={},
+                timeout=OPENCODE_SERVE_ABORT_TIMEOUT,
             )
         except httpx.HTTPError as e:
             logger.warning(

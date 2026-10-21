@@ -96,7 +96,7 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
   unfolded tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip tooltip={label} side="right" suppressed={!effectiveFolded}>
+    <Tooltip tooltip={label} side="end" suppressed={!effectiveFolded}>
       {children}
     </Tooltip>
   );
@@ -196,7 +196,7 @@ function SidebarTab({
   const trigger =
     overlay &&
     (tooltip ? (
-      <Tooltip tooltip={tooltip} side="right">
+      <Tooltip tooltip={tooltip} side="end">
         {overlay}
       </Tooltip>
     ) : label !== undefined ? (

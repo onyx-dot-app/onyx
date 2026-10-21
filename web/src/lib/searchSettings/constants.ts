@@ -1,6 +1,7 @@
 import { SvgHardDrive } from "@opal/icons";
 import {
   SvgAzure,
+  SvgBifrost,
   SvgCohere,
   SvgGoogle,
   SvgLiteLLM,
@@ -191,6 +192,14 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
       "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai/",
     embeddingModels: [],
   },
+  {
+    providerName: EmbeddingProviderName.BIFROST,
+    displayName: "Bifrost",
+    icon: SvgBifrost,
+    apiLink:
+      "https://docs.getbifrost.ai/providers/supported-providers/overview",
+    embeddingModels: [],
+  },
 ];
 
 export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
@@ -274,3 +283,8 @@ export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
 
 /** Mirrors `DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB` on the backend. */
 export const DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20;
+
+/** Mirror the `*EMBEDDING_RATE_LIMIT*` constants on the backend. */
+export const DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60;
+export const MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000;
+export const MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60;

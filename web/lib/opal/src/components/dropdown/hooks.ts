@@ -15,7 +15,7 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
-import { DROPDOWN_WIDTH_TOKENS } from "@opal/components/dropdown/model";
+import { contextualMenuWidthToCss } from "@opal/shared";
 import type {
   DropdownAlign,
   DropdownRow,
@@ -532,14 +532,21 @@ export function useDropdownOverlay({
         flip(),
         shift({ padding: 8 }),
         size({
-          apply({ rects, elements }) {
+          padding: 8,
+          apply({ rects, elements, availableWidth, availableHeight }) {
             // Read through a ref: floating-ui compares middleware by source
             // text, so a closure over `width` would never be seen to change.
             // Inline, so a fixed width also beats the stylesheet's floor.
+            // A fixed width never exceeds the space beside the anchor, so a
+            // wide step still fits a narrow window.
             const fixed =
               widthRef.current === undefined
                 ? undefined
-                : `var(${DROPDOWN_WIDTH_TOKENS[widthRef.current]})`;
+                : `min(${contextualMenuWidthToCss(widthRef.current)}, ${availableWidth}px)`;
+            elements.floating.style.setProperty(
+              "--opal-dropdown-available-height",
+              `${Math.max(0, availableHeight)}px`
+            );
             Object.assign(
               elements.floating.style,
               fixed !== undefined

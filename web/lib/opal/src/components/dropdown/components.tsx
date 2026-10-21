@@ -49,6 +49,7 @@ import type {
   DropdownMode,
   DropdownOption,
   DropdownRow,
+  DropdownSizePreset,
   DropdownSearch,
   DropdownView,
   DropdownViews,
@@ -392,6 +393,8 @@ function DropdownTrigger({
 // ---------------------------------------------------------------------------
 
 interface DropdownDataBaseProps {
+  /** Typography and spacing for built-in rows. Defaults to `"main-ui"`. */
+  sizePreset?: DropdownSizePreset;
   /** Names the list for assistive technology. */
   label?: string;
   /**
@@ -524,6 +527,7 @@ type PendingHighlight =
 function DropdownData(props: DropdownDataProps) {
   const {
     items: rootItems,
+    sizePreset = "main-ui",
     label,
     query,
     search: rootSearch,
@@ -763,6 +767,11 @@ function DropdownData(props: DropdownDataProps) {
       activatingRef.current = rowElementId(id, row);
       switch (row.kind) {
         case "option": {
+          // A link option navigates as an anchor; it is not a pick.
+          if (row.href !== undefined) {
+            setIsOpen(false);
+            break;
+          }
           const moved = runHandler(() => onSelect?.(row, views));
           if (closeOnSelect && !moved) setIsOpen(false);
           break;
@@ -789,7 +798,10 @@ function DropdownData(props: DropdownDataProps) {
     (item: NavItem) => {
       if (item.kind === "row") {
         const { row } = item;
-        if (row.kind === "action" && row.href !== undefined) {
+        if (
+          (row.kind === "action" || row.kind === "option") &&
+          row.href !== undefined
+        ) {
           // Enter clicks the anchor, so the browser navigates as it would
           // for a pointer click; the click handler then runs activateRow.
           document.getElementById(rowElementId(id, row))?.click();
@@ -936,6 +948,7 @@ function DropdownData(props: DropdownDataProps) {
         viewKey={currentViewKey}
         viewDirection={viewDirection}
         groups={foldedGroups}
+        sizePreset={sizePreset}
         emptySet={allRows.length === 0}
         isSelected={isSelected}
         exactValue={exactValue}

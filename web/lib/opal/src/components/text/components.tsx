@@ -146,6 +146,7 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "status-success-01": "text-status-success-01",
   "status-success-02": "text-status-success-02",
   "status-success-05": "text-status-success-05",
+  "status-warning-05": "text-status-warning-05",
   "theme-amber-05": "text-theme-amber-05",
 };
 
@@ -172,7 +173,9 @@ function Text({
     textPosition,
     maxLines === 1 && "truncate",
     maxLines && maxLines > 1 && "overflow-hidden",
-    strikethrough && "line-through"
+    // A thickness relative to the font size: the font's default line is
+    // about 1px at every size and looks weak on heavier titles.
+    strikethrough && "line-through decoration-[0.125em]"
   );
 
   const style =

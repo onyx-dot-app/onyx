@@ -8,18 +8,18 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content, InputHorizontal } from "@opal/layouts";
 import { Card, InputSwitch, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgOrganization } from "@opal/icons";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 
 const route = ADMIN_ROUTES.LLM_GATEWAY;
 
 export default function LLMGatewayPage() {
   const t = useTranslations("admin.llmGateway");
+  const plans = usePlans();
   const router = useRouter();
   const settings = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
@@ -60,15 +60,7 @@ export default function LLMGatewayPage() {
             >
               <InputHorizontal
                 title={t("access.toggle.title")}
-                tag={
-                  !businessTier
-                    ? {
-                        title: t("businessPlanTag.label"),
-                        color: "amber",
-                        icon: SvgOrganization,
-                      }
-                    : undefined
-                }
+                tag={!businessTier ? plans[Tier.BUSINESS].tag : undefined}
                 description={t("access.toggle.description")}
                 disabled={!businessTier}
                 withLabel
