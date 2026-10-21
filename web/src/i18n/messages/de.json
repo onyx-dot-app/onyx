@@ -2240,11 +2240,12 @@
         "label": "Beta"
       },
       "connectors": {
+        "description": "Quellen, die die interne Suche im Chat verwendet. Fügen Sie sie auf der Seite zum Indexierungsstatus hinzu oder ändern Sie sie dort.",
         "empty": {
           "title": "Keine Konnektoren eingerichtet"
         },
         "manageAllButton": {
-          "label": "Alle verwalten"
+          "label": "Konnektoren verwalten"
         },
         "title": "Konnektoren"
       },

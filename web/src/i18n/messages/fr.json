@@ -2240,11 +2240,12 @@
         "label": "bêta"
       },
       "connectors": {
+        "description": "Sources utilisées par la recherche interne dans le chat. Ajoutez-les ou modifiez-les sur la page d'état de l'indexation.",
         "empty": {
           "title": "Aucun connecteur configuré"
         },
         "manageAllButton": {
-          "label": "Tout gérer"
+          "label": "Gérer les connecteurs"
         },
         "title": "Connecteurs"
       },

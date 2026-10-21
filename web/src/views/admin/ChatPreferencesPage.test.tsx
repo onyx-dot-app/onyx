@@ -140,6 +140,34 @@ describe("ChatPreferencesPage", () => {
     );
   });
 
+  test("lists every connector source and explains the section", async () => {
+    const fetchMock = jest.mocked(global.fetch);
+    const baseFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) => {
+      if (input === SWR_KEYS.connectorStatus) {
+        const ccPairs = ["web", "github", "slack", "confluence", "notion"].map(
+          (source) => ({ has_successful_run: true, source, status: "ACTIVE" })
+        );
+        return new Response(JSON.stringify(ccPairs), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return baseFetch!(input, init);
+    });
+
+    render(<ChatPreferencesPage />);
+
+    for (const name of ["Web", "GitHub", "Slack", "Confluence", "Notion"]) {
+      expect(await screen.findByText(name)).toBeInTheDocument();
+    }
+    expect(
+      screen.getByText(/Sources that Internal Search uses in chat/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Manage connectors/ })
+    ).toHaveAttribute("href", "/admin/indexing-status");
+  });
+
   test("still saves a changed team name on blur", async () => {
     const user = setupUser();
     render(<ChatPreferencesPage />);
