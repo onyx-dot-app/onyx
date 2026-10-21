@@ -264,3 +264,13 @@ def test_bedrock_assume_role_keys_map_to_kwargs() -> None:
             )
             == set()
         )
+
+
+def test_bedrock_assume_role_lowercase_keys_not_mapped() -> None:
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.BEDROCK,
+        custom_config={"aws_role_name": "arn", "aws_external_id": "ext-id"},
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}
