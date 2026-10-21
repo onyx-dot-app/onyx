@@ -3087,6 +3087,7 @@
             "errors": "Indexación completada con errores.",
             "resolved": "Errores de indexación resueltos.",
             "succeeded": "Indexación completada correctamente.",
+            "queued": "Indexación en cola.",
             "inProgress": "Indexación en curso.",
             "canceled": "Indexación detenida."
           },
@@ -3098,6 +3099,7 @@
             "errors": "Permisos sincronizados con errores.",
             "resolved": "Errores de sincronización de permisos resueltos.",
             "succeeded": "Permisos sincronizados correctamente.",
+            "queued": "Sincronización de permisos en cola.",
             "inProgress": "Sincronizando permisos.",
             "canceled": "Sincronización de permisos detenida."
           },
@@ -3109,6 +3111,7 @@
             "errors": "Membresías de grupo sincronizadas con errores.",
             "resolved": "Errores de sincronización de membresías de grupo resueltos.",
             "succeeded": "Membresías de grupo sincronizadas correctamente.",
+            "queued": "Sincronización de membresías de grupo en cola.",
             "inProgress": "Sincronizando membresías de grupo.",
             "canceled": "Sincronización de grupos detenida."
           },
@@ -3120,6 +3123,7 @@
             "errors": "Depuración completada con errores.",
             "resolved": "Errores de depuración resueltos.",
             "succeeded": "Depuración completada correctamente.",
+            "queued": "Depuración en cola.",
             "inProgress": "Depuración en curso.",
             "canceled": "Depuración detenida."
           },
@@ -3131,6 +3135,7 @@
             "errors": "Comprobaciones del conector completadas con errores.",
             "resolved": "Errores de las comprobaciones del conector resueltos.",
             "succeeded": "Comprobaciones del conector superadas.",
+            "queued": "Comprobaciones del conector en cola.",
             "inProgress": "Comprobaciones del conector en curso.",
             "canceled": "Comprobaciones del conector detenidas."
           }
