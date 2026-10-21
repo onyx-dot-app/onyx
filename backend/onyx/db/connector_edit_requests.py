@@ -19,6 +19,7 @@ from onyx.db.backfill_models import (
     PendingBackfill,
 )
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
+from onyx.db.connector_credential_pair import lock_connector_credential_pair_row
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
@@ -57,22 +58,10 @@ def request_retry_delay(failure_count: int) -> timedelta:
     )
 
 
-def _lock_cc_pair_row(
-    db_session: Session, cc_pair_id: int
-) -> ConnectorCredentialPair | None:
-    return db_session.execute(
-        select(ConnectorCredentialPair)
-        .where(ConnectorCredentialPair.id == cc_pair_id)
-        .with_for_update()
-        # Read the locked row, not a stale copy from the identity map.
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-
-
 def _lock_cc_pair_for_request(
     db_session: Session, cc_pair_id: int
 ) -> ConnectorCredentialPair:
-    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
+    cc_pair = lock_connector_credential_pair_row(db_session, cc_pair_id)
     if cc_pair is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"Connector credential pair {cc_pair_id} not found"
@@ -300,7 +289,7 @@ def create_pending_backfill_attempt__no_commit(
     pending, the request is gone or has an attempt, or another attempt is
     active on these search settings. The caller commits, then sends the
     task."""
-    cc_pair = _lock_cc_pair_row(db_session, cc_pair_id)
+    cc_pair = lock_connector_credential_pair_row(db_session, cc_pair_id)
     if (
         cc_pair is None
         or cc_pair.status != ConnectorCredentialPairStatus.ACTIVE

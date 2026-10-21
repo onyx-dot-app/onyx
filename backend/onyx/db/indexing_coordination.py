@@ -131,11 +131,21 @@ class IndexingCoordination:
         Request cancellation of an indexing attempt.
         This replaces Redis termination signals.
         """
+        IndexingCoordination.request_cancellation__no_commit(
+            db_session, index_attempt_id
+        )
+        db_session.commit()
+
+    @staticmethod
+    def request_cancellation__no_commit(
+        db_session: Session,
+        index_attempt_id: int,
+    ) -> None:
+        """Flags the attempt for cancellation; its task reads the flag. The
+        caller commits."""
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt:
             attempt.cancellation_requested = True
-            db_session.commit()
-
             logger.info("Requested cancellation for attempt %s", index_attempt_id)
 
     @staticmethod

@@ -447,6 +447,13 @@ writer of the attempt's aggregate counters:
   (`targeted_reindex_job_id` set) is explicitly excluded from this check and may run
   concurrently with a full crawl, relying instead on the per-document row locks in
   §4.4.
+- The creators in `docfetching/task_creation_utils.py` (new attempt, pending
+  backfill, dispatch of a waiting attempt) take the tenant-wide Redis creation
+  lock, then the cc-pair's row lock (`lock_connector_credential_pair_row`), check
+  the pair's status under it, and hold it until the attempt commits. The pause
+  and deletion routes take the same row lock before they read the attempts to
+  cancel, so a pause or delete never misses an attempt created at the same time.
+  Lock order: Redis creation lock, then the cc-pair row, then its attempt rows.
 - `update_batch_completion_and_docs` increments `completed_batches`,
   `total_docs_indexed`, `new_docs_indexed`, `total_chunks` under a
   `SELECT ... FOR UPDATE` on the `IndexAttempt` row. Each `docprocessing_task` also

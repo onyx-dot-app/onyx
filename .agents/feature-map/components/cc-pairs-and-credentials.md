@@ -330,9 +330,15 @@ cron; every cc-pair is re-evaluated every 15 seconds against its own
 `PUT /manage/admin/cc-pair/{id}/status` → `cc_pair.py:update_cc_pair_status`.
 Only `ACTIVE` and `PAUSED` are accepted here (not `DELETING`; the comment at
 `cc_pair.py:500` is explicit that this route must not be usable to delete).
-`CCPairAccessLevel.OPERATE` is enough here. Pausing sets a Redis stop fence (`RedisConnector.stop.set_fence(True)`),
+`CCPairAccessLevel.OPERATE` is enough here. The route first takes the pair's row lock
+(`lock_connector_credential_pair_row`, `SELECT ... FOR UPDATE`) and holds it until the
+status commit. Attempt creation takes the same lock (see indexing-pipeline §4.5),
+so a pause either finds an attempt that a concurrent creation added and cancels it, or
+the creation sees `PAUSED` and adds nothing.
+Pausing sets a Redis stop fence (`RedisConnector.stop.set_fence(True)`),
 requests cancellation of any in-progress `IndexAttempt` rows
-(`IndexingCoordination.request_cancellation`), and revokes their Celery tasks. A first
+(`IndexingCoordination.request_cancellation__no_commit`), and revokes their Celery
+tasks after the commit. A first
 attempt that waits for capability checks has no task, so it is canceled directly
 (`cancel_waiting_index_attempt__no_commit`).
 It updates `status=PAUSED` and immediately re-fires `CHECK_FOR_INDEXING` so the
@@ -351,7 +357,9 @@ used only when a pairing has no indexed documents; see §2). The real flow:
    `CCPairAccessLevel.EDIT`. A user with global `MANAGE_CONNECTORS` passes. A scoped
    manager needs the `EDITOR` role in a group that manages the pair. The creator of a
    non-public pair with no manage group also passes.
-2. Cancel any scheduled/in-progress index attempts.
+2. Take the pair's row lock (as the pause does, so no attempt is created
+   between the cancel and the status change), then cancel any
+   scheduled/in-progress index attempts.
 3. Set `status = DELETING` and commit.
 4. Fire `CHECK_FOR_CONNECTOR_DELETION` immediately (also runs on its own beat
    schedule).
