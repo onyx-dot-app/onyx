@@ -959,6 +959,7 @@
       },
       "detail": {
         "issuesTitle": "問題",
+        "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",

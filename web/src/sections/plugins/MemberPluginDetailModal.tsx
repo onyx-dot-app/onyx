@@ -529,9 +529,7 @@ export function MemberPluginDetailContent({
         )
       : t(`status.${connection.kind}`);
   const connectionTitle =
-    connection.kind === "connected"
-      ? t(connection.ownership === "user" ? "status.connected" : "status.none")
-      : connectionLabel;
+    connection.kind === "connected" ? t("status.none") : connectionLabel;
 
   if (guard.confirmationOpen) {
     return (
@@ -733,12 +731,13 @@ export function MemberPluginDetailContent({
                               <Text font="main-ui-action">
                                 {connectionTitle}
                               </Text>
-                              {connection.kind === "connected" &&
-                                connection.ownership !== "none" && (
-                                  <Text font="secondary-body" color="text-03">
-                                    {connectionLabel}
-                                  </Text>
-                                )}
+                              {connection.kind === "connected" && (
+                                <Text font="secondary-body" color="text-03">
+                                  {connection.ownership === "none"
+                                    ? t("detail.noAuthentication")
+                                    : connectionLabel}
+                                </Text>
+                              )}
                             </div>
                           </div>
                           {canDisconnect && (

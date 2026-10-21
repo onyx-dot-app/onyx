@@ -959,6 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Problemas",
+        "noAuthentication": "No se requiere autenticación",
         "connection": "Conexión",
         "tools": "Herramientas",
         "toolCount": "{count, plural, one {# herramienta} other {# herramientas}}",

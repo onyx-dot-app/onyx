@@ -130,9 +130,10 @@ Craft Apps have no stored description, so their headers use the localized Craft 
 Member directory detail and connection dialogs share one persistent backdrop, so switching screens does not restart its fade-in.
 The backdrop and active content use the same Radix dialog root, so its scroll lock permits wheel and touch events inside the modal. Standalone callers wrap the shared content in their own dialog root.
 The Connection tab starts with a status card: green when connected, yellow when setup is needed, and gray when checking or unavailable.
-Connected MCP, OpenAPI, and Craft App cards use the same ownership text.
+Connected MCP, OpenAPI, and Craft App cards all use the title "Ready to use"
+and the same ownership text.
 Personal credentials and pass-through show "Uses your connected account".
-Workspace credentials show "Workspace connection". No-auth cards omit account text. External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
+Workspace credentials show "Workspace connection". No-auth cards show "No authentication required". External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
 The connection card provides Connect when the user can authenticate. Workspace setup remains distinct from personal authentication.
 Personal account connections show Disconnect in the connection card. It opens the existing confirmation flow.
 Tool descriptions use secondary body text and wrap within the row.

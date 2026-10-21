@@ -623,7 +623,7 @@ test("connecting an app keeps its row in the default All filter", async () => {
     name: /^Workspace GitHub/,
   });
   await user.click(within(details).getByRole("tab", { name: "Connection" }));
-  expect(within(details).getByRole("status")).toHaveTextContent("Connected");
+  expect(within(details).getByRole("status")).toHaveTextContent("Ready to use");
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   await user.click(within(details).getByRole("button", { name: /^Cancel$/ }));
   expect(
@@ -719,7 +719,7 @@ test("a successful connection returns to the Connection tab with the same backdr
     await screen.findByRole("tab", { name: "Connection" })
   ).toHaveAttribute("aria-selected", "true");
   await waitFor(() =>
-    expect(screen.getByRole("status")).toHaveTextContent("Connected")
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to use")
   );
   expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
 });

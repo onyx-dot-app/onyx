@@ -959,6 +959,7 @@
       },
       "detail": {
         "issuesTitle": "مشكلات",
+        "noAuthentication": "لا يلزم المصادقة",
         "connection": "الاتصال",
         "tools": "الأدوات",
         "toolCount": "{count, plural, zero {لا توجد أدوات} one {أداة واحدة} two {أداتان} few {# أدوات} many {# أداة} other {# أداة}}",

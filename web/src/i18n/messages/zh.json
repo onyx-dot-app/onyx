@@ -959,6 +959,7 @@
       },
       "detail": {
         "issuesTitle": "问题",
+        "noAuthentication": "无需身份验证",
         "connection": "连接",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",

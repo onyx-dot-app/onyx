@@ -959,6 +959,7 @@
       },
       "detail": {
         "issuesTitle": "문제",
+        "noAuthentication": "인증이 필요하지 않음",
         "connection": "연결",
         "tools": "도구",
         "toolCount": "{count, plural, other {도구 #개}}",

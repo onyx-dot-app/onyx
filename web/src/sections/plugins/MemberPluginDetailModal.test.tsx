@@ -50,8 +50,8 @@ describe.each(["mcp", "openapi", "external-app"] as const)(
     test.each([
       { ownership: "session", text: "Ready to useUses your connected account" },
       { ownership: "workspace", text: "Ready to useWorkspace connection" },
-      { ownership: "none", text: "Ready to use" },
-      { ownership: "user", text: "ConnectedUses your connected account" },
+      { ownership: "none", text: "Ready to useNo authentication required" },
+      { ownership: "user", text: "Ready to useUses your connected account" },
     ] as const)(
       "shows only relevant $ownership copy",
       ({ ownership, text }) => {
@@ -214,8 +214,8 @@ test("MCP connection details show the description instead of the server URL", ()
     screen.queryByText("https://mcp.linear.app/mcp")
   ).not.toBeInTheDocument();
   expect(screen.queryByText("Server URL")).not.toBeInTheDocument();
-  expect(screen.getByText("Connected")).toBeVisible();
-  expect(screen.getByRole("status")).toHaveTextContent("Connected");
+  expect(screen.getByText("Ready to use")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
 });
 
 test("MCP connection card reports needs sign-in when credentials are missing", () => {
@@ -249,7 +249,7 @@ test.each(["https://api.linear.app", "https://[2606:4700::1111]:8443"])(
       memberPluginMessages.actions.memberPlugins.externalApp
         .craftOnlyDescription
     );
-    expect(screen.getByRole("status")).toHaveTextContent("Connected");
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
     expect(
       requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
     ).toBe(true);
@@ -266,7 +266,7 @@ test.each([undefined, []])(
       connection: { kind: "connected", ownership: "user" },
     });
     expect(screen.queryByText(/https?:\/\//)).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Connected");
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
     expect(
       requests.mock.calls.every(([input]) => !String(input).includes("/admin"))
     ).toBe(true);
@@ -289,7 +289,7 @@ test("Craft App details share the connection card and searchable Skills tab with
     app: memberApp({ authenticated: true }),
     connection: { kind: "connected", ownership: "user" },
   });
-  expect(screen.getByRole("status")).toHaveTextContent("Connected");
+  expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
   expect(screen.queryByRole("term")).not.toBeInTheDocument();
   expect(
     screen.queryByText("Use your account in Craft.")
@@ -661,7 +661,7 @@ test("OpenAPI details share MCP navigation and render schema endpoints, not the 
     connection: { kind: "connected", ownership: "user" },
   });
   expect(screen.queryByText("https://api.github.com")).not.toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("Connected");
+  expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
   expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute(
     "aria-selected",
     "true"
@@ -1304,7 +1304,7 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
     { onClose }
   );
   const user = setupUser();
-  expect(screen.getByRole("status")).toHaveTextContent("Connected");
+  expect(screen.getByRole("status")).toHaveTextContent("Ready to use");
   expect(await screen.findByText("Issues")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Review skills" }));
   await user.click(
