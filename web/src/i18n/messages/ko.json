@@ -959,7 +959,6 @@
       },
       "detail": {
         "issuesTitle": "문제",
-        "readyDescription": "이 플러그인을 사용할 수 있습니다.",
         "connection": "연결",
         "tools": "도구",
         "toolCount": "{count, plural, other {도구 #개}}",

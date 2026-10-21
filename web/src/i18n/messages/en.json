@@ -959,7 +959,6 @@
       },
       "detail": {
         "issuesTitle": "Issues",
-        "readyDescription": "You can start using this plugin.",
         "connection": "Connection",
         "tools": "Tools",
         "toolCount": "{count, plural, one {# tool} other {# tools}}",

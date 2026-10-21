@@ -959,7 +959,6 @@
       },
       "detail": {
         "issuesTitle": "问题",
-        "readyDescription": "你可以开始使用此插件。",
         "connection": "连接",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",

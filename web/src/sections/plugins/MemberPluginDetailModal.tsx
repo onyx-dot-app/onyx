@@ -733,11 +733,6 @@ export function MemberPluginDetailContent({
                               <Text font="main-ui-action">
                                 {connectionTitle}
                               </Text>
-                              {connection.kind === "connected" && (
-                                <Text font="secondary-body" color="text-03">
-                                  {t("detail.readyDescription")}
-                                </Text>
-                              )}
                               {connection.kind === "connected" &&
                                 (connection.ownership === "workspace" ||
                                   connection.ownership === "session") && (

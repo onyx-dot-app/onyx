@@ -44,6 +44,24 @@ beforeEach(() => {
     .mockImplementation(async () => jsonResponse(approvalApp));
 });
 
+test.each([
+  { ownership: "session", text: "Ready to useUses your sign-in" },
+  { ownership: "workspace", text: "Ready to useWorkspace connection" },
+  { ownership: "none", text: "Ready to use" },
+  { ownership: "user", text: "Connected" },
+] as const)(
+  "connected MCP shows only relevant $ownership copy",
+  ({ ownership, text }) => {
+    show({
+      kind: "mcp",
+      server: memberServer(),
+      tools: [storedMcpTool],
+      connection: { kind: "connected", ownership },
+    });
+    expect(screen.getByRole("status").textContent).toBe(text);
+  }
+);
+
 test("disabled Craft hides app-only metadata, skills recovery, and launch action", () => {
   mockCraftEnabled = false;
   const requests = jest.spyOn(global, "fetch");
@@ -1274,9 +1292,7 @@ test("skill enable changes stay drafts across tabs and save only on Save", async
     { onClose }
   );
   const user = setupUser();
-  expect(screen.getByRole("status")).toHaveTextContent(
-    "You can start using this plugin."
-  );
+  expect(screen.getByRole("status")).toHaveTextContent("Connected");
   expect(await screen.findByText("Issues")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Review skills" }));
   await user.click(

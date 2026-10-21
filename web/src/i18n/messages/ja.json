@@ -959,7 +959,6 @@
       },
       "detail": {
         "issuesTitle": "問題",
-        "readyDescription": "このプラグインを使い始めることができます。",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",

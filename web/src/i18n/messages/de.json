@@ -959,7 +959,6 @@
       },
       "detail": {
         "issuesTitle": "Probleme",
-        "readyDescription": "Du kannst dieses Plugin jetzt verwenden.",
         "connection": "Verbindung",
         "tools": "Werkzeuge",
         "toolCount": "{count, plural, one {# Werkzeug} other {# Werkzeuge}}",
