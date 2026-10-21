@@ -12,6 +12,7 @@ import {
   Text,
 } from "@opal/components";
 import { SvgChevronRight, SvgCodeFile, SvgPlug } from "@opal/icons";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -128,9 +129,14 @@ export default function ChatPluginsPopover({
             interaction={open ? "hover" : "rest"}
             aria-label={t("chat.trigger.label")}
             rightChildren={
-              <div className="flex size-6 items-center justify-center">
+              <Section
+                width={1.5}
+                height={1.5}
+                justifyContent="center"
+                alignItems="center"
+              >
                 <SvgChevronRight size={16} />
-              </div>
+              </Section>
             }
             onPointerEnter={(event) => {
               if (event.pointerType === "mouse") hover(true);
