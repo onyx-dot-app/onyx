@@ -56,12 +56,6 @@ docker buildx bake devcontainer
 
 The `devcontainer` target is defined in `docker-bake.hcl` at the repo root.
 
-After bootstrapping CA certificates, Ubuntu packages use the Dockerfile's `UBUNTU_APT_SNAPSHOT` date during builds.
-This keeps dependency versions consistent when live repository indexes change.
-Advance the date with Ubuntu base image updates, and test an uncached build.
-The build removes the snapshot setting after installing browser dependencies.
-APT uses the live repositories inside the finished devcontainer.
-
 ## User & permissions
 
 The container runs as the `dev` user by default (`remoteUser` in devcontainer.json).
