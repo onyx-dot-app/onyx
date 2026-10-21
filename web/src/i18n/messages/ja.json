@@ -15504,7 +15504,6 @@
       "actionPolicies": "承認設定",
       "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",
-      "viewActions": "アクションを表示",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
       "searchActions": "アクションを検索",
       "setPermissions": "権限を設定",

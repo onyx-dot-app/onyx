@@ -15504,7 +15504,6 @@
       "actionPolicies": "إعدادات الموافقة",
       "policyCounts": "موافقة تلقائية {auto} · سؤال {ask} · معطّل {disabled}",
       "manageActions": "إدارة الإجراءات",
-      "viewActions": "عرض الإجراءات",
       "taskModalDescription": "تُطبّق التغييرات عند حفظ المهمة. تسري قيود مساحة العمل دائمًا.",
       "searchActions": "البحث عن إجراءات",
       "setPermissions": "تعيين الأذونات",

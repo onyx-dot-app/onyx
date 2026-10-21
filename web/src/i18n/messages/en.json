@@ -15504,7 +15504,6 @@
       "actionPolicies": "Approval settings",
       "policyCounts": "{auto} auto-approve · {ask} ask · {disabled} disabled",
       "manageActions": "Manage actions",
-      "viewActions": "View actions",
       "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
       "searchActions": "Search actions",
       "setPermissions": "Set permissions",
