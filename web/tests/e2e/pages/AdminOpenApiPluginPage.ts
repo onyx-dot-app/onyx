@@ -34,7 +34,7 @@ export class AdminOpenApiPluginPage {
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     await this.page
       .getByRole("dialog", { name: `Connect to ${name}`, exact: true })
-      .getByRole("button", { name: "Add Action", exact: true })
+      .getByRole("button", { name: "Add Plugin", exact: true })
       .click();
     await this.expectDetail(name);
     const match = new URL(this.page.url()).pathname.match(/\/openapi\/(\d+)$/);

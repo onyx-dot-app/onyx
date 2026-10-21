@@ -100,7 +100,7 @@ test.each([
     expect(
       screen.queryByRole("switch", { name: "Enable in default Chat" })
     ).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Add Action" }));
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
     expect(writes).toContainEqual({
       path: "/api/admin/tool/custom",
@@ -180,7 +180,7 @@ test.each(["mounted", "disposed"])(
       screen.getByRole("dialog", { name: "Connect to Release API" })
     ).toBeVisible();
     expect(createBody).toBeUndefined();
-    await user.click(await screen.findByRole("button", { name: "Add Action" }));
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
     await waitFor(() =>
       expect(createBody).toEqual({
         description: "Release dashboard",
@@ -246,9 +246,9 @@ test("shows creation failures without completing or closing the form", async () 
     }
   );
   await user.click(screen.getByRole("button", { name: "Continue" }));
-  await user.click(await screen.findByRole("button", { name: "Add Action" }));
+  await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Add Action" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
   );
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(onCreated).not.toHaveBeenCalled();
@@ -326,7 +326,7 @@ test("keeps OAuth settings through Back and saves them only on final creation", 
     await screen.findByRole("textbox", { name: "OAuth Client ID" })
   ).toHaveValue("release-client");
   expect(writes).toEqual([]);
-  const submit = screen.getByRole("button", { name: "Add Action" });
+  const submit = screen.getByRole("button", { name: "Add Plugin" });
   await waitFor(() => expect(submit).toBeEnabled());
   await user.click(submit);
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
@@ -460,9 +460,9 @@ describe("authentication save retries", () => {
         target: { value: "release-secret" },
       });
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Add Action" })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
       );
-      await user.click(screen.getByRole("button", { name: "Add Action" }));
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
       await waitFor(() => expect(failRefresh).toBe(false));
       expect(onCreated).not.toHaveBeenCalled();
       expect(
@@ -472,7 +472,7 @@ describe("authentication save retries", () => {
       if (retry === "failed refresh") {
         failRefresh = true;
         const updateCount = updates.length;
-        await user.click(screen.getByRole("button", { name: "Add Action" }));
+        await user.click(screen.getByRole("button", { name: "Add Plugin" }));
         await waitFor(() => expect(failRefresh).toBe(false));
         expect(updates).toHaveLength(updateCount);
         expect(onCreated).not.toHaveBeenCalled();
@@ -500,7 +500,7 @@ describe("authentication save retries", () => {
         );
         await user.click(screen.getByRole("button", { name: "Continue" }));
       }
-      await user.click(screen.getByRole("button", { name: "Add Action" }));
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
       await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
       expect(toolCreates).toBe(1);
       expect(configCreates).toBe(1);

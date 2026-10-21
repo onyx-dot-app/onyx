@@ -210,7 +210,7 @@ A divider separates default Chat selection from the schema fields. Creation omit
 Back preserves schema and credential drafts. Creation keeps one dialog and backdrop mounted across schema and authentication steps.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
 Existing Craft App edits omit unchanged availability, so unrelated saves preserve concurrent admin changes.
-Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
+Only the final Add Plugin button creates a record. Auth saves use refreshed permission-stamped rows.
 Failed retries reuse the created tool ID and any newly created OAuth configuration ID.
 Retry writes require a successful authoritative refresh, not SWR's cached
 revalidation result. Schema and metadata writes preserve the fresh row's OAuth
