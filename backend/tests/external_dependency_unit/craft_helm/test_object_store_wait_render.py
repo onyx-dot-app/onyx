@@ -9,7 +9,6 @@ import socket
 import subprocess
 import sys
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -96,19 +95,21 @@ def test_wait_script_retries_until_the_store_answers() -> None:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    # Nothing listens yet, so the first try is refused.
-    time.sleep(1)
+    assert wait.stdout is not None
+    # Nothing listens yet, so the first try is refused. The server starts only
+    # once the script has said so, whatever the child's start-up time.
+    first_try = wait.stdout.readline()
     server = HTTPServer(("127.0.0.1", port), _StartingStoreHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        output, _ = wait.communicate(timeout=30)
+        rest, _ = wait.communicate(timeout=30)
     finally:
         server.shutdown()
         server.server_close()
 
     assert wait.returncode == 0
-    assert "Connection refused" in output
-    assert "503" in output
+    assert "Connection refused" in first_try
+    assert "503" in rest
     assert _StartingStoreHandler.answered == 2
 
 
