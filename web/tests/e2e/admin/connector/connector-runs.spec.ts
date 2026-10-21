@@ -217,7 +217,11 @@ test.describe("Connector runs", () => {
     const chartWindows: string[] = [];
     page.on("request", (request) => {
       const url = new URL(request.url());
-      if (url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/runs`)) {
+      // The run list reads pages of 10. The activity panel reads the same route 20 at a time, with no window.
+      if (
+        url.pathname.endsWith(`/cc-pair/${MOCK_SYNC_CC_PAIR_ID}/runs`) &&
+        url.searchParams.get("page_size") === "10"
+      ) {
         runsSince.push(url.searchParams.get("since"));
       }
       if (
@@ -230,25 +234,24 @@ test.describe("Connector runs", () => {
     await detail.goto(MOCK_SYNC_CC_PAIR_ID);
     await detail.expectRunsVisible();
 
-    // Both cards open on the last 12 hours.
-    await expect(detail.timeWindowPicker).toHaveText("Last 12 hours");
-    await expect(detail.runsTimeFilter).toContainText("Last 12 hours");
-    await expect.poll(() => chartWindows.at(-1)).toBe("12h");
-    // The activity panel reads the same route without a window, so look at windowed reads only.
-    const lastSince = () => runsSince.filter((since) => since !== null).at(-1);
-    await expect.poll(lastSince).toBeDefined();
-    const twelveHourSince = lastSince();
+    // Both cards open on the last 24 hours.
+    await expect(detail.timeWindowPicker).toHaveText("Last 24 hours");
+    await expect(detail.runsTimeFilter).toContainText("Last 24 hours");
+    await expect.poll(() => chartWindows.at(-1)).toBe("24h");
+    const lastSince = () => runsSince.at(-1);
+    await expect.poll(lastSince).toBeTruthy();
+    const daySince = lastSince();
 
     // The run list's filter moves the chart.
-    await detail.pickTimeWindow(detail.runsTimeFilter, "Last 24 hours");
-    await expect(detail.timeWindowPicker).toHaveText("Last 24 hours");
-    await expect.poll(() => chartWindows.at(-1)).toBe("24h");
-    await expect.poll(lastSince).not.toBe(twelveHourSince);
-
-    // The chart's picker moves the run list.
-    await detail.pickTimeWindow(detail.timeWindowPicker, "Last 7 days");
-    await expect(detail.runsTimeFilter).toContainText("Last 7 days");
+    await detail.pickTimeWindow(detail.runsTimeFilter, "Last 7 days");
+    await expect(detail.timeWindowPicker).toHaveText("Last 7 days");
     await expect.poll(() => chartWindows.at(-1)).toBe("7d");
-    await expect(detail.allTimeOption).toHaveCount(0);
+    await expect.poll(lastSince).not.toBe(daySince);
+
+    // The chart's picker moves the run list, and all time drops its start.
+    await detail.pickTimeWindow(detail.timeWindowPicker, "All time");
+    await expect(detail.runsTimeFilter).toContainText("All time");
+    await expect.poll(() => chartWindows.at(-1)).toBe("all");
+    await expect.poll(lastSince).toBeNull();
   });
 });

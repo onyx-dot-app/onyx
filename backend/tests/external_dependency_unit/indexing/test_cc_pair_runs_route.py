@@ -675,7 +675,7 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     other = _create_cc_pair(db_session, AccessType.PUBLIC)
     now = datetime.now(timezone.utc)
     recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
-    # Began before the window and ran 11 of its 12 hours inside it.
+    # Began before the window and ran 23 of its 24 hours inside it.
     overlapping = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     old = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     foreign = _index_attempt(db_session, other, 0, IndexingStatus.SUCCESS)
@@ -683,7 +683,7 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     cleaned = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     for attempt, ran_for, ended in [
         (recent, timedelta(hours=1), now - timedelta(hours=2)),
-        (overlapping, timedelta(hours=12), now - timedelta(hours=1)),
+        (overlapping, timedelta(hours=24), now - timedelta(hours=1)),
         (old, timedelta(hours=1), now - timedelta(days=2)),
         (foreign, timedelta(hours=1), now - timedelta(hours=2)),
         (cleaned, timedelta(hours=1), now - timedelta(days=9)),
@@ -700,14 +700,61 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
 
     response = get_cc_pair_throughput(
         cc_pair_id=cc_pair.id,
-        window=CCPairThroughputWindow.HOURS_12,
+        window=CCPairThroughputWindow.HOURS_24,
         user=admin,
         db_session=db_session,
     )
 
-    assert sum(response.docs_indexed) == 100 + round(100 * 11 / 12)
+    assert sum(response.docs_indexed) == 100 + round(100 * 23 / 24)
     # The overlapping run is listed, so the status strip covers its slices.
     assert [(run.started, run.ended) for run in response.runs] == [
         (overlapping.time_started, overlapping.last_heartbeat_time),
         (recent.time_started, recent.time_finished),
     ]
+
+
+def test_all_time_throughput_starts_at_the_pairs_oldest_run(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    other = _create_cc_pair(db_session, AccessType.PUBLIC)
+    idle = _create_cc_pair(db_session, AccessType.PUBLIC)
+    now = datetime.now(timezone.utc)
+    oldest = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    foreign = _index_attempt(db_session, other, 0, IndexingStatus.SUCCESS)
+    for attempt, ended in [
+        (oldest, now - timedelta(days=9)),
+        (recent, now - timedelta(hours=2)),
+        (foreign, now - timedelta(days=30)),
+    ]:
+        attempt.time_created = ended - timedelta(hours=1)
+        attempt.time_started = ended - timedelta(hours=1)
+        attempt.time_finished = ended
+        attempt.total_docs_indexed = 100
+    db_session.commit()
+
+    response = get_cc_pair_throughput(
+        cc_pair_id=cc_pair.id,
+        window=CCPairThroughputWindow.ALL,
+        user=admin,
+        db_session=db_session,
+    )
+
+    assert response.window_start == oldest.time_started
+    assert sum(response.docs_indexed) == 200
+    assert [run.started for run in response.runs] == [
+        oldest.time_started,
+        recent.time_started,
+    ]
+
+    # A pair with no runs still spans a day, the shortest all-time window.
+    empty = get_cc_pair_throughput(
+        cc_pair_id=idle.id,
+        window=CCPairThroughputWindow.ALL,
+        user=admin,
+        db_session=db_session,
+    )
+    assert empty.window_end - empty.window_start == timedelta(days=1)
+    assert sum(empty.docs_indexed) == 0

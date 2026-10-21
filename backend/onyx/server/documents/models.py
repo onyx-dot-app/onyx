@@ -689,23 +689,23 @@ class RunFeed(BaseModel):
 
 
 class CCPairThroughputWindow(str, Enum):
-    """How far back a throughput chart reaches."""
+    """How far back a throughput chart reaches. ALL reaches the oldest run kept."""
 
     HOURS_1 = "1h"
-    HOURS_12 = "12h"
     HOURS_24 = "24h"
     DAYS_7 = "7d"
+    ALL = "all"
 
-    def duration(self) -> timedelta:
+    def duration(self) -> timedelta | None:
         match self:
             case CCPairThroughputWindow.HOURS_1:
                 return timedelta(hours=1)
-            case CCPairThroughputWindow.HOURS_12:
-                return timedelta(hours=12)
             case CCPairThroughputWindow.HOURS_24:
                 return timedelta(hours=24)
             case CCPairThroughputWindow.DAYS_7:
                 return timedelta(days=7)
+            case CCPairThroughputWindow.ALL:
+                return None
 
 
 class CCPairThroughputRun(BaseModel):

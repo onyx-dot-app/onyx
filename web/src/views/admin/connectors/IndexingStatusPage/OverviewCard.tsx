@@ -20,7 +20,7 @@ import {
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
-const WINDOWS: readonly CCPairThroughputWindow[] = ["1h", "12h", "24h", "7d"];
+const WINDOWS: readonly CCPairThroughputWindow[] = ["1h", "24h", "7d"];
 
 const BARS_HEIGHT = 120;
 

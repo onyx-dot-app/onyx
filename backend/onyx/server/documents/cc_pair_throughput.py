@@ -3,7 +3,7 @@ it. Nothing records when each document landed: a run records only its total, so
 its documents spread evenly over the time it ran, and a slice's figure is that
 interpolation, not a count."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -16,13 +16,17 @@ from onyx.server.documents.models import (
 )
 
 # Bars per window, each wide enough to read at the chart's width: 3 minutes over
-# an hour, 10 over 12 hours, 20 over a day and 2 hours over a week.
+# an hour, 20 over a day and 2 hours over a week. All time reuses the week's count.
 THROUGHPUT_SLICES: dict[CCPairThroughputWindow, int] = {
     CCPairThroughputWindow.HOURS_1: 20,
-    CCPairThroughputWindow.HOURS_12: 72,
     CCPairThroughputWindow.HOURS_24: 72,
     CCPairThroughputWindow.DAYS_7: 84,
+    CCPairThroughputWindow.ALL: 84,
 }
+
+# All time spans at least a day, so a first run minutes old still gets
+# readable slices.
+MIN_ALL_TIME_SPAN = timedelta(days=1)
 
 
 def run_ended_at(attempt: IndexAttempt, started: datetime) -> datetime | None:
@@ -82,8 +86,19 @@ def throughput_of(
     """The documents the pairs indexed in each equal slice of the window ending
     now, and the runs that overlap it."""
     window_end = datetime.now(timezone.utc)
-    window_start = window_end - window.duration()
-    attempts = get_index_runs_since(db_session, cc_pair_ids, window_start)
+    duration = window.duration()
+    since = None if duration is None else window_end - duration
+    attempts = get_index_runs_since(db_session, cc_pair_ids, since)
+    window_start = (
+        since
+        if since is not None
+        else min(
+            [
+                window_end - MIN_ALL_TIME_SPAN,
+                *(_run_started(attempt) for attempt in attempts),
+            ]
+        )
+    )
     return CCPairThroughputResponse(
         window_start=window_start,
         window_end=window_end,
@@ -95,9 +110,13 @@ def throughput_of(
     )
 
 
-def _throughput_run(attempt: IndexAttempt) -> CCPairThroughputRun:
+def _run_started(attempt: IndexAttempt) -> datetime:
     # A queued run has no start yet, so it starts at its creation.
-    started = attempt.time_started or attempt.time_created
+    return attempt.time_started or attempt.time_created
+
+
+def _throughput_run(attempt: IndexAttempt) -> CCPairThroughputRun:
+    started = _run_started(attempt)
     return CCPairThroughputRun(
         started=started,
         ended=run_ended_at(attempt, started),

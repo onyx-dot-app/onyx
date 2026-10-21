@@ -2966,8 +2966,8 @@
           "queued": "Na fila",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({minutes, number} min)",
-          "rateFinished": "{rate} documentos/min ({minutes, number} min)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "{rate} documentos/min ({duration})",
           "membershipRate": "{rate} associações/min"
         },
         "actions": {
@@ -3014,7 +3014,6 @@
           "label": "Período",
           "all": "Todo o período",
           "h1": "Última hora",
-          "h12": "Últimas 12 horas",
           "h24": "Últimas 24 horas",
           "d7": "Últimos 7 dias",
           "d30": "Últimos 30 dias"

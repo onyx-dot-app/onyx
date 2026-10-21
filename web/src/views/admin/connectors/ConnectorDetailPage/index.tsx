@@ -97,7 +97,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [runFocus, setRunFocus] = useState(false);
   // One window drives the status card's chart and the runs card's list.
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
-    pickWindow("12h")
+    pickWindow("24h")
   );
   // A picked span of the chart zooms it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);

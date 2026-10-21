@@ -133,18 +133,43 @@ export function finishedAt(run: CCPairRun): string | null {
   return run.attempt.time_finished;
 }
 
-/** Minutes from the run's start to its end, fractional, or `null` before either. */
-function runDurationMinutes(run: CCPairRun): number | null {
+/** Milliseconds from the run's start to its end, or `null` before either. */
+function runDurationMs(run: CCPairRun): number | null {
   const finished = finishedAt(run);
   const started = run.attempt.time_started;
   if (finished === null || started === null) return null;
-  return (new Date(finished).getTime() - new Date(started).getTime()) / 60_000;
+  return new Date(finished).getTime() - new Date(started).getTime();
 }
 
 /** Whole minutes from the run's start to its end, or `null` before either. */
 export function runMinutes(run: CCPairRun): number | null {
-  const minutes = runDurationMinutes(run);
-  return minutes === null ? null : Math.max(0, Math.round(minutes));
+  const ms = runDurationMs(run);
+  return ms === null ? null : Math.max(0, Math.round(ms / 60_000));
+}
+
+/** A run's length in its two largest units, such as "16s", "4m 12s" or "1h 5m", narrow so the row's detail keeps to one line. */
+function formatRunLength(
+  format: ReturnType<typeof useFormatter>,
+  ms: number
+): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const units = [
+    { unit: "hour", value: Math.floor(total / 3600) },
+    { unit: "minute", value: Math.floor(total / 60) % 60 },
+    { unit: "second", value: total % 60 },
+  ];
+  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2m" or "1h".
+  const first = units.findIndex((part) => part.value > 0);
+  const from = first === -1 ? units.length - 1 : first;
+  return format.list(
+    units
+      .slice(from, from + 2)
+      .filter((part, index) => index === 0 || part.value > 0)
+      .map(({ unit, value }) =>
+        format.number(value, { style: "unit", unit, unitDisplay: "narrow" })
+      ),
+    { type: "unit", style: "narrow" }
+  );
 }
 
 /** Documents a finished index run indexed per minute of its run, or `null` while it goes on or when it indexed none. */
@@ -152,9 +177,9 @@ function finishedIndexRate(run: CCPairRun): number | null {
   if (run.kind !== "indexing" || run.attempt.total_docs_indexed === 0) {
     return null;
   }
-  const minutes = runDurationMinutes(run);
-  if (minutes === null || minutes <= 0) return null;
-  return run.attempt.total_docs_indexed / minutes;
+  const ms = runDurationMs(run);
+  if (ms === null || ms <= 0) return null;
+  return run.attempt.total_docs_indexed / (ms / 60_000);
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
@@ -445,7 +470,6 @@ export default function RunRow({
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
-  const canceled = run.attempt.status === "canceled";
 
   const finished = finishedAt(run);
   // A finished index run shows its rate and keeps its finish time in the tooltip.
@@ -474,17 +498,18 @@ export default function RunRow({
       }
     }
     if (finished === null) return t("detail.running");
-    const minutes = runMinutes(run);
-    if (minutes === null) return formatDateTimeLog(finished);
+    const ms = runDurationMs(run);
+    if (ms === null) return formatDateTimeLog(finished);
+    const duration = formatRunLength(format, ms);
     if (finishedRate !== null) {
       return t("detail.rateFinished", {
         rate: format.number(finishedRate, RATE_FORMAT),
-        minutes,
+        duration,
       });
     }
     return t("detail.finished", {
       time: formatDateTimeLog(finished),
-      minutes,
+      duration,
     });
   }
 
@@ -523,11 +548,7 @@ export default function RunRow({
                 className="min-w-0 flex-1"
               >
                 <Content
-                  icon={
-                    active || canceled
-                      ? SvgSlowMotion
-                      : RUN_KIND_ICONS[run.kind]
-                  }
+                  icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
                   title={t(`kinds.${run.kind}`)}
                   sizePreset="secondary"
                   variant="body"
