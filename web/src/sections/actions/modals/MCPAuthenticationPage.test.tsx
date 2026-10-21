@@ -1727,3 +1727,56 @@ test("explicit Chat disable overrides an earlier verified enable intent", async 
   );
   expect(JSON.parse(String(submission?.[1]?.body)).enable_chat).toBe(false);
 });
+
+test.each([
+  MCPAuthenticationPerformer.PER_USER,
+  MCPAuthenticationPerformer.ADMIN,
+])(
+  "accepts a replacement API token after a URL change clears headers (%s)",
+  async (performer) => {
+    const configuredServer: MCPServer = {
+      ...server,
+      server_url: "https://replacement.example.com/mcp",
+      auth_type: MCPAuthenticationType.API_TOKEN,
+      auth_performer: performer,
+      admin_credentials: undefined,
+      user_credentials: undefined,
+      status: MCPServerStatus.AWAITING_AUTH,
+      auth_template: {
+        headers: { Authorization: "" },
+        required_fields: ["api_key"],
+      },
+    };
+    const fetchSpy = mockNetwork(configuredServer);
+    const onPublished = jest.fn().mockResolvedValue(undefined);
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    render(
+      <Harness configuredServer={configuredServer} onPublished={onPublished} />
+    );
+    await user.click(screen.getByRole("button", { name: "Open setup" }));
+    const token = await screen.findByLabelText(copy.sharedApiKey.label);
+    expect(token).toHaveValue("");
+    await user.type(token, "replacement-token");
+    await user.click(
+      screen.getByRole("button", { name: copy.submitButton.label })
+    );
+    await waitFor(() => expect(onPublished).toHaveBeenCalledWith(server.id));
+    const submission = fetchSpy.mock.calls.find(
+      ([url]) => url === "/api/admin/mcp/setup"
+    );
+    expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
+      expect.objectContaining({
+        server_url: configuredServer.server_url,
+        auth_template: {
+          headers: { Authorization: "Bearer {api_key}" },
+          required_fields: ["api_key"],
+        },
+        ...(performer === MCPAuthenticationPerformer.ADMIN
+          ? { api_token: "replacement-token" }
+          : { admin_credentials: { api_key: "replacement-token" } }),
+      })
+    );
+  }
+);
