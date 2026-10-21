@@ -141,6 +141,12 @@ _ALLOWED = [
         id="same-legacy-cloud-model",
     ),
     pytest.param(
+        _present(NOMIC, reduced_dimension=256),
+        _request(NOMIC, reduced_dimension=256),
+        False,
+        id="same-self-hosted-model-keeps-a-stored-reduced-dimension",
+    ),
+    pytest.param(
         _present("text-embedding-3-large", OPENAI, reduced_dimension=1024),
         _spec_request(OPENAI, "text-embedding-3-large", reduced_dimension=1024),
         True,
@@ -193,11 +199,25 @@ _REJECTED = [
         id="same-model-with-another-dim",
     ),
     pytest.param(
-        _present(GRANITE),
-        _spec_request(None, GRANITE, reduced_dimension=256),
+        _present("text-embedding-3-large", OPENAI),
+        _spec_request(OPENAI, "text-embedding-3-large", reduced_dimension=1024),
         True,
         "share its index",
         id="same-model-changes-reduced-dimension-in-multi-tenant",
+    ),
+    pytest.param(
+        _present(GRANITE),
+        _spec_request(None, GRANITE, reduced_dimension=256),
+        False,
+        "do not support reduced_dimension",
+        id="same-self-hosted-model-adds-reduced-dimension",
+    ),
+    pytest.param(
+        _present(GRANITE),
+        _request("my-org/custom-embedder", model_dim=1024, reduced_dimension=256),
+        False,
+        "do not support reduced_dimension",
+        id="custom-self-hosted-model-with-reduced-dimension",
     ),
     pytest.param(
         _present("embed-english-v3.0"),

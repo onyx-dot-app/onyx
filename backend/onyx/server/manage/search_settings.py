@@ -467,14 +467,31 @@ def _check_embedding_model_target(
         if spec is not None and spec.status == EmbeddingModelStatus.SELECTABLE
         else None
     )
+    is_present_model = embedding_model_match_key(
+        request.provider_type, request.model_name
+    ) == embedding_model_match_key(present.provider_type, present.model_name)
+
+    # The model server ignores reduced_dimension, so a self-hosted index with it
+    # gets vectors of the wrong size. A re-index keeps a stored value.
+    if (
+        request.provider_type is None
+        and request.reduced_dimension is not None
+        and not (
+            is_present_model
+            and request.reduced_dimension == present.reduced_dimension
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Self-hosted embedding models do not support reduced_dimension: the "
+            "model server returns vectors of the full dimension.",
+        )
 
     # A re-index with the PRESENT model (quantization, contextual RAG, switchover).
     # Stored rows often differ from the registry (e.g. empty prefixes), so only
     # the dimension is checked. Tenants share the index of a model, so
     # MULTI_TENANT also keeps reduced_dimension.
-    if embedding_model_match_key(
-        request.provider_type, request.model_name
-    ) == embedding_model_match_key(present.provider_type, present.model_name):
+    if is_present_model:
         allowed_dims = {present.model_dim}
         if selectable_spec is not None:
             allowed_dims.add(selectable_spec.model_dim)
