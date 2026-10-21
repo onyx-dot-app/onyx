@@ -59,68 +59,78 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-it("edits only decision models and never assigns a chat default", async () => {
-  const fetchSpy = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValue(new Response(JSON.stringify(provider)));
-  const onSuccess = jest.fn();
-  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
-  render(
-    <DecisionProviderModal
-      providerName="openai"
-      existingLlmProvider={provider}
-      onSuccess={onSuccess}
-    />
-  );
+it.each(["openai", "vercel_ai_gateway"])(
+  "%s edits only decision models and never assigns a chat default",
+  async (providerName) => {
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify(provider)));
+    const onSuccess = jest.fn();
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    render(
+      <DecisionProviderModal
+        providerName={providerName}
+        existingLlmProvider={{ ...provider, provider: providerName }}
+        onSuccess={onSuccess}
+      />
+    );
 
-  expect(await screen.findByText("OpenAI Decisions")).toBeInTheDocument();
-  expect(screen.queryByText(/Configure \*/)).not.toBeInTheDocument();
-  expect(screen.queryByText("Chat Model")).not.toBeInTheDocument();
-  expect(screen.queryByText("Auto-update models")).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Rename" })
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Model Settings" })
-  ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("link", {
-      name: "Manage chat settings in Language Models",
-    })
-  ).toHaveAttribute("href", "/admin/language-models");
-  await user.clear(screen.getByLabelText(/display name/i));
-  await user.type(
-    screen.getByLabelText(/display name/i),
-    "Decision connection"
-  );
-  await user.clear(screen.getByLabelText(/API key/i));
-  await user.type(screen.getByLabelText(/API key/i), "rotated-key");
-  await user.click(screen.getByRole("button", { name: "Update" }));
-  await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("OpenAI Decisions")).toBeInTheDocument();
+    expect(screen.queryByText(/Configure \*/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Chat Model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Refresh models" }) !== null
+    ).toBe(providerName === "vercel_ai_gateway");
+    expect(screen.queryByText("Auto-update models")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Rename" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Model Settings" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Manage chat settings in Language Models",
+      })
+    ).toHaveAttribute("href", "/admin/language-models");
+    await user.clear(screen.getByLabelText(/display name/i));
+    await user.type(
+      screen.getByLabelText(/display name/i),
+      "Decision connection"
+    );
+    await user.clear(screen.getByLabelText(/API key/i));
+    await user.type(screen.getByLabelText(/API key/i), "rotated-key");
+    await user.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
-  const request = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/llm/decision-provider"
-  )?.[1];
-  expect(JSON.parse(String(request?.body))).toMatchObject({
-    id: 7,
-    selected_model_names: ["gpt-6-luna"],
-  });
-  expect(JSON.parse(String(request?.body))).not.toHaveProperty(
-    "model_configurations"
-  );
-  expect(JSON.parse(String(request?.body))).not.toHaveProperty("is_auto_mode");
-  expect(fetchSpy).not.toHaveBeenCalledWith(
-    "/api/admin/llm/default",
-    expect.anything()
-  );
-  expect(fetchSpy).toHaveBeenCalledWith(
-    "/api/admin/llm/decision-provider/test",
-    expect.objectContaining({
-      body: expect.stringContaining('"model":"gpt-6-luna"'),
-    })
-  );
-  expect(provider.model_configurations[0]?.is_visible).toBe(true);
-});
+    const request = fetchSpy.mock.calls.find(
+      ([url]) => url === "/api/admin/llm/decision-provider"
+    )?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      id: 7,
+      selected_model_names: ["gpt-6-luna"],
+    });
+    expect(JSON.parse(String(request?.body))).not.toHaveProperty(
+      "model_configurations"
+    );
+    expect(JSON.parse(String(request?.body))).not.toHaveProperty(
+      "is_auto_mode"
+    );
+    expect(fetchSpy).not.toHaveBeenCalledWith(
+      "/api/admin/llm/default",
+      expect.anything()
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/admin/llm/decision-provider/test",
+      expect.objectContaining({
+        body: expect.stringContaining('"model":"gpt-6-luna"'),
+      })
+    );
+    expect(provider.model_configurations[0]?.is_visible).toBe(true);
+  }
+);
 
 it("can remove every decision model without submitting shared chat models", async () => {
   const fetchSpy = jest

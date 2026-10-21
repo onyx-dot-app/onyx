@@ -64,7 +64,13 @@ function mockApi(
             ? { provider_id: 8, model_name: "zoom-decisions" }
             : null,
           providers: hasZoomConnection ? [configuredProvider] : [],
-          supported_providers: ["typesafe", "openai", "openrouter", "zoom_ai"],
+          supported_providers: [
+            "typesafe",
+            "openai",
+            "openrouter",
+            "vercel_ai_gateway",
+            "zoom_ai",
+          ],
         })
       );
     if (url === SWR_KEYS.adminLlmProvidersPaged)
@@ -120,10 +126,11 @@ it("shows the provider catalog without choosing a decision model", async () => {
   render(<DecisionModelsPage />);
   expect(await screen.findByText("Decision Models")).toBeInTheDocument();
   expect(await screen.findByPlaceholderText("Not configured")).toHaveValue("");
-  expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(4);
+  expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(5);
   expect(
     screen.getByText("TypeSafe AI", { selector: "span" })
   ).toBeInTheDocument();
+  expect(screen.getByText("Vercel AI Gateway")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Clear" })
   ).not.toBeInTheDocument();
@@ -298,7 +305,7 @@ it("refetches a cached provider list that another page made stale", async () => 
     },
   });
   await waitFor(() =>
-    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(4)
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(5)
   );
   expect(
     screen.queryByRole("button", { name: "Configure" })

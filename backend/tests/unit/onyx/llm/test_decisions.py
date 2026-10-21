@@ -142,6 +142,10 @@ def test_system_one_protocol(
             DecisionProvider.ZOOM_AI,
             "https://api.zoom.us/v2/aiservices/decisions/decide",
         ),
+        (
+            DecisionProvider.VERCEL_AI_GATEWAY,
+            "https://ai-gateway.vercel.sh/v1/decisions",
+        ),
     ],
 )
 def test_array_protocol_preserves_refusals(
@@ -285,6 +289,46 @@ def test_openrouter_custom_base_uses_alpha() -> None:
         api_base="https://proxy.example/api/v1/",
     )
     assert client.url == "https://proxy.example/api/alpha/decisions"
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "https://proxy.example/api",
+        "https://proxy.example/api/v1",
+        "https://proxy.example/api/v1/",
+    ],
+)
+def test_gateway_custom_bases_use_versioned_decision_endpoint(api_base: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://proxy.example/api/v1/decisions"
+        return httpx.Response(
+            200,
+            json={
+                "model": "test-model",
+                "answers": [{"type": "predicate", "name": "check", "probability": 0.9}],
+            },
+        )
+
+    with closing(httpx.Client(transport=httpx.MockTransport(handler))) as transport:
+        with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
+            result = DecisionClient(
+                DecisionProvider.VERCEL_AI_GATEWAY,
+                "test-model",
+                "test-key",
+                api_base=api_base,
+            ).decide(
+                DecisionRequest(
+                    input="Test",
+                    questions=[
+                        PredicateQuestion(name="check", instructions="Is this a test?")
+                    ],
+                ),
+                flow=LLMFlow.MODEL_VALIDATION,
+            )
+    assert result.model_dump()["answers"] == [
+        {"type": "predicate", "name": "check", "probability": 0.9}
+    ]
 
 
 @pytest.mark.parametrize(

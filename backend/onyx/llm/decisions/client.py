@@ -29,6 +29,10 @@ _ENDPOINTS = {
     DecisionProvider.ZOOM_AI: ("https://api.zoom.us/v2", "aiservices/decisions/decide"),
     DecisionProvider.OPENAI: ("https://api.openai.com/v1", "decisions"),
     DecisionProvider.OPENROUTER: ("https://openrouter.ai/api/alpha", "decisions"),
+    DecisionProvider.VERCEL_AI_GATEWAY: (
+        "https://ai-gateway.vercel.sh/v1",
+        "decisions",
+    ),
 }
 
 
@@ -157,6 +161,8 @@ class DecisionClient:
         base = (api_base or base).rstrip("/")
         if provider == DecisionProvider.OPENROUTER and base.endswith("/v1"):
             base = base.removesuffix("/v1") + "/alpha"
+        if provider == DecisionProvider.VERCEL_AI_GATEWAY and not base.endswith("/v1"):
+            base += "/v1"
         self.url = f"{base}/{path}"
         self.timeout = timeout
         self._headers = {

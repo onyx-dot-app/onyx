@@ -933,6 +933,25 @@ def _resolve_decision_connection(
 def _decision_provider_catalog(
     request: DecisionProviderConnection,
 ) -> dict[str, bool] | None:
+    if request.provider == LlmProviderNames.VERCEL_AI_GATEWAY:
+        payload = _get_openai_compatible_server_response(
+            request.api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
+            request.api_key,
+        )
+        items = payload.get("data")
+        if not isinstance(items, list):
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Invalid models in the Vercel AI Gateway catalog",
+            )
+        return {
+            item["id"]: False
+            for item in items
+            if isinstance(item, dict)
+            and item.get("type") == "evaluation"
+            and isinstance(item.get("id"), str)
+            and item["id"]
+        }
     if request.provider == LlmProviderNames.TYPESAFE:
         return {
             model.name: False for model in fetch_typesafe_models(request.api_key or "")
@@ -3120,8 +3139,8 @@ def get_vercel_ai_gateway_available_models(
     for model in models:
         try:
             model_id = model.get("id", "")
-            # The catalog mixes language, embedding, and media models.
-            if not model_id or model.get("type") != "language":
+            model_type = model.get("type")
+            if not model_id or model_type not in {"language", "evaluation"}:
                 continue
 
             modalities = model.get("modalities") or {}
@@ -3135,6 +3154,8 @@ def get_vercel_ai_gateway_available_models(
                     max_input_tokens=model.get("context_window"),
                     supports_image_input="image" in input_modalities,
                     supports_reasoning="reasoning" in supported_parameters,
+                    supports_chat=model_type == "language",
+                    supports_decisions=model_type == "evaluation",
                 )
             )
         except Exception as e:
@@ -3162,6 +3183,8 @@ def get_vercel_ai_gateway_available_models(
                     max_input_tokens=r.max_input_tokens,
                     supports_image_input=r.supports_image_input,
                     supports_reasoning=r.supports_reasoning,
+                    supports_chat=r.supports_chat,
+                    supports_decisions=r.supports_decisions,
                 )
                 for r in sorted_results
             ],
