@@ -147,9 +147,18 @@ jest.mock("@/app/craft/components/BuildMessageList", () => ({
   __esModule: true,
   default: () => <div>Saved history</div>,
 }));
+const mockSubmitResult = jest.fn();
 jest.mock("@/app/craft/components/BuildWelcome", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ onSubmit }: Pick<CraftInputBarProps, "onSubmit">) => (
+    <button
+      onClick={async () =>
+        mockSubmitResult(await onSubmit("welcome prompt", []))
+      }
+    >
+      Send welcome
+    </button>
+  ),
 }));
 jest.mock("@/app/craft/components/AgentSwitcher", () => ({
   __esModule: true,
@@ -624,6 +633,40 @@ it.each(["active", "failed"] as const)(
       expect(streamMessage).toHaveBeenCalledTimes(1);
     } finally {
       useBuildSessionStore.setState({ loadSession: original });
+    }
+  }
+);
+
+it.each([true, false])(
+  "reports welcome handoff acceptance with sandbox ready: %s",
+  async (ready) => {
+    const pendingStream = deferred<void>();
+    streamMessage.mockReturnValueOnce(pendingStream.promise);
+    useBuildSessionStore.setState({
+      currentSessionId: null,
+      preProvisioning: ready
+        ? { status: "ready", sessionId: "welcome" }
+        : { status: "idle" },
+    });
+    const error = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<BuildChatPanel />);
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: "Send welcome" }))
+      );
+      expect(mockSubmitResult).toHaveBeenCalledWith(ready);
+      if (ready)
+        expect(streamMessage).toHaveBeenCalledWith(
+          "welcome",
+          "welcome prompt",
+          expect.anything(),
+          []
+        );
+      else expect(streamMessage).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      await act(async () => pendingStream.resolve());
+      streamMessage.mockReset().mockResolvedValue(undefined);
     }
   }
 );

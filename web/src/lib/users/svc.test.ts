@@ -30,6 +30,9 @@ beforeEach(() => {
     });
   }
   sessionStorage.setItem("unrelated-preference", "keep");
+  sessionStorage.setItem("onyx:draft:craft:new", "legacy draft");
+  sessionStorage.setItem("onyx:draft:craft:user:new", "welcome draft");
+  sessionStorage.setItem("onyx:draft:craft:user:session", "session draft");
   sessionStorage.setItem(
     "onyx:craft:directories:v1:user:session",
     "private names"
@@ -75,6 +78,9 @@ test("failed logout retains the signed-in user's saved tabs", async () => {
   );
   expect(readOutputPanelPreferences("second-session")?.panelTabs).toHaveLength(
     1
+  );
+  expect(sessionStorage.getItem("onyx:draft:craft:user:new")).toBe(
+    "welcome draft"
   );
   expect(mutate).not.toHaveBeenCalled();
 });
