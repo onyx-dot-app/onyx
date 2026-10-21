@@ -103,7 +103,10 @@ class TestGetAssociatedObjects:
         ticket = _record("ticket1", associations={"contacts": _inline(["11", "22"])})
 
         result = connector._get_associated_objects(
-            HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+            HubSpotObjectType.TICKETS,
+            ticket,
+            HubSpotObjectType.CONTACTS,
+            strict=False,
         )
 
         ops.list_associations.assert_not_called()
@@ -122,7 +125,10 @@ class TestGetAssociatedObjects:
         ticket = _record("t1", associations={"contacts": _inline(["1"], True)})
 
         connector._get_associated_objects(
-            HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+            HubSpotObjectType.TICKETS,
+            ticket,
+            HubSpotObjectType.CONTACTS,
+            strict=False,
         )
 
         assert [c.kwargs["after"] for c in ops.list_associations.call_args_list] == [
@@ -140,7 +146,10 @@ class TestGetAssociatedObjects:
 
         with patch("onyx.connectors.hubspot.connector.time.sleep"):
             result = connector._get_associated_objects(
-                HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+                HubSpotObjectType.TICKETS,
+                ticket,
+                HubSpotObjectType.CONTACTS,
+                strict=False,
             )
 
         assert result == []

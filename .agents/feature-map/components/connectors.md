@@ -440,6 +440,11 @@ a gateway today (`<source>/source_operations.py`); most connectors still call th
 SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
+The SharePoint, OneDrive and Outlook checks share their sign-in probe
+(`microsoft_utils/sign_in.py`) and row text (`microsoft_utils/check_text.py`),
+and every probe after sign-in depends on it. `MicrosoftGraphError` is a
+`SourceApiError` that carries the request and the response body, so a check's
+Error Details show them.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
 JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 Its `GitHubApiError` is a `SourceApiError` that carries the request and the
@@ -453,7 +458,10 @@ decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
 source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, GitHub, and YouTrack
 register real ones today; every other source gets a synthesized fallback wrapping
-`validate_connector_settings`). A source with named checks must have a
+`validate_connector_settings`, the generic "Test connection" row of
+`capability_checks/generic_row.py`. A source whose connector keeps the no-op
+`validate_connector_settings` (`factory.py:source_has_settings_probe`) gets no
+INDEXING check, so its plan and runs hold no row). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
 instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
