@@ -2,7 +2,7 @@
 
 **Import:** `import { InputDatePicker } from "@opal/components";`
 
-Segmented date field on the shared `.opal-input` chrome, the Figma `Input/Date`. Mono `MM/DD/YYYY` segments accept typed input (auto-advance, backspace to the previous segment, commit on blur or Enter once the segments form a real in-range date), and the calendar action opens the Opal `Calendar` in a popover for click selection. Invalid or out-of-range typing reverts to the committed value.
+Segmented date field on the shared `.opal-input` chrome, the Figma `Input/Date`. Mono `MM/DD/YYYY` segments accept typed input (auto-advance, backspace to the previous segment, Left/Right arrows across segment edges, commit on blur or Enter once the segments form a real in-range date), and the calendar action opens the Opal `Calendar` in a popover for click selection. Invalid or out-of-range typing reverts to the committed value.
 
 ```tsx
 <InputDatePicker

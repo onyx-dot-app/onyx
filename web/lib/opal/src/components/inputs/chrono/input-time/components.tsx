@@ -229,7 +229,10 @@ function InputTime({
                 )}
                 onKeyDown={handleSegmentKeyDown(
                   part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null
+                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                  i < segmentParts.length - 1
+                    ? segmentRefs[segmentParts[i + 1]!]
+                    : null
                 )}
               />
             </React.Fragment>
