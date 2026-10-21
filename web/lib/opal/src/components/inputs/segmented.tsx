@@ -45,7 +45,9 @@ export function cleanPastedText(text: string): string {
  * writes the value and before any later input event, so it can never
  * overwrite a newer caret move.
  */
-export function usePendingCaret(segments: unknown) {
+export function usePendingCaret<S extends { [K in keyof S]: string }>(
+  segments: S
+) {
   const pendingCaretRef = React.useRef<{
     input: HTMLInputElement;
     position: number;
