@@ -447,6 +447,13 @@ writer of the attempt's aggregate counters:
   (`targeted_reindex_job_id` set) is explicitly excluded from this check and may run
   concurrently with a full crawl, relying instead on the per-document row locks in
   §4.4.
+- The creators in `docfetching/task_creation_utils.py` (new attempt, pending
+  backfill, dispatch of a waiting attempt) take the tenant-wide Redis creation
+  lock, then the cc-pair's row lock (`lock_connector_credential_pair_row`), check
+  the pair's status under it, and hold it until the attempt commits. The pause
+  and deletion routes take the same row lock before they read the attempts to
+  cancel, so a pause or delete never misses an attempt created at the same time.
+  Lock order: Redis creation lock, then the cc-pair row, then its attempt rows.
 - `update_batch_completion_and_docs` increments `completed_batches`,
   `total_docs_indexed`, `new_docs_indexed`, `total_chunks` under a
   `SELECT ... FOR UPDATE` on the `IndexAttempt` row. Each `docprocessing_task` also
@@ -489,6 +496,19 @@ is handled separately, by `reissue_old_batches`: on resume, every batch still
 sitting in `DocumentBatchStorage` for the cc-pair is re-issued as a fresh
 `docprocessing` task under the new attempt's ID, and the new attempt's batch
 numbering picks up after the reissued + already-completed count.
+
+The failed attempt's `docprocessing` tasks can still run during the reissue. Each
+task increments `completed_batches` and then deletes its batch. So
+`reissue_old_batches` moves the batches first and then reads the old attempt's
+`completed_batches` again from the database. Every old batch is then moved,
+counted, or both (both only leaves an unused batch number). The sum is the next
+batch number. The count can come from a later attempt that failed before it
+fetched anything, so the next number is also kept above every moved batch. The
+new attempt starts with `completed_batches` = next batch number - moved batches,
+set before the reissued tasks go out, so completion still fires at
+`completed_batches >= total_batches`. A batch that a task deleted before the
+move is skipped (`change_file_id` returns `False`), and `store_batch` refuses
+to overwrite an existing batch.
 
 `check_checkpoint_size` enforces a 200MB cap on the serialized checkpoint
 (`deep_getsizeof`), raising rather than silently truncating a runaway checkpoint

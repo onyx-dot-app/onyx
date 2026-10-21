@@ -1,10 +1,12 @@
 from typing import Annotated
 
+from pydantic import field_validator
+
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
 )
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, field_format_error
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -17,10 +19,21 @@ from onyx.connectors.microsoft_utils.config import (
     MicrosoftCloudBinding,
 )
 
+SITE_URL_FORMAT_ERROR = (
+    "Enter a full site URL, e.g. https://acme.sharepoint.com/sites/hr."
+)
+
 _COSMETIC = FieldPolicy(FieldClass.COSMETIC)
 _CONTENT_TYPE_TOGGLE = FieldPolicy(
     FieldClass.SCOPE, scope=ScopeToggle(widens_when=True)
 )
+
+
+def is_site_url_well_formed(site_url: str) -> bool:
+    """A full SharePoint or OneDrive site URL: https and a site path."""
+    return site_url.startswith("https://") and (
+        "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
+    )
 
 
 class SharepointCredentialBinding(MicrosoftCloudBinding):
@@ -52,3 +65,12 @@ class SharepointConnectorConfig(SharepointCredentialBinding, ConnectorConfig):
     exhaustive_ad_enumeration: Annotated[bool, _COSMETIC] = (
         SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
     )
+
+    # Indexing validates every entry, blanks included. The host and the
+    # outbound URL guard depend on the cloud and DNS, so the checks keep them.
+    @field_validator("sites")
+    @classmethod
+    def _sites_are_full_site_urls(cls, value: list[str] | None) -> list[str] | None:
+        if any(not is_site_url_well_formed(site_url) for site_url in value or []):
+            raise field_format_error(SITE_URL_FORMAT_ERROR)
+        return value

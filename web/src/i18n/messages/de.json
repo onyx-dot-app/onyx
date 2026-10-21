@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI-Aktion hinzufügen"
+        "title": "OpenAPI-Plugin hinzufügen"
       },
       "cancelButton": {
         "label": "Abbrechen"
@@ -188,14 +188,14 @@
         "invalidJson": "Ungültiges JSON-Format",
         "placeholder": "Geben Sie hier Ihr OpenAPI-Schema ein",
         "required": "Die Definition des OpenAPI-Schemas ist erforderlich",
-        "subDescription": "Geben Sie ein OpenAPI-Schema an, das die APIs definiert, die Sie im Rahmen dieser Aktion bereitstellen möchten. Sie können die Platzhalter `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` und `USER_EMAIL` an beliebiger Stelle im Schema verwenden (z. B. Server-URL, Pfade, Standardwerte von Parametern). Sie werden beim Aufruf durch die Werte der aktuellen Anfrage ersetzt. Mehr über [OpenAPI-Aktionen]({docsUrl}) erfahren.",
+        "subDescription": "Geben Sie ein OpenAPI-Schema an, das die APIs definiert, die Sie im Rahmen dieses Plugins bereitstellen möchten. Sie können die Platzhalter `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID` und `USER_EMAIL` an beliebiger Stelle im Schema verwenden (z. B. Server-URL, Pfade, Standardwerte von Parametern). Sie werden beim Aufruf durch die Werte der aktuellen Anfrage ersetzt. Mehr über [OpenAPI-Plugins]({docsUrl}) erfahren.",
         "title": "Definition des OpenAPI-Schemas"
       },
       "editConfigsButton": {
-        "disabledTooltip": "Nur der Ersteller der Aktion oder ein Administrator kann die Authentifizierung verwalten"
+        "disabledTooltip": "Nur der Ersteller des Plugins oder ein Administrator kann die Authentifizierung verwalten"
       },
       "editHeader": {
-        "title": "OpenAPI-Aktion bearbeiten"
+        "title": "OpenAPI-Plugin bearbeiten"
       },
       "empty": {
         "description": "Geben Sie ein OpenAPI-Schema an, um hier eine Vorschau der Aktionen zu sehen.",
@@ -208,17 +208,17 @@
         "noSummary": "Keine Zusammenfassung angegeben"
       },
       "submitButton": {
-        "addLabel": "Aktion hinzufügen",
+        "addLabel": "Plugin hinzufügen",
         "addingLabel": "Wird hinzugefügt...",
         "saveLabel": "Änderungen speichern",
         "savingLabel": "Wird gespeichert..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI-Aktion erfolgreich erstellt",
-        "actionUpdated": "OpenAPI-Aktion erfolgreich aktualisiert",
-        "createFailed": "Die OpenAPI-Aktion konnte nicht erstellt werden",
+        "actionCreated": "OpenAPI-Plugin erfolgreich erstellt",
+        "actionUpdated": "OpenAPI-Plugin erfolgreich aktualisiert",
+        "createFailed": "Das OpenAPI-Plugin konnte nicht erstellt werden",
         "invalidJson": "Ungültiges JSON-Format in der Definition des OpenAPI-Schemas",
-        "updateFailed": "Die OpenAPI-Aktion konnte nicht aktualisiert werden"
+        "updateFailed": "Das OpenAPI-Plugin konnte nicht aktualisiert werden"
       },
       "humanDescription": {
         "title": "Beschreibung für Menschen",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "Die vorhandene OAuth-Konfiguration konnte nicht geladen werden. Geben Sie die Details erneut ein, um sie zu aktualisieren."
       },
       "header": {
-        "description": "Authentifizieren Sie Ihre Verbindung, um die OpenAPI-Aktionen zu verwenden."
+        "description": "Authentifizieren Sie Ihre Verbindung, um dieses OpenAPI-Plugin zu verwenden."
       },
       "headers": {
         "addButton": {
           "label": "Header hinzufügen"
         },
-        "description": "Legen Sie benutzerdefinierte Header für alle Anfragen an den API-Endpunkt dieser Aktion fest.",
+        "description": "Legen Sie benutzerdefinierte Header für alle Anfragen an den API-Endpunkt dieses Plugins fest.",
         "keyRequired": "Der Header-Schlüssel ist erforderlich",
         "keyTitle": "Header",
         "minRequired": "Fügen Sie mindestens einen Authentifizierungs-Header hinzu",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "Löschen"
         },
-        "title": "OpenAPI-Aktion löschen"
+        "title": "OpenAPI-Plugin löschen"
       },
       "method": {
         "noSummary": "Keine Zusammenfassung angegeben"
@@ -764,7 +764,7 @@
           "tooltip": "Bilderzeugung konfigurieren"
         },
         "openapi": {
-          "tooltip": "OpenAPI-Aktionen verwalten"
+          "tooltip": "OpenAPI-Plugins verwalten"
         },
         "webSearch": {
           "tooltip": "Websuche konfigurieren"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "Verbunden",
         "workspace": "Workspace-Verbindung",
-        "session": "Nutzt Ihre Anmeldung",
+        "session": "Verwendet Ihr verbundenes Konto",
         "none": "Einsatzbereit",
         "oauth": "Konto verbinden",
         "credentials": "Anmeldedaten hinzufügen",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "Probleme",
-        "readyDescription": "Du kannst dieses Plugin jetzt verwenden.",
+        "noAuthentication": "Keine Authentifizierung erforderlich",
         "connection": "Verbindung",
         "tools": "Werkzeuge",
         "toolCount": "{count, plural, one {# Werkzeug} other {# Werkzeuge}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "Hinzufügen",
         "mcp": "Benutzerdefinierten MCP-Server hinzufügen",
-        "openapi": "OpenAPI-Aktion hinzufügen"
+        "openapi": "OpenAPI-Plugin hinzufügen"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP-Server konnten nicht geladen werden.",
         "listErrorDescription": "Diese Plugin-Liste konnte nicht geladen werden. Versuchen Sie es gleich erneut.",
-        "openapiError": "OpenAPI-Aktionen konnten nicht geladen werden.",
+        "openapiError": "OpenAPI-Plugins konnten nicht geladen werden.",
         "retry": {
           "label": "Erneut versuchen"
         },
@@ -2240,11 +2240,12 @@
         "label": "Beta"
       },
       "connectors": {
+        "description": "Quellen, die die interne Suche im Chat verwendet. Fügen Sie sie auf der Seite zum Indexierungsstatus hinzu oder ändern Sie sie dort.",
         "empty": {
           "title": "Keine Konnektoren eingerichtet"
         },
         "manageAllButton": {
-          "label": "Alle verwalten"
+          "label": "Konnektoren verwalten"
         },
         "title": "Konnektoren"
       },
@@ -2423,7 +2424,7 @@
           "title": "Coding-Agent"
         },
         "description": "Tools und Funktionen, die der Chat verwenden kann. Dies gilt nicht für Agenten.",
-        "pluginsNote": "Konfigurieren Sie MCP-Server und OpenAPI-Aktionen für den Standard-Chat unter [Plugins]({url}).",
+        "pluginsNote": "Konfigurieren Sie MCP-Server und OpenAPI-Plugins für den Standard-Chat unter [Plugins]({url}).",
         "imageGeneration": {
           "description": "Bilder mit KI-gestützten Tools erzeugen und bearbeiten.",
           "disabledTooltip": "Die Bilderzeugung erfordert ein konfiguriertes Modell. Richten Sie eines unter Konfiguration > Bilderzeugung ein oder fragen Sie einen Administrator.",
@@ -2965,8 +2966,8 @@
           "queued": "In Warteschlange",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({minutes, number} Min.)",
-          "rateFinished": "{rate} Dok./Min. ({minutes, number} Min.)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "{rate} Dok./Min. ({duration})",
           "membershipRate": "{rate} Mitgliedschaften/Min."
         },
         "actions": {
@@ -3013,7 +3014,6 @@
           "label": "Zeitraum",
           "all": "Gesamter Zeitraum",
           "h1": "Letzte Stunde",
-          "h12": "Letzte 12 Stunden",
           "h24": "Letzte 24 Stunden",
           "d7": "Letzte 7 Tage",
           "d30": "Letzte 30 Tage"
@@ -3087,6 +3087,7 @@
             "errors": "Indexierung mit Fehlern abgeschlossen.",
             "resolved": "Indexierungsfehler behoben.",
             "succeeded": "Indexierung erfolgreich abgeschlossen.",
+            "queued": "Indexierung in der Warteschlange.",
             "inProgress": "Indexierung läuft.",
             "canceled": "Indexierung gestoppt."
           },
@@ -3098,6 +3099,7 @@
             "errors": "Berechtigungen mit Fehlern synchronisiert.",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben.",
             "succeeded": "Berechtigungen erfolgreich synchronisiert.",
+            "queued": "Berechtigungssynchronisierung in der Warteschlange.",
             "inProgress": "Berechtigungen werden synchronisiert.",
             "canceled": "Berechtigungssynchronisierung gestoppt."
           },
@@ -3109,6 +3111,7 @@
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert.",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben.",
             "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert.",
+            "queued": "Gruppensynchronisierung in der Warteschlange.",
             "inProgress": "Gruppenmitgliedschaften werden synchronisiert.",
             "canceled": "Gruppensynchronisierung gestoppt."
           },
@@ -3120,6 +3123,7 @@
             "errors": "Bereinigung mit Fehlern abgeschlossen.",
             "resolved": "Bereinigungsfehler behoben.",
             "succeeded": "Bereinigung erfolgreich abgeschlossen.",
+            "queued": "Bereinigung in der Warteschlange.",
             "inProgress": "Bereinigung läuft.",
             "canceled": "Bereinigung gestoppt."
           },
@@ -3131,6 +3135,7 @@
             "errors": "Connector-Prüfungen mit Fehlern abgeschlossen.",
             "resolved": "Fehler der Connector-Prüfungen behoben.",
             "succeeded": "Connector-Prüfungen bestanden.",
+            "queued": "Connector-Prüfungen in der Warteschlange.",
             "inProgress": "Connector-Prüfungen laufen.",
             "canceled": "Connector-Prüfungen gestoppt."
           }
@@ -4819,33 +4824,47 @@
       "allProviders": {
         "label": "Alle Anbieter"
       },
+      "deleteModal": {
+        "description": "Die Nutzung von **{model}** ({provider}) wird wieder zum integrierten Preis berechnet.",
+        "submit": {
+          "label": "Löschen"
+        },
+        "title": "Überschreibung für *{model}* löschen"
+      },
       "empty": {
         "description": "Fügen Sie eine hinzu, um einen ausgehandelten Preis (USD pro 1 Mio. Token) für ein Modell anzuwenden.",
         "title": "Keine Kostenüberschreibungen festgelegt."
       },
       "form": {
         "addButton": {
-          "label": "Überschreibung hinzufügen"
+          "label": "Hinzufügen"
         },
+        "description": "Legen Sie einen ausgehandelten Preis für ein Modell fest. Er ersetzt den integrierten Preis bei der Berechnung der Nutzungskosten.",
+        "editTitle": "Kostenüberschreibung bearbeiten",
+        "newTitle": "Neue Kostenüberschreibung",
         "cacheRate": {
-          "label": "Preis für Cache-Lesevorgänge (USD pro 1 Mio. Token, optional)",
-          "placeholder": "standardmäßig der Eingabepreis"
+          "description": "Einheit: USD pro 1 Mio. Token. Standardmäßig der Eingabepreis.",
+          "label": "Preis für Cache-Lesevorgänge"
         },
         "cancelButton": {
           "label": "Abbrechen"
         },
         "inputRate": {
-          "label": "Eingabepreis (USD pro 1 Mio. Token)"
+          "label": "Eingabepreis"
         },
         "model": {
+          "description": "Eine Kostenüberschreibung auf dieses ausgewählte Modell anwenden.",
           "label": "Modell",
           "placeholder": "Modell auswählen"
         },
         "outputRate": {
-          "label": "Ausgabepreis (USD pro 1 Mio. Token)"
+          "label": "Ausgabepreis"
         },
         "saveButton": {
           "label": "Speichern"
+        },
+        "units": {
+          "description": "Einheit: USD pro 1 Mio. Token."
         }
       },
       "panel": {
@@ -4859,15 +4878,16 @@
         "title": "Kostenüberschreibungen"
       },
       "row": {
+        "cache": "Cache {value}",
         "deleteButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} löschen"
         },
+        "description": "{provider} · Aktualisiert {time}",
         "editButton": {
           "ariaLabel": "{provider}-Überschreibung für {model} bearbeiten"
         },
-        "rates": "{provider} · Ein {input} · Aus {output} · USD pro 1 Mio. Token",
-        "ratesWithCache": "{provider} · Ein {input} · Aus {output} · Cache {cache} · USD pro 1 Mio. Token",
-        "updated": "Aktualisiert {time}"
+        "input": "Ein {value}",
+        "output": "Aus {value}"
       },
       "toasts": {
         "removeFailed": "Die Überschreibung konnte nicht entfernt werden: {message}",
@@ -4875,10 +4895,6 @@
         "saveFailed": "Die Überschreibung konnte nicht gespeichert werden: {message}",
         "saved": "Preis für {model} gespeichert.",
         "unknownError": "Unbekannter Fehler"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -6847,6 +6863,9 @@
         "noModelsTooltip": "Contextual Retrieval ist deaktiviert, weil keine Modelle konfiguriert sind. Richten Sie zuerst ein [Sprachmodell]({link}) ein.",
         "title": "Contextual Retrieval"
       },
+      "currentModel": {
+        "legacyHint": "Dies ist ein veraltetes Modell. Es funktioniert weiter, aber Sie können es nicht erneut für einen neuen Index auswählen. Klicken Sie zum Upgrade auf „Alle Modelle anzeigen“ und wählen Sie ein neueres Modell."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Das Embedding-Modell und die Einstellungen werden von Onyx Cloud verwaltet."
@@ -6985,9 +7004,12 @@
         "currentButton": {
           "label": "Aktuelles Modell"
         },
-        "deprecated": {
-          "connectTooltip": "Dieses Embedding-Modell ist veraltet und kann nicht verbunden werden.",
-          "selectTooltip": "Dieses Embedding-Modell ist veraltet und kann nicht ausgewählt werden."
+        "gpuRecommended": {
+          "tag": "GPU empfohlen"
+        },
+        "legacy": {
+          "tag": "Veraltet",
+          "tooltip": "Sie können dieses Modell nicht für einen neuen Index auswählen. Es funktioniert weiter, bis Sie das Modell wechseln."
         },
         "selectButton": {
           "label": "Modell auswählen"
@@ -6997,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU-Geschwindigkeiten sind Schätzungen und hängen von Hardware und Dokumentgröße ab. RAM-Empfehlungen gelten für ein geladenes Modell, nicht für den gesamten Onyx-Stack. Planen Sie beim Neuindizieren mehr Speicher ein.",
         "addCustomModel": {
           "label": "Benutzerdefiniertes Modell hinzufügen"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "Verbinden Sie einen LiteLLM-Proxy, ein Azure-OpenAI-Deployment oder ein Bifrost-Gateway. Den Modellnamen geben Sie selbst an. Für LiteLLM und Azure geben Sie auch die Dimension an.",
+          "selfHostedDescription": "Betreiben Sie ein Hugging-Face-Embedding-Modell, das nicht in der Liste oben steht. Modellname, Dimension und Präfixe geben Sie selbst an.",
+          "title": "Erweitert: eigenes Modell oder eigenen Proxy verwenden"
         },
         "cloudTab": {
           "label": "Cloud-basiert"
@@ -7198,22 +7226,27 @@
         "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Das Top-Embedding-Modell von Cohere. Das beste Verhältnis von Qualität und Kosten. 2048 Dimensionen.",
+        "cohereEmbedV5Fast": "Günstigere Variante von Embed 5 von Cohere. Trotzdem eine ausgezeichnete Wahl. 2048 Dimensionen.",
         "cohereEmbedEnglishV3": "Englisches Embedding-Modell von Cohere. Gute Leistung bei englischsprachigen Aufgaben.",
         "cohereEmbedEnglishLightV3": "Leichtgewichtiges englisches Embedding-Modell von Cohere. Schneller und effizienter für einfachere Aufgaben.",
-        "cohereEmbedV4": "Neuestes mehrsprachiges Embedding-Modell von Cohere mit standardmäßig 1536 Dimensionen für bessere Retrieval-Qualität.",
-        "openaiTextEmbedding3Large": "Großes Embedding-Modell von OpenAI. Beste Leistung, aber teurer.",
-        "openaiTextEmbedding3Small": "Neueres, effizienteres Embedding-Modell von OpenAI. Gutes Verhältnis von Leistung und Kosten.",
+        "cohereEmbedV4": "Mehrsprachiges Embedding-Modell von Cohere mit 1536 Dimensionen.",
+        "openaiTextEmbedding3Large": "Großes Embedding-Modell von OpenAI. Eine gute Wahl, wenn Sie OpenAI bereits nutzen. 3072 Dimensionen.",
+        "openaiTextEmbedding3Small": "Kleines Embedding-Modell von OpenAI. Mit Abstand die günstigste Cloud-basierte Option. 1536 Dimensionen.",
         "googleGeminiEmbedding001": "Gemini-Embedding-Modell von Google. Leistungsstark und effizient.",
         "googleTextEmbedding005": "Kleineres, leichteres Embedding-Modell von Google.",
-        "googleGeminiEmbedding2": "Neuestes multimodales Embedding-Modell von Google (GA). Höchste Retrieval-Qualität mit 3072 Dimensionen.",
+        "googleGeminiEmbedding2": "Das Top-Embedding-Modell von Google. Sehr leistungsstark, aber teuer und langsamer. Mit 3072 Dimensionen entsteht ein großer Index. Eine solide Wahl für Teams, die Google bereits nutzen.",
         "googleGeminiEmbedding2Preview": "Vorschauversion von Gemini Embedding 2. Für neue Einrichtungen durch gemini-embedding-2 ersetzt.",
         "voyageLarge2Instruct": "Großes Embedding-Modell von Voyage. Hohe Leistung durch Instruction-Fine-Tuning.",
         "voyage4Large": "Größtes Embedding-Modell der Voyage-4-Serie. Beste Retrieval-Qualität von Voyage, mehrsprachig.",
         "voyage4": "Universelles Embedding-Modell der Voyage-4-Serie. Hohe Retrieval-Qualität zu moderaten Kosten.",
         "voyage4Lite": "Leichtgewichtiges Embedding-Modell der Voyage-4-Serie. Niedrigste Kosten und höchste Rate-Limits.",
         "voyageLight2Instruct": "Leichtgewichtiges Embedding-Modell von Voyage. Gutes Verhältnis von Leistung und Effizienz.",
+        "graniteEmbedding97mMultilingualR2": "Das kleine mehrsprachige Modell von IBM. In {appName} enthalten. 97 Mio. Parameter, 384 Dimensionen. Bis zu 200 Dokumente / Min. / CPU-Kern. Empfohlener CPU-RAM: 4 GB pro Modellserver.",
+        "voyage4Nano": "Das Modell mit offenen Gewichten von Voyage AI. 346 Mio. Parameter, 2048 Dimensionen. Bis zu 50 Dokumente / Min. / CPU-Kern. Empfohlener CPU-RAM: 4 GB pro Modellserver.",
+        "nemotron3Embed1b": "Das mehrsprachige Modell von NVIDIA. 1,1 Mrd. Parameter, 2048 Dimensionen. Bis zu 5 Dokumente / Min. / CPU-Kern. Empfohlener CPU-RAM: 8 GB pro Modellserver. GPU empfohlen.",
         "nomicEmbedTextV1": "Embedding-Modell von Nomic, spezialisiert auf Retrieval, Ähnlichkeit, Clustering und Klassifikation.",
-        "e5BaseV2": "Ein kleineres und schnelleres Modell als der Standard. Etwa doppelt so schnell wie das Standardmodell, bei geringerer Suchqualität.",
+        "e5BaseV2": "Englisches Embedding-Modell aus der E5-Familie von Microsoft. Ausgewogen zwischen Geschwindigkeit und Suchqualität.",
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
         "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
@@ -11896,6 +11929,9 @@
         "personal": {
           "label": "Persönlich"
         },
+        "required": {
+          "tooltip": "Der Administrator Ihrer Organisation schreibt diesen Skill für Sie vor."
+        },
         "unavailable": {
           "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
         }
@@ -12423,6 +12459,9 @@
       "customTool": {
         "authFailedStatus": {
           "text": "Authentifizierung von {toolName} fehlgeschlagen (HTTP {statusCode})"
+        },
+        "blockedStatus": {
+          "text": "{toolName} wurde blockiert"
         },
         "completedStatus": {
           "text": "{toolName} abgeschlossen"
@@ -14895,7 +14934,7 @@
         "title": "\"{title}\" löschen?"
       },
       "newSession": {
-        "label": "Loslegen"
+        "label": "Neue Sitzung"
       },
       "options": {
         "label": "Sitzungsoptionen"
@@ -14959,7 +14998,8 @@
         "missingTaskId": "Aufgaben-ID fehlt.",
         "pauseButton": "Pausieren",
         "resumeButton": "Fortsetzen",
-        "runNowButton": "Jetzt ausführen",
+        "runHistoryTab": "Ausführungsverlauf",
+        "runNowButton": "Einmal ausführen",
         "toasts": {
           "deleteFailed": "Aufgabe konnte nicht gelöscht werden",
           "deleted": "„{name}“ gelöscht.",
@@ -15054,7 +15094,7 @@
           "trigger": "Auslöser"
         },
         "empty": {
-          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Jetzt ausführen“."
+          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Einmal ausführen“."
         },
         "errors": {
           "loadFailed": "Ausführungsverlauf konnte nicht geladen werden.",
@@ -15073,19 +15113,20 @@
           "notOpenableAriaLabel": "Nicht öffenbar"
         },
         "trigger": {
-          "runNow": "Jetzt ausführen",
+          "runNow": "Einmal ausführen",
           "schedule": "Zeitplan"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "Zeiten verwenden deine lokale Zeitzone.",
         "dailyWeekly": {
-          "atLabel": "Um",
-          "daysLabel": "An diesen Tagen",
+          "atLabel": "Uhrzeit",
+          "daysLabel": "Tage",
           "runsEveryDay": "Läuft jeden Tag",
           "runsOn": "Läuft am {days}"
         },
         "interval": {
-          "everyLabel": "Alle"
+          "everyLabel": "Wiederholen alle"
         },
         "intervalUnits": {
           "days": "Tage",
@@ -15424,8 +15465,8 @@
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
-      "taskDescription": "Nur aktivierte Apps sind für diese Aufgabe verfügbar. Änderungen gelten nur für diese Aufgabe.",
-      "newTaskDescription": "Aktivieren Sie die Apps für diese Aufgabe. Jede App beginnt mit Ihren aktuellen Aktionseinstellungen.",
+      "taskDescription": "Wähle die Plugins für diese Aufgabe und lege fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
+      "newTaskDescription": "Aktiviere ein Plugin, um mit deinen aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
       "workspace_managed": "Vom Arbeitsbereich verwaltet",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
@@ -15449,7 +15490,9 @@
       "disabledForTask": "Für diese Aufgabe deaktiviert",
       "externalApp": "App",
       "mcpServer": "MCP-Server",
-      "taskAppsTitle": "Apps und MCP-Server",
+      "taskAppsTitle": "Plugins",
+      "taskAccessTitle": "Plugin-Zugriff",
+      "noEnabledApps": "Für diese Aufgabe sind keine Plugins aktiviert.",
       "actionPolicies": "Genehmigungseinstellungen",
       "policyCounts": "{auto} automatisch · {ask} nachfragen · {disabled} deaktiviert",
       "manageActions": "Aktionen verwalten",
@@ -15793,6 +15836,11 @@
     },
     "iconTooltip": {
       "label": "Weitere Informationen"
+    },
+    "inputCurrency": {
+      "amount": "Betrag",
+      "fraction": "Nachkommastellen des Betrags",
+      "whole": "Ganzzahliger Betrag"
     },
     "input": {
       "day": "Tag",
@@ -16754,21 +16802,11 @@
         "title": "Skill nicht verfügbar"
       },
       "management": {
-        "description": "Steuern Sie, wer diesen Skill verwenden kann.",
-        "externalApp": {
-          "manage": {
-            "label": "In App-Einstellungen verwalten"
-          },
-          "readyDescription": "Dieser Skill verwendet die App „{appName}“.",
-          "title": "Externe App"
-        },
         "sharing": {
           "edit": {
             "label": "Freigabe bearbeiten"
-          },
-          "title": "Freigabe"
-        },
-        "title": "Verwaltung"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "Fügen Sie vor dem Speichern eine Beschreibung hinzu.",
@@ -16778,21 +16816,6 @@
         "noPermission": "Sie haben keine Berechtigung, die Details dieses Skills zu bearbeiten.",
         "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden und bearbeiten.",
-          "title": "Organisation",
-          "viewerDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden."
-        },
-        "personal": {
-          "description": "Nur Sie können diesen Skill verwenden.",
-          "title": "Persönlich"
-        },
-        "shares": {
-          "description": "Nur ausgewählte Benutzer und Gruppen können diesen Skill verwenden.",
-          "title": "{count, plural, one {# Freigabe} other {# Freigaben}}"
-        }
       },
       "toasts": {
         "created": "„{name}“ erstellt",
@@ -16973,7 +16996,6 @@
         },
         "externalAppNotice": "Organisationsweiter Lesezugriff ist erforderlich, solange dieser Skill mit der App “{appName}” verknüpft ist.",
         "header": {
-          "title": "*{name}* teilen",
           "transferTitle": "*{name}* übertragen"
         },
         "loading": {
@@ -16985,7 +17007,9 @@
         },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
-          "ariaLabel": "Zugriff für {name} aktualisieren"
+          "ariaLabel": "Zugriff für {name} aktualisieren",
+          "canUse": "Kann verwenden",
+          "canEdit": "Kann bearbeiten"
         },
         "saveButton": {
           "label": "Speichern"
@@ -17007,7 +17031,23 @@
         },
         "transferredToast": {
           "message": "Eigentum übertragen."
-        }
+        },
+        "installation": {
+          "title": "Installation",
+          "available": "Zur Installation verfügbar",
+          "default": "Standardmäßig installiert",
+          "required": "Erforderlich",
+          "availableDescription": "Nutzer können jederzeit installieren oder deinstallieren.",
+          "defaultDescription": "Automatisch installiert. Nutzer können jederzeit deaktivieren oder deinstallieren.",
+          "requiredDescription": "Automatisch installiert. Nutzer können nicht deaktivieren oder deinstallieren.",
+          "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird."
+        },
+        "description": "Wählen Sie, wer diesen Skill nutzen kann und wie er installiert wird.",
+        "accessTitle": "Wer hat Zugriff",
+        "peopleTitle": "Personen mit Zugriff",
+        "manageIndividualAccess": "Individuellen Zugriff verwalten",
+        "individualAccessTitle": "Individueller Zugriff",
+        "ownershipTitle": "Eigentümerschaft"
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"

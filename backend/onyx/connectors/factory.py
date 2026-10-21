@@ -1,6 +1,7 @@
 import importlib
 from enum import Enum
 from typing import Any, Type
+from uuid import UUID
 
 import pydantic
 from pydantic import BaseModel
@@ -131,6 +132,18 @@ def source_supports_windowed_runs(source: DocumentSource) -> bool:
         return False
     connector_class = _load_connector_class(source)
     return issubclass(connector_class, (CheckpointedConnector, PollConnector))
+
+
+def source_has_settings_probe(source: DocumentSource) -> bool:
+    """True if the source's connector overrides ``validate_connector_settings``.
+    The default is a no-op that reaches nothing, so it tests nothing."""
+    if source not in CONNECTOR_CLASS_MAP:
+        return False
+    connector_class = _load_connector_class(source)
+    return (
+        connector_class.validate_connector_settings
+        is not BaseConnector.validate_connector_settings
+    )
 
 
 def source_prune_honors_indexing_start(source: DocumentSource) -> bool:
@@ -532,6 +545,7 @@ def validate_proposed_pairing(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     access_type: AccessType,
+    user_id: UUID,
 ) -> ProposedPairingValidation:
     """Validates a proposed pairing as creation does, from the given values
     instead of the stored connector.
@@ -583,6 +597,7 @@ def validate_proposed_pairing(
         connector_specific_config=connector_specific_config,
         credential=credential,
         access_type=access_type,
+        user_id=user_id,
     )
     return ProposedPairingValidation(
         check_results=run.finished_results,
@@ -642,6 +657,7 @@ def validate_ccpair_for_user(
         access_type=access_type,
         enforce_creation=enforce_creation,
         trigger=trigger,
+        user_id=user.id if user is not None else None,
     )
 
 
@@ -657,11 +673,12 @@ def validate_and_record_pairing(
     access_type: AccessType,
     enforce_creation: bool,
     trigger: CapabilityCheckTrigger,
+    user_id: UUID | None,
 ) -> bool:
     """Validates a pairing from the given values and records the outcome as
     the pairing's capability report under ``trigger``. ``cc_pair_id`` is the
     edited pair whose fresh dry-run results are reused; None for a new
-    pairing. An edit passes its proposed values before it writes them.
+    pairing. ``user_id`` is who asks for it, whose check skips are reused. An edit passes its proposed values before it writes them.
 
     Raises:
         ValidationError: The binding, the construction or a required check
@@ -730,6 +747,7 @@ def validate_and_record_pairing(
             credential=credential,
             access_type=access_type,
             enforce_creation=enforce_creation,
+            user_id=user_id,
         )
 
     _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())

@@ -86,6 +86,8 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
   modelPaging?: ModelPaging;
+  /** Where the list portals to; inside a modal, pass the modal content. */
+  container?: InputSingleSelectProps["container"];
 }
 
 /**
@@ -105,6 +107,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   disabled,
   placeholder,
   modelPaging,
+  container,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
@@ -221,6 +224,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}
+      container={container}
     />
   );
 }

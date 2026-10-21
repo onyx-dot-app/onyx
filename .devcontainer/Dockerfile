@@ -10,7 +10,11 @@ FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c
 
 FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Ubuntu 26.04 moved ARM64 packages from ports to the main archive.
+RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+    sed -i 's|ports.ubuntu.com/ubuntu-ports|archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources; \
+  fi \
+  && apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
   cargo \

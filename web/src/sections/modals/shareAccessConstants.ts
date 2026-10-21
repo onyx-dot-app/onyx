@@ -48,16 +48,20 @@ const SCOPE_OPTION_DEFINITIONS: ShareOptionDefinition<ShareScope>[] = [
   },
 ];
 
-export function useSharePermissionOptions(): SharePermissionMenuOption<ShareAccessPermission>[] {
+export function useSharePermissionOptions(
+  labels?: Record<ShareAccessPermission, string>
+): SharePermissionMenuOption<ShareAccessPermission>[] {
   const t = useTranslations("chat.modals.share");
+  const viewerLabel = labels?.VIEWER;
+  const editorLabel = labels?.EDITOR;
   return useMemo(
     () =>
       PERMISSION_OPTION_DEFINITIONS.map(({ icon, labelKey, value }) => ({
         icon,
-        label: t(labelKey),
+        label: (value === "VIEWER" ? viewerLabel : editorLabel) ?? t(labelKey),
         value,
       })),
-    [t]
+    [t, viewerLabel, editorLabel]
   );
 }
 

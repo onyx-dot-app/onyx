@@ -2,7 +2,6 @@ name: MCP Compatibility
 
 on:
   pull_request:
-  merge_group:
   workflow_dispatch:
     inputs:
       test_alert:

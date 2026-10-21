@@ -78,6 +78,11 @@ type InputSingleBaseProps = Omit<
   rightChildren?: React.ReactNode;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Where the list portals to. Inside a modal, pass the modal content so the
+   * list sits within its focus trap and the search field can take focus.
+   */
+  container?: HTMLElement | null;
 };
 
 /**

@@ -6,7 +6,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.models import GitHubRepository
-from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.models import connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
@@ -58,12 +58,12 @@ def validate_credential_base_url(base_url: str) -> None:
     token-leak surface. ``GITHUB_CONNECTOR_BASE_URL`` is deployment config, set
     by whoever runs the app, and stays exempt.
 
-    The SSRF protection level decides how strict this is, the same control the
-    web connector uses. At the default level only public hosts are reachable.
+    The SSRF protection level decides how strict this is, through the shared
+    connector policy. At the default level only public hosts are reachable.
     When an admin relaxes it, a private Enterprise Server becomes reachable but
     cloud metadata stays blocked.
     """
-    enforced: bool = web_connector_ssrf_enforced(
+    enforced: bool = connector_ssrf_enforced(
         get_security_settings().ssrf_protection_level
     )
     try:

@@ -50,7 +50,11 @@ from onyx.connectors.microsoft_utils.models import (
 from onyx.connectors.microsoft_utils.sharepoint_principals import (
     SharepointPrincipalType,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.sharepoint.models import (
+    SharepointDrive,
+    SitePagesPage,
+    SiteUrlListing,
+)
 from onyx.connectors.slack.source_operations import (
     SlackAuthTestResponse,
     SlackChannelMembersPage,
@@ -190,7 +194,9 @@ def _configure_sharepoint_spy(spy: MagicMock) -> None:
     the read checks reach the item-level and group-level operations."""
     site_url: str = "https://contoso.sharepoint.com/sites/eng"
     spy.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
-    spy.list_site_urls.return_value = [site_url]
+    spy.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[site_url], complete=True
+    )
     spy.get_site_id.return_value = "site-id"
     spy.list_drives.return_value = [
         SharepointDrive(
@@ -361,7 +367,7 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
     ],
     # The root page check reads a page only when a root page is set.
-    DocumentSource.NOTION: [{"root_page_id": "root"}],
+    DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
 }
 
 

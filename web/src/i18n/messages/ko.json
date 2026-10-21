@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI 액션 추가"
+        "title": "OpenAPI 플러그인 추가"
       },
       "cancelButton": {
         "label": "취소"
@@ -188,14 +188,14 @@
         "invalidJson": "잘못된 JSON 형식입니다",
         "placeholder": "여기에 OpenAPI 스키마를 입력하세요",
         "required": "OpenAPI 스키마 정의는 필수입니다",
-        "subDescription": "이 액션의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 액션]({docsUrl})에 대해 자세히 알아보세요.",
+        "subDescription": "이 플러그인의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 플러그인]({docsUrl})에 대해 자세히 알아보세요.",
         "title": "OpenAPI 스키마 정의"
       },
       "editConfigsButton": {
-        "disabledTooltip": "액션을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
+        "disabledTooltip": "플러그인을 만든 사용자 또는 관리자만 인증을 관리할 수 있습니다"
       },
       "editHeader": {
-        "title": "OpenAPI 액션 편집"
+        "title": "OpenAPI 플러그인 편집"
       },
       "empty": {
         "description": "OpenAPI 스키마를 입력하면 여기에서 액션을 미리 볼 수 있습니다.",
@@ -208,17 +208,17 @@
         "noSummary": "요약이 제공되지 않음"
       },
       "submitButton": {
-        "addLabel": "액션 추가",
+        "addLabel": "플러그인 추가",
         "addingLabel": "추가하는 중...",
         "saveLabel": "변경 사항 저장",
         "savingLabel": "저장하는 중..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI 액션을 만들었습니다",
-        "actionUpdated": "OpenAPI 액션을 업데이트했습니다",
-        "createFailed": "OpenAPI 액션을 만들지 못했습니다",
+        "actionCreated": "OpenAPI 플러그인을 만들었습니다",
+        "actionUpdated": "OpenAPI 플러그인을 업데이트했습니다",
+        "createFailed": "OpenAPI 플러그인을 만들지 못했습니다",
         "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다",
-        "updateFailed": "OpenAPI 액션을 업데이트하지 못했습니다"
+        "updateFailed": "OpenAPI 플러그인을 업데이트하지 못했습니다"
       },
       "humanDescription": {
         "title": "사용자를 위한 설명",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "기존 OAuth 구성을 불러오지 못했습니다. 업데이트하려면 세부 정보를 다시 입력하세요."
       },
       "header": {
-        "description": "OpenAPI 액션을 사용하려면 연결을 인증하세요."
+        "description": "OpenAPI 플러그인을 사용하려면 연결을 인증하세요."
       },
       "headers": {
         "addButton": {
           "label": "헤더 추가"
         },
-        "description": "이 액션의 API 엔드포인트로 보내는 모든 요청에 사용할 사용자 지정 헤더를 지정하세요.",
+        "description": "이 플러그인의 API 엔드포인트로 보내는 모든 요청에 사용할 사용자 지정 헤더를 지정하세요.",
         "keyRequired": "헤더 키는 필수입니다",
         "keyTitle": "헤더",
         "minRequired": "인증 헤더를 하나 이상 추가하세요",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "삭제"
         },
-        "title": "OpenAPI 액션 삭제"
+        "title": "OpenAPI 플러그인 삭제"
       },
       "method": {
         "noSummary": "요약이 제공되지 않음"
@@ -764,7 +764,7 @@
           "tooltip": "이미지 생성 구성"
         },
         "openapi": {
-          "tooltip": "OpenAPI 작업 관리"
+          "tooltip": "OpenAPI 플러그인 관리"
         },
         "webSearch": {
           "tooltip": "웹 검색 구성"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "연결됨",
         "workspace": "워크스페이스 연결",
-        "session": "현재 로그인 사용",
+        "session": "연결된 계정 사용",
         "none": "사용 준비됨",
         "oauth": "계정 연결",
         "credentials": "인증 정보 추가",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "문제",
-        "readyDescription": "이 플러그인을 사용할 수 있습니다.",
+        "noAuthentication": "인증이 필요하지 않음",
         "connection": "연결",
         "tools": "도구",
         "toolCount": "{count, plural, other {도구 #개}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "추가",
         "mcp": "사용자 지정 MCP 서버 추가",
-        "openapi": "OpenAPI 작업 추가"
+        "openapi": "OpenAPI 플러그인 추가"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP 서버를 불러올 수 없습니다.",
         "listErrorDescription": "플러그인 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
-        "openapiError": "OpenAPI 작업을 불러올 수 없습니다.",
+        "openapiError": "OpenAPI 플러그인을 불러올 수 없습니다.",
         "retry": {
           "label": "다시 시도"
         },
@@ -2240,11 +2240,12 @@
         "label": "베타"
       },
       "connectors": {
+        "description": "채팅의 내부 검색에서 사용하는 소스입니다. 인덱싱 상태 페이지에서 추가하거나 변경하세요.",
         "empty": {
           "title": "설정된 커넥터 없음"
         },
         "manageAllButton": {
-          "label": "전체 관리"
+          "label": "커넥터 관리"
         },
         "title": "커넥터"
       },
@@ -2423,7 +2424,7 @@
           "title": "코딩 에이전트"
         },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
-        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 작업은 [플러그인]({url})에서 설정하세요.",
+        "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 플러그인은 [플러그인]({url})에서 설정하세요.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
           "disabledTooltip": "이미지 생성에는 설정된 모델이 필요합니다. 구성 > 이미지 생성에서 모델을 설정하거나 관리자에게 문의하세요.",
@@ -2965,8 +2966,8 @@
           "queued": "대기 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({minutes, number}분)",
-          "rateFinished": "분당 {rate}개 문서 ({minutes, number}분)",
+          "finished": "{time} ({duration})",
+          "rateFinished": "분당 {rate}개 문서 ({duration})",
           "membershipRate": "{rate} 멤버십/분"
         },
         "actions": {
@@ -3013,7 +3014,6 @@
           "label": "기간",
           "all": "전체 기간",
           "h1": "최근 1시간",
-          "h12": "최근 12시간",
           "h24": "최근 24시간",
           "d7": "최근 7일",
           "d30": "최근 30일"
@@ -3087,6 +3087,7 @@
             "errors": "오류와 함께 인덱싱 완료.",
             "resolved": "인덱싱 오류 해결됨.",
             "succeeded": "인덱싱이 성공적으로 완료됨.",
+            "queued": "인덱싱 대기 중.",
             "inProgress": "인덱싱 진행 중.",
             "canceled": "인덱싱 중지됨."
           },
@@ -3098,6 +3099,7 @@
             "errors": "오류와 함께 권한 동기화됨.",
             "resolved": "권한 동기화 오류 해결됨.",
             "succeeded": "권한 동기화가 성공적으로 완료됨.",
+            "queued": "권한 동기화 대기 중.",
             "inProgress": "권한 동기화 중.",
             "canceled": "권한 동기화 중지됨."
           },
@@ -3109,6 +3111,7 @@
             "errors": "오류와 함께 그룹 멤버십 동기화됨.",
             "resolved": "그룹 멤버십 동기화 오류 해결됨.",
             "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨.",
+            "queued": "그룹 멤버십 동기화 대기 중.",
             "inProgress": "그룹 멤버십 동기화 중.",
             "canceled": "그룹 동기화 중지됨."
           },
@@ -3120,6 +3123,7 @@
             "errors": "오류와 함께 정리 완료됨.",
             "resolved": "정리 오류 해결됨.",
             "succeeded": "정리가 성공적으로 완료됨.",
+            "queued": "정리 대기 중.",
             "inProgress": "정리 진행 중.",
             "canceled": "정리 중지됨."
           },
@@ -3131,6 +3135,7 @@
             "errors": "오류와 함께 커넥터 검사 완료됨.",
             "resolved": "커넥터 검사 오류 해결됨.",
             "succeeded": "커넥터 검사 통과.",
+            "queued": "커넥터 검사 대기 중.",
             "inProgress": "커넥터 검사 진행 중.",
             "canceled": "커넥터 검사 중지됨."
           }
@@ -4819,33 +4824,47 @@
       "allProviders": {
         "label": "모든 제공업체"
       },
+      "deleteModal": {
+        "description": "**{model}**({provider}) 사용량은 다시 기본 제공 가격으로 계산됩니다.",
+        "submit": {
+          "label": "삭제"
+        },
+        "title": "*{model}* 재정의 삭제"
+      },
       "empty": {
         "description": "모델에 협상된 요금(100만 token당 USD)을 적용하려면 재정의를 추가하세요.",
         "title": "설정된 비용 재정의가 없습니다."
       },
       "form": {
         "addButton": {
-          "label": "재정의 추가"
+          "label": "추가"
         },
+        "description": "모델의 협상된 요금을 설정합니다. 사용 비용 계산에서 기본 제공 가격을 대체합니다.",
+        "editTitle": "비용 재정의 편집",
+        "newTitle": "새 비용 재정의",
         "cacheRate": {
-          "label": "캐시 읽기 요금(100만 token당 USD, 선택 사항)",
-          "placeholder": "기본값은 입력 요금입니다"
+          "description": "단위는 100만 token당 USD입니다. 기본값은 입력 요금입니다.",
+          "label": "캐시 읽기 요금"
         },
         "cancelButton": {
           "label": "취소"
         },
         "inputRate": {
-          "label": "입력 요금(100만 token당 USD)"
+          "label": "입력 요금"
         },
         "model": {
+          "description": "선택한 이 모델에 비용 재정의를 적용합니다.",
           "label": "모델",
           "placeholder": "모델 선택"
         },
         "outputRate": {
-          "label": "출력 요금(100만 token당 USD)"
+          "label": "출력 요금"
         },
         "saveButton": {
           "label": "저장"
+        },
+        "units": {
+          "description": "단위는 100만 token당 USD입니다."
         }
       },
       "panel": {
@@ -4859,15 +4878,16 @@
         "title": "비용 재정의"
       },
       "row": {
+        "cache": "캐시 {value}",
         "deleteButton": {
           "ariaLabel": "{model}의 {provider} 재정의 삭제"
         },
+        "description": "{provider} · 업데이트 {time}",
         "editButton": {
           "ariaLabel": "{model}의 {provider} 재정의 편집"
         },
-        "rates": "{provider} · 입력 {input} · 출력 {output} · 100만 token당 USD",
-        "ratesWithCache": "{provider} · 입력 {input} · 출력 {output} · 캐시 {cache} · 100만 token당 USD",
-        "updated": "{time}에 업데이트됨"
+        "input": "입력 {value}",
+        "output": "출력 {value}"
       },
       "toasts": {
         "removeFailed": "재정의를 제거하지 못했습니다: {message}",
@@ -4875,10 +4895,6 @@
         "saveFailed": "재정의를 저장하지 못했습니다: {message}",
         "saved": "{model}의 요금을 저장했습니다.",
         "unknownError": "알 수 없는 오류"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -6847,6 +6863,9 @@
         "noModelsTooltip": "설정된 모델이 없어 컨텍스트 검색을 사용할 수 없습니다. 먼저 [언어 모델]({link})을 설정하세요.",
         "title": "컨텍스트 검색"
       },
+      "currentModel": {
+        "legacyHint": "레거시 모델입니다. 계속 작동하지만 새 인덱스에 다시 선택할 수는 없습니다. 업그레이드하려면 “모든 모델 보기”를 클릭하고 최신 모델을 선택하세요."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Embedding 모델과 설정은 Onyx Cloud에서 관리합니다."
@@ -6985,9 +7004,12 @@
         "currentButton": {
           "label": "현재 모델"
         },
-        "deprecated": {
-          "connectTooltip": "이 embedding 모델은 지원이 중단되어 연결할 수 없습니다.",
-          "selectTooltip": "이 embedding 모델은 지원이 중단되어 선택할 수 없습니다."
+        "gpuRecommended": {
+          "tag": "GPU 권장"
+        },
+        "legacy": {
+          "tag": "레거시",
+          "tooltip": "이 모델은 새 인덱스에 선택할 수 없습니다. 모델을 변경하기 전까지는 계속 작동합니다."
         },
         "selectButton": {
           "label": "모델 선택"
@@ -6997,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU 속도는 추정치이며 하드웨어와 문서 크기에 따라 달라집니다. 권장 RAM은 로드된 모델 하나에 대한 값이며 전체 Onyx 구성의 요구량이 아닙니다. 재인덱싱 시 메모리를 추가로 확보하세요.",
         "addCustomModel": {
           "label": "사용자 지정 모델 추가"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "LiteLLM 프록시, Azure OpenAI 배포 또는 Bifrost 게이트웨이를 연결합니다. 모델 이름은 직접 입력합니다. LiteLLM과 Azure는 차원도 입력합니다.",
+          "selfHostedDescription": "위 목록에 없는 Hugging Face 임베딩 모델을 실행합니다. 모델 이름, 차원, 접두사는 직접 입력합니다.",
+          "title": "고급: 자체 모델 또는 프록시 사용"
         },
         "cloudTab": {
           "label": "클라우드 기반"
@@ -7198,22 +7226,27 @@
         "restoreHint": "커넥터를 유지하려면 여기서 취소하고 재개하거나 문제를 해결한 뒤 다시 재인덱싱하세요. 그러면 새 인덱스로 이전됩니다. 그렇지 않으면 재인덱싱이 끝난 뒤 다시 추가하세요."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere의 대표 임베딩 모델입니다. 품질과 비용의 균형이 가장 좋습니다. 2048차원 출력.",
+        "cohereEmbedV5Fast": "Cohere Embed 5의 저비용 버전입니다. 그래도 매우 훌륭한 선택입니다. 2048차원 출력.",
         "cohereEmbedEnglishV3": "Cohere의 영어 임베딩 모델입니다. 영어 작업에 좋은 성능을 보입니다.",
         "cohereEmbedEnglishLightV3": "Cohere의 경량 영어 임베딩 모델입니다. 단순한 작업에 더 빠르고 효율적입니다.",
-        "cohereEmbedV4": "Cohere의 최신 다국어 임베딩 모델로, 기본 1536차원 출력으로 더 높은 검색 품질을 제공합니다.",
-        "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 성능은 가장 좋지만 비용이 더 높습니다.",
-        "openaiTextEmbedding3Small": "OpenAI의 더 새롭고 효율적인 임베딩 모델입니다. 성능과 비용의 균형이 좋습니다.",
+        "cohereEmbedV4": "Cohere의 다국어 임베딩 모델로, 1536차원 출력을 제공합니다.",
+        "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 이미 OpenAI를 사용 중이라면 좋은 선택입니다. 3072차원 출력.",
+        "openaiTextEmbedding3Small": "OpenAI의 소형 임베딩 모델입니다. 클라우드 기반 옵션 중 단연 가장 경제적입니다. 1536차원 출력.",
         "googleGeminiEmbedding001": "Google의 Gemini 임베딩 모델입니다. 강력하고 효율적입니다.",
         "googleTextEmbedding005": "Google의 더 작고 가벼운 임베딩 모델입니다.",
-        "googleGeminiEmbedding2": "Google의 최신 멀티모달 임베딩 모델(GA)입니다. 3072차원 출력으로 최고 품질의 검색을 제공합니다.",
+        "googleGeminiEmbedding2": "Google의 대표 임베딩 모델입니다. 매우 강력하지만 비용이 높고 더 느립니다. 3072차원 출력으로 인덱스가 커집니다. 이미 Google을 사용하는 팀에게 탄탄한 선택입니다.",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
         "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
         "voyage4Large": "Voyage 4 시리즈의 가장 큰 임베딩 모델입니다. Voyage 최고의 검색 품질과 다국어를 지원합니다.",
         "voyage4": "Voyage 4 시리즈의 범용 임베딩 모델입니다. 적당한 비용으로 높은 검색 품질을 제공합니다.",
         "voyage4Lite": "Voyage 4 시리즈의 경량 임베딩 모델입니다. 비용이 가장 낮고 속도 제한이 가장 높습니다.",
         "voyageLight2Instruct": "Voyage의 경량 임베딩 모델입니다. 성능과 효율의 균형이 좋습니다.",
+        "graniteEmbedding97mMultilingualR2": "IBM의 소형 다국어 모델입니다. {appName}에 포함됩니다. 9700만 개 파라미터, 384차원 출력. CPU 코어당 분당 최대 200개 문서. CPU 권장 RAM: 모델 서버당 4 GB.",
+        "voyage4Nano": "Voyage AI의 오픈 웨이트 모델입니다. 3억 4600만 개 파라미터, 2048차원 출력. CPU 코어당 분당 최대 50개 문서. CPU 권장 RAM: 모델 서버당 4 GB.",
+        "nemotron3Embed1b": "NVIDIA의 다국어 모델입니다. 11억 개 파라미터, 2048차원 출력. CPU 코어당 분당 최대 5개 문서. CPU 권장 RAM: 모델 서버당 8 GB. GPU를 권장합니다.",
         "nomicEmbedTextV1": "검색, 유사도, 클러스터링, 분류에 특화된 Nomic의 임베딩 모델입니다.",
-        "e5BaseV2": "기본 모델보다 더 작고 빠른 모델입니다. 검색 품질은 낮아지지만 기본 모델보다 약 2배 빠릅니다.",
+        "e5BaseV2": "Microsoft E5 계열의 영어 임베딩 모델입니다. 속도와 검색 품질의 균형을 갖추었습니다.",
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",
         "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
         "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
@@ -11896,6 +11929,9 @@
         "personal": {
           "label": "개인"
         },
+        "required": {
+          "tooltip": "조직 관리자가 이 스킬을 필수로 지정했습니다."
+        },
         "unavailable": {
           "label": "사용 불가 - 클릭하여 자세히 보기"
         }
@@ -12423,6 +12459,9 @@
       "customTool": {
         "authFailedStatus": {
           "text": "{toolName} 인증 실패 (HTTP {statusCode})"
+        },
+        "blockedStatus": {
+          "text": "{toolName}이(가) 차단되었습니다"
         },
         "completedStatus": {
           "text": "{toolName} 완료"
@@ -14895,7 +14934,7 @@
         "title": "\"{title}\"을(를) 삭제할까요?"
       },
       "newSession": {
-        "label": "크래프트 시작"
+        "label": "새 세션"
       },
       "options": {
         "label": "세션 옵션"
@@ -14959,7 +14998,8 @@
         "missingTaskId": "작업 ID가 없습니다.",
         "pauseButton": "일시 중지",
         "resumeButton": "재개",
-        "runNowButton": "지금 실행",
+        "runHistoryTab": "실행 기록",
+        "runNowButton": "한 번 실행",
         "toasts": {
           "deleteFailed": "작업을 삭제하지 못했습니다",
           "deleted": "\"{name}\"이(가) 삭제되었습니다.",
@@ -15054,7 +15094,7 @@
           "trigger": "트리거"
         },
         "empty": {
-          "label": "아직 실행 기록이 없습니다. 작업이 실행될 때마다 기록이 생성되며, 위의 지금 실행을 사용할 수도 있습니다."
+          "label": "아직 실행 기록이 없습니다. 작업이 실행될 때마다 기록이 생성되며, 위의 한 번 실행을 사용할 수도 있습니다."
         },
         "errors": {
           "loadFailed": "실행 기록을 불러오지 못했습니다.",
@@ -15073,19 +15113,20 @@
           "notOpenableAriaLabel": "열 수 없음"
         },
         "trigger": {
-          "runNow": "지금 실행",
+          "runNow": "한 번 실행",
           "schedule": "예약"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "시간은 현지 시간대를 사용합니다.",
         "dailyWeekly": {
-          "atLabel": "시각",
-          "daysLabel": "다음 요일에",
+          "atLabel": "시간",
+          "daysLabel": "요일",
           "runsEveryDay": "매일 실행됩니다",
           "runsOn": "{days}에 실행됩니다"
         },
         "interval": {
-          "everyLabel": "매"
+          "everyLabel": "반복 간격"
         },
         "intervalUnits": {
           "days": "일",
@@ -15424,8 +15465,8 @@
       "appTitle": "{name} 승인 설정",
       "title": "승인 설정",
       "personalDescription": "이 설정은 Craft 대화와 새 작업에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
-      "taskDescription": "활성화된 앱만 이 작업에서 사용할 수 있습니다. 변경 사항은 이 작업에만 적용됩니다.",
-      "newTaskDescription": "이 작업에서 사용할 앱을 활성화하세요. 각 앱은 현재 작업 설정으로 시작합니다.",
+      "taskDescription": "이 작업에서 사용할 플러그인과 자동으로 실행할 동작을 선택하세요. 변경 사항은 이 작업에만 적용됩니다.",
+      "newTaskDescription": "플러그인을 활성화하면 현재 동작 설정으로 시작합니다.",
       "workspace_disabled": "워크스페이스에서 비활성화됨",
       "workspace_managed": "워크스페이스에서 관리",
       "userManagement": "사용자가 승인 설정을 관리하도록 허용",
@@ -15449,7 +15490,9 @@
       "disabledForTask": "이 작업에서 비활성화됨",
       "externalApp": "앱",
       "mcpServer": "MCP 서버",
-      "taskAppsTitle": "앱 및 MCP 서버",
+      "taskAppsTitle": "플러그인",
+      "taskAccessTitle": "플러그인 접근",
+      "noEnabledApps": "이 작업에 활성화된 플러그인이 없습니다.",
       "actionPolicies": "승인 설정",
       "policyCounts": "자동 승인 {auto} · 확인 {ask} · 비활성 {disabled}",
       "manageActions": "작업 관리",
@@ -15793,6 +15836,11 @@
     },
     "iconTooltip": {
       "label": "자세한 정보"
+    },
+    "inputCurrency": {
+      "amount": "금액",
+      "fraction": "금액의 소수 부분",
+      "whole": "금액의 정수 부분"
     },
     "input": {
       "day": "일",
@@ -16754,21 +16802,11 @@
         "title": "스킬 사용 불가"
       },
       "management": {
-        "description": "이 스킬을 사용할 수 있는 사람을 관리하세요.",
-        "externalApp": {
-          "manage": {
-            "label": "앱 설정에서 관리"
-          },
-          "readyDescription": "이 스킬은 앱 “{appName}”을 사용합니다.",
-          "title": "외부 앱"
-        },
         "sharing": {
           "edit": {
             "label": "공유 편집"
-          },
-          "title": "공유"
-        },
-        "title": "관리"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "저장하기 전에 설명을 추가하세요.",
@@ -16778,21 +16816,6 @@
         "noPermission": "이 스킬의 세부 정보를 편집할 권한이 없습니다.",
         "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "조직의 모든 구성원이 이 스킬을 사용하고 편집할 수 있습니다.",
-          "title": "조직",
-          "viewerDescription": "조직의 모든 구성원이 이 스킬을 사용할 수 있습니다."
-        },
-        "personal": {
-          "description": "나만 이 스킬을 사용할 수 있습니다.",
-          "title": "개인"
-        },
-        "shares": {
-          "description": "선택한 사용자와 그룹만 이 스킬을 사용할 수 있습니다.",
-          "title": "{count, plural, one {공유 #건} other {공유 #건}}"
-        }
       },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
@@ -16973,7 +16996,6 @@
         },
         "externalAppNotice": "이 스킬이 “{appName}” 앱과 연결되어 있는 동안에는 조직 전체 뷰어 권한이 필요합니다.",
         "header": {
-          "title": "*{name}* 공유",
           "transferTitle": "*{name}* 이전"
         },
         "loading": {
@@ -16985,7 +17007,9 @@
         },
         "ownerLabel": "소유자",
         "permissionMenu": {
-          "ariaLabel": "{name}의 접근 권한 변경"
+          "ariaLabel": "{name}의 접근 권한 변경",
+          "canUse": "사용 가능",
+          "canEdit": "편집 가능"
         },
         "saveButton": {
           "label": "저장"
@@ -17007,7 +17031,23 @@
         },
         "transferredToast": {
           "message": "소유권을 이전했습니다."
-        }
+        },
+        "installation": {
+          "title": "설치",
+          "available": "설치 가능",
+          "default": "기본 설치",
+          "required": "필수",
+          "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
+          "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
+          "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
+          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
+        },
+        "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
+        "accessTitle": "액세스 범위",
+        "peopleTitle": "액세스 권한이 있는 사용자",
+        "manageIndividualAccess": "개별 액세스 관리",
+        "individualAccessTitle": "개별 액세스",
+        "ownershipTitle": "소유권"
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"

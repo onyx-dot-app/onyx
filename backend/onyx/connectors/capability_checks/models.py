@@ -33,6 +33,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     RateLimitedValidationError,
     SourceApiError,
+    TimedOutValidationError,
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
@@ -180,10 +181,17 @@ class CapabilityCheckStatus(str, Enum):
     # The check needs state (connector instance or config) that was not
     # supplied.
     SKIPPED = "skipped"
+    # A required check the admin skipped on a form: it did not run, and it
+    # holds Create. Only draft runs and pair dry runs hold it.
+    STOPPED = "stopped"
 
 
 INCOMPLETE_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
     {CapabilityCheckStatus.INCOMPLETE, CapabilityCheckStatus.INDETERMINATE}
+)
+# Statuses of a check that did not run. Neither is a pass.
+NOT_RUN_STATUSES: frozenset[CapabilityCheckStatus] = frozenset(
+    {CapabilityCheckStatus.SKIPPED, CapabilityCheckStatus.STOPPED}
 )
 
 
@@ -346,10 +354,14 @@ def _http_detail(error: BaseException) -> CheckErrorDetail | None:
 
 
 def check_error_detail(
-    error: Exception, error_kind: CheckErrorKind, secrets: Iterable[str]
+    error: Exception,
+    error_kind: CheckErrorKind,
+    secrets: Iterable[str],
+    keep_trace: bool = False,
 ) -> CheckErrorDetail | None:
     """The detail of a check's exception: the HTTP response it carries, and a
-    stack trace when the cause is unknown. None when it has neither. URL query
+    stack trace when the cause is unknown or ``keep_trace`` is set. None when
+    it has neither. URL query
     strings and every value of ``secrets`` (the run's credential values) are
     removed from the response and the trace before either is cut to size,
     so a cut cannot leave part of a secret."""
@@ -359,14 +371,16 @@ def check_error_detail(
         detail.response_excerpt = _scrubbed(
             _cut_for_redaction(detail.response_excerpt, secrets), secrets
         )[:MAX_RESPONSE_EXCERPT_CHARS]
-    if error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
+    if keep_trace or error_kind in _UNKNOWN_CAUSE_ERROR_KINDS:
         trace = _scrubbed("".join(traceback.format_exception(error)), secrets)
         detail.stack_trace = trace[-MAX_STACK_TRACE_CHARS:]
     return detail if detail != CheckErrorDetail() else None
 
 
 class CheckRowText(BaseModel):
-    """A row's line and description."""
+    """A row's line and description. In a hang-guard text,
+    ``TIME_LIMIT_PLACEHOLDER`` in the description gives the guard's time
+    limit, e.g. "10 minutes"."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -374,8 +388,23 @@ class CheckRowText(BaseModel):
     description: str
 
 
+TIME_LIMIT_PLACEHOLDER = "{time_limit}"
+
+
+def sign_in_timeout_text(source_name: str) -> CheckRowText:
+    """The row text of a sign-in that the source did not answer in time."""
+    return CheckRowText(
+        summary="Sign-in timed out",
+        description=(
+            f"{source_name} did not answer the sign-in in time.\nRe-run, or "
+            f"check that {source_name} is reachable from Onyx."
+        ),
+    )
+
+
 class CheckNotRunReason(str, Enum):
-    """Why a SKIPPED check did not run, when a gate of the run stopped it."""
+    """Why a SKIPPED or STOPPED check did not run: a gate of the run, or the
+    admin."""
 
     # A check it depends on FAILED.
     DEPENDENCY_FAILED = "dependency_failed"
@@ -388,6 +417,15 @@ class CheckNotRunReason(str, Enum):
     RATE_LIMITED = "rate_limited"
     # The check found nothing in scope to test (``NothingToCheckError``).
     NOTHING_IN_SCOPE = "nothing_in_scope"
+    # The admin skipped the check on a form: an optional check is SKIPPED, a
+    # required one STOPPED.
+    SKIPPED_BY_USER = "skipped_by_user"
+    STOPPED_BY_USER = "stopped_by_user"
+
+
+USER_NOT_RUN_REASONS: frozenset[CheckNotRunReason] = frozenset(
+    {CheckNotRunReason.SKIPPED_BY_USER, CheckNotRunReason.STOPPED_BY_USER}
+)
 
 
 # Kinds that leave the check INCOMPLETE: they prove nothing about the
@@ -412,7 +450,7 @@ def check_error_kind(error: Exception) -> CheckErrorKind:
         return CheckErrorKind.RATE_LIMITED
     if isinstance(error, InconclusiveValidationError):
         return CheckErrorKind.INCONCLUSIVE
-    if isinstance(error, TimeoutError):
+    if isinstance(error, (TimeoutError, TimedOutValidationError)):
         return CheckErrorKind.TIMEOUT
     if isinstance(error, UnreachableValidationError):
         return CheckErrorKind.UNREACHABLE
@@ -471,6 +509,19 @@ class CapabilityCheckContext(BaseModel):
         return validate_form_state(mapping.config_class, self.connector_specific_config)
 
 
+class CheckStep(BaseModel):
+    """Makes a check the second step of another check's row: a two-step row.
+    The parent probes one item; the step lists or counts all of them, and its
+    result fills the parent's row (``two_step.two_step_row``)."""
+
+    # The check_id of the parent. The step runs after it, on its row.
+    step_of: str
+    # The row's line while the step runs after the parent passed.
+    running_summary: str
+    # The caveat on the parent's line when the step does not finish.
+    unfinished_caveat: str
+
+
 _PERM_SYNC_CAPABILITIES = frozenset(
     {
         CredentialCapability.DOC_PERMISSION_SYNC,
@@ -503,10 +554,10 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
     - ``applies``: a predicate on the form state, for anything the two
       declarations above cannot express.
 
-    ``validates_binding`` marks a check that proves the credential works with
-    the credential-bound fields (e.g. it signs in to the site URL). Such a
-    check may require only bound fields. A create form can wait on these
-    checks before it unlocks the rest of the configuration.
+    ``validates_binding`` marks a check whose pass unlocks the rest of the
+    create form: every source's sign-in check, and a check that proves the
+    credential works with the credential-bound fields (e.g. it lists the
+    site's spaces). Such a check may require only bound fields.
     """
 
     # The source's config model. None for checks that never read the config.
@@ -532,6 +583,8 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         fails_when_unreachable: bool = False,
         depends_on: tuple[str, ...] = (),
         row_id: str | None = None,
+        step: CheckStep | None = None,
+        timeout_text: CheckRowText | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -580,8 +633,14 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.depends_on = depends_on
         # The row the check shows on. Checks that share one are one row: the
         # variants of a probe (token types, deployments) and a probe's
-        # discovery step. Defaults to the check_id.
-        self.row_id = row_id or check_id
+        # discovery step. Defaults to the parent's check_id for a step, else
+        # to the check_id.
+        self.row_id = row_id or (step.step_of if step is not None else check_id)
+        # Set on the second step of a two-step row.
+        self.step = step
+        # The row text when the hang guard stops the check. None gives the
+        # runner's default.
+        self.timeout_text = timeout_text
 
     def outcome_status(
         self, error_kind: CheckErrorKind, form_run: bool
@@ -651,6 +710,8 @@ class CapabilityCheckResult(BaseModel):
     status: CapabilityCheckStatus
     # The row the check shows on; None in results stored before rows.
     row_id: str | None = None
+    # Set on the second step of a two-step row; it names the parent.
+    step: CheckStep | None = None
     # Exception text for failures, skip reason for skips, empty on success.
     message: str = ""
     # Exception class name, for support diagnosis.
@@ -773,10 +834,10 @@ def aggregate_capability_verdict(
 
     Pure function, evaluated in strict precedence order. Required checks gate
     the verdict: a required FAILED is FAILED, and a required INCOMPLETE or
-    SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
-    made. Non-required failures and incomplete checks only downgrade to
-    PASSED_WITH_WARNINGS (partial capability); non-required skips do not
-    downgrade at all. Checks that do not apply are left out. An empty result
+    SKIPPED (or STOPPED) leaves the capability's core unverified, so no
+    pass-ish claim may be made. Non-required failures and incomplete checks
+    only downgrade to PASSED_WITH_WARNINGS (partial capability); non-required
+    skips do not downgrade at all. Checks that do not apply are left out. An empty result
     list aggregates to SKIPPED: a capability is never PASSED on the basis of
     having checked nothing.
     """
@@ -794,10 +855,7 @@ def aggregate_capability_verdict(
         result.status in INCOMPLETE_STATUSES and result.required for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
-    if any(
-        result.status == CapabilityCheckStatus.SKIPPED and result.required
-        for result in results
-    ):
+    if any(result.status in NOT_RUN_STATUSES and result.required for result in results):
         return CapabilityVerdict.SKIPPED
     if any(
         result.status == CapabilityCheckStatus.FAILED
@@ -805,7 +863,7 @@ def aggregate_capability_verdict(
         for result in results
     ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS
-    if all(result.status == CapabilityCheckStatus.SKIPPED for result in results):
+    if all(result.status in NOT_RUN_STATUSES for result in results):
         return CapabilityVerdict.SKIPPED
     return CapabilityVerdict.PASSED
 
@@ -822,3 +880,64 @@ def compute_capability_verdicts(
         )
         for capability in CredentialCapability
     }
+
+
+class DraftCheckActions(BaseModel):
+    """The per-check actions of a draft run request: Run Check and Re-run
+    Check (``check_ids``), Skip (``skip_check_ids``) and Start Now
+    (``start_check_id``)."""
+
+    # Only these checks run, ignoring their cached results. Every other check
+    # keeps its result from the cache or from the latest run of the draft key,
+    # and runs only when it has none.
+    check_ids: list[str] | None = None
+    # These do not run: an optional check is SKIPPED, a required one STOPPED.
+    skip_check_ids: list[str] = []
+    # Runs next: this check and the checks it depends on go first.
+    start_check_id: str | None = None
+
+
+class TwoStepEntry(BaseModel):
+    """What the row rules read of one check: a result, or a draft state."""
+
+    check_id: str
+    row_id: str
+    step: CheckStep | None = None
+    # None while the check is pending or running.
+    status: CapabilityCheckStatus | None
+    applicable: bool = True
+    partial: bool = False
+    error_kind: CheckErrorKind | None = None
+    not_run_reason: CheckNotRunReason | None = None
+    summary: str | None = None
+
+    @classmethod
+    def of_result(cls, result: CapabilityCheckResult) -> "TwoStepEntry":
+        return cls(
+            check_id=result.check_id,
+            row_id=result.row_id or result.check_id,
+            step=result.step,
+            status=result.status,
+            applicable=result.applicable,
+            partial=result.partial,
+            error_kind=result.error_kind,
+            not_run_reason=result.not_run_reason,
+            summary=result.summary,
+        )
+
+
+class TwoStepRow(BaseModel):
+    """How a two-step row shows. The row takes the state, line, description,
+    details and findings of ``shown_check_id``, with two exceptions:
+    ``counting`` makes it In progress, and ``caveat`` adds a caveat to the
+    parent's Successful row. ``summary`` is the row's line in every case."""
+
+    row_id: str
+    parent_check_id: str
+    step_check_id: str
+    shown_check_id: str
+    # The step runs after the parent passed.
+    counting: bool = False
+    summary: str | None = None
+    # The step did not finish.
+    caveat: str | None = None

@@ -24,7 +24,7 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurableKind,
 )
 from onyx.connectors.sharepoint import source_operations as gateway_module
-from onyx.connectors.sharepoint.models import SharepointDrive
+from onyx.connectors.sharepoint.models import SharepointDrive, SiteUrlListing
 from onyx.connectors.sharepoint.source_operations import (
     DRIVE_EXPAND_FIELDS,
     DRIVE_LIST_PROPERTY,
@@ -249,14 +249,28 @@ def test_list_site_urls_reads_every_page() -> None:
     pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL, ""], None))
     sdk = _sdk_client(pages=pages)
 
-    assert fake_gateway(sdk_client=sdk).list_site_urls() == [SITE_URL, OTHER_SITE_URL]
+    assert fake_gateway(sdk_client=sdk).list_site_urls().site_urls == [
+        SITE_URL,
+        OTHER_SITE_URL,
+    ]
 
 
 def test_list_site_urls_stops_at_the_page_cap() -> None:
     pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL], None))
     sdk = _sdk_client(pages=pages)
 
-    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=1) == [SITE_URL]
+    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=1) == (
+        SiteUrlListing(site_urls=[SITE_URL], complete=False)
+    )
+
+
+def test_a_sample_of_the_whole_listing_is_complete() -> None:
+    pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL], None))
+    sdk = _sdk_client(pages=pages)
+
+    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=2) == (
+        SiteUrlListing(site_urls=[SITE_URL, OTHER_SITE_URL], complete=True)
+    )
 
 
 def test_check_token_reports_the_lifetime() -> None:

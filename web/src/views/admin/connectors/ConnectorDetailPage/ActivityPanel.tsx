@@ -153,6 +153,8 @@ export interface ActivityPanelProps {
   onClose?: () => void;
   /** A chart slice or span that narrows every group. The chart's picker shows and clears it. */
   range?: SliceRange | null;
+  /** Keeps the card in view under the page header while the column beside it scrolls. */
+  sticky?: boolean;
   className?: string;
 }
 
@@ -162,6 +164,7 @@ export default function ActivityPanel({
   title,
   onClose,
   range = null,
+  sticky = false,
   className,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
@@ -307,10 +310,15 @@ export default function ActivityPanel({
       )}
       data-testid="connector-activity"
     >
+      {/* 1.5rem and 6rem match SettingsLayouts.Body's pt-6 and pt-6 + pb-18, so the page's end never pushes the title out of view. */}
       <Section
         alignItems="stretch"
         height="fit"
-        className="min-h-0 lg:max-h-full"
+        className={cn(
+          "min-h-0 lg:max-h-full",
+          sticky &&
+            "lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[min(100%,calc(var(--settings-scroll-height)_-_var(--settings-header-height,0px)_-_6rem))]"
+        )}
       >
         <Card border="solid" rounding={4} padding={2} height="full">
           <Section

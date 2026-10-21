@@ -70,6 +70,7 @@ class _TokenCheck(CapabilityCheck[YouTrackConnectorConfig]):
             display_name="YouTrack accepts the URL and token",
             requires_connector_instance=False,
             requires_fields=REQUIRED_FIELDS,
+            validates_binding=True,
             remediation=(
                 "Check the YouTrack URL, including the context path on YouTrack "
                 "Server, and that the permanent token is valid."

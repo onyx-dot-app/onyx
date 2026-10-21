@@ -48,6 +48,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InconclusiveValidationError,
     InsufficientPermissionsError,
+    TimedOutValidationError,
     UnexpectedValidationError,
 )
 
@@ -310,6 +311,16 @@ def test_auth_connection_error_is_incomplete() -> None:
         _run("confluence_auth", _context(gateway, _form()))
 
 
+def test_auth_timeout_is_a_sign_in_timeout() -> None:
+    gateway = _gateway()
+    gateway.probe_site.side_effect = requests.ConnectTimeout("slow")
+
+    with pytest.raises(TimedOutValidationError) as raised:
+        _run("confluence_auth", _context(gateway, _form()))
+
+    assert raised.value.summary == "Sign-in timed out"
+
+
 # confluence_spaces_visible
 
 
@@ -443,12 +454,11 @@ def test_configured_page_searches_by_id() -> None:
     assert kwargs["limit"] == 1
 
 
-def test_configured_page_must_be_a_number() -> None:
-    gateway = _gateway()
+def test_configured_page_waits_for_a_page_id_that_is_not_a_number() -> None:
+    # The config model rejects the value, so the form shows it on the field.
+    states = _draft_states(_form(page_id="Home"))
 
-    with pytest.raises(ConnectorValidationError, match="not a number"):
-        _run("confluence_configured_page", _context(gateway, _form(page_id="Home")))
-    gateway.search_pages.assert_not_called()
+    assert states["confluence_configured_page"] == DraftCheckStateKind.WAITING
 
 
 def test_configured_page_not_found() -> None:
@@ -476,20 +486,17 @@ def test_cql_query_runs_the_connector_query() -> None:
 
 
 @pytest.mark.parametrize(
-    "cql,message",
+    "cql",
     [
-        ("type=page and lastModified > now('-1d')", "lastModified"),
-        ("type=page and LASTMODIFIED > now('-1d')", "lastModified"),
-        ("type=page order by created", "ORDER BY"),
-        ("type=page ORDER  BY created", "ORDER BY"),
+        "type=page and lastModified > now('-1d')",
+        "type=page order by created",
     ],
 )
-def test_cql_query_rejects_filters_onyx_adds_itself(cql: str, message: str) -> None:
-    gateway = _gateway()
+def test_cql_query_waits_for_a_clause_each_sync_adds(cql: str) -> None:
+    # The config model rejects the value, so the form shows it on the field.
+    states = _draft_states(_form(cql_query=cql))
 
-    with pytest.raises(ConnectorValidationError, match=message):
-        _run("confluence_cql_query", _context(gateway, _form(cql_query=cql)))
-    gateway.search_pages.assert_not_called()
+    assert states["confluence_cql_query"] == DraftCheckStateKind.WAITING
 
 
 @pytest.mark.parametrize(
@@ -784,6 +791,14 @@ def test_user_name_lookup_errors_are_incomplete(error: Exception) -> None:
     gateway.lookup_user_display_name.side_effect = error
 
     with pytest.raises(UnexpectedValidationError):
+        _run("confluence_user_names", _context(gateway, _form()))
+
+
+def test_a_user_name_lookup_timeout_is_a_timeout() -> None:
+    gateway = _gateway()
+    gateway.lookup_user_display_name.side_effect = requests.Timeout("slow")
+
+    with pytest.raises(TimedOutValidationError, match="did not answer"):
         _run("confluence_user_names", _context(gateway, _form()))
 
 

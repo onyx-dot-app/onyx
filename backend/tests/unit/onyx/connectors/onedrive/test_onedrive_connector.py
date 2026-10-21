@@ -27,6 +27,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
@@ -49,6 +50,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -57,6 +59,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.onedrive.capability_checks import (
+    _CANDIDATE_PAGES,
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
     build_onedrive_indexing_checks,
@@ -1158,6 +1161,7 @@ def test_onedrive_drive_count_maps_listing_errors(
 
 def test_onedrive_named_capability_checks_pass_through_gateway() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.check_token.return_value = MicrosoftTokenInfo(expires_in=3599)
     gateway.list_users.return_value = OneDriveUserPage(users=[_user()])
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
@@ -1206,7 +1210,7 @@ def test_onedrive_capability_user_probe_is_bounded_for_mock_pages() -> None:
         if check.check_id == "onedrive_drive"
     )
 
-    with pytest.raises(ConnectorValidationError, match="No readable OneDrive"):
+    with pytest.raises(InconclusiveValidationError, match="has a OneDrive"):
         check.run(context)
     assert gateway.list_users.call_count == 20
 
@@ -1433,11 +1437,8 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
         build_onedrive_doc_permission_sync_checks(), context
     )
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = result.advisories
-    assert "did not read item permissions" in advisory.message
-    # The admin must know which drives the check samples.
-    assert "first 20 configured users" in advisory.message
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No files found to test"
     gateway.get_delta_page.assert_called_once()
     gateway.list_permissions.assert_not_called()
 
@@ -1475,6 +1476,41 @@ def test_onedrive_permission_check_probes_past_empty_drive() -> None:
     )
 
 
+def test_onedrive_permission_check_tries_the_next_drive_after_a_last_page_end() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.get_user.side_effect = [
+        _user("empty@example.com"),
+        _user("populated@example.com"),
+    ]
+    gateway.get_default_drive.side_effect = [
+        OneDriveDrive(id="empty-drive", name="Empty"),
+        OneDriveDrive(id="populated-drive", name="Populated"),
+    ]
+    empty_pages: list[DriveDeltaFetchResult] = [
+        DriveDeltaFetchResult(page=DriveDeltaPage(), next_checkpoint_url="next")
+    ] * (_CANDIDATE_PAGES - 1)
+    gateway.get_delta_page.side_effect = [
+        *empty_pages,
+        DriveDeltaFetchResult(page=DriveDeltaPage()),
+        DriveDeltaFetchResult(page=DriveDeltaPage(items=[_file_item()])),
+    ]
+    gateway.list_permissions.return_value = OneDrivePermissionPage(permissions=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config={
+            "users": ["empty@example.com", "populated@example.com"]
+        },
+        source_operations=gateway,
+    )
+
+    build_onedrive_doc_permission_sync_checks()[0].run(context)
+
+    gateway.list_permissions.assert_called_once_with(
+        drive_id="populated-drive", item_id="raw-item-id"
+    )
+
+
 def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.get_user.return_value = _user()
@@ -1491,7 +1527,7 @@ def test_onedrive_permission_check_bounds_empty_delta_pages() -> None:
     )
 
     with pytest.raises(
-        ConnectorValidationError, match="No readable OneDrive item was found"
+        InconclusiveValidationError, match="No readable OneDrive item was found"
     ):
         build_onedrive_doc_permission_sync_checks()[0].run(context)
 
@@ -1515,9 +1551,8 @@ def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
     )
     (result,) = run_capability_checks([_group_members_check()], context)
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = result.advisories
-    assert "did not read transitive group members" in advisory.message
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No readable groups found"
     gateway.list_transitive_group_members.assert_not_called()
 
 
@@ -1532,9 +1567,8 @@ def test_onedrive_group_check_reports_tenant_without_groups() -> None:
 
     (result,) = run_capability_checks([_group_members_check()], context)
 
-    assert result.status == CapabilityCheckStatus.PASSED
-    (advisory,) = result.advisories
-    assert "did not read transitive group members" in advisory.message
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.summary == "No readable groups found"
     gateway.list_groups.assert_called_once()
     gateway.list_transitive_group_members.assert_not_called()
 
@@ -1629,9 +1663,9 @@ def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
         if check.check_id == "onedrive_group_members"
     )
 
-    output = check.run(context)
+    with pytest.raises(InconclusiveValidationError, match="first 20 groups"):
+        check.run(context)
 
-    assert len(_advisories(output)) == 1
     assert gateway.list_groups.call_count == 20
     gateway.list_transitive_group_members.assert_not_called()
 

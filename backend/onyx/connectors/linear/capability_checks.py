@@ -20,6 +20,7 @@ from onyx.connectors.capability_checks.models import (
     CheckRowText,
     CredentialCapability,
     form_config,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -27,6 +28,7 @@ from onyx.connectors.exceptions import (
     CredentialInvalidError,
     InconclusiveValidationError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -118,19 +120,11 @@ def config_from_context(context: CapabilityCheckContext) -> LinearConnectorConfi
     return form_config(context, LinearConnectorConfig)
 
 
-def _timeout_row(sign_in: bool) -> CheckRowText:
-    if sign_in:
-        return CheckRowText(
-            summary="Sign-in timed out",
-            description=(
-                "Linear did not answer the sign-in in time.\nRe-run, or check "
-                "that Linear is reachable from Onyx."
-            ),
-        )
-    return CheckRowText(
-        summary="Timed out",
-        description="The check ran past its time limit.\nRe-run the checks later.",
-    )
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks later.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Linear")
 
 
 def _raise_for_linear_error(
@@ -187,8 +181,8 @@ def _raise_for_linear_error(
             ),
         ) from error
     if isinstance(error, LinearUnreachableError) and error.timed_out:
-        row: CheckRowText = _timeout_row(sign_in)
-        raise UnreachableValidationError(
+        row: CheckRowText = _SIGN_IN_TIMEOUT_TEXT if sign_in else _TIMEOUT_TEXT
+        raise TimedOutValidationError(
             f"Linear did not answer in time: {error}",
             summary=row.summary,
             description=row.description,
@@ -298,7 +292,9 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
         display_name: str,
         remediation: str,
         requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
@@ -309,7 +305,9 @@ class _LinearCheck(CapabilityCheck[LinearConnectorConfig]):
             requires_connector_config=requires_connector_config,
             remediation=remediation,
             docs_link=DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -319,7 +317,9 @@ class _TokenCheck(_LinearCheck):
             check_id=SIGN_IN_CHECK_ID,
             display_name="Sign in to Linear",
             remediation="Check the API key, or reconnect through OAuth.",
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

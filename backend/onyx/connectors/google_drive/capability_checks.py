@@ -36,9 +36,11 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CheckRowText,
+    CheckStep,
     CountFinding,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -48,7 +50,9 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.connectors.google_drive.config import (
     GoogleDriveConnectorConfig,
@@ -77,11 +81,13 @@ from onyx.connectors.google_drive.models import (
     GoogleSharedDrive,
 )
 from onyx.connectors.google_drive.source_operations import (
+    GOOGLE_CONNECTION_ERRORS,
     DriveCorpus,
     ExportSizeThresholdExceeded,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
+    is_google_timeout,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -95,6 +101,18 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = SCOPE_DOC_URL
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Google Drive")
+_UNREACHABLE_TEXT = CheckRowText(
+    summary="Cannot reach Google Drive",
+    description=(
+        "The connection to Google failed.\nRe-run the checks. If it repeats, "
+        "check that the server can reach googleapis.com."
+    ),
+)
 
 _DRIVE_API = "Google Drive API"
 _ADMIN_API = "Admin SDK API"
@@ -211,12 +229,25 @@ def _google_errors(
     denied_row: CheckRowText | None = None,
     not_found: str | None = None,
     not_found_row: CheckRowText | None = None,
+    timeout_row: CheckRowText = _TIMEOUT_TEXT,
 ) -> Iterator[None]:
     """Maps the gateway's errors onto the validation-exception family.
     ``api`` names the Google API the probe calls; ``denied`` explains a 403.
     Each ``*_row`` is the row text of that outcome."""
     try:
         yield
+    except GOOGLE_CONNECTION_ERRORS as e:
+        if is_google_timeout(e):
+            raise TimedOutValidationError(
+                f"Google did not answer in time: {_detail(e)}",
+                summary=timeout_row.summary,
+                description=timeout_row.description,
+            ) from e
+        raise UnreachableValidationError(
+            f"Onyx cannot reach Google: {_detail(e)}",
+            summary=_UNREACHABLE_TEXT.summary,
+            description=_UNREACHABLE_TEXT.description,
+        ) from e
     except (GoogleDriveRefreshError, GoogleDriveHttpError, PermissionError) as e:
         _raise_google_error(
             context,
@@ -503,6 +534,10 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         requires_connector_config: bool = False,
         credential_kind: GoogleCredentialKind | None = None,
         discovery: bool = False,
+        step: CheckStep | None = None,
+        validates_binding: bool = False,
+        fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -521,6 +556,10 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             discovery=discovery,
+            step=step,
+            validates_binding=validates_binding,
+            fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
         self._credential_kind = credential_kind
 
@@ -553,6 +592,9 @@ class _AuthCheck(_GoogleDriveCheck):
                 "OAuth: connect Google Drive again. Turn on the Google Drive API "
                 "in the Google Cloud project of the credential."
             ),
+            validates_binding=True,
+            fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -571,6 +613,7 @@ class _AuthCheck(_GoogleDriveCheck):
                     "primary admin's files. (HTTP 403)"
                 ),
             ),
+            timeout_row=_SIGN_IN_TIMEOUT_TEXT,
         ):
             auth: GoogleDriveAuth = ops.authenticate()
             next(
@@ -1134,15 +1177,6 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         requested: list[str] = extract_str_list_from_comma_str(config.my_drive_emails)
-        if not requested:
-            raise ConnectorValidationError(
-                "My Drive emails holds no email.",
-                summary="My Drive Emails has no email",
-                description=(
-                    "My Drive Emails holds only commas or spaces.\nEnter at least "
-                    "one email in My Drive Emails, or clear the field."
-                ),
-            )
         with _google_errors(
             context,
             api=_ADMIN_API,
@@ -1344,6 +1378,11 @@ class _SharedDriveListingCheck(_GoogleDriveCheck):
             check_id="google_drive_shared_drive_listing",
             display_name="List shared drives",
             discovery=True,
+            step=CheckStep(
+                step_of=_SHARED_DRIVES_CHECK_ID,
+                running_summary="Drives visible, counting…",
+                unfinished_caveat="Could not count every shared drive.",
+            ),
             requires_connector_config=True,
             remediation=(
                 "Service account: make the primary admin a Workspace admin who "
@@ -1393,6 +1432,11 @@ class _UserCountCheck(_GoogleDriveCheck):
             check_id="google_drive_user_count",
             display_name="List Workspace users",
             discovery=True,
+            step=CheckStep(
+                step_of=_WORKSPACE_USERS_CHECK_ID,
+                running_summary="Users listed, counting…",
+                unfinished_caveat="Could not count every user.",
+            ),
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
                 "Make the primary admin a Google Workspace admin, give the service "

@@ -4,6 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+import base64
 import json
 import threading
 from collections.abc import Callable, Sequence
@@ -35,6 +36,8 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
+    EntityFailure,
     HierarchyNode,
     SlimDocument,
 )
@@ -81,6 +84,8 @@ from onyx.connectors.outlook.threads import (
     MAX_MESSAGES_PER_CONVERSATION,
     copy_document_id,
     own_document_id,
+    thread_key,
+    thread_started_at,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.process_isolation import IsolatedProcessError
@@ -92,6 +97,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     attachment,
     change,
     change_of,
+    conversation_index,
     event,
     folder,
     graph_error,
@@ -2695,3 +2701,333 @@ def test_plain_walks_carry_no_readership() -> None:
 
     assert pruned and all(i.external_access is None for i in pruned)
     assert indexed and all(i.external_access is None for i in indexed)
+
+
+# Targeted reindex.
+
+OUTSIDE_TREE_ID = "folder-outside-tree"
+THREAD_START = datetime(2026, 10, 13, 7, 45, 52, tzinfo=timezone.utc)
+
+
+def _key_started_at(started: datetime, outlook_layout: bool) -> str:
+    """A thread key whose header holds ``started`` in one of the two layouts
+    [MS-OXOMSG] documents: FILETIME bits 63..24, or bits 55..16."""
+    filetime = int(
+        (started - datetime(1601, 1, 1, tzinfo=timezone.utc)).total_seconds() * 10**7
+    )
+    stored = (filetime >> 16) & (2**40 - 1) if outlook_layout else filetime >> 24
+    header = bytes([0x01]) + stored.to_bytes(5, "big") + bytes(range(16))
+    key = thread_key(base64.b64encode(header).decode())
+    assert key is not None
+    return key
+
+
+def _received_page(**_: Any) -> OutlookDeltaPage:
+    """A received-time scan that meets another thread, then the test's."""
+    return OutlookDeltaPage(
+        changes=[change(id="msg-other", conversation_id="conv-other"), change()]
+    )
+
+
+def _reindex_gateway() -> MagicMock:
+    gateway = _happy_gateway()
+    gateway.fetch_received_page.side_effect = _received_page
+    return gateway
+
+
+def _reindex(
+    connector: OutlookConnector, document_ids: list[str], **kwargs: Any
+) -> tuple[list[Document], list[ConnectorFailure], list[HierarchyNode]]:
+    errors = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=document_id),
+            failure_message="failed",
+        )
+        for document_id in document_ids
+    ]
+    items = list(connector.reindex(errors, **kwargs))
+    return (
+        [i for i in items if isinstance(i, Document)],
+        [i for i in items if isinstance(i, ConnectorFailure)],
+        [i for i in items if isinstance(i, HierarchyNode)],
+    )
+
+
+def _failed(failures: list[ConnectorFailure]) -> dict[str, str]:
+    return {
+        f.failed_document.document_id: f.failure_message
+        for f in failures
+        if f.failed_document is not None
+    }
+
+
+def _key() -> str:
+    key = thread_key(conversation_index(CONVERSATION_ID))
+    assert key is not None
+    return key
+
+
+@pytest.mark.parametrize("outlook_layout", [False, True])
+def test_thread_start_is_read_from_either_documented_time_layout(
+    outlook_layout: bool,
+) -> None:
+    decoded = thread_started_at(_key_started_at(THREAD_START, outlook_layout))
+
+    assert decoded is not None
+    assert abs(decoded - THREAD_START) < timedelta(seconds=2)
+    assert thread_started_at("not-a-key") is None
+
+
+def test_each_thread_gets_its_own_scan_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(connector_module, "RECEIVED_SCAN_LIMIT", 2)
+    old_key = _key_started_at(THREAD_START - timedelta(days=700), False)
+    new_key = _key_started_at(THREAD_START, False)
+    new_started = thread_started_at(new_key)
+    assert new_started is not None
+    new_index = base64.b64encode(base64.urlsafe_b64decode(new_key + "==")).decode()
+
+    def received(*, received_from: datetime, **_: Any) -> OutlookDeltaPage:
+        # Mail after the old thread's start never reaches the new thread
+        # within one budget, so only a scan from its own start finds it.
+        if received_from == new_started - connector_module.THREAD_CLOCK_SKEW:
+            return OutlookDeltaPage(
+                changes=[
+                    change(conversation_id="conv-new", conversation_index=new_index)
+                ]
+            )
+        return OutlookDeltaPage(
+            changes=[change(id="msg-filler", conversation_id="conv-filler")],
+            next_link="more",
+        )
+
+    gateway = _reindex_gateway()
+    gateway.fetch_received_page.side_effect = received
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    found = connector._conversation_ids(mailbox(), {old_key, new_key}, None)
+
+    assert found == {new_key: "conv-new"}
+    assert gateway.fetch_received_page.call_count == 3
+
+
+def test_a_refused_conversation_keeps_the_builders_already_found() -> None:
+    gateway = _reindex_gateway()
+    refused_index = conversation_index("conv-refused")
+
+    def received(**_: Any) -> OutlookDeltaPage:
+        return OutlookDeltaPage(
+            changes=[
+                change(),
+                change(
+                    id="msg-refused",
+                    conversation_id="conv-refused",
+                    conversation_index=refused_index,
+                ),
+            ]
+        )
+
+    readable = _outline_of(gateway)
+
+    def outline(*, conversation_id: str, **kwargs: Any) -> OutlookDeltaPage:
+        if conversation_id == "conv-refused":
+            raise graph_error(403)
+        return readable(conversation_id=conversation_id, **kwargs)
+
+    gateway.fetch_received_page.side_effect = received
+    gateway.fetch_conversation_outline_page.side_effect = outline
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    readable_id = thread_doc_id(CONVERSATION_ID)
+    refused_id = thread_doc_id("conv-refused")
+
+    docs, failures, _ = _reindex(connector, [readable_id, refused_id])
+
+    assert [d.id for d in docs] == [readable_id]
+    assert set(_failed(failures)) == {refused_id}
+
+
+def test_reindex_finds_the_thread_from_its_start_and_reads_that_conversation() -> None:
+    gateway = _reindex_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures and [d.id for d in docs] == [thread_doc_id(CONVERSATION_ID)]
+    started = thread_started_at(_key())
+    assert started is not None
+    scans = gateway.fetch_received_page.call_args_list
+    assert scans[0].kwargs["received_from"] == (
+        started - connector_module.THREAD_CLOCK_SKEW
+    )
+    read = {
+        c.kwargs["conversation_id"]
+        for c in gateway.fetch_conversation_outline_page.call_args_list
+    }
+    assert read == {CONVERSATION_ID}
+
+
+def test_reindex_fails_a_thread_the_scan_does_not_meet() -> None:
+    gateway = _reindex_gateway()
+    gateway.fetch_received_page.side_effect = None
+    gateway.fetch_received_page.return_value = OutlookDeltaPage(changes=[])
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID), own_id])
+
+    assert not docs
+    assert set(_failed(failures)) == {thread_doc_id(CONVERSATION_ID), own_id}
+    gateway.fetch_conversation_outline_page.assert_not_called()
+
+
+def test_reindex_rebuilds_a_thread_like_the_walk_does() -> None:
+    walked = [
+        d
+        for d in _run(_connector(_happy_gateway(), mailboxes=[MAILBOX_ADDRESS]))
+        if isinstance(d, Document)
+    ]
+    connector = _connector(_reindex_gateway(), mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, nodes = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures
+    assert [d.id for d in docs] == [d.id for d in walked]
+    assert docs[0].sections == walked[0].sections
+    assert {n.raw_node_id for n in nodes} == {
+        mailbox_node_id(mailbox()),
+        INBOX_ID,
+        ARCHIVE_ID,
+        PROJECTS_ID,
+    }
+
+
+def test_reindex_reads_no_message_the_walk_would_skip() -> None:
+    gateway = _reindex_gateway()
+    page = gateway.fetch_conversation_messages_page.return_value
+    page.messages.append(
+        message(id="msg-outside", parent_folder_id=OUTSIDE_TREE_ID, body_text="Outside")
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures and len(docs) == 1
+    # The junk, trashed, hidden, draft and outside-the-tree copies are left out.
+    assert docs[0].metadata["message_count"] == "2"
+    text = "".join(section.text or "" for section in docs[0].sections)
+    assert "Outside" not in text
+
+
+def test_reindex_writes_the_own_document_of_a_copy_without_its_first_message() -> None:
+    gateway = _reindex_gateway()
+
+    def replies_only(**_: Any) -> OutlookDeltaPage:
+        return OutlookDeltaPage(changes=[change(reply=True)])
+
+    gateway.fetch_conversation_outline_page.side_effect = replies_only
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[message()]
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(
+        connector, [own_id, thread_doc_id(CONVERSATION_ID)], include_permissions=True
+    )
+
+    assert [d.id for d in docs] == [own_id]
+    assert docs[0].external_access is not None
+    assert docs[0].external_access.external_user_emails == {MAILBOX_ADDRESS}
+    assert set(_failed(failures)) == {thread_doc_id(CONVERSATION_ID)}
+
+
+@pytest.mark.parametrize(
+    "found, reason",
+    [
+        (None, "default calendar"),
+        (event(event_type="occurrence", series_master_id="series-1"), "occurrence"),
+        (event(sensitivity="private"), "private"),
+        (event(is_cancelled=True), "cancelled"),
+    ],
+)
+def test_reindex_refuses_events_the_walk_skips(
+    found: OutlookEvent | None, reason: str
+) -> None:
+    gateway = _reindex_gateway()
+    gateway.get_default_calendar_event.return_value = found
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_calendar=True)
+    target = event_document_id(mailbox(), "evt-1")
+
+    docs, failures, _ = _reindex(connector, [target])
+
+    assert not docs
+    assert reason in _failed(failures)[target]
+
+
+def test_reindex_reads_an_event_with_its_readers() -> None:
+    gateway = _reindex_gateway()
+    gateway.get_default_calendar_event.return_value = event()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_calendar=True)
+    target = event_document_id(mailbox(), "evt-1")
+
+    docs, failures, nodes = _reindex(connector, [target], include_permissions=True)
+
+    assert not failures
+    assert [d.id for d in docs] == [target]
+    assert docs[0].external_access is not None
+    assert docs[0].external_access.external_user_emails == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+    assert calendar_node_id(mailbox()) in {n.raw_node_id for n in nodes}
+
+
+def test_reindex_fails_ids_it_cannot_parse_or_that_are_out_of_scope() -> None:
+    connector = _connector(_reindex_gateway(), mailboxes=[MAILBOX_ADDRESS])
+    targets = [
+        "not-an-outlook-id",
+        "outlook-thread:not-a-key",
+        own_document_id(_key(), mailbox(id="someone-else")),
+        event_document_id(mailbox(), "evt-1"),
+    ]
+
+    docs, failures, _ = _reindex(connector, targets)
+
+    assert not docs
+    failed = _failed(failures)
+    assert set(failed) == set(targets)
+    assert "not one this connector walks" in failed[targets[2]]
+    assert "Include Calendar is off" in failed[targets[3]]
+
+
+def test_reindex_fails_the_targets_of_a_refused_mailbox() -> None:
+    gateway = _reindex_gateway()
+    gateway.probe_mailbox.side_effect = graph_error(403)
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(connector, [own_id])
+
+    assert not docs
+    assert set(_failed(failures)) == {own_id}
+
+
+def test_reindex_raises_when_graph_throttles() -> None:
+    gateway = _reindex_gateway()
+    gateway.fetch_received_page.side_effect = graph_error(429, "TooManyRequests")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(RateLimitTriedTooManyTimesError):
+        _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+
+def test_reindex_ignores_entity_failures() -> None:
+    gateway = _reindex_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    entity = ConnectorFailure(
+        failed_entity=EntityFailure(entity_id=MAILBOX_ADDRESS), failure_message="x"
+    )
+
+    assert list(connector.reindex([entity])) == []
+    gateway.resolve_mailbox.assert_not_called()

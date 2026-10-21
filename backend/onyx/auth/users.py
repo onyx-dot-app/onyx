@@ -143,6 +143,7 @@ from onyx.db.pat import resolve_pat
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    delete_user_from_db__no_commit,
     fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
@@ -603,6 +604,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    async def delete(
+        self,
+        user: User,
+        request: Request | None = None,
+    ) -> None:
+        await self.on_before_delete(user, request)
+        await self.user_db.session.run_sync(
+            partial(delete_user_from_db__no_commit, user)
+        )
+        await self.user_db.session.commit()
+        await self.on_after_delete(user, request)
 
     @asynccontextmanager
     async def _tenant_session_with_bound_user_db(

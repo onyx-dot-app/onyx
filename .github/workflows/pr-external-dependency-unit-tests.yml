@@ -4,7 +4,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
     paths:
       - "backend/**"

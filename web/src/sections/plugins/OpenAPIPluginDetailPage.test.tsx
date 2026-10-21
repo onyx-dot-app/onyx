@@ -138,7 +138,11 @@ beforeEach(() => {
       writes.push({ path, body, method: init.method });
       if (failWrite) return json({ detail: failWrite }, 400);
       if (init.method === "DELETE") return json(true);
-      if (path === "/api/admin/default-assistant") return json(body);
+      if (path === "/api/admin/default-assistant/tools") {
+        const others = defaultChatToolIds.filter((id) => id !== 42);
+        const enabled = String(init.body).includes('"enabled":true');
+        return json({ tool_ids: enabled ? [...others, 42] : others });
+      }
       if (path === "/api/admin/oauth-config/7") return json({ id: 7 });
       if (path === "/api/admin/oauth-config/create") {
         configCreates += 1;
@@ -273,9 +277,9 @@ describe("detail modal", () => {
     );
     await waitFor(() =>
       expect(writes).toContainEqual({
-        path: "/api/admin/default-assistant",
+        path: "/api/admin/default-assistant/tools",
         method: "PATCH",
-        body: { tool_ids: [99] },
+        body: { tool_ids: [42], enabled: false },
       })
     );
     expect(
@@ -318,9 +322,9 @@ describe("detail modal", () => {
     );
     await waitFor(() =>
       expect(writes).toContainEqual({
-        path: "/api/admin/default-assistant",
+        path: "/api/admin/default-assistant/tools",
         method: "PATCH",
-        body: { tool_ids: [99] },
+        body: { tool_ids: [42], enabled: false },
       })
     );
   });
@@ -783,8 +787,8 @@ describe.each(["metadata", "schema", "authentication"] as const)(
         expect(
           await screen.findByText(
             editor === "authentication"
-              ? "Only the action's creator or an admin can manage authentication"
-              : "Failed to update OpenAPI action"
+              ? "Only the plugin's creator or an admin can manage authentication"
+              : "Failed to update OpenAPI plugin"
           )
         ).toBeVisible();
         expect(freshRead).toHaveBeenCalledTimes(1);

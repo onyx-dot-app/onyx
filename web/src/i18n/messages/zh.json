@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "添加 OpenAPI 操作"
+        "title": "添加 OpenAPI 插件"
       },
       "cancelButton": {
         "label": "取消"
@@ -188,14 +188,14 @@
         "invalidJson": "JSON 格式无效",
         "placeholder": "在此输入您的 OpenAPI 架构",
         "required": "必须填写 OpenAPI 架构定义",
-        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此操作一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 操作]({docsUrl})。",
+        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
       "editConfigsButton": {
-        "disabledTooltip": "只有该操作的创建者或管理员才能管理身份验证"
+        "disabledTooltip": "只有该插件的创建者或管理员才能管理身份验证"
       },
       "editHeader": {
-        "title": "编辑 OpenAPI 操作"
+        "title": "编辑 OpenAPI 插件"
       },
       "empty": {
         "description": "提供 OpenAPI 架构后即可在此预览操作。",
@@ -208,17 +208,17 @@
         "noSummary": "未提供摘要"
       },
       "submitButton": {
-        "addLabel": "添加操作",
+        "addLabel": "添加插件",
         "addingLabel": "正在添加...",
         "saveLabel": "保存更改",
         "savingLabel": "正在保存..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI 操作创建成功",
-        "actionUpdated": "OpenAPI 操作更新成功",
-        "createFailed": "创建 OpenAPI 操作失败",
+        "actionCreated": "OpenAPI 插件创建成功",
+        "actionUpdated": "OpenAPI 插件更新成功",
+        "createFailed": "创建 OpenAPI 插件失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
-        "updateFailed": "更新 OpenAPI 操作失败"
+        "updateFailed": "更新 OpenAPI 插件失败"
       },
       "humanDescription": {
         "title": "面向用户的描述",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "加载现有 OAuth 配置失败。请重新输入详细信息以更新配置。"
       },
       "header": {
-        "description": "验证连接身份后即可开始使用 OpenAPI 操作。"
+        "description": "验证连接身份后即可开始使用 OpenAPI 插件。"
       },
       "headers": {
         "addButton": {
           "label": "添加请求头"
         },
-        "description": "为发送到此操作 API 端点的所有请求指定自定义请求头。",
+        "description": "为发送到此插件 API 端点的所有请求指定自定义请求头。",
         "keyRequired": "必须填写请求头名称",
         "keyTitle": "请求头",
         "minRequired": "请至少添加一个身份验证请求头",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "删除"
         },
-        "title": "删除 OpenAPI 操作"
+        "title": "删除 OpenAPI 插件"
       },
       "method": {
         "noSummary": "未提供摘要"
@@ -764,7 +764,7 @@
           "tooltip": "配置图像生成"
         },
         "openapi": {
-          "tooltip": "管理 OpenAPI 操作"
+          "tooltip": "管理 OpenAPI 插件"
         },
         "webSearch": {
           "tooltip": "配置网络搜索"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "已连接",
         "workspace": "工作区连接",
-        "session": "使用您的登录信息",
+        "session": "使用您已连接的账户",
         "none": "可直接使用",
         "oauth": "连接您的账户",
         "credentials": "添加您的凭据",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "问题",
-        "readyDescription": "你可以开始使用此插件。",
+        "noAuthentication": "无需身份验证",
         "connection": "连接",
         "tools": "工具",
         "toolCount": "{count, plural, other {#个工具}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "添加",
         "mcp": "添加自定义 MCP 服务器",
-        "openapi": "添加 OpenAPI 操作"
+        "openapi": "添加 OpenAPI 插件"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "无法加载 MCP 服务器。",
         "listErrorDescription": "无法加载此插件列表。请稍后重试。",
-        "openapiError": "无法加载 OpenAPI 操作。",
+        "openapiError": "无法加载 OpenAPI 插件。",
         "retry": {
           "label": "重试"
         },
@@ -2240,11 +2240,12 @@
         "label": "测试版"
       },
       "connectors": {
+        "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
         "empty": {
           "title": "尚未设置连接器"
         },
         "manageAllButton": {
-          "label": "管理全部"
+          "label": "管理连接器"
         },
         "title": "连接器"
       },
@@ -2423,7 +2424,7 @@
           "title": "编程智能体"
         },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
-        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 操作。",
+        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",
@@ -2965,8 +2966,8 @@
           "queued": "排队中",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{minutes, number} 分钟）",
-          "rateFinished": "{rate} 文档/分钟（{minutes, number} 分钟）",
+          "finished": "{time}（{duration}）",
+          "rateFinished": "{rate} 文档/分钟（{duration}）",
           "membershipRate": "{rate} 成员关系/分钟"
         },
         "actions": {
@@ -3013,7 +3014,6 @@
           "label": "时间范围",
           "all": "全部时间",
           "h1": "过去 1 小时",
-          "h12": "过去 12 小时",
           "h24": "过去 24 小时",
           "d7": "过去 7 天",
           "d30": "过去 30 天"
@@ -3087,6 +3087,7 @@
             "errors": "索引已完成，存在错误。",
             "resolved": "索引错误已解决。",
             "succeeded": "索引成功完成。",
+            "queued": "索引排队中。",
             "inProgress": "索引进行中。",
             "canceled": "索引已停止。"
           },
@@ -3098,6 +3099,7 @@
             "errors": "权限已同步，存在错误。",
             "resolved": "权限同步错误已解决。",
             "succeeded": "权限同步成功。",
+            "queued": "权限同步排队中。",
             "inProgress": "正在同步权限。",
             "canceled": "权限同步已停止。"
           },
@@ -3109,6 +3111,7 @@
             "errors": "群组成员已同步，存在错误。",
             "resolved": "群组成员同步错误已解决。",
             "succeeded": "群组成员同步成功。",
+            "queued": "群组成员同步排队中。",
             "inProgress": "正在同步群组成员。",
             "canceled": "群组同步已停止。"
           },
@@ -3120,6 +3123,7 @@
             "errors": "清理已完成，但有错误。",
             "resolved": "清理错误已解决。",
             "succeeded": "清理成功完成。",
+            "queued": "清理排队中。",
             "inProgress": "清理进行中。",
             "canceled": "清理已停止。"
           },
@@ -3131,6 +3135,7 @@
             "errors": "连接器检查已完成，但有错误。",
             "resolved": "连接器检查错误已解决。",
             "succeeded": "连接器检查通过。",
+            "queued": "连接器检查排队中。",
             "inProgress": "连接器检查进行中。",
             "canceled": "连接器检查已停止。"
           }
@@ -4819,33 +4824,47 @@
       "allProviders": {
         "label": "所有提供方"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）的使用量将重新按内置价格计算。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 *{model}* 的覆盖"
+      },
       "empty": {
         "description": "添加一项，为某个模型应用协商价格（每 100 万 tokens 的美元价格）。",
         "title": "尚未设置费用覆盖。"
       },
       "form": {
         "addButton": {
-          "label": "添加覆盖"
+          "label": "添加"
         },
+        "description": "为模型设置协商价格。它会在使用成本计算中替换内置价格。",
+        "editTitle": "编辑成本覆盖",
+        "newTitle": "新建成本覆盖",
         "cacheRate": {
-          "label": "缓存读取价格（每 100 万 tokens 美元，可选）",
-          "placeholder": "默认与输入价格相同"
+          "description": "单位为每 100 万 tokens 美元。默认与输入价格相同。",
+          "label": "缓存读取价格"
         },
         "cancelButton": {
           "label": "取消"
         },
         "inputRate": {
-          "label": "输入价格（每 100 万 tokens 美元）"
+          "label": "输入价格"
         },
         "model": {
+          "description": "对所选的此模型应用成本覆盖。",
           "label": "模型",
           "placeholder": "选择模型"
         },
         "outputRate": {
-          "label": "输出价格（每 100 万 tokens 美元）"
+          "label": "输出价格"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "单位为每 100 万 tokens 美元。"
         }
       },
       "panel": {
@@ -4859,15 +4878,16 @@
         "title": "费用覆盖"
       },
       "row": {
+        "cache": "缓存 {value}",
         "deleteButton": {
           "ariaLabel": "删除 {model} 的 {provider} 覆盖"
         },
+        "description": "{provider} · 更新于 {time}",
         "editButton": {
           "ariaLabel": "编辑 {model} 的 {provider} 覆盖"
         },
-        "rates": "{provider} · 输入 {input} · 输出 {output} · 每 100 万 tokens 美元",
-        "ratesWithCache": "{provider} · 输入 {input} · 输出 {output} · 缓存 {cache} · 每 100 万 tokens 美元",
-        "updated": "更新于 {time}"
+        "input": "输入 {value}",
+        "output": "输出 {value}"
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",
@@ -4875,10 +4895,6 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -6847,6 +6863,9 @@
         "noModelsTooltip": "上下文检索已禁用，因为您尚未配置任何模型。请先设置[语言模型]({link})。",
         "title": "上下文检索"
       },
+      "currentModel": {
+        "legacyHint": "这是旧版模型。它会继续工作，但不能再次选择用于新索引。如需升级，请点击“查看所有模型”并选择较新的模型。"
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Embedding 模型和相关设置由 Onyx Cloud 管理。"
@@ -6985,9 +7004,12 @@
         "currentButton": {
           "label": "当前模型"
         },
-        "deprecated": {
-          "connectTooltip": "此 embedding 模型已弃用，无法连接。",
-          "selectTooltip": "此 embedding 模型已弃用，无法选择。"
+        "gpuRecommended": {
+          "tag": "建议使用 GPU"
+        },
+        "legacy": {
+          "tag": "旧版",
+          "tooltip": "此模型不能用于新索引。在您更换模型之前，它会继续工作。"
         },
         "selectButton": {
           "label": "选择模型"
@@ -6997,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU 速度为估计值，会因硬件和文档大小而异。RAM 建议适用于一个已加载模型，并非整个 Onyx 系统的内存要求。重新索引时请预留更多内存。",
         "addCustomModel": {
           "label": "添加自定义模型"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "连接 LiteLLM 代理、Azure OpenAI 部署或 Bifrost 网关。模型名称由您自行填写。对于 LiteLLM 和 Azure，还需填写维度。",
+          "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
+          "title": "高级：使用自己的模型或代理"
         },
         "cloudTab": {
           "label": "云端"
@@ -7198,22 +7226,27 @@
         "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere 的旗舰嵌入模型。质量与成本的最佳平衡。2048 维输出。",
+        "cohereEmbedV5Fast": "Cohere Embed 5 的低成本版本。依然是非常出色的选择。2048 维输出。",
         "cohereEmbedEnglishV3": "Cohere 的英语嵌入模型。在英语任务上表现良好。",
         "cohereEmbedEnglishLightV3": "Cohere 的轻量级英语嵌入模型。处理简单任务更快、更高效。",
-        "cohereEmbedV4": "Cohere 最新的多语言嵌入模型，默认 1536 维输出，检索质量更高。",
-        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。性能最佳，但成本更高。",
-        "openaiTextEmbedding3Small": "OpenAI 更新、更高效的嵌入模型。性能与成本平衡良好。",
+        "cohereEmbedV4": "Cohere 的多语言嵌入模型，1536 维输出。",
+        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。适合已在使用 OpenAI 的团队。3072 维输出。",
+        "openaiTextEmbedding3Small": "OpenAI 的小型嵌入模型。在云端选项中最经济，优势明显。1536 维输出。",
         "googleGeminiEmbedding001": "Google 的 Gemini 嵌入模型。强大且高效。",
         "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
-        "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
+        "googleGeminiEmbedding2": "Google 的旗舰嵌入模型。功能非常强大，但成本高、速度较慢。3072 维输出会生成较大的索引。对已在使用 Google 的团队来说是稳妥的选择。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyage4Large": "Voyage 4 系列中最大的嵌入模型。Voyage 最佳检索质量，支持多语言。",
         "voyage4": "Voyage 4 系列通用嵌入模型。以适中成本提供高检索质量。",
         "voyage4Lite": "Voyage 4 系列轻量级嵌入模型。成本最低，速率限制最高。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
+        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言模型。随 {appName} 提供。9700 万参数，384 维输出。每个 CPU 核心每分钟最多处理 200 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "voyage4Nano": "Voyage AI 的开放权重模型。3.46 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 50 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "nemotron3Embed1b": "NVIDIA 的多语言模型。11 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 5 篇文档。CPU 推理建议 RAM：每个模型服务器 8 GB。建议使用 GPU。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
-        "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
+        "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
@@ -11896,6 +11929,9 @@
         "personal": {
           "label": "个人"
         },
+        "required": {
+          "tooltip": "你的组织管理员要求你拥有此技能。"
+        },
         "unavailable": {
           "label": "不可用 - 点击了解更多"
         }
@@ -12423,6 +12459,9 @@
       "customTool": {
         "authFailedStatus": {
           "text": "{toolName} 身份验证失败（HTTP {statusCode}）"
+        },
+        "blockedStatus": {
+          "text": "{toolName} 已被阻止"
         },
         "completedStatus": {
           "text": "{toolName} 已完成"
@@ -14895,7 +14934,7 @@
         "title": "删除\"{title}\"？"
       },
       "newSession": {
-        "label": "开始创作"
+        "label": "新会话"
       },
       "options": {
         "label": "会话选项"
@@ -14959,7 +14998,8 @@
         "missingTaskId": "缺少任务 ID。",
         "pauseButton": "暂停",
         "resumeButton": "恢复",
-        "runNowButton": "立即运行",
+        "runHistoryTab": "运行历史",
+        "runNowButton": "运行一次",
         "toasts": {
           "deleteFailed": "删除任务失败",
           "deleted": "已删除“{name}”。",
@@ -15054,7 +15094,7 @@
           "trigger": "触发方式"
         },
         "empty": {
-          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“立即运行”。"
+          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“运行一次”。"
         },
         "errors": {
           "loadFailed": "无法加载运行历史。",
@@ -15073,19 +15113,20 @@
           "notOpenableAriaLabel": "无法打开"
         },
         "trigger": {
-          "runNow": "立即运行",
+          "runNow": "运行一次",
           "schedule": "计划"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "时间使用您所在的本地时区。",
         "dailyWeekly": {
-          "atLabel": "时间",
-          "daysLabel": "在这些日子",
+          "atLabel": "运行时间",
+          "daysLabel": "日期",
           "runsEveryDay": "每天运行",
           "runsOn": "在{days}运行"
         },
         "interval": {
-          "everyLabel": "每"
+          "everyLabel": "重复间隔"
         },
         "intervalUnits": {
           "days": "天",
@@ -15424,8 +15465,8 @@
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
       "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
-      "taskDescription": "此任务只能使用已启用的应用。更改仅适用于此任务。",
-      "newTaskDescription": "启用此任务可以使用的应用。每个应用初始使用您当前的操作设置。",
+      "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
+      "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
       "workspace_disabled": "工作区已禁用",
       "workspace_managed": "由工作区管理",
       "userManagement": "允许用户管理审批设置",
@@ -15449,7 +15490,9 @@
       "disabledForTask": "已为此任务禁用",
       "externalApp": "应用",
       "mcpServer": "MCP 服务器",
-      "taskAppsTitle": "应用和 MCP 服务器",
+      "taskAppsTitle": "插件",
+      "taskAccessTitle": "插件访问权限",
+      "noEnabledApps": "此任务未启用任何插件。",
       "actionPolicies": "审批设置",
       "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
       "manageActions": "管理操作",
@@ -15793,6 +15836,11 @@
     },
     "iconTooltip": {
       "label": "更多信息"
+    },
+    "inputCurrency": {
+      "amount": "金额",
+      "fraction": "金额小数部分",
+      "whole": "金额整数部分"
     },
     "input": {
       "day": "日",
@@ -16754,21 +16802,11 @@
         "title": "技能不可用"
       },
       "management": {
-        "description": "控制谁可以使用此技能。",
-        "externalApp": {
-          "manage": {
-            "label": "在应用设置中管理"
-          },
-          "readyDescription": "此技能使用应用“{appName}”。",
-          "title": "外部应用"
-        },
         "sharing": {
           "edit": {
             "label": "编辑共享"
-          },
-          "title": "共享"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存前请添加描述。",
@@ -16778,21 +16816,6 @@
         "noPermission": "您没有编辑此技能详情的权限。",
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "组织中的所有人都可以使用和编辑此技能。",
-          "title": "组织",
-          "viewerDescription": "组织中的所有人都可以使用此技能。"
-        },
-        "personal": {
-          "description": "只有您可以使用此技能。",
-          "title": "个人"
-        },
-        "shares": {
-          "description": "只有选定的用户和群组可以使用此技能。",
-          "title": "{count, plural, one {# 个共享} other {# 个共享}}"
-        }
       },
       "toasts": {
         "created": "已创建“{name}”",
@@ -16973,7 +16996,6 @@
         },
         "externalAppNotice": "只要此技能与应用“{appName}”关联，就必须开放全组织的查看权限。",
         "header": {
-          "title": "共享 *{name}*",
           "transferTitle": "转移 *{name}*"
         },
         "loading": {
@@ -16985,7 +17007,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "更新 {name} 的访问权限"
+          "ariaLabel": "更新 {name} 的访问权限",
+          "canUse": "可使用",
+          "canEdit": "可编辑"
         },
         "saveButton": {
           "label": "保存"
@@ -17007,7 +17031,23 @@
         },
         "transferredToast": {
           "message": "所有权已转移。"
-        }
+        },
+        "installation": {
+          "title": "安装",
+          "available": "可供安装",
+          "default": "默认安装",
+          "required": "必需",
+          "availableDescription": "用户可以随时安装或卸载。",
+          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
+          "requiredDescription": "自动安装。用户无法禁用或卸载。",
+          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+        },
+        "description": "选择谁可以使用此技能及其安装方式。",
+        "accessTitle": "谁可以访问",
+        "peopleTitle": "有访问权限的人员",
+        "manageIndividualAccess": "管理单独访问权限",
+        "individualAccessTitle": "单独访问权限",
+        "ownershipTitle": "所有权"
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"

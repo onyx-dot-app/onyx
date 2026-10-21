@@ -31,7 +31,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
-    cache_draft_result,
+    cache_run_result,
     cached_check_result,
     clear_draft_result_in_flight,
     form_draft_result_keys,
@@ -348,9 +348,8 @@ def run_draft_capability_checks_task(
             and check.capability == result.capability
         )
         apply_check_result(check_state, result)
-        result_key = run.result_cache_keys[result.check_id]
-        cache_draft_result(result_key, result)
-        clear_draft_result_in_flight(result_key)
+        cache_run_result(run, result)
+        clear_draft_result_in_flight(run.result_cache_keys[result.check_id])
         if is_superseded(run):
             raise _DraftRunSupersededError()
         mark_next_running()
@@ -359,7 +358,9 @@ def run_draft_capability_checks_task(
     try:
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
-        pending = pending_in_run_order(snapshot, get_capability_checks(snapshot.source))
+        pending = pending_in_run_order(
+            snapshot, get_capability_checks(snapshot.source), run.first_check_id
+        )
         pending_result_keys = list(
             dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
         )
@@ -399,6 +400,7 @@ def run_draft_capability_checks_task(
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
             prior_results=settled_results(snapshot),
             form_run=True,
+            first_check_id=run.first_check_id,
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)

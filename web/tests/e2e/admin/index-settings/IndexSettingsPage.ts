@@ -17,6 +17,8 @@ export class IndexSettingsPage {
   readonly viewAllModelsButton: Locator;
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
+  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, custom). */
+  readonly bringYourOwnToggle: Locator;
   readonly applyReindexButton: Locator;
   readonly applyWithoutReindexButton: Locator;
   readonly revertButton: Locator;
@@ -40,6 +42,9 @@ export class IndexSettingsPage {
     });
     this.cloudTab = page.getByRole("tab", { name: /cloud.based/i });
     this.selfHostedTab = page.getByRole("tab", { name: /self.hosted/i });
+    this.bringYourOwnToggle = page.getByRole("button", {
+      name: "Advanced: bring your own model or proxy",
+    });
     this.applyReindexButton = page.getByRole("button", {
       name: "Apply & Re-index",
     });
@@ -84,9 +89,25 @@ export class IndexSettingsPage {
     await this.cloudTab.click();
   }
 
+  /** Open the collapsed "bring your own" section of the active tab. */
+  async expandBringYourOwnSection(): Promise<void> {
+    await expect(this.bringYourOwnToggle).toBeVisible({ timeout: 10000 });
+    // Control flow only: the section stays open after an earlier expand.
+    if (
+      (await this.bringYourOwnToggle.getAttribute("aria-expanded")) !== "true"
+    ) {
+      await this.bringYourOwnToggle.click();
+    }
+    await expect(this.bringYourOwnToggle).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Cloud-provider setup modal (LiteLLM / Azure — providers with no
-  // pre-registered models render an "Add Configuration" card)
+  // pre-registered models render an "Add Configuration" card inside the
+  // collapsed "bring your own" section)
   // ---------------------------------------------------------------------------
 
   private setupModalFor(displayName: string): Locator {
@@ -105,6 +126,7 @@ export class IndexSettingsPage {
   }
 
   async openProviderSetup(displayName: string): Promise<void> {
+    await this.expandBringYourOwnSection();
     await this.page
       .getByText(
         new RegExp(

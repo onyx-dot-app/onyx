@@ -51,6 +51,9 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
+The sidebar’s New Session link opens `/craft/v1`. It supports the browser’s Open in New Tab action and Ctrl/Command-click.
+Same-tab clicks retain the unsaved-change prompt. Opening another tab leaves the current session in place.
+
 The output panel starts closed. Its first opening shows Outputs, which lists agent-created files under `outputs/`.
 All Files browses the complete workspace; Apps opens the local webapp. Files open in individual, closeable tabs.
 Closing the active tab returns to the last viewed open tab. Closing the last tab leaves an empty panel.
@@ -87,6 +90,8 @@ the agent produces appear as artifacts the user can browse, download, or
 (for Markdown) export as a `.docx`.
 An app connection card resolves its pending agent request even when credentials already exist.
 It shows Connected only after the decision endpoint succeeds. Failed decisions remain retryable.
+Refresh restores pending connection cards and shows the existing flashing cursor while the turn is active.
+Failed turn-status reads keep the input disabled and expose the session retry action.
 Passive discoveries update the inventory without adding tabs, opening the panel, or changing selection.
 Explicit resource actions create and select tabs. See [[craft-streaming]] for inventory and revision rules.
 The user's own uploaded library files
@@ -593,10 +598,14 @@ Only explicit selections enter the current turn’s attachment context. Stored f
 Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
 URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
 Replacing that destination preserves selected source files and uploads them into the replacement.
-New Build, another session, or visit end clears the previous draft.
+New Session, another session, or visit end clears the previous attachment draft.
+Composer text uses `useDraft` in browser session storage, keyed by account and URL session ID, with a separate New Session key for each account.
+Signed-out composers do not save drafts. Logout removes current and legacy Craft draft keys.
+Text survives same-tab navigation and reloads without moving between sessions. Accepted prompt handoff or queueing clears the saved text. Failed session provisioning retains the text and attachments.
+Draft cleanup survives composer unmounting. Paste-tile edits and slash-query removal update the saved text immediately.
 Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
 Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
-ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its attachment draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 

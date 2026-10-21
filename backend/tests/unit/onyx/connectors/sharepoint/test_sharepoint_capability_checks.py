@@ -15,12 +15,15 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckErrorKind,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
     UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
@@ -36,14 +39,16 @@ from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError,
     MicrosoftGraphError,
 )
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
+from onyx.connectors.sharepoint.config import SITE_URL_FORMAT_ERROR
 from onyx.connectors.sharepoint.models import (
     SharepointDrive,
-    SharepointTokenInfo,
     SitePagesPage,
+    SiteUrlListing,
 )
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
 from onyx.utils.url import SSRFException
@@ -89,8 +94,12 @@ def _gateway() -> MagicMock:
     """A healthy tenant: one site with one library holding one small file and
     one page."""
     gateway: MagicMock = create_autospec(SharepointSourceOperations, instance=True)
-    gateway.check_token.return_value = SharepointTokenInfo(expires_in=3599)
-    gateway.list_site_urls.return_value = [SITE_URL, OTHER_SITE_URL]
+    gateway.check_token.return_value = MicrosoftTokenInfo(
+        expires_in=3599, app_name="Onyx"
+    )
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[SITE_URL, OTHER_SITE_URL], complete=True
+    )
     gateway.get_site_id.return_value = "site-id"
     gateway.list_drives.return_value = [DRIVE]
     gateway.get_delta_page.return_value = _delta_page(ITEM_JSON)
@@ -134,9 +143,16 @@ def _status(check_id: str, context: CapabilityCheckContext) -> CapabilityCheckSt
 
 
 def test_every_check_passes_on_a_healthy_tenant() -> None:
+    gateway: MagicMock = _gateway()
+    gateway.get_delta_page.return_value = _delta_page(
+        {
+            **ITEM_JSON,
+            "parentReference": {"driveId": "drive-id", "path": "/drives/d/root:/Plans"},
+        }
+    )
     results: list[CapabilityCheckResult] = run_capability_checks(
         build_sharepoint_indexing_checks(),
-        _context(_gateway(), _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])),
+        _context(gateway, _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])),
     )
 
     assert {result.check_id: result.status for result in results} == {
@@ -259,7 +275,7 @@ def test_an_ambiguous_library_fails() -> None:
     config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive"])
 
     with pytest.raises(ConnectorValidationError, match="ambiguous"):
-        _run("sharepoint_documents_read", _context(gateway, config))
+        _run("sharepoint_configured_libraries", _context(gateway, config))
 
 
 def test_a_site_graph_does_not_know_fails_with_its_url() -> None:
@@ -289,12 +305,14 @@ def test_configured_sites_check_is_skipped_without_sites() -> None:
 def test_a_blank_site_entry_fails_like_indexing() -> None:
     gateway: MagicMock = _gateway()
 
-    with pytest.raises(ConnectorValidationError, match="not a full"):
-        _run(
-            "sharepoint_configured_sites",
-            _context(gateway, _config(sites=["", SITE_URL])),
-        )
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_configured_sites"]],
+        _context(gateway, _config(sites=["", SITE_URL])),
+    )
 
+    assert result.status is CapabilityCheckStatus.FAILED
+    assert result.error_kind is CheckErrorKind.INVALID
+    assert f"sites: {SITE_URL_FORMAT_ERROR}" in result.message
     gateway.get_site_id.assert_not_called()
 
 
@@ -316,7 +334,7 @@ def test_configured_sites_the_exclusions_remove_are_not_replaced() -> None:
     gateway: MagicMock = _gateway()
     config: dict[str, Any] = _config(sites=[SITE_URL], excluded_sites=["*/sites/eng"])
 
-    with pytest.raises(UnexpectedValidationError, match="No library"):
+    with pytest.raises(NothingToCheckError, match="No library"):
         _run("sharepoint_documents_read", _context(gateway, config))
 
     gateway.list_site_urls.assert_not_called()
@@ -325,10 +343,10 @@ def test_configured_sites_the_exclusions_remove_are_not_replaced() -> None:
 
 def test_discovered_probe_sites_leave_out_personal_sites() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_site_urls.return_value = [
-        "https://contoso-my.sharepoint.com/personal/alice",
-        OTHER_SITE_URL,
-    ]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=["https://contoso-my.sharepoint.com/personal/alice", OTHER_SITE_URL],
+        complete=True,
+    )
 
     _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
 
@@ -358,7 +376,7 @@ def test_only_the_first_sites_are_probed() -> None:
 
 def test_an_empty_site_listing_fails() -> None:
     gateway: MagicMock = _gateway()
-    gateway.list_site_urls.return_value = []
+    gateway.list_site_urls.return_value = SiteUrlListing(site_urls=[], complete=True)
 
     with pytest.raises(ConnectorValidationError, match="Sites.Selected"):
         _run("sharepoint_sites_visible", _context(gateway, _config(sites=[])))
@@ -402,7 +420,7 @@ def test_missing_folder_fails_with_its_path() -> None:
         _run("sharepoint_configured_libraries", _context(gateway, config))
 
 
-def test_a_second_library_the_site_lacks_fails() -> None:
+def test_a_second_library_the_site_lacks_is_a_partial_find() -> None:
     """The documents probe stops at the first file, so this check is what
     catches a library name that matches nothing."""
     gateway: MagicMock = _gateway()
@@ -410,8 +428,13 @@ def test_a_second_library_the_site_lacks_fails() -> None:
         sites=[f"{SITE_URL}/Shared Documents", f"{OTHER_SITE_URL}/Archive"]
     )
 
-    with pytest.raises(ConnectorValidationError, match="Archive"):
-        _run("sharepoint_configured_libraries", _context(gateway, config))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["sharepoint_configured_libraries"]], _context(gateway, config)
+    )
+
+    assert result.status is CapabilityCheckStatus.INCOMPLETE
+    assert result.partial
+    assert result.summary == "Library not found: Archive"
 
     gateway.resolve_folder.assert_not_called()
 
@@ -587,7 +610,9 @@ def test_documents_check_stops_after_the_first_libraries() -> None:
 def _listed_sites_with_one_file(gateway: MagicMock, count: int, file_at: int) -> None:
     """``count`` listed sites, each with one library. Only the library of site
     ``file_at`` (from 1) holds a file indexing would read."""
-    gateway.list_site_urls.return_value = [f"{SITE_URL}{n}" for n in range(count)]
+    gateway.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[f"{SITE_URL}{n}" for n in range(count)], complete=True
+    )
     gateway.list_drives.side_effect = lambda site_url: [
         SharepointDrive(id=site_url, name="Documents", web_url=site_url)
     ]
@@ -614,7 +639,10 @@ def test_documents_check_reads_a_bounded_number_of_listed_sites() -> None:
     gateway: MagicMock = _gateway()
     _listed_sites_with_one_file(gateway, count=30, file_at=21)
 
-    _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
+    with pytest.raises(
+        InconclusiveValidationError, match="first 20 libraries, on 20 sites,"
+    ):
+        _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
 
     gateway.list_site_urls.assert_called_once_with(max_pages=1)
     assert gateway.list_drives.call_count == 20
@@ -641,11 +669,12 @@ def test_documents_check_skips_the_download_of_a_large_file() -> None:
     gateway.read_item_bytes.assert_not_called()
 
 
-def test_documents_check_passes_on_an_empty_library() -> None:
+def test_documents_check_is_incomplete_on_an_empty_library() -> None:
     gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page()
 
-    _run("sharepoint_documents_read", _context(gateway, _config()))
+    with pytest.raises(InconclusiveValidationError, match="The library, on 1 site,"):
+        _run("sharepoint_documents_read", _context(gateway, _config()))
 
     gateway.get_drive_item.assert_not_called()
 
@@ -697,11 +726,11 @@ def test_documents_check_is_skipped_when_documents_are_off() -> None:
     )
 
 
-def test_no_library_anywhere_is_incomplete() -> None:
+def test_no_library_anywhere_is_skipped() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = []
 
-    with pytest.raises(UnexpectedValidationError, match="No library"):
+    with pytest.raises(NothingToCheckError, match="No library"):
         _run("sharepoint_documents_read", _context(gateway, _config()))
 
 
@@ -757,11 +786,12 @@ def test_pages_check_moves_past_a_site_without_a_pages_listing() -> None:
     gateway.get_site_page.assert_called_once()
 
 
-def test_pages_check_passes_on_a_site_without_pages() -> None:
+def test_pages_check_is_skipped_on_a_site_without_pages() -> None:
     gateway: MagicMock = _gateway()
     gateway.list_site_pages.return_value = SitePagesPage(pages=[])
 
-    _run("sharepoint_site_pages_read", _context(gateway, _config()))
+    with pytest.raises(NothingToCheckError, match="no modern page"):
+        _run("sharepoint_site_pages_read", _context(gateway, _config()))
 
     gateway.get_site_page.assert_not_called()
 

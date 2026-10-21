@@ -7,7 +7,7 @@ from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import FileStoreType, QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import (
@@ -575,6 +575,13 @@ ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH = (
 # giving up.
 DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
     os.environ.get("NUM_RETRIES_ON_STARTUP") or 10
+)
+
+# Seconds the API server waits on startup for the model server to load the
+# self-hosted embedding model, which includes a download if it is not cached.
+# Startup fails when the wait runs out. 0 disables the wait.
+LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT = int(
+    os.environ.get("LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT") or 1800
 )
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
@@ -2110,6 +2117,28 @@ if _uses_default_object_storage_credentials(
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
+
+# The bundled MinIO that releases before the object store wrote to. A hand-run
+# upgrade keeps this endpoint in .env, so the files stay in MinIO.
+BUNDLED_LEGACY_MINIO_ENDPOINT_URL = "http://minio:9000"
+
+
+def _runs_on_legacy_minio(file_store_backend: str, s3_endpoint_url: str | None) -> bool:
+    return (
+        file_store_backend == FileStoreType.S3
+        and (s3_endpoint_url or "").rstrip("/") == BUNDLED_LEGACY_MINIO_ENDPOINT_URL
+    )
+
+
+# Fires in every process that imports this module, so object-store-copy shows it too.
+if _runs_on_legacy_minio(FILE_STORE_BACKEND, S3_ENDPOINT_URL):
+    logger.warning(
+        "Files are still stored in the legacy MinIO service, which a later "
+        "release removes. Set S3_ENDPOINT_URL=http://object-store:8333 and "
+        "S3_LEGACY_ENDPOINT_URL=%s in .env and run `docker compose up -d`, "
+        "or run `onyx-cli deploy upgrade`.",
+        BUNDLED_LEGACY_MINIO_ENDPOINT_URL,
+    )
 
 # The MinIO store earlier releases wrote to. While set, writes and deletes reach
 # both stores and reads that miss fall back to it. The same endpoint as

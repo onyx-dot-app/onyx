@@ -952,57 +952,61 @@ export default function ChatPreferencesPage() {
               <Section gap={6}>
                 {/* Connectors */}
                 <Section gap={3}>
-                  <Content
-                    title={t("connectors.title")}
-                    sizePreset="main-content"
-                    variant="section"
-                  />
-
                   <Section
                     flexDirection="row"
                     justifyContent="between"
                     alignItems="center"
                     gap={1}
+                    wrap
                   >
-                    {uniqueSources.length === 0 ? (
-                      <EmptyMessageCard
-                        sizePreset="main-ui"
-                        title={t("connectors.empty.title")}
+                    <Section width="fit" alignItems="start">
+                      <Content
+                        title={t("connectors.title")}
+                        description={t("connectors.description")}
+                        sizePreset="main-content"
+                        variant="section"
                       />
-                    ) : (
-                      <>
-                        <Section
-                          flexDirection="row"
-                          justifyContent="start"
-                          alignItems="center"
-                          gap={1}
-                        >
-                          {uniqueSources.slice(0, 3).map((source) => {
-                            const meta = getSourceMetadata(source);
-                            return (
-                              <div key={source} className="w-40">
-                                <Card padding={2} border="solid">
-                                  <Content
-                                    icon={meta.icon}
-                                    title={meta.displayName}
-                                    sizePreset="main-ui"
-                                  />
-                                </Card>
-                              </div>
-                            );
-                          })}
-                        </Section>
-
-                        <Button
-                          href="/admin/indexing-status"
-                          prominence="tertiary"
-                          rightIcon={SvgExternalLink}
-                        >
-                          {t("connectors.manageAllButton.label")}
-                        </Button>
-                      </>
+                    </Section>
+                    {uniqueSources.length > 0 && (
+                      <Button
+                        href="/admin/indexing-status"
+                        prominence="tertiary"
+                        rightIcon={SvgExternalLink}
+                      >
+                        {t("connectors.manageAllButton.label")}
+                      </Button>
                     )}
                   </Section>
+
+                  {uniqueSources.length === 0 ? (
+                    <EmptyMessageCard
+                      sizePreset="main-ui"
+                      title={t("connectors.empty.title")}
+                    />
+                  ) : (
+                    <Section
+                      flexDirection="row"
+                      justifyContent="start"
+                      alignItems="center"
+                      gap={1}
+                      wrap
+                    >
+                      {uniqueSources.map((source) => {
+                        const meta = getSourceMetadata(source);
+                        return (
+                          <div key={source} className="w-40">
+                            <Card padding={2} border="solid">
+                              <Content
+                                icon={meta.icon}
+                                title={meta.displayName}
+                                sizePreset="main-ui"
+                              />
+                            </Card>
+                          </div>
+                        );
+                      })}
+                    </Section>
+                  )}
                 </Section>
 
                 {/* Actions & Tools */}

@@ -47,8 +47,10 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckOutput,
     CheckRowText,
+    CheckStep,
     CredentialCapability,
     OptionsFinding,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -88,6 +90,13 @@ from onyx.connectors.source_operations import SourceOperations
 
 _SLACK_DOCS_LINK = (
     "https://docs.onyx.app/admins/connectors/official/slack/slack_indexed"
+)
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped after {time_limit}.\nRe-run the checks when no Slack "
+        "indexing job is running."
+    ),
 )
 
 _ADD_SCOPE_REMEDIATION = (
@@ -133,7 +142,7 @@ _PERM_SYNC_PRIVATE_LISTING_CHECK_ID = "slack_perm_sync_private_channel_listing"
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     _GRID_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
     _PUBLIC_LISTING_CHECK_ID: (_AUTH_CHECK_ID,),
-    "slack_readable_channel_listing": (_AUTH_CHECK_ID,),
+    "slack_readable_channel_listing": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_perm_sync_channel_listing": (_AUTH_CHECK_ID,),
     "slack_message_history_read": (_PUBLIC_LISTING_CHECK_ID,),
     "slack_channel_join_scope": (_AUTH_CHECK_ID,),
@@ -469,6 +478,8 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
         validates_binding: bool = False,
         discovery: bool = False,
         fails_when_unreachable: bool = False,
+        step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -485,6 +496,8 @@ class _SlackCheck(CapabilityCheck[SlackConnectorConfig]):
             validates_binding=validates_binding,
             discovery=discovery,
             fails_when_unreachable=fails_when_unreachable,
+            step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -501,6 +514,7 @@ class _TokenAuthCheck(_SlackCheck):
             ),
             validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=sign_in_timeout_text("Slack"),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -1158,6 +1172,11 @@ class _ReadableChannelListingCheck(_SlackCheck):
             display_name="List public channels",
             remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
             discovery=True,
+            step=CheckStep(
+                step_of=_PUBLIC_LISTING_CHECK_ID,
+                running_summary="Channels visible, counting…",
+                unfinished_caveat="Could not count every channel.",
+            ),
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:

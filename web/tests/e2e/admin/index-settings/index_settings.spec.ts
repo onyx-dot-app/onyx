@@ -115,6 +115,8 @@ function modelDisplayName(model: TestModelConfiguration): string {
 // Helpers shared across both describe blocks
 // ---------------------------------------------------------------------------
 
+// Legacy self-hosted models are not rendered unless current, so the first
+// "Select Model" is always one of the selectable models.
 async function stageNonCurrentSelfHostedModel(page: Page): Promise<void> {
   await expandModelPicker(page);
   await page.getByRole("tab", { name: /self.hosted/i }).click();

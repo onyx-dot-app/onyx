@@ -107,7 +107,10 @@ filters distinguish account state without separating services by protocol.
 Workspace credentials and no-auth services count as connected. Connected external apps with disabled associated skills show a yellow directory indicator with an explanatory tooltip. Card type labels use the singular Craft App. Surface support appears in the status indicator instead of Chat only or Craft only tags.
 Loading and failed account-status checks remain distinct from missing credentials.
 Connected and needs-auth cards omit the extra connection text line; the dot and
-its tooltip retain account status. Setup errors and unavailable states remain visible.
+its tooltip retain account status. Until connected, cards use one account-status dot
+and tooltip. Needs sign-in never shows separate surface states. Connected cards
+show the Main Chat, custom agents, and Craft status breakdown.
+Setup errors and unavailable states remain visible.
 Craft App and OpenAPI cards show unsupported surfaces in the availability indicator and tooltip.
 The Craft MCP catalog includes default Chat availability for this indicator and sorting.
 
@@ -127,7 +130,10 @@ Craft Apps have no stored description, so their headers use the localized Craft 
 Member directory detail and connection dialogs share one persistent backdrop, so switching screens does not restart its fade-in.
 The backdrop and active content use the same Radix dialog root, so its scroll lock permits wheel and touch events inside the modal. Standalone callers wrap the shared content in their own dialog root.
 The Connection tab starts with a status card: green when connected, yellow when setup is needed, and gray when checking or unavailable.
-Connected cards include secondary readiness text. External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
+Connected MCP, OpenAPI, and Craft App cards all use the title "Ready to use"
+and the same ownership text.
+Personal credentials and pass-through show "Uses your connected account".
+Workspace credentials show "Workspace connection". No-auth cards show "No authentication required". External apps show a separate Issues card with a yellow dot when associated skills are disabled. Review skills opens the Skills tab.
 The connection card provides Connect when the user can authenticate. Workspace setup remains distinct from personal authentication.
 Personal account connections show Disconnect in the connection card. It opens the existing confirmation flow.
 Tool descriptions use secondary body text and wrap within the row.
@@ -210,7 +216,7 @@ A divider separates default Chat selection from the schema fields. Creation omit
 Back preserves schema and credential drafts. Creation keeps one dialog and backdrop mounted across schema and authentication steps.
 Authorization supports OAuth, custom headers/API keys, pass-through when enabled, and explicit no authentication.
 Existing Craft App edits omit unchanged availability, so unrelated saves preserve concurrent admin changes.
-Only the final Add Action creates a record. Auth saves use refreshed permission-stamped rows.
+Only the final Add Plugin button creates a record. Auth saves use refreshed permission-stamped rows.
 Failed retries reuse the created tool ID and any newly created OAuth configuration ID.
 Retry writes require a successful authoritative refresh, not SWR's cached
 revalidation result. Schema and metadata writes preserve the fresh row's OAuth
@@ -472,11 +478,12 @@ Personal approval drafts survive tab changes and write only on Save.
 Opening the plugin modal preloads approval settings, before Tools is selected. If a tab switch must wait, the available list stays visible with a tab spinner.
 Member indicators and tooltip rows use Main Chat, Custom agents, then Craft.
 The segments run clockwise: upper left, upper right, then bottom.
-Workspace setup uses one gray dot and one setup message instead of surface rows.
-Other plugin states show three segments. Unsupported surfaces are gray and say Not available;
+Unconnected member plugins use one dot and one status message instead of surface rows.
+Workspace setup uses gray; required sign-in uses orange.
+Only connected member plugins show three segments. Unsupported surfaces are gray and say Not available;
 these segments do not lower the plugin's sort priority. Tooltip rows have no introductory status sentence.
-Supported segments are green when connected and enabled, orange when sign-in is needed
-or an admin or personal setting disables the surface, and gray when state is unknown.
+Supported segments are green when enabled, orange when an admin or personal setting
+disables the surface, and gray when state is unknown.
 Tooltips identify admin-disabled and personally disabled surfaces.
 Custom agents remain ready when only default Chat or personal Craft preferences are disabled;
 each agent must still be configured with the plugin. Sorting uses the same supported-surface rules.
@@ -487,14 +494,15 @@ Main Chat uses the same
 `Persona__Tool` selections as Admin > Chat Preferences. There is no separate
 server flag or schema migration. The page reads
 `GET /admin/default-assistant/configuration` and saves through
-`PATCH /admin/default-assistant` with `tool_ids`. These endpoints require
+`PATCH /admin/default-assistant/tools` with the changed `tool_ids` and
+`enabled`. These endpoints require
 `FULL_ADMIN_PANEL_ACCESS`. Other action managers cannot change the main Chat setting.
 Enabling selects this server's tools; disabling removes them. Both operations
 preserve selections from other servers and built-in tools. A selected subset
 shows the server as available. Changes in either surface appear in the other.
-The frontend sequences complete replacement writes across hook instances
-sharing one SWR cache. Rejection rolls back before the next write. Different
-browser clients still require backend concurrency control.
+The backend locks the default persona row for each write, so different
+browser clients serialize. The frontend also sequences writes across hook
+instances sharing one SWR cache. Rejection rolls back before the next write.
 Refreshing an existing server does not select new tools automatically. Custom
 agent attachments remain unchanged.
 
@@ -1014,8 +1022,10 @@ returned as a `ToolResponse` (never a raised exception, per
 
 `CustomTool.run` (`custom_tool.py`) only classifies HTTP `401`/`403` as an
 auth error (`CustomToolErrorInfo(is_auth_error=True, ...)`). A blocked
-destination or a 3xx redirect raises `ToolCallException`. Any other status
-code or exception surfaces as the raw response body or propagates up to
+destination (`status_code=None`) or a 3xx redirect returns a failed
+`CustomToolCallSummary` and emits a `CustomToolDelta` with the same error, so
+the chat step shows a blocked or failed state live and after reload. Any other
+status code or exception surfaces as the raw response body or propagates up to
 `_safe_run_single_tool`'s generic exception handling
 (`[[tools-framework]]` §4.5 step 6).
 

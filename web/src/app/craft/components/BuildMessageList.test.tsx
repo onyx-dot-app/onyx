@@ -91,6 +91,50 @@ const savedAssistantMessage: BuildMessage = {
   },
 };
 
+test("shows a cursor after refresh with only completed tools until the turn settles", () => {
+  const streamItems: StreamItem[] = [
+    {
+      type: "tool_call",
+      id: "completed-tool",
+      toolCall: {
+        id: "completed-tool",
+        kind: "execute",
+        title: "Running command",
+        description: "List files",
+        command: "ls",
+        status: "completed",
+        rawOutput: "report.txt",
+      },
+    },
+  ];
+  const props = {
+    sessionId: "session-1",
+    messages: [],
+    streamItems,
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
+  };
+  const { rerender } = render(<BuildMessageList {...props} isStreaming />);
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+  rerender(<BuildMessageList {...props} isStreaming={false} />);
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
+});
+
+test("uses the text cursor without adding a second progress cursor", () => {
+  renderList({
+    isStreaming: true,
+    streamItems: [
+      { type: "text", id: "text-1", content: "Writing", isStreaming: true },
+    ],
+  });
+  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+});
+
+test("shows a cursor when a live turn has only saved history", () => {
+  renderList({ messages: [savedAssistantMessage], isStreaming: true });
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+});
+
 // Output ownership follows settled turns, independently of assistant prose.
 test("renders a settled output-only turn but never places its cards before a live response", () => {
   const message: BuildMessage = {
@@ -305,6 +349,31 @@ describe("BuildMessageList thinking visibility", () => {
 });
 
 // Finalization uses the existing assistant block until canonical history is ready.
+test("keeps a finalization cursor when attachment completes before any assistant output", () => {
+  const messages: BuildMessage[] = [
+    {
+      id: "user",
+      type: "user",
+      content: "Make a report",
+      timestamp: new Date(),
+      turn_index: 0,
+    },
+  ];
+  render(
+    <BuildMessageList
+      sessionId="session-1"
+      messages={messages}
+      streamItems={[]}
+      scrollContainerRef={scrollRef()}
+      autoScrollEnabled={false}
+      isStreaming
+      isFinalizing
+    />
+  );
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+});
+
 test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {
   const props = {
     sessionId: "session-1",

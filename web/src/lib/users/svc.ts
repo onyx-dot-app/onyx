@@ -30,7 +30,12 @@ export async function logout(): Promise<Response> {
       const storage = window.sessionStorage;
       for (let index = storage.length - 1; index >= 0; index--) {
         const key = storage.key(index);
-        if (key?.startsWith("onyx:craft:")) storage.removeItem(key);
+        if (
+          key?.startsWith("onyx:craft:") ||
+          key?.startsWith("onyx:draft:craft:")
+        ) {
+          storage.removeItem(key);
+        }
       }
     } catch {
       // Disabled browser storage must not prevent logout.

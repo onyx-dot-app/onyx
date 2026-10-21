@@ -76,7 +76,7 @@ Related files:
 
 ## 5. Sandbox callbacks default to the internal API service
 
-Craft previously required an explicit `ONYX_SERVER_URL`, and the local values file pointed callbacks at the host frontend. The chart now derives an internal API Service URL when Craft is enabled, while retaining an explicit configured URL as an override; the sandbox PodTemplate and generated ConfigMap use the same value. The chart version advances to 0.9.19.
+Craft previously required an explicit `ONYX_SERVER_URL`, and the local values file pointed callbacks at the host frontend. The chart now derives an internal API Service URL when Craft is enabled, while retaining an explicit configured URL as an override; the sandbox PodTemplate and generated ConfigMap use the same value. The chart version advances to 0.9.20.
 
 **Review focus:** The chart now supplies an internal callback URL by default when Craft is enabled. Deployments that need a public hostname or path prefix still need an explicit override.
 

@@ -6,6 +6,11 @@ from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock
 
+import httplib2
+import pytest
+import requests
+from google.auth.exceptions import TransportError
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
@@ -54,7 +59,10 @@ def _ops() -> MagicMock:
 
 
 def _run(
-    check_id: str, ops: MagicMock, config: dict[str, Any] | None = None
+    check_id: str,
+    ops: MagicMock,
+    config: dict[str, Any] | None = None,
+    form_run: bool = False,
 ) -> CapabilityCheckResult:
     (check,) = [
         check
@@ -70,7 +78,7 @@ def _run(
         },
         source_operations=ops,
     )
-    (result,) = run_capability_checks([check], context)
+    (result,) = run_capability_checks([check], context, form_run=form_run)
     return result
 
 
@@ -139,3 +147,65 @@ def test_variants_and_steps_share_a_row() -> None:
     assert len(checks) == 19
     assert len(rows) == 16
     assert all(len(check.display_name) <= 24 for check in checks)
+
+
+def _transport_error(cause: Exception) -> TransportError:
+    """A token request that got no answer, as google-auth raises it."""
+    try:
+        raise TransportError(cause) from cause
+    except TransportError as error:
+        return error
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _transport_error(requests.ConnectionError("refused")),
+        httplib2.ServerNotFoundError("Unable to find the server"),
+        ConnectionRefusedError("refused"),
+    ],
+)
+def test_an_unreachable_google_fails_only_a_form_run(error: Exception) -> None:
+    ops = _ops()
+    ops.authenticate.side_effect = error
+
+    form = _run("google_drive_auth", ops, form_run=True)
+    stored = _run("google_drive_auth", ops)
+
+    assert form.status == CapabilityCheckStatus.FAILED
+    assert stored.status == CapabilityCheckStatus.INCOMPLETE
+    assert form.error_kind == stored.error_kind == CheckErrorKind.UNREACHABLE
+    assert form.summary == stored.summary == "Cannot reach Google Drive"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [_transport_error(requests.ReadTimeout("read timed out")), TimeoutError()],
+)
+def test_a_sign_in_timeout_fails_only_a_form_run(error: Exception) -> None:
+    ops = _ops()
+    ops.list_files.side_effect = error
+
+    form = _run("google_drive_auth", ops, form_run=True)
+    stored = _run("google_drive_auth", ops)
+
+    assert form.status == CapabilityCheckStatus.FAILED
+    assert stored.status == CapabilityCheckStatus.INCOMPLETE
+    assert form.error_kind == stored.error_kind == CheckErrorKind.TIMEOUT
+    assert form.summary == "Sign-in timed out"
+
+
+def test_a_request_timeout_after_sign_in_is_incomplete_on_a_form_run() -> None:
+    ops = _ops()
+    ops.list_drives.side_effect = TimeoutError()
+
+    result = _run(
+        "google_drive_shared_drives",
+        ops,
+        config={"include_shared_drives": True},
+        form_run=True,
+    )
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
+    assert result.error_kind == CheckErrorKind.TIMEOUT
+    assert result.summary == "Timed out"

@@ -175,6 +175,20 @@ def test_a_rate_limit_in_a_200_answer_is_a_typed_error() -> None:
         _api_key_ops().get_viewer()
 
 
+def test_a_refused_credential_in_a_200_answer_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [
+            {"message": "refused", "extensions": {"code": "AUTHENTICATION_ERROR"}}
+        ]
+    }
+    with (
+        patch(f"{OPS}._make_query", return_value=response),
+        pytest.raises(LinearAuthError),
+    ):
+        _api_key_ops().get_viewer()
+
+
 @patch(f"{OPS}.refresh_oauth_token")
 def test_a_busy_refresh_lock_is_a_typed_error(refresh: MagicMock) -> None:
     provider = _provider({"access_token": "old", "refresh_token": "r", "expire_at": 0})

@@ -176,7 +176,7 @@
     },
     "addOpenApiModal": {
       "addHeader": {
-        "title": "OpenAPI アクションを追加"
+        "title": "OpenAPI プラグインを追加"
       },
       "cancelButton": {
         "label": "キャンセル"
@@ -188,14 +188,14 @@
         "invalidJson": "JSON の形式が無効です",
         "placeholder": "ここに OpenAPI スキーマを入力してください",
         "required": "OpenAPI スキーマ定義は必須です",
-        "subDescription": "このアクションで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI アクション]({docsUrl}) を参照してください。",
+        "subDescription": "このプラグインで利用可能にする API を定義する OpenAPI スキーマを指定します。スキーマ内のどこでも (サーバー URL、パス、パラメーターの既定値など) プレースホルダー `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID`、`USER_EMAIL` を使用できます。呼び出し時に、現在のリクエストの値に置き換えられます。詳細は [OpenAPI プラグイン]({docsUrl}) を参照してください。",
         "title": "OpenAPI スキーマ定義"
       },
       "editConfigsButton": {
-        "disabledTooltip": "認証を管理できるのは、アクションの作成者または管理者のみです"
+        "disabledTooltip": "認証を管理できるのは、プラグインの作成者または管理者のみです"
       },
       "editHeader": {
-        "title": "OpenAPI アクションを編集"
+        "title": "OpenAPI プラグインを編集"
       },
       "empty": {
         "description": "OpenAPI スキーマを入力すると、ここにアクションのプレビューが表示されます。",
@@ -208,17 +208,17 @@
         "noSummary": "概要はありません"
       },
       "submitButton": {
-        "addLabel": "アクションを追加",
+        "addLabel": "プラグインを追加",
         "addingLabel": "追加中...",
         "saveLabel": "変更を保存",
         "savingLabel": "保存中..."
       },
       "toasts": {
-        "actionCreated": "OpenAPI アクションを作成しました",
-        "actionUpdated": "OpenAPI アクションを更新しました",
-        "createFailed": "OpenAPI アクションの作成に失敗しました",
+        "actionCreated": "OpenAPI プラグインを作成しました",
+        "actionUpdated": "OpenAPI プラグインを更新しました",
+        "createFailed": "OpenAPI プラグインの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
-        "updateFailed": "OpenAPI アクションの更新に失敗しました"
+        "updateFailed": "OpenAPI プラグインの更新に失敗しました"
       },
       "humanDescription": {
         "title": "ユーザー向けの説明",
@@ -553,13 +553,13 @@
         "loadConfigFailed": "既存の OAuth 設定の読み込みに失敗しました。更新するには、内容を再入力してください。"
       },
       "header": {
-        "description": "接続を認証すると、OpenAPI アクションを使用できます。"
+        "description": "接続を認証すると、OpenAPI プラグインを使用できます。"
       },
       "headers": {
         "addButton": {
           "label": "ヘッダーを追加"
         },
-        "description": "このアクションの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
+        "description": "このプラグインの API エンドポイントに送信するすべてのリクエストに、カスタムヘッダーを指定します。",
         "keyRequired": "ヘッダーのキーは必須です",
         "keyTitle": "ヘッダー",
         "minRequired": "認証ヘッダーを 1 つ以上追加してください",
@@ -632,7 +632,7 @@
         "submitButton": {
           "label": "削除"
         },
-        "title": "OpenAPI アクションを削除"
+        "title": "OpenAPI プラグインを削除"
       },
       "method": {
         "noSummary": "概要はありません"
@@ -764,7 +764,7 @@
           "tooltip": "画像生成を設定"
         },
         "openapi": {
-          "tooltip": "OpenAPIアクションを管理"
+          "tooltip": "OpenAPIプラグインを管理"
         },
         "webSearch": {
           "tooltip": "ウェブ検索を設定"
@@ -923,7 +923,7 @@
       "status": {
         "connected": "接続済み",
         "workspace": "ワークスペースの接続",
-        "session": "ログイン情報を使用",
+        "session": "接続済みのアカウントを使用",
         "none": "使用可能",
         "oauth": "アカウントを接続",
         "credentials": "認証情報を追加",
@@ -959,7 +959,7 @@
       },
       "detail": {
         "issuesTitle": "問題",
-        "readyDescription": "このプラグインを使い始めることができます。",
+        "noAuthentication": "認証は不要です",
         "connection": "接続",
         "tools": "ツール",
         "toolCount": "{count, plural, other {#個のツール}}",
@@ -1112,7 +1112,7 @@
       "add": {
         "label": "追加",
         "mcp": "カスタム MCP サーバーを追加",
-        "openapi": "OpenAPI アクションを追加"
+        "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
         "slack": {
@@ -1171,7 +1171,7 @@
       "state": {
         "mcpError": "MCP サーバーを読み込めませんでした。",
         "listErrorDescription": "このプラグイン一覧を読み込めませんでした。しばらくしてから再試行してください。",
-        "openapiError": "OpenAPI アクションを読み込めませんでした。",
+        "openapiError": "OpenAPI プラグインを読み込めませんでした。",
         "retry": {
           "label": "再試行"
         },
@@ -2240,11 +2240,12 @@
         "label": "ベータ"
       },
       "connectors": {
+        "description": "チャットの内部検索で使用されるソースです。追加や変更はインデックス作成ステータスのページで行います。",
         "empty": {
           "title": "コネクターが設定されていません"
         },
         "manageAllButton": {
-          "label": "すべて管理"
+          "label": "コネクタを管理"
         },
         "title": "コネクター"
       },
@@ -2423,7 +2424,7 @@
           "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
-        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI アクションは、[プラグイン]({url})で設定できます。",
+        "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
         "imageGeneration": {
           "description": "AI ツールを使用して画像を生成・加工します。",
           "disabledTooltip": "画像生成にはモデルの設定が必要です。「構成 > 画像生成」で設定するか、管理者に依頼してください。",
@@ -2965,8 +2966,8 @@
           "queued": "待機中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{minutes, number} 分）",
-          "rateFinished": "{rate} 件/分（{minutes, number} 分）",
+          "finished": "{time}（{duration}）",
+          "rateFinished": "{rate} 件/分（{duration}）",
           "membershipRate": "{rate} メンバーシップ/分"
         },
         "actions": {
@@ -3013,7 +3014,6 @@
           "label": "期間",
           "all": "全期間",
           "h1": "過去 1 時間",
-          "h12": "過去 12 時間",
           "h24": "過去 24 時間",
           "d7": "過去 7 日間",
           "d30": "過去 30 日間"
@@ -3087,6 +3087,7 @@
             "errors": "エラーを伴いインデックス作成が完了しました。",
             "resolved": "インデックス作成のエラーが解決されました。",
             "succeeded": "インデックスが正常に完了しました。",
+            "queued": "インデックスは待機中です。",
             "inProgress": "インデックス実行中。",
             "canceled": "インデックスが停止しました。"
           },
@@ -3098,6 +3099,7 @@
             "errors": "エラーを伴い権限が同期されました。",
             "resolved": "権限同期のエラーが解決されました。",
             "succeeded": "権限の同期が正常に完了しました。",
+            "queued": "権限の同期は待機中です。",
             "inProgress": "権限を同期中。",
             "canceled": "権限の同期が停止しました。"
           },
@@ -3109,6 +3111,7 @@
             "errors": "エラーを伴いグループメンバーシップが同期されました。",
             "resolved": "グループメンバーシップ同期のエラーが解決されました。",
             "succeeded": "グループメンバーシップの同期が正常に完了しました。",
+            "queued": "グループメンバーシップの同期は待機中です。",
             "inProgress": "グループメンバーシップを同期中。",
             "canceled": "グループ同期が停止しました。"
           },
@@ -3120,6 +3123,7 @@
             "errors": "プルーニングがエラーを伴って完了しました。",
             "resolved": "プルーニングのエラーが解決されました。",
             "succeeded": "プルーニングが正常に完了しました。",
+            "queued": "プルーニングは待機中です。",
             "inProgress": "プルーニングを実行中。",
             "canceled": "プルーニングが停止しました。"
           },
@@ -3131,6 +3135,7 @@
             "errors": "コネクタチェックがエラーを伴って完了しました。",
             "resolved": "コネクタチェックのエラーが解決されました。",
             "succeeded": "コネクタチェックに合格しました。",
+            "queued": "コネクタチェックは待機中です。",
             "inProgress": "コネクタチェックを実行中。",
             "canceled": "コネクタチェックが停止しました。"
           }
@@ -4819,33 +4824,47 @@
       "allProviders": {
         "label": "すべてのプロバイダー"
       },
+      "deleteModal": {
+        "description": "**{model}**（{provider}）の利用は再び組み込み価格で計算されます。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "*{model}* の上書きを削除"
+      },
       "empty": {
         "description": "モデルに交渉済みの単価（100 万 tokens あたりの USD）を適用するには、追加してください。",
         "title": "コストオーバーライドは設定されていません。"
       },
       "form": {
         "addButton": {
-          "label": "オーバーライドを追加"
+          "label": "追加"
         },
+        "description": "モデルの交渉済み単価を設定します。利用コストの計算で組み込み価格の代わりに使われます。",
+        "editTitle": "コストの上書きを編集",
+        "newTitle": "新しいコストの上書き",
         "cacheRate": {
-          "label": "キャッシュ読み取り単価（100 万 tokens あたりの USD、任意）",
-          "placeholder": "既定では入力単価を使用"
+          "description": "単位は 100 万 tokens あたりの USD です。既定では入力単価を使用します。",
+          "label": "キャッシュ読み取り単価"
         },
         "cancelButton": {
           "label": "キャンセル"
         },
         "inputRate": {
-          "label": "入力単価（100 万 tokens あたりの USD）"
+          "label": "入力単価"
         },
         "model": {
+          "description": "選択したこのモデルにコストの上書きを適用します。",
           "label": "モデル",
           "placeholder": "モデルを選択"
         },
         "outputRate": {
-          "label": "出力単価（100 万 tokens あたりの USD）"
+          "label": "出力単価"
         },
         "saveButton": {
           "label": "保存"
+        },
+        "units": {
+          "description": "単位は 100 万 tokens あたりの USD です。"
         }
       },
       "panel": {
@@ -4859,15 +4878,16 @@
         "title": "コストオーバーライド"
       },
       "row": {
+        "cache": "キャッシュ {value}",
         "deleteButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを削除"
         },
+        "description": "{provider} · 更新 {time}",
         "editButton": {
           "ariaLabel": "{model} の {provider} オーバーライドを編集"
         },
-        "rates": "{provider} · 入力 {input} · 出力 {output} · 100 万 tokens あたりの USD",
-        "ratesWithCache": "{provider} · 入力 {input} · 出力 {output} · キャッシュ {cache} · 100 万 tokens あたりの USD",
-        "updated": "更新 {time}"
+        "input": "入力 {value}",
+        "output": "出力 {value}"
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",
@@ -4875,10 +4895,6 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
-      },
-      "placeholders": {
-        "inputCost": "3.00",
-        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -6847,6 +6863,9 @@
         "noModelsTooltip": "モデルが設定されていないため、コンテキスト検索は無効です。先に [言語モデル]({link}) を設定してください。",
         "title": "コンテキスト検索"
       },
+      "currentModel": {
+        "legacyHint": "これはレガシーモデルです。引き続き動作しますが、新しいインデックスに再度選択することはできません。アップグレードするには、「すべてのモデルを表示」をクリックして新しいモデルを選択してください。"
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "embedding モデルと関連設定は Onyx Cloud が管理します。"
@@ -6985,9 +7004,12 @@
         "currentButton": {
           "label": "現在のモデル"
         },
-        "deprecated": {
-          "connectTooltip": "この embedding モデルは非推奨のため接続できません。",
-          "selectTooltip": "この embedding モデルは非推奨のため選択できません。"
+        "gpuRecommended": {
+          "tag": "GPU推奨"
+        },
+        "legacy": {
+          "tag": "レガシー",
+          "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
           "label": "モデルを選択"
@@ -6997,8 +7019,14 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPUの速度は目安で、ハードウェアと文書サイズによって異なります。推奨RAMは読み込んだモデル1つ分であり、Onyx全体の必要量ではありません。再インデックス時は追加のメモリを確保してください。",
         "addCustomModel": {
           "label": "カスタムモデルを追加"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "LiteLLM プロキシ、Azure OpenAI デプロイメント、または Bifrost ゲートウェイを接続します。モデル名はご自身で指定します。LiteLLM と Azure では次元も指定します。",
+          "selfHostedDescription": "上の一覧にない Hugging Face の埋め込みモデルを実行します。モデル名、次元、プレフィックスはご自身で指定します。",
+          "title": "詳細設定: 独自のモデルまたはプロキシを使用"
         },
         "cloudTab": {
           "label": "クラウド型"
@@ -7198,22 +7226,27 @@
         "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere の主力埋め込みモデル。品質とコストのバランスが最も優れています。2048 次元出力。",
+        "cohereEmbedV5Fast": "Cohere の Embed 5 の低コスト版。それでも非常に優れた選択肢です。2048 次元出力。",
         "cohereEmbedEnglishV3": "Cohere の英語向け埋め込みモデル。英語タスクで良好な性能。",
         "cohereEmbedEnglishLightV3": "Cohere の軽量な英語向け埋め込みモデル。単純なタスクではより高速で効率的。",
-        "cohereEmbedV4": "Cohere の最新の多言語埋め込みモデル。デフォルトの 1536 次元出力で検索品質を向上。",
-        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。最高の性能だが高コスト。",
-        "openaiTextEmbedding3Small": "OpenAI の新しく効率的な埋め込みモデル。性能とコストのバランスが良い。",
+        "cohereEmbedV4": "Cohere の多言語埋め込みモデル。1536 次元出力。",
+        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。すでに OpenAI を利用している場合に適しています。3072 次元出力。",
+        "openaiTextEmbedding3Small": "OpenAI の小型埋め込みモデル。クラウド型の選択肢の中で群を抜いて経済的です。1536 次元出力。",
         "googleGeminiEmbedding001": "Google の Gemini 埋め込みモデル。強力で効率的。",
         "googleTextEmbedding005": "Google のより小型で軽量な埋め込みモデル。",
-        "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
+        "googleGeminiEmbedding2": "Google の主力埋め込みモデル。非常に高性能ですが、コストが高く低速です。3072 次元出力のためインデックスが大きくなります。すでに Google を利用しているチームには堅実な選択肢です。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
         "voyage4Large": "Voyage 4 シリーズ最大の埋め込みモデル。Voyage で最高の検索品質、多言語対応。",
         "voyage4": "Voyage 4 シリーズの汎用埋め込みモデル。手頃なコストで高い検索品質。",
         "voyage4Lite": "Voyage 4 シリーズの軽量埋め込みモデル。最も低コストで、レート制限が最も高い。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
+        "graniteEmbedding97mMultilingualR2": "IBMの小型多言語モデル。{appName}に同梱。9700万パラメータ、384次元出力。CPUコアあたり最大200文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "voyage4Nano": "Voyage AIのオープンウェイトモデル。3億4600万パラメータ、2048次元出力。CPUコアあたり最大50文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "nemotron3Embed1b": "NVIDIAの多言語モデル。11億パラメータ、2048次元出力。CPUコアあたり最大5文書/分。CPU実行時の推奨RAM：モデルサーバーあたり8 GB。GPU推奨。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
-        "e5BaseV2": "デフォルトより小型で高速なモデル。検索品質は下がるが、デフォルトモデルの約 2 倍高速。",
+        "e5BaseV2": "Microsoft の E5 ファミリーの英語埋め込みモデル。速度と検索品質のバランスが取れています。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",
         "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
         "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"
@@ -11896,6 +11929,9 @@
         "personal": {
           "label": "個人用"
         },
+        "required": {
+          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
+        },
         "unavailable": {
           "label": "利用できません - クリックして詳細を表示"
         }
@@ -12423,6 +12459,9 @@
       "customTool": {
         "authFailedStatus": {
           "text": "{toolName} の認証に失敗しました (HTTP {statusCode})"
+        },
+        "blockedStatus": {
+          "text": "{toolName} はブロックされました"
         },
         "completedStatus": {
           "text": "{toolName} が完了しました"
@@ -14895,7 +14934,7 @@
         "title": "「{title}」を削除しますか？"
       },
       "newSession": {
-        "label": "クラフトを始める"
+        "label": "新しいセッション"
       },
       "options": {
         "label": "セッションのオプション"
@@ -14959,7 +14998,8 @@
         "missingTaskId": "タスク ID がありません。",
         "pauseButton": "一時停止",
         "resumeButton": "再開",
-        "runNowButton": "今すぐ実行",
+        "runHistoryTab": "実行履歴",
+        "runNowButton": "1回実行",
         "toasts": {
           "deleteFailed": "タスクを削除できませんでした",
           "deleted": "「{name}」を削除しました。",
@@ -15054,7 +15094,7 @@
           "trigger": "トリガー"
         },
         "empty": {
-          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「今すぐ実行」も使えます。"
+          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「1回実行」も使えます。"
         },
         "errors": {
           "loadFailed": "実行履歴を読み込めませんでした。",
@@ -15073,19 +15113,20 @@
           "notOpenableAriaLabel": "開けません"
         },
         "trigger": {
-          "runNow": "今すぐ実行",
+          "runNow": "1回実行",
           "schedule": "スケジュール"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "時刻にはローカルのタイムゾーンを使用します。",
         "dailyWeekly": {
-          "atLabel": "時刻:",
-          "daysLabel": "実行する曜日",
+          "atLabel": "時刻",
+          "daysLabel": "曜日",
           "runsEveryDay": "毎日実行されます",
           "runsOn": "{days} に実行されます"
         },
         "interval": {
-          "everyLabel": "実行間隔:"
+          "everyLabel": "繰り返し間隔"
         },
         "intervalUnits": {
           "days": "日",
@@ -15424,8 +15465,8 @@
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話と新しいタスクでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクでは有効なアプリのみ使用できます。変更はこのタスクのみに適用されます。",
-      "newTaskDescription": "このタスクで使用するアプリを有効にしてください。各アプリは現在のアクション設定から開始します。",
+      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
+      "newTaskDescription": "プラグインを有効にすると、現在のアクション設定を初期設定として使用します。",
       "workspace_disabled": "ワークスペースで無効",
       "workspace_managed": "ワークスペースで管理",
       "userManagement": "ユーザーによる承認設定の管理を許可",
@@ -15449,7 +15490,9 @@
       "disabledForTask": "このタスクで無効",
       "externalApp": "アプリ",
       "mcpServer": "MCPサーバー",
-      "taskAppsTitle": "アプリとMCPサーバー",
+      "taskAppsTitle": "プラグイン",
+      "taskAccessTitle": "プラグインへのアクセス",
+      "noEnabledApps": "このタスクで有効なプラグインはありません。",
       "actionPolicies": "承認設定",
       "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",
@@ -15793,6 +15836,11 @@
     },
     "iconTooltip": {
       "label": "詳細情報"
+    },
+    "inputCurrency": {
+      "amount": "金額",
+      "fraction": "金額の小数部",
+      "whole": "金額の整数部"
     },
     "input": {
       "day": "日",
@@ -16754,21 +16802,11 @@
         "title": "スキルを利用できません"
       },
       "management": {
-        "description": "このスキルを使用できるユーザーを管理します。",
-        "externalApp": {
-          "manage": {
-            "label": "アプリ設定で管理"
-          },
-          "readyDescription": "このスキルはアプリ「{appName}」を使用します。",
-          "title": "外部アプリ"
-        },
         "sharing": {
           "edit": {
             "label": "共有を編集"
-          },
-          "title": "共有"
-        },
-        "title": "管理"
+          }
+        }
       },
       "saveTooltip": {
         "missingDescription": "保存する前に説明を追加してください。",
@@ -16778,21 +16816,6 @@
         "noPermission": "このスキルの詳細を編集する権限がありません。",
         "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
-      },
-      "sharing": {
-        "organization": {
-          "editorDescription": "組織内の全員がこのスキルを使用および編集できます。",
-          "title": "組織",
-          "viewerDescription": "組織内の全員がこのスキルを使用できます。"
-        },
-        "personal": {
-          "description": "このスキルを使用できるのはあなただけです。",
-          "title": "個人"
-        },
-        "shares": {
-          "description": "選択したユーザーとグループのみがこのスキルを使用できます。",
-          "title": "{count, plural, one {# 件の共有} other {# 件の共有}}"
-        }
       },
       "toasts": {
         "created": "「{name}」を作成しました",
@@ -16973,7 +16996,6 @@
         },
         "externalAppNotice": "このスキルがアプリ「{appName}」に関連付けられている間は、組織全体への閲覧者アクセスが必要です。",
         "header": {
-          "title": "*{name}* を共有",
           "transferTitle": "*{name}* を譲渡"
         },
         "loading": {
@@ -16985,7 +17007,9 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新"
+          "ariaLabel": "{name} のアクセス権を更新",
+          "canUse": "使用可能",
+          "canEdit": "編集可能"
         },
         "saveButton": {
           "label": "保存"
@@ -17007,7 +17031,23 @@
         },
         "transferredToast": {
           "message": "所有権を譲渡しました。"
-        }
+        },
+        "installation": {
+          "title": "インストール",
+          "available": "インストール可能",
+          "default": "デフォルトでインストール",
+          "required": "必須",
+          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
+          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
+          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
+        },
+        "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
+        "accessTitle": "アクセス範囲",
+        "peopleTitle": "アクセスできるユーザー",
+        "manageIndividualAccess": "個別のアクセスを管理",
+        "individualAccessTitle": "個別のアクセス",
+        "ownershipTitle": "所有権"
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"

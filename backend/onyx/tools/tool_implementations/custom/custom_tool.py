@@ -183,6 +183,31 @@ class CustomTool(Tool[None]):
             )
         )
 
+    def _failed_response(
+        self, placement: Placement, status_code: int | None, message: str
+    ) -> ToolResponse:
+        error_info = CustomToolErrorInfo(status_code=status_code, message=message)
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    tool_id=self._id,
+                    response_type="text",
+                    error=error_info,
+                ),
+            )
+        )
+        return ToolResponse(
+            rich_response=CustomToolCallSummary(
+                tool_name=self._name,
+                response_type="text",
+                tool_result=None,
+                error=error_info,
+            ),
+            llm_facing_response=message,
+        )
+
     def run(
         self,
         placement: Placement,
@@ -241,22 +266,28 @@ class CustomTool(Tool[None]):
                 block_link_local_only=params.block_link_local_only,
             )
         except (SSRFException, ValueError) as e:
-            raise ToolCallException(
-                message=f"{self._name} request blocked: {e}",
-                llm_facing_message=(
+            logger.warning("%s request blocked: %s", self._name, e)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=(
                     f"The {self._name} tool could not run because its destination "
                     "is not allowed."
                 ),
-            ) from e
+            )
         if response.is_redirect:
-            raise ToolCallException(
+            logger.warning(
+                "%s got HTTP %s redirect to '%s'; redirects are not followed",
+                self._name,
+                response.status_code,
+                response.headers.get("Location"),
+            )
+            return self._failed_response(
+                placement,
+                status_code=response.status_code,
                 message=(
-                    f"{self._name} got HTTP {response.status_code} redirect to "
-                    f"'{response.headers.get('Location')}'; redirects are not followed"
-                ),
-                llm_facing_message=(
                     f"The {self._name} tool failed because the server sent a "
-                    "redirect. An admin must set the action's server URL to the "
+                    "redirect. An admin must set the plugin's server URL to the "
                     "final location."
                 ),
             )

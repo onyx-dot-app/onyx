@@ -10,6 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
 from onyx.connectors.capability_checks.models import (
     INCOMPLETE_STATUSES,
+    TIME_LIMIT_PLACEHOLDER,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
@@ -21,6 +22,7 @@ from onyx.connectors.capability_checks.models import (
     CheckNotApplicableError,
     CheckNotRunReason,
     CheckOutput,
+    CheckRowText,
     CredentialCapability,
     CredentialCapabilityReport,
     check_error_detail,
@@ -155,6 +157,7 @@ def _build_result(
         required=check.required,
         status=outcome.status,
         row_id=check.row_id,
+        step=check.step,
         message=outcome.message,
         error_type=outcome.error_type,
         error_kind=outcome.error_kind,
@@ -185,8 +188,13 @@ def _safe_error_detail(
     """The error's detail, or None when building it fails: a detail is for
     support, and must never fail the run."""
     try:
+        # A fallback check's row text is inferred from an untyped legacy
+        # error, so its stack trace stays available whatever the kind.
         return check_error_detail(
-            error, error_kind, credential_strings(context.credential_json)
+            error,
+            error_kind,
+            credential_strings(context.credential_json),
+            keep_trace=check.is_fallback,
         )
     except Exception:
         logger.exception(
@@ -202,12 +210,17 @@ def _error_outcome(
     form_run: bool,
     message: str | None = None,
     duration_ms: int | None = None,
+    default_row: CheckRowText | None = None,
 ) -> _CheckOutcome:
     """Maps a check's exception to an outcome, per the check exception
     contract and the check's ``outcome_status``. The row text is the
-    error's own, else the default of its kind."""
+    error's own, else ``default_row``, else the default of its kind."""
     error_kind = check_error_kind(error)
-    summary, description = _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    summary, description = (
+        (default_row.summary, default_row.description)
+        if default_row is not None
+        else _DEFAULT_ROW_TEXT_BY_KIND.get(error_kind, (None, None))
+    )
     if isinstance(error, ValidationError):
         summary = error.summary or summary
         description = error.description or description
@@ -246,6 +259,28 @@ def _missing_instance_outcome(
 def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
     """The check's hang guard: its own timeout, else the default."""
     return check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+
+
+def _time_limit_words(timeout_seconds: float) -> str:
+    seconds = round(timeout_seconds)
+    if seconds >= 60 and seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute{'' if minutes == 1 else 's'}"
+    return f"{seconds} second{'' if seconds == 1 else 's'}"
+
+
+def _hang_guard_row(
+    check: CapabilityCheck, timeout_seconds: float
+) -> CheckRowText | None:
+    """The check's own text for its hang guard, with the guard's time limit."""
+    if check.timeout_text is None:
+        return None
+    return CheckRowText(
+        summary=check.timeout_text.summary,
+        description=check.timeout_text.description.replace(
+            TIME_LIMIT_PLACEHOLDER, _time_limit_words(timeout_seconds)
+        ),
+    )
 
 
 def _capped(timeout_seconds: float, cap_seconds: float | None) -> float:
@@ -314,6 +349,7 @@ def _execute_check(
             form_run,
             message=_TIMEOUT_MESSAGE,
             duration_ms=elapsed_ms(),
+            default_row=_hang_guard_row(check, timeout_seconds),
         )
     except Exception as e:
         if check_error_kind(e) == CheckErrorKind.UNEXPECTED:
@@ -412,17 +448,46 @@ def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
     return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
 
 
-def run_order(checks: Sequence[CapabilityCheck]) -> list[CapabilityCheck]:
+def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[str]:
+    """``check_id`` and every check of ``checks`` it depends on, directly or
+    through other checks."""
+    depends_on_by_id: dict[str, tuple[str, ...]] = {
+        check.check_id: check.depends_on for check in checks
+    }
+    found: set[str] = set()
+    stack: list[str] = [check_id]
+    while stack:
+        current = stack.pop()
+        if current in found or current not in depends_on_by_id:
+            continue
+        found.add(current)
+        stack.extend(depends_on_by_id[current])
+    return found
+
+
+def run_order(
+    checks: Sequence[CapabilityCheck], first_check_id: str | None = None
+) -> list[CapabilityCheck]:
     """The order the runner executes ``checks``: validation checks before
     discovery checks, and every check after the checks of ``checks`` it
     depends on; otherwise their given order.
 
+    ``first_check_id`` (Start Now) moves that check, and the checks it needs,
+    ahead of the others of its kind. A discovery check still runs after
+    validation.
+
     Raises:
         ValueError: The dependencies among ``checks`` form a cycle.
     """
-    remaining: list[CapabilityCheck] = [
-        check for check in checks if not check.discovery
-    ] + [check for check in checks if check.discovery]
+    first_ids: set[str] = (
+        _with_dependencies(checks, first_check_id)
+        if first_check_id is not None
+        else set()
+    )
+    # A stable sort, so the given order holds within each group.
+    remaining: list[CapabilityCheck] = sorted(
+        checks, key=lambda check: (check.discovery, check.check_id not in first_ids)
+    )
     present_ids: set[str] = {check.check_id for check in checks}
     ordered: list[CapabilityCheck] = []
     ordered_ids: set[str] = set()
@@ -458,7 +523,13 @@ _NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
     CheckNotRunReason.DEPENDENCY_INCOMPLETE: "Not run: {name} incomplete",
     CheckNotRunReason.DEPENDENCY_SKIPPED: "Not run: {name} did not run",
 }
-_NOTHING_IN_SCOPE_LINE = "Not run: {name} found nothing to test"
+# The line of a check whose dependency did not run for a reason of its own
+# (not a gate of the run). The reason stays the dependency's.
+_DEPENDENCY_NOT_RUN_LINE_BY_REASON: dict[CheckNotRunReason, str] = {
+    CheckNotRunReason.NOTHING_IN_SCOPE: "Not run: {name} found nothing to test",
+    CheckNotRunReason.SKIPPED_BY_USER: "Not run: {name} skipped",
+    CheckNotRunReason.STOPPED_BY_USER: "Not run: {name} stopped",
+}
 
 
 def _dependency_not_run_outcome(
@@ -474,16 +545,17 @@ def _dependency_not_run_outcome(
         dependency = results_by_check_id.get(dependency_id)
         if dependency is None or not dependency.applicable:
             continue
-        if dependency.not_run_reason == CheckNotRunReason.NOTHING_IN_SCOPE:
-            line = _NOTHING_IN_SCOPE_LINE.format(name=dependency.display_name)
-            return _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=line,
-                summary=line,
-                not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
-                blocked_by=dependency_id,
-            )
-        if dependency.not_run_reason is not None:
+        if (dependency_reason := dependency.not_run_reason) is not None:
+            own_line = _DEPENDENCY_NOT_RUN_LINE_BY_REASON.get(dependency_reason)
+            if own_line is not None:
+                line = own_line.format(name=dependency.display_name)
+                return _CheckOutcome(
+                    status=CapabilityCheckStatus.SKIPPED,
+                    message=line,
+                    summary=line,
+                    not_run_reason=CheckNotRunReason.DEPENDENCY_SKIPPED,
+                    blocked_by=dependency_id,
+                )
             return _CheckOutcome(
                 status=CapabilityCheckStatus.SKIPPED,
                 message=dependency.message,
@@ -808,6 +880,7 @@ def generate_capability_report(
     timeout_cap_seconds: float | None = None,
     prior_results: Sequence[CapabilityCheckResult] = (),
     form_run: bool = False,
+    first_check_id: str | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -831,9 +904,13 @@ def generate_capability_report(
     ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
     the connector instantiation's. ``prior_results`` and ``form_run`` are
     forwarded to ``run_capability_checks``.
+
+    ``first_check_id`` (Start Now) orders the source's checks before
+    ``check_ids`` limits them, as a draft run's progress does
+    (``pending_in_run_order``).
     """
     source = source or credential.source
-    checks = get_capability_checks(source)
+    checks = run_order(get_capability_checks(source), first_check_id)
     if check_ids is not None:
         checks = [check for check in checks if check.check_id in check_ids]
     # Fail loudly for programmer errors (a source with no connector class)

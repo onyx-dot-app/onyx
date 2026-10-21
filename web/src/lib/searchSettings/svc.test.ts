@@ -73,6 +73,7 @@ describe("Google embedding authentication", () => {
       providerType: "google",
       apiKey: null,
       apiUrl: "",
+      modelName: "gemini-embedding-2",
       apiVersion: null,
       deploymentName: null,
       vertexConfig,
@@ -88,6 +89,7 @@ describe("Google embedding authentication", () => {
     expect(fetchSpy.mock.calls[1]?.[1]?.method).toBe("PUT");
     const testBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
     const saveBody = JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body));
+    expect(testBody.model_name).toBe("gemini-embedding-2");
     expect(testBody.vertex_config).toEqual(vertexConfig);
     expect(testBody.api_key).toBeNull();
     expect(saveBody.vertex_config).toEqual(vertexConfig);
@@ -106,6 +108,7 @@ describe("Google embedding authentication", () => {
         providerType: "google",
         apiKey: null,
         apiUrl: "",
+        modelName: "gemini-embedding-2",
         apiVersion: null,
         deploymentName: null,
         vertexConfig: {

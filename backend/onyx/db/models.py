@@ -112,6 +112,7 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
     SessionOrigin,
     SharingScope,
+    SkillInstallationPolicy,
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
@@ -819,6 +820,10 @@ class UserSkillPreference(Base):
     # Denormalized for name uniqueness; the composite FK keeps it exact.
     name: Mapped[str] = mapped_column(String(64), nullable=False)
 
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+
     __table_args__ = (
         ForeignKeyConstraint(
             ["name", "skill_id"],
@@ -832,6 +837,7 @@ class UserSkillPreference(Base):
             "user_id",
             "name",
             unique=True,
+            postgresql_where=text("enabled"),
         ),
     )
 
@@ -5090,6 +5096,13 @@ class Skill(Base):
         Enum(SkillSharePermission, native_enum=False),
         nullable=True,
     )
+    installation_policy: Mapped[SkillInstallationPolicy] = mapped_column(
+        Enum(SkillInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=SkillInstallationPolicy.AVAILABLE,
+        server_default=SkillInstallationPolicy.AVAILABLE.value,
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -5129,10 +5142,20 @@ class Skill(Base):
     )
 
     __table_args__ = (
+        Index(
+            "uq_skill_automatic_name",
+            "name",
+            unique=True,
+            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
+        ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",
+        ),
+        CheckConstraint(
+            "built_in_skill_id IS NOT NULL OR public_permission IS NOT NULL OR author_user_id IS NOT NULL",
+            name="ck_private_skill_has_owner",
         ),
     )
 

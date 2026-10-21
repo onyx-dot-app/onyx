@@ -29,6 +29,7 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CheckRowText,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -38,6 +39,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     NothingToCheckError,
     RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
     UnreachableValidationError,
 )
@@ -64,6 +66,11 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description="The check ran past its time limit.\nRe-run the checks later.",
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("GitHub")
 _SSO_GUIDE_LINK = (
     "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
     "authenticating-with-saml-single-sign-on/"
@@ -271,7 +278,9 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = _OWNER_FIELDS,
         requires_connector_config: bool = False,
+        validates_binding: bool = False,
         fails_when_unreachable: bool = False,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -284,7 +293,9 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
             requires_fields=requires_fields,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
             fails_when_unreachable=fails_when_unreachable,
+            timeout_text=timeout_text,
         )
 
 
@@ -309,7 +320,9 @@ class _AuthCheck(_GitHubCheck):
                 "check the Enterprise Server URL, if one is set."
             ),
             requires_fields=frozenset(),
+            validates_binding=True,
             fails_when_unreachable=True,
+            timeout_text=_SIGN_IN_TIMEOUT_TEXT,
         )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
@@ -324,7 +337,13 @@ class _AuthCheck(_GitHubCheck):
                     "token in API Token."
                 ),
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
+        except requests.Timeout as e:
+            raise TimedOutValidationError(
+                f"GitHub did not answer the sign-in in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
             raise UnreachableValidationError(
                 "Onyx cannot connect to GitHub. Check the Enterprise Server URL, "
                 "if one is set.",
@@ -609,11 +628,6 @@ def _repository_problem(
             f"`{full_name}`: access denied (HTTP 403: {_detail(error)})."
             f"{_accepted_access(error)}"
         )
-    if "/" in name:
-        return (
-            f"`{full_name}`: not found. Enter the repository name without the "
-            "owner (e.g. `onyx`, not `onyx-dot-app/onyx`)"
-        )
     cause: str = (
         "the classic token has no `repo` scope, which private repositories need"
         if _lacks_private_scope(token)
@@ -647,11 +661,6 @@ def _names(names: list[str]) -> str:
 def _not_found_line(names: list[str], token: GitHubTokenInfo | None) -> str:
     """The line after a not-found description: the names, and the likely
     cause."""
-    if any("/" in name for name in names):
-        return (
-            f"Not found: {_names(names)}. Enter each name without the owner "
-            "(onyx, not onyx-dot-app/onyx)."
-        )
     if _lacks_private_scope(token):
         return f"Not found: {_names(names)}. Select the repo scope."
     return f"Not found: {_names(names)}. Check each name and the token's access."
