@@ -145,6 +145,7 @@ function MCPSetupSession({
   );
   const nameInput = useRef<HTMLInputElement>(null);
   const connectionPanel = useRef<HTMLDivElement>(null);
+  const serverPanel = useRef<HTMLDivElement>(null);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const normalizedUrl = endpoint(url);
   const leave = () => {
@@ -207,7 +208,11 @@ function MCPSetupSession({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (step === "server") nameInput.current?.focus();
+      if (
+        step === "server" &&
+        !serverPanel.current?.contains(document.activeElement)
+      )
+        nameInput.current?.focus();
       else if (
         step === "connection" &&
         !connectionPanel.current?.contains(document.activeElement)
@@ -348,6 +353,7 @@ function MCPSetupSession({
                     <>
                       <div
                         hidden={step !== "server"}
+                        ref={serverPanel}
                         className={connection ? styles.panel : undefined}
                         data-direction="back"
                       >

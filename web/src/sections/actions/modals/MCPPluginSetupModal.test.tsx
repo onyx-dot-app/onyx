@@ -822,6 +822,31 @@ test("Back preserves connection credentials and final details without saving", a
   expect(writes).toEqual([]);
 });
 
+test("Back does not move focus after the user starts editing the URL", async () => {
+  probeResponse = async () => oauthResult;
+  render(<SetupModal />);
+  await openConnection();
+  const frames: FrameRequestCallback[] = [];
+  const requestFrame = jest
+    .spyOn(window, "requestAnimationFrame")
+    .mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+  try {
+    fireEvent.click(screen.getByRole("button", { name: copy.back }));
+    const input = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+    input.focus();
+    act(() => frames.forEach((callback) => callback(0)));
+    expect(input).toHaveFocus();
+    expect(
+      screen.getByRole("textbox", { name: /^MCP Server URL/ })
+    ).toHaveValue("https://example.com/mcp");
+  } finally {
+    requestFrame.mockRestore();
+  }
+});
+
 test("returning to the URL preserves credentials until the endpoint changes", async () => {
   probeResponse = async () => oauthResult;
   render(<SetupModal />);
