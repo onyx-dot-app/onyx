@@ -71,10 +71,35 @@ including files uploaded after the upgrade, because 0.9.x writes to both
 stores. The `<fullname>-object-store` PVC stays, and the next upgrade continues
 the move.
 
-One exception: a file written or deleted while MinIO was unavailable reaches
-MinIO only when the copy Job next runs. If MinIO had an outage after the Job
-completed, delete the Job and upgrade again before you roll back, and wait for
-it to complete.
+`helm rollback` does not change the database schema. A 0.8.x API server fails
+to start on the 0.9.x schema with `Can't locate revision`. Only the 0.9.x image
+has the migrations to downgrade it. Roll back in this order:
+
+1. If MinIO had an outage after the copy Job completed, delete the Job and
+   upgrade again, and wait for it to complete. A file written or deleted while
+   MinIO was unavailable reaches MinIO only when the copy Job runs.
+2. Downgrade the schema from a 0.9.x pod. This deletes data that only 0.9.x
+   stores, such as child chat sessions, OAuth grants and tokens that Onyx
+   issued, and personal MCP and OpenAPI tool preferences.
+
+   ```bash
+   kubectl exec -n <namespace> deploy/<fullname>-api-server -- \
+     alembic downgrade 25053020dd5a
+   ```
+
+   `25053020dd5a` is the last migration of Onyx v4.9. For another release, get
+   it with `docker run --rm onyxdotapp/onyx-backend:<version> alembic heads`.
+3. Roll back immediately. The app returns errors until the 0.8.x pods are
+   ready. A 0.9.x API pod that restarts before then upgrades the schema again.
+
+   ```bash
+   helm rollback -n <namespace> <release> <revision>
+   ```
+
+If you ran `helm rollback` first, the 0.8.x API pod restarts in a loop. The
+0.9.x pod keeps serving without the object store, so file reads fail. Run the
+step 2 command. `kubectl exec` picks the ready pod, which is the 0.9.x one.
+The 0.8.x pod starts on its next restart.
 
 ### Retire MinIO
 
