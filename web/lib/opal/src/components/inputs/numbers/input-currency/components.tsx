@@ -205,7 +205,9 @@ function InputCurrency({
       update({ ...segments, whole });
       return;
     }
-    update({ ...segments, whole });
+    // A typed separator says the whole part is done, so an empty one is 0
+    // (".5" reads 0.5). Arrows, Tab and Enter only move focus and fill nothing.
+    update({ ...segments, whole: whole || "0" });
     fractionRef.current?.focus();
     fractionRef.current?.select();
   }
@@ -244,7 +246,8 @@ function InputCurrency({
       const [first = "", second] = pieces;
       if (second !== undefined) {
         update({
-          whole: trimLeadingZeros(first),
+          // A pasted separator implies the whole part, as typing one does.
+          whole: trimLeadingZeros(first) || "0",
           fraction: showFraction ? second.slice(0, maxFraction) : "",
         });
         return;

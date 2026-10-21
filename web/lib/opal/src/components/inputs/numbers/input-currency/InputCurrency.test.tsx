@@ -211,6 +211,35 @@ describe("pasting", () => {
     }
   );
 
+  it("fills 0 when the separator is typed into an empty whole segment", async () => {
+    const user = setupUser();
+    const fields = renderEmpty();
+    await user.click(fields.whole);
+    await user.keyboard(".");
+    expect(fields.whole).toHaveValue("0");
+    expect(fields.fraction).toHaveFocus();
+    expect(fields.onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it("fills 0 when a pasted amount starts with the separator", async () => {
+    const user = setupUser();
+    const fields = renderEmpty();
+    await user.click(fields.fraction);
+    await user.paste(".5");
+    expect(fields.whole).toHaveValue("0");
+    expect(fields.fraction).toHaveValue("5");
+  });
+
+  it("leaves an empty whole segment empty when an arrow moves on", async () => {
+    const user = setupUser();
+    const fields = renderEmpty();
+    await user.click(fields.whole);
+    await user.keyboard("{ArrowRight}");
+    expect(fields.fraction).toHaveFocus();
+    expect(fields.whole).toHaveValue("");
+    expect(fields.onChange).not.toHaveBeenCalled();
+  });
+
   it("ignores the grouping key when typed", async () => {
     const user = setupUser();
     const fields = renderEmpty();
