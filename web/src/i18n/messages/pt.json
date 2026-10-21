@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, one {# conector indexado} other {# conectores indexados}}",
           "indexing": "{count, plural, one {# conector indexando} other {# conectores indexando}}",
           "failed": "{count, plural, one {# conector com falha} other {# conectores com falha}}",
-          "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}"
+          "paused": "{count, plural, one {# conector pausado} other {# conectores pausados}}",
+          "scheduled": "{count, plural, one {# conector agendado} other {# conectores agendados}}",
+          "deleting": "{count, plural, one {# conector sendo excluído} other {# conectores sendo excluídos}}"
         },
         "access": {
           "public": "Público",

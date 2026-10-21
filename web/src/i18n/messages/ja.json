@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
           "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
-          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}"
+          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
+          "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
+          "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
           "public": "公開",

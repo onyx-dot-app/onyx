@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
           "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
           "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
-          "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}"
+          "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}",
+          "scheduled": "{count, plural, one {# connecteur planifié} other {# connecteurs planifiés}}",
+          "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
           "public": "Public",

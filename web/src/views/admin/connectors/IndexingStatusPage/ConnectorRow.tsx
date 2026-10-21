@@ -86,8 +86,11 @@ export default function ConnectorRow({
   const warnings = row.open_error_count;
   // An empty display name falls back to the email, as an unset one does.
   const owner = row.creator_name?.trim() || row.creator_email;
-  // A paused or scheduled row has no run in flight, so its stages and file counts stay hidden.
-  const idle = row.status === "paused" || row.status === "scheduled";
+  // A paused, scheduled or deleting row has no run in flight, so its stages and file counts stay hidden.
+  const idle =
+    row.status === "paused" ||
+    row.status === "scheduled" ||
+    row.status === "deleting";
   const toggleLabel = expanded ? t("actions.collapse") : t("actions.expand");
   const [stagesOpen, setStagesOpen] = useState(false);
   const [runsFocused, setRunsFocused] = useState(false);

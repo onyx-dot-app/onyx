@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",
           "indexing": "{count, plural, one {موصل واحد قيد الفهرسة} other {# موصلات قيد الفهرسة}}",
           "failed": "{count, plural, one {موصل واحد فشل} other {# موصلات فشلت}}",
-          "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}"
+          "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}",
+          "scheduled": "{count, plural, one {موصل واحد مجدول} other {# موصلات مجدولة}}",
+          "deleting": "{count, plural, one {موصل واحد قيد الحذف} other {# موصلات قيد الحذف}}"
         },
         "access": {
           "public": "عام",

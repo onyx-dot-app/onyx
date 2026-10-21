@@ -16,14 +16,8 @@ import {
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { CardLoader, IconLoader } from "@opal/loaders";
-import {
-  SvgActivity,
-  SvgCheckCircle,
-  SvgPause,
-  SvgSettings,
-  SvgXOctagon,
-} from "@opal/icons";
+import { CardLoader } from "@opal/loaders";
+import { SvgActivity, SvgSettings } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -43,6 +37,7 @@ import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import { bucketStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
 
 const PAGE_SIZE = 20;
@@ -50,13 +45,15 @@ const POLL_MS = 30_000;
 const LOADER_ROWS = 4;
 const ALL = "all";
 
-// The header counts. Scheduled pairs get none.
-const COUNT_TAGS = [
-  { status: "indexed", icon: SvgCheckCircle, color: "green" },
-  { status: "indexing", icon: IconLoader, color: "blue" },
-  { status: "failed", icon: SvgXOctagon, color: "red" },
-  { status: "paused", icon: SvgPause, color: "amber" },
-] as const;
+// The header counts, one per bucket that holds a pair, so they add up to the list.
+const COUNT_ORDER = [
+  "indexed",
+  "indexing",
+  "failed",
+  "paused",
+  "scheduled",
+  "deleting",
+] as const satisfies readonly IndexingConnectorStatus[];
 
 interface FederatedRowProps {
   connector: FederatedConnectorStatus;
@@ -232,20 +229,26 @@ export default function ConnectorList({
             width="fit"
             height="fit"
           >
-            {COUNT_TAGS.map((tag) => ({
-              ...tag,
-              count: data?.status_counts[tag.status] ?? 0,
+            {COUNT_ORDER.map((counted) => ({
+              counted,
+              count: data?.status_counts[counted] ?? 0,
+              tag: bucketStatusTag(counted),
             }))
               .filter(({ count }) => count > 0)
-              .map(({ status: counted, icon, color, count }) => (
+              .map(({ counted, count, tag }) => (
+                // A count filters the list to its bucket, and again clears the filter.
                 <Tag
                   key={counted}
-                  icon={icon}
+                  icon={tag.icon}
                   title={format.number(count)}
                   tooltip={t(`counts.${counted}`, { count })}
-                  color={color}
+                  color={tag.color}
                   variant="status"
                   size="md"
+                  aria-pressed={status === counted}
+                  onClick={() =>
+                    pickStatus(status === counted ? null : counted)
+                  }
                 />
               ))}
           </Section>

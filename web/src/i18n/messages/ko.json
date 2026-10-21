@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
           "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
-          "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}"
+          "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
+          "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",
+          "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
           "public": "공개",

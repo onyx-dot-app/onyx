@@ -7381,7 +7381,9 @@
           "indexed": "{count, plural, other {# 个连接器已索引}}",
           "indexing": "{count, plural, other {# 个连接器正在索引}}",
           "failed": "{count, plural, other {# 个连接器失败}}",
-          "paused": "{count, plural, other {# 个连接器已暂停}}"
+          "paused": "{count, plural, other {# 个连接器已暂停}}",
+          "scheduled": "{count, plural, other {# 个连接器已计划}}",
+          "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
           "public": "公开",

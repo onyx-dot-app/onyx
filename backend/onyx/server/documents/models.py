@@ -817,6 +817,7 @@ class IndexingConnectorStatus(str, Enum):
     INDEXING = "indexing"
     FAILED = "failed"
     PAUSED = "paused"
+    DELETING = "deleting"
     SCHEDULED = "scheduled"
     INDEXED = "indexed"
 
@@ -828,8 +829,8 @@ class IndexingConnectorRow(BaseModel):
     name: str
     source: DocumentSource
     access_type: AccessType
-    # The pair's own state, which names the tag for a pair that is deleting,
-    # invalid or on its first index. `status` is the bucket.
+    # The pair's own state, which names the tag for a pair that is invalid or
+    # on its first index. `status` is the bucket.
     cc_pair_status: ConnectorCredentialPairStatus
     status: IndexingConnectorStatus
     creator_email: str | None

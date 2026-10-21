@@ -27,6 +27,7 @@ export const INDEXING_CONNECTOR_STATUSES = [
   "indexing",
   "failed",
   "paused",
+  "deleting",
   "scheduled",
   "indexed",
 ] as const;
@@ -39,7 +40,7 @@ export interface IndexingConnectorRow {
   name: string;
   source: ValidSources;
   access_type: AccessType;
-  /** The pair's own state, which names the tag for a pair that is deleting, invalid or on its first index. */
+  /** The pair's own state, which names the tag for a pair that is invalid or on its first index. */
   cc_pair_status: ConnectorCredentialPairStatus;
   status: IndexingConnectorStatus;
   creator_email: string | null;
