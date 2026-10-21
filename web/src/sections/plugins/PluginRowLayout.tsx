@@ -37,13 +37,15 @@ export default function PluginRowLayout({
               {title}
             </Text>
           </div>
-          <div className="flex min-w-0 items-center gap-2 leading-none">
-            <div className="min-w-0 truncate">
-              <Text font="secondary-body" color="text-03">
-                {description}
-              </Text>
+          {description && (
+            <div className="flex min-w-0 items-center gap-2 leading-none">
+              <div className="min-w-0 truncate">
+                <Text font="secondary-body" color="text-03">
+                  {description}
+                </Text>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         {status && <div className="pt-1">{status}</div>}
       </div>
