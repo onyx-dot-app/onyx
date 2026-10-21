@@ -121,11 +121,15 @@ export default function ChatPluginsPopover({
             icon={SvgPlug}
             title={t("chat.trigger.label")}
             sizePreset="main-ui"
-            padding={0}
+            variant="section"
             rounding={2}
             interaction={open ? "hover" : "rest"}
             aria-label={t("chat.trigger.label")}
-            rightChildren={<SvgChevronRight size={16} />}
+            rightChildren={
+              <div className="flex size-6 items-center justify-center">
+                <SvgChevronRight size={16} />
+              </div>
+            }
             onPointerEnter={(event) => {
               if (event.pointerType === "mouse") hover(true);
             }}
