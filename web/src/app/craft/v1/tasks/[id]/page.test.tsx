@@ -129,3 +129,26 @@ describe("deletion", () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 });
+
+// Task overview
+test("shows the prompt, plugin access, and run history together with a direct edit link", async () => {
+  mockRequests(Promise.resolve(new Response(null, { status: 204 })));
+  const user = setupUser();
+  render(<ScheduledTaskDetailPage />);
+
+  expect(
+    await screen.findByRole("heading", { name: "Run history" })
+  ).toBeVisible();
+  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  expect(screen.getByText("Plugin access")).toBeVisible();
+  expect(screen.getByText(task.prompt)).toBeVisible();
+  expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+    "href",
+    "/craft/v1/tasks/task-id/edit"
+  );
+  const promptToggle = screen.getByRole("button", { name: "Prompt" });
+  expect(promptToggle).toHaveAttribute("aria-expanded", "false");
+  await user.click(promptToggle);
+  expect(promptToggle).toHaveAttribute("aria-expanded", "true");
+  expect(mockPush).not.toHaveBeenCalled();
+});

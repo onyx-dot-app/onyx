@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
-import TaskActionPolicies, {
-  TaskActionPoliciesSummary,
-} from "@/app/craft/v1/tasks/components/TaskActionPolicies";
+import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
 import type {
   AppActionPoliciesView,
   TaskAppActionPolicies,
@@ -13,13 +11,36 @@ jest.mock("next/navigation", () => ({
   usePathname: () => "/craft/v1/apps",
 }));
 
-const mockExternalApps = [{ id: 10, authenticated: false }];
-jest.mock("@/hooks/useUserExternalApps", () => ({
-  __esModule: true,
-  default: () => ({ data: mockExternalApps }),
-}));
-jest.mock("@/lib/mcp/hooks", () => ({
-  useCraftMcpServers: () => ({ data: { mcp_servers: [] } }),
+let mockConnected = true;
+let mockCatalogAvailable = true;
+let mockConnectionError: Error | undefined;
+const mockRefresh = jest.fn();
+
+jest.mock("@/lib/plugins/member", () => ({
+  ...jest.requireActual("@/lib/plugins/member"),
+  useMemberPlugins: () => ({
+    plugins: !mockCatalogAvailable
+      ? []
+      : [
+          {
+            kind: "external-app",
+            app: {
+              id: 10,
+              name: "Slack",
+              app_type: "SLACK",
+              authenticated: mockConnected,
+              supports_oauth: true,
+              credential_keys: [],
+              credential_values: {},
+            },
+            connection: mockConnected
+              ? { kind: "connected", ownership: "user" }
+              : { kind: "oauth" },
+          },
+        ],
+    refresh: mockRefresh,
+    errors: { apps: mockConnectionError },
+  }),
 }));
 
 const initialData: AppActionPoliciesView[] = [
@@ -90,6 +111,10 @@ function Form({ taskId = null }: { taskId?: string | null }) {
   );
 }
 beforeEach(() => {
+  mockConnected = true;
+  mockCatalogAvailable = true;
+  mockConnectionError = undefined;
+  mockRefresh.mockClear();
   mockData = initialData;
   mockError = undefined;
   mockIsValidating = false;
@@ -172,39 +197,15 @@ it("keeps a complete draft editable after a background fetch fails", async () =>
     screen.queryByText("Could not load approval settings.")
   ).not.toBeInTheDocument();
 });
-it("shows a compact task summary with read-only action details", async () => {
-  const user = setupUser();
-  mockData = initialData.map((app) => ({ ...app, enabled: true }));
-  render(<TaskActionPoliciesSummary taskId="task" />);
-  expect(
-    screen.getByRole("switch", { name: "Enable Slack for this task" })
-  ).toBeChecked();
-  expect(
-    screen.getByText("1 auto-approve · 0 ask · 1 disabled")
-  ).toBeInTheDocument();
-  expect(screen.queryByText("Send messages")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "View actions" }));
-  expect(screen.getByText("Send messages")).toBeInTheDocument();
-  expect(
-    within(screen.getByRole("group", { name: "Send messages" })).getByRole(
-      "button",
-      { name: "Auto-approve" }
-    )
-  ).toBeDisabled();
-  expect(
-    screen.queryByRole("button", { name: "Save changes" })
-  ).not.toBeInTheDocument();
-});
+
 it("starts new apps off without copying actions until enabled", async () => {
   const user = setupUser();
   render(<Form />);
   expect(
     screen.getByRole("switch", { name: "Enable Slack for this task" })
   ).not.toBeChecked();
-  expect(screen.queryByText("Disabled for this task")).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Manage actions" })
-  ).not.toBeInTheDocument();
+  expect(screen.getByText("Disabled for this task")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Manage actions" })).toBeEnabled();
   expect(
     screen.queryByRole("group", { name: "Send messages" })
   ).not.toBeInTheDocument();
@@ -273,16 +274,30 @@ it("loads an existing task's enabled apps and independent stored choices", async
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-it("shows missing credentials without preventing task enablement", async () => {
+it("replaces the enable toggle with a connection button until connected", async () => {
+  mockConnected = false;
   const user = setupUser();
-  render(<Form />);
-  expect(await screen.findByText("Connection required")).toBeInTheDocument();
+  const { rerender } = render(<Form />);
+  expect(screen.queryByText("Connection required")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("switch", { name: "Enable Slack for this task" })
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Connect Slack" }));
+  expect(
+    screen.getByRole("button", { name: "Continue to Slack" })
+  ).toBeVisible();
+  await user.keyboard("{Escape}");
+  mockConnected = true;
+  rerender(<Form />);
+  expect(
+    screen.queryByRole("button", { name: "Connect Slack" })
+  ).not.toBeInTheDocument();
   const toggle = screen.getByRole("switch", {
     name: "Enable Slack for this task",
   });
+  expect(toggle).not.toBeChecked();
   await user.click(toggle);
   expect(toggle).toBeChecked();
-  expect(screen.getByText("Connection required")).toBeInTheDocument();
 });
 
 it("keeps hundreds of actions out of the form and applies filtered edits only after Save", async () => {
@@ -436,17 +451,6 @@ it("explains workspace-disabled actions on hover without labeling personal choic
   expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 });
 
-it("explains admin-disabled actions in read-only task details", async () => {
-  const user = setupUser();
-  mockData = initialData.map((app) => ({ ...app, enabled: true }));
-  render(<TaskActionPoliciesSummary taskId="task" />);
-  await user.click(screen.getByRole("button", { name: "View actions" }));
-  await user.hover(screen.getByRole("group", { name: "Delete messages" }));
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "An admin disabled this action for the workspace."
-  );
-});
-
 it("requires changes to save and confirms dirty cancel and escape", async () => {
   const user = setupUser();
   render(<Form />);
@@ -534,3 +538,139 @@ it.each([true, false])(
     ]);
   }
 );
+
+it("opens connected card settings by keyboard without enabling the plugin", async () => {
+  const user = setupUser();
+  render(<Form />);
+  screen.getByRole("group", { name: "Slack" }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("group", { name: "Send messages" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  ).not.toBeChecked();
+  await user.click(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("opens the connection dialog when a disconnected card is clicked", async () => {
+  mockConnected = false;
+  const user = setupUser();
+  render(<Form />);
+  await user.click(screen.getByRole("group", { name: "Slack" }));
+  expect(
+    screen.getByRole("button", { name: "Continue to Slack" })
+  ).toBeVisible();
+});
+
+it("keeps enablement unavailable until connection data is known", async () => {
+  const user = setupUser();
+  mockCatalogAvailable = false;
+  const { rerender } = render(<Form />);
+  expect(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  ).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("button", { name: "Manage actions" })).toBeDisabled();
+  await user.click(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  );
+  expect(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  ).not.toBeChecked();
+  mockCatalogAvailable = true;
+  rerender(<Form />);
+  expect(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  ).not.toHaveAttribute("aria-disabled", "true");
+});
+
+it("retains untouched personal defaults when editing actions before enabling", async () => {
+  const app = initialData[0];
+  if (!app) throw new Error("Missing app fixture");
+  mockData = [
+    {
+      ...app,
+      actions: [
+        ...app.actions,
+        {
+          action_id: "read",
+          normalised_name: "Read messages",
+          description: "",
+          effective_policy: "ALWAYS",
+          workspace_policy: "ASK",
+          stored_policy: "ALWAYS",
+          editable: true,
+          lock_reason: null,
+        },
+      ],
+    },
+  ];
+  const user = setupUser();
+  render(<Form />);
+  await user.click(screen.getByRole("button", { name: "Manage actions" }));
+  await user.click(
+    within(screen.getByRole("group", { name: "Send messages" })).getByRole(
+      "button",
+      { name: "Ask" }
+    )
+  );
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await user.click(
+    screen.getByRole("switch", { name: "Enable Slack for this task" })
+  );
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenCalledWith([
+    {
+      gated_app_id: 1,
+      enabled: true,
+      action_policies: { send: "ASK", delete: "DENY", read: "ALWAYS" },
+    },
+  ]);
+});
+
+it("allows an enabled plugin to be edited and disabled when connection data fails", async () => {
+  mockCatalogAvailable = false;
+  mockConnectionError = new Error("offline");
+  mockData = initialData.map((app) => ({ ...app, enabled: true }));
+  const user = setupUser();
+  render(<Form taskId="task" />);
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(mockRefresh).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("group", { name: "Slack" }));
+  expect(screen.getByRole("group", { name: "Send messages" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  const toggle = screen.getByRole("switch", {
+    name: "Enable Slack for this task",
+  });
+  expect(toggle).toBeChecked();
+  await user.click(toggle);
+  expect(toggle).not.toBeChecked();
+  expect(toggle).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("button", { name: "Manage actions" })).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenCalledWith([
+    { gated_app_id: 1, enabled: false, action_policies: { send: "ALWAYS" } },
+  ]);
+});
+
+it("allows an enabled disconnected plugin to be disabled without reconnecting", async () => {
+  mockConnected = false;
+  mockData = initialData.map((app) => ({ ...app, enabled: true }));
+  const user = setupUser();
+  render(<Form taskId="task" />);
+  const toggle = screen.getByRole("switch", {
+    name: "Enable Slack for this task",
+  });
+  expect(toggle).toBeChecked();
+  expect(screen.getByRole("button", { name: "Connect Slack" })).toBeVisible();
+  await user.click(toggle);
+  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Connect Slack" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Save task" }));
+  expect(mockSave).toHaveBeenCalledWith([
+    { gated_app_id: 1, enabled: false, action_policies: { send: "ALWAYS" } },
+  ]);
+});

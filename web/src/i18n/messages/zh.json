@@ -14962,7 +14962,8 @@
         "missingTaskId": "缺少任务 ID。",
         "pauseButton": "暂停",
         "resumeButton": "恢复",
-        "runNowButton": "立即运行",
+        "runHistoryTab": "运行历史",
+        "runNowButton": "运行一次",
         "toasts": {
           "deleteFailed": "删除任务失败",
           "deleted": "已删除“{name}”。",
@@ -15057,7 +15058,7 @@
           "trigger": "触发方式"
         },
         "empty": {
-          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“立即运行”。"
+          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“运行一次”。"
         },
         "errors": {
           "loadFailed": "无法加载运行历史。",
@@ -15076,19 +15077,20 @@
           "notOpenableAriaLabel": "无法打开"
         },
         "trigger": {
-          "runNow": "立即运行",
+          "runNow": "运行一次",
           "schedule": "计划"
         }
       },
       "scheduleEditor": {
+        "localTimeHint": "时间使用您所在的本地时区。",
         "dailyWeekly": {
-          "atLabel": "时间",
-          "daysLabel": "在这些日子",
+          "atLabel": "运行时间",
+          "daysLabel": "日期",
           "runsEveryDay": "每天运行",
           "runsOn": "在{days}运行"
         },
         "interval": {
-          "everyLabel": "每"
+          "everyLabel": "重复间隔"
         },
         "intervalUnits": {
           "days": "天",
@@ -15427,8 +15429,8 @@
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
       "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
-      "taskDescription": "此任务只能使用已启用的应用。更改仅适用于此任务。",
-      "newTaskDescription": "启用此任务可以使用的应用。每个应用初始使用您当前的操作设置。",
+      "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
+      "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
       "workspace_disabled": "工作区已禁用",
       "workspace_managed": "由工作区管理",
       "userManagement": "允许用户管理审批设置",
@@ -15452,7 +15454,9 @@
       "disabledForTask": "已为此任务禁用",
       "externalApp": "应用",
       "mcpServer": "MCP 服务器",
-      "taskAppsTitle": "应用和 MCP 服务器",
+      "taskAppsTitle": "插件",
+      "taskAccessTitle": "插件访问权限",
+      "noEnabledApps": "此任务未启用任何插件。",
       "actionPolicies": "审批设置",
       "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
       "manageActions": "管理操作",

@@ -27,7 +27,7 @@ designs, not aspirational, except where noted (§9).
 A user writes a prompt, picks a schedule (an interval, a daily/weekly
 cadence, or a raw cron expression), and saves it at `/craft/v1/tasks`. From
 then on, the task fires on its own: a fresh Craft session runs the prompt
-headlessly, and the user can click "Run now" to fire it immediately without
+headlessly, and the user can click "Run once" to fire it immediately without
 waiting.
 
 Every past run shows up in the task's run history. Clicking a finished run
@@ -35,6 +35,25 @@ opens the same session view used for an interactive chat; there is no
 separate "run detail" screen. If a run needs an approval the task wasn't
 configured to grant, or if it fails outright, the user gets a notification.
 Scheduled runs never clutter the normal Craft session sidebar.
+
+The task detail page shows a brief, expandable prompt and the enabled plugins as passive labels.
+Run history follows this compact summary on the same page. There are no tabs or plugin configuration controls.
+Edit opens the task editor for prompt, schedule, and plugin changes.
+The standard settings header shows Edit, Run once, Pause or Resume, and Delete beside the task title.
+Pause or Resume is the primary action.
+The task editor groups schedule choices in a panel with interval and daily/weekly modes.
+The Plugins section uses a card grid with task enable switches and action settings buttons.
+Clicking a connected plugin card opens action settings, even when disabled for the task.
+Clicking a disconnected card opens its connection dialog. The toggle only changes task enablement.
+Plugins that need a connection show an orange dot after the name and an outlined plug button.
+Their plug button opens the shared connection dialog. Disabled plugins show it instead of the enable switch.
+Already-enabled plugins retain the switch so users can turn them off without reconnecting.
+The enable switch returns after connection. Failed connection-data requests expose a retry action.
+Connected, enabled cards use a white surface; disabled or disconnected cards use the gray page surface.
+Unknown connection data cannot enable a plugin, but enabled plugins can still be edited or disabled.
+The editor owns drafts and dialog selection; `TaskPluginCard` only displays state and emits user actions.
+`TaskActionPoliciesSummary` owns the read-only access list. `TaskAppActionsModal` owns unsaved action edits.
+The first action edit or enable snapshots personal defaults, including untouched actions.
 
 Deleting from the task detail page removes the task from the cached overview
 and replaces the detail URL with `/craft/v1/tasks`. Browser Back does not
@@ -113,7 +132,7 @@ run could saturate would stall dispatch for every tenant
 - `ScheduledTaskEnabledApp`: membership keyed by `(scheduled_task_id, gated_app_id)`.
   Missing membership blocks every action in that app, including workspace-managed actions.
 - `ScheduledTaskActionPolicy`: one choice per `(scheduled_task_id, gated_app_id, action_id)`.
-  New tasks copy personal choices when an app is first enabled. Existing tasks retain their choices, including empty maps that require approval. Workspace restrictions remain live.
+  New tasks copy personal choices, including untouched actions, on the first action edit or enable. Existing tasks retain their choices, including empty maps that require approval. Workspace restrictions remain live.
 
 - `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`/`SLACK`): set at
   session-create time (`SCHEDULED` by the executor). The normal Craft sidebar query
@@ -216,10 +235,13 @@ sweeper does not send a notification.
 
 ### 4.4 Per-action policies
 
-The task editor shows Apps and MCP servers as full-width plugin rows with enable switches.
-New tasks start with all apps off. Disabled editable rows show the switch without a status label.
-Enabled rows show action counts and Manage actions; actions do not expand inline.
-When creating a task, first enable starts with current personal choices. Existing tasks keep their saved choices, including an empty map that defaults to Ask.
+The task editor shows a Plugins card grid with separate connection, enable, and action controls.
+New tasks start with all plugins off. Disabled cards show "Disabled for this task"; enabled cards show action counts.
+Connected cards open action settings, including when disabled for the task. Their gear button opens the same modal.
+Disconnected cards show an orange dot and a connection button. Already-enabled plugins retain the switch until turned off.
+Clicking these cards opens the shared connection dialog. Unknown connection data cannot enable a plugin, but enabled plugins can still be edited or disabled.
+For new tasks, the first action edit or enable copies current personal choices, including untouched actions.
+Existing tasks keep their saved choices, including an empty map that defaults to Ask.
 Disabling preserves saved choices; re-enabling restores them. Later personal edits do not change saved task choices.
 Manage actions opens a modal for one app. Search narrows the visible actions.
 Each row has Auto-approve, Ask, and Disabled buttons.
@@ -232,7 +254,7 @@ Closing a changed modal asks the user to discard changes or keep editing.
 The task form's Save persists the draft; modal actions do not write to the database.
 
 Task edits apply to subsequent requests, including active runs. Task permission responses keep action configuration
-separate from the `enabled` gate; new task creation uses personal defaults for first enable. `effective_policy` always describes the task setting.
+separate from the `enabled` gate; the editor copies personal defaults on first action edit or enable for new tasks. `effective_policy` always describes the task setting.
 
 `backend/onyx/db/action_policy.py` owns the shared permission rules. A task-disabled app blocks every request first. Workspace DENY always blocks.
 When user management is off, workspace settings apply. Otherwise a task uses its own saved policy;
@@ -358,7 +380,7 @@ file and on code review, not automation.
    `tail -f backend/log/celery_beat_debug.log`.
 2. Create a task at `/craft/v1/tasks` with an interval schedule and a
    simple prompt.
-3. Use "Run now" rather than waiting for the interval; confirm a run row
+3. Use "Run once" rather than waiting for the interval; confirm a run row
    appears as `running` then reaches a terminal state within the executor's
    budget.
 4. Open the finished run from the task's run history; confirm it opens the
