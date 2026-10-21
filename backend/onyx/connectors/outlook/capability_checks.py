@@ -39,6 +39,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckFindingKey,
+    CheckNotApplicableError,
     CheckOutput,
     CheckStep,
     CountFinding,
@@ -135,7 +136,9 @@ _LISTING_CHECK_ID = "outlook_mailbox_listing"
 _CONFIGURED_MAILBOXES_CHECK_ID = "outlook_configured_mailboxes"
 _CONFIGURED_GROUPS_CHECK_ID = "outlook_configured_groups"
 # The selected mailboxes and groups too, so one unreachable scope fails one
-# row. A check that does not apply does not stop the samples.
+# row. A check that does not apply does not stop the samples. A config-less
+# run selects nothing, so those two checks do not apply there and the samples
+# run.
 _SAMPLE_DEPENDS_ON: tuple[str, ...] = (
     _LISTING_CHECK_ID,
     _CONFIGURED_MAILBOXES_CHECK_ID,
@@ -870,14 +873,14 @@ def _mailbox_problem_row(problem: MailboxProblem) -> CheckRowText:
 class _ConfiguredMailboxesCheck(_ConfigReadingCheck):
     """Resolves and probes every explicitly configured mailbox. Some
     unreachable is INCOMPLETE, and the samples open the reachable ones; none
-    reachable FAILS."""
+    reachable FAILS. With no mailbox selected, also on a config-less run, it
+    does not apply."""
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_CONFIGURED_MAILBOXES_CHECK_ID,
             display_name="Find selected mailboxes",
             remediation=f"{MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}",
-            requires_connector_config=True,
         )
 
     def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
@@ -885,6 +888,8 @@ class _ConfiguredMailboxesCheck(_ConfigReadingCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         addresses = configured_addresses(self.config(context))
+        if not addresses:
+            raise CheckNotApplicableError("No mailboxes are selected.")
         problems: list[MailboxProblem] = describe_unavailable_mailboxes(
             _gateway(context), addresses
         )
@@ -942,14 +947,14 @@ def _group_problem_row(problem: GroupProblem) -> CheckRowText:
 
 class _ConfiguredGroupsCheck(_ConfigReadingCheck):
     """Each configured group names exactly one Entra group the app can read.
-    Some unusable is INCOMPLETE; none usable FAILS."""
+    Some unusable is INCOMPLETE; none usable FAILS. With no group selected,
+    also on a config-less run, it does not apply."""
 
     def __init__(self) -> None:
         super().__init__(
             check_id=_CONFIGURED_GROUPS_CHECK_ID,
             display_name="Find selected groups",
             remediation=f"{GROUP_UNAVAILABLE_REMEDIATION} {GROUP_LISTING_REMEDIATION}",
-            requires_connector_config=True,
         )
 
     def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
@@ -957,6 +962,8 @@ class _ConfiguredGroupsCheck(_ConfigReadingCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         groups = configured_groups(self.config(context))
+        if not groups:
+            raise CheckNotApplicableError("No mailbox groups are selected.")
         try:
             problems: list[GroupProblem] = describe_unavailable_groups(
                 _gateway(context), groups, denied_row=_GROUPS_DENIED_ROW

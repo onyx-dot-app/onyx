@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckNotApplicableError,
     CheckOutput,
     CountFinding,
     CredentialCapability,
@@ -565,10 +566,14 @@ def test_mail_read_check_reports_a_configured_mailbox_that_does_not_exist() -> N
 # ---------------------------------------------------------------------------
 
 
-def test_groups_check_does_nothing_without_groups() -> None:
+def test_groups_check_does_not_apply_without_groups() -> None:
     gateway = healthy_gateway()
 
-    _run("outlook_configured_groups", check_context(gateway, {"mailbox_groups": []}))
+    with pytest.raises(CheckNotApplicableError):
+        _run(
+            "outlook_configured_groups",
+            check_context(gateway, {"mailbox_groups": []}),
+        )
 
     gateway.resolve_groups.assert_not_called()
 
@@ -610,10 +615,11 @@ def test_groups_check_maps_a_denied_listing_to_the_group_permission() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_configured_check_does_nothing_in_every_mailbox_mode() -> None:
+def test_configured_check_does_not_apply_in_every_mailbox_mode() -> None:
     gateway = healthy_gateway()
 
-    _run("outlook_configured_mailboxes", check_context(gateway, {"mailboxes": []}))
+    with pytest.raises(CheckNotApplicableError):
+        _run("outlook_configured_mailboxes", check_context(gateway, {"mailboxes": []}))
 
     gateway.resolve_mailbox.assert_not_called()
 
@@ -686,13 +692,18 @@ def test_configured_check_names_user_read_all_when_resolution_is_denied() -> Non
         )
 
 
-def test_configured_check_is_skipped_without_a_config() -> None:
-    results = run_capability_checks(
-        [_CHECKS_BY_ID["outlook_configured_mailboxes"]],
-        check_context(healthy_gateway()),
-    )
+@pytest.mark.parametrize(
+    "check_id", ["outlook_configured_mailboxes", "outlook_configured_groups"]
+)
+def test_configured_check_does_not_apply_without_a_config(check_id: str) -> None:
+    gateway = healthy_gateway()
 
-    assert results[0].status is CapabilityCheckStatus.SKIPPED
+    (result,) = run_capability_checks([_CHECKS_BY_ID[check_id]], check_context(gateway))
+
+    assert result.status is CapabilityCheckStatus.SKIPPED
+    assert not result.applicable
+    gateway.resolve_mailbox.assert_not_called()
+    gateway.resolve_groups.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
