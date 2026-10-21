@@ -36,27 +36,6 @@ jest.mock("@/app/craft/contexts/UploadFilesContext", () => {
   };
 });
 
-jest.mock("@/sections/input/BaseInputBar", () => {
-  const React = jest.requireActual<typeof import("react")>("react");
-  return {
-    __esModule: true,
-    default: React.forwardRef(
-      (
-        {
-          onQueueMessage,
-        }: {
-          onQueueMessage?: (message: string) => void;
-        },
-        _ref
-      ) => (
-        <button onClick={() => onQueueMessage?.("queued prompt")}>
-          Queue message
-        </button>
-      )
-    ),
-  };
-});
-
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
@@ -123,6 +102,15 @@ jest.mock("@/sections/input/PlusMenuButton", () => ({
 }));
 jest.mock("@/app/craft/components/UserLibraryModal", () => () => null);
 
+function enterText(text: string) {
+  const input = screen.getByRole("textbox", { name: "Message input" });
+  input.textContent = text;
+  fireEvent.input(input);
+  return input;
+}
+
+beforeEach(() => sessionStorage.clear());
+
 describe("CraftInputBar queued attachments", () => {
   beforeEach(() => {
     mockClearFiles.mockClear();
@@ -139,7 +127,7 @@ describe("CraftInputBar queued attachments", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+    fireEvent.keyDown(enterText("queued prompt"), { key: "Enter" });
 
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
     expect(mockClearFiles).toHaveBeenCalledWith();
@@ -154,8 +142,70 @@ describe("CraftInputBar queued attachments", () => {
         onQueueMessage={onQueueMessage}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+    fireEvent.keyDown(enterText("queued prompt"), { key: "Enter" });
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
     expect(mockClearFiles).not.toHaveBeenCalled();
   });
+});
+
+describe("CraftInputBar session drafts", () => {
+  it("keeps separate drafts for New Session and existing sessions across navigation", () => {
+    const onSubmit = jest.fn();
+    const { rerender, unmount } = render(
+      <CraftInputBar onSubmit={onSubmit} isRunning={false} />
+    );
+    enterText("Welcome draft");
+    rerender(
+      <CraftInputBar sessionId="a" onSubmit={onSubmit} isRunning={false} />
+    );
+    expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+    enterText("Session A draft");
+    rerender(
+      <CraftInputBar sessionId="b" onSubmit={onSubmit} isRunning={false} />
+    );
+    expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+    enterText("Session B draft");
+    rerender(
+      <CraftInputBar sessionId="a" onSubmit={onSubmit} isRunning={false} />
+    );
+    expect(screen.getByRole("textbox")).toHaveTextContent("Session A draft");
+    rerender(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
+    expect(screen.getByRole("textbox")).toHaveTextContent("Welcome draft");
+    enterText("Latest welcome draft");
+    unmount();
+    render(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
+    expect(screen.getByRole("textbox")).toHaveTextContent(
+      "Latest welcome draft"
+    );
+  });
+
+  it("does not restore submitted text", () => {
+    const onSubmit = jest.fn();
+    const { unmount } = render(
+      <CraftInputBar onSubmit={onSubmit} isRunning={false} />
+    );
+    fireEvent.keyDown(enterText("Send this"), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("Send this", attachedFiles);
+    unmount();
+    render(<CraftInputBar onSubmit={onSubmit} isRunning={false} />);
+    expect(screen.getByRole("textbox")).toBeEmptyDOMElement();
+  });
+
+  it.each([true, false])(
+    "clears queued text only when accepted: %s",
+    (accepted) => {
+      const props = {
+        onSubmit: jest.fn(),
+        isRunning: true,
+        onQueueMessage: () => accepted,
+      };
+      const { unmount } = render(<CraftInputBar {...props} />);
+      fireEvent.keyDown(enterText("Queue this"), { key: "Enter" });
+      unmount();
+      render(<CraftInputBar {...props} />);
+      expect(screen.getByRole("textbox").textContent).toBe(
+        accepted ? "" : "Queue this"
+      );
+    }
+  );
 });

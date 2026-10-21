@@ -69,6 +69,7 @@ export interface BaseInputBarProps {
   /** Return true to consume the pasted text (skips pasteText). */
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
+  onContentChange?: (text: string) => void;
   onInputCallback?: () => void;
   onSelectionChange?: () => void;
 }
@@ -95,6 +96,7 @@ const BaseInputBar = memo(
         bottomRightSlot,
         onPasteText,
         onPasteFiles,
+        onContentChange,
         onInputCallback,
         onSelectionChange,
       },
@@ -129,6 +131,7 @@ const BaseInputBar = memo(
         expandTile,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        onContentChange,
         pasteTilesEnabled,
         disabled,
       });

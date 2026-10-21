@@ -788,6 +788,8 @@ function ChatPanelContent({
                       }}
                     >
                       <CraftInputBar
+                        key={existingSessionId ?? "new"}
+                        sessionId={existingSessionId}
                         ref={inputBarRef}
                         onSubmit={handleSubmit}
                         isRunning={displayIsRunning}

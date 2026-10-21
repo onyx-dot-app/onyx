@@ -4,6 +4,7 @@ import {
   forwardRef,
   memo,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -29,6 +30,7 @@ import {
   useUploadFilesContext,
   type BuildFile,
 } from "@/app/craft/contexts/UploadFilesContext";
+import { draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
@@ -50,6 +52,8 @@ export interface CraftInputBarHandle {
 }
 
 export interface CraftInputBarProps {
+  /** URL session identity; null identifies the New Session draft. */
+  sessionId?: string | null;
   onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   disabled?: boolean;
@@ -78,6 +82,7 @@ const CraftInputBar = memo(
   forwardRef<CraftInputBarHandle, CraftInputBarProps>(
     (
       {
+        sessionId = null,
         onSubmit,
         isRunning,
         disabled = false,
@@ -97,6 +102,17 @@ const CraftInputBar = memo(
       const t = useTranslations("craft.inputBar");
       const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
+      const storageKey = draftKey("craft", sessionId ?? "new");
+      const { draft, loaded, save } = useDraft<string>({
+        key: storageKey,
+        debounceMs: 0,
+      });
+      const restoredKeyRef = useRef<string | null>(null);
+      useEffect(() => {
+        if (!loaded || restoredKeyRef.current === storageKey) return;
+        restoredKeyRef.current = storageKey;
+        if (typeof draft === "string") baseRef.current?.setMessage(draft);
+      }, [draft, loaded, storageKey]);
       const fileInputRef = useRef<HTMLInputElement>(null);
       const router = useRouter();
 
@@ -294,6 +310,8 @@ const CraftInputBar = memo(
             }}
           />
           <BaseInputBar
+            key={storageKey}
+            onContentChange={save}
             ref={baseRef}
             onSubmit={handleSubmit}
             isRunning={isRunning}
