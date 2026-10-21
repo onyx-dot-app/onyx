@@ -507,6 +507,11 @@ existence check and the final kill so a session cannot be created mid-reap and
 then have its brand-new workspace deleted. The next request for that user
 re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 
+Both backends attempt resource removal independently and report incomplete cleanup.
+Kubernetes waits for Pod, Service, and Secret absence within one teardown budget.
+A deletion error or wait timeout aborts sleep. The row stays eligible for retry,
+and session ports remain allocated until termination succeeds.
+
 ---
 
 ## 5. Contracts and invariants
