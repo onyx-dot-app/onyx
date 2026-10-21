@@ -287,7 +287,11 @@ function InputCurrency({
       .replace(/\D/g, "");
     update({
       whole: whole || "0",
-      fraction: (moved + segments.fraction).slice(0, maxFraction),
+      // Trailing zeros never change the amount, and padding ("1234.00") would
+      // otherwise ride along behind the moved digits; blur pads them back.
+      fraction: (moved + segments.fraction)
+        .replace(/0+$/, "")
+        .slice(0, maxFraction),
     });
     const fraction = fractionRef.current;
     if (!fraction) return;
