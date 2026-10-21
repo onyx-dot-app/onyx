@@ -708,7 +708,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_AWS_ACCESS_KEY_ID:-minioadmin}}
       #!value prod,no-letsencrypt: MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}}
-    # 0 stops MinIO once it is retired, without touching the app.
+    # 0 on an install that never held files here, or once MinIO is retired. An
+    # earlier release's .env lacks the variable, so its MinIO keeps running.
     deploy:
       replicas: ${MINIO_REPLICAS:-1}
     volumes:
@@ -729,6 +730,9 @@ services:
     profiles: ["s3-filestore"]
     restart: unless-stopped
     init: true
+    # It only has work while MinIO holds files, so it runs exactly when MinIO does.
+    deploy:
+      replicas: ${MINIO_REPLICAS:-1}
     depends_on:
       object-store:
         condition: service_healthy
