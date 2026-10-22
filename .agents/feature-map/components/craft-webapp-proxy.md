@@ -350,7 +350,7 @@ Forms, popups, frames, and top-level navigation remain blocked. Referrers and HT
 CORS permits credential-free asset reads. CSP limits fetch requests to capability URLs; HTTPS CDN assets can load.
 Explicit reload resets static and uploaded HTML documents, including unchanged uploads.
 Hidden HTML frames retain their document state within the bounded viewer cache, like registered app frames.
-Active viewers renew before expiry. Uploaded HTML outside Outputs keeps its self-contained `srcdoc` preview.
+Mounted viewers renew before expiry, including retained hidden frames. If browser suspension lets a grant expire, the next fetch requests a fresh grant. Uploaded HTML outside Outputs keeps its self-contained `srcdoc` preview.
 Root-relative workspace asset URLs are not rewritten; use relative paths.
 File revision updates use the existing preview cache and viewed-revision handling.
 

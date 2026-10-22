@@ -92,38 +92,89 @@ test.each([
   }
 );
 
-test("renews the accepted capability without replacing the iframe", async () => {
+test.each([true, false])(
+  "renews retained capabilities with isActive=%s",
+  async (isActive) => {
+    jest.useFakeTimers();
+    try {
+      const url = "/api/build/static-preview/stable-token/index.html";
+      jest
+        .mocked(createStaticPreview)
+        .mockResolvedValueOnce({
+          url,
+          token: "stable-token",
+          expiresAt: Date.now() + 61_000,
+        })
+        .mockImplementation(async () => ({
+          url,
+          token: "stable-token",
+          expiresAt: Date.now() + 3600_000,
+        }));
+      render(
+        <SWRConfig value={{ provider: () => new Map() }}>
+          <HtmlFilePreview
+            sessionId="renew"
+            filePath="outputs/site/index.html"
+            isActive={isActive}
+          />
+        </SWRConfig>
+      );
+      const frame = await screen.findByTitle("index.html");
+      for (const elapsed of [1000, 3540_000, 60_000]) {
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(elapsed);
+        });
+      }
+      expect(createStaticPreview).toHaveBeenLastCalledWith(
+        "renew",
+        "outputs/site/index.html",
+        "stable-token"
+      );
+      expect(screen.getByTitle("index.html")).toBe(frame);
+      expect(frame).toHaveAttribute("src", url);
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);
+
+test("requests a fresh grant when browser suspension outlasts expiry", async () => {
   jest.useFakeTimers();
   try {
-    const url = "/api/build/static-preview/stable-token/index.html";
+    const url = "/api/build/static-preview/old-token/index.html";
     jest
       .mocked(createStaticPreview)
       .mockResolvedValueOnce({
         url,
-        token: "stable-token",
+        token: "old-token",
         expiresAt: Date.now() + 61_000,
       })
-      .mockResolvedValue({
-        url,
-        token: "stable-token",
+      .mockImplementation(async () => ({
+        url: "/api/build/static-preview/new-token/index.html",
+        token: "new-token",
         expiresAt: Date.now() + 3600_000,
-      });
+      }));
     render(
       <SWRConfig value={{ provider: () => new Map() }}>
-        <HtmlFilePreview sessionId="renew" filePath="outputs/site/index.html" />
+        <HtmlFilePreview
+          sessionId="suspend"
+          filePath="outputs/site/index.html"
+        />
       </SWRConfig>
     );
-    const frame = await screen.findByTitle("index.html");
+    await screen.findByTitle("index.html");
+    jest.setSystemTime(Date.now() + 2 * 3600_000);
     await act(async () => {
       await jest.advanceTimersByTimeAsync(1000);
     });
     expect(createStaticPreview).toHaveBeenLastCalledWith(
-      "renew",
-      "outputs/site/index.html",
-      "stable-token"
+      "suspend",
+      "outputs/site/index.html"
     );
-    expect(screen.getByTitle("index.html")).toBe(frame);
-    expect(frame).toHaveAttribute("src", url);
+    expect(screen.getByTitle("index.html")).toHaveAttribute(
+      "src",
+      "/api/build/static-preview/new-token/index.html"
+    );
   } finally {
     jest.useRealTimers();
   }

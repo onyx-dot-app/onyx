@@ -24,7 +24,13 @@ export default function HtmlFilePreview({
 }: FilePreviewContentProps) {
   const t = useTranslations("craft.filePreview");
   const renewal = useRef<
-    { token: string; revision: typeof revision; refreshKey: number } | undefined
+    | {
+        token: string;
+        expiresAt: number;
+        revision: typeof revision;
+        refreshKey: number;
+      }
+    | undefined
   >(undefined);
   const [retry, setRetry] = useState(0);
   const { data, error } = useFilePreview(
@@ -33,26 +39,37 @@ export default function HtmlFilePreview({
       const token =
         renewal.current &&
         renewal.current.revision === revision &&
-        renewal.current.refreshKey === refreshKey
+        renewal.current.refreshKey === refreshKey &&
+        renewal.current.expiresAt > Date.now()
           ? renewal.current.token
           : undefined;
       return token
         ? createStaticPreview(sessionId, filePath, token)
         : createStaticPreview(sessionId, filePath);
     },
-    { revision, refreshKey: refreshKey + retry, isActive, onRefreshingChange }
+    {
+      revision,
+      refreshKey: refreshKey + retry,
+      // Retained frames remain live even when their tab is hidden.
+      onRefreshingChange: isActive ? onRefreshingChange : undefined,
+    }
   );
   useEffect(() => {
-    if (!data || !isActive) return;
+    if (!data) return;
     const timer = setTimeout(
       () => {
-        renewal.current = { token: data.token, revision, refreshKey };
+        renewal.current = {
+          token: data.token,
+          expiresAt: data.expiresAt,
+          revision,
+          refreshKey,
+        };
         setRetry((value) => value + 1);
       },
       Math.max(0, data.expiresAt - Date.now() - 60_000)
     );
     return () => clearTimeout(timer);
-  }, [data, isActive, revision, refreshKey]);
+  }, [data, revision, refreshKey]);
   if (error && !data)
     return (
       <PreviewUnavailable

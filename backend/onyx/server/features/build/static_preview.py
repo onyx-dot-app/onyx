@@ -10,7 +10,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
@@ -22,6 +22,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.models import StaticPreviewGrant, StaticPreviewResponse
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from shared_configs.contextvars import (
@@ -56,20 +57,6 @@ PREVIEW_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Cross-Origin-Resource-Policy": "cross-origin",
 }
-
-
-class StaticPreviewGrant(BaseModel):
-    tenant_id: str
-    session_id: UUID
-    user_id: UUID
-    root: str
-    files: dict[str, int]
-    revisions: dict[str, str]
-
-
-class StaticPreviewResponse(BaseModel):
-    path: str
-    expires_in: int = PREVIEW_TTL_SECONDS
 
 
 @router.post("/{session_id}/static-preview/{path:path}")
@@ -128,7 +115,8 @@ def create_static_preview(
             ex=PREVIEW_TTL_SECONDS,
         )
         return StaticPreviewResponse(
-            path=f"{renew_token}/{quote(target.name, safe='')}"
+            path=f"{renew_token}/{quote(target.name, safe='')}",
+            expires_in=PREVIEW_TTL_SECONDS,
         )
     token = secrets.token_urlsafe(32)
     grant = StaticPreviewGrant(
@@ -146,7 +134,9 @@ def create_static_preview(
     cache.set(
         f"craft:static-preview:{token}", grant.model_dump_json(), ex=PREVIEW_TTL_SECONDS
     )
-    return StaticPreviewResponse(path=f"{token}/{quote(target.name, safe='')}")
+    return StaticPreviewResponse(
+        path=f"{token}/{quote(target.name, safe='')}", expires_in=PREVIEW_TTL_SECONDS
+    )
 
 
 @public_router.get("/{token}/{path:path}")
