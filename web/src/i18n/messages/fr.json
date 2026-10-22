@@ -10478,6 +10478,12 @@
         "azureSpeechTts": {
           "subtitle": "Synthèse vocale dans Microsoft Foundry Tools."
         },
+        "inworldStt": {
+          "subtitle": "API de reconnaissance vocale Inworld."
+        },
+        "inworldTts": {
+          "subtitle": "Inworld TTS-2 et TTS-2 Flash."
+        },
         "elevenlabsStt": {
           "subtitle": "API de reconnaissance vocale ElevenLabs."
         },
@@ -16427,7 +16433,7 @@
         "title": "Envoi automatique à la pause"
       },
       "playbackSpeed": {
-        "description": "Ajustez la vitesse de lecture vocale.",
+        "description": "Réglez la vitesse de lecture vocale (0,5–{max}x). Choisissez une vitesse prise en charge si votre réglage enregistré dépasse cette plage.",
         "title": "Vitesse de lecture"
       },
       "title": "Voix"

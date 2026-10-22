@@ -37,6 +37,7 @@ import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
 import { type Locale } from "@/i18n/config";
 import { LanguageSelect } from "@/lib/app/components";
+import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -1172,6 +1173,7 @@ function PromptShortcuts() {
 }
 
 function ChatPreferencesSettings() {
+  const { ttsMaxSpeed } = useVoiceStatus();
   const t = useTranslations("settings");
   const tInputSelect = useTranslations("common.inputSelect");
   const tModelSelector = useTranslations("chat.modelSelector");
@@ -1661,14 +1663,16 @@ function ChatPreferencesSettings() {
 
             <InputHorizontal
               title={t("voice.playbackSpeed.title")}
-              description={t("voice.playbackSpeed.description")}
+              description={t("voice.playbackSpeed.description", {
+                max: ttsMaxSpeed,
+              })}
               withLabel
             >
               <div className="flex items-center gap-3">
                 <input
                   type="range"
                   min="0.5"
-                  max="2"
+                  max={ttsMaxSpeed}
                   step="0.1"
                   value={draftVoicePlaybackSpeed}
                   onChange={(e) => {

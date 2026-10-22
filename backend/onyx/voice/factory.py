@@ -69,6 +69,17 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             default_voice=default_voice,
         )
 
+    elif provider_type == "inworld":
+        from onyx.voice.providers.inworld import InworldVoiceProvider
+
+        return InworldVoiceProvider(
+            api_key=api_key,
+            api_base=api_base,
+            stt_model=stt_model,
+            tts_model=tts_model,
+            default_voice=default_voice,
+        )
+
     elif provider_type == "zoom":
         from onyx.voice.providers.zoom import ZoomVoiceProvider
 

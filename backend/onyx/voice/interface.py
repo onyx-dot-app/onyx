@@ -177,6 +177,10 @@ class VoiceProviderInterface(ABC):
             List of model dictionaries with 'id' and 'name' keys
         """
 
+    def get_tts_max_speed(self) -> float:
+        """Maximum synthesis speed offered by this provider."""
+        return 2.0
+
     def supports_streaming_stt(self) -> bool:
         """Returns True if this provider supports streaming STT."""
         return False

@@ -1,4 +1,4 @@
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { VoiceProviderView } from "@/lib/voice/types";
@@ -7,6 +7,7 @@ export type { VoiceProviderView };
 
 /** Fetches and caches the list of configured voice providers. */
 export function useVoiceProviders() {
+  const { mutate: mutateCache } = useSWRConfig();
   const { data, error, isLoading, mutate } = useSWR<VoiceProviderView[]>(
     SWR_KEYS.voiceProviders,
     errorHandlingFetcher,
@@ -21,6 +22,8 @@ export function useVoiceProviders() {
     providers: data ?? [],
     isLoading,
     error,
-    refresh: mutate,
+    refresh: async () => {
+      await Promise.all([mutate(), mutateCache(SWR_KEYS.voiceStatus)]);
+    },
   };
 }

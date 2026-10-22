@@ -45,6 +45,7 @@ UPLOAD_READ_CHUNK_SIZE = 8192
 class VoiceStatusResponse(BaseModel):
     stt_enabled: bool
     tts_enabled: bool
+    tts_max_speed: float = 2.0
 
 
 @router.get("/status")
@@ -58,6 +59,11 @@ def get_voice_status(
     return VoiceStatusResponse(
         stt_enabled=stt_provider is not None and stt_provider.api_key is not None,
         tts_enabled=tts_provider is not None and tts_provider.api_key is not None,
+        tts_max_speed=(
+            get_voice_provider(tts_provider).get_tts_max_speed()
+            if tts_provider is not None
+            else 2.0
+        ),
     )
 
 
