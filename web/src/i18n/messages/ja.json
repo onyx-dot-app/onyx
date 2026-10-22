@@ -3666,7 +3666,8 @@
       "settings": {
         "description": "コネクタの情報とアクセス。",
         "displayName": {
-          "title": "コネクタの表示名"
+          "title": "コネクタの表示名",
+          "placeholder": "コネクタ名"
         },
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",

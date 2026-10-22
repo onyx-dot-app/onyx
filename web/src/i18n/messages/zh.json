@@ -3666,7 +3666,8 @@
       "settings": {
         "description": "连接器信息与访问权限。",
         "displayName": {
-          "title": "连接器显示名称"
+          "title": "连接器显示名称",
+          "placeholder": "连接器名称"
         },
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",

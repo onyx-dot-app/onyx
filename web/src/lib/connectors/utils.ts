@@ -291,7 +291,8 @@ export function createConnectorInitialValues(
   const configuration = connectorConfigs[connector];
 
   return {
-    name: "",
+    // Starts as the source's name; the admin can rename it.
+    name: getSourceDisplayName(connector) ?? "",
     groups: [],
     group_roles: {},
     data_access_group_ids: [],

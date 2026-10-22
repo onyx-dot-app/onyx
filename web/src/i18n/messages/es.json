@@ -3666,7 +3666,8 @@
       "settings": {
         "description": "Información y acceso del conector.",
         "displayName": {
-          "title": "Nombre visible del conector"
+          "title": "Nombre visible del conector",
+          "placeholder": "Nombre del conector"
         },
         "documentAccess": {
           "description": "Controla quién puede acceder a los documentos indexados por este conector.",

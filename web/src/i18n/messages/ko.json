@@ -3666,7 +3666,8 @@
       "settings": {
         "description": "커넥터 정보 및 액세스.",
         "displayName": {
-          "title": "커넥터 표시 이름"
+          "title": "커넥터 표시 이름",
+          "placeholder": "커넥터 이름"
         },
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",

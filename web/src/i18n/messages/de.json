@@ -3666,7 +3666,8 @@
       "settings": {
         "description": "Konnektor-Informationen und Zugriff.",
         "displayName": {
-          "title": "Anzeigename des Konnektors"
+          "title": "Anzeigename des Konnektors",
+          "placeholder": "Konnektorname"
         },
         "documentAccess": {
           "description": "Legen Sie fest, wer auf die von diesem Konnektor indexierten Dokumente zugreifen kann.",
