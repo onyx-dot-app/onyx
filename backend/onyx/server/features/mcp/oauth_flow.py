@@ -30,7 +30,10 @@ from onyx.oauth.protocol import (
     validate_authorization_params,
 )
 from onyx.server.features.mcp.client import initialize_mcp_client
-from onyx.server.features.mcp.client_metadata import mcp_oauth_redirect_uri
+from onyx.server.features.mcp.client_metadata import (
+    is_mcp_oauth_cimd_client_id,
+    mcp_oauth_redirect_uri,
+)
 from onyx.server.features.mcp.credentials import (
     mcp_oauth_client_information_fingerprint,
     mcp_oauth_connection_headers_fingerprint,
@@ -52,10 +55,12 @@ from onyx.server.features.mcp.ssrf import (
     mcp_ssrf_httpx_client_factory,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
 MCP_OAUTH_FLOW_TTL_SECONDS = 10 * 60
+CLIENT_METADATA_CHECK_TIMEOUT_SECONDS = 5.0
 MCP_OAUTH_ATTEMPTS = AuthorizationAttemptStore(
     cache_backend_provider=get_cache_backend,
     namespace="mcp",
@@ -224,6 +229,40 @@ async def _start_oauth_from_well_known_metadata(
         await client.get(server_url)
 
 
+async def validate_client_metadata_authorization(
+    authorization_url: str, client_id: str | None
+) -> None:
+    """Pre-fetch the authorization URL so a provider that cannot read the CIMD
+    document fails here, not on its error page. Network errors fail open."""
+    if not is_mcp_oauth_cimd_client_id(client_id):
+        return
+    try:
+        async with (
+            asyncio.timeout(CLIENT_METADATA_CHECK_TIMEOUT_SECONDS),
+            mcp_ssrf_httpx_client_factory() as client,
+            # Only the status matters, so the page body is never read.
+            client.stream("GET", authorization_url, follow_redirects=False) as response,
+        ):
+            status_code = response.status_code
+    except (httpx.HTTPError, SSRFException, TimeoutError):
+        # The browser may reach a provider this server cannot.
+        logger.warning(
+            "Could not pre-check the MCP OAuth authorization request", exc_info=True
+        )
+        return
+    # 5xx counts too: Sentry and Canva answer 500 for an unreadable document.
+    if status_code < 400:
+        return
+    logger.warning("MCP OAuth authorization pre-check failed: status=%s", status_code)
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "The OAuth provider could not use this instance's client metadata document. "
+        "If this instance is not reachable from the public internet, turn off "
+        "'Use client metadata document' and connect again.",
+        extra={"oauth_error": "client_metadata_rejected"},
+    )
+
+
 def start_known_provider_oauth_flow(
     *,
     mcp_server: MCPServer,
@@ -294,6 +333,9 @@ async def _start_auto_discovery_oauth_flow_once(
                 OnyxErrorCode.INVALID_INPUT,
                 "MCP OAuth discovery did not produce a redirect URI.",
             )
+        await validate_client_metadata_authorization(
+            authorization.authorization_url, context.client_info.client_id
+        )
         MCP_OAUTH_ATTEMPTS.store(
             owner_id=user_id,
             state=authorization.state,

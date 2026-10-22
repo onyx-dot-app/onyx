@@ -4,6 +4,8 @@ import httpx
 import pytest
 from mcp.client.auth.exceptions import OAuthRegistrationError
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import oauth_discovery
 from onyx.server.features.mcp.models import MCPOAuthDiscoveryRequest
 
@@ -101,6 +103,20 @@ def test_registration_error_is_sanitized_through_nested_task_groups() -> None:
     assert "own OAuth client" in error.detail
     assert "private" not in error.detail
     assert "html" not in error.detail
+
+
+def test_onyx_error_survives_nested_task_groups() -> None:
+    rejected = OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "client metadata rejected",
+        extra={"oauth_error": "client_metadata_rejected"},
+    )
+    error = oauth_discovery.oauth_setup_error(
+        ExceptionGroup(
+            "transport", [RuntimeError("cleanup"), ExceptionGroup("oauth", [rejected])]
+        )
+    )
+    assert error is rejected
 
 
 def test_discovery_checks_server_management_before_network(

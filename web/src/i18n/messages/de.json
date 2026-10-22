@@ -329,6 +329,7 @@
         "saveStage": "Verbindungseinstellungen konnten nicht gespeichert werden",
         "loadStage": "Verbindungseinstellungen konnten nicht geladen werden",
         "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
+        "clientMetadataRejected": "Der Anbieter konnte das Client-Metadatendokument nicht verwenden. Wenn diese Instanz nicht über das öffentliche Internet erreichbar ist, deaktivieren Sie „Client-Metadatendokument verwenden“ und verbinden Sie sich erneut.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
         "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
@@ -411,7 +412,8 @@
       },
       "cimd": {
         "label": "Client-Metadatendokument verwenden",
-        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung."
+        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung.",
+        "turnOff": "Client-Metadatendokument deaktivieren"
       },
       "discovery": {
         "checking": "Automatische Einrichtung wird geprüft…",
