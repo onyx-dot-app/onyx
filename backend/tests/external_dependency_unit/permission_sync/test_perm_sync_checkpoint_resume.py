@@ -2,8 +2,8 @@
 attempt: the next attempt continues after the last saved element instead of
 restarting the crawl, keeps the stopped attempt's window, and on success marks
 the cc_pair synced as of that window and drops the checkpoints. A failed
-element write or a requested full refresh keeps the crawl from skipping
-elements."""
+element write, a requested full refresh, or a connector config change keeps
+the crawl from skipping elements."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
@@ -218,6 +218,30 @@ def test_full_refresh_ignores_older_checkpoint(
     db_session.commit()
 
     # A fresh crawl starts at element 0 and stops like the first run
+    _dispatch(cc_pair.id, db_session)
+    with pytest.raises(RuntimeError, match="Stop signal detected"):
+        _run(cc_pair.id, crawl)
+
+    assert crawl.crawled_by_run[1] == list(range(_STOP_AFTER))
+
+
+def test_config_change_ignores_older_checkpoint(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    cc_pair = create_test_connector_credential_pair(
+        db_session, source=DocumentSource.GOOGLE_DRIVE, access_type=AccessType.SYNC
+    )
+    crawl = _FakeCheckpointedCrawl()
+
+    _dispatch(cc_pair.id, db_session)
+    with pytest.raises(RuntimeError, match="Stop signal detected"):
+        _run(cc_pair.id, crawl)
+
+    # A new scope makes the old checkpoint's remaining work list wrong
+    cc_pair.connector.connector_specific_config = {"shared_drive_urls": "new-drive"}
+    db_session.commit()
+
     _dispatch(cc_pair.id, db_session)
     with pytest.raises(RuntimeError, match="Stop signal detected"):
         _run(cc_pair.id, crawl)

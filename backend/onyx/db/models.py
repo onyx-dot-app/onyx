@@ -6332,6 +6332,8 @@ class DocPermissionSyncAttempt(Base):
     poll_range_end: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Connector config the checkpoint was crawled with. A different config never resumes it.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, default=None)
 
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(

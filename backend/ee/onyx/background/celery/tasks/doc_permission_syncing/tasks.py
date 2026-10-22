@@ -49,6 +49,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisLocks,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -581,7 +582,13 @@ def connector_permission_sync_generator_task(
             sync_config.doc_sync_config.checkpointed_doc_sync_func
         )
         if checkpointed_doc_sync_func is not None:
-            checkpointer = FileStoreDocSyncCheckpointer(cc_pair_id, attempt_id)
+            checkpointer = FileStoreDocSyncCheckpointer(
+                cc_pair_id,
+                attempt_id,
+                compute_connector_config_hash(
+                    cc_pair.connector.connector_specific_config
+                ),
+            )
             document_external_accesses = checkpointed_doc_sync_func(
                 cc_pair,
                 fetch_all_existing_docs_fn,

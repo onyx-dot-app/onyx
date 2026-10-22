@@ -439,12 +439,14 @@ def get_resumable_doc_permission_sync_checkpoint(
     cc_pair_id: int,
     current_attempt_id: int,
     max_age: timedelta,
+    connector_config_hash: str | None,
 ) -> DocPermissionSyncCheckpointRef | None:
     """The newest recent checkpoint of a failed attempt, when every attempt
     after it also failed. An attempt that dies before its first save leaves the
     older checkpoint resumable; any other outcome since means a fresh crawl.
     A checkpoint older than the pair's perm_sync_pending_since predates a
-    requested full refresh and is never resumed."""
+    requested full refresh, and one crawled with another connector config
+    covers a different scope. Neither is resumed."""
     pending_since = db_session.execute(
         select(ConnectorCredentialPair.perm_sync_pending_since).where(
             ConnectorCredentialPair.id == cc_pair_id
@@ -469,6 +471,7 @@ def get_resumable_doc_permission_sync_checkpoint(
         or holder.checkpoint_pointer is None
         or holder.poll_range_end is None
         or (pending_since is not None and holder.time_created < pending_since)
+        or holder.connector_config_hash != connector_config_hash
     ):
         return None
 
@@ -499,6 +502,7 @@ def set_doc_permission_sync_attempt_checkpoint(
     checkpoint_pointer: str | None,
     poll_range_start: datetime | None = None,
     poll_range_end: datetime | None = None,
+    connector_config_hash: str | None = None,
 ) -> None:
     db_session.execute(
         update(DocPermissionSyncAttempt)
@@ -507,6 +511,7 @@ def set_doc_permission_sync_attempt_checkpoint(
             checkpoint_pointer=checkpoint_pointer,
             poll_range_start=poll_range_start,
             poll_range_end=poll_range_end,
+            connector_config_hash=connector_config_hash,
         )
     )
     db_session.commit()

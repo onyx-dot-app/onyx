@@ -38,8 +38,11 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
     resumed keeps its checkpoint until this one saves, so a crash before the
     first save still leaves something to resume."""
 
-    def __init__(self, cc_pair_id: int, attempt_id: int) -> None:
+    def __init__(
+        self, cc_pair_id: int, attempt_id: int, connector_config_hash: str | None
+    ) -> None:
         self.attempt_id = attempt_id
+        self._connector_config_hash = connector_config_hash
         self._resume: DocSyncResume | None = None
         self._resumed_attempt_id: int | None = None
         self._resumed_pointer: str | None = None
@@ -53,6 +56,7 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
                 cc_pair_id=cc_pair_id,
                 current_attempt_id=attempt_id,
                 max_age=timedelta(days=NUM_DAYS_TO_KEEP_CHECKPOINTS),
+                connector_config_hash=connector_config_hash,
             )
         if ref is None:
             return
@@ -115,6 +119,7 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
                 pointer,
                 poll_range_start=poll_range_start,
                 poll_range_end=poll_range_end,
+                connector_config_hash=self._connector_config_hash,
             )
         self._saved_pointer = pointer
 

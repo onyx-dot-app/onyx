@@ -29,9 +29,14 @@ def upgrade() -> None:
         "doc_permission_sync_attempt",
         sa.Column("poll_range_end", sa.DateTime(timezone=True), nullable=True),
     )
+    op.add_column(
+        "doc_permission_sync_attempt",
+        sa.Column("connector_config_hash", sa.String(), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("doc_permission_sync_attempt", "connector_config_hash")
     op.drop_column("doc_permission_sync_attempt", "poll_range_end")
     op.drop_column("doc_permission_sync_attempt", "poll_range_start")
     op.drop_column("doc_permission_sync_attempt", "checkpoint_pointer")
