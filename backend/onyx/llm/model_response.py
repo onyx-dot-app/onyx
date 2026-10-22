@@ -1,5 +1,6 @@
 """Provider responses, normalization, and application message accumulation."""
 
+import json
 from collections.abc import Generator, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from uuid import uuid4
@@ -40,7 +41,6 @@ from onyx.llm.tool_parsing import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
 
@@ -430,33 +430,7 @@ class _PendingToolCall:
     def __init__(self, content_index: int, call: ToolCall) -> None:
         self.content_index = content_index
         self.call = call
-        self.arguments: str | None = ""
-        self.streaming = True
         self.finalized = False
-
-    def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
-        self.finalized = False
-        if delta.id:
-            self.call.id = delta.id
-        if delta.function is None:
-            return {}
-        if delta.function.name:
-            self.call.name = delta.function.name
-        text = delta.function.arguments or ""
-        self.arguments = (self.arguments or "") + text
-        self.call.raw_arguments = self.arguments
-        if not self.streaming or not text:
-            return {}
-        try:
-            current = parse_partial_object(self.arguments)
-        except ValueError:
-            # Retain invalid arguments so execution can return a paired tool error.
-            logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
-            self.streaming = False
-            return {}
-        fragments = appended_text(self.call.arguments, current)
-        self.call.arguments = current
-        return fragments
 
 
 class MessageAccumulator:
@@ -513,35 +487,46 @@ class MessageAccumulator:
                 )
                 continue
             self.active_text = None
-            fragments: dict[str, str] = {}
+            fragments: list[str] = []
             if pending is None:
+                buffered = self._unnamed_calls.pop(call.index, [])
                 block = ToolCall(
-                    id=call.id or f"fallback_{uuid4().hex}",
+                    id=next((part.id for part in buffered if part.id), None)
+                    or call.id
+                    or f"fallback_{uuid4().hex}",
                     name=call.function.name or "" if call.function else "",
                     arguments={},
+                    raw_arguments="",
                     arguments_complete=False,
                 )
                 pending = _PendingToolCall(len(self.message.content), block)
                 self.calls[call.index] = pending
-                for buffered in self._unnamed_calls.pop(call.index, []):
-                    for name, text in pending.update(buffered).items():
-                        fragments[name] = fragments.get(name, "") + text
+                fragments.extend(
+                    part.function.arguments or ""
+                    for part in buffered
+                    if part.function is not None
+                )
                 self.message.content.append(block)
                 events.append(
                     ToolCallStartEvent(
                         content_index=pending.content_index,
-                        tool_call=block.model_copy(deep=True),
+                        tool_call_id=block.id,
+                        tool_name=block.name,
                     )
                 )
-            for name, text in pending.update(call).items():
-                fragments[name] = fragments.get(name, "") + text
-            events.append(
-                ToolCallDeltaEvent(
-                    content_index=pending.content_index,
-                    tool_call=pending.call.model_copy(deep=True),
-                    argument_deltas=fragments,
+            pending.finalized = False
+            if call.function is not None:
+                fragments.append(call.function.arguments or "")
+            if arguments_delta := "".join(fragments):
+                pending.call.raw_arguments = (
+                    pending.call.raw_arguments or ""
+                ) + arguments_delta
+                events.append(
+                    ToolCallDeltaEvent(
+                        content_index=pending.content_index,
+                        arguments_delta=arguments_delta,
+                    )
                 )
-            )
         if chunk.choice.finish_reason:
             self.message.stop_reason = chunk.choice.finish_reason
         if chunk.usage is not None:
@@ -557,25 +542,20 @@ class MessageAccumulator:
             )
             pending = _PendingToolCall(len(self.message.content), block)
             # Recovery already parsed and normalized these arguments.
-            pending.arguments = None
             self.calls[len(self.calls)] = pending
             self.message.content.append(block)
             events.append(
                 ToolCallStartEvent(
                     content_index=pending.content_index,
-                    tool_call=block.model_copy(deep=True),
+                    tool_call_id=block.id,
+                    tool_name=block.name,
                 )
             )
             block.arguments = call.arguments.copy()
             events.append(
                 ToolCallDeltaEvent(
                     content_index=pending.content_index,
-                    tool_call=block.model_copy(deep=True),
-                    argument_deltas={
-                        name: value
-                        for name, value in call.arguments.items()
-                        if isinstance(value, str)
-                    },
+                    arguments_delta=json.dumps(call.arguments),
                 )
             )
         return events
@@ -657,11 +637,13 @@ class MessageAccumulator:
         for pending in self.calls.values():
             if pending.finalized:
                 continue
-            if pending.arguments is None:
+            if pending.call.raw_arguments is None:
                 pending.call.arguments_complete = True
             else:
                 _finish_tool_call(
-                    pending.call, pending.arguments, self.tools.get(pending.call.name)
+                    pending.call,
+                    pending.call.raw_arguments,
+                    self.tools.get(pending.call.name),
                 )
             pending.finalized = True
 

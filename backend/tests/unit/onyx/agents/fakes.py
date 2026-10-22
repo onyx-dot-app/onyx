@@ -266,7 +266,7 @@ def message_events(message: AssistantMessage) -> Iterator[GenerationEvent]:
             )
         else:
             yield ToolCallStartEvent(
-                content_index=index, tool_call=block.model_copy(deep=True)
+                content_index=index, tool_call_id=block.id, tool_name=block.name
             )
             yield ToolCallEndEvent(
                 content_index=index, tool_call=block.model_copy(deep=True)

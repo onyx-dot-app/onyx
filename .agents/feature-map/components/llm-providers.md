@@ -389,6 +389,12 @@ call fragments are keyed by `index`: an early chunk carries `id` and
 reading any single chunk's `tool_calls` as complete
 truncates the call.
 
+Shared tool-call events also use incremental content: starts carry the call ID and
+name, deltas carry `arguments_delta`, and ends carry the finalized `ToolCall`.
+`apply_generation_event` retains raw arguments until completion, including on
+cancellation. The accumulator parses arguments once at completion. Chat separately
+decodes partial arguments when Python code or think-tool reasoning needs live display.
+
 Both response converters use `model_response.py:_ProviderUsage.to_usage` to normalize
 usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
 falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence

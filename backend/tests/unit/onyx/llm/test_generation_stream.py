@@ -36,13 +36,14 @@ from onyx.llm.models import (
     GenerationRequestParams,
     GenerationStartEvent,
     GenerationTextEvent,
-    GenerationToolCallEvent,
     ReasoningEffort,
     TextContent,
     TextDeltaEvent,
     ThinkingBlock,
     ThinkingDeltaEvent,
+    ToolCallDeltaEvent,
     ToolCallEndEvent,
+    ToolCallStartEvent,
     ToolChoiceOptions,
     ToolDefinition,
     Usage,
@@ -361,15 +362,18 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
         "tool_call_end",
         "done",
     ]
-    calls = [
-        event.tool_call
+    call_start = next(
+        event for event in events if isinstance(event, ToolCallStartEvent)
+    )
+    call_end = next(event for event in events if isinstance(event, ToolCallEndEvent))
+    assert call_start.tool_call_id == call_end.tool_call.id
+    assert call_start.tool_call_id
+    assert [
+        event.arguments_delta
         for event in events
-        if isinstance(event, GenerationToolCallEvent)
-    ]
-    assert len({call.id for call in calls}) == 1
-    assert calls[0].id and calls[0].arguments == {}
-    assert calls[1].arguments == {"query": "fir"}
-    assert calls[-1].arguments == {"query": "first"}
+        if isinstance(event, ToolCallDeltaEvent)
+    ] == ['{"query":"fir', 'st"}']
+    assert call_end.tool_call.arguments == {"query": "first"}
     start, delta, terminal = events[0], events[1], events[-1]
     assert isinstance(start, GenerationLifecycleEvent)
     assert start.type == "start"
@@ -456,20 +460,19 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert [
         event.type for event in events if not isinstance(event, GenerationTextEvent)
     ] == ["start", "tool_call_start", "tool_call_delta", "tool_call_end", "done"]
-    calls = [
-        event.tool_call
-        for event in events
-        if isinstance(event, GenerationToolCallEvent)
-    ]
-    assert len({call.id for call in calls}) == 1
-    assert calls[-1].arguments == {"query": "recovered"}
+    call_start = next(
+        event for event in events if isinstance(event, ToolCallStartEvent)
+    )
+    call_end = next(event for event in events if isinstance(event, ToolCallEndEvent))
+    assert call_start.tool_call_id == call_end.tool_call.id
+    assert call_end.tool_call.arguments == {"query": "recovered"}
     terminal = events[-1]
     assert isinstance(terminal, GenerationDoneEvent)
     final = collect_generation(events)
     assert final.thinking_blocks == [signed]
     assert final.usage == usage
     assert final.stop_reason == "stop"
-    assert final.tool_calls == [calls[-1]]
+    assert final.tool_calls == [call_end.tool_call]
     assert final.text == ("" if reasoning else payload)
     assert final.thinking == (payload if reasoning else "")
 
@@ -542,9 +545,7 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
         for event in accumulator.add(_stream_chunk(chunk)):
             apply_generation_event(accepted, event)
             # Event consumers cannot change already accepted tool or reasoning data.
-            if isinstance(event, GenerationToolCallEvent):
-                event.tool_call.arguments.clear()
-            elif isinstance(event, ThinkingDeltaEvent) and event.blocks:
+            if isinstance(event, ThinkingDeltaEvent) and event.blocks:
                 event.blocks.clear()
         assert accepted.content == accumulator.message.content
         if index == 0:
@@ -554,15 +555,17 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
     assert accepted.thinking_blocks == [
         ThinkingBlock(thinking="plan", signature="signed")
     ]
-    assert accepted.tool_calls[0].arguments == {"query": "partial", "limit": 3}
+    assert accepted.tool_calls[0].arguments == {}
+    assert accepted.tool_calls[0].raw_arguments == '{"query":"partial","limit":3}'
     assert not accepted.tool_calls[0].arguments_complete
     for event in accumulator.end():
         apply_generation_event(accepted, event)
-        if isinstance(event, GenerationToolCallEvent):
+        if isinstance(event, ToolCallEndEvent):
             event.tool_call.arguments.clear()
     assert accepted.id == "run:0"
     assert accepted.content == accumulator.message.content
     assert accepted.tool_calls[0].arguments_complete
+    assert accepted.tool_calls[0].arguments == {"query": "partial", "limit": 3}
 
 
 def test_text_update_payload_does_not_grow_with_accumulated_output() -> None:
@@ -574,6 +577,45 @@ def test_text_update_payload_does_not_grow_with_accumulated_output() -> None:
     assert len({event.model_dump_json() for event in updates}) == 1
     assert len(updates[0].model_dump_json()) < 200
     assert accumulator.message.text == "x" * 100_000 + "next" * 10
+
+
+def test_tool_delta_payload_does_not_grow_with_accumulated_arguments() -> None:
+    accumulator = MessageAccumulator()
+    accepted = AssistantMessage()
+    fragments = ['{"queries":["' + "x" * 100_000, *(["next"] * 10), '"]}']
+    updates: list[ToolCallDeltaEvent] = []
+    for index, fragment in enumerate(fragments):
+        for event in accumulator.add(
+            _stream_chunk(
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=0,
+                            id="call" if index == 0 else None,
+                            function=ResponseFunctionCall(
+                                name="internal_search" if index == 0 else None,
+                                arguments=fragment,
+                            ),
+                        )
+                    ]
+                )
+            )
+        ):
+            apply_generation_event(accepted, event)
+            if isinstance(event, ToolCallDeltaEvent):
+                updates.append(event)
+    assert accepted.tool_calls[0].raw_arguments == "".join(fragments)
+    assert accepted.tool_calls[0].arguments == {}
+    assert not accepted.tool_calls[0].arguments_complete
+    for event in accumulator.end():
+        apply_generation_event(accepted, event)
+    assert accepted.tool_calls[0].arguments == {
+        "queries": ["x" * 100_000 + "next" * 10]
+    }
+    assert [event.arguments_delta for event in updates] == fragments
+    serialized = [event.model_dump_json() for event in updates[1:-1]]
+    assert len(set(serialized)) == 1
+    assert len(serialized[0]) < 200
 
 
 @pytest.mark.parametrize("failed", [False, True])
@@ -825,9 +867,7 @@ def test_tool_call_waits_for_name_and_preserves_early_arguments() -> None:
     assert result.tool_calls[0].name == "search"
     assert result.tool_calls[0].arguments == {"query": "early"}
     assert all(
-        event.tool_call.name
-        for event in events
-        if isinstance(event, GenerationToolCallEvent)
+        event.tool_name for event in events if isinstance(event, ToolCallStartEvent)
     )
 
 
@@ -982,7 +1022,7 @@ def test_unnamed_native_call_does_not_suppress_text_recovery(streaming: bool) ->
     assert result.tool_calls[0].arguments == {"query": "onyx"}
 
 
-def test_split_surrogate_pair_in_tool_arguments_streams_one_character() -> None:
+def test_split_surrogate_pair_in_tool_arguments_decodes_on_completion() -> None:
     accumulator = MessageAccumulator()
     fragments = ['{"text": "hi \\ud83d', '\\ude00"}']
     events = [
@@ -1008,16 +1048,15 @@ def test_split_surrogate_pair_in_tool_arguments_streams_one_character() -> None:
     events.extend(accumulator.end())
 
     texts = [
-        event.argument_deltas.get("text", "")
+        event.arguments_delta
         for event in events
-        if isinstance(event, GenerationToolCallEvent)
+        if isinstance(event, ToolCallDeltaEvent)
     ]
-    assert "".join(texts) == "hi 😀"
-    assert all("\ud83d" not in text for text in texts)
+    assert texts == fragments
     assert collect_generation(events).tool_calls[0].arguments == {"text": "hi 😀"}
 
 
-def test_invalid_tool_arguments_stop_argument_deltas_and_keep_raw_text() -> None:
+def test_invalid_tool_arguments_keep_all_raw_fragments() -> None:
     accumulator = MessageAccumulator()
     # A raw newline inside a JSON string is invalid.
     fragments = ['{"code": "a', "\nb", 'c"}']
@@ -1044,11 +1083,11 @@ def test_invalid_tool_arguments_stop_argument_deltas_and_keep_raw_text() -> None
     accumulator.end()
 
     deltas = [
-        event.argument_deltas
+        event.arguments_delta
         for event in events
-        if isinstance(event, GenerationToolCallEvent)
+        if isinstance(event, ToolCallDeltaEvent)
     ]
     call = accumulator.message.tool_calls[0]
-    assert deltas == [{}, {"code": "a"}, {}, {}]
+    assert deltas == fragments
     assert call.raw_arguments == "".join(fragments)
     assert call.argument_error is not None
