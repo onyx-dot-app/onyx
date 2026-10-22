@@ -327,12 +327,10 @@
         "saveAuthFailed": "Échec de l'enregistrement de la configuration d'authentification",
         "saveConfigFailed": "Échec de l'enregistrement de la configuration du serveur",
         "saveStage": "Impossible d’enregistrer les paramètres de connexion",
-        "oauthStage": "Impossible de lancer la connexion",
-        "discoveryStage": "Impossible de charger les outils du serveur",
         "loadStage": "Impossible de charger les paramètres de connexion",
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
-        "connectionFailed": "Le serveur OAuth est inaccessible. Vérifiez l’URL du serveur et réessayez.",
+        "connectionFailed": "Le serveur est inaccessible. Vérifiez l’URL du serveur et réessayez.",
         "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
         "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "Gérer les paramètres de discussion dans Modèles de langage",
+      "decisionModel": {
+        "title": "Modèle de décision",
+        "openAiDecisionsModelName": "Décisions OpenAI (GPT-6 Luna)",
+        "description": "Sélectionnez un modèle pour les futures fonctions de classification et de révision. Onyx n’utilise pas encore ce modèle.",
+        "clear": "Effacer",
+        "notConfigured": "Non configuré",
+        "saved": "Modèle de décision mis à jour",
+        "saveFailed": "Impossible de mettre à jour le modèle de décision"
+      },
+      "header": {
+        "title": "Modèles de décision",
+        "description": "Gérez les fournisseurs et choisissez un modèle de décision facultatif."
+      },
+      "providers": {
+        "title": "Fournisseurs",
+        "description": "Connectez un fournisseur ou gérez ses modèles de décision.",
+        "clearBeforeRemoval": "Effacez le modèle de décision sélectionné avant de supprimer ce fournisseur.",
+        "edit": "Configurer",
+        "connect": "Connecter"
+      },
+      "loadFailed": "Impossible de charger les modèles de décision.",
+      "retry": "Réessayer",
+      "saveFailed": "Impossible d’enregistrer la connexion.",
+      "cancel": "Annuler",
+      "save": "Enregistrer"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "Plus de modèles"
           },
           "refetch": {
+            "label": "Actualiser les modèles",
             "errorToast": "Échec de la récupération des modèles"
           },
           "row": {
             "defaultLabel": "Modèle par défaut",
+            "decisionTag": {
+              "label": "Décision",
+              "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",
+              "chatAndDecision": "Prend en charge les tâches de chat et de décision."
+            },
             "renameButton": {
               "tooltip": "Renommer"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "Paramètres d’approbation",
       "policyCounts": "{auto} automatiques · {ask} demander · {disabled} désactivées",
       "manageActions": "Gérer les actions",
-      "viewActions": "Voir les actions",
       "taskModalDescription": "Les modifications s’appliquent lorsque vous enregistrez la tâche. Les restrictions de l’espace de travail s’appliquent toujours.",
       "searchActions": "Rechercher des actions",
       "setPermissions": "Définir les autorisations",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "Modèles de langage"
+        },
+        "decisionModels": {
+          "label": "Modèles de décision"
         },
         "llmGateway": {
           "label": "LLM Gateway"

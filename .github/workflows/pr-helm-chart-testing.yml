@@ -20,6 +20,8 @@ jobs:
       [
         runs-on,
         runner=8cpu-linux-x64,
+        # Docker and kind each store images; OpenSearch exhausts the default disk.
+        "volume=100gb",
         "run-id=${{ github.run_id }}-helm-chart-check",
       ]
     timeout-minutes: 45

@@ -104,6 +104,37 @@ def provider(db_session: Session) -> Generator[LLMProviderView, None, None]:
         remove_llm_provider(db_session, saved.id)
 
 
+def test_typesafe_credentials_persist_without_chat_models(db_session: Session) -> None:
+    saved = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            provider="typesafe",
+            api_key="typesafe-test-key",
+            is_auto_mode=True,
+        ),
+        db_session,
+    )
+    try:
+        stored = fetch_existing_llm_provider_by_id(saved.id, db_session)
+        assert stored is not None
+        assert stored.api_key is not None
+        assert stored.api_key.get_value(apply_mask=False) == "typesafe-test-key"
+        assert stored.model_configurations == []
+        assert stored.is_auto_mode is False
+        for flow in (LLMModelFlowType.CHAT, LLMModelFlowType.CRAFT):
+            with pytest.raises(ValueError, match="not a valid model"):
+                update_default_model(db_session, saved.id, "jev-latest", flow)
+            db_session.rollback()
+        with pytest.raises(ValueError, match="chat model discovery"):
+            sync_model_configurations(
+                db_session,
+                saved.id,
+                [SyncModelEntry(name="jev-latest", display_name="Jev")],
+            )
+        db_session.rollback()
+    finally:
+        remove_llm_provider(db_session, saved.id)
+
+
 def _update_provider(
     db_session: Session,
     provider: LLMProviderView,

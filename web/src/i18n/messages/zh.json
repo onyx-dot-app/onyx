@@ -327,12 +327,10 @@
         "saveAuthFailed": "保存身份验证配置失败",
         "saveConfigFailed": "保存服务器配置失败",
         "saveStage": "无法保存连接设置",
-        "oauthStage": "无法开始登录",
-        "discoveryStage": "无法加载服务器工具",
         "loadStage": "无法加载连接设置",
         "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
-        "connectionFailed": "无法连接 OAuth 服务器。请检查服务器 URL 后重试。",
+        "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
         "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
         "oauthInitFailed": "发起 OAuth 失败：{detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "在语言模型中管理聊天设置",
+      "decisionModel": {
+        "title": "决策模型",
+        "openAiDecisionsModelName": "OpenAI 决策 (GPT-6 Luna)",
+        "description": "选择用于未来分类和审核功能的模型。Onyx 尚未使用此模型。",
+        "clear": "清除",
+        "notConfigured": "未配置",
+        "saved": "决策模型已更新",
+        "saveFailed": "无法更新决策模型"
+      },
+      "header": {
+        "title": "决策模型",
+        "description": "管理决策模型提供商并选择可选的决策模型。"
+      },
+      "providers": {
+        "title": "提供商",
+        "description": "连接提供商或管理其决策模型。",
+        "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
+        "edit": "配置",
+        "connect": "连接"
+      },
+      "loadFailed": "无法加载决策模型。",
+      "retry": "重试",
+      "saveFailed": "无法保存连接。",
+      "cancel": "取消",
+      "save": "保存"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "更多模型"
           },
           "refetch": {
+            "label": "刷新模型",
             "errorToast": "获取模型失败"
           },
           "row": {
             "defaultLabel": "默认模型",
+            "decisionTag": {
+              "label": "决策",
+              "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
+              "chatAndDecision": "支持聊天和决策任务。"
+            },
             "renameButton": {
               "tooltip": "重命名"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "审批设置",
       "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
       "manageActions": "管理操作",
-      "viewActions": "查看操作",
       "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
       "searchActions": "搜索操作",
       "setPermissions": "设置权限",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "语言模型"
+        },
+        "decisionModels": {
+          "label": "决策模型"
         },
         "llmGateway": {
           "label": "LLM 网关"

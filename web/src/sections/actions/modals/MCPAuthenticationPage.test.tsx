@@ -1,3 +1,6 @@
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: { id: "admin-user" } }),
+}));
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
   useRouter: () => ({ push: jest.fn() }),
@@ -28,6 +31,7 @@ import {
 } from "@/lib/mcp/types";
 import type { MCPOAuthDiscovery } from "@/lib/mcp/types";
 import type { MCPOAuthFailureReason } from "@/lib/mcp/svc";
+import { mintMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
 import messages from "@/i18n/messages/en.json";
 
 const copy = messages.actions.mcpAuthModal;
@@ -51,12 +55,12 @@ const server: MCPServer = {
 
 function LoadedAuthentication({
   serverId,
-  fetchTools,
+  onPublished,
   onComplete,
   onBusyChange,
 }: {
   serverId: number;
-  fetchTools: (serverId: number) => Promise<void>;
+  onPublished: (serverId: number) => Promise<void>;
   onComplete: () => void;
   onBusyChange: (busy: boolean) => void;
 }) {
@@ -70,9 +74,8 @@ function LoadedAuthentication({
       active
       variant="page"
       mcpServer={data}
-      onTriggerFetchTools={fetchTools}
+      onSaved={async (saved) => onPublished(saved.id)}
       onBusyChange={onBusyChange}
-      onSaved={async () => {}}
       onComplete={onComplete}
     />
   ) : null;
@@ -80,10 +83,10 @@ function LoadedAuthentication({
 
 function Harness({
   configuredServer,
-  fetchTools,
+  onPublished,
 }: {
   configuredServer: MCPServer;
-  fetchTools: (serverId: number) => Promise<void>;
+  onPublished: (serverId: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -105,7 +108,7 @@ function Harness({
             {open && (
               <LoadedAuthentication
                 serverId={configuredServer.id}
-                fetchTools={fetchTools}
+                onPublished={onPublished}
                 onComplete={() => setOpen(false)}
                 onBusyChange={setBusy}
               />
@@ -154,13 +157,7 @@ function mockNetwork(
         )
       );
     }
-    if (url === "/api/admin/mcp/servers/create") {
-      return new Response(JSON.stringify({ server_id: configuredServer.id }));
-    }
-    if (url.startsWith("/api/admin/mcp/server/7/status?")) {
-      return new Response("{}");
-    }
-    if (url === "/api/admin/mcp/oauth/connect") {
+    if (url === "/api/admin/mcp/setup") {
       return oauthError
         ? new Response(
             JSON.stringify({
@@ -171,10 +168,8 @@ function mockNetwork(
           )
         : new Response(
             JSON.stringify({
-              status: "already_authenticated",
-              server_id: configuredServer.id,
-              authorization_url: null,
-              redirect_url: "/admin/mcp-actions/?trigger_fetch=true",
+              status: "connected",
+              server: configuredServer,
             })
           );
     }
@@ -198,11 +193,11 @@ async function expandSection(
 
 async function openSetup(
   configuredServer = server,
-  fetchTools = jest.fn().mockResolvedValue(undefined),
+  onPublished = jest.fn().mockResolvedValue(undefined),
   user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never })
 ) {
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByDisplayValue("registered-client");
@@ -225,7 +220,7 @@ test("blocks a shared-token template that no longer sends the shared key", async
   const network = mockNetwork(configuredServer);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={jest.fn()} />
+    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await expandSection(user, "Advanced settings");
@@ -241,7 +236,7 @@ test("blocks a shared-token template that no longer sends the shared key", async
     )
   ).toBeVisible();
   expect(
-    network.mock.calls.some(([url]) => url === "/api/admin/mcp/servers/create")
+    network.mock.calls.some(([url]) => url === "/api/admin/mcp/setup")
   ).toBe(false);
 });
 
@@ -268,10 +263,10 @@ test("clears OAuth failure actions when choosing another authentication method",
   ).not.toBeInTheDocument();
 });
 
-test("preserves a saved SSE transport and discovers tools once when OAuth is already connected", async () => {
+test("preserves a saved SSE transport and publishes the validated server once", async () => {
   const fetchSpy = mockNetwork(server);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
-  const user = await openSetup(server, fetchTools);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
+  const user = await openSetup(server, onPublished);
   const originalLocation = window.location.href;
 
   await user.click(
@@ -280,10 +275,10 @@ test("preserves a saved SSE transport and discovers tools once when OAuth is alr
     })
   );
 
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
-  expect(fetchTools).toHaveBeenCalledWith(7);
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
+  expect(onPublished).toHaveBeenCalledWith(7);
   expect(fetchSpy).toHaveBeenCalledWith(
-    "/api/admin/mcp/servers/create",
+    "/api/admin/mcp/setup",
     expect.objectContaining({
       body: expect.stringContaining('"transport":"SSE"'),
     })
@@ -296,8 +291,8 @@ test("preserves a saved SSE transport and discovers tools once when OAuth is alr
 
 test("keeps edited client credentials visible after OAuth startup fails", async () => {
   mockNetwork(server, "Protected resource metadata was not found");
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
-  const user = await openSetup(server, fetchTools);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
+  const user = await openSetup(server, onPublished);
   const clientId = screen.getByLabelText(copy.clientId.label, { exact: false });
   await user.clear(clientId);
   await user.type(clientId, "replacement-client");
@@ -318,15 +313,13 @@ test("keeps edited client credentials visible after OAuth startup fails", async 
       name: copy.submitButton.label,
     })
   ).toBeEnabled();
-  expect(fetchTools).not.toHaveBeenCalled();
+  expect(onPublished).not.toHaveBeenCalled();
 });
 
 test("keeps setup open when asynchronous tool discovery fails", async () => {
-  mockNetwork(server);
-  const fetchTools = jest
-    .fn()
-    .mockRejectedValue(new Error("Tool listing timed out"));
-  const user = await openSetup(server, fetchTools);
+  mockNetwork(server, "Tool listing timed out");
+  const onPublished = jest.fn();
+  const user = await openSetup(server, onPublished);
   await user.click(
     screen.getByRole("button", {
       name: copy.submitButton.label,
@@ -371,14 +364,14 @@ test("retains manual OAuth settings and required custom header values", async ()
 
   await waitFor(() =>
     expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/admin/mcp/servers/create",
+      "/api/admin/mcp/setup",
       expect.objectContaining({
         body: expect.stringContaining('"workspace":"support"'),
       })
     )
   );
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -392,7 +385,7 @@ test("retains manual OAuth settings and required custom header values", async ()
   );
 });
 
-test("compares retry edits with the configuration saved before OAuth failed", async () => {
+test("compares failed retries against the unchanged saved configuration", async () => {
   const fetchSpy = mockNetwork(server, "Provider is unavailable");
   const user = await openSetup();
   const clientId = screen.getByLabelText(copy.clientId.label, { exact: false });
@@ -416,18 +409,16 @@ test("compares retry edits with the configuration saved before OAuth failed", as
   );
   await waitFor(() =>
     expect(
-      fetchSpy.mock.calls.filter(
-        ([url]) => url === "/api/admin/mcp/servers/create"
-      )
+      fetchSpy.mock.calls.filter(([url]) => url === "/api/admin/mcp/setup")
     ).toHaveLength(2)
   );
   const submissions = fetchSpy.mock.calls.filter(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submissions[1]?.[1]?.body))).toEqual(
     expect.objectContaining({
       oauth_client_id: "registered-client",
-      oauth_client_id_changed: true,
+      oauth_client_id_changed: false,
     })
   );
 });
@@ -461,10 +452,10 @@ test("removes the default bearer token prompt when switching to OAuth", async ()
     auth_template: { headers: {}, required_fields: [] },
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   expect(
@@ -490,9 +481,9 @@ test("removes the default bearer token prompt when switching to OAuth", async ()
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -514,15 +505,17 @@ test("preserves a masked shared token while editing its custom header name", asy
     },
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   // The stored token shows as a tag; the input itself stays empty.
   expect(
-    await screen.findByLabelText(copy.sharedApiKey.label, { selector: "input" })
+    await screen.findByLabelText(copy.sharedApiKey.label, {
+      selector: "input",
+    })
   ).toHaveValue("");
   expect(screen.getByText("********")).toBeInTheDocument();
   expect(
@@ -537,9 +530,9 @@ test("preserves a masked shared token while editing its custom header name", asy
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -571,10 +564,10 @@ test("keeps personal credentials visible and shows headers directly in advanced 
     },
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   const token = await screen.findByLabelText("API Key", { selector: "input" });
@@ -595,9 +588,9 @@ test("keeps personal credentials visible and shows headers directly in advanced 
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -628,15 +621,17 @@ test("requires new credentials when switching between shared and personal token 
     },
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   // The stored token shows as a tag; the input itself stays empty.
   expect(
-    await screen.findByLabelText(copy.sharedApiKey.label, { selector: "input" })
+    await screen.findByLabelText(copy.sharedApiKey.label, {
+      selector: "input",
+    })
   ).toHaveValue("");
   expect(screen.getByText("********")).toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Credentials" }));
@@ -652,11 +647,9 @@ test("requires new credentials when switching between shared and personal token 
       name: copy.submitButton.label,
     })
   );
-  expect(fetchTools).not.toHaveBeenCalled();
+  expect(onPublished).not.toHaveBeenCalled();
   expect(
-    fetchSpy.mock.calls.filter(
-      ([url]) => url === "/api/admin/mcp/servers/create"
-    )
+    fetchSpy.mock.calls.filter(([url]) => url === "/api/admin/mcp/setup")
   ).toHaveLength(0);
 
   await user.type(
@@ -682,9 +675,9 @@ test("requires new credentials when switching between shared and personal token 
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -696,17 +689,17 @@ test("requires new credentials when switching between shared and personal token 
   );
 });
 
-test("keeps setup open while connection work is pending", async () => {
+test("keeps setup open while the published server refresh is pending", async () => {
   mockNetwork(server);
   const discovery = deferred<void>();
-  const fetchTools = jest.fn(() => discovery.promise);
-  const user = await openSetup(server, fetchTools);
+  const onPublished = jest.fn(() => discovery.promise);
+  const user = await openSetup(server, onPublished);
   await user.click(
     screen.getByRole("button", {
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   expect(screen.getByTestId("mcp-auth-connect-button")).toBeDisabled();
   await user.keyboard("{Escape}");
   expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -746,7 +739,7 @@ test("shows OAuth fields without opening advanced settings and preserves masked 
     })
   );
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -768,10 +761,10 @@ test("manual OAuth requires a client ID before saving or starting authorization"
     oauth_token_endpoint: "https://identity.example.com/token",
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   expect(
@@ -785,13 +778,9 @@ test("manual OAuth requires a client ID before saving or starting authorization"
   );
   expect(await screen.findByText(copy.clientId.required)).toBeInTheDocument();
   expect(
-    fetchSpy.mock.calls.some(
-      ([url]) =>
-        url === "/api/admin/mcp/servers/create" ||
-        url === "/api/admin/mcp/oauth/connect"
-    )
+    fetchSpy.mock.calls.some(([url]) => url === "/api/admin/mcp/setup")
   ).toBe(false);
-  expect(fetchTools).not.toHaveBeenCalled();
+  expect(onPublished).not.toHaveBeenCalled();
 });
 
 test("each authentication method shows its explanation in the main form", async () => {
@@ -848,10 +837,10 @@ test("OAuth setup choices support keyboard navigation", async () => {
 test("new OAuth setup starts automatically and own-client setup requires a client ID", async () => {
   const configuredServer = { ...server, admin_credentials: {} };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser();
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radiogroup", { name: copy.oauthSetup.label });
@@ -881,7 +870,7 @@ test("new OAuth setup starts automatically and own-client setup requires a clien
     })
   ).toBeDisabled();
   expect(
-    fetchSpy.mock.calls.some(([url]) => url === "/api/admin/mcp/servers/create")
+    fetchSpy.mock.calls.some(([url]) => url === "/api/admin/mcp/setup")
   ).toBe(false);
   await user.type(
     screen.getByLabelText(copy.clientId.label, { exact: false }),
@@ -892,16 +881,16 @@ test("new OAuth setup starts automatically and own-client setup requires a clien
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
 });
 
 test("automatic setup can turn off the client metadata document", async () => {
   const configuredServer = { ...server, admin_credentials: {} };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = setupUser();
   render(
-    <Harness configuredServer={configuredServer} fetchTools={fetchTools} />
+    <Harness configuredServer={configuredServer} onPublished={onPublished} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radiogroup", { name: copy.oauthSetup.label });
@@ -916,9 +905,9 @@ test("automatic setup can turn off the client metadata document", async () => {
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -942,10 +931,10 @@ test("switching an existing client to automatic setup clears its credentials and
     oauth_additional_auth_params: { prompt: "consent" },
   };
   const fetchSpy = mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   const user = await openSetup(
     configuredServer,
-    fetchTools,
+    onPublished,
     setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never })
   );
   expect(
@@ -967,9 +956,9 @@ test("switching an existing client to automatic setup clears its credentials and
       name: copy.submitButton.label,
     })
   );
-  await waitFor(() => expect(fetchTools).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onPublished).toHaveBeenCalledTimes(1));
   const submission = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/servers/create"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   const payload = JSON.parse(String(submission?.[1]?.body));
   expect(payload).toEqual(
@@ -986,7 +975,7 @@ test("switching an existing client to automatic setup clears its credentials and
   expect(payload).not.toHaveProperty("oauth_scopes_override");
   expect(payload).not.toHaveProperty("oauth_additional_auth_params");
   const oauth = fetchSpy.mock.calls.find(
-    ([url]) => url === "/api/admin/mcp/oauth/connect"
+    ([url]) => url === "/api/admin/mcp/setup"
   );
   expect(JSON.parse(String(oauth?.[1]?.body))).toEqual(
     expect.objectContaining({
@@ -1017,7 +1006,7 @@ test.each(["registered-client", ""])(
       pointerEventsCheck: PointerEventsCheckLevel.Never,
     });
     render(
-      <Harness configuredServer={configuredServer} fetchTools={jest.fn()} />
+      <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
     );
     await user.click(screen.getByRole("button", { name: "Open setup" }));
     await screen.findByLabelText(copy.clientId.label, { exact: false });
@@ -1088,7 +1077,7 @@ test("registration failures show a clear recovery action instead of provider HTM
   });
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={jest.fn()} />
+    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByRole("radio", { name: copy.oauthSetup.automatic.label });
@@ -1126,7 +1115,7 @@ test("retrying unavailable discovery refreshes support while preserving automati
   const fetchSpy = mockNetwork(configuredServer, undefined, false, options);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(
-    <Harness configuredServer={configuredServer} fetchTools={jest.fn()} />
+    <Harness configuredServer={configuredServer} onPublished={jest.fn()} />
   );
   await user.click(screen.getByRole("button", { name: "Open setup" }));
   await screen.findByText(copy.discovery.unreachable);
@@ -1161,7 +1150,7 @@ test("preserves freshly loaded server metadata when saving authentication", asyn
   await user.click(screen.getByTestId("mcp-auth-connect-button"));
   await waitFor(() => {
     const request = network.mock.calls.find(
-      ([url]) => String(url) === "/api/admin/mcp/servers/create"
+      ([url]) => String(url) === "/api/admin/mcp/setup"
     );
     expect(request).toBeDefined();
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
@@ -1213,10 +1202,10 @@ describe("inline authentication", () => {
         active
         variant="page"
         mcpServer={configuredServer}
-        onTriggerFetchTools={async () => {}}
+        onSaved={async () => {}}
         onBusyChange={() => {}}
         onDirtyChange={dirty}
-        onSaved={async () => {}}
+
         onComplete={() => {}}
       />
     );
@@ -1254,10 +1243,10 @@ describe("inline authentication", () => {
         active
         variant="page"
         mcpServer={configuredServer}
-        onTriggerFetchTools={async () => {}}
+        onSaved={async () => {}}
         onBusyChange={() => {}}
         onDirtyChange={dirty}
-        onSaved={async () => {}}
+
         onComplete={() => {}}
       />
     );
@@ -1310,9 +1299,9 @@ describe("inline authentication", () => {
             token_endpoint: "https://identity.example.com/token",
           },
         }}
-        onTriggerFetchTools={async () => {}}
-        onBusyChange={() => {}}
         onSaved={async () => {}}
+        onBusyChange={() => {}}
+
         onComplete={() => {}}
       />
     );
@@ -1345,22 +1334,19 @@ describe("inline authentication", () => {
     const user = setupUser({
       pointerEventsCheck: PointerEventsCheckLevel.Never,
     });
-    const resolveServer = jest.fn().mockResolvedValue(server);
+    const onCreate = jest.fn().mockResolvedValue(server);
     render(
       <MCPAuthenticationPage
         active
         variant="page"
         mcpServer={{ name: server.name, server_url: server.server_url }}
-        resolveServer={resolveServer}
+        onCreate={onCreate}
         recommendation={{
           kind: "auth_unknown",
           transport: MCPTransportType.SSE,
         }}
         onBusyChange={() => {}}
         onDirtyChange={() => {}}
-        onSaved={async () => {}}
-        onComplete={() => {}}
-        onTriggerFetchTools={async () => {}}
       />
     );
     const proceed = screen.getByTestId("mcp-auth-connect-button");
@@ -1382,8 +1368,54 @@ describe("inline authentication", () => {
     );
     await waitFor(() => expect(proceed).toBeEnabled());
     await user.click(proceed);
-    await waitFor(() => expect(resolveServer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
   });
+
+  test.each([true, false])(
+    "offers pass-through with collapsed connection settings only when OAuth login is enabled: %s",
+    async (oauthEnabled) => {
+      mockNetwork(server, undefined, oauthEnabled);
+      const user = setupUser({
+        pointerEventsCheck: PointerEventsCheckLevel.Never,
+      });
+      render(
+        <MCPAuthenticationPage
+          active
+          variant="page"
+          mcpServer={server}
+          recommendation={{
+            kind: "public",
+            transport: MCPTransportType.SSE,
+            tool_count: 3,
+            server_name: server.name,
+          }}
+          onBusyChange={() => {}}
+
+          onComplete={() => {}}
+          onSaved={async () => {}}
+        />
+      );
+      await waitFor(() =>
+        expect(global.fetch).toHaveBeenCalledWith("/api/auth/type")
+      );
+      expect(
+        screen.getByRole("button", { name: "Expand Advanced settings" })
+      ).toBeVisible();
+      const method = screen.getByRole("combobox", {
+        name: copy.authType.label,
+      });
+      expect(method).toHaveValue(copy.authType.none.label);
+      await user.click(method);
+      const option = screen.queryByRole("option", {
+        name: copy.authType.ptOauth.label,
+      });
+      if (oauthEnabled) {
+        expect(option).toBeVisible();
+      } else {
+        expect(option).not.toBeInTheDocument();
+      }
+    }
+  );
 
   test("keeps detected recommendations visible when users choose other options", async () => {
     mockNetwork(server);
@@ -1407,9 +1439,9 @@ describe("inline authentication", () => {
         }}
         onBusyChange={() => {}}
         onDirtyChange={() => {}}
-        onSaved={async () => {}}
+
         onComplete={() => {}}
-        onTriggerFetchTools={async () => {}}
+        onSaved={async () => {}}
       />
     );
     const recommended = messages.craft.llmPopover.recommended.label;
@@ -1445,7 +1477,7 @@ describe("inline authentication", () => {
     };
     mockNetwork(configuredServer);
     const complete = jest.fn();
-    const fetchTools = jest.fn().mockResolvedValue(undefined);
+    const onPublished = jest.fn().mockResolvedValue(undefined);
     const user = setupUser({
       pointerEventsCheck: PointerEventsCheckLevel.Never,
     });
@@ -1456,9 +1488,9 @@ describe("inline authentication", () => {
         mcpServer={configuredServer}
         onBusyChange={() => {}}
         onDirtyChange={() => {}}
-        onSaved={async () => {}}
+
         onComplete={complete}
-        onTriggerFetchTools={fetchTools}
+        onSaved={async (saved) => onPublished(saved.id)}
       />
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1472,7 +1504,7 @@ describe("inline authentication", () => {
       screen.getByRole("button", { name: copy.submitButton.label })
     );
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
-    expect(fetchTools).toHaveBeenCalledWith(7);
+    expect(onPublished).toHaveBeenCalledWith(7);
     expect(
       screen.getByRole("combobox", {
         name: messages.actions.mcpAuthModal.authType.label,
@@ -1490,9 +1522,9 @@ describe("inline authentication", () => {
         mcpServer={server}
         onBusyChange={() => {}}
         onDirtyChange={() => {}}
-        onSaved={async () => {}}
+
         onComplete={() => {}}
-        onTriggerFetchTools={async () => {}}
+        onSaved={async () => {}}
       />
     );
     expect(
@@ -1517,9 +1549,9 @@ describe("inline authentication", () => {
         mcpServer={apiServer}
         onBusyChange={() => {}}
         onDirtyChange={() => {}}
-        onSaved={async () => {}}
+
         onComplete={() => {}}
-        onTriggerFetchTools={async () => {}}
+        onSaved={async () => {}}
       />
     );
     expect(
@@ -1545,10 +1577,9 @@ test("restores automatic OAuth setup after registration without a dirty form", a
       active
       variant="page"
       mcpServer={configuredServer}
-      onTriggerFetchTools={async () => {}}
+      onSaved={async () => {}}
       onBusyChange={() => {}}
       onDirtyChange={dirty}
-      onSaved={async () => {}}
       onComplete={() => {}}
     />
   );
@@ -1563,31 +1594,189 @@ test("restores automatic OAuth setup after registration without a dirty form", a
   expect(dirty).toHaveBeenLastCalledWith(false);
 });
 
-test("discovers tools for a Chat-enable intent without changing connected authentication", async () => {
+test("an unverified Chat-enable token cannot enable Chat during staged authentication", async () => {
   const configuredServer: MCPServer = {
     ...server,
     auth_type: MCPAuthenticationType.NONE,
     status: MCPServerStatus.CONNECTED,
     tool_count: 0,
   };
-  mockNetwork(configuredServer);
-  const fetchTools = jest.fn().mockResolvedValue(undefined);
+  const network = mockNetwork(configuredServer);
+  const onPublished = jest.fn().mockResolvedValue(undefined);
   render(
     <MCPAuthenticationPage
       active
       variant="page"
       mcpServer={configuredServer}
       chatEnableIntent="pending-chat-intent"
-      onTriggerFetchTools={fetchTools}
+      onSaved={async (saved) => onPublished(saved.id)}
       onBusyChange={() => {}}
-      onSaved={async () => {}}
       onComplete={() => {}}
     />
   );
   const save = await screen.findByTestId("mcp-auth-connect-button");
   expect(save).toBeEnabled();
   await setupUser().click(save);
-  await waitFor(() =>
-    expect(fetchTools).toHaveBeenCalledWith(7, "pending-chat-intent")
+  await waitFor(() => expect(onPublished).toHaveBeenCalledWith(7));
+  const submission = network.mock.calls.find(
+    ([url]) => url === "/api/admin/mcp/setup"
+  );
+  expect(JSON.parse(String(submission?.[1]?.body))).not.toHaveProperty(
+    "enable_chat"
   );
 });
+
+test("stages pending URL and metadata changes and publishes only after validation succeeds", async () => {
+  const draftServer: MCPServer = {
+    ...server,
+    server_url: "https://replacement.example.com/mcp",
+    auth_type: MCPAuthenticationType.NONE,
+    admin_credentials: undefined,
+  };
+  const published = {
+    ...draftServer,
+    name: "Replacement MCP",
+    status: MCPServerStatus.CONNECTED,
+  };
+  const network = mockNetwork(draftServer);
+  const fallback = network.getMockImplementation();
+  let fail = true;
+  network.mockImplementation(async (input, init) => {
+    if (String(input) === "/api/admin/mcp/setup") {
+      return fail
+        ? new Response(JSON.stringify({ detail: "Tool discovery failed" }), {
+            status: 502,
+          })
+        : new Response(
+            JSON.stringify({ status: "connected", server: published })
+          );
+    }
+    if (!fallback) throw new Error("Missing network fixture");
+    return fallback(input, init);
+  });
+  const saved = jest.fn().mockResolvedValue(undefined);
+  const complete = jest.fn();
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={draftServer}
+      configurationDraft={{
+        name: "Replacement MCP",
+        server_url: draftServer.server_url,
+        enable_chat: true,
+      }}
+      onSaved={saved}
+      onComplete={complete}
+      onBusyChange={() => {}}
+    />
+  );
+  const user = setupUser();
+  await user.click(screen.getByTestId("mcp-auth-connect-button"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Tool discovery failed"
+  );
+  expect(saved).not.toHaveBeenCalled();
+  expect(complete).not.toHaveBeenCalled();
+  expect(
+    network.mock.calls.some(([url]) => url === "/api/admin/mcp/oauth/discover")
+  ).toBe(false);
+  const first = network.mock.calls.find(
+    ([url]) => url === "/api/admin/mcp/setup"
+  );
+  expect(JSON.parse(String(first?.[1]?.body))).toEqual(
+    expect.objectContaining({
+      name: "Replacement MCP",
+      server_url: draftServer.server_url,
+      existing_server_id: 7,
+      enable_chat: true,
+    })
+  );
+  fail = false;
+  await user.click(screen.getByTestId("mcp-auth-connect-button"));
+  await waitFor(() => expect(saved).toHaveBeenCalledWith(published));
+  expect(complete).toHaveBeenCalledTimes(1);
+  expect(
+    network.mock.calls
+      .filter(([, options]) => options?.method === "POST")
+      .every(([url]) => url === "/api/admin/mcp/setup")
+  ).toBe(true);
+});
+
+test("explicit Chat disable overrides an earlier verified enable intent", async () => {
+  const configuredServer = { ...server, auth_type: MCPAuthenticationType.NONE };
+  const network = mockNetwork(configuredServer);
+  const intent = mintMcpChatEnableIntent({ userId: "admin-user", serverId: 7 });
+  const saved = jest.fn().mockResolvedValue(undefined);
+  render(
+    <MCPAuthenticationPage
+      active
+      variant="page"
+      mcpServer={configuredServer}
+      configurationDraft={{ enable_chat: false }}
+      chatEnableIntent={intent}
+      onSaved={saved}
+      onBusyChange={() => {}}
+      onComplete={() => {}}
+    />
+  );
+  await setupUser().click(await screen.findByTestId("mcp-auth-connect-button"));
+  await waitFor(() => expect(saved).toHaveBeenCalled());
+  const submission = network.mock.calls.find(
+    ([url]) => url === "/api/admin/mcp/setup"
+  );
+  expect(JSON.parse(String(submission?.[1]?.body)).enable_chat).toBe(false);
+});
+
+test.each([
+  MCPAuthenticationPerformer.PER_USER,
+  MCPAuthenticationPerformer.ADMIN,
+])(
+  "accepts a replacement API token after a URL change clears headers (%s)",
+  async (performer) => {
+    const configuredServer: MCPServer = {
+      ...server,
+      server_url: "https://replacement.example.com/mcp",
+      auth_type: MCPAuthenticationType.API_TOKEN,
+      auth_performer: performer,
+      admin_credentials: undefined,
+      user_credentials: undefined,
+      status: MCPServerStatus.AWAITING_AUTH,
+      auth_template: {
+        headers: { Authorization: "" },
+        required_fields: ["api_key"],
+      },
+    };
+    const fetchSpy = mockNetwork(configuredServer);
+    const onPublished = jest.fn().mockResolvedValue(undefined);
+    const user = setupUser({
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    render(
+      <Harness configuredServer={configuredServer} onPublished={onPublished} />
+    );
+    await user.click(screen.getByRole("button", { name: "Open setup" }));
+    const token = await screen.findByLabelText(copy.sharedApiKey.label);
+    expect(token).toHaveValue("");
+    await user.type(token, "replacement-token");
+    await user.click(
+      screen.getByRole("button", { name: copy.submitButton.label })
+    );
+    await waitFor(() => expect(onPublished).toHaveBeenCalledWith(server.id));
+    const submission = fetchSpy.mock.calls.find(
+      ([url]) => url === "/api/admin/mcp/setup"
+    );
+    expect(JSON.parse(String(submission?.[1]?.body))).toEqual(
+      expect.objectContaining({
+        server_url: configuredServer.server_url,
+        auth_template: {
+          headers: { Authorization: "Bearer {api_key}" },
+          required_fields: ["api_key"],
+        },
+        ...(performer === MCPAuthenticationPerformer.ADMIN
+          ? { api_token: "replacement-token" }
+          : { admin_credentials: { api_key: "replacement-token" } }),
+      })
+    );
+  }
+);

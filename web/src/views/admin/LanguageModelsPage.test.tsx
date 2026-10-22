@@ -1,6 +1,14 @@
-import { render, screen, setupUser } from "@tests/setup/test-utils";
+import {
+  makeProvider,
+  render,
+  screen,
+  setupUser,
+} from "@tests/setup/test-utils";
 import LanguageModelsPage from "@/views/admin/LanguageModelsPage";
-import type { LLMProviderView } from "@/lib/languageModels/types";
+import type {
+  LLMProviderFormProps,
+  LLMProviderView,
+} from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("next/navigation", () => ({
@@ -69,6 +77,31 @@ const providers: LLMProviderView[] = [
   },
 ];
 
+jest.mock("@/sections/modals/languageModels/OpenAIModal", () => ({
+  __esModule: true,
+  default: ({ shouldMarkAsDefault }: LLMProviderFormProps) => (
+    <div
+      data-testid="chat-provider-setup"
+      data-default={String(shouldMarkAsDefault)}
+    />
+  ),
+}));
+
+let currentProviders = providers;
+
+const typesafeProvider: LLMProviderView = {
+  ...makeProvider({ id: 22, provider: "typesafe", model_configurations: [] }),
+  api_key: null,
+  api_base: null,
+  api_version: null,
+  custom_config: null,
+  is_public: true,
+  is_auto_mode: false,
+  groups: [],
+  personas: [],
+  deployment_name: null,
+};
+
 providers.push({
   id: 8,
   name: "Search provider",
@@ -98,11 +131,12 @@ providers.push({
 
 describe("LanguageModelsPage", () => {
   beforeEach(() => {
+    currentProviders = providers;
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       if (input === SWR_KEYS.adminLlmProvidersPaged) {
         return new Response(
           JSON.stringify({
-            providers,
+            providers: currentProviders,
             default_text: { provider_id: 7, model_name: "gpt-4o" },
             default_vision: null,
             default_chat_naming: { provider_id: 7, model_name: "gpt-4o-mini" },
@@ -120,6 +154,30 @@ describe("LanguageModelsPage", () => {
     });
   });
   afterEach(() => jest.restoreAllMocks());
+
+  test("TypeSafe does not prevent the first chat provider becoming default", async () => {
+    currentProviders = [typesafeProvider];
+    const user = setupUser();
+    render(<LanguageModelsPage />);
+    await user.click(await screen.findByLabelText("Add OpenAI GPT"));
+    expect(screen.getByTestId("chat-provider-setup")).toHaveAttribute(
+      "data-default",
+      "true"
+    );
+  });
+
+  test("TypeSafe does not prevent deleting the last chat provider", async () => {
+    const chatProvider = providers[0];
+    if (!chatProvider) throw new Error("Missing chat provider fixture");
+    currentProviders = [chatProvider, typesafeProvider];
+    const user = setupUser();
+    render(<LanguageModelsPage />);
+    await user.click(await screen.findByRole("button", { name: "Delete GPT" }));
+    expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+    expect(
+      screen.getByText("Connect another provider to continue using chats.")
+    ).toBeInTheDocument();
+  });
 
   test("keeps task model settings out of Language Models and hidden models out of chat defaults", async () => {
     const user = setupUser();

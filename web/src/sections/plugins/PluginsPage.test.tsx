@@ -591,7 +591,7 @@ test.each(SUGGESTED_MCP_PLUGINS)(
   }
 );
 
-test("opens custom MCP and routes a completed native server to its canonical detail", async () => {
+test("opens custom MCP and shows discovered tools after setup completes", async () => {
   mockNetwork();
   render(<PluginsPage />);
   const user = setupUser();
@@ -600,7 +600,7 @@ test("opens custom MCP and routes a completed native server to its canonical det
   await user.click(screen.getByRole("button", { name: copy.add.mcp }));
   expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "Complete setup" }));
-  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/mcp/7");
+  expect(mockPush).toHaveBeenCalledWith("/admin/plugins/mcp/7?tab=tools");
 });
 
 test("opens OpenAPI creation and configures authentication on its canonical detail", async () => {

@@ -327,12 +327,10 @@
         "saveAuthFailed": "Failed to save authentication configuration",
         "saveConfigFailed": "Failed to save server configuration",
         "saveStage": "Could not save connection settings",
-        "oauthStage": "Could not start sign-in",
-        "discoveryStage": "Could not load server tools",
         "loadStage": "Could not load connection settings",
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
-        "connectionFailed": "The OAuth server could not be reached. Check the server URL and try again.",
+        "connectionFailed": "The server could not be reached. Check the server URL and try again.",
         "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "Manage chat settings in Language Models",
+      "decisionModel": {
+        "title": "Decision model",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
+        "clear": "Clear",
+        "notConfigured": "Not configured",
+        "saved": "Decision model updated",
+        "saveFailed": "Failed to update decision model"
+      },
+      "header": {
+        "title": "Decision Models",
+        "description": "Manage decision model providers and choose an optional model."
+      },
+      "providers": {
+        "title": "Providers",
+        "description": "Connect a provider or manage its decision models.",
+        "clearBeforeRemoval": "Clear the selected decision model before removing this provider.",
+        "edit": "Configure",
+        "connect": "Connect"
+      },
+      "loadFailed": "Could not load decision models.",
+      "retry": "Try again",
+      "saveFailed": "Could not save the connection.",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "More Models"
           },
           "refetch": {
+            "label": "Refresh models",
             "errorToast": "Failed to fetch models"
           },
           "row": {
             "defaultLabel": "Default Model",
+            "decisionTag": {
+              "label": "Decision",
+              "decisionOnly": "Decision model. Not available in the chat model picker.",
+              "chatAndDecision": "Supports both chat and decision tasks."
+            },
             "renameButton": {
               "tooltip": "Rename"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "Approval settings",
       "policyCounts": "{auto} auto-approve · {ask} ask · {disabled} disabled",
       "manageActions": "Manage actions",
-      "viewActions": "View actions",
       "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
       "searchActions": "Search actions",
       "setPermissions": "Set permissions",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "Language Models"
+        },
+        "decisionModels": {
+          "label": "Decision Models"
         },
         "llmGateway": {
           "label": "LLM Gateway"

@@ -327,12 +327,10 @@
         "saveAuthFailed": "فشل حفظ إعدادات المصادقة",
         "saveConfigFailed": "فشل حفظ إعدادات الخادم",
         "saveStage": "تعذّر حفظ إعدادات الاتصال",
-        "oauthStage": "تعذّر بدء تسجيل الدخول",
-        "discoveryStage": "تعذّر تحميل أدوات الخادم",
         "loadStage": "تعذّر تحميل إعدادات الاتصال",
         "clientRegistrationFailed": "فشل تسجيل العميل تلقائيًا. استخدم عميل OAuth خاصًا بك أو تحقق من متطلبات الإعداد لدى المزوّد.",
         "discoveryFailed": "لم نعثر على إعدادات تسجيل الدخول باستخدام OAuth. تحقق من عنوان URL للخادم أو أدخل نقاط النهاية من المزوّد.",
-        "connectionFailed": "تعذّر الوصول إلى خادم OAuth. تحقق من عنوان URL للخادم وحاول مجددًا.",
+        "connectionFailed": "تعذّر الوصول إلى الخادم. تحقق من عنوان URL للخادم وحاول مجددًا.",
         "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا.",
         "oauthInitFailed": "فشل بدء OAuth: {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "إدارة إعدادات الدردشة في نماذج اللغة",
+      "decisionModel": {
+        "title": "نموذج القرار",
+        "openAiDecisionsModelName": "قرارات OpenAI (GPT-6 Luna)",
+        "description": "اختر نموذجًا لميزات التصنيف والمراجعة المستقبلية. لا يستخدم Onyx هذا النموذج بعد.",
+        "clear": "مسح",
+        "notConfigured": "غير مُعدّ",
+        "saved": "تم تحديث نموذج القرار",
+        "saveFailed": "تعذّر تحديث نموذج القرار"
+      },
+      "header": {
+        "title": "نماذج القرار",
+        "description": "أدر موفري نماذج القرار واختر نموذجًا اختياريًا."
+      },
+      "providers": {
+        "title": "الموفرون",
+        "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
+        "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
+        "edit": "تكوين",
+        "connect": "ربط"
+      },
+      "loadFailed": "تعذر تحميل نماذج القرار.",
+      "retry": "إعادة المحاولة",
+      "saveFailed": "تعذر حفظ الاتصال.",
+      "cancel": "إلغاء",
+      "save": "حفظ"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "المزيد من النماذج"
           },
           "refetch": {
+            "label": "تحديث النماذج",
             "errorToast": "فشل جلب النماذج"
           },
           "row": {
             "defaultLabel": "النموذج الافتراضي",
+            "decisionTag": {
+              "label": "قرار",
+              "decisionOnly": "نموذج لاتخاذ القرارات. غير متاح في قائمة نماذج الدردشة.",
+              "chatAndDecision": "يدعم مهام الدردشة واتخاذ القرارات."
+            },
             "renameButton": {
               "tooltip": "إعادة تسمية"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "إعدادات الموافقة",
       "policyCounts": "موافقة تلقائية {auto} · سؤال {ask} · معطّل {disabled}",
       "manageActions": "إدارة الإجراءات",
-      "viewActions": "عرض الإجراءات",
       "taskModalDescription": "تُطبّق التغييرات عند حفظ المهمة. تسري قيود مساحة العمل دائمًا.",
       "searchActions": "البحث عن إجراءات",
       "setPermissions": "تعيين الأذونات",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "نماذج اللغة"
+        },
+        "decisionModels": {
+          "label": "نماذج القرار"
         },
         "llmGateway": {
           "label": "بوابة LLM"

@@ -327,12 +327,10 @@
         "saveAuthFailed": "認証設定の保存に失敗しました",
         "saveConfigFailed": "サーバー設定の保存に失敗しました",
         "saveStage": "接続設定を保存できませんでした",
-        "oauthStage": "サインインを開始できませんでした",
-        "discoveryStage": "サーバーのツールを読み込めませんでした",
         "loadStage": "接続設定を読み込めませんでした",
         "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
         "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
-        "connectionFailed": "OAuthサーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
+        "connectionFailed": "サーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
         "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。",
         "oauthInitFailed": "OAuth の開始に失敗しました: {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "言語モデルでチャット設定を管理",
+      "decisionModel": {
+        "title": "判断モデル",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "今後の分類・レビュー機能に使用するモデルを選択します。Onyx はまだこのモデルを使用しません。",
+        "clear": "解除",
+        "notConfigured": "未設定",
+        "saved": "判断モデルを更新しました",
+        "saveFailed": "判断モデルを更新できませんでした"
+      },
+      "header": {
+        "title": "判断モデル",
+        "description": "判断モデルのプロバイダーを管理し、必要に応じてモデルを選択します。"
+      },
+      "providers": {
+        "title": "プロバイダー",
+        "description": "プロバイダーを接続するか、判断モデルを管理します。",
+        "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
+        "edit": "設定",
+        "connect": "接続"
+      },
+      "loadFailed": "判断モデルを読み込めませんでした。",
+      "retry": "再試行",
+      "saveFailed": "接続を保存できませんでした。",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "モデルをもっと見る"
           },
           "refetch": {
+            "label": "モデルを更新",
             "errorToast": "モデルを取得できませんでした"
           },
           "row": {
             "defaultLabel": "デフォルトモデル",
+            "decisionTag": {
+              "label": "判断",
+              "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
+              "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
+            },
             "renameButton": {
               "tooltip": "名前を変更"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "承認設定",
       "policyCounts": "自動承認 {auto} · 確認 {ask} · 無効 {disabled}",
       "manageActions": "アクションを管理",
-      "viewActions": "アクションを表示",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
       "searchActions": "アクションを検索",
       "setPermissions": "権限を設定",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "言語モデル"
+        },
+        "decisionModels": {
+          "label": "判断モデル"
         },
         "llmGateway": {
           "label": "LLM ゲートウェイ"

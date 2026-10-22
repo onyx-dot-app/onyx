@@ -327,12 +327,10 @@
         "saveAuthFailed": "Falha ao salvar a configuração de autenticação",
         "saveConfigFailed": "Falha ao salvar a configuração do servidor",
         "saveStage": "Não foi possível salvar as configurações da conexão",
-        "oauthStage": "Não foi possível iniciar o login",
-        "discoveryStage": "Não foi possível carregar as ferramentas do servidor",
         "loadStage": "Não foi possível carregar as configurações da conexão",
         "clientRegistrationFailed": "O registro automático do cliente falhou. Use seu próprio cliente OAuth ou verifique os requisitos de configuração do provedor.",
         "discoveryFailed": "Não foi possível encontrar as configurações de login OAuth. Verifique a URL do servidor ou insira os endpoints do seu provedor.",
-        "connectionFailed": "Não foi possível acessar o servidor OAuth. Verifique a URL do servidor e tente novamente.",
+        "connectionFailed": "Não foi possível acessar o servidor. Verifique a URL do servidor e tente novamente.",
         "oauthFailed": "Não foi possível iniciar o login OAuth. Verifique as configurações do cliente e tente novamente.",
         "oauthInitFailed": "Falha ao iniciar o OAuth: {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "Gerenciar configurações de chat em Modelos de linguagem",
+      "decisionModel": {
+        "title": "Modelo de decisão",
+        "openAiDecisionsModelName": "Decisões da OpenAI (GPT-6 Luna)",
+        "description": "Selecione um modelo para futuros recursos de classificação e revisão. O Onyx ainda não usa este modelo.",
+        "clear": "Limpar",
+        "notConfigured": "Não configurado",
+        "saved": "Modelo de decisão atualizado",
+        "saveFailed": "Não foi possível atualizar o modelo de decisão"
+      },
+      "header": {
+        "title": "Modelos de decisão",
+        "description": "Gerencie os provedores e escolha um modelo de decisão opcional."
+      },
+      "providers": {
+        "title": "Provedores",
+        "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
+        "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
+        "edit": "Configurar",
+        "connect": "Conectar"
+      },
+      "loadFailed": "Não foi possível carregar os modelos de decisão.",
+      "retry": "Tentar novamente",
+      "saveFailed": "Não foi possível salvar a conexão.",
+      "cancel": "Cancelar",
+      "save": "Salvar"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "Mais modelos"
           },
           "refetch": {
+            "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"
           },
           "row": {
             "defaultLabel": "Modelo padrão",
+            "decisionTag": {
+              "label": "Decisão",
+              "decisionOnly": "Modelo de decisão. Não está disponível no seletor de modelos de chat.",
+              "chatAndDecision": "Suporta tarefas de chat e de decisão."
+            },
             "renameButton": {
               "tooltip": "Renomear"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "Configurações de aprovação",
       "policyCounts": "{auto} automáticas · {ask} perguntar · {disabled} desativadas",
       "manageActions": "Gerenciar ações",
-      "viewActions": "Ver ações",
       "taskModalDescription": "As alterações se aplicam ao salvar a tarefa. As restrições do espaço de trabalho sempre se aplicam.",
       "searchActions": "Buscar ações",
       "setPermissions": "Definir permissões",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "Modelos de linguagem"
+        },
+        "decisionModels": {
+          "label": "Modelos de decisão"
         },
         "llmGateway": {
           "label": "LLM Gateway"

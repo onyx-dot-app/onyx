@@ -330,14 +330,32 @@ async def _start_auto_discovery_oauth_flow_once(
         transport if use_authenticated_connection else MCPTransport.STREAMABLE_HTTP
     )
 
+    return await run_oauth_discovery(
+        oauth_provider=oauth_provider,
+        server_url=mcp_server.server_url,
+        connection_headers=oauth_connection_headers,
+        transport=probe_transport,
+        use_authenticated_connection=use_authenticated_connection,
+    )
+
+
+async def run_oauth_discovery(
+    *,
+    oauth_provider: OAuthClientProvider,
+    server_url: str,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    use_authenticated_connection: bool = False,
+) -> OAuthStartResult:
+    """Probe a connection, then fall back to protected-resource discovery."""
     try:
         async with asyncio.timeout(OAUTH_HTTP_TIMEOUT_SECONDS):
             try:
                 authorization = await run_with_authorization_handoff(
                     initialize_mcp_client(
-                        mcp_server.server_url,
-                        connection_headers=oauth_connection_headers,
-                        transport=probe_transport,
+                        server_url,
+                        connection_headers=connection_headers,
+                        transport=transport,
                         auth=oauth_provider,
                     )
                 )
@@ -364,8 +382,8 @@ async def _start_auto_discovery_oauth_flow_once(
             authorization = await run_with_authorization_handoff(
                 _start_oauth_from_well_known_metadata(
                     oauth_provider,
-                    mcp_server.server_url,
-                    oauth_connection_headers,
+                    server_url,
+                    connection_headers,
                 )
             )
             if authorization is not None:

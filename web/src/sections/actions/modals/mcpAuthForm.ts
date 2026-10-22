@@ -84,7 +84,7 @@ export function getAuthTemplateForMethod(
   const headers = { ...template.headers };
   if (
     authType === MCPAuthenticationType.API_TOKEN &&
-    Object.keys(headers).length === 0
+    Object.values(headers).every((value) => !value.trim())
   ) {
     headers.Authorization = "Bearer {api_key}";
   } else if (

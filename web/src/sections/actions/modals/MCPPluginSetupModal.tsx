@@ -13,7 +13,7 @@ import {
   Text,
 } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
-import { SvgCheck, SvgX } from "@opal/icons";
+import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
 import type { RichStr } from "@opal/types";
@@ -21,25 +21,17 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { refreshMemberPluginCaches } from "@/lib/plugins/member";
 import { useUser } from "@/providers/UserProvider";
-import { consumeMcpChatEnableIntent } from "@/sections/actions/mcpChatEnableIntent";
+import type { prepareMCPAuthPayload } from "@/sections/actions/modals/mcpAuthForm";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useUserGroups } from "@/lib/hooks";
+import { setupMCPServer, streamMCPServerProbe } from "@/lib/mcp/svc";
 import {
-  createMCPServer,
-  streamMCPServerProbe,
-  refreshMCPServerTools,
-  updateMCPServer,
-  updateMCPServerStatus,
-} from "@/lib/mcp/svc";
-import {
-  MCPServerStatus,
   MCPTransportType,
   type MCPServer,
-  type MCPServerCreateRequest,
   type MCPServerConfigurationValues,
   type MCPSetupProbeResult,
   type MCPSetupRecommendation,
@@ -111,11 +103,7 @@ function MCPSetupSession({
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
   const [enableChat, setEnableChat] = useState(true);
-  const { user, userResolution } = useUser();
-  const actor = useRef(user?.id);
-  useEffect(() => {
-    actor.current = user?.id;
-  }, [user?.id]);
+  const { userResolution } = useUser();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -138,13 +126,13 @@ function MCPSetupSession({
     recommendation: MCPSetupRecommendation;
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const savedServer = useRef<MCPServer | null>(null);
   const closeRequested = useRef(false);
   const lastProbe = useRef<Extract<ProbeState, { kind: "checked" }> | null>(
     null
   );
-  const urlInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const connectionPanel = useRef<HTMLDivElement>(null);
+  const serverPanel = useRef<HTMLDivElement>(null);
   const [footerTarget, setFooterTarget] = useState<HTMLDivElement | null>(null);
   const normalizedUrl = endpoint(url);
   const leave = () => {
@@ -207,7 +195,11 @@ function MCPSetupSession({
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      if (step === "server") urlInput.current?.focus();
+      if (
+        step === "server" &&
+        !serverPanel.current?.contains(document.activeElement)
+      )
+        nameInput.current?.focus();
       else if (
         step === "connection" &&
         !connectionPanel.current?.contains(document.activeElement)
@@ -311,7 +303,9 @@ function MCPSetupSession({
                     setConnection({ url: normalizedUrl, recommendation, name });
                     setStep("connection");
                   };
-                  const resolveServer = async () => {
+                  const createServer = async (
+                    auth: ReturnType<typeof prepareMCPAuthPayload>
+                  ) => {
                     const errors = await details.validateForm();
                     if (
                       Object.keys(errors).length ||
@@ -324,7 +318,9 @@ function MCPSetupSession({
                     }
                     if (!connection)
                       throw new Error(t("mcpSetup.reviewSettings"));
-                    const payload: MCPServerCreateRequest = {
+                    const result = await setupMCPServer({
+                      ...auth,
+                      enable_chat: defaultChat.canEdit && enableChat,
                       name: details.values.name.trim(),
                       description: details.values.description,
                       server_url: connection.url,
@@ -336,18 +332,27 @@ function MCPSetupSession({
                       users: details.values.is_public
                         ? []
                         : details.values.users,
-                    };
-                    const server = savedServer.current
-                      ? await updateMCPServer(savedServer.current.id, payload)
-                      : await createMCPServer(payload);
-                    savedServer.current = server;
-                    details.resetForm({ values: details.values });
-                    return server;
+                    });
+                    if (result.status === "authorization_required") {
+                      window.location.href = result.authorization_url;
+                      return;
+                    }
+                    await Promise.all([
+                      mutate(SWR_KEYS.adminMcpServers),
+                      ...(defaultChat.canEdit
+                        ? [mutate(SWR_KEYS.defaultAssistantConfig)]
+                        : []),
+                      refreshMemberPluginCaches(mutate),
+                    ]).catch((error: unknown) =>
+                      console.error("Error refreshing MCP servers:", error)
+                    );
+                    onCompleted(result.server);
                   };
                   return (
                     <>
                       <div
                         hidden={step !== "server"}
+                        ref={serverPanel}
                         className={connection ? styles.panel : undefined}
                         data-direction="back"
                       >
@@ -364,6 +369,7 @@ function MCPSetupSession({
                             <InputTypeIn
                               id="mcp-setup-initial-name"
                               name="name"
+                              ref={nameInput}
                               value={details.values.name}
                               onChange={details.handleChange}
                               placeholder={t("addMcpModal.name.title")}
@@ -378,7 +384,6 @@ function MCPSetupSession({
                               id="mcp-setup-url"
                               name="server_url"
                               type="url"
-                              ref={urlInput}
                               value={url}
                               placeholder={t("placeholders.mcpServerUrl")}
                               variant={
@@ -440,10 +445,13 @@ function MCPSetupSession({
                               ["authentication", "contacting_server"] as const
                             ).map((stage) => {
                               let state =
-                                checked?.kind === "oauth" ||
-                                checked?.kind === "public"
-                                  ? "success"
-                                  : (progress[stage] ?? "pending");
+                                probe.kind === "idle" ||
+                                probe.url !== normalizedUrl
+                                  ? "idle"
+                                  : checked?.kind === "oauth" ||
+                                      checked?.kind === "public"
+                                    ? "success"
+                                    : (progress[stage] ?? "pending");
                               if (
                                 checked?.kind === "unreachable" &&
                                 state === "pending"
@@ -464,6 +472,9 @@ function MCPSetupSession({
                                     aria-hidden="true"
                                     className={styles.statusIcon}
                                   >
+                                    <span data-icon="idle">
+                                      <SvgMinus className="size-4 text-text-02" />
+                                    </span>
                                     <span data-icon="pending">
                                       <IconLoader size={16} />
                                     </span>
@@ -497,13 +508,15 @@ function MCPSetupSession({
                                               ? "mcpAuthModal.transport.sseLabel"
                                               : "mcpAuthModal.transport.httpLabel"
                                           )
-                                      : t(
-                                          state === "pending"
-                                            ? "mcpSetup.stagePending"
-                                            : state === "success"
-                                              ? "mcpSetup.stageSuccess"
-                                              : "mcpSetup.stageError"
-                                        )}
+                                      : state === "idle"
+                                        ? undefined
+                                        : t(
+                                            state === "pending"
+                                              ? "mcpSetup.stagePending"
+                                              : state === "success"
+                                                ? "mcpSetup.stageSuccess"
+                                                : "mcpSetup.stageError"
+                                          )}
                                   </Text>
                                 </div>
                               );
@@ -621,10 +634,7 @@ function MCPSetupSession({
                               description: details.values.description,
                               server_url: connection.url,
                             }}
-                            resolveServer={resolveServer}
-                            enableChatOnConnect={
-                              defaultChat.canEdit && enableChat
-                            }
+                            onCreate={createServer}
                             recommendation={connection.recommendation}
                             canSubmit={
                               details.isValid &&
@@ -634,43 +644,6 @@ function MCPSetupSession({
                             onBusyChange={setBusy}
                             onBack={() => setStep("server")}
                             onCancel={leave}
-                            onSaved={async () => {
-                              await mutate(SWR_KEYS.adminMcpServers);
-                            }}
-                            onTriggerFetchTools={async (id, token) => {
-                              await updateMCPServerStatus(
-                                id,
-                                MCPServerStatus.FETCHING_TOOLS
-                              );
-                              const tools = await refreshMCPServerTools(id);
-                              await mutate(
-                                SWR_KEYS.adminMcpServerToolSnapshots(id),
-                                tools,
-                                { revalidate: false }
-                              );
-                              if (
-                                defaultChat.canEdit &&
-                                tools.length > 0 &&
-                                consumeMcpChatEnableIntent(token, {
-                                  userId: actor.current,
-                                  serverId: id,
-                                })
-                              ) {
-                                if (!defaultChat.data || defaultChat.error)
-                                  throw new Error(
-                                    t("addMcpModal.toasts.updateFailed")
-                                  );
-                                await defaultChat.updateTools(
-                                  tools.map((tool) => tool.id),
-                                  true
-                                );
-                              }
-                              await refreshMemberPluginCaches(mutate);
-                            }}
-                            onComplete={() => {
-                              if (!savedServer.current) return;
-                              onCompleted(savedServer.current);
-                            }}
                           />
                         </div>
                       )}

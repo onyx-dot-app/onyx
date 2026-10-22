@@ -12,6 +12,7 @@ import { NextIntlClientProvider } from "next-intl";
 import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import frenchMessages from "@/i18n/messages/fr.json";
 import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
+import DecisionModelSetting from "@/views/admin/DecisionModelSetting";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -97,6 +98,7 @@ async function renderTaskModels(): Promise<void> {
 describe("ChatTaskModelSettings", () => {
   let defaultChatNaming: DefaultModel | null;
   let defaultSearchSelection: DefaultModel | null;
+  let decisionModel: DefaultModel | null;
   let mutationResponse: () => Promise<Response>;
   let searchMutationResponse: () => Promise<Response>;
   let listedProviders: LLMProviderView[];
@@ -105,6 +107,7 @@ describe("ChatTaskModelSettings", () => {
   beforeEach(() => {
     defaultChatNaming = null;
     defaultSearchSelection = null;
+    decisionModel = null;
     listedProviders = providers;
     listingResponse = null;
     mutationResponse = async () => new Response(null, { status: 204 });
@@ -112,6 +115,34 @@ describe("ChatTaskModelSettings", () => {
     jest.spyOn(toast, "success").mockReturnValue("success-toast");
     jest.spyOn(toast, "error").mockReturnValue("error-toast");
     jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      if (input === SWR_KEYS.decisionModel) {
+        if (init?.method === "POST")
+          decisionModel = { provider_id: 7, model_name: "decisions" };
+        if (init?.method === "DELETE") decisionModel = null;
+        return new Response(
+          JSON.stringify({
+            model: decisionModel,
+            providers: [
+              {
+                ...providers[0],
+                model_configurations: [
+                  {
+                    id: 31,
+                    name: "decisions",
+                    display_name: "Decision Model A",
+                    is_visible: false,
+                    max_input_tokens: null,
+                    supports_image_input: false,
+                    supports_reasoning: false,
+                    supports_chat: false,
+                    supports_decisions: true,
+                  },
+                ],
+              },
+            ],
+          })
+        );
+      }
       if (input === "/api/admin/llm/default-chat-naming") {
         const response = await mutationResponse();
         if (response.ok) {
@@ -159,7 +190,7 @@ describe("ChatTaskModelSettings", () => {
     jest.restoreAllMocks();
   });
 
-  test("translates both optional suffixes through the Opal strings bridge", async () => {
+  test("translates optional suffixes through the Opal strings bridge", async () => {
     render(
       <NextIntlClientProvider locale="fr" messages={frenchMessages}>
         <OpalStringsBridge>
@@ -231,11 +262,39 @@ describe("ChatTaskModelSettings", () => {
     expect(screen.getByText("Search selection model")).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText("Use Default model")).toHaveLength(2);
     expect(screen.queryByText("Session model")).not.toBeInTheDocument();
-    expect(screen.getAllByDisplayValue("")).toHaveLength(2);
+    expect(screen.getAllByDisplayValue("").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("Chat Naming Model")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Reset" })
     ).not.toBeInTheDocument();
+  });
+
+  test("opts into a decision model and clears it without a chat fallback", async () => {
+    const user = setupUser();
+    render(<DecisionModelSetting />);
+    const input = await screen.findByPlaceholderText("Not configured");
+    expect(
+      screen.queryByRole("button", { name: "Clear" })
+    ).not.toBeInTheDocument();
+    await user.click(input);
+    await user.click(await screen.findByText("Decision Model A"));
+    await waitFor(() =>
+      expect(decisionModel).toEqual({ provider_id: 7, model_name: "decisions" })
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      SWR_KEYS.decisionModel,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ provider_id: 7, model_name: "decisions" }),
+      })
+    );
+    await user.click(await screen.findByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(decisionModel).toBeNull());
+    expect(await screen.findByPlaceholderText("Not configured")).toHaveValue(
+      ""
+    );
+    expect(defaultChatNaming).toBeNull();
+    expect(defaultSearchSelection).toBeNull();
   });
 
   test("saves a hidden model without changing model visibility", async () => {

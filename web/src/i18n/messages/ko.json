@@ -327,12 +327,10 @@
         "saveAuthFailed": "인증 구성을 저장하지 못했습니다",
         "saveConfigFailed": "서버 구성을 저장하지 못했습니다",
         "saveStage": "연결 설정을 저장할 수 없습니다",
-        "oauthStage": "로그인을 시작할 수 없습니다",
-        "discoveryStage": "서버 도구를 불러올 수 없습니다",
         "loadStage": "연결 설정을 불러올 수 없습니다",
         "clientRegistrationFailed": "클라이언트 자동 등록에 실패했습니다. 자체 OAuth 클라이언트를 사용하거나 공급자의 설정 요구 사항을 확인하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
-        "connectionFailed": "OAuth 서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
+        "connectionFailed": "서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
         "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
         "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
@@ -1249,6 +1247,34 @@
     }
   },
   "admin": {
+    "decisionModels": {
+      "sharedModelSettings": "언어 모델에서 채팅 설정 관리",
+      "decisionModel": {
+        "title": "판단 모델",
+        "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
+        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "clear": "해제",
+        "notConfigured": "설정되지 않음",
+        "saved": "판단 모델이 업데이트되었습니다",
+        "saveFailed": "판단 모델을 업데이트하지 못했습니다"
+      },
+      "header": {
+        "title": "판단 모델",
+        "description": "판단 모델 제공업체를 관리하고 선택적으로 모델을 선택합니다."
+      },
+      "providers": {
+        "title": "제공업체",
+        "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
+        "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
+        "edit": "구성",
+        "connect": "연결"
+      },
+      "loadFailed": "판단 모델을 불러올 수 없습니다.",
+      "retry": "다시 시도",
+      "saveFailed": "연결을 저장할 수 없습니다.",
+      "cancel": "취소",
+      "save": "저장"
+    },
     "addConnector": {
       "categories": {
         "codeRepository": {
@@ -7708,10 +7734,16 @@
             "label": "모델 더 보기"
           },
           "refetch": {
+            "label": "모델 새로고침",
             "errorToast": "모델을 가져오지 못했습니다"
           },
           "row": {
             "defaultLabel": "기본 모델",
+            "decisionTag": {
+              "label": "판단",
+              "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
+              "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
+            },
             "renameButton": {
               "tooltip": "이름 변경"
             },
@@ -15504,7 +15536,6 @@
       "actionPolicies": "승인 설정",
       "policyCounts": "자동 승인 {auto} · 확인 {ask} · 비활성 {disabled}",
       "manageActions": "작업 관리",
-      "viewActions": "작업 보기",
       "taskModalDescription": "변경 사항은 예약 작업을 저장할 때 적용됩니다. 워크스페이스 제한은 항상 적용됩니다.",
       "searchActions": "작업 검색",
       "setPermissions": "권한 설정",
@@ -16466,6 +16497,9 @@
         },
         "languageModels": {
           "label": "언어 모델"
+        },
+        "decisionModels": {
+          "label": "판단 모델"
         },
         "llmGateway": {
           "label": "LLM 게이트웨이"
