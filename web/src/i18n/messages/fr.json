@@ -14281,7 +14281,7 @@
         "title": "Compétences associées",
         "unavailable": {
           "duplicateName": "Une compétence nommée « {name} » est déjà associée.",
-          "invalid": "Compétence non valide : corrigez-la avant de l'associer.",
+          "invalid": "Compétence non valide. Corrigez-la avant de l'associer.",
           "otherApp": "Déjà associée à l'app « {name} »."
         },
         "unlink": {

@@ -370,7 +370,7 @@ test.describe("Index Settings Page @exclusive", () => {
   });
 });
 
-test.describe("Index Settings — contextual LLM updates @exclusive", () => {
+test.describe("Index Settings: contextual LLM updates @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -763,7 +763,7 @@ async function mockImageProcessing(
   return mocks;
 }
 
-test.describe("Index Settings — image processing @exclusive", () => {
+test.describe("Index Settings: image processing @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -957,7 +957,7 @@ test.describe("Index Settings — image processing @exclusive", () => {
 // Switchover strategy tests
 // ---------------------------------------------------------------------------
 
-test.describe("Index Settings — switchover strategies @exclusive", () => {
+test.describe("Index Settings: switchover strategies @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -1062,7 +1062,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
   });
 });
 
-test.describe("Index Settings — vector quantization @exclusive", () => {
+test.describe("Index Settings: vector quantization @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -1204,7 +1204,7 @@ const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
   },
 ];
 
-test.describe("Index Settings — empty-registry providers @exclusive", () => {
+test.describe("Index Settings: empty-registry providers @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -1290,7 +1290,7 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
 const BIFROST_MODEL = "openai/text-embedding-3-small";
 const BIFROST_API_URL = "http://bifrost.example.com:8080";
 
-test.describe("Index Settings — bring-your-own model cards @exclusive", () => {
+test.describe("Index Settings: bring-your-own model cards @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");

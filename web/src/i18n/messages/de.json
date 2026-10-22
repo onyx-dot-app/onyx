@@ -14281,7 +14281,7 @@
         "title": "Verknüpfte Skills",
         "unavailable": {
           "duplicateName": "Ein Skill namens „{name}“ ist bereits verknüpft.",
-          "invalid": "Ungültiger Skill: Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
+          "invalid": "Ungültiger Skill. Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
           "otherApp": "Bereits mit der App „{name}“ verknüpft."
         },
         "unlink": {

@@ -14281,7 +14281,7 @@
         "title": "Associated skills",
         "unavailable": {
           "duplicateName": "A skill named “{name}” is already associated.",
-          "invalid": "Invalid skill — fix it before associating.",
+          "invalid": "Invalid skill. Fix it before associating.",
           "otherApp": "Already associated with app “{name}”."
         },
         "unlink": {

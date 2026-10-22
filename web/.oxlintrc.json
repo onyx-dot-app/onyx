@@ -49,6 +49,7 @@
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-em-dash": "error",
     "anti-slop/no-hookless-use-function": "error",
     "anti-slop/no-known-value-widening": "warn",
     "anti-slop/no-unknown-parameters": "error",

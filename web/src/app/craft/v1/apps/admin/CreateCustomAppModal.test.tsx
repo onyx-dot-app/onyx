@@ -591,7 +591,7 @@ describe("CreateCustomAppModal", () => {
     });
     expect(invalidSkill).toHaveAttribute("aria-disabled", "true");
     expect(invalidSkill).toHaveTextContent(
-      "Invalid skill — fix it before associating."
+      "Invalid skill. Fix it before associating."
     );
     const otherAppAssociation = screen.getByRole("option", {
       name: /^other-app-skill/,

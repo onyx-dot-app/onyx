@@ -14281,7 +14281,7 @@
         "title": "关联的技能",
         "unavailable": {
           "duplicateName": "名为“{name}”的技能已关联。",
-          "invalid": "技能无效，请先修复再关联。",
+          "invalid": "技能无效。请先修复再关联。",
           "otherApp": "已与应用“{name}”关联。"
         },
         "unlink": {
