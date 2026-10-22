@@ -19,6 +19,7 @@ use ``applies`` instead of ``requires_fields``.
 
 import re
 import time
+from collections.abc import Callable
 from typing import Any, NoReturn
 from urllib.parse import urlparse
 
@@ -45,7 +46,11 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
-from onyx.connectors.jira.models import JiraGroupMemberSample, JiraIssueIdPage
+from onyx.connectors.jira.models import (
+    JiraGroupMemberSample,
+    JiraIssueIdPage,
+    JiraProjectSample,
+)
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraCloudIdError,
@@ -66,6 +71,9 @@ from onyx.connectors.jira.utils import (
     get_issue_field,
 )
 from onyx.connectors.source_operations import SourceOperations
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
 _SITE_FIELDS = frozenset({"jira_base_url"})
@@ -801,6 +809,8 @@ _PUBLIC_HOLDER_TYPES = frozenset({HOLDER_TYPE_ANYONE, HOLDER_TYPE_APPLICATION_RO
 _SAMPLE_USERS = 5
 _SAMPLE_ROLES = 3
 _SAMPLE_GROUPS = 3
+_SAMPLE_PROJECTS = 5
+_PROBE_ISSUE_PAGE = 50
 _GROUP_MEMBER_PAGE_SIZE = 50
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
 
@@ -858,19 +868,66 @@ def _email_hint(gateway: JiraSourceOperations) -> str:
     return _CLOUD_EMAIL_HINT if is_cloud_gateway(gateway) else _DC_EMAIL_HINT
 
 
-def _probe_project_key(
+def _jql_issue_projects(
+    gateway: JiraSourceOperations, jql: str
+) -> JiraProjectSample | None:
+    """The distinct projects of the first page of issues the query matches,
+    or None when it matches no issue. Raises ``JiraApiError``."""
+    issues: list[dict[str, Any]]
+    # True when the page holds every matching issue.
+    complete: bool
+    if is_cloud_gateway(gateway):
+        page: JiraIssueIdPage = gateway.search_issue_ids(
+            jql=jql, max_results=_PROBE_ISSUE_PAGE
+        )
+        if not page.issue_ids:
+            return None
+        issues = gateway.bulk_fetch_issues(issue_ids=page.issue_ids, fields="project")
+        complete = page.next_page_token is None and len(issues) == len(page.issue_ids)
+    else:
+        issues = gateway.search_issues(
+            jql=jql,
+            start_at=0,
+            max_results=_PROBE_ISSUE_PAGE,
+            fields="project",
+        )
+        if not issues:
+            return None
+        # Jira can return fewer issues than asked for, so a short page is
+        # complete only when the next offset holds no issue.
+        complete = len(issues) < _PROBE_ISSUE_PAGE and not gateway.search_issues(
+            jql=jql, start_at=len(issues), max_results=1, fields="project"
+        )
+    project_keys: list[str] = []
+    for issue in issues:
+        project: Any = get_issue_field(issue, "project")
+        if not isinstance(project, dict) or not project.get("key"):
+            complete = False
+            continue
+        project_key: str = str(project["key"])
+        if project_key not in project_keys:
+            project_keys.append(project_key)
+    return JiraProjectSample(
+        project_keys=project_keys[:_SAMPLE_PROJECTS],
+        total=len(project_keys) if complete else None,
+    )
+
+
+def _probe_projects(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> str:
-    """The configured project in project mode, the project of the first
-    matching issue in JQL mode, else the first visible project. Permission sync
-    reads the scheme of every project with indexed issues, so a JQL query that
-    matches nothing leaves nothing to check."""
+) -> JiraProjectSample:
+    """The configured project in project mode, the projects of the first
+    matching issues in JQL mode, else the first visible projects. Permission
+    sync reads the scheme of every project with indexed issues, so a JQL query
+    that matches nothing leaves nothing to check."""
     project_key: str = _project_key(config)
     if project_key and not _jql(config):
-        return project_key
+        return JiraProjectSample(project_keys=[project_key], total=1)
     if _jql(config):
         try:
-            issue = _search_one_issue(_gateway(context), _scope_jql(config))
+            sample: JiraProjectSample | None = _jql_issue_projects(
+                _gateway(context), _scope_jql(config)
+            )
         except JiraApiError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot run the JQL query, so it cannot pick a project to "
@@ -878,25 +935,24 @@ def _probe_project_key(
                 summary="Cannot run the JQL query",
                 description="Run JQL query reports why.",
             ) from e
-        if issue is None:
+        if sample is None:
             raise NothingToCheckError(
                 "The JQL query matched no issue, so permission sync reads no "
                 "project yet.",
                 summary="No project to read",
                 description="The JQL query matches no issue yet.",
             )
-        project: Any = get_issue_field(issue, "project")
-        if not isinstance(project, dict) or not project.get("key"):
+        if not sample.project_keys:
             raise UnexpectedValidationError(
-                "Jira returned the first issue of the JQL query without its "
+                "Jira returned the issues of the JQL query without their "
                 "project, so Onyx cannot pick a project to probe.",
                 summary="Sample issue came back without a project",
                 description=(
-                    "Jira returned the query's first issue without its project.\n"
+                    "Jira returned the query's issues without their project.\n"
                     "Re-run the checks."
                 ),
             )
-        return str(project["key"])
+        return sample
     try:
         projects: list[dict[str, Any]] = _gateway(context).list_projects()
     except JiraApiError as e:
@@ -915,7 +971,10 @@ def _probe_project_key(
             summary="No project to read",
             description="List projects reports why.",
         )
-    return str(projects[0]["key"])
+    return JiraProjectSample(
+        project_keys=[str(project["key"]) for project in projects[:_SAMPLE_PROJECTS]],
+        total=len(projects),
+    )
 
 
 def _browse_holders(scheme: dict[str, Any]) -> list[dict[str, Any]]:
@@ -983,12 +1042,12 @@ def _read_permission_scheme(
 
 def _read_scheme_for_dependent_check(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> tuple[str, dict[str, Any]]:
-    """The probe project and its scheme, for a check that needs the scheme
-    first. A failed read is jira_permission_scheme_read's failure."""
+) -> tuple[JiraProjectSample, dict[str, Any]]:
+    """The probe projects and the scheme of the first, for a check that needs
+    the scheme first. A failed read is jira_permission_scheme_read's failure."""
     try:
-        project_key: str = _probe_project_key(context, config)
-        return project_key, _read_permission_scheme(context, config, project_key)
+        sample: JiraProjectSample = _probe_projects(context, config)
+        return sample, _read_permission_scheme(context, config, sample.project_keys[0])
     except ConnectorValidationError as e:
         raise UnexpectedValidationError(
             "Onyx cannot read the permission scheme, so this check cannot run. "
@@ -996,6 +1055,66 @@ def _read_scheme_for_dependent_check(
             summary="Cannot read the permission scheme",
             description="Read permission schemes reports why.",
         ) from e
+
+
+def _check_sampled_projects(
+    context: CapabilityCheckContext,
+    config: JiraConnectorConfig,
+    check_project: Callable[[str, dict[str, Any]], CheckOutput],
+    *,
+    missing: str,
+    skip_summary: str,
+    incomplete_summary: str,
+) -> CheckOutput:
+    """Runs ``check_project`` on the probe projects in order and returns the
+    result of the first that has something to test. ``check_project`` raises
+    ``NothingToCheckError`` for a project with nothing to test. When no project
+    has anything, the check skips only if it read the full scope. A later
+    project whose scheme Onyx cannot read is left out, not failed."""
+    sample, scheme = _read_scheme_for_dependent_check(context, config)
+    skipped: list[NothingToCheckError] = []
+    unreadable: int = 0
+    for index, project_key in enumerate(sample.project_keys):
+        if index:
+            try:
+                scheme = _read_permission_scheme(context, config, project_key)
+            except RateLimitedValidationError:
+                # More calls to a throttled Jira only add load.
+                raise
+            except (ConnectorValidationError, UnexpectedValidationError) as e:
+                logger.warning(
+                    "Jira check skipped project %s: cannot read its permission "
+                    "scheme: %s",
+                    project_key,
+                    e,
+                )
+                unreadable += 1
+                continue
+        try:
+            return check_project(project_key, scheme)
+        except NothingToCheckError as e:
+            skipped.append(e)
+    read: int = len(sample.project_keys) - unreadable
+    if sample.covers_scope and not unreadable:
+        if read == 1:
+            raise skipped[0]
+        raise NothingToCheckError(
+            f"None of the {read} projects in scope {missing}.",
+            summary=skip_summary,
+            description=f"No project in scope {missing}.",
+        )
+    checked: str = (
+        f"Checked {read} of {sample.total} projects"
+        if sample.total is not None
+        else f"Checked {read} projects, and the JQL query matches more"
+    )
+    if unreadable:
+        checked += f" ({unreadable} more could not be read)"
+    raise InconclusiveValidationError(
+        f"{checked}. None of them {missing}, so Onyx cannot verify the rest.",
+        summary=incomplete_summary,
+        description=f"{checked}; none {missing}.",
+    )
 
 
 class _PermissionSchemeReadCheck(_JiraCheck):
@@ -1011,7 +1130,7 @@ class _PermissionSchemeReadCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_key: str = _probe_project_key(context, config)
+        project_key: str = _probe_projects(context, config).project_keys[0]
         scheme: dict[str, Any] = _read_permission_scheme(context, config, project_key)
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         if not holders:
@@ -1047,7 +1166,8 @@ class _ProjectAccessMappableCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        sample, scheme = _read_scheme_for_dependent_check(context, config)
+        project_key: str = sample.project_keys[0]
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
         unsupported: list[str] = sorted(holder_types - SUPPORTED_STATIC_HOLDER_TYPES)
@@ -1166,7 +1286,24 @@ class _ProjectRolesReadCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        return _check_sampled_projects(
+            context,
+            config,
+            lambda project_key, scheme: self._check_project(
+                context, config, project_key, scheme
+            ),
+            missing="grants Browse Projects through a project role",
+            skip_summary="No role grants to test",
+            incomplete_summary="No role grants in sampled projects",
+        )
+
+    def _check_project(
+        self,
+        context: CapabilityCheckContext,
+        config: JiraConnectorConfig,
+        project_key: str,
+        scheme: dict[str, Any],
+    ) -> CheckOutput:
         role_ids: list[str] = _browse_role_ids(scheme)
         if _is_public(scheme):
             raise NothingToCheckError(
@@ -1210,11 +1347,12 @@ class _PermissionUserEmailsCheck(_JiraCheck):
     """People who hold Browse Projects, directly or through a project role,
     have emails. Permission sync maps them to Onyx users by email.
 
-    Passes for a public project (``anyone`` or ``applicationRole``), which syncs
-    without reading users, and for a project with group grants, which give
-    access through group sync. Fails when the sample covers every user the
-    sync reads and no user maps: no user account holds the grant, or every
-    user hides the email. A partial sample is INCOMPLETE."""
+    Moves to the next sampled project past a public project (``anyone`` or
+    ``applicationRole``), which syncs without reading users, and past a project
+    with group grants, which give access through group sync. Fails when the
+    sample covers every user the sync reads and no user maps: no user account
+    holds the grant, or every user hides the email. A partial sample is
+    INCOMPLETE."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -1229,8 +1367,25 @@ class _PermissionUserEmailsCheck(_JiraCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
+        return _check_sampled_projects(
+            context,
+            config,
+            lambda project_key, scheme: self._check_project(
+                context, config, project_key, scheme
+            ),
+            missing="grants access to individual users",
+            skip_summary="No user grants to test",
+            incomplete_summary="No user grants in sampled projects",
+        )
+
+    def _check_project(
+        self,
+        context: CapabilityCheckContext,
+        config: JiraConnectorConfig,
+        project_key: str,
+        scheme: dict[str, Any],
+    ) -> CheckOutput:
         gateway: JiraSourceOperations = _gateway(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
         if _is_public(scheme):
