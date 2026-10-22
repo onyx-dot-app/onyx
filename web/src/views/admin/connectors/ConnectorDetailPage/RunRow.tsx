@@ -28,7 +28,10 @@ import type {
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  runKindLabelKey,
+  runStatusTag,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
@@ -550,7 +553,7 @@ export default function RunRow({
               >
                 <Content
                   icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
-                  title={t(`kinds.${run.kind}`)}
+                  title={t(`kinds.${runKindLabelKey(run)}`)}
                   sizePreset="secondary"
                   variant="body"
                   color="muted"
