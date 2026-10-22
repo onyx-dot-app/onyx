@@ -162,6 +162,8 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
     <InputHorizontal
       title={t(`${copy.section}.title`)}
       description={t(`${copy.section}.description`)}
+      // The title opens the select, like the page's other select rows.
+      withLabel
       fillInput
     >
       {control}
