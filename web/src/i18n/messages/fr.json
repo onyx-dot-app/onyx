@@ -3663,7 +3663,8 @@
       "settings": {
         "description": "Informations et accès du connecteur.",
         "displayName": {
-          "title": "Nom d'affichage du connecteur"
+          "title": "Nom d'affichage",
+          "placeholder": "Ajoutez un nom d'affichage"
         },
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
@@ -3722,7 +3723,7 @@
               "label": "Inclure les pièces jointes"
             },
             "scoped_token": {
-              "label": "Il s'agit d'un jeton d'API avec des portées",
+              "label": "Jeton d'API à portée limitée",
               "description": "Les jetons à portée nécessitent un routage via la passerelle d'API d'Atlassian. Laissez désactivé pour les jetons classiques."
             }
           }
@@ -3849,13 +3850,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Propriétaire du dépôt"
+              "label": "Propriétaire du dépôt",
+              "placeholder": "Indiquez un propriétaire de dépôt"
             },
             "github_mode": {
-              "label": "Contenu GitHub à indexer",
               "tabs": {
                 "repo": {
-                  "label": "Dépôt précis"
+                  "label": "Dépôts précis"
                 },
                 "everything": {
                   "label": "Tout"
@@ -3863,12 +3864,12 @@
               }
             },
             "repositories": {
-              "label": "Nom(s) du dépôt",
-              "description": "Pour plusieurs dépôts, saisissez les noms séparés par des virgules (par ex. repo1,repo2,repo3)"
+              "label": "Noms des dépôts",
+              "placeholder": "Ajoutez un nom de dépôt"
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les dépôts auxquels les identifiants fournis donnent accès !"
+              "label": "Tout indexer",
+              "description": "Onyx indexera tous les dépôts trouvés pour le propriétaire {owner}."
             },
             "include_prs": {
               "label": "Inclure les pull requests",
@@ -3884,7 +3885,8 @@
             },
             "branch": {
               "label": "Branche",
-              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement."
+              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement.",
+              "placeholder": "Ajoutez un nom de branche"
             }
           }
         },
@@ -3967,8 +3969,8 @@
               "description": "Une ou plusieurs clés de projet Bitbucket (séparées par des virgules) pour indexer tous les dépôts de ces projets (par ex. PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Espace de travail",
-              "description": "Ce connecteur indexera tous les dépôts de l'espace de travail."
+              "label": "Indexe tous les dépôts de l'espace de travail",
+              "description": "Onyx indexe tous les dépôts de l'espace de travail que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             }
           }
         },
@@ -4092,8 +4094,8 @@
               }
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera toutes les pages auxquelles les identifiants fournis donnent accès !"
+              "label": "Indexe toutes les pages que le compte peut lire",
+              "description": "Onyx indexe toutes les pages de chaque espace que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "space": {
               "label": "Clé de l'espace",
@@ -4135,8 +4137,8 @@
               }
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les tickets auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les tickets que le compte peut lire",
+              "description": "Onyx indexe tous les tickets de chaque projet que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "project_key": {
               "label": "Clé du projet",
@@ -4323,8 +4325,8 @@
               }
             },
             "everything_description": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les espaces auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les espaces que le compte peut lire",
+              "description": "Onyx indexe toutes les pages de chaque espace que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "spaces": {
               "label": "ID d'espace",
@@ -4764,8 +4766,8 @@
               }
             },
             "everything_description": {
-              "label": "Tout",
-              "description": "Ce connecteur détectera et indexera automatiquement toutes les bases et toutes les tables accessibles avec votre jeton d'API."
+              "label": "Indexe toutes les bases que le jeton peut lire",
+              "description": "Onyx trouve et indexe toutes les bases et tables que le jeton d'API peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "airtable_url": {
               "label": "URL Airtable",
@@ -4804,8 +4806,8 @@
               "description": "Pour plusieurs spots, saisissez-les un par un."
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les spots auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les spots que le compte peut lire",
+              "description": "Onyx indexe tous les spots que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             }
           }
         },
@@ -13583,9 +13585,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "Ajouter"
-      },
       "removeButton": {
         "tooltip": "Retirer"
       }

@@ -93,6 +93,39 @@ export function withoutFormOnlyFields<V>(
   );
 }
 
+/** The config field named `name`, tab contents included. */
+export function findConfigField(
+  configuration: ConnectionConfiguration,
+  name: string
+): ConnectionConfiguration["values"][number] | undefined {
+  const find = (
+    fields: ConnectionConfiguration["values"]
+  ): ConnectionConfiguration["values"][number] | undefined => {
+    for (const field of fields) {
+      if (field.name === name) return field;
+      if (field.type === "tab") {
+        const nested = find(field.tabs.flatMap((tab) => tab.fields));
+        if (nested) return nested;
+      }
+    }
+    return undefined;
+  };
+  return find([...configuration.values, ...configuration.advanced_values]);
+}
+
+/** A list's entries as the config takes them: with the field's `transform`
+ * applied. */
+export function listConfigValue(
+  configuration: ConnectionConfiguration,
+  name: string,
+  entries: string[]
+): string[] | string {
+  const field = findConfigField(configuration, name);
+  return field?.type === "list" && field.transform
+    ? field.transform(entries)
+    : entries;
+}
+
 function withoutBlankEntries(items: readonly unknown[]): unknown[] {
   return items.filter((item) => typeof item !== "string" || item.trim() !== "");
 }
@@ -128,10 +161,10 @@ export function connectorConfigFromForm(
   for (const [key, raw] of Object.entries(values)) {
     if (formControlFieldNames.has(key)) continue;
     const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
-    const field = configuration.values.find((field) => field.name === key);
     config[key] =
-      field && "transform" in field && field.transform
-        ? field.transform(value as string[])
+      Array.isArray(value) &&
+      value.every((entry): entry is string => typeof entry === "string")
+        ? listConfigValue(configuration, key, value)
         : value;
   }
   return withoutFormOnlyFields(source, config);
@@ -258,7 +291,8 @@ export function createConnectorInitialValues(
   const configuration = connectorConfigs[connector];
 
   return {
-    name: "",
+    // Starts as the source's name; the admin can rename it.
+    name: getSourceDisplayName(connector) ?? "",
     groups: [],
     group_roles: {},
     data_access_group_ids: [],

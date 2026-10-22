@@ -1,5 +1,4 @@
 import { useTranslations } from "next-intl";
-import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { Card, Collapsible } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -46,7 +45,7 @@ export default function ConnectorSettingsSection({
               <InputTypeInField
                 name="name"
                 data-testid="connector-name"
-                placeholder={getSourceDisplayName(connector) ?? undefined}
+                placeholder={t("displayName.placeholder")}
                 variant={disabled ? "disabled" : "primary"}
               />
             </InputVertical>

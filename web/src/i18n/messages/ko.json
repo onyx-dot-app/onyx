@@ -3663,7 +3663,8 @@
       "settings": {
         "description": "커넥터 정보 및 액세스.",
         "displayName": {
-          "title": "커넥터 표시 이름"
+          "title": "표시 이름",
+          "placeholder": "표시 이름 추가"
         },
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
@@ -3722,7 +3723,7 @@
               "label": "첨부 파일 포함"
             },
             "scoped_token": {
-              "label": "범위가 지정된 API 토큰입니다",
+              "label": "범위 지정 API 토큰",
               "description": "범위가 지정된 토큰은 Atlassian API 게이트웨이를 거쳐야 합니다. 기존 토큰이면 끄세요."
             }
           }
@@ -3849,13 +3850,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "저장소 소유자"
+              "label": "저장소 소유자",
+              "placeholder": "저장소 소유자 지정"
             },
             "github_mode": {
-              "label": "인덱싱할 GitHub 콘텐츠",
               "tabs": {
                 "repo": {
-                  "label": "특정 저장소"
+                  "label": "지정한 저장소"
                 },
                 "everything": {
                   "label": "전체"
@@ -3863,12 +3864,12 @@
               }
             },
             "repositories": {
-              "label": "저장소 이름",
-              "description": "저장소가 여러 개이면 쉼표로 구분하여 이름을 입력하세요 (예: repo1,repo2,repo3)"
+              "label": "저장소 이름 목록",
+              "placeholder": "저장소 이름 추가"
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 저장소를 인덱싱합니다!"
+              "label": "모두 색인",
+              "description": "Onyx가 소유자 {owner}에 대해 찾은 모든 저장소를 색인합니다."
             },
             "include_prs": {
               "label": "풀 리퀘스트 포함",
@@ -3884,7 +3885,8 @@
             },
             "branch": {
               "label": "브랜치",
-              "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요."
+              "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요.",
+              "placeholder": "브랜치 이름 추가"
             }
           }
         },
@@ -3967,8 +3969,8 @@
               "description": "해당 프로젝트의 모든 저장소를 인덱싱할 Bitbucket 프로젝트 키를 하나 이상 쉼표로 구분하여 입력하세요 (예: PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "워크스페이스",
-              "description": "이 커넥터는 워크스페이스의 모든 저장소를 인덱싱합니다."
+              "label": "워크스페이스의 모든 저장소를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 워크스페이스의 모든 저장소를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             }
           }
         },
@@ -4092,8 +4094,8 @@
               }
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 페이지를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 페이지를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스페이스의 모든 페이지를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "space": {
               "label": "스페이스 키",
@@ -4135,8 +4137,8 @@
               }
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 이슈를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 이슈를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 프로젝트의 모든 이슈를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "project_key": {
               "label": "프로젝트 키",
@@ -4323,8 +4325,8 @@
               }
             },
             "everything_description": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스페이스를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 스페이스를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스페이스의 모든 페이지를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "spaces": {
               "label": "스페이스 ID",
@@ -4764,8 +4766,8 @@
               }
             },
             "everything_description": {
-              "label": "전체",
-              "description": "이 커넥터는 API 토큰으로 액세스할 수 있는 모든 베이스와 테이블을 자동으로 찾아 인덱싱합니다."
+              "label": "토큰이 읽을 수 있는 모든 베이스를 색인합니다",
+              "description": "Onyx는 API 토큰이 읽을 수 있는 모든 베이스와 테이블을 찾아 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4804,8 +4806,8 @@
               "description": "스팟이 여러 개이면 하나씩 입력하세요."
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스팟을 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 스팟을 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스팟을 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             }
           }
         },
@@ -13583,9 +13585,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "새로 추가"
-      },
       "removeButton": {
         "tooltip": "제거"
       }

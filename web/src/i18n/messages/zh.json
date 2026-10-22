@@ -3663,7 +3663,8 @@
       "settings": {
         "description": "连接器信息与访问权限。",
         "displayName": {
-          "title": "连接器显示名称"
+          "title": "显示名称",
+          "placeholder": "添加显示名称"
         },
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",
@@ -3722,7 +3723,7 @@
               "label": "包含附件"
             },
             "scoped_token": {
-              "label": "这是带作用域的 API 令牌",
+              "label": "带作用域的 API 令牌",
               "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。使用经典令牌时请保持关闭。"
             }
           }
@@ -3849,13 +3850,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "仓库所有者"
+              "label": "仓库所有者",
+              "placeholder": "指定仓库所有者"
             },
             "github_mode": {
-              "label": "要索引的 GitHub 内容",
               "tabs": {
                 "repo": {
-                  "label": "指定仓库"
+                  "label": "指定的仓库"
                 },
                 "everything": {
                   "label": "全部"
@@ -3863,12 +3864,12 @@
               }
             },
             "repositories": {
-              "label": "仓库名称",
-              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+              "label": "仓库名称列表",
+              "placeholder": "添加仓库名称"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有仓库！"
+              "label": "索引全部",
+              "description": "Onyx 将索引为所有者 {owner} 找到的所有仓库。"
             },
             "include_prs": {
               "label": "包含拉取请求",
@@ -3884,7 +3885,8 @@
             },
             "branch": {
               "label": "分支",
-              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。"
+              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。",
+              "placeholder": "添加分支名称"
             }
           }
         },
@@ -3967,8 +3969,8 @@
               "description": "一个或多个 Bitbucket 项目键（以逗号分隔），用于索引这些项目中的所有仓库（例如 PROJ1,PROJ2）"
             },
             "workspace_tab": {
-              "label": "工作区",
-              "description": "此连接器将索引工作区中的所有仓库。"
+              "label": "索引工作区中的所有仓库",
+              "description": "Onyx 会索引工作区中所选账户可读取的全部仓库。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -4092,8 +4094,8 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有页面！"
+              "label": "索引该账户可读取的所有页面",
+              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
             },
             "space": {
               "label": "空间键",
@@ -4135,8 +4137,8 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有议题！"
+              "label": "索引该账户可读取的所有问题",
+              "description": "Onyx 会索引所选账户可读取的每个项目中的全部问题。如需缩小范围，请选择其他标签页。"
             },
             "project_key": {
               "label": "项目键",
@@ -4323,8 +4325,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有空间！"
+              "label": "索引该账户可读取的所有空间",
+              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
             },
             "spaces": {
               "label": "空间 ID",
@@ -4764,8 +4766,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将自动发现并索引您的 API 令牌可访问的所有基础和数据表。"
+              "label": "索引该令牌可读取的所有 Base",
+              "description": "Onyx 会查找并索引 API 令牌可读取的全部 Base 和表。如需缩小范围，请选择其他标签页。"
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4804,8 +4806,8 @@
               "description": "如有多个 Spot，请逐个输入。"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有 Spot！"
+              "label": "索引该账户可读取的所有 Spot",
+              "description": "Onyx 会索引所选账户可读取的全部 Spot。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -13583,9 +13585,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "新增"
-      },
       "removeButton": {
         "tooltip": "移除"
       }
