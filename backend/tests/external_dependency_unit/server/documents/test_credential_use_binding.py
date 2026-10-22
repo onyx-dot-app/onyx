@@ -238,6 +238,8 @@ def test_spellings_of_the_pairs_site_match(env: _Env, db_session: Session) -> No
         "http://acme.atlassian.net",
         # The connector gets the value as entered, and needs a scheme.
         "acme.atlassian.net/wiki",
+        # Another path on the same host is another site.
+        f"{_SITE}/other",
     ):
         _refused(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
