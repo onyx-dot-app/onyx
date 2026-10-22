@@ -120,6 +120,12 @@ string values.
 | Coding agent | `CodingAgentStart`, `CodingAgentThinkingDelta`, `CodingAgentFinal` | Query/repo, thinking tokens, final answer. Shares the run with `BashToolStart`/`BashToolDelta` for the shell it drives. |
 | Bash tool | `BashToolStart`, `BashToolDelta` | Command, then `stdout`/`stderr`/`exit_code`/`timed_out`. |
 
+The LLM stream carries raw tool-argument fragments. `MessageRenderer` decodes them
+incrementally only for Python code and the configured reasoning tool. It emits the
+existing `ToolCallArgumentDelta` or reasoning packets. Other tools use finalized
+arguments when execution starts. Saved interrupted calls retain raw arguments for
+display without becoming executable.
+
 ### 4.2 `Placement`
 
 `Placement` (`placement.py:Placement`) is the coordinate every packet carries:

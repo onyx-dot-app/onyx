@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.models import (
     AgentInfo,
@@ -13,9 +13,23 @@ from onyx.agents.models import (
 from onyx.chat.models import ResponseRecord
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
-from onyx.llm.models import AssistantMessage, Message, ToolResultMessage
+from onyx.llm.models import AssistantMessage, Message, ToolCall, ToolResultMessage
+from onyx.utils.logger import setup_logger
+from onyx.utils.streaming_json import parse_partial_object
 
 _STRING = TypeAdapter(str)
+logger = setup_logger()
+
+
+def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
+    """Decode interrupted arguments for display without making the call executable."""
+    if call.arguments_complete or call.argument_error or not call.raw_arguments:
+        return call.arguments
+    try:
+        return parse_partial_object(call.raw_arguments)
+    except ValueError:
+        logger.debug("Interrupted tool arguments cannot be displayed", exc_info=True)
+        return call.arguments
 
 
 def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
@@ -23,7 +37,9 @@ def message_thinking(message: AssistantMessage, think_tool: str | None = None) -
     thinking = message.thinking
     for call in message.tool_calls:
         if call.name == think_tool:
-            thinking += _STRING.validate_python(call.arguments.get("reasoning", ""))
+            thinking += _STRING.validate_python(
+                tool_arguments_for_display(call).get("reasoning", "")
+            )
     return thinking
 
 

@@ -62,13 +62,17 @@ A generation deadline does not cancel the parent agent's signal.
 ## Streaming and cancellation
 
 Text and thinking deltas carry content indices; they have no separate start or end events.
-Tool calls retain start, delta, and end events for incremental arguments and final validation.
+Tool-call start events carry the call ID and name. Delta events carry only new argument text.
+End events carry the finalized `ToolCall`, including parsed arguments or an argument error.
+All content events identify their block through `content_index`.
 
-`stream` yields indexed text and thinking deltas, plus snapshots of the tool call being updated.
-Updates do not contain the accumulated assistant message. Thinking deltas retain provider replay blocks.
-Start, completion, and error events carry isolated full-message snapshots.
-Events describe text, thinking, tool arguments, completion, and errors.
-A successful stream ends with `done`, which contains the completed assistant message.
+During streaming, the caller retains unfinished arguments in `ToolCall.raw_arguments`.
+Parsed `arguments` are available after the tool-call end event. Incomplete calls must not execute.
+Consumers that display arguments as they arrive can decode the raw fragments with `parse_partial_object`.
+Chat does this for Python code and think-tool reasoning; other tools need no partial parsing.
+
+Thinking deltas retain provider replay blocks. Generation lifecycle events carry status and usage, without message content.
+A successful stream ends with `done`. Build the complete message by applying the content events.
 A stream error raises after emitting its error event when generation has started.
 Events also carry effective request settings for diagnostics. Presentation reads these settings from the event.
 Close the stream when consumption stops early.

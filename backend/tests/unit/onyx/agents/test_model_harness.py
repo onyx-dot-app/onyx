@@ -1,6 +1,8 @@
 """The normalized model adapter works without Onyx chat types."""
 
+import threading
 from collections.abc import Generator, Iterator
+from typing import override
 
 import pytest
 
@@ -26,8 +28,9 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationOptions,
     GenerationRequest,
-    GenerationToolCallEvent,
     TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
     ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
@@ -124,6 +127,64 @@ def test_partial_message_closes_before_run_completion(cancelled: bool) -> None:
     )
 
 
+def test_cancelled_argument_stream_retains_partial_snapshot_without_executing() -> None:
+    reached_partial = threading.Event()
+    resume = threading.Event()
+    continued = threading.Event()
+    stop_read = threading.Event()
+    executed: list[str] = []
+
+    class InterruptedModel(FakeModelClient):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            assert context is not None and context.cancellation is not None
+            yield ToolCallStartEvent(
+                content_index=0, tool_call_id="call", tool_name="echo"
+            )
+            yield ToolCallDeltaEvent(content_index=0, arguments_delta='{"value":"par')
+            reached_partial.set()
+            assert resume.wait(5)
+            yield ToolCallDeltaEvent(content_index=0, arguments_delta='tial"}')
+            continued.set()
+            assert stop_read.wait(5)
+            context.cancellation.check()
+
+    echo = AgentTool(
+        definition=ToolDefinition(name="echo", description="Echo", parameters={}),
+        execute=lambda invocation: (
+            executed.append(invocation.call_id) or ToolResult(content="executed")
+        ),
+    )
+    run = Agent(
+        InterruptedModel(lambda _request, _signal: AssistantMessage()), tools=[echo]
+    ).start(max_steps=2)
+    try:
+        assert reached_partial.wait(5)
+        saved = run.snapshot()
+        assert saved.steps[0].message.tool_calls[0].raw_arguments == '{"value":"par'
+        resume.set()
+        assert continued.wait(5)
+        run.cancel()
+        stop_read.set()
+        with pytest.raises(AgentCancelled):
+            run.result()
+        assert run.wait_for_idle(5)
+        interrupted = run.snapshot().steps[0].message.tool_calls[0]
+        assert interrupted.id == "call"
+        assert interrupted.raw_arguments == '{"value":"partial"}'
+        assert interrupted.arguments == {}
+        assert not interrupted.arguments_complete
+        assert saved.steps[0].message.tool_calls[0].raw_arguments == '{"value":"par'
+        assert not executed
+    finally:
+        resume.set()
+        stop_read.set()
+        run.cancel()
+        assert run.wait_for_idle(5)
+
+
 def test_tool_recovery_happens_before_events() -> None:
     llm = ScriptedLLM(
         [
@@ -150,10 +211,10 @@ def test_tool_recovery_happens_before_events() -> None:
         event.generation_event
         for event in events
         if event.type == "message_update"
-        and isinstance(event.generation_event, GenerationToolCallEvent)
+        and isinstance(event.generation_event, ToolCallStartEvent)
     )
-    assert isinstance(tool_event, GenerationToolCallEvent)
-    assert tool_event.tool_call.id == response.tool_call_id
+    assert isinstance(tool_event, ToolCallStartEvent)
+    assert tool_event.tool_call_id == response.tool_call_id
 
 
 def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
@@ -183,13 +244,9 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
             chunks(), PreparedStep(tools=[tool()]).generation_request([])
         )
     )
-    calls = [
-        event.tool_call
-        for event in events
-        if isinstance(event, GenerationToolCallEvent)
-    ]
-    assert calls and calls[0].id
-    assert {call.id for call in calls} == {calls[0].id}
+    starts = [event for event in events if isinstance(event, ToolCallStartEvent)]
+    assert len(starts) == 1 and starts[0].tool_call_id
+    assert accumulator.message.tool_calls[0].id == starts[0].tool_call_id
     accumulator.finalize()
     assert accumulator.message.tool_calls[0].arguments == {"value": 3}
 

@@ -377,20 +377,22 @@ class ThinkingDeltaEvent(GenerationTextEvent):
 
 class GenerationToolCallEvent(_Event):
     content_index: int = Field(ge=0)
-    tool_call: ToolCall
-    argument_deltas: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolCallStartEvent(GenerationToolCallEvent):
     type: Literal["tool_call_start"] = "tool_call_start"
+    tool_call_id: str
+    tool_name: str
 
 
 class ToolCallDeltaEvent(GenerationToolCallEvent):
     type: Literal["tool_call_delta"] = "tool_call_delta"
+    arguments_delta: str
 
 
 class ToolCallEndEvent(GenerationToolCallEvent):
     type: Literal["tool_call_end"] = "tool_call_end"
+    tool_call: ToolCall
 
 
 GenerationContentEvent = Annotated[
@@ -435,16 +437,29 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
     index = event.content_index
     if index > len(message.content):
         raise ValueError("Generation update skips a content block")
-    if isinstance(event, GenerationToolCallEvent):
-        block = event.tool_call.model_copy(deep=True)
+    if isinstance(event, ToolCallStartEvent):
+        if index != len(message.content):
+            raise ValueError("Tool start targets existing content")
+        message.content.append(
+            ToolCall(
+                id=event.tool_call_id,
+                name=event.tool_name,
+                arguments={},
+                raw_arguments="",
+                arguments_complete=False,
+            )
+        )
+        return
+    if isinstance(event, (ToolCallDeltaEvent, ToolCallEndEvent)):
         if index == len(message.content):
-            if not isinstance(event, ToolCallStartEvent):
-                raise ValueError("Tool update requires a started call")
-            message.content.append(block)
+            raise ValueError("Tool update requires a started call")
+        block = message.content[index]
+        if not isinstance(block, ToolCall):
+            raise ValueError("Tool update targets non-tool content")
+        if isinstance(event, ToolCallDeltaEvent):
+            block.raw_arguments = (block.raw_arguments or "") + event.arguments_delta
         else:
-            if not isinstance(message.content[index], ToolCall):
-                raise ValueError("Tool update targets non-tool content")
-            message.content[index] = block
+            message.content[index] = event.tool_call.model_copy(deep=True)
         return
     if index == len(message.content):
         message.content.append(
