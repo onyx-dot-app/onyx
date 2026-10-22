@@ -456,12 +456,12 @@ def _provisioned_sandbox(
                 pass
     finally:
         try:
+            cleanup_api_user_sandbox_rows(user_id)
+        finally:
             store = get_default_file_store()
             prefix = f"sandbox-snapshots/{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/{sandbox_id}/"
             for record in store.list_files_by_prefix(prefix):
                 store.delete_file(record.file_id)
-        finally:
-            cleanup_api_user_sandbox_rows(user_id)
 
 
 @dataclass(frozen=True)
