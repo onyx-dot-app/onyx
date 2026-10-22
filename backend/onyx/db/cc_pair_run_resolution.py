@@ -37,8 +37,7 @@ def resolve_runs__no_commit(
 ) -> int:
     """Marks each (kind, id) resolved against the pair it maps to and returns
     how many it marked. A run resolved before keeps its first resolution and is
-    not counted. ``user_id`` None is the system. Clears the repeated error flag
-    of a pair whose latest failure it resolves."""
+    not counted. ``user_id`` None is the system."""
     if not runs:
         return 0
     stmt = (
@@ -58,33 +57,23 @@ def resolve_runs__no_commit(
         .returning(CCPairRunResolution.attempt_id)
     )
     marked = len(db_session.scalars(stmt).all())
-    clear_resolved_repeated_error_states__no_commit(
-        db_session,
-        {
-            cc_pair_id
-            for (kind, _), cc_pair_id in runs.items()
-            if kind is CCPairRunKind.INDEXING
-        },
-    )
+    clear_resolved_repeated_error_states__no_commit(db_session, set(runs.values()))
     return marked
 
 
 def clear_resolved_repeated_error_states__no_commit(
     db_session: Session, cc_pair_ids: Collection[int]
-) -> None:
-    """Takes each flagged pair whose latest failed index attempt under the
-    current search settings is resolved out of the repeated error state, and
-    clears its alert. The pair keeps its status, so a pair Cloud paused stays
-    paused until an admin resumes it."""
+) -> list[int]:
+    """Clears the repeated error flag and alert of each pair whose latest failed
+    index attempt is resolved, and returns the pairs whose flag it cleared. The
+    pair keeps its status, so a pair Cloud paused stays paused."""
     if not cc_pair_ids:
-        return
+        return []
     latest_failed = db_session.execute(
         select(IndexAttempt.connector_credential_pair_id, IndexAttempt.id)
         .join(SearchSettings)
-        .join(ConnectorCredentialPair)
         .where(
             IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
-            ConnectorCredentialPair.in_repeated_error_state.is_(True),
             SearchSettings.status == IndexModelStatus.PRESENT,
             IndexAttempt.status == IndexingStatus.FAILED,
             IndexAttempt.targeted_reindex_job_id.is_(None),
@@ -101,22 +90,29 @@ def clear_resolved_repeated_error_states__no_commit(
         db_session,
         [(CCPairRunKind.INDEXING, attempt_id) for _, attempt_id in latest_failed],
     )
-    cleared = [
+    resolved_pairs = [
         cc_pair_id
         for cc_pair_id, attempt_id in latest_failed
         if (CCPairRunKind.INDEXING, attempt_id) in resolved
     ]
-    if not cleared:
-        return
-    db_session.execute(
-        update(ConnectorCredentialPair)
-        .where(ConnectorCredentialPair.id.in_(cleared))
-        .values(in_repeated_error_state=False)
-    )
-    for cc_pair_id in cleared:
+    if not resolved_pairs:
+        return []
+    # Unflagged pairs too: a beat can raise the alert just before it sets the flag.
+    for cc_pair_id in resolved_pairs:
         clear_connector_alerts__no_commit(
             db_session, cc_pair_id, NotificationType.CONNECTOR_REPEATED_ERRORS
         )
+    return list(
+        db_session.scalars(
+            update(ConnectorCredentialPair)
+            .where(
+                ConnectorCredentialPair.id.in_(resolved_pairs),
+                ConnectorCredentialPair.in_repeated_error_state.is_(True),
+            )
+            .values(in_repeated_error_state=False)
+            .returning(ConnectorCredentialPair.id)
+        ).all()
+    )
 
 
 def get_resolution_times(

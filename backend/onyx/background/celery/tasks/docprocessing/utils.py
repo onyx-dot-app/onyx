@@ -20,7 +20,12 @@ from onyx.db.index_attempt import (
     get_last_attempt_for_cc_pair,
     get_recent_attempts_for_cc_pair,
 )
-from onyx.db.models import Connector, ConnectorCredentialPair, SearchSettings
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    IndexAttempt,
+    SearchSettings,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
@@ -174,12 +179,11 @@ def repeated_error_alert(
     )
 
 
-def is_in_repeated_error_state(
+def _failed_streak(
     cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
-) -> bool:
-    """Whether the pair's latest attempts under the search settings all failed,
-    enough of them in a row to flag it. A failure an admin resolved breaks the
-    streak, so resolving the latest one keeps the beat from flagging it again."""
+) -> list[IndexAttempt]:
+    """The pair's latest attempts under the search settings when enough of them
+    in a row failed to flag it, else none."""
     failures_needed = failures_before_repeated_error_state(cc_pair.connector)
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair.id,
@@ -191,13 +195,20 @@ def is_in_repeated_error_state(
         attempt.status != IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
     ):
+        return []
+    return most_recent_index_attempts
+
+
+def is_in_repeated_error_state(
+    cc_pair: ConnectorCredentialPair, search_settings_id: int, db_session: Session
+) -> bool:
+    """Whether the beat flags the pair: its failed streak holds no failure an
+    admin resolved, so resolving the latest one keeps the flag down."""
+    streak = _failed_streak(cc_pair, search_settings_id, db_session)
+    if not streak:
         return False
     resolved = get_resolution_times(
-        db_session,
-        [
-            (CCPairRunKind.INDEXING, attempt.id)
-            for attempt in most_recent_index_attempts
-        ],
+        db_session, [(CCPairRunKind.INDEXING, attempt.id) for attempt in streak]
     )
     return not resolved
 
@@ -241,10 +252,9 @@ def should_index(
         search_settings_id=search_settings_instance.id,
         db_session=db_session,
     )
-    all_recent_errored = is_in_repeated_error_state(
-        cc_pair=cc_pair,
-        search_settings_id=search_settings_instance.id,
-        db_session=db_session,
+    # Retries back off on the raw failed streak, so a resolve does not speed them up.
+    all_recent_errored = bool(
+        _failed_streak(cc_pair, search_settings_instance.id, db_session)
     )
 
     # uncomment for debugging
