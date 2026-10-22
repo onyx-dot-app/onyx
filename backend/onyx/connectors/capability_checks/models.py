@@ -37,11 +37,13 @@ from onyx.connectors.exceptions import (
     UnreachableValidationError,
 )
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import CheckRowText, InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
+from onyx.utils.text_processing import shorten
 
 logger = setup_logger()
 
@@ -139,9 +141,7 @@ class CheckAdvisory(BaseModel):
     @field_validator("message")
     @classmethod
     def _bounded(cls, message: str) -> str:
-        if len(message) <= MAX_ADVISORY_LENGTH:
-            return message
-        return message[: MAX_ADVISORY_LENGTH - 1] + "…"
+        return shorten(message, MAX_ADVISORY_LENGTH)
 
 
 class CheckOutput(BaseModel):
@@ -377,17 +377,8 @@ def check_error_detail(
     return detail if detail != CheckErrorDetail() else None
 
 
-class CheckRowText(BaseModel):
-    """A row's line and description. In a hang-guard text,
-    ``TIME_LIMIT_PLACEHOLDER`` in the description gives the guard's time
-    limit, e.g. "10 minutes"."""
-
-    model_config = ConfigDict(frozen=True)
-
-    summary: str
-    description: str
-
-
+# In a hang-guard text's description, gives the guard's time limit, e.g.
+# "10 minutes".
 TIME_LIMIT_PLACEHOLDER = "{time_limit}"
 
 
@@ -400,6 +391,14 @@ def sign_in_timeout_text(source_name: str) -> CheckRowText:
             f"check that {source_name} is reachable from Onyx."
         ),
     )
+
+
+class MicrosoftSignIn(BaseModel):
+    """What a passing Microsoft sign-in check shows: its line, and caveats."""
+
+    summary: str
+    description: str | None = None
+    caveats: list[str] = []
 
 
 class CheckNotRunReason(str, Enum):
@@ -953,3 +952,158 @@ class TwoStepRow(BaseModel):
     summary: str | None = None
     # The step did not finish.
     caveat: str | None = None
+
+
+class CheckReadinessKind(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    MISSING_FIELDS = "missing_fields"
+    INVALID_FIELDS = "invalid_fields"
+    NEEDS_CONFIG = "needs_config"
+    NEEDS_INSTANCE = "needs_instance"
+    RUNNABLE = "runnable"
+
+
+class CheckReadiness(BaseModel):
+    """Whether a check can run in a context, and why not."""
+
+    kind: CheckReadinessKind
+    # The missing or invalid field names, for those kinds.
+    fields: frozenset[str] = frozenset()
+    message: str = ""
+
+
+class CheckOutcome(BaseModel):
+    """
+    Outcome of one check execution, before it is joined with the check's
+    metadata into a result row. Shared across checks with one check_id.
+    """
+
+    status: CapabilityCheckStatus
+    message: str = ""
+    error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
+    not_run_reason: CheckNotRunReason | None = None
+    blocked_by: str | None = None
+    partial: bool = False
+    summary: str | None = None
+    description: str | None = None
+    duration_ms: int | None = None
+    applicable: bool = True
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+
+class DraftCheckStateKind(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    INCOMPLETE = "incomplete"
+    # Legacy: INCOMPLETE in runs started before it had its own value.
+    INDETERMINATE = "indeterminate"
+    SKIPPED = "skipped"
+    # A required check the admin skipped: it holds Create until it runs.
+    STOPPED = "stopped"
+    # A required field is missing or invalid; the check runs once it is valid.
+    WAITING = "waiting"
+    # The access type or the check's ``applies`` excludes it.
+    NOT_APPLICABLE = "not_applicable"
+
+
+class DraftCheckState(BaseModel):
+    check_id: str
+    # The row the check shows on (``CapabilityCheck.row_id``). None in runs
+    # started before rows, which read it as the check_id.
+    row_id: str | None = None
+    # Set on the second step of a two-step row; it names the parent.
+    step: CheckStep | None = None
+    display_name: str
+    capability: CredentialCapability
+    required: bool
+    state: DraftCheckStateKind
+    message: str = ""
+    # Exception class name of a failure, for support diagnosis.
+    error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
+    # Why a SKIPPED check did not run, and the dependency that stopped it.
+    not_run_reason: CheckNotRunReason | None = None
+    blocked_by: str | None = None
+    # An INCOMPLETE check that confirmed part of its scope.
+    partial: bool = False
+    # The row's short line and description.
+    summary: str | None = None
+    description: str | None = None
+    is_fallback: bool = False
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
+    remediation: str | None = None
+    docs_link: str | None = None
+    duration_ms: int | None = None
+    from_cache: bool = False
+    # The check proves the credential works with the credential-bound fields.
+    validates_binding: bool = False
+    # A discovery check: it finds what the credential reaches and never
+    # gates the form.
+    discovery: bool = False
+    # What the check found, once it passed.
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
+
+
+class DraftCheckPlan(BaseModel):
+    """The checks a draft run would hold for a form, each in its state before
+    anything runs: pending, waiting or not applicable."""
+
+    source: DocumentSource
+    access_type: AccessType | None
+    # Field name to error message, for the form.
+    form_errors: dict[str, str]
+    unknown_fields: list[str]
+    checks: list[DraftCheckState]
+
+
+class DraftRunPairScope(BaseModel):
+    """The existing cc-pair that a dry run proposes a state for."""
+
+    cc_pair_id: int
+    connector_id: int
+    input_type: InputType | None
+
+
+class CachedDraftResult(BaseModel):
+    state: DraftCheckStateKind
+    message: str
+    duration_ms: int | None
+    error_type: str | None = None
+    error_kind: CheckErrorKind | None = None
+    error_detail: CheckErrorDetail | None = None
+    summary: str | None = None
+    description: str | None = None
+    # Set only on the admin's own skip or stop (``cache_user_skip``).
+    not_run_reason: CheckNotRunReason | None = None
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
+
+    @property
+    def skipped_by_user(self) -> bool:
+        return self.not_run_reason == CheckNotRunReason.SKIPPED_BY_USER
+
+
+class StoredRunProgress(BaseModel):
+    """The run's finished checks, and the checks still to finish in run
+    order: the first RUNNING, the rest PENDING."""
+
+    check_results: list[CapabilityCheckResult]
+    open_checks: list[DraftCheckState]

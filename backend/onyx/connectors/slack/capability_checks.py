@@ -46,7 +46,6 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckNotApplicableError,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CredentialCapability,
     OptionsFinding,
@@ -63,6 +62,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     UnreachableValidationError,
 )
+from onyx.connectors.models import CheckRowText
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.slack.connector import (
     channel_keys,

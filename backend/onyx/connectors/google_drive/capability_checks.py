@@ -35,7 +35,6 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
@@ -97,7 +96,7 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleCredentialKind,
     google_credential_kind,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = SCOPE_DOC_URL

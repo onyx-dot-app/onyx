@@ -32,6 +32,7 @@ from typing import NoReturn, TypeVar
 
 from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.microsoft_check_text import grant_line, sign_in
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -39,10 +40,10 @@ from onyx.connectors.capability_checks.models import (
     CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
-    CheckRowText,
     CheckStep,
     CountFinding,
     CredentialCapability,
+    MicrosoftSignIn,
     sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
@@ -52,19 +53,12 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     ValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import (
-    grant_line,
-)
 from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
-from onyx.connectors.microsoft_utils.models import (
-    MicrosoftAccountLabels,
-    MicrosoftRowText,
-    MicrosoftSignIn,
-)
-from onyx.connectors.microsoft_utils.sign_in import sign_in
+from onyx.connectors.microsoft_utils.models import MicrosoftAccountLabels
+from onyx.connectors.models import CheckRowText, fit_summary
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
@@ -117,8 +111,6 @@ _CANDIDATE_PAGES = 20
 # A bound on the pages the mailbox count reads. Pages hold up to 999 users, so
 # the count reaches its cap long before this unless Graph sends empty pages.
 _COUNT_PAGES = 20
-# The longest row line the card shows.
-_MAX_LINE = 40
 _LOCKED_STATUS = 423
 _SAMPLED_MAILBOX = "a sampled mailbox"
 
@@ -157,19 +149,12 @@ _DEPENDS_ON: dict[str, tuple[str, ...]] = {
 }
 
 
-def _line(prefix: str, name: str, suffix: str = "") -> str:
-    """``prefix``, ``name`` and ``suffix``, with the name cut to fit the row."""
-    room: int = _MAX_LINE - len(prefix) - len(suffix)
-    cut: str = name if len(name) <= room else name[: room - 1] + "…"
-    return f"{prefix}{cut}{suffix}"
-
-
-def _row(summary: str, description: str) -> MicrosoftRowText:
-    return MicrosoftRowText(summary=summary, description=description)
+def _row(summary: str, description: str) -> CheckRowText:
+    return CheckRowText(summary=summary, description=description)
 
 
 def _raise_row(
-    error_class: type[ValidationError], message: str, row: MicrosoftRowText
+    error_class: type[ValidationError], message: str, row: CheckRowText
 ) -> NoReturn:
     raise error_class(message, summary=row.summary, description=row.description)
 
@@ -214,24 +199,24 @@ def _calendar_denied(mailbox: OutlookMailbox) -> str:
     return f"The app cannot read the calendar of `{mailbox.address}`."
 
 
-def _mail_denied_row(name: str) -> MicrosoftRowText:
+def _mail_denied_row(name: str) -> CheckRowText:
     return _row(
-        _line("No permission to read mail in ", name),
+        fit_summary("No permission to read mail in ", name),
         f"The app cannot open this mailbox.\n{_MAIL_GRANT}",
     )
 
 
-def _unusable_mailbox_row(name: str) -> MicrosoftRowText:
+def _unusable_mailbox_row(name: str) -> CheckRowText:
     return _row(
-        _line("No usable mailbox for ", name),
+        fit_summary("No usable mailbox for ", name),
         "The user exists but has no mailbox the app can open: no Exchange "
         "license, or the mailbox is locked or archived.",
     )
 
 
-def _mailbox_not_found_row(address: str) -> MicrosoftRowText:
+def _mailbox_not_found_row(address: str) -> CheckRowText:
     return _row(
-        _line("Mailbox not found: ", address),
+        fit_summary("Mailbox not found: ", address),
         "No user has this address.\nUse the user principal name or primary SMTP "
         "address in Mailboxes.",
     )
@@ -244,8 +229,8 @@ def _raise_for_mailbox_error(
     *,
     message: str | None = None,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
-    denied_row: MicrosoftRowText | None = None,
-    unending_row: MicrosoftRowText | None = None,
+    denied_row: CheckRowText | None = None,
+    unending_row: CheckRowText | None = None,
     request: str = "the mailbox read",
 ) -> NoReturn:
     raise_for_graph_error(
@@ -326,7 +311,7 @@ class _Candidates:
             ConnectorValidationError,
             f"{describe_group_mismatch(first, 0)}. {GROUP_UNAVAILABLE_REMEDIATION}",
             _row(
-                _line("Group not found: ", first),
+                fit_summary("Group not found: ", first),
                 "A Mailbox Groups entry does not name exactly one Entra group.\n"
                 "Use the group's object ID in Mailbox Groups.",
             ),
@@ -366,10 +351,10 @@ def _first_mailbox_that(
     denied_one: Callable[[OutlookMailbox], str],
     denied_all: str,
     *,
-    denied_all_row: MicrosoftRowText,
-    nothing_to_probe: MicrosoftRowText,
+    denied_all_row: CheckRowText,
+    nothing_to_probe: CheckRowText,
     remediation: str = EXCHANGE_SCOPE_REMEDIATION,
-    unending_row: MicrosoftRowText | None = None,
+    unending_row: CheckRowText | None = None,
 ) -> tuple[OutlookMailbox, T]:
     """Walk the candidates one user at a time until ``opens`` returns
     something on a mailbox, and return that mailbox with what it opened.
@@ -685,7 +670,7 @@ class _MailReadCheck(_ConfigReadingCheck):
                 unending_row=_MESSAGES_UNENDING_ROW,
                 request="the message read",
             )
-        passed: str = _line("Read mail in ", sample.name)
+        passed: str = fit_summary("Read mail in ", sample.name)
         if message is None:
             # A mailbox the walk sampled stays unnamed.
             subject: str = (
@@ -696,7 +681,7 @@ class _MailReadCheck(_ConfigReadingCheck):
             raise InconclusiveValidationError(
                 f"{subject} holds no messages, so the check did not verify that "
                 "the app can read message bodies and attachments.",
-                summary=_line("No mail found in ", sample.name),
+                summary=fit_summary("No mail found in ", sample.name),
                 description=(
                     "The mailbox is empty.\nAdd a mailbox that has mail to "
                     "Mailboxes, then run the checks again."
@@ -724,7 +709,7 @@ class _MailReadCheck(_ConfigReadingCheck):
             if e.status == _LOCKED_STATUS:
                 raise ConnectorValidationError(
                     f"`{mailbox.address}` refused the attachment read ({e.code}).",
-                    summary=_line("Mailbox is locked: ", sample.name),
+                    summary=fit_summary("Mailbox is locked: ", sample.name),
                     description="The mailbox refused the attachment read.\nRe-run "
                     "the checks.",
                 ) from e
@@ -842,7 +827,7 @@ class _CalendarReadCheck(_ConfigReadingCheck):
                     "not verify that the app can read event bodies.",
                     _NO_EVENTS_ROW,
                 )
-            return CheckOutput(summary=_line("Read an event in ", sample.name))
+            return CheckOutput(summary=fit_summary("Read an event in ", sample.name))
         _first_mailbox_that(
             _Candidates(gateway, config),
             calendar_with_event,
@@ -856,21 +841,21 @@ class _CalendarReadCheck(_ConfigReadingCheck):
             remediation=CALENDAR_READ_REMEDIATION,
             unending_row=_EVENTS_UNENDING_ROW,
         )
-        return CheckOutput(summary=_line("Read an event in ", _SAMPLED_MAILBOX))
+        return CheckOutput(summary=fit_summary("Read an event in ", _SAMPLED_MAILBOX))
 
 
-def _calendar_denied_row(name: str) -> MicrosoftRowText:
+def _calendar_denied_row(name: str) -> CheckRowText:
     return _row(
-        _line("No permission to read calendar of ", name),
+        fit_summary("No permission to read calendar of ", name),
         f"The app cannot read this mailbox's calendar.\n{_CALENDAR_GRANT}",
     )
 
 
-def _mailbox_problem_row(problem: MailboxProblem) -> MicrosoftRowText:
+def _mailbox_problem_row(problem: MailboxProblem) -> CheckRowText:
     """The summary can cut the address, so the description starts with the
     full address and the reason."""
     if problem.status is None:
-        row: MicrosoftRowText = _mailbox_not_found_row(problem.address)
+        row: CheckRowText = _mailbox_not_found_row(problem.address)
     elif problem.status == 403:
         row = _mail_denied_row(problem.address)
     else:
@@ -912,7 +897,7 @@ class _ConfiguredMailboxesCheck(_ConfigReadingCheck):
             + ", ".join(problem.describe() for problem in problems)
             + f". {MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}"
         )
-        first: MicrosoftRowText = _mailbox_problem_row(problems[0])
+        first: CheckRowText = _mailbox_problem_row(problems[0])
         if len(problems) == len(addresses):
             _raise_row(
                 ConnectorValidationError,
@@ -941,9 +926,9 @@ class _ConfiguredMailboxesCheck(_ConfigReadingCheck):
         )
 
 
-def _group_problem_row(problem: GroupProblem) -> MicrosoftRowText:
+def _group_problem_row(problem: GroupProblem) -> CheckRowText:
     return _row(
-        _line("Group not found: ", problem.identifier),
+        fit_summary("Group not found: ", problem.identifier),
         f"{problem.describe()}.\nUse the group's object ID in Mailbox Groups.",
     )
 
@@ -991,7 +976,7 @@ class _ConfiguredGroupsCheck(_ConfigReadingCheck):
             + ", ".join(problem.describe() for problem in problems)
             + f". {GROUP_UNAVAILABLE_REMEDIATION}"
         )
-        first: MicrosoftRowText = _group_problem_row(problems[0])
+        first: CheckRowText = _group_problem_row(problems[0])
         if len(problems) == len(groups):
             _raise_row(
                 ConnectorValidationError,

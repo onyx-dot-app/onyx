@@ -24,7 +24,6 @@ from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckStateKind,
     StoredDraftRun,
     load_draft_run,
     read_draft_run_for_user,
@@ -42,6 +41,7 @@ from onyx.connectors.capability_checks.models import (
     CountFinding,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckStateKind,
     FindingOption,
     OptionsFinding,
 )

@@ -6,11 +6,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import findings_setting
-from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
-    decide_draft_check_state,
-)
+from onyx.connectors.capability_checks.draft_runs import decide_draft_check_state
 from onyx.connectors.capability_checks.findings import bounded_count, bounded_options
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
@@ -23,6 +19,8 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CountFinding,
+    DraftCheckState,
+    DraftCheckStateKind,
     OptionsFinding,
     aggregate_capability_verdict,
 )

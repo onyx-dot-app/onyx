@@ -14,8 +14,6 @@ from onyx.connectors.capability_checks.creation import (
     _unfinished_results,
 )
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
     cache_draft_result,
     wait_for_dependencies,
 )
@@ -29,6 +27,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
 from onyx.connectors.capability_checks.runner import (
     merge_capability_results,

@@ -10,8 +10,6 @@ from ee.onyx.connectors.capability_checks import get_perm_sync_capability_checks
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckState,
-    DraftCheckStateKind,
     DraftRunStatus,
 )
 from onyx.connectors.capability_checks.models import (
@@ -23,6 +21,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CheckStep,
     CredentialCapability,
+    DraftCheckState,
+    DraftCheckStateKind,
     TwoStepEntry,
     TwoStepRow,
 )

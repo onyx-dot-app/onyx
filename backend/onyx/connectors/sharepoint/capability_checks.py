@@ -18,13 +18,19 @@ from datetime import datetime
 from typing import NoReturn
 
 from onyx.connectors.capability_checks.form_state import FormState
+from onyx.connectors.capability_checks.microsoft_check_text import (
+    ENTRA_GROUPS_DENIED_ROW,
+    SHAREPOINT_API,
+    grant_line,
+    sign_in,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
+    MicrosoftSignIn,
     form_config,
     sign_in_timeout_text,
 )
@@ -37,12 +43,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     ValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import (
-    ENTRA_GROUPS_DENIED_ROW,
-    SHAREPOINT_API,
-    format_date,
-    grant_line,
-)
+from onyx.connectors.microsoft_utils.check_text import format_date
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaItem,
@@ -67,8 +68,6 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 )
 from onyx.connectors.microsoft_utils.models import (
     MicrosoftAccountLabels,
-    MicrosoftRowText,
-    MicrosoftSignIn,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
@@ -80,7 +79,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
     is_public_login_name,
     resolve_group_id,
 )
-from onyx.connectors.microsoft_utils.sign_in import sign_in
+from onyx.connectors.models import CheckRowText, fit_summary
 from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.sharepoint.connector import (
@@ -149,8 +148,6 @@ _PROBE_DELTA_PAGE_SIZE: int = 25
 # A download probe reads one real file. A large one would spend the check's
 # time budget on bytes the check learns nothing from.
 _MAX_PROBE_DOWNLOAD_BYTES: int = 5 * 1024 * 1024
-# The longest row line the card shows.
-_MAX_LINE: int = 40
 _LOCKED_STATUS: int = 423
 _READ_REMEDIATION: str = (
     "Grant `Sites.Read.All` (application permission) and admin-consent it, or "
@@ -263,12 +260,6 @@ def _graph_api_base(config: SharepointConnectorConfig) -> str:
 # --- Row text ---
 
 
-def _line(prefix: str, name: str) -> str:
-    """``prefix`` and ``name``, with the name cut to fit the row."""
-    room: int = _MAX_LINE - len(prefix)
-    return prefix + (name if len(name) <= room else name[: room - 1] + "…")
-
-
 def _site_name(site_url: str) -> str:
     """The short name of a site, the last part of its URL."""
     return site_url.rstrip("/").rsplit("/", 1)[-1]
@@ -278,69 +269,69 @@ def _counted(count: int, noun: str, plural: str) -> str:
     return f"{count} {noun if count == 1 else plural}"
 
 
-def _row(summary: str, description: str) -> MicrosoftRowText:
-    return MicrosoftRowText(summary=summary, description=description)
+def _row(summary: str, description: str) -> CheckRowText:
+    return CheckRowText(summary=summary, description=description)
 
 
-def _site_denied_row(site_url: str) -> MicrosoftRowText:
+def _site_denied_row(site_url: str) -> CheckRowText:
     return _row(
-        _line("No read access to ", _site_name(site_url)),
+        fit_summary("No read access to ", _site_name(site_url)),
         f"The app has no read grant on {site_url}.\n{_READ_GRANT}",
     )
 
 
-def _site_not_found_row(site_url: str) -> MicrosoftRowText:
+def _site_not_found_row(site_url: str) -> CheckRowText:
     return _row(
-        _line("Site not found: ", _site_name(site_url)),
+        fit_summary("Site not found: ", _site_name(site_url)),
         f"Microsoft found no site at {site_url}.\nCorrect or remove the URL in Sites.",
     )
 
 
-def _site_missing_row(error: MicrosoftGraphError, site_url: str) -> MicrosoftRowText:
+def _site_missing_row(error: MicrosoftGraphError, site_url: str) -> CheckRowText:
     """The row of a site Graph does not serve: locked or archived on a 423,
     otherwise not found."""
     if error.status != _LOCKED_STATUS:
         return _site_not_found_row(site_url)
     return _row(
-        _line("Site is locked: ", _site_name(site_url)),
+        fit_summary("Site is locked: ", _site_name(site_url)),
         f"Microsoft refused {site_url}: it is locked or archived.\nUnlock or "
         "restore the site, or remove it from Sites.",
     )
 
 
-def _site_invalid_row(site_url: str) -> MicrosoftRowText:
+def _site_invalid_row(site_url: str) -> CheckRowText:
     return _row(
-        _line("Site URL not valid: ", _site_name(site_url)),
+        fit_summary("Site URL not valid: ", _site_name(site_url)),
         f"Microsoft refused {site_url}.\nUse a site URL on this tenant in Sites.",
     )
 
 
-def _site_permissions_denied_row(site_url: str) -> MicrosoftRowText:
+def _site_permissions_denied_row(site_url: str) -> CheckRowText:
     return _row(
-        _line("No access to permissions of ", _site_name(site_url)),
+        fit_summary("No access to permissions of ", _site_name(site_url)),
         f"The app cannot read who has access to {site_url}.\n{_REST_GRANT}",
     )
 
 
-def _library_not_found_row(library: str) -> MicrosoftRowText:
+def _library_not_found_row(library: str) -> CheckRowText:
     return _row(
-        _line("Library not found: ", library),
+        fit_summary("Library not found: ", library),
         "The site has no library with this name in its URL.\nCopy the library URL "
         "from the browser into Sites.",
     )
 
 
-def _library_ambiguous_row(site_url: str) -> MicrosoftRowText:
+def _library_ambiguous_row(site_url: str) -> CheckRowText:
     return _row(
-        _line("Library name is ambiguous in ", _site_name(site_url)),
+        fit_summary("Library name is ambiguous in ", _site_name(site_url)),
         "More than one library matches the library part of this site URL.\nUse "
         "the URL of the one library you want in Sites.",
     )
 
 
-def _library_unreadable_row(library: str) -> MicrosoftRowText:
+def _library_unreadable_row(library: str) -> CheckRowText:
     return _row(
-        _line("Library not readable: ", library),
+        fit_summary("Library not readable: ", library),
         f"Microsoft refused the file listing of this library.\n{_RETRY_LINE}",
     )
 
@@ -378,7 +369,7 @@ _FILE_GONE_ROW = _row(
 
 
 def _raise_row(
-    error_class: type[ValidationError], message: str, row: MicrosoftRowText
+    error_class: type[ValidationError], message: str, row: CheckRowText
 ) -> NoReturn:
     raise error_class(message, summary=row.summary, description=row.description)
 
@@ -388,9 +379,9 @@ def _raise_for_read_error(
     denied: str,
     missing: str,
     *,
-    denied_row: MicrosoftRowText | None = None,
-    not_found_row: MicrosoftRowText | None = None,
-    invalid_row: MicrosoftRowText | None = None,
+    denied_row: CheckRowText | None = None,
+    not_found_row: CheckRowText | None = None,
+    invalid_row: CheckRowText | None = None,
     request: str = "the request",
 ) -> NoReturn:
     """``denied`` names what a grant would open, ``missing`` what Graph did
@@ -418,8 +409,8 @@ def _raise_for_rest_error(
     denied: str,
     missing: str,
     *,
-    denied_row: MicrosoftRowText | None = None,
-    not_found_row: MicrosoftRowText | None = None,
+    denied_row: CheckRowText | None = None,
+    not_found_row: CheckRowText | None = None,
     request: str = "the request",
 ) -> NoReturn:
     """SharePoint REST refusals: the permission reads need a grant Graph
@@ -564,7 +555,7 @@ def _site_drives(
     except DriveMetadataError as error:
         _raise_unexpected_library(error)
     except ValueError as error:
-        ambiguous: MicrosoftRowText = _library_ambiguous_row(site.url)
+        ambiguous: CheckRowText = _library_ambiguous_row(site.url)
         raise _LibraryAmbiguous(
             str(error), summary=ambiguous.summary, description=ambiguous.description
         ) from error
@@ -572,7 +563,7 @@ def _site_drives(
         kind: str = (
             "OneDrive" if PERSONAL_SITE_URL_MARKER in site.url.lower() else "library"
         )
-        missing: MicrosoftRowText = _library_not_found_row(site.drive_name)
+        missing: CheckRowText = _library_not_found_row(site.drive_name)
         raise _LibraryNotFound(
             f"No {kind} at `{site.drive_name}` in {site.url}. Use the library's "
             "URL segment (SharePoint strips characters like `&` from it).",
@@ -644,7 +635,7 @@ def _first_indexable_file(
             f"The app cannot list the files of {drive.display_name} in {site.url}",
             f"Graph has no library {drive.display_name} in {site.url}.",
             denied_row=_row(
-                _line("No read access to ", drive.display_name),
+                fit_summary("No read access to ", drive.display_name),
                 f"The app can see the library but not list its files.\n{_READ_GRANT}",
             ),
             not_found_row=_library_unreadable_row(drive.display_name),
@@ -697,8 +688,8 @@ def _site_pages(
         if error.status == 404:
             return None
         name: str = _site_name(site.url)
-        unreadable: MicrosoftRowText = _row(
-            _line("Site pages not readable: ", name),
+        unreadable: CheckRowText = _row(
+            fit_summary("Site pages not readable: ", name),
             f"Microsoft refused the page listing of {site.url}.\n{_LOCKED_LINE}",
         )
         _raise_for_read_error(
@@ -706,7 +697,7 @@ def _site_pages(
             f"The app cannot list the pages of {site.url}",
             f"Graph lists no pages for {site.url}.",
             denied_row=_row(
-                _line("No permission to read pages of ", name),
+                fit_summary("No permission to read pages of ", name),
                 f"The app cannot list the pages of {site.url}.\n{_READ_GRANT}",
             ),
             not_found_row=unreadable,
@@ -789,12 +780,12 @@ def _site_group_users(
             f"The app cannot read the members of `{site_group.title}` on {site.url}",
             f"SharePoint has no group `{site_group.title}` on {site.url}.",
             denied_row=_row(
-                _line("No access to members of ", site_group.title),
+                fit_summary("No access to members of ", site_group.title),
                 f"The app cannot read who is in the site group {site_group.title}."
                 f"\n{_REST_GRANT}",
             ),
             not_found_row=_row(
-                _line("Site group not found: ", site_group.title),
+                fit_summary("Site group not found: ", site_group.title),
                 "SharePoint listed this group and then did not find it.\nRe-run "
                 "the checks.",
             ),
@@ -970,7 +961,7 @@ class _ContentTypesCheck(_SharepointCheck):
 
 def _site_problem(error: MicrosoftGraphError, site_url: str) -> SiteProblem:
     if error.status == 403:
-        row: MicrosoftRowText = _site_denied_row(site_url)
+        row: CheckRowText = _site_denied_row(site_url)
     elif error.status == 400:
         row = _site_invalid_row(site_url)
     else:
@@ -1000,7 +991,7 @@ def _validate_site_urls(
         except SiteUrlBlockedError as error:
             raise ConnectorValidationError(
                 error.message,
-                summary=_line("Site URL not allowed: ", _site_name(site_url)),
+                summary=fit_summary("Site URL not allowed: ", _site_name(site_url)),
                 description=(
                     "The URL points at an address the server must not call.\nUse "
                     "the site's public SharePoint URL in Sites."
@@ -1009,7 +1000,7 @@ def _validate_site_urls(
         except SiteUrlHostError as error:
             raise ConnectorValidationError(
                 error.message,
-                summary=_line("Site is on another host: ", _site_name(site_url)),
+                summary=fit_summary("Site is on another host: ", _site_name(site_url)),
                 description=(
                     "All sites must be on one tenant's SharePoint host.\nRemove "
                     f"{site_url} from Sites, or use its URL on this tenant's host."
@@ -1017,7 +1008,7 @@ def _validate_site_urls(
             ) from error
 
 
-def _first_problem_action(row: MicrosoftRowText) -> str:
+def _first_problem_action(row: CheckRowText) -> str:
     """The action line of a row's description."""
     return row.description.splitlines()[-1]
 
@@ -1061,7 +1052,7 @@ class _ConfiguredSitesCheck(_SharepointCheck):
             raise ConnectorValidationError(
                 f"These URLs name no site: {', '.join(dropped)}. A site URL ends "
                 "in /sites/name, /teams/name or /personal/name.",
-                summary=_line("URL names no site: ", dropped[0]),
+                summary=fit_summary("URL names no site: ", dropped[0]),
                 description=(
                     "The URL has no site name after /sites/, /teams/ or "
                     "/personal/.\nAdd the site name to the URL in Sites."
@@ -1224,7 +1215,7 @@ def _folder_problem(
     missing: bool = error.status == 404
     return LibraryProblem(
         row=_row(
-            _line(
+            fit_summary(
                 "Folder not found: " if missing else "Folder path not valid: ", folder
             ),
             (
@@ -1360,7 +1351,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
                     f"The app cannot read the folder {folder_url}",
                     f"No folder at {folder_url}. Check the path.",
                     denied_row=_row(
-                        _line(
+                        fit_summary(
                             "No read access to ",
                             site.folder_path.rstrip("/").rsplit("/", 1)[-1],
                         ),
@@ -1406,7 +1397,9 @@ class _DocumentsReadCheck(_SharepointCheck):
                 if item is None:
                     continue
                 self._read_one(gateway, drive, item)
-                return CheckOutput(summary=_line("Read a file in ", drive.display_name))
+                return CheckOutput(
+                    summary=fit_summary("Read a file in ", drive.display_name)
+                )
         if not probed:
             _raise_row(
                 NothingToCheckError,
@@ -1447,7 +1440,7 @@ class _DocumentsReadCheck(_SharepointCheck):
                 f"The app cannot read `{item.name}` in {drive.display_name}.",
                 remediation=_READ_REMEDIATION,
                 denied_row=_row(
-                    _line("No read access to files in ", drive.display_name),
+                    fit_summary("No read access to files in ", drive.display_name),
                     f"Documents in {drive.display_name} would index without "
                     f"content.\n{_READ_GRANT}",
                 ),
@@ -1501,7 +1494,7 @@ class _SitePagesReadCheck(_SharepointCheck):
             if page_id is None:
                 continue
             passed: CheckOutput = CheckOutput(
-                summary=_line("Read a page on ", _site_name(site.url))
+                summary=fit_summary("Read a page on ", _site_name(site.url))
             )
             try:
                 gateway.get_site_page(
@@ -1527,7 +1520,9 @@ class _SitePagesReadCheck(_SharepointCheck):
                     f"The app cannot read a page of {site.url}",
                     f"Graph lists page {page_id} of {site.url} and then has no page.",
                     denied_row=_row(
-                        _line("No permission to read pages of ", _site_name(site.url)),
+                        fit_summary(
+                            "No permission to read pages of ", _site_name(site.url)
+                        ),
                         f"The app cannot read the pages of {site.url}.\n{_READ_GRANT}",
                     ),
                     request="the page read",
@@ -1618,7 +1613,7 @@ class _SiteGroupMembersCheck(_SharepointCheck):
             if group is None:
                 continue
             _site_group_users(gateway, site, group)
-            return CheckOutput(summary=_line("Read members of ", group.title))
+            return CheckOutput(summary=fit_summary("Read members of ", group.title))
         _raise_row(
             NothingToCheckError,
             "The probe sites grant no SharePoint group, so no group was read.",
@@ -1668,7 +1663,7 @@ class _EntraNestedGroupsCheck(_SharepointCheck):
                     ),
                     request="the nested group read",
                 )
-            return CheckOutput(summary=_line("Read groups inside ", group.name))
+            return CheckOutput(summary=fit_summary("Read groups inside ", group.name))
         _raise_row(
             NothingToCheckError,
             "The probe sites grant no Entra group the check could resolve.",
@@ -1691,7 +1686,7 @@ def _read_member_page(
         if error.status == _LOCKED_STATUS:
             raise UnexpectedValidationError(
                 f"The app cannot read the members of Entra group {group_id}.",
-                summary=_line("Group is locked: ", name),
+                summary=fit_summary("Group is locked: ", name),
                 description=f"Microsoft refused the member read.\n{_RETRY_LINE}",
             ) from error
         raise_for_graph_error(
@@ -1746,12 +1741,12 @@ class _EntraGroupMembersCheck(_SharepointCheck):
                 gateway, site, _site_assignments(gateway, site)
             )
             if group is not None and _read_member_page(gateway, group.id, group.name):
-                return CheckOutput(summary=_line("Read members of ", group.name))
+                return CheckOutput(summary=fit_summary("Read members of ", group.name))
         fallback: EntraGroup | None = _first_listed_group(gateway)
         if fallback is not None:
             name: str = fallback.display_name or fallback.id
             if _read_member_page(gateway, fallback.id, name):
-                return CheckOutput(summary=_line("Read members of ", name))
+                return CheckOutput(summary=fit_summary("Read members of ", name))
         _raise_row(
             NothingToCheckError,
             "No Entra group was found to read.",
@@ -1793,7 +1788,7 @@ class _EntraGroupEnumerationCheck(_SharepointCheck):
                     "read.\nRe-run the checks."
                 ),
             )
-        return CheckOutput(summary=_line("Listed groups, read ", name))
+        return CheckOutput(summary=fit_summary("Listed groups, read ", name))
 
 
 class _FileGone(Exception):
@@ -1857,7 +1852,9 @@ class _DocumentPermissionsCheck(_SharepointCheck):
                         ],
                     )
                 return CheckOutput(
-                    summary=_line("Read permissions of a file in ", drive.display_name)
+                    summary=fit_summary(
+                        "Read permissions of a file in ", drive.display_name
+                    )
                 )
         if not probed:
             _raise_row(
@@ -1893,7 +1890,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
                 f"in {site.url}",
                 f"SharePoint has no library {drive.display_name} in {site.url}.",
                 denied_row=_row(
-                    _line("No access to permissions of ", drive.display_name),
+                    fit_summary("No access to permissions of ", drive.display_name),
                     "The app cannot read who has access to this library.\n"
                     f"{_REST_GRANT}",
                 ),
@@ -1952,7 +1949,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
                     f"The app cannot read who has access to a folder.\n{_REST_GRANT}",
                 ),
                 not_found_row=_row(
-                    _line("Folder is locked: ", folder_path.rsplit("/", 1)[-1]),
+                    fit_summary("Folder is locked: ", folder_path.rsplit("/", 1)[-1]),
                     f"SharePoint refused the folder read.\n{_LOCKED_LINE}",
                 ),
                 request="the folder permission read",
@@ -1987,7 +1984,7 @@ class _DocumentPermissionsCheck(_SharepointCheck):
                         "`Sites.Read.All` and admin-consent it.",
                     ),
                     not_found_row=_row(
-                        _line("File is locked: ", item.name),
+                        fit_summary("File is locked: ", item.name),
                         f"Microsoft refused the sharing-link read.\n{_LOCKED_LINE}",
                     ),
                     request="the sharing-link read",
@@ -2105,13 +2102,15 @@ class _PagePermissionsCheck(_SharepointCheck):
                         f"{_REST_GRANT}",
                     ),
                     not_found_row=_row(
-                        _line("Page is locked: ", _site_name(page_url)),
+                        fit_summary("Page is locked: ", _site_name(page_url)),
                         f"SharePoint refused the page permission read.\n{_LOCKED_LINE}",
                     ),
                     request="the page permission read",
                 )
             return CheckOutput(
-                summary=_line("Read permissions of a page on ", _site_name(site.url))
+                summary=fit_summary(
+                    "Read permissions of a page on ", _site_name(site.url)
+                )
             )
         if vanished:
             raise InconclusiveValidationError(

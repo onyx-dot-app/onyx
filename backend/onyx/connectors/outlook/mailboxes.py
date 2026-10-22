@@ -8,7 +8,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OutlookGraphError,
 )
-from onyx.connectors.microsoft_utils.models import MicrosoftRowText
+from onyx.connectors.models import CheckRowText
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     EXCHANGE_SCOPE_REMEDIATION,
@@ -94,7 +94,7 @@ def describe_unavailable_groups(
     gateway: OutlookSourceOperations,
     identifiers: list[str],
     *,
-    denied_row: MicrosoftRowText | None = None,
+    denied_row: CheckRowText | None = None,
 ) -> list[GroupProblem]:
     """One problem per configured group that does not name exactly one Entra
     group, empty when all do. ``denied_row`` is the row of a refused group

@@ -1,5 +1,5 @@
 """Plain data the Microsoft connectors share: what an app-only sign-in tells,
-the row text and field labels of their capability checks, and what
+the account's field labels for error text, and what
 SharePoint permission sync works on (principals and role assignments from
 SharePoint REST, the members of an Entra group from Graph). The office365
 objects never leave ``sharepoint_rest``."""
@@ -79,15 +79,6 @@ class MicrosoftTokenInfo(BaseModel):
     certificate_not_after: datetime | None = None
 
 
-class MicrosoftRowText(BaseModel):
-    """The row text of one outcome of a probe."""
-
-    model_config = ConfigDict(frozen=True)
-
-    summary: str
-    description: str
-
-
 class MicrosoftAccountLabels(BaseModel):
     """The names the connector form gives the account's fields, for lines
     that tell the admin which field to fix."""
@@ -111,14 +102,6 @@ class MicrosoftAccountLabels(BaseModel):
             private_key=private_key or f"{prefix} Private Key",
             certificate_password=f"{prefix} Certificate Password",
         )
-
-
-class MicrosoftSignIn(BaseModel):
-    """What a passing sign-in check shows: its line, and caveats."""
-
-    summary: str
-    description: str | None = None
-    caveats: list[str] = []
 
 
 class AccessTokenClaims(BaseModel):

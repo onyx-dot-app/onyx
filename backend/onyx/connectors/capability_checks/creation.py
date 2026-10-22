@@ -24,8 +24,6 @@ from onyx.background.celery.tasks.capability_checks.enqueue import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
-    CachedDraftResult,
-    DraftCheckStateKind,
     cached_check_result,
     form_draft_result_keys,
     get_cached_draft_result,
@@ -35,6 +33,7 @@ from onyx.connectors.capability_checks.draft_runs import (
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import (
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckResult,
     CapabilityCheckStatus,
@@ -42,6 +41,7 @@ from onyx.connectors.capability_checks.models import (
     CheckNotRunReason,
     CredentialCapability,
     CredentialCapabilityReport,
+    DraftCheckStateKind,
     NamedCheckRun,
     PendingCheck,
 )

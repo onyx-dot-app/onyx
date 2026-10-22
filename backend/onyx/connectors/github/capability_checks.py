@@ -27,7 +27,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     sign_in_timeout_text,
 )
@@ -62,7 +61,7 @@ from onyx.connectors.github.source_operations import (
     GitHubSourceOperations,
 )
 from onyx.connectors.github.utils import parse_repository_names
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"

@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, computed_field
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
@@ -34,26 +34,24 @@ from onyx.connectors.capability_checks.findings_setting import (
 )
 from onyx.connectors.capability_checks.models import (
     TRANSIENT_ERROR_KINDS,
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
-    CheckAdvisory,
-    CheckErrorDetail,
-    CheckErrorKind,
-    CheckFinding,
     CheckNotApplicableError,
     CheckNotRunReason,
-    CheckStep,
+    CheckReadinessKind,
     CredentialCapability,
+    DraftCheckState,
+    DraftCheckStateKind,
+    DraftRunPairScope,
     TwoStepEntry,
     TwoStepRow,
     compute_capability_verdicts,
-    parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
-    CheckReadinessKind,
     decide_check_readiness,
     run_order,
 )
@@ -61,7 +59,6 @@ from onyx.connectors.capability_checks.two_step import (
     two_step_rows,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
-from onyx.connectors.models import InputType
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
@@ -99,23 +96,6 @@ _USER_SKIP_REASONS = frozenset(
 )
 _SKIPPED_BY_USER_LINE = "Skipped by you"
 _STOPPED_BY_USER_LINE = "Not run: stopped by user"
-
-
-class DraftCheckStateKind(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    PASSED = "passed"
-    FAILED = "failed"
-    INCOMPLETE = "incomplete"
-    # Legacy: INCOMPLETE in runs started before it had its own value.
-    INDETERMINATE = "indeterminate"
-    SKIPPED = "skipped"
-    # A required check the admin skipped: it holds Create until it runs.
-    STOPPED = "stopped"
-    # A required field is missing or invalid; the check runs once it is valid.
-    WAITING = "waiting"
-    # The access type or the check's ``applies`` excludes it.
-    NOT_APPLICABLE = "not_applicable"
 
 
 _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
@@ -167,52 +147,6 @@ class DraftRerunMode(str, Enum):
     NONE = "none"
     FAILED = "failed"
     ALL = "all"
-
-
-class DraftCheckState(BaseModel):
-    check_id: str
-    # The row the check shows on (``CapabilityCheck.row_id``). None in runs
-    # started before rows, which read it as the check_id.
-    row_id: str | None = None
-    # Set on the second step of a two-step row; it names the parent.
-    step: CheckStep | None = None
-    display_name: str
-    capability: CredentialCapability
-    required: bool
-    state: DraftCheckStateKind
-    message: str = ""
-    # Exception class name of a failure, for support diagnosis.
-    error_type: str | None = None
-    error_kind: CheckErrorKind | None = None
-    error_detail: CheckErrorDetail | None = None
-    # Why a SKIPPED check did not run, and the dependency that stopped it.
-    not_run_reason: CheckNotRunReason | None = None
-    blocked_by: str | None = None
-    # An INCOMPLETE check that confirmed part of its scope.
-    partial: bool = False
-    # The row's short line and description.
-    summary: str | None = None
-    description: str | None = None
-    is_fallback: bool = False
-    missing_fields: list[str] = []
-    invalid_fields: list[str] = []
-    remediation: str | None = None
-    docs_link: str | None = None
-    duration_ms: int | None = None
-    from_cache: bool = False
-    # The check proves the credential works with the credential-bound fields.
-    validates_binding: bool = False
-    # A discovery check: it finds what the credential reaches and never
-    # gates the form.
-    discovery: bool = False
-    # What the check found, once it passed.
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-    @field_validator("findings", mode="before")
-    @classmethod
-    def _known_findings(cls, findings: Any) -> Any:
-        return parse_known_findings(findings)
 
 
 class DraftCheckRunSnapshot(BaseModel):
@@ -296,26 +230,6 @@ def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResu
     ]
 
 
-class DraftCheckPlan(BaseModel):
-    """The checks a draft run would hold for a form, each in its state before
-    anything runs: pending, waiting or not applicable."""
-
-    source: DocumentSource
-    access_type: AccessType | None
-    # Field name to error message, for the form.
-    form_errors: dict[str, str]
-    unknown_fields: list[str]
-    checks: list[DraftCheckState]
-
-
-class DraftRunPairScope(BaseModel):
-    """The existing cc-pair that a dry run proposes a state for."""
-
-    cc_pair_id: int
-    connector_id: int
-    input_type: InputType | None
-
-
 class StoredDraftRun(BaseModel):
     user_id: UUID
     snapshot: DraftCheckRunSnapshot
@@ -333,30 +247,6 @@ class StoredDraftRun(BaseModel):
 
     def renew_lease(self, seconds: float) -> None:
         self.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-
-
-class CachedDraftResult(BaseModel):
-    state: DraftCheckStateKind
-    message: str
-    duration_ms: int | None
-    error_type: str | None = None
-    error_kind: CheckErrorKind | None = None
-    error_detail: CheckErrorDetail | None = None
-    summary: str | None = None
-    description: str | None = None
-    # Set only on the admin's own skip or stop (``cache_user_skip``).
-    not_run_reason: CheckNotRunReason | None = None
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-    @field_validator("findings", mode="before")
-    @classmethod
-    def _known_findings(cls, findings: Any) -> Any:
-        return parse_known_findings(findings)
-
-    @property
-    def skipped_by_user(self) -> bool:
-        return self.not_run_reason == CheckNotRunReason.SKIPPED_BY_USER
 
 
 def decide_draft_check_state(

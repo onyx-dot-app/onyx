@@ -23,7 +23,6 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
-    CheckRowText,
     CredentialCapability,
     sign_in_timeout_text,
 )
@@ -39,7 +38,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     UnreachableValidationError,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
 from onyx.connectors.notion.config import NotionConnectorConfig
 from onyx.connectors.notion.models import NotionSearchObjectType, NotionSearchResponse
 from onyx.connectors.notion.source_operations import (

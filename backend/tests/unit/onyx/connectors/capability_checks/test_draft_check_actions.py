@@ -19,8 +19,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks import creation, draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckState,
-    DraftCheckStateKind,
     DraftRerunMode,
     DraftRunStatus,
     get_cached_draft_result,
@@ -37,6 +35,8 @@ from onyx.connectors.capability_checks.models import (
     CheckOutput,
     CredentialCapability,
     DraftCheckActions,
+    DraftCheckState,
+    DraftCheckStateKind,
     NamedCheckRun,
     aggregate_capability_verdict,
 )

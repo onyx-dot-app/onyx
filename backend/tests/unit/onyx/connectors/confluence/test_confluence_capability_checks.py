@@ -15,10 +15,7 @@ import requests
 from requests import HTTPError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckStateKind,
-    decide_draft_check_state,
-)
+from onyx.connectors.capability_checks.draft_runs import decide_draft_check_state
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
@@ -28,6 +25,7 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CredentialCapability,
+    DraftCheckStateKind,
     FindingOption,
     OptionsFinding,
     compute_capability_verdicts,

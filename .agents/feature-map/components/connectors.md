@@ -461,8 +461,10 @@ SharePoint's gateway is also the only importer of `msal`, `requests` and `office
 under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
 permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
 The SharePoint, OneDrive and Outlook checks share their sign-in probe
-(`microsoft_utils/sign_in.py`) and row text (`microsoft_utils/check_text.py`),
-and every probe after sign-in depends on it. `MicrosoftGraphError` is a
+(`capability_checks/microsoft_check_text.py:sign_in`), and every probe after
+sign-in depends on it. They also share the row text of the errors that
+`microsoft_utils/graph_errors.py` maps (`microsoft_utils/check_text.py`).
+`MicrosoftGraphError` is a
 `SourceApiError` that carries the request and the response body, so a check's
 Error Details show them.
 The GitHub gateway calls the REST API through PyGithub's requester and parses the
@@ -515,12 +517,13 @@ timeout, an unreachable source or an unexpected error. URL query strings and
 the run's credential values are removed from the excerpt and the trace.
 A source gateway's API error subclasses `exceptions.py:SourceApiError`.
 A result's row text is `summary` (a short line) and `description` (up to three
-lines). A check's `ValidationError` can carry both, and the runner falls back to
+lines); `connectors/models.py:fit_summary` cuts a name to fit the line. A
+check's `ValidationError` can carry both, and the runner falls back to
 a default for a timeout, a rate limit, an unreachable source or an unexpected
 error, and to the "Not run: …" line for a stopped check. A request that the
 source does not answer in time raises `exceptions.py:TimedOutValidationError`
 (kind `timeout`). When the hang guard stops a check, the row shows the check's
-`timeout_text` (`models.py:CheckRowText`; sign-in checks use
+`timeout_text` (`connectors/models.py:CheckRowText`; sign-in checks use
 `sign_in_timeout_text`), else the default. `message` stays the
 full text. A passing check gives its line in `CheckOutput.summary`. Checks that
 share a `row_id` are one row on the form: the variants of a probe (token types,

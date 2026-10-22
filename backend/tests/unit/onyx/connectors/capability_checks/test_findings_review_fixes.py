@@ -9,8 +9,6 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import draft_runs, findings_setting
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
-    DraftCheckState,
-    DraftCheckStateKind,
     DraftRunStatus,
     cache_draft_result,
     pending_in_run_order,
@@ -27,6 +25,8 @@ from onyx.connectors.capability_checks.models import (
     CheckFindingKey,
     CheckOutput,
     CountFinding,
+    DraftCheckState,
+    DraftCheckStateKind,
     OptionsFinding,
     parse_known_findings,
 )

@@ -7,8 +7,6 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckState,
-    DraftCheckStateKind,
     decide_draft_check_state,
     draft_result_cache_key,
 )
@@ -17,6 +15,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
+    DraftCheckState,
+    DraftCheckStateKind,
 )
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType

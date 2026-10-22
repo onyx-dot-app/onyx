@@ -20,7 +20,6 @@ from onyx.configs.constants import (
     DocumentSource,
 )
 from onyx.connectors.capability_checks.draft_runs import (
-    DraftCheckPlan,
     DraftCheckRunSnapshot,
     DraftRerunMode,
     read_draft_run_for_user,
@@ -31,10 +30,11 @@ from onyx.connectors.capability_checks.findings_setting import (
 from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
     DraftCheckActions,
+    DraftCheckPlan,
+    StoredRunProgress,
     TwoStepRow,
 )
 from onyx.connectors.capability_checks.stored_run_progress import (
-    StoredRunProgress,
     load_stored_run_progress,
 )
 from onyx.connectors.capability_checks.two_step import (
