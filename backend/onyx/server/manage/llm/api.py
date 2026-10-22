@@ -1136,7 +1136,10 @@ def put_llm_provider(
             else None
         )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
-        llm_provider_upsert_request.custom_config = existing_provider.custom_config
+        # Only preserve existing if caller didn't provide custom_config in this request.
+        # If custom_config was explicitly sent (even if same value), use the caller's value.
+        if llm_provider_upsert_request.custom_config is None:
+            llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     if llm_provider_upsert_request.zoom_voice_provider_id is not None:
         llm_provider_upsert_request.api_key = None
