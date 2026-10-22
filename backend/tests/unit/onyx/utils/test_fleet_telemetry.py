@@ -662,6 +662,37 @@ def test_fetch_counts_connector_batches_and_passes_every_yield_through(
     assert sink.call_args.args == (1, "fetch", {"fetch_errors": 1})
 
 
+def test_fetch_records_events_only_for_document_and_hierarchy_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.indexing import run_docfetching as fetch
+
+    buffer = Mock(count=0)
+    monkeypatch.setattr(fetch, "StageEventBuffer", Mock(return_value=buffer))
+    sink = Mock()
+    monkeypatch.setattr(fetch, "emit_stage_counter", sink)
+    checkpoint_only = (None, None, None, object())
+    failure = (None, None, object(), None)
+    hierarchy = (None, [object()], None, None)
+    docs = ([object()], None, None, None)
+    items = [
+        checkpoint_only,
+        failure,
+        checkpoint_only,
+        hierarchy,
+        docs,
+        checkpoint_only,
+    ]
+
+    assert list(fetch._timed_connector_runs(items, 1)) == items
+    assert buffer.record.call_count == 2
+    assert [call.args[2] for call in sink.call_args_list] == [
+        {"fetch_docs": 0, "fetch_errors": 1},
+        {"fetch_docs": 0, "fetch_errors": 0},
+        {"fetch_docs": 1, "fetch_errors": 0},
+    ]
+
+
 @pytest.mark.parametrize("deployment_type", list(fleet.DeploymentType))
 @pytest.mark.parametrize("service", ["api", "worker"])
 def test_process_heartbeat_only_reports_api_deployment_type(
