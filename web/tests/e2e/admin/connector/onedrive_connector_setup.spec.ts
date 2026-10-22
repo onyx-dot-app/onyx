@@ -38,6 +38,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.fillCertificateCredential();
     await setup.runChecks();
     await setup.selectSpecificScope("owner@example.com");
+    await setup.rerunChecks();
     await setup.submitConnector("Specific OneDrive");
     await setup.expectCreated();
 

@@ -122,3 +122,16 @@ export async function runConnectorChecks(page: Page): Promise<void> {
     timeout: 10_000,
   });
 }
+
+/**
+ * Re-runs the checks after a form change, which starts no run on its own, and
+ * waits until the run covers the current form. Needs `mockPassingConnectorChecks`.
+ */
+export async function rerunConnectorChecks(page: Page): Promise<void> {
+  const settingsChanged = page.getByText("Settings changed", { exact: true });
+  await expect(settingsChanged).toBeVisible();
+  await page
+    .getByRole("button", { name: "Re-run Checks", exact: true })
+    .click();
+  await expect(settingsChanged).toBeHidden({ timeout: 10_000 });
+}

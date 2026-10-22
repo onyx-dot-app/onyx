@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import {
   mockPassingConnectorChecks,
+  rerunConnectorChecks,
   runConnectorChecks,
 } from "@tests/e2e/utils/connectorChecks";
 
@@ -144,6 +145,11 @@ export class OneDriveConnectorSetupPage {
   /** Run the connector checks and wait for the configuration to unlock. */
   async runChecks() {
     await runConnectorChecks(this.page);
+  }
+
+  /** Re-run the checks so they cover a changed form, which Create waits for. */
+  async rerunChecks() {
+    await rerunConnectorChecks(this.page);
   }
 
   async selectSpecificScope(user?: string) {
