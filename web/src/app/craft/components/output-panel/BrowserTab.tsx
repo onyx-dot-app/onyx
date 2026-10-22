@@ -96,20 +96,22 @@ export default function BrowserTab({
           </Section>
         ) : null}
         <Section height="auto" gap={1.5} alignItems="stretch">
-          {!accessRevoked &&
-            onFileOpen &&
-            htmlFiles.map((path) => (
-              <Button
-                key={path}
-                icon={SvgGlobe}
-                prominence="tertiary"
-                tooltip={path}
-                onClick={() => onFileOpen(path, path.split("/").pop() || path)}
-              >
-                {path.split("/").pop() || path}
-              </Button>
-            ))}
-          {apps.map((candidate) => (
+          {[
+            ...(!accessRevoked && onFileOpen
+              ? htmlFiles.map((path) => ({
+                  id: `file:${path}`,
+                  name: path.split("/").pop() || path,
+                  url: path,
+                  state: "ready" as const,
+                  onOpen: () => onFileOpen(path, path.split("/").pop() || path),
+                }))
+              : []),
+            ...apps.map((candidate) => ({
+              ...candidate,
+              id: `app:${candidate.id}`,
+              onOpen: () => onNavigate(candidate.id),
+            })),
+          ].map((candidate) => (
             <Tooltip key={candidate.id} tooltip={candidate.url} side="bottom">
               <SelectCard
                 role="button"
@@ -119,13 +121,13 @@ export default function BrowserTab({
                 border="none"
                 padding={3}
                 rounding={3}
-                onClick={() => onNavigate(candidate.id)}
+                onClick={candidate.onOpen}
               >
                 <Section
                   flexDirection="row"
                   height="auto"
                   gap={3}
-                  justifyContent="start"
+                  justifyContent="center"
                   className="min-w-0"
                 >
                   <SvgGlobe
@@ -134,10 +136,11 @@ export default function BrowserTab({
                     aria-hidden
                   />
                   <Section
+                    width="auto"
                     height="auto"
                     gap={0}
-                    alignItems="start"
-                    className="min-w-0"
+                    alignItems="center"
+                    className="min-w-0 text-center"
                   >
                     <Text
                       font="main-ui-muted"
