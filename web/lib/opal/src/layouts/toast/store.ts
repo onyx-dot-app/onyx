@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useSyncExternalStore } from "react";
 
 // ---------------------------------------------------------------------------

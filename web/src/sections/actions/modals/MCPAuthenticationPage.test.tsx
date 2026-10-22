@@ -1385,6 +1385,52 @@ describe("inline authentication", () => {
     await waitFor(() => expect(resolveServer).toHaveBeenCalledTimes(1));
   });
 
+  test.each([true, false])(
+    "offers pass-through with collapsed connection settings only when OAuth login is enabled: %s",
+    async (oauthEnabled) => {
+      mockNetwork(server, undefined, oauthEnabled);
+      const user = setupUser({
+        pointerEventsCheck: PointerEventsCheckLevel.Never,
+      });
+      render(
+        <MCPAuthenticationPage
+          active
+          variant="page"
+          mcpServer={server}
+          recommendation={{
+            kind: "public",
+            transport: MCPTransportType.SSE,
+            tool_count: 3,
+            server_name: server.name,
+          }}
+          onBusyChange={() => {}}
+          onSaved={async () => {}}
+          onComplete={() => {}}
+          onTriggerFetchTools={async () => {}}
+        />
+      );
+      await waitFor(() =>
+        expect(global.fetch).toHaveBeenCalledWith("/api/auth/type")
+      );
+      expect(
+        screen.getByRole("button", { name: "Expand Advanced settings" })
+      ).toBeVisible();
+      const method = screen.getByRole("combobox", {
+        name: copy.authType.label,
+      });
+      expect(method).toHaveValue(copy.authType.none.label);
+      await user.click(method);
+      const option = screen.queryByRole("option", {
+        name: copy.authType.ptOauth.label,
+      });
+      if (oauthEnabled) {
+        expect(option).toBeVisible();
+      } else {
+        expect(option).not.toBeInTheDocument();
+      }
+    }
+  );
+
   test("keeps detected recommendations visible when users choose other options", async () => {
     mockNetwork(server);
     const user = setupUser({

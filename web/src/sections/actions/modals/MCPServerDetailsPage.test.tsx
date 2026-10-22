@@ -352,6 +352,7 @@ describe("inline server configuration", () => {
       .mockReturnValue({ ...base, permissions, adminCapabilities });
     const saved = jest.fn().mockResolvedValue(undefined);
     const dirty = jest.fn();
+    const authenticate = jest.fn();
     render(
       <>
         <MCPServerDetailsPage
@@ -359,6 +360,7 @@ describe("inline server configuration", () => {
           variant="page"
           server={server}
           onSaved={saved}
+          onAuthenticate={authenticate}
           onBusyChange={() => {}}
           onDirtyChange={dirty}
           {...pageOptions}
@@ -366,7 +368,7 @@ describe("inline server configuration", () => {
         <RefreshSettings />
       </>
     );
-    return { saved, dirty };
+    return { saved, dirty, authenticate };
   }
 
   test("saving metadata preserves Chat availability changed during editing", async () => {
@@ -662,16 +664,82 @@ describe("inline server configuration", () => {
       await screen.findByRole("textbox", { name: "Server Name" }),
       " updated"
     );
-    expect(
-      screen.queryByRole("textbox", { name: /^MCP Server URL/ })
-    ).not.toBeInTheDocument();
+    const endpoint = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+    expect(endpoint).toBeVisible();
+    expect(endpoint).toHaveValue(configuredServer.server_url);
+    expect(endpoint).not.toHaveAttribute("readonly");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
     expect(savedRequests[0]?.payload).not.toHaveProperty("server_url");
     expect(saved).toHaveBeenCalledWith(
       expect.objectContaining({ server_url: configuredServer.server_url })
     );
   });
+
+  test("whitespace-only endpoint edits preserve credentials", async () => {
+    const { authenticate } = renderDetailsPage();
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.type(endpoint, " ");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(endpoint).toHaveValue(configuredServer.server_url)
+    );
+    expect(savedRequests).toHaveLength(0);
+    expect(authenticate).not.toHaveBeenCalled();
+  });
+
+  test("saves an edited endpoint and opens authentication", async () => {
+    const { saved, authenticate } = renderDetailsPage();
+    const user = setupUser();
+    const endpoint = await screen.findByRole("textbox", {
+      name: /^MCP Server URL/,
+    });
+    await user.clear(endpoint);
+    await user.type(endpoint, "https://new.example.com/mcp");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+    expect(savedRequests).toHaveLength(1);
+    expect(savedRequests[0]?.payload).toEqual({
+      server_url: "https://new.example.com/mcp",
+    });
+    expect(saved).toHaveBeenCalledWith(
+      expect.objectContaining({ server_url: "https://new.example.com/mcp" })
+    );
+    expect(authenticate).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(["", "not-a-url", "ftp://example.com/mcp"])(
+    "rejects invalid endpoint %s",
+    async (url) => {
+      renderDetailsPage();
+      const user = setupUser();
+      const endpoint = await screen.findByRole("textbox", {
+        name: /^MCP Server URL/,
+      });
+      await user.clear(endpoint);
+      if (url) await user.type(endpoint, url);
+      await user.tab();
+      expect(
+        (
+          await screen.findAllByText(
+            messages.actions.addMcpModal.serverUrl.invalid
+          )
+        )[0]
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Save Changes" })
+      ).toBeDisabled();
+      expect(endpoint).toHaveAttribute("aria-invalid", "true");
+      expect(endpoint).toHaveAccessibleDescription(
+        messages.actions.addMcpModal.serverUrl.invalid
+      );
+      expect(savedRequests).toHaveLength(0);
+    }
+  );
 
   test.each([
     { adminCapabilities: [] },
@@ -683,9 +751,10 @@ describe("inline server configuration", () => {
       expect(
         await screen.findByRole("textbox", { name: "Server Name" })
       ).toBeDisabled();
-      expect(
-        screen.queryByRole("textbox", { name: /^MCP Server URL/ })
-      ).not.toBeInTheDocument();
+      const endpoint = screen.getByRole("textbox", { name: /^MCP Server URL/ });
+      expect(endpoint).toBeVisible();
+      expect(endpoint).toHaveValue(configuredServer.server_url);
+      expect(endpoint).toHaveAttribute("readonly");
       expect(
         screen.queryByRole("button", { name: "Save Changes" })
       ).not.toBeInTheDocument();
