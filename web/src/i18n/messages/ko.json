@@ -2225,10 +2225,7 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "세션 제목을 생성합니다. 빠르고 저렴한 모델이 적합합니다.",
-        "title": "채팅 이름 지정 모델",
-        "chatDefault": {
-          "label": "채팅 기본값"
-        }
+        "title": "채팅 이름 지정 모델"
       },
       "searchSelectionModel": {
         "description": "검색된 문서를 선택하고 확인합니다. 빠르고 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
@@ -2242,8 +2239,8 @@
         "addProvider": {
           "label": "제공자 추가"
         },
-        "globalDefault": {
-          "description": "각 채팅의 모델"
+        "chatDefault": {
+          "label": "채팅 기본값"
         }
       },
       "advanced": {

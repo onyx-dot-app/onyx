@@ -2225,10 +2225,7 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "Genera los títulos de las sesiones. Un modelo rápido y económico funciona bien.",
-        "title": "Modelo de nombres de chat",
-        "chatDefault": {
-          "label": "Predeterminado del chat"
-        }
+        "title": "Modelo de nombres de chat"
       },
       "searchSelectionModel": {
         "description": "Selecciona y comprueba los documentos recuperados. Un modelo rápido y económico puede reducir los costes de búsqueda, pero puede afectar a la calidad de las respuestas.",
@@ -2242,8 +2239,8 @@
         "addProvider": {
           "label": "Añadir proveedor"
         },
-        "globalDefault": {
-          "description": "El modelo de cada chat"
+        "chatDefault": {
+          "label": "Predeterminado del chat"
         }
       },
       "advanced": {

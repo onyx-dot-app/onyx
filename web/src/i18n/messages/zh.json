@@ -2225,10 +2225,7 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "生成会话标题。快速、低成本的模型即可胜任。",
-        "title": "聊天命名模型",
-        "chatDefault": {
-          "label": "聊天默认"
-        }
+        "title": "聊天命名模型"
       },
       "searchSelectionModel": {
         "description": "选择并检查检索到的文档。快速、低成本的模型可以降低搜索成本，但可能影响回答质量。",
@@ -2242,8 +2239,8 @@
         "addProvider": {
           "label": "添加提供商"
         },
-        "globalDefault": {
-          "description": "每个聊天的模型"
+        "chatDefault": {
+          "label": "聊天默认"
         }
       },
       "advanced": {
