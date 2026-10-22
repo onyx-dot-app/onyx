@@ -1,6 +1,6 @@
 An explanation of how the history of messages, tool calls, and docs are stored in the database:
 
-Messages are grouped by a chat session, a tree structured is used to allow edits and for the
+Messages are grouped by a chat session, a tree structure is used to allow edits and for the
 user to switch between branches. Each ChatMessage is either a user message or an assistant message.
 It should always alternate between the two, System messages, custom agent prompt injections, and
 reminder messages are injected dynamically after the chat session is loaded into memory. The user
@@ -12,7 +12,7 @@ The assistant message includes the response, tool calls, feedback, citations, et
 Things provided as input are part of the user message, things that happen during the inference and
 LLM loop are part of the assistant message.
 
-Reasoning is part of the message or tool call that occured after the reasoning. Really the reasoning
+Reasoning is part of the message or tool call that occurred after the reasoning. Really the reasoning
 should be part of the previous message / tool call because if it branches afterwards as a result of
 the reasoning, this is somewhat unintuitive. But to not include reasoning as part of the user message,
 it is instead included with the following message or tool call. With parallel tool calls, the reasoning
