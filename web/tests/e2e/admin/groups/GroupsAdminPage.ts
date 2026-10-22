@@ -176,6 +176,11 @@ export class GroupsAdminPage {
     return this.page.getByText(displayName, { exact: true });
   }
 
+  /** The switch of one permission row, matched by its display name. */
+  permissionSwitch(displayName: string): Locator {
+    return this.page.getByRole("switch", { name: displayName, exact: true });
+  }
+
   /** Every permission switch on the edit page. */
   get permissionSwitches(): Locator {
     return this.page.getByRole("switch");

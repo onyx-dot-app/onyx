@@ -177,13 +177,17 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         group=0,
     ),
     PermissionRegistryEntry(
-        id="manage_connectors_and_document_sets",
-        display_name="Manage Connectors & Document Sets",
-        description="Add and update connectors and document sets.",
-        permissions=[
-            Permission.MANAGE_CONNECTORS,
-            Permission.MANAGE_DOCUMENT_SETS,
-        ],
+        id="manage_connectors",
+        display_name="Manage Connectors",
+        description="Add and update connectors, their credentials, and indexing.",
+        permissions=[Permission.MANAGE_CONNECTORS],
+        group=0,
+    ),
+    PermissionRegistryEntry(
+        id="manage_document_sets",
+        display_name="Manage Document Sets",
+        description="Add and update document sets from existing connectors.",
+        permissions=[Permission.MANAGE_DOCUMENT_SETS],
         group=0,
     ),
     PermissionRegistryEntry(
