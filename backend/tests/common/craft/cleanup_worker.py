@@ -2,6 +2,8 @@
 
 import os
 import time
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import uuid4
 
 import pytest
@@ -10,6 +12,7 @@ from kubernetes import client
 from onyx.background.celery.apps.client import celery_app
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
 
 APP_NAMESPACE = os.environ.get("HELM_RELEASE_NAMESPACE", "onyx")
 
@@ -48,7 +51,9 @@ def _send_cleanup() -> str:
     return task_id
 
 
-def run_cleanup(core: client.CoreV1Api) -> None:
+def run_cleanup(
+    core: client.CoreV1Api, expected_state: Literal["SUCCESS", "FAILURE"] = "SUCCESS"
+) -> None:
     require_isolated_cleanup_deployment()
     task_id = _send_cleanup()
     marker = f"(ID: {task_id}) completed with state:"
@@ -75,10 +80,21 @@ def run_cleanup(core: client.CoreV1Api) -> None:
                 task_id = _send_cleanup()
                 marker = f"(ID: {task_id}) completed with state:"
                 break
-            assert f"{marker} SUCCESS" in completed, completed
+            assert f"{marker} {expected_state}" in completed, completed
             return
         time.sleep(0.5)
     pytest.fail(
         f"Cleanup task {task_id} did not complete. "
         "The test deployment's heavy worker must use DEBUG logging."
     )
+
+
+def wait_for_resource_grace(
+    core: client.CoreV1Api, pod_name: str, namespace: str
+) -> None:
+    pod = core.read_namespaced_pod(pod_name, namespace, _request_timeout=10)
+    eligible_at = pod.metadata.creation_timestamp + timedelta(
+        seconds=RESOURCE_GRACE_SECONDS + 2
+    )
+    while (remaining := (eligible_at - datetime.now(timezone.utc)).total_seconds()) > 0:
+        time.sleep(min(2, remaining))
