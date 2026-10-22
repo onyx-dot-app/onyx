@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "CQL 쿼리",
-              "description": "중요: 현재 'page' 유형의 객체를 반환하는 CQL 쿼리만 지원합니다. 따라서 모든 CQL 쿼리에는 유일한 유형 필터로 'type=page'가 포함되어야 합니다. 'lastModified' 필터는 커넥터의 폴링 로직에 문제를 일으키므로 사용하지 마세요. 커넥터가 자체 정렬 순서를 설정하므로 ORDER BY도 사용하지 마세요. CQL 쿼리가 반환한 페이지의 모든 첨부 파일과 댓글은 그대로 가져옵니다. 'lastmodified' 필터는 덮어써집니다. 자세한 내용은 Atlassian의 [CQL 문서](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)를 참조하세요."
+              "description": "페이지만 반환하세요. 유형 필터는 `type=page`만 사용하세요.\n정렬과 날짜 필터는 피하세요. `order by` 또는 `lastModified`는 Onyx 자체 쿼리를 깨뜨립니다. [CQL 참조](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "쿼리 테스트"
+              }
             }
           }
         },

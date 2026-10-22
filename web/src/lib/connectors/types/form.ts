@@ -81,6 +81,13 @@ export interface TextOption extends Option {
   default?: string;
   initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
+  /** Monospace text, for code or queries. Text areas only. */
+  mono?: boolean;
+  /**
+   * A button under the field that runs this capability check now, beside
+   * the description. The description's lines show one per row.
+   */
+  testCheck?: { checkId: string; label: string };
   /** Example value shown in the empty input: a message key, or one picked by
    * the form's values (e.g. Confluence's site URL per Cloud or Data Center). */
   placeholder?: string | ((values: Record<string, unknown>) => string);

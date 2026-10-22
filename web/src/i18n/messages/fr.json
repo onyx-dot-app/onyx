@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "Requête CQL",
-              "description": "IMPORTANT : nous ne prenons en charge pour l'instant que les requêtes CQL qui renvoient des objets de type 'page'. Toutes les requêtes CQL doivent donc contenir 'type=page' comme seul filtre de type. N'utilisez pas non plus de filtres sur 'lastModified', car ils perturbent la logique d'interrogation de notre connecteur. N'utilisez pas ORDER BY, car le connecteur définit son propre ordre de tri. Nous récupérons toujours toutes les pièces jointes et tous les commentaires des pages renvoyées par la requête CQL. Les filtres 'lastmodified' sont écrasés. Consultez la [documentation CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) d'Atlassian pour plus de détails."
+              "description": "Renvoyez uniquement des pages. Gardez `type=page` comme seul filtre de type.\nÉvitez le tri et les filtres de date. `order by` ou `lastModified` casseront la requête propre d'Onyx. [Référence CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Tester la requête"
+              }
             }
           }
         },

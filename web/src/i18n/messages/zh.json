@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "CQL 查询",
-              "description": "重要提示：目前仅支持返回“page”类型对象的 CQL 查询。这意味着所有 CQL 查询都必须包含“type=page”作为唯一的类型过滤条件。同时请勿使用“lastModified”过滤条件，否则会影响连接器的轮询逻辑。请勿使用 ORDER BY，因为连接器会设置自己的排序方式。我们仍会获取 CQL 查询所返回页面的所有附件和评论。任何“lastmodified”过滤条件都将被覆盖。更多详情请参阅 Atlassian 的 [CQL 文档](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)。"
+              "description": "仅返回页面。类型过滤器只保留 `type=page`。\n避免排序和日期过滤器。`order by` 或 `lastModified` 会破坏 Onyx 自身的查询。 [CQL 参考](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "测试查询"
+              }
             }
           }
         },

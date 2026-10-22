@@ -11,6 +11,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
+  Button,
   InputKeyValue,
   InputNumber,
   MessageCard,
@@ -19,7 +20,15 @@ import {
 } from "@opal/components";
 import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content, InputHorizontal, InputVertical, Label } from "@opal/layouts";
+import {
+  Content,
+  InputHorizontal,
+  InputVertical,
+  Label,
+  Section,
+} from "@opal/layouts";
+import { SvgRefreshCw } from "@opal/icons";
+import { useConnectorCheckActions } from "@/views/admin/connectors/AddConnectorPage/form/checkActions";
 import {
   InputCheckboxField,
   InputMultiUploadField,
@@ -327,6 +336,9 @@ export const RenderField: FC<RenderFieldProps> = ({
               )
             )
           );
+  const checkActions = useConnectorCheckActions();
+  const testCheck: { checkId: string; label: string } | undefined =
+    field.type === "text" ? field.testCheck : undefined;
   // A text field's placeholder can follow the form's values.
   const textPlaceholder: string | undefined =
     field.type === "text"
@@ -549,31 +561,76 @@ export const RenderField: FC<RenderFieldProps> = ({
           withLabel={field.name}
           title={label}
           subDescription={
-            subDescriptionKey
-              ? t(`subDescriptions.${subDescriptionKey}`, {
-                  connectorName: getSourceDisplayName(connector) ?? connector,
-                })
-              : richDescription
+            testCheck
+              ? undefined
+              : subDescriptionKey
+                ? t(`subDescriptions.${subDescriptionKey}`, {
+                    connectorName: getSourceDisplayName(connector) ?? connector,
+                  })
+                : richDescription
           }
           suffix={optionalSuffix}
         >
-          {field.isTextArea ? (
-            <InputTextAreaField
-              name={field.name}
-              // Tests find a config text field by its config name.
-              data-testid={field.name}
-              placeholder={textPlaceholder}
-              variant={disabled ? "disabled" : undefined}
-              rows={1}
-            />
-          ) : (
-            <InputTypeInField
-              name={field.name}
-              data-testid={field.name}
-              placeholder={textPlaceholder}
-              variant={disabled ? "disabled" : undefined}
-            />
-          )}
+          {/* A field with a test check shows its description beside the
+              button, under the input. */}
+          <Section gap={1} alignItems="stretch" width="full">
+            {field.isTextArea ? (
+              <InputTextAreaField
+                name={field.name}
+                // Tests find a config text field by its config name.
+                data-testid={field.name}
+                placeholder={textPlaceholder}
+                variant={disabled ? "disabled" : undefined}
+                rows={1}
+                mono={field.mono}
+              />
+            ) : (
+              <InputTypeInField
+                name={field.name}
+                data-testid={field.name}
+                placeholder={textPlaceholder}
+                variant={disabled ? "disabled" : undefined}
+              />
+            )}
+            {testCheck && (
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                gap={4}
+                width="full"
+              >
+                <Section
+                  gap={0}
+                  alignItems="start"
+                  width="fit"
+                  // Shrinks and wraps, so the button keeps its width.
+                  className="min-w-0 flex-1"
+                >
+                  {typeof description === "string" &&
+                    description.split("\n").map((line) => (
+                      <OpalText
+                        key={line}
+                        font="secondary-body"
+                        color="text-03"
+                      >
+                        {markdown(line)}
+                      </OpalText>
+                    ))}
+                </Section>
+                <Section width="fit" height="fit" className="shrink-0">
+                  <Button
+                    icon={SvgRefreshCw}
+                    prominence="secondary"
+                    disabled={disabled || checkActions === null}
+                    onClick={() => checkActions?.runCheck(testCheck.checkId)}
+                  >
+                    {testCheck.label}
+                  </Button>
+                </Section>
+              </Section>
+            )}
+          </Section>
         </InputVertical>
       ) : field.type === "string_tab" ? (
         // A tab with nothing to fill in says what it indexes.

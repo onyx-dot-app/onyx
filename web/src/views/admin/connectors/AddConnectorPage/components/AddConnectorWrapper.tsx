@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useMemo,
 } from "react";
 import {
   getSourceDisplayName,
@@ -99,6 +100,10 @@ import { visibleConnectorFields } from "@/views/admin/connectors/AddConnectorPag
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
+import {
+  ConnectorCheckActionsProvider,
+  type ConnectorCheckActions,
+} from "@/views/admin/connectors/AddConnectorPage/form/checkActions";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import { CredentialDerivedConfig } from "@/views/admin/connectors/AddConnectorPage/form/CredentialDerivedConfig";
@@ -138,6 +143,8 @@ interface ConnectorChecksGateProps {
   credential: CredentialRef | null;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   ccPairId: number | null;
+  /** Called when a field runs a check, e.g. to open the checks card. */
+  onCheckRun?: () => void;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -150,9 +157,10 @@ function ConnectorChecksGate({
   source,
   credential,
   ccPairId,
+  onCheckRun,
   children,
 }: ConnectorChecksGateProps) {
-  const { createReady, results } = useConnectorChecks({
+  const { createReady, results, runCheck } = useConnectorChecks({
     source,
     credential,
     ccPairId,
@@ -160,7 +168,21 @@ function ConnectorChecksGate({
   const optionalFailedCount: number = results.filter(
     (result) => result.status === "failed" && !result.required
   ).length;
-  return children({ createReady, optionalFailedCount });
+  // A field (e.g. Confluence's CQL query) can run its check from the form.
+  const actions: ConnectorCheckActions = useMemo(
+    () => ({
+      runCheck: (checkId) => {
+        runCheck(checkId);
+        onCheckRun?.();
+      },
+    }),
+    [runCheck, onCheckRun]
+  );
+  return (
+    <ConnectorCheckActionsProvider value={actions}>
+      {children({ createReady, optionalFailedCount })}
+    </ConnectorCheckActionsProvider>
+  );
 }
 
 async function submitConnector<T>(
@@ -299,6 +321,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const [advisoryOpen, setAdvisoryOpen] = useState(false);
   // Counts View Failed Checks clicks, so the checks card opens and scrolls into view.
   const [expandChecksRequest, setExpandChecksRequest] = useState(0);
+  // Opens the checks card and scrolls it into view.
+  const openChecksCard = useCallback(
+    () => setExpandChecksRequest((count) => count + 1),
+    []
+  );
   // Edit mode: the plan shown for review, with the proposal it was computed
   // for, so a stale plan can be computed again.
   const [planning, setPlanning] = useState(false);
@@ -746,6 +773,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             source={connector}
             credential={toCredentialRef(checkedCredential)}
             ccPairId={edit?.ccPair.id ?? null}
+            onCheckRun={openChecksCard}
           >
             {(checks) => {
               // Only a missing account locks the configuration. The bound

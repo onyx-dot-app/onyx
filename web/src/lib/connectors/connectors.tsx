@@ -238,6 +238,12 @@ export function translateConfiguration(
           ? (values) => translate(placeholder(values))
           : translate(placeholder);
     }
+    if (out.type === "text" && out.testCheck !== undefined) {
+      out.testCheck = {
+        ...out.testCheck,
+        label: translate(out.testCheck.label),
+      };
+    }
     if (out.type === "list" && out.placeholder !== undefined) {
       out.placeholder = translate(out.placeholder);
     }
@@ -960,6 +966,13 @@ export const connectorConfigs: Record<
                 type: "text",
                 label: "connectors.confluence.fields.cql_query.label",
                 name: "cql_query",
+                isTextArea: true,
+                mono: true,
+                testCheck: {
+                  checkId: "confluence_cql_query",
+                  label:
+                    "connectors.confluence.fields.cql_query.testButton.label",
+                },
                 default: "",
                 description:
                   "connectors.confluence.fields.cql_query.description",

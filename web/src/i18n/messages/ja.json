@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "CQL クエリ",
-              "description": "重要: 現在、'page' タイプのオブジェクトを返す CQL クエリのみがサポートされています。つまり、すべての CQL クエリで、唯一のタイプフィルターとして 'type=page' を含める必要があります。また、コネクターのポーリングロジックに問題が生じるため、'lastModified' のフィルターは使用しないでください。コネクターが独自の並び順を設定するため、ORDER BY も使用しないでください。CQL クエリが返すページの添付ファイルとコメントは、すべて取得されます。'lastmodified' フィルターは上書きされます。詳細は、Atlassian の [CQL ドキュメント](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)を参照してください。"
+              "description": "ページのみを返します。タイプフィルターは `type=page` のみにしてください。\n並べ替えと日付フィルターは避けてください。`order by` や `lastModified` は Onyx 独自のクエリを壊します。 [CQL リファレンス](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "クエリをテスト"
+              }
             }
           }
         },

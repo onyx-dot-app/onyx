@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "Consulta CQL",
-              "description": "IMPORTANTE: No momento, só oferecemos suporte a consultas CQL que retornam objetos do tipo 'page'. Isso significa que toda consulta CQL deve conter 'type=page' como único filtro de tipo. Também é importante não usar filtros de 'lastModified', pois eles causam problemas na lógica de sondagem do conector. Não use ORDER BY, porque o conector define sua própria ordenação. Ainda assim, obteremos todos os anexos e comentários das páginas retornadas pela consulta CQL. Qualquer filtro de 'lastmodified' será sobrescrito. Consulte a [documentação de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) da Atlassian para mais detalhes."
+              "description": "Retorne apenas páginas. Mantenha `type=page` como o único filtro de tipo.\nEvite ordenação e filtros de data. `order by` ou `lastModified` quebrarão a consulta do próprio Onyx. [Referência de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Testar consulta"
+              }
             }
           }
         },

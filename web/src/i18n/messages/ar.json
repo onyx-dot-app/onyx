@@ -4118,7 +4118,10 @@
             },
             "cql_query": {
               "label": "استعلام CQL",
-              "description": "مهم: ندعم حاليًا فقط استعلامات CQL التي تعيد كائنات من النوع \"page\". هذا يعني أن كل استعلام CQL يجب أن يحتوي على \"type=page\" كمرشح النوع الوحيد. ومن المهم أيضًا ألا تُستخدم مرشحات \"lastModified\" لأنها تسبب مشكلات في منطق استطلاع الموصل. لا تستخدم ORDER BY لأن الموصل يحدد ترتيب الفرز بنفسه. سنجلب مع ذلك جميع المرفقات والتعليقات للصفحات التي يعيدها استعلام CQL. ستُستبدل أي مرشحات \"lastmodified\". راجع [توثيق CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) من Atlassian لمزيد من التفاصيل."
+              "description": "أرجع الصفحات فقط. أبقِ `type=page` عامل تصفية النوع الوحيد.\nتجنب الفرز وعوامل تصفية التاريخ. ستؤدي `order by` أو `lastModified` إلى تعطيل استعلام Onyx الخاص. [مرجع CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "اختبار الاستعلام"
+              }
             }
           }
         },
