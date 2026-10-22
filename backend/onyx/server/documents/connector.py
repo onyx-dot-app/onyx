@@ -59,7 +59,10 @@ from onyx.connectors.factory import (
     validate_connector_config,
     validate_connector_credential_bindings,
 )
-from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
+from onyx.connectors.google_utils.google_auth import (
+    GoogleUnreachableError,
+    get_google_oauth_creds,
+)
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
     get_auth_url,
@@ -300,10 +303,14 @@ def check_drive_tokens(
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
-    google_drive_creds = get_google_oauth_creds(
-        token_json_str=token_json_str,
-        source=DocumentSource.GOOGLE_DRIVE,
-    )
+    try:
+        google_drive_creds = get_google_oauth_creds(
+            token_json_str=token_json_str,
+            source=DocumentSource.GOOGLE_DRIVE,
+        )
+    except GoogleUnreachableError as e:
+        # No answer from Google says nothing about the token.
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e)) from e
     if google_drive_creds is None:
         return AuthStatus(authenticated=False)
     return AuthStatus(authenticated=True)
