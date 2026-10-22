@@ -45,7 +45,10 @@ An admin experiences it directly on the embedding-model page. They pick a new
 embedding model and start a re-index. The picker lists only the selectable models of
 the registry (self-hosted Granite, Voyage 4 Nano and Nemotron; Cohere, OpenAI, Google
 and Voyage cloud models). Custom Hugging Face models, LiteLLM, Azure and Bifrost are in
-a collapsed Advanced section. A legacy model (for example nomic, E5, Cohere v3) shows
+an Advanced section. It is collapsed by default, but the cloud section opens when the
+current or staged model is a LiteLLM, Azure or Bifrost model, and shows that model as a
+card. A search for that model's name also finds it. The admin can still close the
+section. A legacy model (for example nomic, E5, Cohere v3) shows
 only while it is the current model. It can re-index, but it cannot be chosen as a new
 target. Before the re-index starts, the API embeds a fixed test string with the stored
 provider settings for Bifrost and for every selectable cloud model. From that point,
