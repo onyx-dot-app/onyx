@@ -610,12 +610,15 @@ document to the wrong person.
    A source whose crawl can outlast that timeout (Google Drive) sets
    `DocSyncConfig.checkpointed_doc_sync_func`. The task passes it a
    `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
-   which saves the crawl checkpoint to the file store at most every
-   `CHECKPOINT_SAVE_INTERVAL_SECONDS`, with the crawl's `poll_range_start`/
-   `poll_range_end`, on the attempt row. The next attempt resumes the newest
-   checkpoint of a failed attempt younger than `NUM_DAYS_TO_KEEP_CHECKPOINTS`
-   when only failures followed it, keeps that window, and on success sets
-   `last_time_perm_sync` to the window end and deletes the chain's checkpoints.
+   which saves one checkpoint file per cc_pair to the file store at most every
+   `CHECKPOINT_SAVE_INTERVAL_SECONDS`, holding the crawl window, the saving
+   attempt, and the connector config hash. The next attempt resumes it when the
+   saving attempt failed, only failures followed, the file is younger than
+   `NUM_DAYS_TO_KEEP_CHECKPOINTS`, the config hash matches, and no full refresh
+   was requested since. It keeps that window, and on success sets
+   `last_time_perm_sync` to the window end and deletes the file. Saving stops
+   after a failed element write, so the resume retries that element. Connector
+   deletion removes the file.
    The open attempt is also the per-cc_pair lock, for doc sync and group sync.
    The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
    and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`

@@ -6323,18 +6323,6 @@ class DocPermissionSyncAttempt(Base):
 
     celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
 
-    # Saved crawl progress of a resumable doc sync, and the time window it covers.
-    # The next attempt continues a failed one from here instead of from the start.
-    checkpoint_pointer: Mapped[str | None] = mapped_column(String, default=None)
-    poll_range_start: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), default=None
-    )
-    poll_range_end: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), default=None
-    )
-    # Connector config the checkpoint was crawled with. A different config never resumes it.
-    connector_config_hash: Mapped[str | None] = mapped_column(String, default=None)
-
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair"

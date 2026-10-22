@@ -5,10 +5,9 @@ and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, cast
 
-from pydantic import BaseModel
 from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
@@ -427,53 +426,36 @@ def complete_doc_permission_sync_attempt(
         raise
 
 
-class DocPermissionSyncCheckpointRef(BaseModel):
-    attempt_id: int
-    checkpoint_pointer: str
-    poll_range_start: datetime | None
-    poll_range_end: datetime
-
-
-def get_resumable_doc_permission_sync_checkpoint(
+def is_doc_permission_sync_attempt_resumable(
     db_session: Session,
     cc_pair_id: int,
+    attempt_id: int,
     current_attempt_id: int,
-    max_age: timedelta,
-    connector_config_hash: str | None,
-) -> DocPermissionSyncCheckpointRef | None:
-    """The newest recent checkpoint of a failed attempt, when every attempt
-    after it also failed. An attempt that dies before its first save leaves the
-    older checkpoint resumable; any other outcome since means a fresh crawl.
-    A checkpoint older than the pair's perm_sync_pending_since predates a
-    requested full refresh, and one crawled with another connector config
-    covers a different scope. Neither is resumed."""
-    pending_since = db_session.execute(
-        select(ConnectorCredentialPair.perm_sync_pending_since).where(
-            ConnectorCredentialPair.id == cc_pair_id
-        )
-    ).scalar_one_or_none()
+) -> bool:
+    """Whether the checkpoint a failed attempt left may continue: the attempt
+    started after any requested full refresh (perm_sync_pending_since), and
+    only failures came after it. An attempt that dies before its first save
+    leaves the older checkpoint resumable."""
     holder = db_session.execute(
         select(DocPermissionSyncAttempt)
-        .where(
-            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
-            DocPermissionSyncAttempt.id != current_attempt_id,
-            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
-            DocPermissionSyncAttempt.checkpoint_pointer.is_not(None),
-            DocPermissionSyncAttempt.poll_range_end.is_not(None),
-            DocPermissionSyncAttempt.time_created
-            >= datetime.now(timezone.utc) - max_age,
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.id
+            == DocPermissionSyncAttempt.connector_credential_pair_id,
         )
-        .order_by(DocPermissionSyncAttempt.time_created.desc())
-        .limit(1)
+        .where(
+            DocPermissionSyncAttempt.id == attempt_id,
+            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
+            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
+            or_(
+                ConnectorCredentialPair.perm_sync_pending_since.is_(None),
+                DocPermissionSyncAttempt.time_created
+                >= ConnectorCredentialPair.perm_sync_pending_since,
+            ),
+        )
     ).scalar_one_or_none()
-    if (
-        holder is None
-        or holder.checkpoint_pointer is None
-        or holder.poll_range_end is None
-        or (pending_since is not None and holder.time_created < pending_since)
-        or holder.connector_config_hash != connector_config_hash
-    ):
-        return None
+    if holder is None:
+        return False
 
     later_non_failure = db_session.execute(
         select(DocPermissionSyncAttempt.id)
@@ -485,36 +467,7 @@ def get_resumable_doc_permission_sync_checkpoint(
         )
         .limit(1)
     ).scalar_one_or_none()
-    if later_non_failure is not None:
-        return None
-
-    return DocPermissionSyncCheckpointRef(
-        attempt_id=holder.id,
-        checkpoint_pointer=holder.checkpoint_pointer,
-        poll_range_start=holder.poll_range_start,
-        poll_range_end=holder.poll_range_end,
-    )
-
-
-def set_doc_permission_sync_attempt_checkpoint(
-    db_session: Session,
-    attempt_id: int,
-    checkpoint_pointer: str | None,
-    poll_range_start: datetime | None = None,
-    poll_range_end: datetime | None = None,
-    connector_config_hash: str | None = None,
-) -> None:
-    db_session.execute(
-        update(DocPermissionSyncAttempt)
-        .where(DocPermissionSyncAttempt.id == attempt_id)
-        .values(
-            checkpoint_pointer=checkpoint_pointer,
-            poll_range_start=poll_range_start,
-            poll_range_end=poll_range_end,
-            connector_config_hash=connector_config_hash,
-        )
-    )
-    db_session.commit()
+    return later_non_failure is None
 
 
 # =============================================================================
