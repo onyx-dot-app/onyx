@@ -150,7 +150,7 @@ jobs:
           set -eo pipefail
           # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
           entries=""
-          for f in $(find backend/tests/integration/tests/craft/k8s \
+          for f in $(find backend/tests/integration/tests/craft/k8s backend/tests/integration/tests/craft/k8s/cleanup \
               -maxdepth 1 -name 'test_*.py' -type f | sort); do
             base=$(basename "$f" .py)
             shard="${base#test_}"
