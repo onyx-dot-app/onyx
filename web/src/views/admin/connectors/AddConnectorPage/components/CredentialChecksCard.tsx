@@ -195,66 +195,69 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     />
   ) : undefined;
 
-  // Left slot: "Required", or on hover Skip Check for a running check or an
-  // optional expected one.
   // A required expected check cannot be skipped.
   const skippable: boolean =
-    check.state === "running" || (expected && !check.required);
-  const leftSlot =
-    skippable && onSkipCheck ? (
-      <Hoverable.Item
-        group={ROW_HOVER_GROUP}
-        variant="replace-on-hover"
-        resting={required}
-      >
-        <Button
-          icon={SvgXCircle}
-          prominence="tertiary"
-          size="sm"
-          tooltip={t("actions.skip.label")}
-          aria-label={t("actions.skip.label")}
-          onClick={noProp(() => onSkipCheck(check.check_id))}
-        />
-      </Hoverable.Item>
-    ) : (
-      required
-    );
+    (check.state === "running" || (expected && !check.required)) &&
+    onSkipCheck !== undefined;
+  const runnable: boolean =
+    (check.state === "skipped" || expected) && onRunCheck !== undefined;
 
-  // Right slot: a finished check's chevron, or on hover a skipped or queued
-  // check's Run. Otherwise an empty slot of the same width keeps the rows
-  // aligned.
-  const rightSlot = expandable ? (
-    // Points right closed and turns down open, as a Divider's chevron does.
-    // Its click reaches the line's, which toggles the details.
-    <div
-      className={cn(
-        "transition-transform duration-200 ease-in-out",
-        expanded && "rotate-90"
-      )}
+  // Every action button sits at the end, side by side: Skip and Run appear on
+  // hover, and a finished check's chevron always shows. At least 1.25rem
+  // wide, so rows without a button still line up.
+  const actions = (
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      width="fit"
+      height="fit"
+      gap={0}
+      className="min-w-5"
     >
-      <Button
-        icon={SvgChevronRight}
-        prominence="tertiary"
-        size="md"
-        aria-expanded={expanded}
-        tooltip={t(expanded ? "details.collapse" : "details.expand")}
-        aria-label={t(expanded ? "details.collapse" : "details.expand")}
-      />
-    </div>
-  ) : (check.state === "skipped" || expected) && onRunCheck ? (
-    // Hidden at rest, but its width stays.
-    <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
-      <Button
-        icon={SvgPlay}
-        prominence="tertiary"
-        size="md"
-        tooltip={t("actions.run.label")}
-        aria-label={t("actions.run.label")}
-        onClick={noProp(() => onRunCheck(check.check_id))}
-      />
-    </Hoverable.Item>
-  ) : (
-    <div aria-hidden className="w-(--height-line-h3-section) shrink-0" />
+      {skippable && (
+        <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
+          <Button
+            icon={SvgXCircle}
+            prominence="tertiary"
+            size="md"
+            tooltip={t("actions.skip.label")}
+            aria-label={t("actions.skip.label")}
+            onClick={noProp(() => onSkipCheck?.(check.check_id))}
+          />
+        </Hoverable.Item>
+      )}
+      {runnable && (
+        <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
+          <Button
+            icon={SvgPlay}
+            prominence="tertiary"
+            size="md"
+            tooltip={t("actions.run.label")}
+            aria-label={t("actions.run.label")}
+            onClick={noProp(() => onRunCheck?.(check.check_id))}
+          />
+        </Hoverable.Item>
+      )}
+      {expandable && (
+        // Points right closed and turns down open, as a Divider's chevron
+        // does. Its click reaches the line's, which toggles the details.
+        <div
+          className={cn(
+            "transition-transform duration-200 ease-in-out",
+            expanded && "rotate-90"
+          )}
+        >
+          <Button
+            icon={SvgChevronRight}
+            prominence="tertiary"
+            size="md"
+            aria-expanded={expanded}
+            tooltip={t(expanded ? "details.collapse" : "details.expand")}
+            aria-label={t(expanded ? "details.collapse" : "details.expand")}
+          />
+        </div>
+      )}
+    </Section>
   );
 
   const docs: RichStr | undefined =
@@ -289,18 +292,27 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     variant: logVariant,
     icon,
     title: check.display_name,
+    // The message at the start, "Required" at the end.
     centerChildren: (
-      <OverflowText
-        as="p"
-        font={messageFont}
-        color={messageColor}
-        textPosition="text-start"
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        height="fit"
+        gap={2}
+        className="min-w-0"
       >
-        {check.message || t(detail)}
-      </OverflowText>
+        <OverflowText
+          as="p"
+          font={messageFont}
+          color={messageColor}
+          textPosition="text-start"
+        >
+          {check.message || t(detail)}
+        </OverflowText>
+        {required}
+      </Section>
     ),
-    rightChildren: leftSlot,
-    endButton: rightSlot,
+    endButton: actions,
   };
 
   return (
@@ -313,7 +325,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
           expanded={expanded}
           expandedContent={details}
         />
-      ) : (check.state === "skipped" || expected) && onRunCheck ? (
+      ) : runnable && onRunCheck ? (
         // The row does what its end button does: a click anywhere runs it.
         <Log {...line} onClick={() => onRunCheck(check.check_id)} />
       ) : (
