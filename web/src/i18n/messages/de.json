@@ -2636,10 +2636,6 @@
         "description": "Dieser Konnektor befindet sich in einem ungültigen Zustand. Bitte aktualisieren Sie Ihre Anmeldedaten oder erstellen Sie einen neuen Konnektor, bevor Sie neu indexieren.",
         "title": "Ungültiger Konnektorzustand"
       },
-      "permSyncPending": {
-        "description": "Suche und Chat-Antworten können die Dokumente dieses Connectors auslassen, bis seine erste Berechtigungssynchronisierung abgeschlossen ist. Onyx zeigt ein Dokument nur Personen, die es in der Quelle öffnen können.",
-        "title": "Berechtigungen sind noch nicht synchronisiert"
-      },
       "loadError": {
         "title": "Die Informationen zum Konnektor mit der ID {ccPairId} konnten nicht abgerufen werden",
         "unknownMessage": "Unbekannter Fehler"
@@ -2690,6 +2686,10 @@
             "syncing": "Eine Berechtigungssynchronisierung ist bereits geplant oder läuft"
           }
         }
+      },
+      "permSyncPending": {
+        "description": "Suche und Chat-Antworten können die Dokumente dieses Konnektors auslassen, bis seine erste Berechtigungssynchronisierung erfolgreich abgeschlossen ist. {appName} zeigt ein Dokument nur Personen, die es in der Quelle öffnen können.",
+        "title": "Berechtigungen sind noch nicht synchronisiert"
       },
       "reEnableModal": {
         "actionButton": {

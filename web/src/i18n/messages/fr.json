@@ -2636,10 +2636,6 @@
         "description": "Ce connecteur est dans un état non valide. Mettez à jour vos identifiants ou créez un nouveau connecteur avant de réindexer.",
         "title": "État du connecteur non valide"
       },
-      "permSyncPending": {
-        "description": "La recherche et les réponses du chat peuvent omettre les documents de ce connecteur jusqu'à la fin de sa première synchronisation des autorisations. Onyx n'affiche un document qu'aux personnes qui peuvent l'ouvrir dans la source.",
-        "title": "Les autorisations ne sont pas encore synchronisées"
-      },
       "loadError": {
         "title": "Échec de la récupération des informations du connecteur portant l'ID {ccPairId}",
         "unknownMessage": "Erreur inconnue"
@@ -2690,6 +2686,10 @@
             "syncing": "Une synchronisation des autorisations est déjà en file d'attente ou en cours"
           }
         }
+      },
+      "permSyncPending": {
+        "description": "La recherche et les réponses du chat peuvent omettre les documents de ce connecteur jusqu'à ce que sa première synchronisation des autorisations aboutisse. {appName} n'affiche un document qu'aux personnes qui peuvent l'ouvrir dans la source.",
+        "title": "Les autorisations ne sont pas encore synchronisées"
       },
       "reEnableModal": {
         "actionButton": {

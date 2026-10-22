@@ -2636,10 +2636,6 @@
         "description": "Este conector está em um estado inválido. Atualize suas credenciais ou crie um novo conector antes de reindexar.",
         "title": "Estado inválido do conector"
       },
-      "permSyncPending": {
-        "description": "A pesquisa e as respostas do chat podem omitir os documentos deste conector até que a primeira sincronização de permissões termine. O Onyx mostra um documento apenas para quem pode abri-lo na origem.",
-        "title": "As permissões ainda não foram sincronizadas"
-      },
       "loadError": {
         "title": "Falha ao buscar as informações do conector com ID {ccPairId}",
         "unknownMessage": "Erro desconhecido"
@@ -2690,6 +2686,10 @@
             "syncing": "Uma sincronização de permissões já está na fila ou em andamento"
           }
         }
+      },
+      "permSyncPending": {
+        "description": "A pesquisa e as respostas do chat podem omitir os documentos deste conector até que a primeira sincronização de permissões seja concluída. O {appName} mostra um documento apenas para quem pode abri-lo na origem.",
+        "title": "As permissões ainda não foram sincronizadas"
       },
       "reEnableModal": {
         "actionButton": {

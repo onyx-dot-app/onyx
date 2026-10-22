@@ -51,6 +51,7 @@ export interface CCPairFullInfo {
 
   last_indexed: string | null;
   last_pruned: string | null;
+  // Null until every doc and group sync the source needs has succeeded once.
   last_full_permission_sync: string | null;
   overall_indexing_speed: number | null;
   latest_checkpoint_description: string | null;
