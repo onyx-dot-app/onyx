@@ -212,9 +212,11 @@ export function translateConfiguration(
     const out: ConnectorField = {
       ...f,
       ...(f.label !== undefined && { label: text(f.label) }),
-      ...(f.description !== undefined && {
-        description: text(f.description),
-      }),
+      // A description with form arguments is formatted when it is shown.
+      ...(f.description !== undefined &&
+        !(f.type === "string_tab" && f.descriptionValues) && {
+          description: text(f.description),
+        }),
     };
     if (out.type === "tab") {
       out.tabs = out.tabs.map((tab) => ({
@@ -445,6 +447,7 @@ export const connectorConfigs: Record<
         label: "connectors.github.fields.repo_owner.label",
         name: "repo_owner",
         optional: false,
+        placeholder: "connectors.github.fields.repo_owner.placeholder",
       },
       {
         type: "tab",
@@ -459,6 +462,12 @@ export const connectorConfigs: Record<
                 type: "string_tab",
                 label: "connectors.github.fields.everything.label",
                 name: "everything",
+                description: "connectors.github.fields.everything.description",
+                descriptionValues: (values) =>
+                  typeof values.repo_owner === "string" &&
+                  values.repo_owner.trim() !== ""
+                    ? { owner: values.repo_owner.trim() }
+                    : null,
               },
             ],
           },

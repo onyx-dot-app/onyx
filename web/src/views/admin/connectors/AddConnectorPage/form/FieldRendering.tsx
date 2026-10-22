@@ -34,7 +34,7 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -304,6 +304,29 @@ export const RenderField: FC<RenderFieldProps> = ({
     typeof description === "string" && description
       ? markdown(description)
       : undefined;
+  // A description with form arguments (e.g. the GitHub owner) is formatted
+  // here; without its arguments it is hidden.
+  const descriptionArgs: Record<string, string> | null | undefined =
+    field.type === "string_tab" ? field.descriptionValues?.(values) : undefined;
+  const stringTabDescription: RichStr | undefined =
+    descriptionArgs === undefined
+      ? richDescription
+      : descriptionArgs === null
+        ? undefined
+        : markdown(
+            t(
+              // SAFETY: a config description is a key of
+              // `admin.connectorsList`; `connectorCopy.test.ts` checks each
+              // one against en.json.
+              field.description as Parameters<typeof t>[0],
+              Object.fromEntries(
+                Object.entries(descriptionArgs).map(([name, value]) => [
+                  name,
+                  escapeMarkdown(value),
+                ])
+              )
+            )
+          );
   const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
     : undefined;
@@ -550,7 +573,7 @@ export const RenderField: FC<RenderFieldProps> = ({
         <MessageCard
           innerPadding={1}
           title={label}
-          description={richDescription}
+          description={stringTabDescription}
         />
       ) : (
         <>

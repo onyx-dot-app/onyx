@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "连接器信息与访问权限。",
         "displayName": {
-          "title": "连接器显示名称",
-          "placeholder": "连接器名称"
+          "title": "显示名称",
+          "placeholder": "添加显示名称"
         },
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "仓库所有者"
+              "label": "仓库所有者",
+              "placeholder": "指定仓库所有者"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "仓库名称列表",
-              "placeholder": "仓库名称..."
+              "placeholder": "添加仓库名称"
             },
             "everything": {
-              "label": "Onyx 将索引所有仓库"
+              "label": "索引全部",
+              "description": "Onyx 将索引为所有者 {owner} 找到的所有仓库。"
             },
             "include_prs": {
               "label": "包含拉取请求",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "分支",
               "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。",
-              "placeholder": "分支名称..."
+              "placeholder": "添加分支名称"
             }
           }
         },

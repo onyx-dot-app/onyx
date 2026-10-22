@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "Información y acceso del conector.",
         "displayName": {
-          "title": "Nombre visible del conector",
-          "placeholder": "Nombre del conector"
+          "title": "Nombre visible",
+          "placeholder": "Añade un nombre visible"
         },
         "documentAccess": {
           "description": "Controla quién puede acceder a los documentos indexados por este conector.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Propietario del repositorio"
+              "label": "Propietario del repositorio",
+              "placeholder": "Especifica un propietario del repositorio"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "Nombres de los repositorios",
-              "placeholder": "Nombre del repositorio..."
+              "placeholder": "Añade un nombre de repositorio"
             },
             "everything": {
-              "label": "Onyx indexará todos los repositorios"
+              "label": "Indexar todo",
+              "description": "Onyx indexará todos los repositorios encontrados para el propietario {owner}."
             },
             "include_prs": {
               "label": "Incluir pull requests",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "Rama",
               "description": "Rama de la que indexar documentos (p. ej. gh-pages). Déjalo en blanco para usar la rama predeterminada de cada repositorio. Solo se aplica cuando \"Incluir documentos\" está habilitado. Tras cambiarlo en un conector existente, activa una reindexación para aplicar la nueva rama de inmediato.",
-              "placeholder": "Nombre de la rama..."
+              "placeholder": "Añade un nombre de rama"
             }
           }
         },

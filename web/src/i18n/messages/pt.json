@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "Informações e acesso do conector.",
         "displayName": {
-          "title": "Nome de exibição do conector",
-          "placeholder": "Nome do conector"
+          "title": "Nome de exibição",
+          "placeholder": "Adicione um nome de exibição"
         },
         "documentAccess": {
           "description": "Controle quem pode acessar os documentos indexados por este conector.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Proprietário do repositório"
+              "label": "Proprietário do repositório",
+              "placeholder": "Especifique um proprietário do repositório"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "Nomes dos repositórios",
-              "placeholder": "Nome do repositório..."
+              "placeholder": "Adicione um nome de repositório"
             },
             "everything": {
-              "label": "O Onyx indexará todos os repositórios"
+              "label": "Indexar tudo",
+              "description": "O Onyx indexará todos os repositórios encontrados para o proprietário {owner}."
             },
             "include_prs": {
               "label": "Incluir pull requests",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "Branch",
               "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente.",
-              "placeholder": "Nome da branch..."
+              "placeholder": "Adicione um nome de branch"
             }
           }
         },

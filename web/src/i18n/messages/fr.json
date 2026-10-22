@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "Informations et accès du connecteur.",
         "displayName": {
-          "title": "Nom d'affichage du connecteur",
-          "placeholder": "Nom du connecteur"
+          "title": "Nom d'affichage",
+          "placeholder": "Ajoutez un nom d'affichage"
         },
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Propriétaire du dépôt"
+              "label": "Propriétaire du dépôt",
+              "placeholder": "Indiquez un propriétaire de dépôt"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "Noms des dépôts",
-              "placeholder": "Nom du dépôt..."
+              "placeholder": "Ajoutez un nom de dépôt"
             },
             "everything": {
-              "label": "Onyx indexera tous les dépôts"
+              "label": "Tout indexer",
+              "description": "Onyx indexera tous les dépôts trouvés pour le propriétaire {owner}."
             },
             "include_prs": {
               "label": "Inclure les pull requests",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "Branche",
               "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement.",
-              "placeholder": "Nom de la branche..."
+              "placeholder": "Ajoutez un nom de branche"
             }
           }
         },

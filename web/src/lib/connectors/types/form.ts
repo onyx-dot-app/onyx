@@ -118,6 +118,11 @@ export interface FileOption extends Option {
 export interface StringTabOption extends Option {
   type: "string_tab";
   default?: string;
+  /** The description's arguments, read from the form; null hides the
+   * description. With it, the description key is formatted when shown. */
+  descriptionValues?: (
+    values: Record<string, unknown>
+  ) => Record<string, string> | null;
 }
 
 export type ConnectorValueField =

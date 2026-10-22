@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "Konnektor-Informationen und Zugriff.",
         "displayName": {
-          "title": "Anzeigename des Konnektors",
-          "placeholder": "Konnektorname"
+          "title": "Anzeigename",
+          "placeholder": "Anzeigenamen hinzufügen"
         },
         "documentAccess": {
           "description": "Legen Sie fest, wer auf die von diesem Konnektor indexierten Dokumente zugreifen kann.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Repository-Eigentümer"
+              "label": "Repository-Eigentümer",
+              "placeholder": "Repository-Inhaber angeben"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "Repository-Namen",
-              "placeholder": "Repository-Name..."
+              "placeholder": "Repository-Namen hinzufügen"
             },
             "everything": {
-              "label": "Onyx wird alle Repositorys indexieren"
+              "label": "Alles indexieren",
+              "description": "Onyx indexiert alle Repositorys, die für den Inhaber {owner} gefunden werden."
             },
             "include_prs": {
               "label": "Pull Requests einbeziehen",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "Branch",
               "description": "Branch, aus dem Dokumente indexiert werden (z. B. gh-pages). Leer lassen, um den Standard-Branch jedes Repositorys zu verwenden. Gilt nur, wenn \"Dokumente einbeziehen\" aktiviert ist. Nach einer Änderung bei einem bestehenden Konnektor eine Neuindexierung auslösen, damit der neue Branch sofort übernommen wird.",
-              "placeholder": "Branch-Name..."
+              "placeholder": "Branch-Namen hinzufügen"
             }
           }
         },

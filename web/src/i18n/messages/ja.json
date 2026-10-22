@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "コネクタの情報とアクセス。",
         "displayName": {
-          "title": "コネクタの表示名",
-          "placeholder": "コネクタ名"
+          "title": "表示名",
+          "placeholder": "表示名を入力"
         },
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "リポジトリのオーナー"
+              "label": "リポジトリのオーナー",
+              "placeholder": "リポジトリのオーナーを指定"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "リポジトリ名の一覧",
-              "placeholder": "リポジトリ名..."
+              "placeholder": "リポジトリ名を入力"
             },
             "everything": {
-              "label": "Onyx はすべてのリポジトリをインデックスします"
+              "label": "すべてをインデックス",
+              "description": "Onyx は、オーナー {owner} について見つかったすべてのリポジトリをインデックスします。"
             },
             "include_prs": {
               "label": "プルリクエストを含める",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "ブランチ",
               "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。",
-              "placeholder": "ブランチ名..."
+              "placeholder": "ブランチ名を入力"
             }
           }
         },

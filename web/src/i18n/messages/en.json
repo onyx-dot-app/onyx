@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "Connector information and access.",
         "displayName": {
-          "title": "Connector Display Name",
-          "placeholder": "Connector Name"
+          "title": "Display Name",
+          "placeholder": "Add a display name"
         },
         "documentAccess": {
           "description": "Control who can access documents indexed by this connector.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Repository Owner"
+              "label": "Repository Owner",
+              "placeholder": "Specify a repository owner"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "Repository Names",
-              "placeholder": "Repository Name..."
+              "placeholder": "Add a repository name"
             },
             "everything": {
-              "label": "Onyx will index all repositories"
+              "label": "Index Everything",
+              "description": "Onyx will index all repositories found for the owner {owner}."
             },
             "include_prs": {
               "label": "Include Pull Requests",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "Branch",
               "description": "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
-              "placeholder": "Branch Name..."
+              "placeholder": "Add a branch name"
             }
           }
         },

@@ -3666,8 +3666,8 @@
       "settings": {
         "description": "커넥터 정보 및 액세스.",
         "displayName": {
-          "title": "커넥터 표시 이름",
-          "placeholder": "커넥터 이름"
+          "title": "표시 이름",
+          "placeholder": "표시 이름 추가"
         },
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
@@ -3853,7 +3853,8 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "저장소 소유자"
+              "label": "저장소 소유자",
+              "placeholder": "저장소 소유자 지정"
             },
             "github_mode": {
               "tabs": {
@@ -3867,10 +3868,11 @@
             },
             "repositories": {
               "label": "저장소 이름 목록",
-              "placeholder": "저장소 이름..."
+              "placeholder": "저장소 이름 추가"
             },
             "everything": {
-              "label": "Onyx가 모든 저장소를 색인합니다"
+              "label": "모두 색인",
+              "description": "Onyx가 소유자 {owner}에 대해 찾은 모든 저장소를 색인합니다."
             },
             "include_prs": {
               "label": "풀 리퀘스트 포함",
@@ -3887,7 +3889,7 @@
             "branch": {
               "label": "브랜치",
               "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요.",
-              "placeholder": "브랜치 이름..."
+              "placeholder": "브랜치 이름 추가"
             }
           }
         },
