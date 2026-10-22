@@ -583,10 +583,8 @@ pathable==0.4.4
     # via jsonschema-path
 pdfminer-six==20251107
     # via markitdown
-pillow==13.0.0
-    # via
-    #   onyx
-    #   python-pptx
+pillow==12.1.1
+    # via python-pptx
 platformdirs==4.5.0
     # via
     #   fastmcp
