@@ -1,13 +1,17 @@
+from copy import deepcopy
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.airtable_connector import (
     AirtableConnector,
     parse_airtable_url,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.models import Document
 
 
@@ -124,7 +128,7 @@ def _setup_mock_api(
     return mock_api
 
 
-SAMPLE_BASES = [
+SAMPLE_BASES: list[dict[str, Any]] = [
     {
         "id": "appBASE1",
         "name": "Base One",
@@ -379,6 +383,108 @@ class TestIndexAll:
 
         assert len(docs) == 1
         assert docs[0].id == "airtable__recOK"
+
+
+class TestPruning:
+    @pytest.mark.parametrize("failure_stage", ["bases", "tables", "records"])
+    def test_failed_enumeration_does_not_return_partial_ids(
+        self, failure_stage: str
+    ) -> None:
+        connector = AirtableConnector()
+        mock_api = _setup_mock_api(SAMPLE_BASES)
+        connector._airtable_client = mock_api
+        error = RuntimeError("Airtable API unavailable")
+
+        if failure_stage == "bases":
+            mock_api.bases.side_effect = error
+        elif failure_stage == "tables":
+            original_base = mock_api.base.side_effect
+
+            def base_with_failure(base_id: str) -> MagicMock:
+                base = original_base(base_id)
+                if base_id == "appBASE2":
+                    base.tables.side_effect = error
+                return base
+
+            mock_api.base.side_effect = base_with_failure
+        else:
+            original_table = mock_api.table.side_effect
+
+            def table_with_failure(base_id: str, table_id: str) -> MagicMock:
+                table = original_table(base_id, table_id)
+                if table_id == "tblTABLE3":
+                    table.all.side_effect = error
+                return table
+
+            mock_api.table.side_effect = table_with_failure
+
+        with pytest.raises(RuntimeError, match="Airtable API unavailable"):
+            extract_ids_from_runnable_connector(connector)
+
+    def test_table_failure_after_a_yield_aborts_pruning(self) -> None:
+        connector = AirtableConnector()
+        connector._airtable_client = _setup_mock_api(SAMPLE_BASES)
+        document = Document(
+            id="airtable__recA1",
+            source=DocumentSource.AIRTABLE,
+            sections=[],
+            semantic_identifier="Alice",
+            metadata={},
+        )
+
+        def partially_failed_table(
+            base_id: str,  # noqa: ARG001
+            table_name_or_id: str,  # noqa: ARG001
+            base_name: str | None = None,  # noqa: ARG001
+        ) -> GenerateDocumentsOutput:
+            yield [document]
+            raise RuntimeError("Record processing failed")
+
+        with patch.object(connector, "_index_table", partially_failed_table):
+            with pytest.raises(RuntimeError, match="Record processing failed"):
+                extract_ids_from_runnable_connector(connector)
+
+    @pytest.mark.parametrize("empty_scope", ["account", "base", "table"])
+    def test_successful_empty_enumeration_is_allowed(self, empty_scope: str) -> None:
+        bases = deepcopy(SAMPLE_BASES[:1])
+        if empty_scope == "account":
+            bases = []
+        elif empty_scope == "base":
+            bases[0]["tables"] = []
+        else:
+            for table in bases[0]["tables"]:
+                table["records"] = []
+        connector = AirtableConnector()
+        connector._airtable_client = _setup_mock_api(bases)
+
+        assert extract_ids_from_runnable_connector(connector).raw_id_to_parent == {}
+
+    @pytest.mark.parametrize("specific_table", [False, True])
+    def test_pruning_matches_indexed_ids_and_creation_dates(
+        self, specific_table: bool
+    ) -> None:
+        bases = deepcopy(SAMPLE_BASES)
+        bases[0]["tables"][0]["records"].append({"id": "recEMPTY", "fields": {}})
+        connector = (
+            AirtableConnector(base_id="appBASE1", table_name_or_id="tblTABLE1")
+            if specific_table
+            else AirtableConnector()
+        )
+        connector._airtable_client = _setup_mock_api(bases)
+        indexed_documents = _collect_docs(connector)
+
+        with patch.object(
+            connector, "load_from_state", wraps=connector.load_from_state
+        ) as load:
+            result = extract_ids_from_runnable_connector(connector)
+            if not specific_table:
+                load.assert_not_called()
+
+        assert result.raw_id_to_parent == {doc.id: None for doc in indexed_documents}
+        assert "airtable__recEMPTY" not in result.raw_id_to_parent
+        assert result.id_to_created_at == {
+            doc.id: doc.doc_created_at for doc in indexed_documents
+        }
 
 
 class TestSpecificTableMode:
