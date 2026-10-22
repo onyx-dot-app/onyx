@@ -547,9 +547,9 @@ export const RenderField: FC<RenderFieldProps> = ({
       ) : field.type === "string_tab" ? (
         // A tab with nothing to fill in says what it indexes.
         <MessageCard
-        innerPadding={1}
-        title={label}
-        description={richDescription}
+          innerPadding={1}
+          title={label}
+          description={richDescription}
         />
       ) : (
         <>
