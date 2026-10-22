@@ -55,24 +55,25 @@ def _target_column(kind: GatedAppKind) -> InstrumentedAttribute[int | None]:
 
 
 def get_gated_app_id(
-    db_session: Session, kind: GatedAppKind, target_id: int
+    db_session: Session, kind: GatedAppKind, target_id: int, *, for_update: bool = False
 ) -> int | None:
     """The ``gated_app`` row id for ``(kind, target_id)``, or ``None`` when the
     target has no identity row yet."""
-    return db_session.scalar(
-        select(GatedApp.id).where(_target_column(kind) == target_id)
-    )
+    statement = select(GatedApp.id).where(_target_column(kind) == target_id)
+    if for_update:
+        statement = statement.with_for_update()
+    return db_session.scalar(statement)
 
 
 def get_or_create_gated_app_id(
-    db_session: Session, kind: GatedAppKind, target_id: int
+    db_session: Session, kind: GatedAppKind, target_id: int, *, for_update: bool = False
 ) -> int:
     """The ``gated_app`` row id for ``(kind, target_id)``, creating it if absent.
 
     Race-safe: a concurrent insert is absorbed by ON CONFLICT DO NOTHING on the
     target's unique index, then re-selected. Flushes but does not commit.
     """
-    existing = get_gated_app_id(db_session, kind, target_id)
+    existing = get_gated_app_id(db_session, kind, target_id, for_update=for_update)
     if existing is not None:
         return existing
     target_column = _target_column(kind).key
@@ -82,7 +83,7 @@ def get_or_create_gated_app_id(
         .on_conflict_do_nothing(index_elements=[target_column])
     )
     db_session.flush()
-    created = get_gated_app_id(db_session, kind, target_id)
+    created = get_gated_app_id(db_session, kind, target_id, for_update=for_update)
     if created is None:
         # Unreachable barring a concurrent delete: we just inserted, or a
         # concurrent writer did.
