@@ -67,7 +67,7 @@ The typical indexing latency depends on your configuration:
 The chat system uses a **Retrieval-Augmented Generation (RAG)** pipeline:
 
 1. User query is analyzed and expanded
-2. Relevant documents are retrieved from the vector database (Vespa)
+2. Relevant documents are retrieved from the vector database (OpenSearch)
 3. Documents are ranked and filtered by relevance and permissions
 4. The LLM generates a response grounded in the retrieved documents
 5. Citations are attached to specific claims in the response

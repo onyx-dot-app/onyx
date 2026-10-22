@@ -10,14 +10,16 @@ agent loop). A single failing case fails the test, and the report lists every
 failure with expected vs got. Each case gets one retry to absorb LLM wobble,
 and a scope covering every connected source grades the same as unscoped.
 
-The CI job is **non-blocking** (`continue-on-error`): a red eval is a signal
-to read, not a merge gate — some cases document behaviors the prompt does not
-handle yet.
+The CI job is **non-blocking** (`continue-on-error`). A red eval is a signal
+to read, not a merge gate, because the backoff advance-vs-re-search cases can
+flake with cheap models.
 
 The dataset covers the behaviors the prompt is responsible for:
 
 - **unscoped** — a topic, product name, or unconnected source must never be
   invented into a filter.
+- **false-positive**: a connected source named as the question's topic, not
+  as where to look, stays unscoped.
 - **combined** — "search A and B" holds the full named set, every cycle.
 - **backoff** — "check A first, then B" advances one source per cycle,
   re-searches on a topic shift, and broadens once exhausted.
@@ -63,8 +65,3 @@ run with `-s` to see it on success too.
   resolved scope set only, never answer phrasing.
 - `CONNECTOR_FILTER_EVAL_ATTEMPTS` sets attempts per case (default 2; a case
   passes if any attempt matches).
-- Known-failing today (why the run is red, and non-blocking): the
-  `false-positive` traps (a connected source named as the TOPIC of the
-  question, not as where to look) until the WHERE-vs-TOPIC prompt tuning
-  lands, and two hard backoff cases (advance-vs-re-search judgment) with
-  cheap models.

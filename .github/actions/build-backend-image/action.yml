@@ -61,6 +61,8 @@ runs:
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
         tags: ${{ inputs.runs-on-ecr-cache }}:nightly-llm-it-backend-${{ inputs.run-id }}
+        # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+        labels: ci.run-id=${{ inputs.run-id }}
         # Attestations attach as ECR referrers to the image digest, which is
         # stable across runs and caps out at 100 per subject.
         provenance: false

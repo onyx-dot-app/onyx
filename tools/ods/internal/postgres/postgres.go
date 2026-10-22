@@ -1,9 +1,9 @@
 package postgres
 
 import (
-	"fmt"
+	"net"
 	"net/url"
-	"os"
+	"strings"
 )
 
 // Config holds PostgreSQL connection configuration.
@@ -24,29 +24,50 @@ const (
 	DefaultDatabase = "postgres"
 )
 
-// NewConfigFromEnv creates a Config from environment variables with defaults.
-func NewConfigFromEnv() *Config {
-	return &Config{
-		User:     getEnvOrDefault("POSTGRES_USER", DefaultUser),
-		Password: getEnvOrDefault("POSTGRES_PASSWORD", DefaultPassword),
-		Host:     getEnvOrDefault("POSTGRES_HOST", DefaultHost),
-		Port:     getEnvOrDefault("POSTGRES_PORT", DefaultPort),
-		Database: getEnvOrDefault("POSTGRES_DB", DefaultDatabase),
+func IsLoopbackHost(host string) bool {
+	host = strings.TrimSuffix(strings.TrimSpace(host), ".")
+	if strings.EqualFold(host, "localhost") {
+		return true
 	}
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+	return net.ParseIP(host).IsLoopback()
 }
 
-// getEnvOrDefault returns the environment variable value or a default.
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// NewConfigFromEnvironment reads a private runtime environment without changing the process.
+func NewConfigFromEnvironment(env []string) *Config {
+	config := &Config{User: DefaultUser, Password: DefaultPassword, Host: DefaultHost, Port: DefaultPort, Database: DefaultDatabase}
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || value == "" {
+			continue
+		}
+		switch key {
+		case "POSTGRES_USER":
+			config.User = value
+		case "POSTGRES_PASSWORD":
+			config.Password = value
+		case "POSTGRES_HOST":
+			config.Host = value
+		case "POSTGRES_PORT":
+			config.Port = value
+		case "POSTGRES_DB":
+			config.Database = value
+		}
 	}
-	return defaultValue
+	return config
 }
 
 // ConnectionString returns a PostgreSQL connection string.
 func (c *Config) ConnectionString() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s",
-		url.QueryEscape(c.User), url.QueryEscape(c.Password), c.Host, c.Port, c.Database)
+	u := url.URL{
+		Scheme: "postgresql",
+		User:   url.UserPassword(c.User, c.Password),
+		Host:   net.JoinHostPort(c.Host, c.Port),
+		Path:   "/" + c.Database,
+	}
+	return u.String()
 }
 
 // PgDumpArgs returns common arguments for pg_dump.

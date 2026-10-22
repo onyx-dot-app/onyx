@@ -39,7 +39,6 @@ export interface UsePacketProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   hasSteps: boolean;
-  expectedBranchesPerTurn: Map<number, number>;
   isGeneratingImage: boolean;
   generatedImageCount: number;
   finalAnswerComing: boolean;
@@ -123,7 +122,6 @@ export function usePacketProcessor(
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    expectedBranchesPerTurn: state.expectedBranches,
     isGeneratingImage: state.isGeneratingImage,
     generatedImageCount: state.generatedImageCount,
     finalAnswerComing: state.finalAnswerComing,

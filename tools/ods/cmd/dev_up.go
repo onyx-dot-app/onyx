@@ -24,7 +24,9 @@ func newDevUpCommand() *cobra.Command {
 Examples:
   ods dev up`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDevcontainer("up", nil)
+			if err := runDevcontainer("up", nil); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -32,27 +34,27 @@ Examples:
 }
 
 // devcontainerImage reads the image field from .devcontainer/devcontainer.json.
-func devcontainerImage() string {
+func devcontainerImage() (string, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return "", fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	data, err := os.ReadFile(filepath.Join(root, ".devcontainer", "devcontainer.json"))
 	if err != nil {
-		log.Fatalf("Failed to read devcontainer.json: %v", err)
+		return "", fatalErrorf("Failed to read devcontainer.json: %w", err)
 	}
 
 	var cfg struct {
 		Image string `json:"image"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		log.Fatalf("Failed to parse devcontainer.json: %v", err)
+		return "", fatalErrorf("Failed to parse devcontainer.json: %w", err)
 	}
 	if cfg.Image == "" {
-		log.Fatal("No image field in devcontainer.json")
+		return "", fatalErrorf("No image field in devcontainer.json")
 	}
-	return cfg.Image
+	return cfg.Image, nil
 }
 
 // checkDevcontainerCLI ensures the devcontainer CLI is installed.
@@ -220,14 +222,14 @@ func ensureRemoteUser() {
 }
 
 // runDevcontainer executes "devcontainer <action> --workspace-folder <root> [extraArgs...]".
-func runDevcontainer(action string, extraArgs []string) {
+func runDevcontainer(action string, extraArgs []string) error {
 	checkDevcontainerCLI()
 	ensureDockerSock()
 	ensureRemoteUser()
 
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	args := []string{action, "--workspace-folder", root}
@@ -247,6 +249,7 @@ func runDevcontainer(action string, extraArgs []string) {
 	c.Stdin = os.Stdin
 
 	if err := c.Run(); err != nil {
-		log.Fatalf("devcontainer %s failed: %v", action, err)
+		return fmt.Errorf("devcontainer %s failed: %w", action, err)
 	}
+	return nil
 }

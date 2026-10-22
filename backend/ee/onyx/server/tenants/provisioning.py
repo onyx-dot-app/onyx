@@ -21,6 +21,7 @@ from ee.onyx.server.tenants.models import (
     TenantDeletionPayload,
 )
 from ee.onyx.server.tenants.schema_management import (
+    build_tenant_schema,
     create_schema_if_not_exists,
     drop_schema,
     run_alembic_migrations,
@@ -41,11 +42,12 @@ from onyx.db.engine.sql_engine import (
     get_session_with_shared_schema,
     get_session_with_tenant,
 )
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import (
     fetch_existing_llm_provider_by_name_and_type,
     fetch_existing_llm_provider_by_type_nameless,
-    update_default_provider,
+    update_default_model,
     upsert_cloud_embedding_provider,
     upsert_llm_provider,
 )
@@ -396,7 +398,12 @@ def configure_default_api_keys(db_session: Session) -> None:
                 request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
             if not has_set_default_provider:
-                update_default_provider(provider.id, default_model, db_session)
+                update_default_model(
+                    provider_id=provider.id,
+                    model=default_model,
+                    db_session=db_session,
+                    flow_type=LLMModelFlowType.CHAT,
+                )
                 has_set_default_provider = True
         except Exception as e:
             logger.error("Failed to configure %s provider: %s", request.provider, e)
@@ -443,9 +450,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                 "No default model found for %s in recommendations",
                 ANTHROPIC_PROVIDER_NAME,
             )
-        default_model_name = (
-            default_model.name if default_model else "claude-sonnet-4-5"
-        )
+        default_model_name = default_model.name if default_model else "claude-sonnet-5"
 
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
@@ -737,11 +742,9 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations in a way that isolates it from the current event loop
-        # Create a new event loop for this synchronous operation
+        # Both paths block on Postgres, so they run off the event loop.
         loop = asyncio.get_event_loop()
-        # Use run_in_executor which properly isolates the thread execution
-        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
+        await loop.run_in_executor(None, lambda: build_tenant_schema(tenant_id))
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:

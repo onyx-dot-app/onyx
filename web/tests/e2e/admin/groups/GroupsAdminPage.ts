@@ -165,9 +165,19 @@ export class GroupsAdminPage {
     return this.page.getByText("System group", { exact: true });
   }
 
-  /** Header of the group-permissions section (full admin, custom groups only). */
+  /** Header of the group-permissions section (full admin, custom groups and Basic). */
   get permissionsSectionHeader(): Locator {
     return this.page.getByText("Group Permissions", { exact: true });
+  }
+
+  /** One permission row in that section, matched by its display name. */
+  permissionRow(displayName: string): Locator {
+    return this.page.getByText(displayName, { exact: true });
+  }
+
+  /** Every permission switch on the edit page. */
+  get permissionSwitches(): Locator {
+    return this.page.getByRole("switch");
   }
 
   /** Header of the shared-resources section (custom groups only). */

@@ -5,12 +5,13 @@ import uuid
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
-import requests
+from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolArgs,
@@ -19,6 +20,8 @@ from onyx.server.query_and_chat.streaming_models import (
     CustomToolStart,
     Packet,
 )
+from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
+from onyx.server.security.store import get_security_settings
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
@@ -36,14 +39,48 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
-    validate_openapi_schema,
 )
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, ssrf_safe_request, validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
+# (connect, read) seconds
+CUSTOM_TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
+
+
+def custom_tool_ssrf_params() -> OutboundSSRFParams:
+    """Cloud blocks every internal target. Self-hosted allows private hosts,
+    allows loopback only at DISABLED, and always blocks link-local/metadata."""
+    if MULTI_TENANT:
+        return OutboundSSRFParams(
+            allow_private_network=False,
+            block_loopback_and_link_local=True,
+            block_link_local_only=False,
+        )
+    ssrf_disabled = (
+        get_security_settings().ssrf_protection_level == SSRFProtectionLevel.DISABLED
+    )
+    return OutboundSSRFParams(
+        allow_private_network=True,
+        block_loopback_and_link_local=not ssrf_disabled,
+        block_link_local_only=ssrf_disabled,
+    )
+
+
+def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
+    """Raises ``SSRFException`` or ``ValueError`` for a blocked destination."""
+    params = custom_tool_ssrf_params()
+    validate_outbound_http_url(
+        url,
+        allow_private_network=params.allow_private_network,
+        block_loopback_and_link_local=params.block_loopback_and_link_local,
+        block_link_local_only=params.block_link_local_only,
+        resolve_dns=resolve_dns,
+    )
 
 
 # override_kwargs is not supported for custom tools
@@ -102,7 +139,7 @@ class CustomTool(Tool[None]):
         # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
         return self._method_spec.raw_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> ToolDefinition:
         return self._tool_definition
 
     def _save_and_get_file_references(
@@ -134,7 +171,7 @@ class CustomTool(Tool[None]):
     def _parse_csv(self, csv_text: str) -> List[Dict[str, Any]]:
         csv_file = StringIO(csv_text)
         reader = csv.DictReader(csv_file)
-        return [row for row in reader]
+        return list(reader)
 
     """Actual execution of the tool"""
 
@@ -144,6 +181,31 @@ class CustomTool(Tool[None]):
                 placement=placement,
                 obj=CustomToolStart(tool_name=self._name, tool_id=self._id),
             )
+        )
+
+    def _failed_response(
+        self, placement: Placement, status_code: int | None, message: str
+    ) -> ToolResponse:
+        error_info = CustomToolErrorInfo(status_code=status_code, message=message)
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self._name,
+                    tool_id=self._id,
+                    response_type="text",
+                    error=error_info,
+                ),
+            )
+        )
+        return ToolResponse(
+            rich_response=CustomToolCallSummary(
+                tool_name=self._name,
+                response_type="text",
+                tool_result=None,
+                error=error_info,
+            ),
+            llm_facing_response=message,
         )
 
     def run(
@@ -191,9 +253,44 @@ class CustomTool(Tool[None]):
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
-        response = requests.request(
-            method, url, json=request_body, headers=self.headers
-        )
+        params = custom_tool_ssrf_params()
+        try:
+            response = ssrf_safe_request(
+                url,
+                method=method,
+                json=request_body,
+                headers=self.headers,
+                timeout=CUSTOM_TOOL_REQUEST_TIMEOUT,
+                allow_private_network=params.allow_private_network,
+                block_loopback_and_link_local=params.block_loopback_and_link_local,
+                block_link_local_only=params.block_link_local_only,
+            )
+        except (SSRFException, ValueError) as e:
+            logger.warning("%s request blocked: %s", self._name, e)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=(
+                    f"The {self._name} tool could not run because its destination "
+                    "is not allowed."
+                ),
+            )
+        if response.is_redirect:
+            logger.warning(
+                "%s got HTTP %s redirect to '%s'; redirects are not followed",
+                self._name,
+                response.status_code,
+                response.headers.get("Location"),
+            )
+            return self._failed_response(
+                placement,
+                status_code=response.status_code,
+                message=(
+                    f"The {self._name} tool failed because the server sent a "
+                    "redirect. An admin must set the plugin's server URL to the "
+                    "final location."
+                ),
+            )
         content_type = response.headers.get("Content-Type", "")
 
         # Detect HTTP errors — only 401/403 are flagged as auth errors
@@ -210,7 +307,7 @@ class CustomTool(Tool[None]):
                 response.status_code,
             )
 
-        tool_result: Any
+        tool_result: CustomToolUserFileSnapshot | JsonValue
         response_type: str
         file_ids: List[str] | None = None
         data: dict | list | str | int | float | bool | None = None
@@ -231,7 +328,7 @@ class CustomTool(Tool[None]):
 
         else:
             try:
-                tool_result = response.json()
+                tool_result = TypeAdapter(JsonValue).validate_python(response.json())
                 response_type = "json"
                 data = tool_result
             except JSONDecodeError:
@@ -261,7 +358,11 @@ class CustomTool(Tool[None]):
             )
         )
 
-        llm_facing_response = json.dumps(tool_result)
+        llm_facing_response = (
+            TypeAdapter(CustomToolUserFileSnapshot | JsonValue)
+            .dump_json(tool_result)
+            .decode()
+        )
 
         return ToolResponse(
             rich_response=CustomToolCallSummary(
@@ -332,82 +433,3 @@ def build_custom_tools_from_openapi_schema_and_headers(
         )
         for method_spec in method_specs
     ]
-
-
-if __name__ == "__main__":
-    import openai
-    from openai.types.chat.chat_completion_message_function_tool_call import (
-        ChatCompletionMessageFunctionToolCall,
-    )
-
-    openapi_schema = {
-        "openapi": "3.0.0",
-        "info": {
-            "version": "1.0.0",
-            "title": "Assistants API",
-            "description": "An API for managing assistants",
-        },
-        "servers": [
-            {"url": "http://localhost:8080"},
-        ],
-        "paths": {
-            "/assistant/{assistant_id}": {
-                "get": {
-                    "summary": "Get a specific Assistant",
-                    "operationId": "getAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                },
-                "post": {
-                    "summary": "Create a new Assistant",
-                    "operationId": "createAssistant",
-                    "parameters": [
-                        {
-                            "name": "assistant_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {"application/json": {"schema": {"type": "object"}}},
-                    },
-                },
-            }
-        },
-    }
-    validate_openapi_schema(openapi_schema)
-
-    tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=0,  # dummy tool id
-        openapi_schema=openapi_schema,
-        emitter=Emitter(merged_queue=queue.Queue()),
-        dynamic_schema_info=None,
-    )
-
-    openai_client = openai.OpenAI()
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Can you fetch assistant with ID 10"},
-        ],
-        tools=[  # ty: ignore[invalid-argument-type]
-            tool.tool_definition() for tool in tools
-        ],
-    )
-    choice = response.choices[0]
-    if choice.message.tool_calls:
-        print(choice.message.tool_calls)
-        tool_call = choice.message.tool_calls[0]
-        if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
-            # Note: This example code would need a proper run_context with emitter
-            # For testing purposes, this would need to be updated
-            print("Tool execution requires run_context with emitter")

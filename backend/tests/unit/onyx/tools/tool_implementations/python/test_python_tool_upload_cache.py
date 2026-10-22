@@ -7,6 +7,7 @@ on every agent loop iteration.
 
 import json
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 from onyx.tools.models import ChatFile, PythonToolOverrideKwargs, ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
@@ -33,7 +34,7 @@ def _make_stream_result() -> StreamResultEvent:
 
 def _make_tool() -> PythonTool:
     emitter = MagicMock()
-    return PythonTool(tool_id=1, emitter=emitter)
+    return PythonTool(tool_id=1, emitter=emitter, chat_session_id=uuid4())
 
 
 def _make_override(files: list[ChatFile]) -> PythonToolOverrideKwargs:

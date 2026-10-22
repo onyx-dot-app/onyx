@@ -91,7 +91,7 @@ def _parse_time(time_str: str | None) -> datetime | None:
     if not time_str:
         return None
     try:
-        return datetime_to_utc(datetime.fromisoformat(time_str.replace("Z", "+00:00")))
+        return datetime_to_utc(datetime.fromisoformat(time_str))
     except ValueError:
         return None
 

@@ -134,5 +134,11 @@ export function toPlainString(value: string | RichStr): string {
     .replace(/(?<!\w)_([^_]+)_(?!\w)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\s*\n\s*/g, " ")
+    .replace(/&#(\d+);/g, (entity: string, code: string) => {
+      const point = Number(code);
+      return point >= 0x21 && point <= 0x7e
+        ? String.fromCodePoint(point)
+        : entity;
+    })
     .trim();
 }

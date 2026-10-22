@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
     from tests.integration.common_utils.test_models import DATestUser
 
+from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_documents_by_source
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -29,7 +31,7 @@ from onyx.db.models import (
     User__UserGroup,
 )
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
-from onyx.server.features.build.db.user_library import delete_user_file, list_user_files
+from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -374,7 +376,9 @@ class SandboxHandle:
 def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
     try:
         with get_session_with_current_tenant() as session:
-            for doc in list_user_files(session, user_id):
+            for doc in get_documents_by_source(
+                db_session=session, source=DocumentSource.CRAFT_FILE, creator_id=user_id
+            ):
                 delete_user_file(session, doc)
             for row in (
                 session.query(ConnectorCredentialPair)
@@ -692,6 +696,7 @@ def pod_exec_async(
         if proxy_session_id is not None
         else ""
     )
+    # Publish atomically so polling cannot read a status without its body.
     script = (
         f"nohup sh -c '"
         f"curl -s -X {method}{header_args}{body_arg}{proxy_arg} "
@@ -699,7 +704,7 @@ def pod_exec_async(
         f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
         f"> {output_path}.code 2>&1; "
         f'{{ cat {output_path}.code; printf "\\n"; cat {output_path}.body; }} '
-        f"> {output_path}"
+        f"> {output_path}.tmp; mv {output_path}.tmp {output_path}"
         f"' > /dev/null 2>&1 &"
     )
     pod_exec(client, pod_name, namespace, script, container=container)

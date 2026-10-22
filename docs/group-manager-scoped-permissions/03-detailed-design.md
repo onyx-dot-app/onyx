@@ -654,7 +654,7 @@ managed scope + PRIVATE); reject otherwise. Admins unaffected (global bypass).
   filter edits inside the `if get_editable:` block as correlated subqueries — do not perturb the shared joins
   above the split.
 - **Junction-only:** scope is purely `User__UserGroup.is_manager` + resource↔group junctions;
-  `permission_grant` stays global-only; Vespa ACL untouched. Backfill is safe — no upgrade migration nulls
+  `permission_grant` stays global-only; document-index ACL untouched. Backfill is safe — no upgrade migration nulls
   `role`, and `native_enum=False` stores `'CURATOR'`/`'GLOBAL_CURATOR'` literally. Ship the
   zero-managed-group migration report for the GLOBAL_CURATOR snapshot caveat.
 

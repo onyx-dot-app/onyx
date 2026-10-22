@@ -2,9 +2,17 @@
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo, SvgPlusCircle } from "@opal/icons";
+import {
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgClock,
+  SvgEdit,
+  SvgInfo,
+  SvgLock,
+  SvgPlusCircle,
+} from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -13,7 +21,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button, Divider, Text } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
@@ -24,14 +32,7 @@ import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import {
-  FiAlertTriangle,
-  FiCheckCircle,
-  FiClock,
-  FiEdit2,
-  FiLock,
-  FiUnlock,
-} from "react-icons/fi";
+import { FiUnlock } from "react-icons/fi";
 import { DeleteButton } from "@/components/DeleteButton";
 import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
@@ -39,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
@@ -144,7 +146,7 @@ const EditRow = ({
             router.push(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
-          <FiEdit2 className="me-2 shrink-0" />
+          <SvgEdit className="me-2 shrink-0" size={16} />
           <span className="font-medium">{documentSet.name}</span>
         </button>
       </Tooltip>
@@ -264,18 +266,18 @@ const DocumentSetTable = ({
                   </TableCell>
                   <TableCell>
                     {documentSet.is_up_to_date ? (
-                      <Badge variant="success" icon={FiCheckCircle}>
+                      <Badge variant="success" icon={SvgCheckCircle}>
                         {t("sets.status.upToDate.label")}
                       </Badge>
                     ) : documentSet.cc_pair_summaries.length > 0 ||
                       (documentSet.federated_connector_summaries &&
                         documentSet.federated_connector_summaries.length >
                           0) ? (
-                      <Badge variant="in_progress" icon={FiClock}>
+                      <Badge variant="in_progress" icon={SvgClock}>
                         {t("sets.status.syncing.label")}
                       </Badge>
                     ) : (
-                      <Badge variant="destructive" icon={FiAlertTriangle}>
+                      <Badge variant="destructive" icon={SvgAlertTriangle}>
                         {t("sets.status.deleting.label")}
                       </Badge>
                     )}
@@ -291,7 +293,7 @@ const DocumentSetTable = ({
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
-                        icon={FiLock}
+                        icon={SvgLock}
                       >
                         {t("sets.access.private.label")}
                       </Badge>
@@ -344,6 +346,7 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
+  const { appName } = useSettings();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -369,7 +372,9 @@ function Main() {
 
   return (
     <div className="mb-8">
-      <Text as="p">{markdown(t("sets.description"))}</Text>
+      <Text as="p">
+        {markdown(t("sets.description", { appName: escapeMarkdown(appName) }))}
+      </Text>
       <Spacer rem={0.75} />
 
       <div className="mb-3"></div>

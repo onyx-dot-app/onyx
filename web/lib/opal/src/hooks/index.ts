@@ -12,8 +12,21 @@
 
 export { default as createSharedHook } from "@opal/hooks/createSharedHook";
 export { default as useContainerCenter } from "@opal/hooks/useContainerCenter";
+export { default as useDebouncedValue } from "@opal/hooks/useDebouncedValue";
 export { default as useFocusOnMount } from "@opal/hooks/useFocusOnMount";
+export {
+  default as useGridNavigation,
+  type GridDirection,
+  type UseGridNavigationOptions,
+  type UseGridNavigationReturn,
+} from "@opal/hooks/useGridNavigation";
+export {
+  default as useHotkey,
+  isTypingTarget,
+  type UseHotkeyOptions,
+} from "@opal/hooks/useHotkey";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
+export { default as useOverflow } from "@opal/hooks/useOverflow";
 export {
   default as useScreenSize,
   type ScreenSize,
@@ -24,3 +37,5 @@ export {
   type UseImageDropzoneOptions,
   type UseImageDropzoneReturn,
 } from "@opal/hooks/useImageDropzone";
+export { default as usePresence } from "@opal/hooks/usePresence";
+export { default as useWindowFileDrag } from "@opal/hooks/useWindowFileDrag";

@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Text from "@/refresh-components/texts/Text";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { Section } from "@/layouts/general-layouts";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
@@ -123,7 +124,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
     >
       {isLoading && (
         <Section>
-          <SvgSimpleLoader className="h-8 w-8" />
+          <IconLoader className="h-8 w-8" />
         </Section>
       )}
       {/* Style container for docx-preview generated styles */}

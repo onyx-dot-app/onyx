@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
 from ee.onyx.server.reporting.usage_export_models import (
+    USAGE_REPORT_MEDIA_TYPE,
     ChatMessageSkeleton,
     FlowType,
     UsageReportMetadata,
 )
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.models import ChatMessage, UsageReport, User
 from onyx.file_store.file_store import get_default_file_store
 
@@ -186,6 +187,13 @@ def get_usage_report_data(
         The usage report data.
     """
     file_store = get_default_file_store()
+    if not file_store.has_file(
+        file_id=report_display_name,
+        file_origin=FileOrigin.GENERATED_REPORT,
+        file_type=USAGE_REPORT_MEDIA_TYPE,
+    ):
+        raise ValueError(f"Usage report {report_display_name} not found")
+
     # usage report may be very large, so don't load it all into memory
     return file_store.read_file(
         file_id=report_display_name, mode="b", use_tempfile=True

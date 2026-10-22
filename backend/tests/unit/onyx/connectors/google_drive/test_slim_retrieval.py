@@ -7,9 +7,7 @@ Verifies that:
 - celery_utils routing picks retrieve_all_slim_docs() for GoogleDriveConnector
 """
 
-from unittest.mock import MagicMock, call, patch
-
-from google.auth.exceptions import RefreshError
+from unittest.mock import MagicMock, patch
 
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
@@ -22,9 +20,13 @@ from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
-    StageCompletion,
+    ImpersonationError,
+    RetrievedDriveFile,
 )
-from onyx.connectors.google_utils.resources import ImpersonationError
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveRefreshError,
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.interfaces import SlimConnector, SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
@@ -40,24 +42,21 @@ def _make_done_checkpoint() -> GoogleDriveCheckpoint:
         retrieved_folder_and_drive_ids=set(),
         completion_stage=DriveRetrievalStage.DONE,
         completion_map=ThreadSafeDict(),
-        all_retrieved_file_ids=set(),
+        retrieved_drive_file_ids=set(),
         has_more=False,
     )
 
 
 def _make_connector() -> GoogleDriveConnector:
     connector = GoogleDriveConnector(include_my_drives=True)
-    connector._creds = MagicMock()
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector._primary_admin_email = _ADMIN_EMAIL
     return connector
 
 
 class TestBuildSlimDocumentPermissions:
     def test_routes_owner_then_retriever_fallback(self) -> None:
-        creds = MagicMock()
-        owner_service = MagicMock()
-        retriever_service = MagicMock()
-        admin_service = MagicMock()
+        ops = MagicMock(spec=GoogleDriveSourceOperations)
         external_access = ExternalAccess.empty()
         file = {
             "id": "file-id",
@@ -70,45 +69,32 @@ class TestBuildSlimDocumentPermissions:
             google_domain="example.com",
         )
 
-        with (
-            patch(
-                f"{_DOC_CONVERSION_MODULE}.get_drive_service",
-                side_effect=[owner_service, admin_service, retriever_service],
-            ) as mock_get_drive_service,
-            patch(
-                f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
-                return_value=external_access,
-            ) as mock_get_external_access,
-        ):
+        with patch(
+            f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
+            return_value=external_access,
+        ) as mock_get_external_access:
             slim_document = build_slim_document(
-                creds,
+                ops,
                 file,
                 permission_sync_context,
                 _RETRIEVER_EMAIL,
             )
-            fallback_drive_service_factory = mock_get_external_access.call_args.kwargs[
-                "fallback_drive_service_factory"
-            ]
-            assert fallback_drive_service_factory() is retriever_service
 
         assert slim_document is not None
         assert slim_document.external_access == external_access
-        assert mock_get_drive_service.call_args_list == [
-            call(creds, user_email=_EXTERNAL_OWNER_EMAIL),
-            call(creds, user_email=_ADMIN_EMAIL),
-            call(creds, user_email=_RETRIEVER_EMAIL),
-        ]
+        mock_get_external_access.assert_called_once()
         access_kwargs = mock_get_external_access.call_args.kwargs
         assert access_kwargs["file"] == file
         assert access_kwargs["company_domain"] == "example.com"
-        assert access_kwargs["retriever_drive_service"] is owner_service
-        assert access_kwargs["admin_drive_service"] is admin_service
+        assert access_kwargs["ops"] is ops
+        # Read as the owner, then as the retriever, then as the admin.
+        assert access_kwargs["retriever_email"] == _EXTERNAL_OWNER_EMAIL
+        assert access_kwargs["fallback_retriever_email"] == _RETRIEVER_EMAIL
+        assert access_kwargs["admin_email"] == _ADMIN_EMAIL
         assert access_kwargs["fallback_user_email"] == _RETRIEVER_EMAIL
 
     def test_skips_retriever_fallback_when_retriever_owns_file(self) -> None:
-        creds = MagicMock()
-        owner_service = MagicMock()
-        admin_service = MagicMock()
+        ops = MagicMock(spec=GoogleDriveSourceOperations)
         file = {
             "id": "file-id",
             "mimeType": "text/plain",
@@ -120,31 +106,21 @@ class TestBuildSlimDocumentPermissions:
             google_domain="example.com",
         )
 
-        with (
-            patch(
-                f"{_DOC_CONVERSION_MODULE}.get_drive_service",
-                side_effect=[owner_service, admin_service],
-            ) as mock_get_drive_service,
-            patch(
-                f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
-                return_value=ExternalAccess.empty(),
-            ) as mock_get_external_access,
-        ):
+        with patch(
+            f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
+            return_value=ExternalAccess.empty(),
+        ) as mock_get_external_access:
             build_slim_document(
-                creds,
+                ops,
                 file,
                 permission_sync_context,
                 _RETRIEVER_EMAIL,
             )
-            fallback_drive_service_factory = mock_get_external_access.call_args.kwargs[
-                "fallback_drive_service_factory"
-            ]
-            assert fallback_drive_service_factory() is None
 
-        assert mock_get_drive_service.call_args_list == [
-            call(creds, user_email=_RETRIEVER_EMAIL),
-            call(creds, user_email=_ADMIN_EMAIL),
-        ]
+        access_kwargs = mock_get_external_access.call_args.kwargs
+        assert access_kwargs["retriever_email"] == _RETRIEVER_EMAIL
+        assert access_kwargs["fallback_retriever_email"] is None
+        assert access_kwargs["admin_email"] == _ADMIN_EMAIL
 
 
 class TestGoogleDriveSlimConnectorInterface:
@@ -203,7 +179,7 @@ class TestRetrieveAllSlimDocs:
                 retrieved_folder_and_drive_ids=set(),
                 completion_stage=DriveRetrievalStage.START,
                 completion_map=ThreadSafeDict(),
-                all_retrieved_file_ids=set(),
+                retrieved_drive_file_ids=set(),
                 has_more=False,
             )
             mock_build.return_value = start_checkpoint
@@ -235,7 +211,7 @@ class TestRetrieveAllSlimDocs:
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.START,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=False,
         )
 
@@ -271,7 +247,7 @@ class TestRetrieveAllSlimDocsPermSync:
             retrieved_folder_and_drive_ids=set(),
             completion_stage=DriveRetrievalStage.START,
             completion_map=ThreadSafeDict(),
-            all_retrieved_file_ids=set(),
+            retrieved_drive_file_ids=set(),
             has_more=False,
         )
 
@@ -364,10 +340,6 @@ class TestFailedFolderIdsByEmail:
 
         with (
             patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
                 "onyx.connectors.google_drive.connector.get_folder_metadata",
                 return_value=folder_no_parents,
             ),
@@ -393,10 +365,6 @@ class TestFailedFolderIdsByEmail:
         }
 
         with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
             patch(
                 "onyx.connectors.google_drive.connector.get_folder_metadata",
                 return_value=folder_with_parents,
@@ -442,7 +410,10 @@ class TestOrphanedPathBackfill:
         folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
 
         def mock_get_folder(
-            _service: MagicMock, folder_id: str, _field_type: DriveFileFieldType
+            _ops: GoogleDriveSourceOperations,
+            _user_email: str,
+            folder_id: str,
+            _field_type: DriveFileFieldType,
         ) -> dict | None:
             if folder_id == "folderA":
                 return folder_a
@@ -451,10 +422,6 @@ class TestOrphanedPathBackfill:
             return None
 
         with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
             patch(
                 "onyx.connectors.google_drive.connector.get_folder_metadata",
                 side_effect=mock_get_folder,
@@ -485,7 +452,10 @@ class TestOrphanedPathBackfill:
         folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
 
         def mock_get_folder(
-            _service: MagicMock, folder_id: str, _field_type: DriveFileFieldType
+            _ops: GoogleDriveSourceOperations,
+            _user_email: str,
+            folder_id: str,
+            _field_type: DriveFileFieldType,
         ) -> dict | None:
             if folder_id == "folderA":
                 return folder_a
@@ -494,10 +464,6 @@ class TestOrphanedPathBackfill:
             return None
 
         with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
             patch(
                 "onyx.connectors.google_drive.connector.get_folder_metadata",
                 side_effect=mock_get_folder,
@@ -532,10 +498,6 @@ class TestOrphanedPathBackfill:
 
         with (
             patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
                 "onyx.connectors.google_drive.connector.get_folder_metadata"
             ) as mock_api,
         ):
@@ -550,115 +512,81 @@ class TestOrphanedPathBackfill:
 
 
 def _make_checkpoint_with_user(user_email: str) -> GoogleDriveCheckpoint:
-    completion_map: ThreadSafeDict[str, StageCompletion] = ThreadSafeDict(
-        {
-            user_email: StageCompletion(
-                stage=DriveRetrievalStage.START,
-                completed_until=0,
-            )
-        }
-    )
     return GoogleDriveCheckpoint(
         retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
-        completion_map=completion_map,
-        all_retrieved_file_ids=set(),
+        completion_stage=DriveRetrievalStage.START,
+        completion_map=ThreadSafeDict(),
+        retrieved_drive_file_ids=set(),
         has_more=False,
-        user_emails=[user_email],
+        user_emails=[user_email, _ADMIN_EMAIL],
     )
 
 
-class TestImpersonateUserRefreshError:
+def _run_gate(
+    connector: GoogleDriveConnector,
+    user_email: str,
+    checkpoint: GoogleDriveCheckpoint,
+    fresh_emails: list[str],
+) -> tuple[list[RetrievedDriveFile], bool]:
+    yielded: list[RetrievedDriveFile] = []
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.get_root_folder_id.side_effect = GoogleDriveRefreshError(
+        "invalid_grant: Invalid email or User ID"
+    )
+    connector._ops = ops
+    with (
+        patch(
+            "onyx.connectors.google_drive.connector.retry_builder",
+            return_value=lambda f: f,
+        ),
+        patch.object(connector, "_get_all_user_emails", return_value=fresh_emails),
+    ):
+        gate = connector._impersonation_gate(user_email, checkpoint)
+        try:
+            while True:
+                yielded.append(next(gate))
+        except StopIteration as stop:
+            return yielded, stop.value
+
+
+class TestImpersonationGateRefreshError:
     def test_user_removed_error_skips_silently(self) -> None:
-        """RefreshError + user absent from workspace: silent skip, no error yielded, stage DONE."""
+        """RefreshError + user absent from workspace: silent skip, user failed."""
         user_email = "wilbur.suero@savvywealth.com"
         connector = _make_connector()
         checkpoint = _make_checkpoint_with_user(user_email)
 
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.get_root_folder_id",
-                side_effect=RefreshError("invalid_grant: Invalid email or User ID"),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.retry_builder",
-                return_value=lambda f: f,
-            ),
-            patch.object(
-                connector,
-                "_get_all_user_emails",
-                return_value=["admin@example.com"],  # user absent
-            ),
-        ):
-            results = list(
-                connector._impersonate_user_for_retrieval(
-                    user_email=user_email,
-                    field_type=DriveFileFieldType.SLIM,
-                    checkpoint=checkpoint,
-                    get_new_drive_id=lambda _: None,
-                    sorted_filtered_folder_ids=[],
-                )
-            )
+        results, usable = _run_gate(
+            connector, user_email, checkpoint, fresh_emails=[_ADMIN_EMAIL]
+        )
 
         assert results == []
-        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+        assert usable is False
+        assert user_email in checkpoint.failed_impersonation_emails
 
     def test_impersonation_error_yields_error(self) -> None:
-        """RefreshError + user still present: error record yielded, stage DONE."""
+        """RefreshError + user still present: error record yielded, user failed."""
         user_email = "wilbur.suero@savvywealth.com"
         connector = _make_connector()
         checkpoint = _make_checkpoint_with_user(user_email)
 
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.get_root_folder_id",
-                side_effect=RefreshError("token_refresh_failed"),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.retry_builder",
-                return_value=lambda f: f,
-            ),
-            patch.object(
-                connector,
-                "_get_all_user_emails",
-                return_value=[user_email, "admin@example.com"],  # user present
-            ),
-        ):
-            results = list(
-                connector._impersonate_user_for_retrieval(
-                    user_email=user_email,
-                    field_type=DriveFileFieldType.SLIM,
-                    checkpoint=checkpoint,
-                    get_new_drive_id=lambda _: None,
-                    sorted_filtered_folder_ids=[],
-                )
-            )
+        results, usable = _run_gate(
+            connector, user_email, checkpoint, fresh_emails=[user_email, _ADMIN_EMAIL]
+        )
 
+        assert usable is False
         assert len(results) == 1
         assert isinstance(results[0].error, ImpersonationError)
         assert results[0].error.user_email == user_email
-        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+        assert user_email in checkpoint.failed_impersonation_emails
 
-    def test_fresh_emails_callback_updates_checkpoint(self) -> None:
-        """_make_fresh_emails_callback returns a closure that calls _get_all_user_emails
-        and updates checkpoint.user_emails as a side effect."""
+    def test_removal_check_does_not_rewrite_the_user_list(self) -> None:
+        """Later phases derive their partitions from checkpoint.user_emails, so
+        the removal lookup must not replace it mid-run."""
         user_email = "wilbur.suero@savvywealth.com"
         connector = _make_connector()
         checkpoint = _make_checkpoint_with_user(user_email)
-        fresh_emails = ["admin@example.com"]  # user absent from fresh list
 
-        with patch.object(connector, "_get_all_user_emails", return_value=fresh_emails):
-            callback = connector._make_fresh_emails_callback(checkpoint)
-            result = callback()
+        _run_gate(connector, user_email, checkpoint, fresh_emails=[_ADMIN_EMAIL])
 
-        assert result == fresh_emails
-        assert checkpoint.user_emails == fresh_emails
-        assert user_email not in (checkpoint.user_emails or [])
+        assert checkpoint.user_emails == [user_email, _ADMIN_EMAIL]

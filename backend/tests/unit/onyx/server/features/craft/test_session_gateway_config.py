@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import BuildSession, Sandbox, User
 from onyx.llm.well_known_providers.auto_update_models import (
     LLMProviderRecommendation,
@@ -92,6 +93,36 @@ def _mock_recommendations() -> Iterator[None]:
         llm_config, "get_recommendations", return_value=_TEST_RECOMMENDATIONS
     ):
         yield
+
+
+@pytest.mark.parametrize("supports_chat", [False, True])
+def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) -> None:
+    provider = _provider(
+        3,
+        "openai",
+        [
+            ModelConfigurationView(
+                name="gpt-6-luna",
+                is_visible=True,
+                supports_image_input=False,
+                supports_chat=supports_chat,
+                supports_decisions=True,
+            )
+        ],
+    )
+    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    expected = (3, "gpt-6-luna") if supports_chat else None
+
+    assert llm_config._select_gateway_default([provider], selection) == expected
+    assert llm_config._select_gateway_default([provider], None, [selection]) == expected
+    assert llm_config._select_gateway_default([provider], None) == expected
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
+        config = llm_config.build_onyx_gateway_config([provider], selection)
+    if supports_chat:
+        assert config is not None
+        assert config.model_name == "3/gpt-6-luna"
+    else:
+        assert config is None
 
 
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
@@ -360,8 +391,11 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
+        patch.object(
+            manager_module,
+            "fetch_default_model",
+            return_value=None,
+        ),
     ):
         config = manager.build_llm_configs(user)
 
@@ -399,9 +433,13 @@ def test_manager_prefers_configured_default_over_recommendation() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -437,9 +475,13 @@ def test_manager_falls_back_to_recommendation_when_configured_default_not_visibl
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=configured_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: configured_default,
+                LLMModelFlowType.CRAFT: None,
+            }.get(flow),
         ),
-        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -465,10 +507,12 @@ def test_manager_prefers_craft_default_over_chat_default() -> None:
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -492,9 +536,13 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ),
-        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
         patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: None,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(
@@ -535,10 +583,12 @@ def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> No
             return_value=[anthropic, bedrock],
         ),
         patch.object(
-            manager_module, "fetch_default_llm_model", return_value=chat_default
-        ),
-        patch.object(
-            manager_module, "fetch_default_craft_model", return_value=craft_default
+            manager_module,
+            "fetch_default_model",
+            side_effect=lambda _db, flow: {
+                LLMModelFlowType.CHAT: chat_default,
+                LLMModelFlowType.CRAFT: craft_default,
+            }.get(flow),
         ),
     ):
         config = manager.build_llm_configs(user)
@@ -633,7 +683,9 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -658,7 +710,9 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -814,7 +868,9 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     config = _gateway_config()
     manager, sandbox_manager, _ = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
     )
     # Exactly the post-rebuild state: file already correct on disk.
     sandbox_manager.read_file.return_value = expected.encode()

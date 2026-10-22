@@ -31,14 +31,16 @@ def test_helper_builds_the_canonical_db_provider() -> None:
     assert provider.get_tenant_id() == get_current_tenant_id()
 
 
-def test_helper_keeps_the_historical_rotation_lock_key() -> None:
+def test_rotation_lock_key_is_per_credential() -> None:
     """
-    Pins the lock key to the ``str(source)`` form in-flight connectors hold;
-    silently switching to ``source.value`` would stop excluding them.
+    Pins the lock key to the credential alone: connectors of different sources
+    can share a family credential, and their renewals must exclude each other.
     """
 
     # Under test.
-    provider = build_db_credentials_provider(DocumentSource.SLACK, 42)
+    slack_provider = build_db_credentials_provider(DocumentSource.SLACK, 42)
+    jira_provider = build_db_credentials_provider(DocumentSource.JIRA, 42)
 
     # Postcondition.
-    assert provider.lock_key == "da_lock:connector:DocumentSource.SLACK:credential_42"
+    assert slack_provider.lock_key == "da_lock:credential_42"
+    assert jira_provider.lock_key == slack_provider.lock_key

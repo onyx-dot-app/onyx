@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Literal
 from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
@@ -16,25 +17,15 @@ from fastapi import (
     WebSocketException,
 )
 from fastapi.responses import RedirectResponse, StreamingResponse
-from fastapi_users.authentication.strategy.base import Strategy
-from fastapi_users.manager import BaseUserManager
 from starlette.websockets import WebSocketState
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
 
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.users import (
-    auth_backend,
-    get_user_manager,
-    is_same_origin,
-    optional_user,
-)
+from onyx.auth.users import current_user_from_websocket_cookie, optional_user
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import Permission, SharingScope
+from onyx.db.enums import SharingScope
 from onyx.db.models import User
 from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
@@ -43,6 +34,8 @@ from onyx.server.features.build.db.build_session import (
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
+
+HmrEndpoint = Literal["hmr", "webpack-hmr"]
 
 logger = setup_logger()
 
@@ -253,41 +246,18 @@ def _webapp_hmr_query_string(query_string: str) -> str:
 
 
 def _webapp_hmr_websocket_url(
-    session_id: UUID, base_url: str, query_string: str
+    session_id: UUID, base_url: str, query_string: str, endpoint: HmrEndpoint
 ) -> str:
     scheme = "wss" if base_url.startswith("https://") else "ws"
     host_and_path = base_url.split("://", 1)[1].rstrip("/")
     target_url = (
         f"{scheme}://{host_and_path}/"
-        f"{_webapp_next_path(session_id, '_next/webpack-hmr')}"
+        f"{_webapp_next_path(session_id, f'_next/{endpoint}')}"
     )
     hmr_query_string = _webapp_hmr_query_string(query_string)
     if hmr_query_string:
         target_url = f"{target_url}?{hmr_query_string}"
     return target_url
-
-
-async def _current_webapp_websocket_user(
-    websocket: WebSocket,
-    user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
-    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
-) -> User:
-    # CSWSH guard: WebSockets are exempt from the same-origin policy and
-    # cookie auth is attached automatically. Browsers always send Origin on
-    # WebSocket upgrades, so a missing header is rejected too.
-    origin = websocket.headers.get("origin")
-    if origin is None or not is_same_origin(origin, WEB_DOMAIN):
-        raise WebSocketException(code=1008)
-    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    user = await strategy.read_token(token, user_manager)
-    if user is None or not user.is_active:
-        raise WebSocketException(code=1008)
-    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
-        raise WebSocketException(code=1008)
-    return user
-
-
-_current_webapp_websocket_user._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
 
 
 async def _pump_webapp_to_upstream(
@@ -315,9 +285,13 @@ async def _pump_upstream_to_webapp(
             await websocket.send_bytes(message)
 
 
-async def _proxy_webapp_hmr_websocket(session_id: UUID, websocket: WebSocket) -> None:
+async def _proxy_webapp_hmr_websocket(
+    session_id: UUID, websocket: WebSocket, endpoint: HmrEndpoint
+) -> None:
     base_url = await _get_sandbox_url(session_id)
-    upstream_url = _webapp_hmr_websocket_url(session_id, base_url, websocket.url.query)
+    upstream_url = _webapp_hmr_websocket_url(
+        session_id, base_url, websocket.url.query, endpoint
+    )
     logger.debug("Proxying websocket to: %s", upstream_url)
 
     try:
@@ -417,15 +391,16 @@ async def get_webapp(
         raise
 
 
-@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/{hmr_endpoint}")
 async def websocket_webapp_hmr(
     session_id: UUID,
+    hmr_endpoint: HmrEndpoint,
     websocket: WebSocket,
-    user: User = Depends(_current_webapp_websocket_user),
+    user: User = Depends(current_user_from_websocket_cookie),
 ) -> None:
     try:
         await _check_webapp_access(session_id, user)
     except HTTPException:
         raise WebSocketException(code=1008)
 
-    await _proxy_webapp_hmr_websocket(session_id, websocket)
+    await _proxy_webapp_hmr_websocket(session_id, websocket, hmr_endpoint)

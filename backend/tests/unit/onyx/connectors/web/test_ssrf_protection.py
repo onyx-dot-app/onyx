@@ -14,8 +14,8 @@ import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.web import connector as web_connector
+from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.connectors.web.connector import (
-    WEB_CONNECTOR_VALID_SETTINGS,
     WebConnector,
     check_internet_connection,
     extract_urls_from_sitemap,

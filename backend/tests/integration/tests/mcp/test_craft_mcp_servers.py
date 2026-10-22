@@ -158,7 +158,7 @@ def test_craft_mcp_server_listing(
     assert [server["id"] for server in craft_servers] == [server_id]
     entry = craft_servers[0]
     assert entry["available_in_craft"] is True
-    assert entry["user_can_authenticate"] is False
+    assert entry["connection_status"] == "not_connected"
     # Nothing for the proxy to authenticate with, so Craft would not emit it.
     assert entry["craft_connected"] is False
 
@@ -177,7 +177,7 @@ def test_craft_mcp_server_listing(
 
     # ...and the craft listing reflects the chat-side auth state
     entry = _get_craft_servers(basic_user)[0]
-    assert entry["user_can_authenticate"] is True
+    assert entry["connection_status"] == "connected"
     assert entry["craft_connected"] is True
 
     # Toggling the flag off removes the server from the craft listing

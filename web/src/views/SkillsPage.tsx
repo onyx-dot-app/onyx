@@ -1,14 +1,16 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
   InputTypeIn,
-  LineItemButton,
   MessageCard,
-  Popover,
+  Dropdown,
   Text,
 } from "@opal/components";
 import {
@@ -23,10 +25,9 @@ import {
   SvgBlocks,
   SvgEdit,
   SvgPlus,
-  SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { SvgGitHub } from "@opal/logos";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -34,12 +35,19 @@ import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import {
+  deleteUserSkill,
+  isSkillNameConflict,
+  setSkillEnabled,
+} from "@/lib/skills/api";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -47,6 +55,7 @@ import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
+  const { appName } = useSettings();
   const router = useRouter();
   const externalAppIdParam = useSearchParams().get("externalAppId");
   const focusedExternalAppId =
@@ -54,6 +63,12 @@ export default function SkillsPage() {
       ? Number(externalAppIdParam)
       : null;
   const { data, error, isLoading, refresh } = useUserSkills();
+  const { mutate } = useSWRConfig();
+  const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
+    null
+  );
+  const [sharingSkillId, setSharingSkillId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [githubImportOpen, setGitHubImportOpen] = useState(false);
@@ -74,6 +89,46 @@ export default function SkillsPage() {
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
+
+  async function deleteSkill() {
+    if (
+      !deleteTarget ||
+      deleting ||
+      (deleteTarget.skill.user_permission !== "OWNER" &&
+        deleteTarget.skill.user_permission !== "EDITOR")
+    )
+      return;
+    setDeleting(true);
+    try {
+      await deleteUserSkill(deleteTarget.id);
+      await refresh(
+        (current) =>
+          current && {
+            ...current,
+            customs: current.customs.filter(
+              (skill) => skill.id !== deleteTarget.id
+            ),
+          },
+        { revalidate: false }
+      );
+      if (deleteTarget.external_app) {
+        void mutate(SWR_KEYS.buildExternalAppsAdmin).catch((error: unknown) => {
+          console.error(
+            "Failed to refresh external app after skill deletion",
+            error
+          );
+        });
+      }
+      setDeleteTarget(null);
+      toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("editor.toasts.deleteFailed")
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function handleEdit(item: CustomSkillCardItem) {
     router.push(`/craft/v1/skills/edit/${item.id}`);
@@ -289,52 +344,50 @@ export default function SkillsPage() {
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={t("page.header.description")}
-        rightChildren={
-          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
-            <Popover.Trigger asChild>
+        actions={[
+          <Dropdown
+            key="primary"
+            open={createMenuOpen}
+            onOpenChange={setCreateMenuOpen}
+          >
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
               </Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new");
-                  }}
-                  title={t("page.createMenu.scratch.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgUploadCloud}
-                  description={t("page.createMenu.upload.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                  title={t("page.createMenu.upload.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgGithub}
-                  description={t("page.createMenu.github.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setGitHubImportOpen(true);
-                  }}
-                  title={t("page.createMenu.github.title")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
-        }
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("page.createMenu.trigger.label")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("page.createMenu.scratch.title"),
+                  description: t("page.createMenu.scratch.description", {
+                    appName,
+                  }),
+                  onSelect: () => router.push("/craft/v1/skills/new"),
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("page.createMenu.upload.title"),
+                  description: t("page.createMenu.upload.description"),
+                  onSelect: () => setCreateOpen(true),
+                },
+                {
+                  kind: "action",
+                  id: "github",
+                  icon: SvgGitHub,
+                  title: t("page.createMenu.github.title"),
+                  description: t("page.createMenu.github.description"),
+                  onSelect: () => setGitHubImportOpen(true),
+                },
+              ]}
+            />
+          </Dropdown>,
+        ]}
       >
         <InputTypeIn
           ref={searchInputRef}
@@ -361,7 +414,7 @@ export default function SkillsPage() {
           />
         )}
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error && !isLoading && (
           <MessageCard
@@ -402,6 +455,8 @@ export default function SkillsPage() {
                           !item.enabled && enabledItemByName.has(item.name)
                         }
                         onEdit={handleEdit}
+                        onShare={(skill) => setSharingSkillId(skill.id)}
+                        onDelete={setDeleteTarget}
                         onClick={setPreviewTarget}
                         onEnabledChange={(skill, enabled) =>
                           void updateSkillEnabled(skill, enabled)
@@ -422,6 +477,18 @@ export default function SkillsPage() {
           </>
         )}
       </SettingsLayouts.Body>
+
+      {sharingSkillId && (
+        <ShareSkillModal
+          mode="edit"
+          skillId={sharingSkillId}
+          open={sharingSkillId !== null}
+          onClose={() => setSharingSkillId(null)}
+          onSaved={() => {
+            void refresh();
+          }}
+        />
+      )}
 
       <CreateSkillModal
         open={createOpen}
@@ -445,6 +512,24 @@ export default function SkillsPage() {
               );
             });
           }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmEntityModal
+          danger
+          entityType={t("editor.deleteModal.entityType")}
+          entityName={deleteTarget.name}
+          additionalDetails={t("editor.delete.description")}
+          actionButtonText={t(
+            deleting
+              ? "editor.deleteModal.pendingLabel"
+              : "editor.deleteModal.label"
+          )}
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+          onSubmit={() => void deleteSkill()}
         />
       )}
 

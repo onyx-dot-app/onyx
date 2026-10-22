@@ -46,8 +46,12 @@ from onyx.db.enums import (
 from onyx.db.hierarchy import cleanup_unowned_hierarchy_nodes
 from onyx.db.index_attempt import delete_index_attempts, get_recent_attempts_for_cc_pair
 from onyx.db.permission_sync_attempt import (
+    cancel_open_doc_permission_sync_attempt,
+    cancel_open_external_group_sync_attempt,
     delete_doc_permission_sync_attempts__no_commit,
     delete_external_group_permission_sync_attempts__no_commit,
+    get_open_doc_permission_sync_attempt,
+    get_open_external_group_sync_attempt,
 )
 from onyx.db.port_attempt import get_active_port_attempt, request_port_cancel
 from onyx.db.search_settings import get_all_search_settings
@@ -95,6 +99,8 @@ def revoke_tasks_blocking_deletion(
                 search_settings_id=search_settings.id,
                 limit=1,
                 db_session=db_session,
+                # an active backfill also writes the pair's documents
+                ignore_backfill=False,
             )
             if (
                 recent_index_attempts
@@ -109,11 +115,13 @@ def revoke_tasks_blocking_deletion(
             task_logger.exception("Exception while revoking indexing task")
 
     try:
-        permissions_sync_payload = redis_connector.permissions.payload
-        if permissions_sync_payload and permissions_sync_payload.celery_task_id:
-            app.control.revoke(permissions_sync_payload.celery_task_id)
+        permission_sync_attempt = get_open_doc_permission_sync_attempt(
+            redis_connector.cc_pair_id, db_session
+        )
+        if permission_sync_attempt and permission_sync_attempt.celery_task_id:
+            app.control.revoke(permission_sync_attempt.celery_task_id)
             task_logger.info(
-                f"Revoked permissions sync task {permissions_sync_payload.celery_task_id}."
+                f"Revoked permissions sync task {permission_sync_attempt.celery_task_id}."
             )
     except Exception:
         task_logger.exception("Exception while revoking permissions sync task")
@@ -127,11 +135,13 @@ def revoke_tasks_blocking_deletion(
         task_logger.exception("Exception while revoking pruning task")
 
     try:
-        external_group_sync_payload = redis_connector.external_group_sync.payload
-        if external_group_sync_payload and external_group_sync_payload.celery_task_id:
-            app.control.revoke(external_group_sync_payload.celery_task_id)
+        group_sync_attempt = get_open_external_group_sync_attempt(
+            redis_connector.cc_pair_id, db_session
+        )
+        if group_sync_attempt and group_sync_attempt.celery_task_id:
+            app.control.revoke(group_sync_attempt.celery_task_id)
             task_logger.info(
-                f"Revoked external group sync task {external_group_sync_payload.celery_task_id}."
+                f"Revoked external group sync task {group_sync_attempt.celery_task_id}."
             )
     except Exception:
         task_logger.exception("Exception while revoking external group sync task")
@@ -223,8 +233,16 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                             )
 
                             redis_connector.prune.reset()
-                            redis_connector.permissions.reset()
-                            redis_connector.external_group_sync.reset()
+                            cancel_open_doc_permission_sync_attempt(
+                                cc_pair_id,
+                                db_session,
+                                reason="Canceled: the connector is being deleted",
+                            )
+                            cancel_open_external_group_sync_attempt(
+                                cc_pair_id,
+                                db_session,
+                                reason="Canceled: the connector is being deleted",
+                            )
                         else:
                             # just wait
                             pass
@@ -319,6 +337,8 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 search_settings_id=search_settings.id,
                 limit=1,
                 db_session=db_session,
+                # an active backfill also writes the pair's documents
+                ignore_backfill=False,
             )
             if (
                 recent_index_attempts
@@ -354,7 +374,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 f"Connector deletion - Delayed (pruning in progress): cc_pair={cc_pair_id}"
             )
 
-        if redis_connector.permissions.fenced:
+        if get_open_doc_permission_sync_attempt(cc_pair_id, db_session) is not None:
             inc_deletion_blocked(tenant_id, "permissions")
             raise TaskDependencyError(
                 f"Connector deletion - Delayed (permissions in progress): cc_pair={cc_pair_id}"

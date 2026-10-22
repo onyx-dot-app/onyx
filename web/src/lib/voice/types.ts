@@ -35,7 +35,7 @@ export interface VoiceProviderView {
 /** A selectable voice option returned by a provider's voices endpoint. */
 export interface VoiceOption {
   value: string;
-  label: string;
+  title: string;
   description?: string;
 }
 
@@ -55,6 +55,7 @@ export interface VoiceFormValues {
 
 /** Request body for creating or updating a voice provider configuration. */
 export interface VoiceProviderUpsertRequest {
+  validation_mode?: "voice" | "decision";
   id?: number;
   name: string;
   provider_type: string;

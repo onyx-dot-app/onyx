@@ -5,17 +5,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
     DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
     INTEGRATION_TESTS_MODE,
-    MANAGED_VESPA,
-    ONYX_DISABLE_VESPA,
-    VESPA_NUM_ATTEMPTS_ON_STARTUP,
+    LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT,
 )
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.embedding_configs import (
-    SUPPORTED_EMBEDDING_MODELS,
-    SupportedEmbeddingModel,
-)
 from onyx.configs.model_configs import GEN_AI_API_KEY, GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.connector import check_connectors_exist, create_initial_default_connector
@@ -26,43 +20,38 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.index_attempt import (
     cancel_indexing_attempts_past_model,
     expire_index_attempts,
 )
 from onyx.db.llm import (
-    fetch_default_llm_model,
+    fetch_default_model,
     fetch_existing_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import (
     get_active_search_settings,
     get_current_search_settings,
     update_current_search_settings,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     OpenSearchIndexWriteBlockedError,
     wait_for_opensearch_with_timeout,
 )
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
-from onyx.document_index.vespa.vespa_document_index import (
-    register_multitenant_vespa_indices,
-)
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
-from onyx.natural_language_processing.search_nlp_models import (
-    EmbeddingModel,
-    warm_up_bi_encoder,
-)
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
@@ -74,14 +63,19 @@ from onyx.server.settings.store import (
 )
 from onyx.utils.gpu_utils import gpu_status_request
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import (
-    ALT_INDEX_SUFFIX,
+    DISABLE_MODEL_SERVER,
     MODEL_SERVER_HOST,
     MODEL_SERVER_PORT,
     MULTI_TENANT,
 )
+from shared_configs.enums import EmbedTextType
 
 logger = setup_logger()
+
+_STARTUP_EMBED_TEXT = "Onyx startup check"
+_STARTUP_RETRY_SECONDS = 10
 
 
 def setup_onyx(
@@ -100,15 +94,6 @@ def setup_onyx(
     active_search_settings = get_active_search_settings(db_session)
     search_settings = active_search_settings.primary
     secondary_search_settings = active_search_settings.secondary
-
-    # search_settings = get_current_search_settings(db_session)
-    # multipass_config_1 = get_multipass_config(search_settings)
-
-    # secondary_large_chunks_enabled: bool | None = None
-    # secondary_search_settings = get_secondary_search_settings(db_session)
-    # if secondary_search_settings:
-    #     multipass_config_2 = get_multipass_config(secondary_search_settings)
-    #     secondary_large_chunks_enabled = multipass_config_2.enable_large_chunks
 
     # Break bad state for thrashing indexes
     if secondary_search_settings and DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -144,19 +129,17 @@ def setup_onyx(
             "DISABLE_VECTOR_DB is set — skipping document index setup and embedding model warm-up."
         )
     else:
-        # Ensure the document indices are setup correctly. This step is
-        # relatively near the end because Vespa takes a bit of time to start up.
-        logger.notice("Verifying Document Index(s) is/are available.")
-        # This flow is for setting up the document index so we get all indices
-        # here.
-        document_indices = get_all_document_indices(
+        # Ensure the document index is set up correctly. This step is
+        # relatively near the end because the document index can take a bit of
+        # time to start up.
+        logger.notice("Verifying the document index is available.")
+        document_index = get_default_document_index(
             search_settings,
             secondary_search_settings,
-            None,
         )
 
-        success = setup_document_indices(
-            document_indices,
+        success = setup_document_index(
+            document_index,
             IndexingSetting.from_db_model(search_settings),
         )
         if not success:
@@ -167,19 +150,81 @@ def setup_onyx(
         logger.notice(
             "Model Server: http://%s:%s", MODEL_SERVER_HOST, MODEL_SERVER_PORT
         )
-        if search_settings.provider_type is None:
-            # In integration tests, do not block API startup on warm-up
-            warm_up_bi_encoder(
-                embedding_model=EmbeddingModel.from_db_model(
-                    search_settings=search_settings,
-                    server_host=MODEL_SERVER_HOST,
-                    server_port=MODEL_SERVER_PORT,
-                ),
-                non_blocking=INTEGRATION_TESTS_MODE,
-            )
+        # Multi-tenant tenant creation and integration tests must not block on it.
+        if (
+            search_settings.provider_type is None
+            and LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT > 0
+            and not (MULTI_TENANT or INTEGRATION_TESTS_MODE or DISABLE_MODEL_SERVER)
+        ):
+            wait_for_local_embedding_model(search_settings)
 
         # update multipass indexing setting based on GPU availability
         update_default_multipass_indexing(db_session)
+
+
+def wait_for_local_embedding_model(search_settings: SearchSettings) -> None:
+    """Block until the inference model server embeds with the self-hosted model in
+    use. Its first request loads the model, with a download if it is not cached
+    (e.g. nomic, which the image does not bundle). Raise when the wait runs out,
+    so the API server does not start with search that cannot embed queries."""
+    model_name = search_settings.model_name
+    embedding_model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+    logger.notice(
+        "Waiting up to %ss for the model server to load embedding model %s. "
+        "It downloads the model first if the model is not in its cache.",
+        LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT,
+        model_name,
+    )
+    start = time.monotonic()
+    deadline = start + LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT
+    last_error: Exception | None = None
+    while (remaining := deadline - time.monotonic()) > 0:
+        try:
+            # A daemon thread: a request that still waits at the deadline does
+            # not keep the failed process from exiting.
+            start_thread_future(
+                lambda: embedding_model.encode(
+                    texts=[_STARTUP_EMBED_TEXT], text_type=EmbedTextType.QUERY
+                ),
+                name="embedding-model-startup-check",
+            ).result(timeout=remaining)
+        except TimeoutError:
+            # The deadline passed during a request, e.g. a slow download.
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Embedding model %s is not ready on the model server after %.0fs: %s",
+                model_name,
+                time.monotonic() - start,
+                e,
+            )
+            time.sleep(min(_STARTUP_RETRY_SECONDS, max(deadline - time.monotonic(), 0)))
+            continue
+        logger.notice(
+            "Embedding model %s is ready on the model server (%.0fs).",
+            model_name,
+            time.monotonic() - start,
+        )
+        return
+
+    reason = (
+        f"Last error: {last_error}"
+        if last_error
+        else "The last request was still waiting for the model server."
+    )
+    raise RuntimeError(
+        f"The model server at {MODEL_SERVER_HOST}:{MODEL_SERVER_PORT} did not load "
+        f"embedding model {model_name} within {LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT}s. "
+        f"{reason} If the model server cannot download the model (for example, it "
+        "has no internet access), add the model to its Hugging Face cache. "
+        "LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT sets the wait; 0 disables it."
+    ) from last_error
 
 
 def mark_reindex_flag(db_session: Session) -> None:
@@ -203,72 +248,64 @@ def mark_reindex_flag(db_session: Session) -> None:
         kv_store.store(KV_REINDEX_KEY, False)
 
 
-def setup_document_indices(
-    document_indices: list[DocumentIndex],
+def setup_document_index(
+    document_index: DocumentIndex,
     index_setting: IndexingSetting,
-    num_attempts: int = VESPA_NUM_ATTEMPTS_ON_STARTUP,
+    num_attempts: int = DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
 ) -> bool:
-    """Sets up all input document indices.
+    """Sets up the input document index.
 
-    If any document index setup fails, the function will return False. Otherwise
+    Returns False if the setup does not succeed within num_attempts, otherwise
     returns True.
     """
-    for document_index in document_indices:
-        # Document index startup is a bit slow, so give it a few seconds.
-        WAIT_SECONDS = 5
-        document_index_setup_success = False
-        for x in range(num_attempts):
-            try:
-                logger.notice(
-                    "Setting up document index %s (attempt %s/%s)...",
-                    document_index.__class__.__name__,
-                    x + 1,
-                    num_attempts,
-                )
-                document_index.verify_and_create_index_if_necessary(
-                    embedding_dim=index_setting.final_embedding_dim,
-                    embedding_precision=index_setting.embedding_precision,
-                )
-
-                logger.notice(
-                    "Document index %s setup complete.",
-                    document_index.__class__.__name__,
-                )
-                document_index_setup_success = True
-                break
-            except OpenSearchIndexWriteBlockedError as e:
-                # The index exists but is write-blocked (typically the
-                # read_only_allow_delete block applied at the disk flood-stage
-                # watermark). It is still readable, so start up degraded rather
-                # than crash-loop until the block clears. A missing index or
-                # blocked creation raises a different error and still fails.
-                logger.error(
-                    "Document index %s is write-blocked; continuing startup without "
-                    "the mapping refresh. Search still works, but indexing will fail "
-                    "until the block is cleared (usually by freeing disk space below "
-                    "the flood-stage watermark). Error: %s",
-                    document_index.__class__.__name__,
-                    e,
-                )
-                document_index_setup_success = True
-                break
-            except Exception:
-                logger.exception(
-                    "Document index %s setup did not succeed. The relevant service may not be ready yet. Retrying in %s seconds.",
-                    document_index.__class__.__name__,
-                    WAIT_SECONDS,
-                )
-                time.sleep(WAIT_SECONDS)
-
-        if not document_index_setup_success:
-            logger.error(
-                "Document index %s setup did not succeed. Attempt limit reached. (%s)",
+    # Document index startup is a bit slow, so give it a few seconds.
+    WAIT_SECONDS = 5
+    for x in range(num_attempts):
+        try:
+            logger.notice(
+                "Setting up document index %s (attempt %s/%s)...",
                 document_index.__class__.__name__,
+                x + 1,
                 num_attempts,
             )
-            return False
+            document_index.verify_and_create_index_if_necessary(
+                embedding_dim=index_setting.final_embedding_dim,
+            )
 
-    return True
+            logger.notice(
+                "Document index %s setup complete.",
+                document_index.__class__.__name__,
+            )
+            return True
+        except OpenSearchIndexWriteBlockedError as e:
+            # The index exists but is write-blocked (typically the
+            # read_only_allow_delete block applied at the disk flood-stage
+            # watermark). It is still readable, so start up degraded rather
+            # than crash-loop until the block clears. A missing index or
+            # blocked creation raises a different error and still fails.
+            logger.error(
+                "Document index %s is write-blocked; continuing startup without "
+                "the mapping refresh. Search still works, but indexing will fail "
+                "until the block is cleared (usually by freeing disk space below "
+                "the flood-stage watermark). Error: %s",
+                document_index.__class__.__name__,
+                e,
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Document index %s setup did not succeed. The relevant service may not be ready yet. Retrying in %s seconds.",
+                document_index.__class__.__name__,
+                WAIT_SECONDS,
+            )
+            time.sleep(WAIT_SECONDS)
+
+    logger.error(
+        "Document index %s setup did not succeed. Attempt limit reached. (%s)",
+        document_index.__class__.__name__,
+        num_attempts,
+    )
+    return False
 
 
 def setup_postgres(db_session: Session) -> None:
@@ -277,7 +314,10 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
+    if (
+        GEN_AI_API_KEY
+        and fetch_default_model(db_session, LLMModelFlowType.CHAT) is None
+    ):
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
@@ -309,8 +349,11 @@ def setup_postgres(db_session: Session) -> None:
         except ValueError as e:
             logger.warning("Failed to upsert LLM provider during setup: %s", e)
             return
-        update_default_provider(
-            provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
+        update_default_model(
+            provider_id=new_llm_provider.id,
+            model=llm_model,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
         )
 
 
@@ -352,55 +395,12 @@ def update_default_multipass_indexing(db_session: Session) -> None:
 
 def setup_multitenant_onyx() -> None:
     if DISABLE_VECTOR_DB:
-        logger.notice("DISABLE_VECTOR_DB is set — skipping multitenant Vespa setup.")
+        logger.notice(
+            "DISABLE_VECTOR_DB is set — skipping multitenant document index setup."
+        )
         return
 
-    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        opensearch_client = OpenSearchClient()
-        if not wait_for_opensearch_with_timeout(client=opensearch_client):
-            raise RuntimeError("Failed to connect to OpenSearch.")
-        set_cluster_state(opensearch_client)
-
-    # For Managed Vespa, the schema is sent over via the Vespa Console manually.
-    # NOTE: Pretty sure this code is never hit in any production environment.
-    if not MANAGED_VESPA and not ONYX_DISABLE_VESPA:
-        setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)
-
-
-def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) -> bool:
-    # TODO(andrei): We don't yet support OpenSearch for multi-tenant instances
-    # so this function remains unchanged.
-    # This is for local testing
-    WAIT_SECONDS = 5
-    VESPA_ATTEMPTS = 5
-    for x in range(VESPA_ATTEMPTS):
-        try:
-            logger.notice("Setting up Vespa (attempt %s/%s)...", x + 1, VESPA_ATTEMPTS)
-            register_multitenant_vespa_indices(
-                indices=[index.index_name for index in supported_indices]
-                + [
-                    f"{index.index_name}{ALT_INDEX_SUFFIX}"
-                    for index in supported_indices
-                ],
-                embedding_dims=[index.dim for index in supported_indices]
-                + [index.dim for index in supported_indices],
-                # on the cloud, just use float for all indices, the option to change this
-                # is not exposed to the user
-                embedding_precisions=[
-                    EmbeddingPrecision.FLOAT for _ in range(len(supported_indices) * 2)
-                ],
-            )
-
-            logger.notice("Vespa setup complete.")
-            return True
-        except Exception:
-            logger.notice(
-                "Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in %s seconds.",
-                WAIT_SECONDS,
-            )
-            time.sleep(WAIT_SECONDS)
-
-    logger.error(
-        "Vespa setup did not succeed. Attempt limit reached. (%s)", VESPA_ATTEMPTS
-    )
-    return False
+    opensearch_client = OpenSearchClient()
+    if not wait_for_opensearch_with_timeout(client=opensearch_client):
+        raise RuntimeError("Failed to connect to OpenSearch.")
+    set_cluster_state(opensearch_client)

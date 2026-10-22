@@ -367,9 +367,8 @@ class TestDeleteImplNoVectorDb:
         mock_get_file_store.return_value = MagicMock()
 
         with (
-            patch(f"{TASKS_MODULE}.get_all_document_indices") as mock_get_indices,
+            patch(f"{TASKS_MODULE}.get_default_document_index") as mock_get_index,
             patch(f"{TASKS_MODULE}.get_active_search_settings") as mock_get_ss,
-            patch(f"{TASKS_MODULE}.httpx_init_vespa_pool") as mock_vespa_pool,
         ):
             delete_user_file_impl(
                 user_file_id=str(uf.id),
@@ -377,9 +376,8 @@ class TestDeleteImplNoVectorDb:
                 redis_locking=False,
             )
 
-            mock_get_indices.assert_not_called()
+            mock_get_index.assert_not_called()
             mock_get_ss.assert_not_called()
-            mock_vespa_pool.assert_not_called()
 
         session.delete.assert_called_once_with(uf)
         session.commit.assert_called_once()
@@ -433,9 +431,8 @@ class TestProjectSyncImplNoVectorDb:
                 f"{TASKS_MODULE}.fetch_user_files_with_access_relationships",
                 return_value=[uf],
             ),
-            patch(f"{TASKS_MODULE}.get_all_document_indices") as mock_get_indices,
+            patch(f"{TASKS_MODULE}.get_default_document_index") as mock_get_index,
             patch(f"{TASKS_MODULE}.get_active_search_settings") as mock_get_ss,
-            patch(f"{TASKS_MODULE}.httpx_init_vespa_pool") as mock_vespa_pool,
         ):
             project_sync_user_file_impl(
                 user_file_id=str(uf.id),
@@ -443,9 +440,8 @@ class TestProjectSyncImplNoVectorDb:
                 redis_locking=False,
             )
 
-            mock_get_indices.assert_not_called()
+            mock_get_index.assert_not_called()
             mock_get_ss.assert_not_called()
-            mock_vespa_pool.assert_not_called()
 
     @patch(f"{TASKS_MODULE}.DISABLE_VECTOR_DB", True)
     @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")

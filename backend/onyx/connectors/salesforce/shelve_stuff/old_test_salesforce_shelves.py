@@ -138,12 +138,12 @@ def create_csv_file(
     fields: set[str] = set()
     for record in records:
         fields.update(record.keys())
-    fields = set(sorted(list(fields)))  # Sort for consistent order
+    sorted_fields = sorted(fields)  # Sort for a consistent column order
 
     # Create CSV file
     csv_path = os.path.join(get_object_type_path(object_type), filename)
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=sorted_fields)
         writer.writeheader()
         for record in records:
             writer.writerow(record)

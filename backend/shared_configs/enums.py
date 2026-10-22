@@ -8,6 +8,7 @@ class EmbeddingProvider(str, Enum):
     GOOGLE = "google"
     LITELLM = "litellm"
     AZURE = "azure"
+    BIFROST = "bifrost"
 
 
 class RerankerProvider(str, Enum):
@@ -28,6 +29,7 @@ class WebSearchProviderType(str, Enum):
     SEARXNG = "searxng"
     BRAVE = "brave"
     TAVILY = "tavily"
+    FIRECRAWL = "firecrawl"
 
 
 class WebContentProviderType(str, Enum):
@@ -50,4 +52,5 @@ class UsageCredentialType(str, Enum):
     JWT = "jwt"
     PAT = "pat"
     CRAFT_PAT = "craft_pat"
+    OAUTH_PROVIDER = "oauth_provider"
     API_KEY = "api_key"

@@ -10,13 +10,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user
+from onyx.auth.users import current_user, scope_exempt
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, SystemUsageAttribution
+from onyx.db.enums import LLMModelFlowType, Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
-    fetch_default_llm_model,
+    fetch_default_model,
 )
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.system_usage import (
@@ -221,7 +221,9 @@ user_usage_router = APIRouter(prefix="/user/usage", tags=PUBLIC_API_TAGS)
 admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 
 
-@user_usage_router.get("")
+# scope_exempt: returns only the caller's own usage, so a scoped PAT may read
+# it like /me. Without a marker the scoped-PAT route gate rejects it fail-closed.
+@user_usage_router.get("", dependencies=[Depends(scope_exempt)])
 def get_my_usage(
     days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
     start: date | None = None,
@@ -278,7 +280,7 @@ def get_my_usage(
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
-    default_model = fetch_default_llm_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     selected_model_price: ModelPrice | None = None
     if (
         default_model is not None

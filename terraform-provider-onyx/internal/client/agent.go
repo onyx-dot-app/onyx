@@ -81,15 +81,6 @@ type agentAttachedDocumentRef struct {
 //
 // The snapshot carries no search_start_date, so that field cannot be read back.
 type Agent struct {
-	ID                          int64                      `json:"id"`
-	Name                        string                     `json:"name"`
-	Description                 string                     `json:"description"`
-	IsPublic                    bool                       `json:"is_public"`
-	IsListed                    bool                       `json:"is_listed"`
-	IsFeatured                  bool                       `json:"is_featured"`
-	BuiltinAgent                bool                       `json:"builtin_persona"`
-	IconName                    *string                    `json:"icon_name"`
-	DisplayPriority             *int64                     `json:"display_priority"`
 	StarterMessages             []StarterMessage           `json:"starter_messages"`
 	Tools                       []agentToolRef             `json:"tools"`
 	DocumentSets                []agentDocumentSetRef      `json:"document_sets"`
@@ -98,9 +89,18 @@ type Agent struct {
 	Groups                      []int64                    `json:"groups"`
 	HierarchyNodes              []agentHierarchyNodeRef    `json:"hierarchy_nodes"`
 	AttachedDocuments           []agentAttachedDocumentRef `json:"attached_documents"`
+	Name                        string                     `json:"name"`
+	Description                 string                     `json:"description"`
+	ID                          int64                      `json:"id"`
+	IconName                    *string                    `json:"icon_name"`
+	DisplayPriority             *int64                     `json:"display_priority"`
 	DefaultModelConfigurationID *int64                     `json:"default_model_configuration_id"`
 	SystemPrompt                *string                    `json:"system_prompt"`
 	TaskPrompt                  *string                    `json:"task_prompt"`
+	IsPublic                    bool                       `json:"is_public"`
+	IsListed                    bool                       `json:"is_listed"`
+	IsFeatured                  bool                       `json:"is_featured"`
+	BuiltinAgent                bool                       `json:"builtin_persona"`
 	DatetimeAware               bool                       `json:"datetime_aware"`
 	ReplaceBaseSystemPrompt     bool                       `json:"replace_base_system_prompt"`
 }

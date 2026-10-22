@@ -352,9 +352,6 @@ func (img *pullImage) bytes() (current, total int64) {
 // compose touches (networks, volumes) is ignored.
 type startProgress struct {
 	checklist
-	// waitHealth records that `up --wait` is in play, so a started container
-	// is only halfway there: compose follows it with a health check.
-	waitHealth bool
 	// project is the compose project name, stripped off container names so
 	// the checklist shows services rather than full container names.
 	project string
@@ -364,6 +361,9 @@ type startProgress struct {
 	// compose is saying anything, so it is written and read from two
 	// goroutines.
 	reported atomic.Bool
+	// waitHealth records that `up --wait` is in play, so a started container
+	// is only halfway there: compose follows it with a health check.
+	waitHealth bool
 }
 
 func newStartProgress(services func([]ui.ServiceRow), extra func(string), waitHealth bool, project string) *startProgress {

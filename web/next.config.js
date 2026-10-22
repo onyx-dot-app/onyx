@@ -14,6 +14,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: process.env.SKIP_TYPE_CHECK === "1",
   },
+  experimental: {
+    // TypeScript 7 has no classic JS API, so `next build` must type-check
+    // through the `tsc` CLI.
+    useTypeScriptCli: true,
+  },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
   // `next dev` otherwise appends its own managed block to web/AGENTS.md on every
@@ -68,10 +73,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -204,6 +210,20 @@ const nextConfig = {
         destination: "/admin/web-search",
         permanent: true,
       },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
+        permanent: true,
+      },
       // Replaces the redirect page that used to live at
       // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
       {
@@ -294,6 +314,25 @@ module.exports = (phase) => {
     withSentryConfig(
       {
         ...nextConfig,
+        ...(isDevServer && {
+          async rewrites() {
+            return [
+              {
+                source: "/.well-known/oauth-authorization-server/:path*",
+                destination: `${
+                  process.env.INTERNAL_URL || "http://localhost:8080"
+                }/oauth-provider/metadata`,
+              },
+              {
+                source: "/.well-known/oauth-protected-resource/:path*",
+                destination: `${
+                  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
+                }/.well-known/oauth-protected-resource/:path*`,
+              },
+              ...(await nextConfig.rewrites()),
+            ];
+          },
+        }),
         reactCompiler:
           !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
       },

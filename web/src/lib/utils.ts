@@ -1,9 +1,8 @@
-import type { ComponentType } from "react";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgImage,
-  SvgFileChartPie,
-  SvgFileBraces,
+  SvgPowerpointFile,
+  SvgCodeFile,
   SvgFileText,
 } from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
@@ -252,12 +251,12 @@ export function isCodeFile(fileName: string | null | undefined): boolean {
  */
 export function getFileIcon(
   fileName: string | null | undefined
-): ComponentType<IconProps> {
+): IconFunctionComponent {
   if (!fileName) return SvgFileText;
   if (isImageFile(fileName)) return SvgImage;
-  if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pptx?$/i.test(fileName)) return SvgPowerpointFile;
   if (/\.pdf$/i.test(fileName)) return SvgFileText;
-  if (isCodeFile(fileName)) return SvgFileBraces;
+  if (isCodeFile(fileName)) return SvgCodeFile;
   return SvgFileText;
 }
 

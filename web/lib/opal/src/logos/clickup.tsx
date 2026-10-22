@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgClickup = ({ size, ...props }: IconProps) => (
+const SvgClickUp = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -46,4 +46,4 @@ const SvgClickup = ({ size, ...props }: IconProps) => (
     </defs>
   </svg>
 );
-export default SvgClickup;
+export default SvgClickUp;

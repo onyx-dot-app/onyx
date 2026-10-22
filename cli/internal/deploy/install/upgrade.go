@@ -36,7 +36,11 @@ func RunUpgrade(ctx context.Context, deps Deps, opts Options) error {
 }
 
 func (in *installer) runUpgrade(ctx context.Context) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	if len(in.root.Ambiguous) > 0 {
 		return exitcodes.Newf(exitcodes.BadRequest,
 			"multiple Onyx installs found (%s and %s) — pass --dir to pick one",
@@ -243,7 +247,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
 	}
-	in.successf("Updated IMAGE_TAG to %s in .env file (all other settings preserved)", targetTag)
+	in.successf("Updated IMAGE_TAG to %s in .env file", targetTag)
+	if err := in.alignObjectStoreEndpoint(envPath); err != nil {
+		in.rollbackEnv(envPath, envBytes)
+		return err
+	}
 
 	if err := in.pullImages(ctx, targetTag, hostPort); err != nil {
 		in.rollbackEnv(envPath, envBytes)

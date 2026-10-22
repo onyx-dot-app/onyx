@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import LLMGatewayPage from "@/app/app/settings/llm-gateway/page";
 
 const mockReplace = jest.fn();
@@ -10,11 +10,12 @@ const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useLLMProviders: jest.fn(),
+  useLanguageModels: jest.fn(),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: jest.fn(),
@@ -26,8 +27,8 @@ jest.mock("@/views/SettingsPage", () => ({
 const mockUseTierAtLeast = useTierAtLeast as jest.MockedFunction<
   typeof useTierAtLeast
 >;
-const mockUseLLMProviders = useLLMProviders as jest.MockedFunction<
-  typeof useLLMProviders
+const mockUseLanguageModels = useLanguageModels as jest.MockedFunction<
+  typeof useLanguageModels
 >;
 const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
@@ -38,11 +39,11 @@ describe("LLMGatewayPage", () => {
     mockUseSettings.mockReturnValue({ isLoading: false } as ReturnType<
       typeof useSettings
     >);
-    mockUseLLMProviders.mockReturnValue({
+    mockUseLanguageModels.mockReturnValue({
       llmProviders: [{ model_configurations: [{ is_visible: true }] }],
       isLoading: false,
       error: undefined,
-    } as unknown as ReturnType<typeof useLLMProviders>);
+    } as unknown as ReturnType<typeof useLanguageModels>);
   });
 
   it("renders the Gateway for the Business minimum tier", () => {
@@ -62,5 +63,18 @@ describe("LLMGatewayPage", () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith("/app/settings/general")
     );
+  });
+
+  it("shows the disabled notice instead of redirecting when an admin turned the gateway off", async () => {
+    mockUseSettings.mockReturnValue({
+      isLoading: false,
+      llm_gateway_enabled: false,
+    } as ReturnType<typeof useSettings>);
+
+    render(<LLMGatewayPage />);
+
+    expect(screen.queryByText("Gateway settings")).not.toBeInTheDocument();
+    expect(await screen.findByText("LLM Gateway is off")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

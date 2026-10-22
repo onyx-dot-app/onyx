@@ -12,7 +12,7 @@ import {
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalAgent } from "@/lib/agents/types";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 function getOnboardingCompletedKey(userId: string): string {
@@ -37,7 +37,9 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
   } = useProviderStatus();
 
   // Only fetch persona-specific providers (different endpoint)
-  const { refetch: refreshPersonaProviders } = useLLMProviders(activeAgent?.id);
+  const { refetch: refreshPersonaProviders } = useLanguageModelsForAgent(
+    activeAgent?.id
+  );
 
   const userName = user?.personalization?.name;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
@@ -23,26 +24,21 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-import { getSourceMetadata } from "@/lib/sources";
 import {
   Card,
   InputTextArea,
   InputTypeIn,
   InputPasswordTypeIn,
 } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_ENDONYMS,
-  SUPPORTED_LOCALES,
-  type Locale,
-} from "@/i18n/config";
+import { type Locale } from "@/i18n/config";
+import { LanguageSelect } from "@/lib/app/components";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useLlmManager } from "@/lib/hooks";
@@ -61,8 +57,8 @@ import {
 } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
-import { ValidSources } from "@/lib/types";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
@@ -79,8 +75,8 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import {
   ALL_REASONING_STOPS,
@@ -89,16 +85,22 @@ import {
   UNSET_REASONING_STOP,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
+import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers/utils";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
-import { hasPermission } from "@/lib/permissions";
-import { findModelConfigId } from "@/lib/languageModels/options";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { hasPermission } from "@/lib/permissions/utils";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+  findLlmOptionById,
+  findModelConfigId,
+} from "@/lib/languageModels/options";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import OAuthProviderConnections from "@/sections/oauth-provider/OAuthProviderConnections";
 
 interface PAT {
   id: number;
@@ -243,6 +245,8 @@ interface PATModalProps {
   setExpirationDays: (days: string) => void;
   accessMode: AccessMode;
   setAccessMode: (mode: AccessMode) => void;
+  /** The access mode the modal opened with; the select never empties below it. */
+  defaultAccessMode: AccessMode;
   scopeOptions: PatScopeOption[];
   scopesError: boolean;
   selectedScopes: string[];
@@ -260,6 +264,7 @@ function PATModal({
   setExpirationDays,
   accessMode,
   setAccessMode,
+  defaultAccessMode,
   scopeOptions,
   scopesError,
   selectedScopes,
@@ -353,29 +358,28 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={expirationDays}
             onValueChange={setExpirationDays}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.expiration.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="7">
-                {t("apiKeys.createModal.expiration.days7")}
-              </InputSelect.Item>
-              <InputSelect.Item value="30">
-                {t("apiKeys.createModal.expiration.days30")}
-              </InputSelect.Item>
-              <InputSelect.Item value="365">
-                {t("apiKeys.createModal.expiration.days365")}
-              </InputSelect.Item>
-              <InputSelect.Item value="null">
-                {t("apiKeys.createModal.expiration.noExpiration")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption="30"
+            placeholder={t("apiKeys.createModal.expiration.placeholder")}
+            options={[
+              { value: "7", title: t("apiKeys.createModal.expiration.days7") },
+              {
+                value: "30",
+                title: t("apiKeys.createModal.expiration.days30"),
+              },
+              {
+                value: "365",
+                title: t("apiKeys.createModal.expiration.days365"),
+              },
+              {
+                value: "null",
+                title: t("apiKeys.createModal.expiration.noExpiration"),
+              },
+            ]}
+          />
         </InputVertical>
         <InputVertical
           title={t("apiKeys.createModal.permissions.title")}
@@ -386,23 +390,23 @@ function PATModal({
           }
           withLabel
         >
-          <InputSelect
+          <InputSingleSelect
             value={accessMode}
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
-          >
-            <InputSelect.Trigger
-              placeholder={t("apiKeys.createModal.permissions.placeholder")}
-            />
-            <InputSelect.Content>
-              <InputSelect.Item value="full">
-                {t("apiKeys.createModal.permissions.fullAccessOption")}
-              </InputSelect.Item>
-              <InputSelect.Item value="limited">
-                {t("apiKeys.createModal.permissions.limitedAccessOption")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption={defaultAccessMode}
+            placeholder={t("apiKeys.createModal.permissions.placeholder")}
+            options={[
+              {
+                value: "full",
+                title: t("apiKeys.createModal.permissions.fullAccessOption"),
+              },
+              {
+                value: "limited",
+                title: t("apiKeys.createModal.permissions.limitedAccessOption"),
+              },
+            ]}
+          />
         </InputVertical>
         {accessMode === "limited" && (
           <ScopeSelector
@@ -493,7 +497,6 @@ function usePATCreation({
           token: data.token,
           name: newTokenName,
         });
-        toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
         const errorData: ErrorResponseBody = await response.json();
@@ -523,6 +526,7 @@ function usePATCreation({
     setExpirationDays,
     accessMode,
     setAccessMode,
+    defaultAccessMode,
     selectedScopes,
     toggleScope,
     newlyCreatedToken,
@@ -534,6 +538,7 @@ function usePATCreation({
 
 function GeneralSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     user,
     updateUserPersonalization,
@@ -542,7 +547,7 @@ function GeneralSettings() {
     updateUserLanguage,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
+  const workspaceLanguage: Locale = useSettings().default_language;
 
   const tBg = useTranslations("common.chatBackgrounds");
   const bgLabels: Record<string, string> = {
@@ -581,7 +586,6 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("profile.toasts.updated")),
     onError: () => toast.error(t("profile.toasts.updateFailed")),
   });
 
@@ -600,7 +604,6 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success(t("dangerZone.deleteAllChats.toasts.deleted"));
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
@@ -728,48 +731,47 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
-                  value={theme}
+                <InputSingleSelect
+                  value={theme ?? ""}
                   onValueChange={(value) => {
                     setTheme(value);
                     updateUserThemePreference(value as ThemePreference);
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={ThemePreference.SYSTEM}
-                      icon={() => (
-                        <ColorSwatch
-                          light={systemTheme === "light"}
-                          dark={systemTheme === "dark"}
-                        />
-                      )}
-                      description={
+                  defaultOption={ThemePreference.SYSTEM}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: ThemePreference.SYSTEM,
+                      title: t("appearance.colorMode.auto"),
+                      description:
                         systemTheme === "light"
                           ? t("appearance.colorMode.light")
                           : systemTheme === "dark"
                             ? t("appearance.colorMode.dark")
-                            : undefined
-                      }
-                    >
-                      {t("appearance.colorMode.auto")}
-                    </InputSelect.Item>
-                    <InputSelect.Separator />
-                    <InputSelect.Item
-                      value={ThemePreference.LIGHT}
-                      icon={() => <ColorSwatch light />}
-                    >
-                      {t("appearance.colorMode.light")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={ThemePreference.DARK}
-                      icon={() => <ColorSwatch dark />}
-                    >
-                      {t("appearance.colorMode.dark")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                            : undefined,
+                      icon: () => (
+                        <ColorSwatch
+                          light={systemTheme === "light"}
+                          dark={systemTheme === "dark"}
+                        />
+                      ),
+                    },
+                    {
+                      options: [
+                        {
+                          value: ThemePreference.LIGHT,
+                          title: t("appearance.colorMode.light"),
+                          icon: () => <ColorSwatch light />,
+                        },
+                        {
+                          value: ThemePreference.DARK,
+                          title: t("appearance.colorMode.dark"),
+                          icon: () => <ColorSwatch dark />,
+                        },
+                      ],
+                    },
+                  ]}
+                />
               </InputHorizontal>
               <InputVertical title={t("appearance.chatBackground.title")}>
                 <div className="flex flex-wrap gap-2">
@@ -842,25 +844,15 @@ function GeneralSettings() {
                 center
                 withLabel
               >
-                <InputSelect
-                  value={currentLanguage}
-                  onValueChange={(value) => {
-                    // SAFETY: the items below only carry SUPPORTED_LOCALES
-                    // values, so the select can't emit anything else.
-                    updateUserLanguage(value as Locale).catch(() => {
+                <LanguageSelect
+                  value={user?.preferences?.language ?? null}
+                  globalDefault={workspaceLanguage}
+                  onChange={(language) => {
+                    updateUserLanguage(language).catch(() => {
                       toast.error(t("language.toasts.updateFailed"));
                     });
                   }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    {SUPPORTED_LOCALES.map((locale) => (
-                      <InputSelect.Item key={locale} value={locale}>
-                        {LOCALE_ENDONYMS[locale]}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                />
               </InputHorizontal>
             </Section>
           </Card>
@@ -1014,7 +1006,6 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          toast.success(t("promptShortcuts.toasts.deleted"));
         } else {
           throw new Error("Failed to delete shortcut");
         }
@@ -1049,7 +1040,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.created"));
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -1068,7 +1058,6 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("promptShortcuts.toasts.updated"));
           } else {
             throw new Error("Failed to update shortcut");
           }
@@ -1184,6 +1173,7 @@ function PromptShortcuts() {
 
 function ChatPreferencesSettings() {
   const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
   const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
@@ -1212,7 +1202,6 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("chats.toasts.saved")),
     onError: () => toast.error(t("chats.toasts.saveFailed")),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
@@ -1231,7 +1220,6 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1240,6 +1228,15 @@ function ChatPreferencesSettings() {
   );
 
   const settings = useSettings();
+  const { defaultText } = useLanguageModels();
+  // The user's default as a configuration id; null means the global default.
+  const defaultModelConfigId = user?.preferences?.default_model
+    ? findModelConfigId(
+        llmManager.llmProviders,
+        llmManager.currentLlm.provider,
+        llmManager.currentLlm.modelName
+      )
+    : null;
   const userTemperatureDefault = user?.preferences.temperature_default ?? null;
   const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
   // 0 mirrors the backend GEN_AI_TEMPERATURE fallback an untouched chat
@@ -1266,7 +1263,6 @@ function ChatPreferencesSettings() {
     async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1280,7 +1276,6 @@ function ChatPreferencesSettings() {
         await updateUserReasoningEffortDefault(
           ALL_REASONING_STOPS[effortStop] ?? null
         );
-        toast.success(t("chats.toasts.saved"));
       } catch {
         toast.error(t("chats.toasts.saveFailed"));
       }
@@ -1327,42 +1322,49 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("chats.defaultModel.title")}
-              description={t("chats.defaultModel.description")}
+              description={t("chats.defaultModel.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
-              <ModelSelector
-                value={
-                  user?.preferences?.default_model
-                    ? findModelConfigId(
-                        llmManager.llmProviders,
-                        llmManager.currentLlm.provider,
-                        llmManager.currentLlm.modelName
-                      )
-                    : null
-                }
-                onChange={(opt) => {
-                  if (opt.modelConfigurationId === null) {
-                    void updateUserDefaultModel(null);
-                  } else {
-                    llmManager.updateCurrentLlm({
-                      name: opt.name,
-                      provider: opt.provider,
-                      modelName: opt.modelName,
-                      modelConfigurationId: opt.modelConfigurationId,
-                    });
-                    void updateUserDefaultModel(
-                      structureValue(
-                        opt.name,
-                        opt.provider,
-                        opt.modelName,
-                        opt.modelConfigurationId
-                      )
-                    );
-                  }
+              <SimpleModelSelector
+                nullable
+                globalDefault={{
+                  description: findDefaultModelDisplayName(
+                    llmManager.llmProviders,
+                    defaultText
+                  ),
                 }}
-                temperatureManager={llmManager}
-                includeGlobalDefault
-                side="bottom"
+                providers={filterModelConfigurations(
+                  llmManager.llmProviders ?? [],
+                  { keep: defaultModelConfigId }
+                )}
+                value={defaultModelConfigId}
+                grouped={!settings.hide_provider_grouping}
+                onChange={(modelConfigurationId) => {
+                  const opt = findLlmOptionById(
+                    llmManager.llmProviders,
+                    modelConfigurationId
+                  );
+                  if (modelConfigurationId === null || opt === null) {
+                    void updateUserDefaultModel(null);
+                    return;
+                  }
+                  llmManager.updateCurrentLlm({
+                    name: opt.name,
+                    provider: opt.provider,
+                    modelName: opt.modelName,
+                    modelConfigurationId,
+                  });
+                  void updateUserDefaultModel(
+                    structureValue(
+                      opt.name,
+                      opt.provider,
+                      opt.modelName,
+                      modelConfigurationId
+                    )
+                  );
+                }}
               />
             </InputHorizontal>
 
@@ -1495,23 +1497,25 @@ function ChatPreferencesSettings() {
                   disabled={!searchUiEnabled}
                   withLabel
                 >
-                  <InputSelect
+                  <InputSingleSelect
                     value={user?.preferences.default_app_mode ?? "CHAT"}
                     onValueChange={(value) => {
                       void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
                     }}
                     disabled={!searchUiEnabled}
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item value="CHAT">
-                        {t("chats.defaultAppMode.chatOption")}
-                      </InputSelect.Item>
-                      <InputSelect.Item value="SEARCH">
-                        {t("chats.defaultAppMode.searchOption")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                    defaultOption="CHAT"
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "CHAT",
+                        title: t("chats.defaultAppMode.chatOption"),
+                      },
+                      {
+                        value: "SEARCH",
+                        title: t("chats.defaultAppMode.searchOption"),
+                      },
+                    ]}
+                  />
                 </InputHorizontal>
               </Tooltip>
             )}
@@ -1550,7 +1554,9 @@ function ChatPreferencesSettings() {
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title={t("memory.referenceStoredMemories.title")}
-              description={t("memory.referenceStoredMemories.description")}
+              description={t("memory.referenceStoredMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1563,7 +1569,9 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
             <InputHorizontal
               title={t("memory.updateMemories.title")}
-              description={t("memory.updateMemories.description")}
+              description={t("memory.updateMemories.description", {
+                appName: settings.appName,
+              })}
               withLabel
             >
               <InputSwitch
@@ -1730,8 +1738,9 @@ function GatewayAccessSection({
   onCreateToken,
 }: GatewayAccessSectionProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const [gatewayUrl, setGatewayUrl] = useState("");
 
   useEffect(() => {
@@ -1782,7 +1791,7 @@ function GatewayAccessSection({
     <Section gap={3}>
       <ContentAction
         title={t("gateway.title")}
-        description={t("gateway.description")}
+        description={t("gateway.description", { appName })}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -1822,34 +1831,32 @@ function GatewayAccessSection({
 
             <Section gap={2} alignItems="start">
               {providerGroups.map((provider) => (
-                <SimpleCollapsible key={provider.id} defaultOpen={false}>
-                  <SimpleCollapsible.Header
-                    title={provider.name}
-                    description={t("gateway.provider.modelsAvailable", {
-                      count: provider.models.length,
-                    })}
-                    sizePreset="main-ui"
-                  />
-                  <SimpleCollapsible.Content>
-                    <Section gap={2} alignItems="start">
-                      {provider.models.map((model) => (
-                        <Section
-                          key={model.id}
-                          flexDirection="row"
-                          justifyContent="between"
-                          alignItems="center"
-                          height="fit"
-                          gap={2}
-                        >
-                          <Text font="main-ui-body" color="text-04">
-                            {model.name}
-                          </Text>
-                          <GatewayCopyValueButton value={model.id} />
-                        </Section>
-                      ))}
-                    </Section>
-                  </SimpleCollapsible.Content>
-                </SimpleCollapsible>
+                <Collapsible
+                  key={provider.id}
+                  defaultOpen={false}
+                  title={provider.name}
+                  description={t("gateway.provider.modelsAvailable", {
+                    count: provider.models.length,
+                  })}
+                >
+                  <Section gap={2} alignItems="start">
+                    {provider.models.map((model) => (
+                      <Section
+                        key={model.id}
+                        flexDirection="row"
+                        justifyContent="between"
+                        alignItems="center"
+                        height="fit"
+                        gap={2}
+                      >
+                        <Text font="main-ui-body" color="text-04">
+                          {model.name}
+                        </Text>
+                        <GatewayCopyValueButton value={model.id} />
+                      </Section>
+                    ))}
+                  </Section>
+                </Collapsible>
               ))}
             </Section>
           </Section>
@@ -1919,6 +1926,7 @@ function LLMGatewaySettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}
@@ -2003,7 +2011,7 @@ function AccountsAccessSettings() {
     errorHandlingFetcher,
     { fallbackData: [] }
   );
-  const currentTier = useSettings().tier;
+  const { tier: currentTier, appName } = useSettings();
   const scopeOptions = useMemo(
     () =>
       // Undefined tier (settings loading/failed) must not hide Community scopes.
@@ -2062,7 +2070,6 @@ function AccountsAccessSettings() {
             tokenCreation.closeTokenModal();
           }
           await mutate();
-          toast.success(t("apiKeys.toasts.deleted"));
           setTokenToDelete(null);
         } else {
           toast.error(t("apiKeys.toasts.deleteFailed"));
@@ -2093,7 +2100,6 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success(t("accounts.passwordModal.toasts.updated"));
           setShowPasswordModal(false);
         } else {
           const errorData: ErrorResponseBody = await response.json();
@@ -2119,6 +2125,7 @@ function AccountsAccessSettings() {
           setExpirationDays={tokenCreation.setExpirationDays}
           accessMode={tokenCreation.accessMode}
           setAccessMode={tokenCreation.setAccessMode}
+          defaultAccessMode={tokenCreation.defaultAccessMode}
           scopeOptions={scopeOptions}
           scopesError={Boolean(scopeOptionsError)}
           selectedScopes={tokenCreation.selectedScopes}
@@ -2148,6 +2155,7 @@ function AccountsAccessSettings() {
               {t("apiKeys.revokeModal.description", {
                 name: tokenToDelete.name,
                 tokenDisplay: tokenToDelete.token_display,
+                appName,
               })}
             </Text>
             <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
@@ -2448,6 +2456,7 @@ function AccountsAccessSettings() {
             )}
           </Section>
         )}
+        <OAuthProviderConnections />
       </Section>
     </>
   );
@@ -2491,6 +2500,7 @@ function FederatedConnectorCard({
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
   const t = useTranslations("settings");
+  const { appName } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -2505,7 +2515,6 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success(t("connectors.toasts.disconnected"));
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
@@ -2545,6 +2554,7 @@ function FederatedConnectorCard({
             <Text color="text-05">
               {t("connectors.disconnectModal.description", {
                 name: sourceMetadata.displayName,
+                appName,
               })}
             </Text>
             <Text color="text-05">

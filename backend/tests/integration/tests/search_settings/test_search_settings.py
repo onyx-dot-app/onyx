@@ -52,7 +52,6 @@ def _set_new_search_settings(
         "provider_type": current_settings.get("provider_type"),
         "index_name": None,
         "multipass_indexing": current_settings.get("multipass_indexing", False),
-        "embedding_precision": current_settings["embedding_precision"],
         "reduced_dimension": current_settings.get("reduced_dimension"),
         "enable_contextual_rag": enable_contextual_rag,
         "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
@@ -84,7 +83,7 @@ def test_get_current_search_settings(
     assert "enable_contextual_rag" in settings
     assert "contextual_rag_model_configuration_id" in settings
     assert "index_name" in settings
-    assert "embedding_precision" in settings
+    assert "vector_quantization" in settings
 
 
 def test_get_all_search_settings(

@@ -9,7 +9,7 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";

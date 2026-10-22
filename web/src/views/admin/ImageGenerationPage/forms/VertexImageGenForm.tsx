@@ -6,8 +6,8 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
-import { InputFile } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleUploadField } from "@opal/form";
+import { InputSingleSelect } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
@@ -96,6 +96,8 @@ function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
   const t = useTranslations("admin.imageGeneration");
+  const tPlaceholders = useTranslations("common.placeholders");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     apiStatus,
     showApiMessage,
@@ -126,35 +128,35 @@ function VertexFormFields(
             >
               <FormField.Label>{t("form.authMethod.label")}</FormField.Label>
               <FormField.Control>
-                <InputSelect
+                <InputSingleSelect
                   value={field.value}
                   onValueChange={(value) => helper.setValue(value)}
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_SERVICE_ACCOUNT}
-                      description={t(
+                  defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: AUTH_METHOD_SERVICE_ACCOUNT,
+                      title: t("form.authMethod.serviceAccount.label"),
+                      description: t(
                         "form.authMethod.serviceAccount.description"
-                      )}
-                    >
-                      {t("form.authMethod.serviceAccount.label")}
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                      description={t(
+                      ),
+                    },
+                    {
+                      value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                      title: t("form.authMethod.workloadIdentity.label"),
+                      description: t(
                         "form.authMethod.workloadIdentity.description"
-                      )}
-                    >
-                      {t("form.authMethod.workloadIdentity.label")}
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                      ),
+                    },
+                  ]}
+                />
               </FormField.Control>
               <FormField.Message
                 messages={{
-                  idle: t("form.authMethod.idle"),
+                  idle: t("form.authMethod.idle", {
+                    appName: settings.appName,
+                  }),
                 }}
               />
             </FormField>
@@ -166,7 +168,7 @@ function VertexFormFields(
       {!isWorkloadIdentity && (
         <FormikField<string>
           name="custom_config.vertex_credentials"
-          render={(field, helper, meta, state) => (
+          render={(_field, _helper, meta, state) => (
             <FormField
               name="custom_config.vertex_credentials"
               state={apiStatus === "error" ? "error" : state}
@@ -174,12 +176,17 @@ function VertexFormFields(
             >
               <FormField.Label>{t("form.credentials.label")}</FormField.Label>
               <FormField.Control>
-                <InputFile
-                  setValue={(value) => helper.setValue(value)}
-                  error={apiStatus === "error"}
-                  onBlur={field.onBlur}
-                  disabled={disabled}
-                  accept="application/json"
+                <InputSingleUploadField
+                  name="custom_config.vertex_credentials"
+                  // Unset, the field shows its own Formik error.
+                  variant={
+                    disabled
+                      ? "disabled"
+                      : apiStatus === "error"
+                        ? "error"
+                        : undefined
+                  }
+                  accept="application/json,.json"
                   placeholder={t("form.credentials.placeholder")}
                 />
               </FormField.Control>
@@ -229,7 +236,7 @@ function VertexFormFields(
                   value={field.value}
                   onChange={(e) => helper.setValue(e.target.value)}
                   onBlur={field.onBlur}
-                  placeholder="my-vertex-project"
+                  placeholder={tPlaceholders("vertexAi.projectId")}
                   variant={disabled ? "disabled" : undefined}
                 />
               </FormField.Control>
@@ -247,7 +254,9 @@ function VertexFormFields(
               ) : (
                 <FormField.Message
                   messages={{
-                    idle: t("form.projectId.idle"),
+                    idle: t("form.projectId.idle", {
+                      appName: settings.appName,
+                    }),
                     error: meta.error,
                   }}
                 />
@@ -272,7 +281,7 @@ function VertexFormFields(
                 value={field.value}
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
-                placeholder="global"
+                placeholder={tPlaceholders("vertexAi.location")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

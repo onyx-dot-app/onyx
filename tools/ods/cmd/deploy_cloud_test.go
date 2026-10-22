@@ -14,9 +14,14 @@ package cmd
 //	E5 --version with leading zeroes         -> rejected before any git work    TestDeployCloud_rejectsLeadingZeroVersion
 //	E6 --attach with malformed or empty tag  -> rejected before any gh work     TestDeployCloud_attachRejectsMalformedTag
 //	E7 --attach with a cut-flow flag         -> rejected before any gh work     TestDeployCloud_attachRejectsCutFlowFlags
+//	E8 --attach with a valid tag             -> watches the tag, cuts nothing   TestDeployCloud_attachWatchesWithoutCutting
+//	E9 real run, with and without --no-watch -> pushes, then announces or
+//	                                            watches the tag's pipeline;
+//	                                            a dry run watches nothing       TestDeployCloud_pushThenAnnounceOrWatch
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -152,5 +157,107 @@ func TestDeployCloud_pushFailureRollsBackLocalTag(t *testing.T) {
 	}
 	if gittest.TagExists(repo.Work, "v4.6.0-cloud.0") {
 		t.Error("local tag must be rolled back after a failed push")
+	}
+}
+
+// deployCloudPipelineGH fakes gh for a cloud pipeline whose build succeeds and
+// whose bump PR is open.
+func deployCloudPipelineGH(t *testing.T) *deployFakeGH {
+	t.Helper()
+	return deployNewFakeGH(t, map[string][]deployGHReply{
+		"run-list": {deployRuns(t, workflowRun{DatabaseID: deployCloudRunID, URL: deployRunURL})},
+		"run-view": {deployRun(t, workflowRun{DatabaseID: deployCloudRunID, Status: "completed", Conclusion: "success"})},
+		"pr-list":  {deployPRs(`[{"number":12,"state":"OPEN","url":"` + deployPRURL + `"}]`)},
+	})
+}
+
+func TestDeployCloud_attachWatchesWithoutCutting(t *testing.T) {
+	// Precondition.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gh := deployCloudPipelineGH(t)
+	out := deployCaptureOutput(t)
+
+	// Under test.
+	cmd := NewDeployCloudCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--attach", deployCloudTag})
+	err := cmd.Execute()
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := out.printed(t), deployRunURL+"\n"+deployPRURL+"\n"; got != want {
+		t.Errorf("expected stdout %q, got %q", want, got)
+	}
+	deployAssertBumpPRPolls(t, gh.calls(), 1, false)
+	if gittest.TagExists(repo.Origin, "v4.6.0-cloud.0") {
+		t.Error("attach must not cut a tag")
+	}
+}
+
+func TestDeployCloud_pushThenAnnounceOrWatch(t *testing.T) {
+	const tag = "v4.6.0-cloud.0"
+	runList := "run list -R onyx-dot-app/onyx --workflow deployment.yml --limit 5 " + deployRunJSONFields + " --event push --branch " + tag
+	cases := []struct {
+		name       string
+		args       []string
+		wantPushed bool
+		wantStdout string
+		wantCalls  []string
+	}{
+		{
+			name:       "dry run neither pushes nor watches",
+			args:       []string{"--yes", "--dry-run"},
+			wantStdout: tag + "\n",
+		},
+		{
+			name:       "no-watch announces the run",
+			args:       []string{"--yes", "--no-watch"},
+			wantPushed: true,
+			wantStdout: deployRunURL + "\n",
+			wantCalls:  []string{runList},
+		},
+		{
+			name:       "default watches through the bump PR",
+			args:       []string{"--yes"},
+			wantPushed: true,
+			wantStdout: deployRunURL + "\n" + deployPRURL + "\n",
+			wantCalls: []string{
+				runList,
+				"run view 900 -R onyx-dot-app/onyx " + deployRunJSONFields,
+				"pr list -R onyx-dot-app/onyx-infra --head bump-version/" + tag + " --state all --json number,state,url",
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Precondition.
+			repo := gittest.SetupReleaseBranchRepo(t)
+			gh := deployCloudPipelineGH(t)
+			out := deployCaptureOutput(t)
+
+			// Under test.
+			cmd := NewDeployCloudCommand()
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			cmd.SetArgs(c.args)
+			err := cmd.Execute()
+
+			// Postcondition.
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if pushed := gittest.TagExists(repo.Origin, tag); pushed != c.wantPushed {
+				t.Errorf("expected %s on origin: %v, got %v", tag, c.wantPushed, pushed)
+			}
+			if got := out.printed(t); got != c.wantStdout {
+				t.Errorf("expected stdout %q, got %q", c.wantStdout, got)
+			}
+			if calls := gh.calls(); !slices.Equal(calls, c.wantCalls) {
+				t.Errorf("expected gh calls %q, got %q", c.wantCalls, calls)
+			}
+		})
 	}
 }

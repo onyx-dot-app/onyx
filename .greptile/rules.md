@@ -1,9 +1,5 @@
 # Greptile Review Rules
 
-## Type Annotations
-
-Use explicit type annotations for variables to enhance code clarity, especially when moving type hints around in the code.
-
 ## Best Practices
 
 Use the "Engineering Best Practices" section of `CONTRIBUTING.md` as core review context. Prefer consistency with existing patterns, fix issues in code you touch, avoid tacking new features onto muddy interfaces, fail loudly instead of silently swallowing errors, keep code strictly typed, preserve clear state boundaries, remove duplicate or dead logic, break up overly long functions, avoid hidden import-time side effects, respect module boundaries, and favor correctness-by-construction over relying on callers to use an API correctly.
@@ -23,6 +19,10 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 ## Multi-tenant vs Single-tenant
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
+
+## Migration Rows Are Deterministic
+
+A new revision under `backend/alembic/versions` may insert rows, and those rows must be identical on every schema: fixed ids and literal values, no `uuid4()`, `now()`, `gen_random_uuid()`, randomness or env reads, in Python or in the SQL text, anywhere but `downgrade`. The template schema is migrated once, snapshotted and cloned into every new tenant, and the deploy gate compares it with a fresh build of the chain, so a run-dependent value makes template and tenants diverge. Schema defaults such as `server_default=now()` and updates to existing rows are fine. A deliberate exception carries `# migration-determinism: allow` on its statement. Flag any run-dependent value in an insert and ask for a fixed one.
 
 ## Routing for New Non-/api Backend Routes
 

@@ -5,12 +5,6 @@ from celery.apps.worker import Worker
 from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.configs.app_configs import (
-    MANAGED_VESPA,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import (
@@ -110,17 +104,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
         max_overflow=EXTRA_CONCURRENCY,
     )
 
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY,  # ty: ignore[unresolved-attribute]
-            ssl_cert=VESPA_CLOUD_CERT_PATH,
-            ssl_key=VESPA_CLOUD_KEY_PATH,
-        )
-    else:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY  # ty: ignore[unresolved-attribute]
-        )
-
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_document_index_or_shutdown()
@@ -163,7 +146,8 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
-            "onyx.background.celery.tasks.opensearch_migration",
+            "onyx.background.celery.tasks.cc_pair_ids_backfill",
+            "onyx.background.celery.tasks.capability_checks",
         ]
     )
 )

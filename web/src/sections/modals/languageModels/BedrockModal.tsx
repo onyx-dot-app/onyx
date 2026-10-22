@@ -1,12 +1,12 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelectField } from "@opal/form";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -57,6 +57,8 @@ const FIELD_BEDROCK_AUTH_METHOD = "custom_config.BEDROCK_AUTH_METHOD";
 const FIELD_AWS_ACCESS_KEY_ID = "custom_config.AWS_ACCESS_KEY_ID";
 const FIELD_AWS_SECRET_ACCESS_KEY = "custom_config.AWS_SECRET_ACCESS_KEY";
 const FIELD_AWS_BEARER_TOKEN_BEDROCK = "custom_config.AWS_BEARER_TOKEN_BEDROCK";
+const FIELD_AWS_ROLE_NAME = "custom_config.AWS_ROLE_NAME";
+const FIELD_AWS_EXTERNAL_ID = "custom_config.AWS_EXTERNAL_ID";
 
 interface BedrockModalValues extends BaseLLMFormValues {
   custom_config: {
@@ -65,6 +67,8 @@ interface BedrockModalValues extends BaseLLMFormValues {
     AWS_ACCESS_KEY_ID?: string;
     AWS_SECRET_ACCESS_KEY?: string;
     AWS_BEARER_TOKEN_BEDROCK?: string;
+    AWS_ROLE_NAME?: string;
+    AWS_EXTERNAL_ID?: string;
   };
 }
 
@@ -78,8 +82,22 @@ function BedrockModalInternals({
   isOnboarding,
 }: BedrockModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
+  const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
+  // On edit, the initial secrets are the backend's masked stored values.
+  const storedConfig = formikProps.initialValues.custom_config;
+  // A provider saved with a region outside the list (a newer AWS region)
+  // keeps it as an option, so the saved value shows instead of an error.
+  const savedRegion = formikProps.values.custom_config?.AWS_REGION_NAME;
+  const regionOptions = AWS_REGION_OPTIONS.map((option) => ({
+    value: option.value,
+    title: option.name,
+  }));
+  if (savedRegion && !AWS_REGION_OPTIONS.some((o) => o.value === savedRegion)) {
+    regionOptions.push({ value: savedRegion, title: savedRegion });
+  }
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_IAM) {
@@ -91,6 +109,9 @@ function BedrockModalInternals({
     } else if (authMethod === AUTH_METHOD_LONG_TERM_API_KEY) {
       formikProps.setFieldValue(FIELD_AWS_ACCESS_KEY_ID, "");
       formikProps.setFieldValue(FIELD_AWS_SECRET_ACCESS_KEY, "");
+      // A bearer token is bound to one account, so it cannot assume a role.
+      formikProps.setFieldValue(FIELD_AWS_ROLE_NAME, "");
+      formikProps.setFieldValue(FIELD_AWS_EXTERNAL_ID, "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
@@ -114,6 +135,8 @@ function BedrockModalInternals({
         formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
       aws_bearer_token_bedrock:
         formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
+      aws_role_name: formikProps.values.custom_config?.AWS_ROLE_NAME,
+      aws_external_id: formikProps.values.custom_config?.AWS_EXTERNAL_ID,
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -131,52 +154,46 @@ function BedrockModalInternals({
             title={t("bedrock.regionField.title")}
             subDescription={t("bedrock.regionField.description")}
           >
-            <InputSelectField name={FIELD_AWS_REGION_NAME}>
-              <InputSelect.Trigger
-                placeholder={t("bedrock.regionField.placeholder")}
-              />
-              <InputSelect.Content>
-                {AWS_REGION_OPTIONS.map((option) => (
-                  <InputSelect.Item key={option.value} value={option.value}>
-                    {option.name}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelectField>
+            <InputSingleSelectField
+              name={FIELD_AWS_REGION_NAME}
+              placeholder={t("bedrock.regionField.placeholder")}
+              options={regionOptions}
+            />
           </InputVertical>
 
           <InputVertical
             withLabel={FIELD_BEDROCK_AUTH_METHOD}
             title={t("bedrock.authMethodField.title")}
-            subDescription={t("bedrock.authMethodField.description")}
+            subDescription={t("bedrock.authMethodField.description", {
+              appName,
+            })}
           >
-            <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
-              <InputSelect.Trigger />
-              <InputSelect.Content>
-                <InputSelect.Item
-                  value={AUTH_METHOD_IAM}
-                  description={t("bedrock.authMethodField.iam.description")}
-                >
-                  {t("bedrock.authMethodField.iam.label")}
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_ACCESS_KEY}
-                  description={t(
+            <InputSingleSelectField
+              name={FIELD_BEDROCK_AUTH_METHOD}
+              defaultOption={AUTH_METHOD_IAM}
+              placeholder={tInputSelect("placeholder.fallback")}
+              options={[
+                {
+                  value: AUTH_METHOD_IAM,
+                  title: t("bedrock.authMethodField.iam.label"),
+                  description: t("bedrock.authMethodField.iam.description"),
+                },
+                {
+                  value: AUTH_METHOD_ACCESS_KEY,
+                  title: t("bedrock.authMethodField.accessKey.label"),
+                  description: t(
                     "bedrock.authMethodField.accessKey.description"
-                  )}
-                >
-                  {t("bedrock.authMethodField.accessKey.label")}
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_LONG_TERM_API_KEY}
-                  description={t(
+                  ),
+                },
+                {
+                  value: AUTH_METHOD_LONG_TERM_API_KEY,
+                  title: t("bedrock.authMethodField.longTermApiKey.label"),
+                  description: t(
                     "bedrock.authMethodField.longTermApiKey.description"
-                  )}
-                >
-                  {t("bedrock.authMethodField.longTermApiKey.label")}
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelectField>
+                  ),
+                },
+              ]}
+            />
           </InputVertical>
         </Section>
       </InputPadder>
@@ -201,6 +218,7 @@ function BedrockModalInternals({
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                existingValue={storedConfig?.AWS_SECRET_ACCESS_KEY || undefined}
               />
             </InputVertical>
           </Section>
@@ -209,8 +227,43 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
-          <MessageCard variant="info" title={t("bedrock.iamNotice.title")} />
+          <MessageCard
+            outerPadding={1}
+            innerPadding={1}
+            variant="info"
+            title={t("bedrock.iamNotice.title", { appName })}
+          />
         </InputPadder>
+      )}
+
+      {(authMethod === AUTH_METHOD_IAM ||
+        authMethod === AUTH_METHOD_ACCESS_KEY) && (
+        <Card color="background-tint-00" border="none" padding={2}>
+          <Section gap={4}>
+            <InputVertical
+              withLabel={FIELD_AWS_ROLE_NAME}
+              title={t("bedrock.assumeRoleField.title")}
+              subDescription={t("bedrock.assumeRoleField.description", {
+                appName,
+              })}
+              suffix="optional"
+            >
+              <InputTypeInField
+                name={FIELD_AWS_ROLE_NAME}
+                // oxlint-disable-next-line i18n/no-raw-jsx-text -- AWS ARN format, not copy
+                placeholder="arn:aws:iam::123456789012:role/bedrock-access"
+              />
+            </InputVertical>
+            <InputVertical
+              withLabel={FIELD_AWS_EXTERNAL_ID}
+              title={t("bedrock.externalIdField.title")}
+              subDescription={t("bedrock.externalIdField.description")}
+              suffix="optional"
+            >
+              <InputTypeInField name={FIELD_AWS_EXTERNAL_ID} />
+            </InputVertical>
+          </Section>
+        </Card>
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
@@ -223,6 +276,9 @@ function BedrockModalInternals({
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 placeholder={t("bedrock.longTermApiKeyField.placeholder")}
+                existingValue={
+                  storedConfig?.AWS_BEARER_TOKEN_BEDROCK || undefined
+                }
               />
             </InputVertical>
           </Section>
@@ -286,6 +342,9 @@ export default function BedrockModal({
       AWS_BEARER_TOKEN_BEDROCK:
         (existingLlmProvider?.custom_config
           ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
+      AWS_ROLE_NAME: existingLlmProvider?.custom_config?.AWS_ROLE_NAME ?? "",
+      AWS_EXTERNAL_ID:
+        existingLlmProvider?.custom_config?.AWS_EXTERNAL_ID ?? "",
     },
   };
 

@@ -6,7 +6,7 @@ import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
-import { Tabs, Text, Button } from "@opal/components";
+import { Tabs, Button } from "@opal/components";
 import { SvgHistory } from "@opal/icons";
 import {
   LLMProviderFormProps,
@@ -148,15 +148,12 @@ function PortkeyModalInternals({
       >
         <Tabs.List>
           {API_MODE_TABS.map((tab) => (
-            <Tabs.Trigger key={tab.value} value={tab.value}>
-              <div className="flex flex-col items-start">
-                <Text font="main-ui-action" color="inherit">
-                  {t(tab.titleKey)}
-                </Text>
-                <Text font="secondary-body" color="text-03">
-                  {t(tab.subtitleKey)}
-                </Text>
-              </div>
+            <Tabs.Trigger
+              key={tab.value}
+              value={tab.value}
+              description={t(tab.subtitleKey)}
+            >
+              {t(tab.titleKey)}
             </Tabs.Trigger>
           ))}
         </Tabs.List>

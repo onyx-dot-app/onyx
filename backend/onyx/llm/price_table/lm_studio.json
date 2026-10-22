@@ -1,0 +1,86 @@
+{
+  "aliases": {},
+  "models": {
+    "openai/gpt-oss-20b": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "gpt-oss",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT OSS 20B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-05",
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3-30b-a3b-2507": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 30B A3B 2507",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-30",
+      "temperature": true,
+      "tool_call": true
+    },
+    "qwen/qwen3-coder-30b": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3 Coder 30B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-23",
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "lmstudio"
+  ]
+}

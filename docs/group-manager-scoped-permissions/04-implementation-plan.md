@@ -73,7 +73,7 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
   - **Corrections (§11.7):** feedback `db/feedback.py` = **no change** (admin-only; not in bundle);
     `recompute_user_permissions__no_commit` takes `(user_ids, db_session)` and must be extended to set
     `is_group_manager`.
-  - **Confirmed SAFE (§11.8):** PAT cap, chat runtime, and document/Vespa ACL are untouched — keep them so.
+  - **Confirmed SAFE (§11.8):** PAT cap, chat runtime, and document-index ACL are untouched — keep them so.
 
 ## Implementation Strategy
 

@@ -42,7 +42,10 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
 )
-from onyx.db.users import reconcile_user_email__no_commit
+from onyx.db.users import (
+    reconcile_user_email__no_commit,
+    release_personas_owned_by_user__no_commit,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -278,8 +281,10 @@ class ScimDAL(DAL):
         """
         if email is not None:
             reconcile_user_email__no_commit(user.id, email, self._session)
-        if is_active is not None:
-            user.is_active = is_active
+        if is_active is False:
+            self.deactivate_user(user)
+        elif is_active:
+            user.is_active = True
         if personal_name is not None:
             user.personal_name = personal_name
         if promote_to_standard:
@@ -287,8 +292,9 @@ class ScimDAL(DAL):
             user.is_verified = True
 
     def deactivate_user(self, user: User) -> None:
-        """Mark a user as inactive."""
+        """Mark a user as inactive and hand their agents to the admins."""
         user.is_active = False
+        release_personas_owned_by_user__no_commit(self._session, user.id)
 
     def list_users(
         self,

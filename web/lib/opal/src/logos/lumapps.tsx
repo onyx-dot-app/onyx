@@ -2,7 +2,7 @@ import type { IconProps } from "@opal/types";
 
 // LumApps brand mark (the isometric-cube glyph). Square viewBox so it renders
 // cleanly in connector tiles; `currentColor` lets it adapt to light/dark.
-const SvgLumapps = ({ size, ...props }: IconProps) => (
+const SvgLumApps = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -18,4 +18,4 @@ const SvgLumapps = ({ size, ...props }: IconProps) => (
   </svg>
 );
 
-export default SvgLumapps;
+export default SvgLumApps;

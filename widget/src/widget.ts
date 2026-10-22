@@ -8,9 +8,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { WidgetConfig, ChatMessage } from "./types/widget-types";
+import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
 import { SearchDocument, ResolvedCitation } from "./types/api-types";
-import { resolveConfig } from "./config/config";
+import {
+  resolveConfig,
+  resolveAuthToken,
+  deriveCredentialIdentity,
+} from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
 import { ApiService } from "./services/api-service";
@@ -31,9 +35,16 @@ export class OnyxChatWidget extends LitElement {
   @property({ attribute: "text-color" }) textColor?: string;
   @property({ attribute: "agent-name" }) agentName?: string;
   @property({ attribute: "logo" }) logo?: string;
-  @property() mode?: "launcher" | "inline";
+  // Reflected so `:host([mode="inline"])` also matches when set as a property.
+  @property({ reflect: true }) mode?: "launcher" | "inline";
   @property({ attribute: "include-citations", type: Boolean })
   includeCitations?: boolean;
+  @property({ attribute: "start-expanded", type: Boolean })
+  startExpanded?: boolean;
+
+  // Assigned as a JS property, since a function cannot ride an HTML attribute.
+  // Takes precedence over `api-key` and keeps the credential out of the markup.
+  @property({ attribute: false }) tokenProvider?: TokenProvider;
 
   // Internal state
   @state() private isOpen = false;
@@ -47,6 +58,7 @@ export class OnyxChatWidget extends LitElement {
 
   private config!: WidgetConfig;
   private apiService!: ApiService;
+  private sessionRestored = false;
   private abortController?: AbortController;
   // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
   private documentMap = new Map<string, SearchDocument>();
@@ -63,6 +75,12 @@ export class OnyxChatWidget extends LitElement {
 
   updated(changedProperties: Map<string, any>) {
     super.updated(changedProperties);
+
+    // A host that assigns `tokenProvider` after mount only becomes able to
+    // identify the stored transcript now.
+    if (changedProperties.has("tokenProvider")) {
+      this.restoreSession();
+    }
 
     // Auto-scroll when messages change or streaming status changes
     if (
@@ -98,28 +116,58 @@ export class OnyxChatWidget extends LitElement {
       logo: this.logo,
       mode: this.mode,
       includeCitations: this.includeCitations,
+      startExpanded: this.startExpanded,
     });
 
     // Apply custom colors
     this.applyCustomColors();
 
-    // Initialize API service
-    this.apiService = new ApiService(
-      this.config.backendUrl,
-      this.config.apiKey
+    // Initialize API service. Auth is read at request time so a `tokenProvider`
+    // assigned after the element mounts is still picked up.
+    this.apiService = new ApiService(this.config.backendUrl, () =>
+      resolveAuthToken(this.tokenProvider, this.config.apiKey)
     );
-
-    // Load persisted session
-    const stored = loadSession();
-    if (stored) {
-      this.chatSessionId = stored.sessionId;
-      this.messages = stored.messages;
-    }
 
     // Auto-open if inline mode
     if (this.config.mode === "inline") {
       this.isOpen = true;
     }
+
+    this.restoreSession();
+  }
+
+  /**
+   * Restore the persisted transcript, once a credential identifies who it
+   * belongs to. This waits rather than restoring at mount because a host
+   * normally assigns `tokenProvider` after the element is parsed, and a
+   * transcript must never be shown to a different signed-in user.
+   */
+  private restoreSession(): void {
+    if (this.sessionRestored) return;
+
+    void (async () => {
+      let identity: string;
+      try {
+        identity = await this.currentIdentity();
+      } catch {
+        // No credential yet. A later `tokenProvider` assignment retries.
+        return;
+      }
+
+      this.sessionRestored = true;
+
+      const stored = loadSession(identity);
+      if (!stored) return;
+      this.chatSessionId = stored.sessionId;
+      this.messages = stored.messages;
+    })();
+  }
+
+  /** Who the current credential represents; scopes the stored transcript. */
+  private async currentIdentity(): Promise<string> {
+    return deriveCredentialIdentity(
+      await resolveAuthToken(this.tokenProvider, this.config.apiKey)
+    );
   }
 
   private applyCustomColors() {
@@ -314,6 +362,13 @@ export class OnyxChatWidget extends LitElement {
   }
 
   private handleKeyDown(e: KeyboardEvent) {
+    // Shadow DOM retargets `e.target` to the host element, so page-level
+    // handlers that let keys through only for text fields (e.g. ones that
+    // block Backspace navigation) would cancel typing here. Escape still
+    // propagates so the host page can close its overlays.
+    if (e.key !== "Escape") {
+      e.stopPropagation();
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       this.sendMessage();
@@ -348,6 +403,10 @@ export class OnyxChatWidget extends LitElement {
         );
         this.isLoading = false;
       }
+
+      // Resolved once per send, so every persisted transcript is tagged with
+      // the user who actually produced it.
+      const identity = await this.currentIdentity();
 
       // Get parent message ID (last assistant message with a numeric ID from backend)
       const parentMessage = [...this.messages]
@@ -470,7 +529,7 @@ export class OnyxChatWidget extends LitElement {
           if (!currentMessage.isStreaming) {
             this.isStreaming = false;
             this.streamingStatus = "";
-            saveSession(this.chatSessionId, this.messages);
+            saveSession(this.chatSessionId, this.messages, identity);
           }
         }
       }
@@ -490,7 +549,10 @@ export class OnyxChatWidget extends LitElement {
   render() {
     const showContainer = this.config.mode === "inline" || this.isOpen;
     const hasMessages = this.messages.length > 0 || this.isStreaming;
-    const isCompactInline = this.config.mode === "inline" && !hasMessages;
+    const isCompactInline =
+      this.config.mode === "inline" &&
+      !this.config.startExpanded &&
+      !hasMessages;
 
     return html`
       ${this.config.mode === "launcher"

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,9 @@ Example usage:
     $ ods release tf-provider --version 1.0.0`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			tfProviderRelease.run(opts)
+			if err := tfProviderRelease.run(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 

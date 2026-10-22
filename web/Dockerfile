@@ -7,12 +7,12 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # no extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
-ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
+ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315
+ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
 # not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS bun_source
 
 # Build stage. Needs a root user plus a shell and npm/npx, which both the default slim image
 # and the DHI "-dev" variant provide.
@@ -50,9 +50,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ARG NEXT_PUBLIC_THEME
 ENV NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME}
-
-ARG NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED
-ENV NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED}
 
 ARG NEXT_PUBLIC_DISABLE_LOGOUT
 ENV NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT}
@@ -102,6 +99,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
+    node tools/prepare-pdf-assets.cjs && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Runtime stage. Runs as the non-root `node` user (uid 1000), which both the default slim
@@ -139,9 +137,6 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 # allow user to specify custom feedback options
 ARG NEXT_PUBLIC_THEME
 ENV NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME}
-
-ARG NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED
-ENV NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED}
 
 ARG NEXT_PUBLIC_DISABLE_LOGOUT
 ENV NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT}

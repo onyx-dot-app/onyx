@@ -1,6 +1,5 @@
 import json
 from collections.abc import Callable
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +9,8 @@ from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import find_model_obj, get_model_map
+from onyx.llm.model_request import serialize_tools
+from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
 
 
@@ -26,22 +27,21 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
     return bool(model_obj.get("supports_function_calling"))
 
 
-def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
-    return token_counter(json.dumps(tool.tool_definition()))
-
-
 def compute_all_tool_tokens(
     tools: list[Tool], token_counter: Callable[[str], int]
 ) -> int:
-    return sum(compute_tool_tokens(tool, token_counter) for tool in tools)
+    return sum(
+        compute_tool_definition_tokens([tool.tool_definition()], token_counter)
+        for tool in tools
+    )
 
 
 def compute_tool_definition_tokens(
-    tool_definitions: list[dict[str, Any]], token_counter: Callable[[str], int]
+    tool_definitions: list[ToolDefinition], token_counter: Callable[[str], int]
 ) -> int:
     return sum(
         token_counter(json.dumps(tool_definition))
-        for tool_definition in tool_definitions
+        for tool_definition in serialize_tools(tool_definitions)
     )
 
 

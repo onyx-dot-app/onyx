@@ -11,7 +11,8 @@
      "primary"  — standard bordered input (default)
      "internal" — no border, transparent background (inside popovers/panels)
      "error"    — red border, error state
-     "disabled" — muted background, not-allowed cursor
+     "disabled" — muted background, not-allowed cursor; an invalid field
+                  inside (aria-invalid) adds the error border
      "readOnly" — transparent background, light border
    ========================================================================== */
 
@@ -33,7 +34,10 @@
   border-color: var(--border-05);
 }
 
-.opal-input[data-variant="primary"]:focus-within:not(:active) {
+/* An open list keeps the focused look, even when focus moves into it
+   (its search field). */
+.opal-input[data-variant="primary"]:focus-within:not(:active),
+.opal-input[data-variant="primary"][data-open] {
   border-color: var(--border-05);
   box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
 }
@@ -48,7 +52,8 @@
   border: 1px solid var(--status-error-05);
 }
 
-.opal-input[data-variant="error"]:focus-within:not(:active) {
+.opal-input[data-variant="error"]:focus-within:not(:active),
+.opal-input[data-variant="error"][data-open] {
   box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
 }
 
@@ -56,6 +61,12 @@
   background-color: var(--background-neutral-03);
   border: 1px solid transparent;
   cursor: not-allowed;
+}
+
+/* Disabled and invalid at once (a select whose options failed to load):
+   the disabled fill with the error border. */
+.opal-input[data-variant="disabled"]:has([aria-invalid="true"]) {
+  border-color: var(--status-error-05);
 }
 
 .opal-input[data-variant="readOnly"] {
@@ -80,7 +91,18 @@
 }
 
 .opal-input-segmented-content {
-  @apply flex min-h-6 flex-1 items-center p-0.5;
+  @apply relative flex min-h-6 flex-1 items-center p-0.5;
+}
+
+/* Placeholder over an empty, unfocused field. The segments under it stay
+   focusable but invisible. */
+.opal-input-segmented-placeholder {
+  @apply pointer-events-none absolute inset-0 flex items-center ps-1;
+}
+
+.opal-input-segmented-content[data-placeholder-shown]
+  > :not(.opal-input-segmented-placeholder) {
+  opacity: 0;
 }
 
 .opal-input-segmented-actions {

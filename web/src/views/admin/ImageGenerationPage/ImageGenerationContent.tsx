@@ -8,10 +8,6 @@ import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
-  LLMProviderResponse,
-  LLMProviderView,
-} from "@/lib/languageModels/types";
-import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
 } from "@/views/admin/ImageGenerationPage/constants";
@@ -22,29 +18,19 @@ import {
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect, type SelectDivider } from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
   const t = useTranslations("admin.imageGeneration");
-  const {
-    data: llmProviderResponse,
-    error: llmError,
-    mutate: refetchProviders,
-  } = useSWR<LLMProviderResponse<LLMProviderView>>(
-    SWR_KEYS.llmProvidersWithImageGen,
-    errorHandlingFetcher
-  );
-  const llmProviders = llmProviderResponse?.providers ?? [];
-
   const {
     data: configs = [],
     error: configError,
@@ -159,7 +145,6 @@ export default function ImageGenerationContent() {
         t("disconnectSuccess.message", { title: disconnectProvider.title })
       );
       refetchConfigs();
-      refetchProviders();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
@@ -175,7 +160,6 @@ export default function ImageGenerationContent() {
     toast.success(t("configureSuccess.message"));
     setEditConfig(null);
     refetchConfigs();
-    refetchProviders();
   };
 
   // Compute replacement options when disconnecting an active provider
@@ -208,7 +192,7 @@ export default function ImageGenerationContent() {
     }
   }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (llmError || configError) {
+  if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;
   }
 
@@ -299,43 +283,31 @@ export default function ImageGenerationContent() {
                   <Text as="p" color="text-04">
                     {t("disconnectModal.replacement.label")}
                   </Text>
-                  <InputSelect
-                    value={replacementProviderId ?? undefined}
+                  <InputSingleSelect
+                    value={replacementProviderId ?? ""}
                     onValueChange={(v) => setReplacementProviderId(v)}
-                  >
-                    <InputSelect.Trigger
-                      placeholder={t("disconnectModal.replacement.placeholder")}
-                    />
-                    <InputSelect.Content>
-                      {replacementGroups.map((group) => (
-                        <InputSelect.Group key={group.name}>
-                          <InputSelect.Label>{group.name}</InputSelect.Label>
-                          {group.providers.map((p) => (
-                            <InputSelect.Item
-                              key={p.image_provider_id}
-                              value={p.image_provider_id}
-                              icon={getModelIcon(p.provider_name)}
-                            >
-                              {p.title}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Group>
-                      ))}
-                      <InputSelect.Separator />
-                      <InputSelect.Item
-                        value={NO_DEFAULT_VALUE}
-                        icon={SvgSlash}
-                      >
-                        <span>
-                          <b>{t("disconnectModal.noDefaultOption.label")}</b>
-                          <span className="text-text-03">
-                            {" "}
-                            {t("disconnectModal.noDefaultOption.description")}
-                          </span>
-                        </span>
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                    placeholder={t("disconnectModal.replacement.placeholder")}
+                    options={[
+                      ...replacementGroups.map(
+                        (group): SelectDivider => ({
+                          title: group.name,
+                          options: group.providers.map((p) => ({
+                            value: p.image_provider_id,
+                            title: p.title,
+                            icon: getModelIcon(p.provider_name),
+                          })),
+                        })
+                      ),
+                      {
+                        value: NO_DEFAULT_VALUE,
+                        title: t("disconnectModal.noDefaultOption.label"),
+                        description: t(
+                          "disconnectModal.noDefaultOption.description"
+                        ),
+                        icon: SvgSlash,
+                      },
+                    ]}
+                  />
                 </Section>
               </Section>
             ) : (
@@ -374,7 +346,6 @@ export default function ImageGenerationContent() {
           {getImageGenForm({
             modal: modal,
             imageProvider: activeProvider,
-            existingProviders: llmProviders,
             existingConfig: editConfig || undefined,
             onSuccess: handleModalSuccess,
           })}

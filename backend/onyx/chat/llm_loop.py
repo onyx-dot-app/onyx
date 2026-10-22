@@ -7,23 +7,23 @@ from typing import Any, Literal
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     build_python_chat_files_from_search_docs,
+    count_message_replay_tokens,
     create_tool_call_failure_messages,
+    create_tool_call_failure_response,
 )
 from onyx.chat.citation_processor import (
     CitationMapping,
-    CitationMode,
     DynamicCitationProcessor,
 )
-from onyx.chat.citation_utils import update_citation_processor_from_tool_response
-from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import (
-    _looks_like_xml_tool_call_payload,
-    extract_tool_calls_from_response_text,
-    run_llm_step,
+from onyx.chat.citation_utils import (
+    build_context_file_citation_mapping,
+    update_citation_processor_from_tool_response,
 )
+from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
-    ContextFileMetadata,
+    CitationMode,
     ExtractedContextFiles,
     FileToolMetadata,
     LlmStepResult,
@@ -35,24 +35,24 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
-from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
-from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.model_request import serialize_tools
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.llm.token_budget import resolve_token_budget
+from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
-    NON_VISION_IMAGE_MARKER,
     OPEN_URL_REMINDER,
 )
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -61,10 +61,9 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     ToolCallDebug,
-    TopLevelBranching,
 )
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
-from onyx.tools.constants import FILE_READER_TOOL_NAME
+from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
@@ -90,10 +89,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
 logger = setup_logger()
-
-# Used when no token_counter is available to measure the non-vision image
-# marker; intentionally generous so budgeting stays conservative.
-_NON_VISION_MARKER_TOKEN_FALLBACK = 40
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -246,9 +241,9 @@ def _try_fallback_tool_extraction(
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
     xml_tool_call_text_detected = no_tool_calls and (
-        _looks_like_xml_tool_call_payload(llm_step_result.answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+        looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.reasoning)
     )
     should_try_fallback = (
         (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
@@ -314,95 +309,19 @@ def _try_fallback_tool_extraction(
 # that legitimately need more turns. Imported from chat_configs.
 
 
-def _build_context_file_citation_mapping(
-    file_metadata: list[ContextFileMetadata],
-    starting_citation_num: int = 1,
-) -> CitationMapping:
-    """Build citation mapping for context files.
-
-    Converts context file metadata into SearchDoc objects that can be cited.
-    Citation numbers start from the provided starting number.
-
-    Args:
-        file_metadata: List of context file metadata
-        starting_citation_num: Starting citation number (default: 1)
-
-    Returns:
-        Dictionary mapping citation numbers to SearchDoc objects
-    """
-    citation_mapping: CitationMapping = {}
-
-    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
-        search_doc = SearchDoc(
-            document_id=file_meta.file_id,
-            chunk_ind=0,
-            semantic_identifier=file_meta.filename,
-            link=None,
-            blurb=file_meta.file_content,
-            source_type=DocumentSource.FILE,
-            boost=1,
-            hidden=False,
-            metadata={},
-            score=0.0,
-            match_highlights=[file_meta.file_content],
-        )
-        citation_mapping[idx] = search_doc
-
-    return citation_mapping
-
-
 def _build_project_message(
     context_files: ExtractedContextFiles | None,
-    token_counter: Callable[[str], int] | None,
-    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
-    """Build messages for context-injected / tool-backed files.
+    """Build the message for context-injected files.
 
-    Returns up to two messages:
-    1. The full-text files message (if file_texts is populated).
-    2. A lightweight metadata message for oversized files, naming whichever
-       retrieval tool this request actually received.
+    Returns the full-text files message (if file_texts is populated). The
+    oversized-file metadata notice is built separately by the caller — its
+    text names the tools offered this cycle, so it belongs outside the
+    cacheable prefix.
     """
-    if not context_files:
+    if not context_files or not context_files.file_texts:
         return []
-
-    messages: list[ChatMessageSimple] = []
-    if context_files.file_texts:
-        messages.append(
-            _create_context_files_message(context_files, token_counter=None)
-        )
-    if context_files.file_metadata_for_tool and token_counter:
-        messages.append(
-            _create_file_tool_metadata_message(
-                context_files.file_metadata_for_tool,
-                token_counter,
-                available_tool_names,
-            )
-        )
-    return messages
-
-
-def count_message_replay_tokens(
-    msg: ChatMessageSimple,
-    *,
-    image_files_replayed_as_markers: bool = False,
-    token_counter: Callable[[str], int] | None = None,
-) -> int:
-    if not image_files_replayed_as_markers:
-        return msg.token_count
-    # Include images whose stored cost is zero, such as project images.
-    num_images = sum(
-        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-    )
-    if not num_images:
-        return msg.token_count
-    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-    marker_tokens = (
-        token_counter(sample_marker)
-        if token_counter
-        else _NON_VISION_MARKER_TOKEN_FALLBACK
-    )
-    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+    return [_create_context_files_message(context_files, token_counter=None)]
 
 
 def construct_message_history(
@@ -436,10 +355,17 @@ def construct_message_history(
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
-    project_messages = _build_project_message(
-        context_files, token_counter, available_tool_names
+    project_messages = _build_project_message(context_files)
+    oversized_files_message: ChatMessageSimple | None = None
+    if context_files and context_files.file_metadata_for_tool and token_counter:
+        oversized_files_message = _create_file_tool_metadata_message(
+            context_files.file_metadata_for_tool,
+            token_counter,
+            available_tool_names,
+        )
+    project_messages_tokens = sum(m.token_count for m in project_messages) + (
+        oversized_files_message.token_count if oversized_files_message else 0
     )
-    project_messages_tokens = sum(m.token_count for m in project_messages)
 
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
@@ -455,12 +381,21 @@ def construct_message_history(
     if system_prompt:
         system_prompt.should_cache = True
 
+    # These are byte-stable across turns (persona task prompt, project file
+    # contents), so keep them in the cacheable prefix.
+    if custom_agent_prompt:
+        custom_agent_prompt.should_cache = True
+    for msg in project_messages:
+        msg.should_cache = True
+
     # If no history, build minimal context
     if not simple_chat_history:
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
         result.extend(project_messages)
+        if oversized_files_message:
+            result.append(oversized_files_message)
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -599,7 +534,8 @@ def construct_message_history(
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
-    # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
+    # [last_user_message], [messages_after_last_user], [file_metadata_notices],
+    # [reminder]
     result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
@@ -612,15 +548,25 @@ def construct_message_history(
     # 3. Add context files / file-metadata messages (inserted before last user message)
     result.extend(project_messages)
 
-    # 4. Add forgotten-files metadata (right before the user's question)
-    if forgotten_files_message:
-        result.append(forgotten_files_message)
-
-    # 5. Add last user message (with context images attached)
+    # 4. Add last user message (with context images attached)
+    last_user_message.should_cache = True
     result.append(last_user_message)
 
-    # 6. Add messages after last user message (tool calls, responses, etc.)
+    # 5. Add messages after last user message (tool calls, responses, etc.)
+    # These are prior tool rounds of the current turn — append-only and
+    # byte-stable between loop iterations, so cache them too.
+    for msg in messages_after_last_user:
+        msg.should_cache = True
     result.extend(messages_after_last_user)
+
+    # 6. Add tool-dependent file notices after the tool rounds, before the
+    # reminder. The oversized-file notice names the tools offered this cycle
+    # and the forgotten-files notice is rebuilt whenever eviction grows the
+    # dropped set, so both must stay out of the contiguous cacheable prefix.
+    if oversized_files_message:
+        result.append(oversized_files_message)
+    if forgotten_files_message:
+        result.append(forgotten_files_message)
 
     # 7. Add reminder message at the very end
     if reminder_message:
@@ -676,6 +622,19 @@ def _create_file_tool_metadata_message(
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
 
+    Preference order is read_file, then internal search, then the python tool.
+    read_file pages through a file directly; search retrieves from the indexed
+    copy; the python tool is handed the files themselves, so prompt truncation
+    does not take them away from it.
+
+    The python tier applies only when every listed file actually reached
+    ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
+    summary-truncated files are listed for the LLM but never staged, so naming
+    python for them would send the model after bytes it does not have. The
+    notice also stops short of promising a path, because PythonTool normalizes
+    and de-duplicates filenames at staging time and applies its own count and
+    byte caps.
+
     An unreported tool set names no tool. Steps that offer none are common (a
     deep-research final report runs with no tools), and under-promising is the
     safe direction to fail in.
@@ -699,6 +658,15 @@ def _create_file_tool_metadata_message(
             "These files are attached but too large to include in full. Their "
             "contents are indexed — use internal search to find the relevant "
             "passages. Do not guess them or search the web for them:"
+        ]
+    elif PythonTool.NAME in offered and all(
+        meta.staged_for_tools for meta in file_metadata
+    ):
+        lines = [
+            "These files are attached but too large to include in full. The "
+            "python tool receives them — read them there, listing the working "
+            "directory if a name does not resolve. Do not guess their contents "
+            "or search the web for them:"
         ]
     else:
         lines = [
@@ -777,9 +745,19 @@ def select_reminder_text(
     "open_url is not available" replies.
     """
     if ran_image_gen:
-        return IMAGE_GEN_REMINDER
+        return build_reminder_message(
+            reminder_text=IMAGE_GEN_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     if just_ran_web_search and has_open_url_tool and not out_of_cycles:
-        return OPEN_URL_REMINDER
+        return build_reminder_message(
+            reminder_text=OPEN_URL_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     return build_reminder_message(
         reminder_text=persona_task_prompt,
         include_citation_reminder=include_citation_reminder,
@@ -816,10 +794,8 @@ def run_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import (
-            initialize_litellm,
-        )  # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
+        from onyx.llm.litellm_singleton.config import initialize_litellm
 
         initialize_litellm()
 
@@ -843,7 +819,7 @@ def run_llm_loop(
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}
         if context_files.file_metadata:
-            project_citation_mapping = _build_context_file_citation_mapping(
+            project_citation_mapping = build_context_file_citation_mapping(
                 context_files.file_metadata
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
@@ -856,7 +832,7 @@ def run_llm_loop(
             finish_reason=None,
         )
 
-        token_budget = resolve_chat_token_budget(llm)
+        token_budget = resolve_token_budget(llm)
         available_tokens = token_budget.input_tokens
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
@@ -947,6 +923,28 @@ def run_llm_loop(
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
             cite_documents = should_cite_documents or always_cite_documents
+            # Head prompts never take cite-dependent content: the message
+            # prefix must be byte-stable across loop iterations for prompt
+            # caching. Citation guidance lives in the uncached trailing
+            # reminder instead.
+            processed_custom_agent_prompt = (
+                process_prompt_template(
+                    custom_agent_prompt,
+                    datetime_aware=persona_datetime_aware,
+                    append_datetime_if_aware=False,
+                )
+                if custom_agent_prompt
+                else None
+            )
+            custom_agent_prompt_msg = (
+                ChatMessageSimple(
+                    message=processed_custom_agent_prompt,
+                    token_count=token_counter(processed_custom_agent_prompt),
+                    message_type=MessageType.USER,
+                )
+                if processed_custom_agent_prompt
+                else None
+            )
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -954,7 +952,6 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
                     )
                     if persona_system_prompt
                     else None
@@ -968,7 +965,6 @@ def run_llm_loop(
                     if processed_system_prompt
                     else None
                 )
-                custom_agent_prompt_msg = None
             else:
                 # If it's an empty string, we assume the user does not want to include it as an empty System message
                 if default_base_system_prompt:
@@ -986,31 +982,11 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=cite_documents,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
                         token_count=token_counter(system_prompt_str),
                         message_type=MessageType.SYSTEM,
-                    )
-                    processed_custom_agent_prompt = (
-                        process_prompt_template(
-                            custom_agent_prompt,
-                            datetime_aware=persona_datetime_aware,
-                            append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
-                        )
-                        if custom_agent_prompt
-                        else None
-                    )
-                    custom_agent_prompt_msg = (
-                        ChatMessageSimple(
-                            message=processed_custom_agent_prompt,
-                            token_count=token_counter(processed_custom_agent_prompt),
-                            message_type=MessageType.USER,
-                        )
-                        if processed_custom_agent_prompt
-                        else None
                     )
                 else:
                     # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
@@ -1019,7 +995,6 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
                         else None
@@ -1094,12 +1069,17 @@ def run_llm_loop(
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
-            tool_defs = [tool.tool_definition() for tool in final_tools]
+            tool_defs = serialize_tools(
+                [tool.tool_definition() for tool in final_tools]
+            )
 
             # Calculate total processing time from loop start until now
             # This measures how long the user waits before the answer starts streaming
             pre_answer_processing_time = time.monotonic() - loop_start_time
 
+            # Counted here, not in run_llm_step: deep research shares its emitter
+            # with parallel research agents.
+            emitter.llm_step_started()
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
@@ -1155,16 +1135,6 @@ def run_llm_loop(
                         )
                     )
 
-            if len(tool_calls) > 1:
-                emitter.emit(
-                    Packet(
-                        placement=Placement(
-                            turn_index=tool_calls[0].placement.turn_index
-                        ),
-                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
-                    )
-                )
-
             # Quick note for why citation_mapping and citation_processors are both needed:
             # 1. Tools return lightweight string mappings, not SearchDoc objects
             # 2. The SearchDoc resolution is deliberately deferred to llm_loop.py
@@ -1196,6 +1166,11 @@ def run_llm_loop(
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
+
+            available_tool_names = {tool.name for tool in final_tools}
+            unknown_tool_calls = [
+                tc for tc in tool_calls if tc.tool_name not in available_tool_names
+            ]
 
             for tool_response in tool_responses:
                 # Extract tool_call from the response (set by run_tool_calls)
@@ -1356,7 +1331,9 @@ def run_llm_loop(
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=saved_response,
-                    search_docs=displayed_docs or search_docs,
+                    search_docs=(
+                        displayed_docs if displayed_docs is not None else search_docs
+                    ),
                     generated_images=generated_images,
                     generated_files=generated_files,
                     generated_file_ids=generated_file_ids,
@@ -1381,12 +1358,9 @@ def run_llm_loop(
 
                 # Build ToolCallSimple list for all tool calls in this turn
                 tool_calls_simple: list[ToolCallSimple] = []
-                for tool_response in valid_tool_responses:
-                    tc = tool_response.tool_call
-                    assert (
-                        tc is not None
-                    )  # Already filtered above, this is just for typing purposes
-
+                for tc in [
+                    tr.tool_call for tr in valid_tool_responses if tr.tool_call
+                ] + unknown_tool_calls:
                     tool_call_message = tc.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)
 
@@ -1426,6 +1400,12 @@ def run_llm_loop(
                         image_files=None,
                     )
                     simple_chat_history.append(tool_response_msg)
+
+                # Unknown tools were not run; answer them so every call is paired
+                simple_chat_history.extend(
+                    create_tool_call_failure_response(tc.tool_call_id)
+                    for tc in unknown_tool_calls
+                )
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

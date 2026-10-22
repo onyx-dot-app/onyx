@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import KV_CRED_KEY, DocumentSource
 from onyx.connectors.google_utils.google_kv import (
+    _consent_scopes,
     build_service_account_creds,
     get_auth_url,
     update_credential_access_tokens,
@@ -22,8 +23,11 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_FAMILY_SCOPES,
+    GOOGLE_SCOPES,
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.db.credentials import CredentialAccessLevel
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -124,11 +128,11 @@ def test_get_auth_url_accepts_dict_and_legacy_string(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: stored_value})
 
     def _update_credential_json(
@@ -190,12 +194,20 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         def to_json(self) -> str:
             return "{}"
 
+    class _StubSession:
+        scope: list[str] | None = ["requested-scope"]
+
     class _StubFlow:
         code_verifier: str | None = None
+
+        def __init__(self) -> None:
+            self.oauth2session = _StubSession()
 
         def fetch_token(self, code: str) -> None:
             captured["code"] = code
             captured["code_verifier"] = self.code_verifier
+            # Partial grants must not fail the exchange.
+            captured["exchange_scope"] = self.oauth2session.scope
 
         @property
         def credentials(self) -> _StubCreds:
@@ -216,11 +228,11 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: payload})
 
     def _from_client_config(
@@ -278,6 +290,7 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
     assert captured["code"] == "auth-code"
     assert captured["code_verifier"] == "test-verifier"
     assert captured["deleted_key"] == KV_CRED_KEY.format("42")
+    assert captured["exchange_scope"] is None
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY] == payload
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_TOKEN_KEY] == "{}"
     assert (
@@ -322,11 +335,11 @@ def test_get_auth_url_reconstructs_app_cred_from_token_blob(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_TOKEN_KEY: token_blob})
 
     def _update_credential_json(
@@ -408,11 +421,11 @@ def test_get_auth_url_uses_app_credential_on_row_without_rewrite(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: payload})
 
     def _update_credential_json(
@@ -462,11 +475,11 @@ def test_get_auth_url_errors_without_app_cred_or_token(monkeypatch: Any) -> None
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({})
 
     def _update_credential_json(
@@ -539,3 +552,24 @@ def test_verify_csrf_rejects_missing_state(monkeypatch: Any) -> None:
         verify_csrf(42, "test-state")
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "No Google authorization flow" in exc_info.value.detail
+
+
+@pytest.mark.parametrize(
+    "stored_json,expected_scopes",
+    [
+        (
+            {"google_app_credential": {"web": {}}, "credential_family": "google"},
+            GOOGLE_FAMILY_SCOPES,
+        ),
+        ({"google_app_credential": {"web": {}}}, GOOGLE_SCOPES[DocumentSource.GMAIL]),
+    ],
+)
+def test_consent_scopes_cover_every_source_of_a_shared_credential(
+    stored_json: dict[str, Any],
+    expected_scopes: list[str],
+) -> None:
+    # Under test.
+    scopes = _consent_scopes(DocumentSource.GMAIL, stored_json)
+
+    # Postcondition.
+    assert scopes == expected_scopes

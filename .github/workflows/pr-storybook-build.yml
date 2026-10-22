@@ -7,7 +7,6 @@ concurrency:
 # independently of the Next build and nothing else in presubmit exercises it.
 # This surfaces that breakage on the PR without gating the merge.
 on:
-  merge_group:
   pull_request:
     paths:
       - "web/**"

@@ -2,7 +2,7 @@
 
 The `-tools1` model knob makes the mock LLM answer the first AUTO-tool-choice
 cycle with an `internal_search` tool call, so Onyx genuinely executes the
-search tool: query expansion, embedding model server, Vespa/OpenSearch
+search tool: query expansion, embedding model server, OpenSearch
 retrieval, document streaming. The follow-up LLM call (tool result in
 history) streams the final answer.
 

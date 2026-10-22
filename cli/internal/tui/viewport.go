@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/markdown"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 )
 
 // entryKind is the type of chat entry.
@@ -52,22 +53,23 @@ const streamRenderInterval = 100 * time.Millisecond
 // viewport manages the chat display.
 type viewport struct {
 	entries      []chatEntry
-	width        int
-	streaming    bool
 	streamBuf    string
-	showSources  bool
 	renderer     *markdown.Renderer
 	pickerItems  []pickerItem
-	pickerActive bool
+	width        int
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
 
 	// Progressive markdown rendering during streaming
-	streamMarkdown bool   // feature flag: render markdown while streaming
 	streamRendered string // cached rendered output during streaming
 	lastRenderTime time.Time
 	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
+
+	streaming      bool
+	showSources    bool
+	pickerActive   bool
+	streamMarkdown bool // feature flag: render markdown while streaming
 }
 
 // newMarkdownRenderer creates a markdown renderer wrapping at width-4 to
@@ -103,6 +105,7 @@ func (v *viewport) setWidth(w int) {
 }
 
 func (v *viewport) addUserMessage(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := "\n" + userPrefixStyle.Render("❯ ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryUser,
@@ -122,7 +125,7 @@ func (v *viewport) startAgent() {
 }
 
 func (v *viewport) appendToken(token string) {
-	v.streamBuf += token
+	v.streamBuf += sanitize.Terminal(token)
 
 	if !v.streamMarkdown {
 		return
@@ -182,6 +185,7 @@ func (v *viewport) renderMarkdown(md string) string {
 }
 
 func (v *viewport) addInfo(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := infoStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryInfo,
@@ -191,6 +195,7 @@ func (v *viewport) addInfo(msg string) {
 }
 
 func (v *viewport) addWarning(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := warnStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
@@ -200,6 +205,7 @@ func (v *viewport) addWarning(msg string) {
 }
 
 func (v *viewport) addError(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := errorStyle.Render("● Error: ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
@@ -221,7 +227,7 @@ func (v *viewport) addCitations(citations map[int]string) {
 	for _, num := range keys {
 		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
-	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
+	text := sanitize.Terminal(fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  ")))
 
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryCitation,
@@ -231,6 +237,10 @@ func (v *viewport) addCitations(citations map[int]string) {
 }
 
 func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
+	for i := range items {
+		items[i].label = sanitize.Line(items[i].label)
+		items[i].detail = sanitize.Line(items[i].detail)
+	}
 	v.pickerItems = items
 	v.pickerType = kind
 	v.pickerActive = true

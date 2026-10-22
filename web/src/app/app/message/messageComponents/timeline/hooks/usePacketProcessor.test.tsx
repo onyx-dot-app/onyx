@@ -16,7 +16,6 @@ import {
   createSearchToolStartPacket,
   createMessageStartPacket,
   createStopPacket,
-  createBranchingPacket,
 } from "./__tests__/testHelpers";
 
 // Mock the transformers module
@@ -457,7 +456,6 @@ describe("usePacketProcessor", () => {
   describe("toolTurnGroups transformation", () => {
     test("groups tools by turn index", () => {
       const packets = [
-        createBranchingPacket(2, 0),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
         createPacket(PacketType.SECTION_END, { turn_index: 0, tab_index: 0 }),
@@ -469,21 +467,6 @@ describe("usePacketProcessor", () => {
       expect(result.current.toolTurnGroups.length).toBe(1);
       expect(result.current.toolTurnGroups[0]?.isParallel).toBe(true);
       expect(result.current.toolTurnGroups[0]?.steps.length).toBe(2);
-    });
-  });
-
-  describe("expectedBranchesPerTurn", () => {
-    test("exposes branch metadata from packets", () => {
-      const packets = [
-        createBranchingPacket(3, 0),
-        createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
-        createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
-        createSearchToolStartPacket({ turn_index: 0, tab_index: 2 }),
-      ];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.expectedBranchesPerTurn.get(0)).toBe(3);
     });
   });
 

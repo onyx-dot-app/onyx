@@ -1,10 +1,12 @@
 name: Run Playwright Tests
 concurrency:
-  group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
-  cancel-in-progress: true
+  # Pushes to main share a group and queue: one run in progress and the
+  # newest one pending, so a burst of merges runs at most twice and every
+  # run finishes (cancelling would starve main while merges keep landing).
+  group: Run-Playwright-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 on:
-  merge_group:
   pull_request:
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test matrix runs. This
@@ -14,8 +16,10 @@ on:
   push:
     tags:
       - "v*.*.*"
-    # TODO: Remove this if we enable merge-queues for release branches.
     branches:
+      # A push to main runs the full suite and updates the S3 baselines.
+      - main
+      # TODO: Remove this if we enable merge-queues for release branches.
       - "release/**"
 
 permissions:
@@ -25,7 +29,6 @@ env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
   FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   GOOGLE_PSE_API_KEY: ${{ secrets.GOOGLE_PSE_API_KEY }}
@@ -43,10 +46,10 @@ env:
   # writes aren't clobbered by a workflow-level definition. The playwright-tests
   # job always uses the self-hosted mock OIDC IdP
   # (deployment/docker_compose/docker-compose.mcp-oauth-test.yml): no secrets,
-  # deterministic, fork-safe, and gates every PR + merge_group. The
+  # deterministic, fork-safe, and gates every PR. The
   # playwright-tests-oauth-okta job additionally exercises the real Okta org when
-  # OAuth-relevant paths change — required on same-repo PRs, informational on
-  # merge_group.
+  # OAuth-relevant paths change on same-repo PRs (required), and on every push
+  # to main (informational).
   MOCK_OIDC_PORT: 8090
   MCP_OAUTH_AUDIENCE: api://mcp
   MCP_OAUTH_REQUIRED_SCOPES: mcp:use
@@ -65,7 +68,6 @@ env:
   MCP_PER_USER_KEY_SERVER_HOST: 0.0.0.0
   MCP_PER_USER_KEY_SERVER_PUBLIC_HOST: host.docker.internal
 
-  MOCK_LLM_RESPONSE: true
   MCP_TEST_SERVER_PORT: 8004
   MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
   MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
@@ -80,8 +82,8 @@ env:
 
 jobs:
   changes:
-    # Decides whether the playwright matrix runs. On pull_request / merge_group
-    # we use paths-filter; on push (tags, release branches) we default to
+    # Decides whether the playwright matrix runs. On pull_request we use
+    # paths-filter; on push (main, tags, release branches) we default to
     # `true` so everything runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -94,17 +96,18 @@ jobs:
       airgap: ${{ steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
-      # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
-      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || 'false' }}
+      # the mock IdP. A push to main always runs it; other events without the
+      # filter default to 'false'.
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
     steps:
       - name: Checkout code
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request'
         with:
           filters: |
             playwright:
@@ -202,6 +205,8 @@ jobs:
         with:
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+          # A PR test image does not ship; build on the public bases if dhi.io is down.
+          required: "false"
 
       # SKIP_TYPE_CHECK cuts the build time of this image. Types are still checked
       # by the `typescript-check` prek hook in the Quality Checks PR workflow.
@@ -212,6 +217,8 @@ jobs:
           file: ./web/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -284,6 +291,8 @@ jobs:
           target: runtime
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
+          # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+          labels: ci.run-id=${{ github.run_id }}
           push: true
           # Attestations attach as ECR referrers to the image digest, which is
           # stable across runs and caps out at 100 per subject.
@@ -336,6 +345,8 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
+          # A PR test image does not ship; build on the public bases if dhi.io is down.
+          dhi-required: "false"
 
   airgap-health:
     needs: [changes, build-backend-image, build-model-server-image]
@@ -373,10 +384,13 @@ jobs:
         run: |
           docker pull "${ONYX_BACKEND_IMAGE}"
           docker pull "${ONYX_MODEL_SERVER_IMAGE}"
-          docker compose -f docker-compose.yml pull relational_db opensearch cache minio
+          docker compose -f docker-compose.yml pull relational_db opensearch cache object-store minio
 
       - name: Verify deployment without external network
         working-directory: deployment/docker_compose
+        env:
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose
@@ -399,7 +413,7 @@ jobs:
                 < ../../backend/tests/airgap/test_default_model_server_embeddings_are_finite.py
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy ||
             ! default_model_embeddings_are_finite; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap.log"
@@ -412,6 +426,8 @@ jobs:
         working-directory: deployment/docker_compose
         env:
           AIRGAP_HF_ENDPOINT: https://tls_failure:4443
+          S3_ENDPOINT_URL: http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL: http://minio:9000
         run: |
           compose=(
             docker compose
@@ -428,7 +444,7 @@ jobs:
               [[ "$(docker inspect --format '{{.State.Health.Status}}' "${container_id}")" == "healthy" ]]
           }
           if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 180 \
-            api_server inference_model_server minio ||
+            api_server inference_model_server object-store ||
             ! api_server_is_healthy; then
             "${compose[@]}" logs --no-color > "${RUNNER_TEMP}/airgap-tls.log"
             exit 1
@@ -528,17 +544,16 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -568,8 +583,8 @@ jobs:
           fi
 
       # The main suite always runs the OAuth spec against the self-hosted mock
-      # OIDC IdP — deterministic, fork-safe, and the gate for every PR +
-      # merge_group. The real Okta org is validated separately by the
+      # OIDC IdP — deterministic, fork-safe, and the gate for every PR.
+      # The real Okta org is validated separately by the
       # playwright-tests-oauth-okta job. Written to $GITHUB_ENV (not the
       # workflow-level env:) so that job can set its own values without a
       # workflow-level definition clobbering them. getMcpOAuthConfig() requires
@@ -588,7 +603,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -635,7 +650,7 @@ jobs:
           cd deployment/docker_compose
           # Pass the same -f overrides as `up` so the mock MCP/IdP services
           # (defined only in the override files) are included in the logs.
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -647,16 +662,16 @@ jobs:
 
   # Validates the MCP OAuth spec against the REAL Okta org (the mock IdP run in
   # playwright-tests is a deterministic stand-in). Runs only when OAuth-relevant
-  # paths change AND the secrets are reachable: always on merge_group, and on
-  # same-repo PRs (forks can't read secrets, so they rely on the mock-IdP run).
+  # paths change on same-repo PRs (forks can't read secrets, so they rely on the
+  # mock-IdP run), and on every push to main.
   # Gating: this job's result is REQUIRED on pull_request and INFORMATIONAL on
-  # merge_group — see the playwright-required job.
+  # push — see the playwright-required job.
   playwright-tests-oauth-okta:
     needs: [changes, build-web-image, build-backend-image, build-model-server-image]
     if: >-
       needs.changes.outputs.playwright == 'true' &&
       needs.changes.outputs.mcp_oauth == 'true' && (
-        github.event_name == 'merge_group' || (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') || (
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
         )
@@ -709,17 +724,16 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          S3_ENDPOINT_URL=http://object-store:8333
+          S3_LEGACY_ENDPOINT_URL=http://minio:9000
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -775,7 +789,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -808,7 +822,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -867,16 +881,12 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
-          MOCK_LLM_RESPONSE=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
           # MCP E2E tests register mock servers on host.docker.internal (a private
@@ -895,7 +905,7 @@ jobs:
       - name: Start Docker containers (lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d --wait
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml up -d --wait
         id: start_docker
 
       - name: Seed dev license
@@ -920,7 +930,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -1011,7 +1021,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           GH_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -1028,9 +1037,6 @@ jobs:
                 echo "rev=main" >> "$GITHUB_OUTPUT"
                 ;;
             esac
-          elif [ "${EVENT_NAME}" = "merge_group" ]; then
-            # Merge queue compares against the target branch (e.g. refs/heads/main -> main)
-            echo "rev=${MERGE_GROUP_BASE_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
           elif [[ "${GH_REF}" == refs/tags/* ]]; then
             # Tag builds compare against the tag name
             echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -1050,7 +1056,7 @@ jobs:
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
-      # PR-only: PR_NUMBER is empty on push/merge_group events, which would write
+      # PR-only: PR_NUMBER is empty on push events, which would write
       # the report under a junk `reports/pr-/...` key. Baselines (updated below)
       # are the meaningful artifact on those events, not this PR-scoped report.
       - name: Upload visual diff report to S3
@@ -1103,13 +1109,7 @@ jobs:
           needs.playwright-tests.result == 'success' && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/heads/release/') ||
-            startsWith(github.ref, 'refs/tags/v') ||
-            (
-              github.event_name == 'merge_group' && (
-                github.event.merge_group.base_ref == 'refs/heads/main' ||
-                startsWith(github.event.merge_group.base_ref, 'refs/heads/release/')
-              )
-            )
+            startsWith(github.ref, 'refs/tags/v')
           )
         env:
           PROJECT: ${{ matrix.project }}
@@ -1271,9 +1271,9 @@ jobs:
             exit 1
           fi
           # The real-Okta OAuth job gates pull_request runs (blocks the PR), but
-          # is informational on merge_group so a flaky Okta run can't wedge the
-          # serialized merge queue. `skipped` means it wasn't applicable (no OAuth
-          # paths changed, or a fork PR) and is always acceptable.
+          # is informational on push to main, after the merge. `skipped` means it
+          # wasn't applicable (no OAuth paths changed, or a fork PR) and is always
+          # acceptable.
           if [ "${EVENT_NAME}" = "pull_request" ] && \
              [ "${OKTA_RESULT}" != "success" ] && [ "${OKTA_RESULT}" != "skipped" ]; then
             echo "Okta OAuth job result (required on PRs): ${OKTA_RESULT}"

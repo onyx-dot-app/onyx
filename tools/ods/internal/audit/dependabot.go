@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
 // dependabotAlert is the subset of the GitHub Dependabot alerts API response we
@@ -34,12 +39,30 @@ type dependabotAlert struct {
 	} `json:"security_vulnerability"`
 }
 
+// dependabotEcosystems maps Dependabot's ecosystem names to OSV's, so the same
+// package from both sources matches one allowlist entry and one alert.
+var dependabotEcosystems = map[string]string{
+	"pip":     "PyPI",
+	"go":      "Go",
+	"rust":    "crates.io",
+	"actions": "GitHub Actions",
+}
+
+// canonicalEcosystem names an ecosystem the way OSV does.
+func canonicalEcosystem(ecosystem string) string {
+	if osv, ok := dependabotEcosystems[strings.ToLower(ecosystem)]; ok {
+		return osv
+	}
+	return ecosystem
+}
+
 // auditDependabot queries open Dependabot security alerts for the current repo
 // via the GitHub CLI and maps them into Findings.
 func auditDependabot() ([]Finding, error) {
 	// {owner}/{repo} is resolved by gh from the repo's git remote. --paginate
-	// merges array pages into a single JSON array.
-	cmd := exec.Command("gh", "api",
+	// merges array pages into a single JSON array. gh switches to POST when -f
+	// fields are present, and the list endpoint 404s on POST.
+	cmd := exec.Command("gh", "api", "--method", "GET",
 		"repos/{owner}/{repo}/dependabot/alerts",
 		"--paginate",
 		"-f", "state=open",
@@ -50,13 +73,37 @@ func auditDependabot() ([]Finding, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := strings.TrimSpace(string(exitErr.Stderr))
 			if strings.Contains(stderr, "404") || strings.Contains(stderr, "Not Found") {
-				return nil, fmt.Errorf("gh api dependabot/alerts returned 404: ensure Dependabot alerts are enabled and the token has 'security_events: read' (or repo admin) access: %s", stderr)
+				return nil, fmt.Errorf("gh api dependabot/alerts returned 404: ensure Dependabot alerts are enabled and the token can read them ('vulnerability-alerts: read' for GITHUB_TOKEN, the security_events scope for a classic PAT): %s", stderr)
 			}
 			return nil, fmt.Errorf("gh api dependabot/alerts failed: %w: %s", err, stderr)
 		}
 		return nil, fmt.Errorf("gh api dependabot/alerts failed: %w", err)
 	}
-	return parseDependabotAlerts(out)
+	findings, err := parseDependabotAlerts(out)
+	if err != nil {
+		return nil, err
+	}
+	// Without a repo root, keep every alert: err toward blocking.
+	if root, err := paths.GitRoot(); err == nil {
+		findings = dropMissingManifests(findings, root)
+	}
+	return findings, nil
+}
+
+// dropMissingManifests drops alerts whose manifest is not in the checkout.
+// Dependabot can keep an alert open after its manifest is deleted, and the
+// alert then names a file that no longer sets any installed version. An
+// alert with no manifest path stays.
+func dropMissingManifests(findings []Finding, root string) []Finding {
+	var kept []Finding
+	for _, f := range findings {
+		if f.Manifest != "" && !fileExists(filepath.Join(root, filepath.FromSlash(f.Manifest))) {
+			log.Debugf("Skipping Dependabot alert %s for %s: %s is not in this checkout", f.ID, f.Package, f.Manifest)
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
 }
 
 // parseDependabotAlerts maps the alerts JSON into Findings, keeping only open

@@ -1,14 +1,15 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Formik, Form, useFormikContext } from "formik";
+import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
@@ -18,12 +19,12 @@ import type {
 import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
-import { InputComboBox } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+import { Text } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -41,8 +42,9 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -55,18 +57,19 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard } from "@opal/components";
+import { Card, EmptyMessageCard, Tag } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
 import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
-import { getProvider } from "@/lib/languageModels";
 import { useSettings } from "@/lib/settings/hooks";
+
+/** How long a save may run before the footer says it is taking a while. */
+const SLOW_SAVE_NOTICE_MS = 10_000;
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -110,6 +113,11 @@ export function APIKeyField({
   subDescription,
 }: APIKeyFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const { initialValues } = useFormikContext<BaseLLMFormValues>();
+  // On edit, the initial value is the backend's masked stored key.
+  const storedValue: unknown = getIn(initialValues, name);
+  const existingValue =
+    typeof storedValue === "string" && storedValue ? storedValue : undefined;
   return (
     <InputPadder>
       <InputVertical
@@ -126,7 +134,7 @@ export function APIKeyField({
         }
         suffix={optional ? t("setup.optionalSuffix.label") : undefined}
       >
-        <PasswordInputTypeInField name={name} />
+        <PasswordInputTypeInField name={name} existingValue={existingValue} />
       </InputVertical>
     </InputPadder>
   );
@@ -150,7 +158,9 @@ export function useApiBaseSubDescription(
   const sentences = [
     description,
     settings.is_containerized
-      ? t("setup.apiBaseField.containerizedNote")
+      ? t("setup.apiBaseField.containerizedNote", {
+          appName: settings.appName,
+        })
       : undefined,
     suffix,
   ].filter((sentence) => sentence !== undefined);
@@ -167,10 +177,11 @@ export interface APIBaseFieldProps {
 export function APIBaseField({
   optional = false,
   subDescription,
-  placeholder = "https://",
+  placeholder,
   rightChildren,
 }: APIBaseFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   return (
     <InputPadder>
       <InputVertical
@@ -181,7 +192,7 @@ export function APIBaseField({
       >
         <InputTypeInField
           name="api_base"
-          placeholder={placeholder}
+          placeholder={placeholder ?? tPlaceholders("url")}
           rightChildren={rightChildren}
         />
       </InputVertical>
@@ -214,14 +225,14 @@ export function ModelAccessField() {
     businessTier && !userGroupsIsLoading && userGroups
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
-          label: g.name,
+          title: g.name,
           description: t("access.groupOption.description"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
-    label: a.name,
+    title: a.name,
     description: t("access.agentOption.description"),
   }));
 
@@ -285,33 +296,36 @@ export function ModelAccessField() {
           title={t("access.field.title")}
           description={t("access.field.description")}
         >
-          <InputSelect
+          <InputSingleSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
-          >
-            <InputSelect.Trigger placeholder={t("access.select.placeholder")} />
-            <InputSelect.Content>
-              <InputSelect.Item value="public" icon={SvgOrganization}>
-                {t("access.public.label")}
-              </InputSelect.Item>
-              <InputSelect.Item value="private" icon={SvgUsers}>
-                {t("access.private.label")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption="public"
+            placeholder={t("access.select.placeholder")}
+            options={[
+              {
+                value: "public",
+                title: t("access.public.label"),
+                icon: SvgOrganization,
+              },
+              {
+                value: "private",
+                title: t("access.private.label"),
+                icon: SvgUsers,
+              },
+            ]}
+          />
         </InputHorizontal>
       </InputPadder>
 
       {!isPublic && (
         <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
-            <InputComboBox
+            <InputSingleComboBox
               placeholder={t("access.comboBox.placeholder")}
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
               options={availableOptions}
-              strict
               searchIcon
             />
 
@@ -325,7 +339,7 @@ export function ModelAccessField() {
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
                   </Text>
                 }
@@ -436,7 +450,7 @@ export function ModelAccessField() {
 interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
 }
-function RefetchButton({ onRefetch }: RefetchButtonProps) {
+export function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const t = useTranslations("admin.languageModels.modals");
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -448,7 +462,9 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
+      icon={isFetching ? IconLoader : SvgRefreshCw}
+      aria-label={t("models.refetch.label")}
+      tooltip={t("models.refetch.label")}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -503,8 +519,8 @@ function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
-/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
- *  providers don't, in which case the row renders without a metadata line. */
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
+ *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
   return (
     model.quantization != null ||
@@ -513,10 +529,13 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
 function buildModelDescription(model: ModelConfiguration): string | undefined {
-  if (!hasModelMetadata(model)) return undefined;
-  const parts: string[] = [];
+  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+  if (!hasModelMetadata(model)) return id;
+  const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
   if (context) parts.push(context);
   const flag = countryCodeToFlag(model.country_code);
@@ -535,7 +554,7 @@ function modelRightChildren(
 ): React.ReactNode {
   if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
   return (
-    <Text secondaryBody text03 title={visionTitle}>
+    <Text font="secondary-body" color="text-03" title={visionTitle}>
       👁
     </Text>
   );
@@ -651,6 +670,17 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
+                  {model.supports_decisions && (
+                    <Tag
+                      color="gray"
+                      title={t("models.row.decisionTag.label")}
+                      tooltip={t(
+                        model.supports_chat === false
+                          ? "models.row.decisionTag.decisionOnly"
+                          : "models.row.decisionTag.chatAndDecision"
+                      )}
+                    />
+                  )}
                   {modelRightChildren(
                     model,
                     t("models.row.visionMarker.title")
@@ -672,11 +702,13 @@ function ModelRow({
                           editHandle.current?.startEditing();
                         }}
                       />
-                      <ModelSettingsPopover
-                        model={model}
-                        onChange={onSettingsChange}
-                        onOpenChange={setSettingsOpen}
-                      />
+                      {model.supports_chat !== false && (
+                        <ModelSettingsPopover
+                          model={model}
+                          onChange={onSettingsChange}
+                          onOpenChange={setSettingsOpen}
+                        />
+                      )}
                       {!isDefaultModel && onSetDefaultModel && (
                         <Button
                           prominence="internal"
@@ -692,13 +724,15 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <Text
-                      secondaryAction
-                      nowrap
-                      className="px-1.5 py-1 text-action-selection-05"
-                    >
-                      {t("models.row.defaultLabel")}
-                    </Text>
+                    <span className="px-1.5 py-1 text-action-selection-05">
+                      <Text
+                        font="secondary-action"
+                        wordWrap="whitespace-nowrap"
+                        color="inherit"
+                      >
+                        {t("models.row.defaultLabel")}
+                      </Text>
+                    </span>
                   )}
                 </OpalSection>
               }
@@ -731,7 +765,7 @@ export function ModelSelectionField({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLLMProviders();
+  const { defaultText } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -750,14 +784,12 @@ export function ModelSelectionField({
     }
   }, [models]);
 
-  // Automatically derive test_model_name from model_configurations.
-  // Any change to visibility or the model list syncs this automatically.
   useEffect(() => {
-    const firstVisible = models.find((m) => m.is_visible)?.name;
-    if (firstVisible !== formikProps.values.test_model_name) {
-      formikProps.setFieldValue("test_model_name", firstVisible);
+    const testModel = models.find((model) => model.is_visible)?.name;
+    if (testModel !== formikProps.values.test_model_name) {
+      formikProps.setFieldValue("test_model_name", testModel);
     }
-  }, [models]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [models, formikProps.setFieldValue, formikProps.values.test_model_name]);
 
   function setVisibility(modelName: string, visible: boolean) {
     const updated = models.map((m) =>
@@ -886,7 +918,9 @@ export function ModelSelectionField({
                       }
                       isDefaultModel={model.name === defaultModelName}
                       onSetDefaultModel={
-                        providerId != null && model.is_visible
+                        providerId != null &&
+                        model.is_visible &&
+                        model.supports_chat !== false
                           ? () => void setDefaultModel(model.name)
                           : undefined
                       }
@@ -1059,10 +1093,22 @@ function ModalWrapperInner({
     ) {
       setFieldValue("model_configurations", modelConfigurations);
     }
-  }, [modelConfigurations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modelConfigurations, setFieldValue, values.model_configurations]);
 
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
+
+  // A provider with thousands of models saves in seconds, not instantly, so
+  // a long-running submit says so instead of looking stuck.
+  const [saveIsSlow, setSaveIsSlow] = useState(false);
+  useEffect(() => {
+    if (!isSubmitting) {
+      setSaveIsSlow(false);
+      return;
+    }
+    const handle = setTimeout(() => setSaveIsSlow(true), SLOW_SAVE_NOTICE_MS);
+    return () => clearTimeout(handle);
+  }, [isSubmitting]);
 
   const disabledTooltip = busy
     ? undefined
@@ -1072,11 +1118,10 @@ function ModalWrapperInner({
         ? t("setup.submitButton.pristineTooltip")
         : undefined;
 
-  const {
-    icon: providerIcon,
-    companyName: providerDisplayName,
-    productName: providerProductName,
-  } = getProvider(providerName);
+  const providerEntry = getProvider(providerName);
+  const providerIcon = providerEntry.icon;
+  const { companyName: providerDisplayName, productName: providerProductName } =
+    useProviderNames()(providerEntry);
 
   const title = llmProvider
     ? markdown(
@@ -1108,13 +1153,18 @@ function ModalWrapperInner({
             {children}
           </Modal.Body>
           <Modal.Footer>
+            {saveIsSlow && (
+              <Text font="secondary-body" color="text-03">
+                {t("setup.slowSave.text")}
+              </Text>
+            )}
             <Button prominence="secondary" onClick={onClose} type="button">
               {t("setup.cancelButton.label")}
             </Button>
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SvgSimpleLoader : undefined}
+              icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}
             >
               {llmProvider

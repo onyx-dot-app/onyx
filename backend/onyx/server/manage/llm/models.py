@@ -3,17 +3,17 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import resolve_api_surface
-from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS, LlmProviderNames
 from onyx.llm.model_capabilities import (
     anthropic_supports_thinking,
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
     supported_reasoning_efforts,
 )
@@ -69,6 +69,7 @@ class TestLLMRequest(BaseModel):
     provider: str
     model: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -87,6 +88,30 @@ class TestLLMRequest(BaseModel):
         return value.strip().lower()
 
 
+def build_model_configuration_views(
+    llm_provider_model: "LLMProviderModel",
+    model_configurations: list["ModelConfigurationModel"],
+) -> list["ModelConfigurationView"]:
+    """Views over one page of a provider's rows, dated duplicates dropped and
+    the provider's recommended default marked."""
+    from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_default_model_for_provider,
+    )
+
+    provider = llm_provider_model.provider
+    views = filter_model_configurations(
+        model_configurations,
+        provider,
+        use_stored_display_name=llm_provider_model.custom_config is not None,
+        custom_config=llm_provider_model.custom_config,
+        deployment_name=llm_provider_model.deployment_name,
+    )
+    default_model = fetch_default_model_for_provider(provider)
+    for view in views:
+        view.is_recommended_default = view.name == default_model
+    return views
+
+
 class LLMProviderDescriptor(BaseModel):
     """A descriptor for an LLM provider that can be safely viewed by
     non-admin users. Used when giving a list of available LLMs."""
@@ -96,38 +121,34 @@ class LLMProviderDescriptor(BaseModel):
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
+    # First stored row the listing left out, None when every row is included.
+    # Required (no default) so pre-paging cache entries fail validation and
+    # rebuild instead of hiding the rest of a large provider.
+    next_model_configuration_offset: int | None
 
     @classmethod
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
+        model_configurations: list["ModelConfigurationModel"],
+        next_model_configuration_offset: int | None,
     ) -> "LLMProviderDescriptor":
+        """`model_configurations` is one page of the provider's rows, passed
+        explicitly so a provider loaded without them never lazy-loads all."""
         from onyx.llm.well_known_providers.llm_provider_options import (
-            fetch_default_model_for_provider,
             get_provider_display_name,
         )
 
         provider = llm_provider_model.provider
-
-        model_configurations = filter_model_configurations(
-            llm_provider_model.model_configurations,
-            provider,
-            use_stored_display_name=llm_provider_model.custom_config is not None,
-            custom_config=llm_provider_model.custom_config,
-            deployment_name=llm_provider_model.deployment_name,
-        )
-        default_model = fetch_default_model_for_provider(provider)
-        for model_configuration in model_configurations:
-            model_configuration.is_recommended_default = (
-                model_configuration.name == default_model
-            )
-
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            model_configurations=model_configurations,
+            model_configurations=build_model_configuration_views(
+                llm_provider_model, model_configurations
+            ),
+            next_model_configuration_offset=next_model_configuration_offset,
         )
 
 
@@ -135,6 +156,7 @@ class LLMProvider(BaseModel):
     name: str | None = None
     provider: str
     api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
@@ -143,6 +165,28 @@ class LLMProvider(BaseModel):
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
+
+
+class DecisionProviderConnection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: int | None = None
+    name: str | None = None
+    provider: str
+    api_key: str | None = None
+    zoom_voice_provider_id: int | None = None
+    api_key_changed: bool = False
+    api_base: str | None = None
+    api_version: str | None = None
+    custom_config: dict[str, str] | None = None
+    custom_config_changed: bool = False
+
+
+class DecisionProviderUpsertRequest(DecisionProviderConnection):
+    selected_model_names: list[str]
+
+
+class TestDecisionProviderRequest(DecisionProviderConnection):
+    model: str
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -158,6 +202,18 @@ class LLMProviderUpsertRequest(LLMProvider):
     keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
+    @model_validator(mode="after")
+    def validate_typesafe_configuration(self) -> LLMProviderUpsertRequest:
+        if self.provider == LlmProviderNames.TYPESAFE:
+            if any(model.supports_chat is True for model in self.model_configurations):
+                raise ValueError(
+                    "TypeSafe AI does not support chat model configuration"
+                )
+            if self.api_base or self.custom_config:
+                raise ValueError("TypeSafe AI uses its hosted System One API")
+            self.is_auto_mode = False
+        return self
+
     @field_validator("provider", mode="before")
     @classmethod
     def normalize_provider(cls, value: str) -> str:
@@ -170,13 +226,21 @@ class LLMProviderView(LLMProvider):
 
     id: int
     model_configurations: list["ModelConfigurationView"]
+    # Set when the response holds only a page of the models (the admin
+    # listing with page_models). None means every model is included.
+    next_model_configuration_offset: int | None = None
 
     @classmethod
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
         include_api_key: bool = True,
+        model_configurations: list["ModelConfigurationModel"] | None = None,
+        next_model_configuration_offset: int | None = None,
     ) -> "LLMProviderView":
+        # ``model_configurations`` is one page of the provider's rows when the
+        # caller paged them, otherwise the loaded relationship is used.
+
         # ``include_api_key=False`` skips the decrypt + credential-access audit
         # for callers that only need catalog metadata (e.g. the Craft gateway
         # model list, which never uses the real key — the proxy injects it).
@@ -215,6 +279,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=api_key,
+            zoom_voice_provider_id=llm_provider_model.zoom_voice_provider_id,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -224,23 +289,31 @@ class LLMProviderView(LLMProvider):
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations,
+                (
+                    llm_provider_model.model_configurations
+                    if model_configurations is None
+                    else model_configurations
+                ),
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
                 custom_config=llm_provider_model.custom_config,
                 deployment_name=llm_provider_model.deployment_name,
             ),
+            next_model_configuration_offset=next_model_configuration_offset,
         )
 
 
 class ModelConfigurationUpsertRequest(BaseModel):
     name: str
     is_visible: bool
+    supports_decisions: bool | None = None
+    supports_chat: bool | None = None
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
     custom_display_name: str | None = None  # Admin-specified override
+    is_router: bool = False
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
@@ -304,6 +377,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             ),
             display_name=model_configuration_model.display_name,
             custom_display_name=model_configuration_model.custom_display_name,
+            is_router=model_configuration_model.is_router,
             reasoning_effort_max=model_configuration_model.reasoning_effort_max,
             reasoning_effort_default=model_configuration_model.reasoning_effort_default,
             temperature_default=model_configuration_model.temperature_default,
@@ -314,6 +388,8 @@ class ModelConfigurationView(BaseModel):
     id: int | None = None
     name: str
     is_visible: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
     max_input_tokens: int | None = None
     # The persisted override/source value, before static-provider capability
     # enrichment. Internal consumers use this to distinguish an intentional
@@ -330,6 +406,8 @@ class ModelConfigurationView(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
+    # Virtual entry delegating model selection to a routing layer.
+    is_router: bool = False
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -372,21 +450,25 @@ class ModelConfigurationView(BaseModel):
             return cls(
                 id=model_configuration_model.id,
                 name=model_configuration_model.name,
+                supports_decisions=LLMModelFlowType.DECISION
+                in model_configuration_model.llm_model_flow_types,
+                supports_chat=LLMModelFlowType.CHAT
+                in model_configuration_model.llm_model_flow_types,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
-                # to the LiteLLM cost map when no VISION flow is stored.
+                # to the model catalog when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
                     or any(
-                        litellm_thinks_model_supports_image_input(name, provider_name)
+                        catalog_model_supports_image_input(name, provider_name)
                         for name in model_identity_names
                     )
                 ),
                 # Prefer the stored flow, then the Claude version parse, then
-                # the LiteLLM cost map, then a name/display-name substring
+                # the model catalog, then a name/display-name substring
                 # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
@@ -410,6 +492,7 @@ class ModelConfigurationView(BaseModel):
                 reasoning_effort_max=model_configuration_model.reasoning_effort_max,
                 reasoning_effort_default=model_configuration_model.reasoning_effort_default,
                 temperature_default=model_configuration_model.temperature_default,
+                is_router=model_configuration_model.is_router,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -438,6 +521,10 @@ class ModelConfigurationView(BaseModel):
         return cls(
             id=model_configuration_model.id,
             name=model_configuration_model.name,
+            supports_decisions=LLMModelFlowType.DECISION
+            in model_configuration_model.llm_model_flow_types,
+            supports_chat=LLMModelFlowType.CHAT
+            in model_configuration_model.llm_model_flow_types,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
                 model_configuration_model.max_input_tokens
@@ -452,7 +539,7 @@ class ModelConfigurationView(BaseModel):
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
                 else any(
-                    litellm_thinks_model_supports_image_input(name, provider_name)
+                    catalog_model_supports_image_input(name, provider_name)
                     for name in model_identity_names
                 )
             ),
@@ -474,6 +561,7 @@ class ModelConfigurationView(BaseModel):
             reasoning_effort_max=model_configuration_model.reasoning_effort_max,
             reasoning_effort_default=model_configuration_model.reasoning_effort_default,
             temperature_default=model_configuration_model.temperature_default,
+            is_router=model_configuration_model.is_router,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,
@@ -501,6 +589,9 @@ class BedrockModelsRequest(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
+    # Cross-account: role to assume (via the credentials above) before listing
+    aws_role_name: str | None = None
+    aws_external_id: str | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
 
@@ -563,6 +654,11 @@ class OllamaModelDetails(BaseModel):
 
 
 # OpenRouter dynamic models fetch
+class TypeSafeModelsRequest(BaseModel):
+    api_key: str | None = None
+    provider_id: int | None = None
+
+
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
@@ -582,6 +678,20 @@ class OpenRouterModelDetails(BaseModel):
     # context_length may be missing or 0 for some models
     context_length: int | None = None
     architecture: dict[str, Any] = {}  # Contains 'input_modalities' key
+    # Router entries bill at the routed upstream's rate, reported as "-1".
+    pricing: dict[str, Any] | None = None
+
+    @property
+    def supports_decisions(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities", [])
+        return isinstance(output_modalities, list) and "decisions" in output_modalities
+
+    @property
+    def supports_chat(self) -> bool:
+        output_modalities = self.architecture.get("output_modalities")
+        if output_modalities is None:
+            return True
+        return isinstance(output_modalities, list) and "text" in output_modalities
 
     @property
     def supports_image_input(self) -> bool:
@@ -593,6 +703,15 @@ class OpenRouterModelDetails(BaseModel):
         output_modalities = self.architecture.get("output_modalities", [])
         return isinstance(output_modalities, list) and "embeddings" in output_modalities
 
+    @property
+    def is_router(self) -> bool:
+        """Virtual models that delegate to an upstream (openrouter/auto, fusion, ...).
+        OpenRouter marks them with tokenizer "Router" and prices them at -1."""
+        if self.architecture.get("tokenizer") == "Router":
+            return True
+        pricing: dict[str, Any] = self.pricing or {}
+        return pricing.get("prompt") == "-1" or pricing.get("completion") == "-1"
+
 
 class OpenRouterFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g., "openai/gpt-5-pro")
@@ -601,6 +720,9 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+    supports_decisions: bool = False
+    supports_chat: bool = True
+    is_router: bool = False
 
 
 # LM Studio dynamic models fetch
@@ -641,6 +763,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
     default_chat_naming: DefaultModel | None = None
+    default_search_selection: DefaultModel | None = None
     default_craft: DefaultModel | None = None
 
     @classmethod
@@ -651,24 +774,58 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         default_vision: DefaultModel | None = None,
         default_chat_naming: DefaultModel | None = None,
         default_craft: DefaultModel | None = None,
+        default_search_selection: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
             default_chat_naming=default_chat_naming,
+            default_search_selection=default_search_selection,
             default_craft=default_craft,
         )
+
+
+class ModelConfigurationPage(BaseModel):
+    """One window of a provider's models, past what the listing returned."""
+
+    model_configurations: list[ModelConfigurationView]
+    # Offset of the next stored row, None at the end of the list or, for a
+    # name search, of the matches.
+    next_offset: int | None
+
+    @classmethod
+    def from_model(
+        cls,
+        llm_provider_model: "LLMProviderModel",
+        model_configurations: list["ModelConfigurationModel"],
+        next_offset: int | None,
+    ) -> "ModelConfigurationPage":
+        return cls(
+            model_configurations=build_model_configuration_views(
+                llm_provider_model, model_configurations
+            ),
+            next_offset=next_offset,
+        )
+
+
+class DecisionModelResponse(BaseModel):
+    model: DefaultModel | None
+    providers: list[LLMProviderView]
+    supported_providers: list[str]
 
 
 class SyncModelEntry(BaseModel):
     """Typed model for syncing fetched models to the DB."""
 
     name: str
+    supports_decisions: bool = False
+    supports_chat: bool = True
     display_name: str
     max_input_tokens: int | None = None
     supports_image_input: bool = False
     supports_reasoning: bool = False
+    is_router: bool = False
 
 
 class LitellmModelsRequest(BaseModel):
@@ -807,6 +964,25 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Vercel AI Gateway dynamic models fetch
+class VercelAIGatewayModelsRequest(BaseModel):
+    # The catalog is public, so api_base alone is enough to list models.
+    api_base: str | None = None
+    api_key: str | None = None
+    # Existing provider id; syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class VercelAIGatewayFinalModelResponse(BaseModel):
+    name: str  # Namespaced model id (e.g. "anthropic/claude-sonnet-4.5")
+    display_name: str
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+    supports_chat: bool = True
+    supports_decisions: bool = False
+
+
 # Portkey dynamic models fetch
 class PortkeyModelsRequest(BaseModel):
     api_base: str
@@ -821,3 +997,8 @@ class PortkeyFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+class ModelRoutingUpdateRequest(BaseModel):
+    model_routing_enabled: bool | None = None
+    model_routing_model_configuration_id: int | None = None

@@ -1,24 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  SvgCheck,
-  SvgSlack,
-  SvgUser,
-  SvgGlobe,
-  SvgKey,
-  SvgUsers,
-} from "@opal/icons";
+import { SvgSlack, SvgUser, SvgGlobe, SvgKey, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import {
-  FilterButton,
-  InputTypeIn,
-  LineItemButton,
-  Popover,
-  ShadowDiv,
-} from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Dropdown, FilterButton, type DropdownItem } from "@opal/components";
 import { AccountType, UserStatus } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import type { GroupOption, StatusFilter, StatusCountMap } from "./types";
@@ -61,14 +46,6 @@ const STATUS_COUNT_KEY: Record<UserStatus, keyof StatusCountMap> = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function CountBadge({ count }: { count: number | undefined }) {
-  return (
-    <Text as="span" secondaryBody text03>
-      {count ?? 0}
-    </Text>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -126,8 +103,6 @@ export default function UserFilters({
   const hasTypeFilter = selectedAccountTypes.length > 0;
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
-  const [groupSearch, setGroupSearch] = useState("");
-  const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
 
   const toggleAccountType = (type: AccountType) => {
     if (selectedAccountTypes.includes(type)) {
@@ -178,17 +153,55 @@ export default function UserFilters({
       )
     : t("filters.status.allOption.label");
 
-  const filteredGroups = groupSearch
-    ? groups.filter((g) =>
-        g.name.toLowerCase().includes(groupSearch.toLowerCase())
-      )
-    : groups;
+  // Each list leads with an "All" row that reads as selected while nothing
+  // is picked, and clears the filter when picked. The member counts ride as
+  // the rows' suffixes.
+  const ALL = "";
+  const withAll = (title: string, rows: DropdownItem[]): DropdownItem[] => [
+    { kind: "option", value: ALL, icon: SvgUsers, title, pinned: true },
+    ...rows,
+  ];
+  const picked = (selected: string[]): ReadonlySet<string> =>
+    new Set(selected.length > 0 ? selected : [ALL]);
+  // A missing count reads as 0, so every row shows one.
+  const count = (n: number | undefined) => String(n ?? 0);
+
+  const accountTypeItems = withAll(
+    t("filters.accountType.allOption.label"),
+    FILTERABLE_ACCOUNT_TYPES.map((type) => ({
+      kind: "option",
+      value: type,
+      icon: ACCOUNT_TYPE_ICONS[type] ?? SvgUser,
+      title: accountTypeLabels[type],
+      suffix: count(accountTypeCounts[type]),
+    }))
+  );
+  const groupItems = withAll(
+    t("filters.group.allOption.label"),
+    groups.map((group) => ({
+      kind: "option",
+      value: String(group.id),
+      icon: SvgUsers,
+      title: group.name,
+      suffix: count(group.memberCount),
+    }))
+  );
+  const statusItems = withAll(
+    t("filters.status.allOption.label"),
+    FILTERABLE_STATUSES.map((status) => ({
+      kind: "option",
+      value: status,
+      icon: SvgUser,
+      title: statusLabels[status],
+      suffix: count(statusCounts[STATUS_COUNT_KEY[status]]),
+    }))
+  );
 
   return (
     <div className="flex gap-2">
       {/* Account type filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             aria-label={t("filters.accountType.button.ariaLabel")}
             icon={SvgUsers}
@@ -197,48 +210,26 @@ export default function UserFilters({
           >
             {typeLabel}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding={2}
-              icon={!hasTypeFilter ? SvgCheck : SvgUsers}
-              state={!hasTypeFilter ? "selected" : "empty"}
-              selectVariant={!hasTypeFilter ? "select-heavy" : "select-light"}
-              onClick={() => onAccountTypesChange([])}
-              title={t("filters.accountType.allOption.label")}
-            />
-            {FILTERABLE_ACCOUNT_TYPES.map((type) => {
-              const isSelected = selectedAccountTypes.includes(type);
-              const typeIcon = ACCOUNT_TYPE_ICONS[type] ?? SvgUser;
-              return (
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  key={type}
-                  icon={isSelected ? SvgCheck : typeIcon}
-                  state={isSelected ? "selected" : "empty"}
-                  selectVariant={isSelected ? "select-heavy" : "select-light"}
-                  onClick={() => toggleAccountType(type)}
-                  rightChildren={<CountBadge count={accountTypeCounts[type]} />}
-                  title={accountTypeLabels[type]}
-                />
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("filters.accountType.button.ariaLabel")}
+          values={picked(selectedAccountTypes)}
+          onSelect={(option) => {
+            if (option.value === ALL) onAccountTypesChange([]);
+            else {
+              const type = FILTERABLE_ACCOUNT_TYPES.find(
+                (candidate) => candidate === option.value
               );
-            })}
-          </div>
-        </Popover.Content>
-      </Popover>
+              if (type) toggleAccountType(type);
+            }
+          }}
+          items={accountTypeItems}
+        />
+      </Dropdown>
 
       {/* Groups filter */}
-      <Popover
-        open={groupPopoverOpen}
-        onOpenChange={(open) => {
-          setGroupPopoverOpen(open);
-          if (!open) setGroupSearch("");
-        }}
-      >
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             aria-label={t("filters.group.button.ariaLabel")}
             icon={SvgUsers}
@@ -247,55 +238,23 @@ export default function UserFilters({
           >
             {groupLabel}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <InputTypeIn
-              value={groupSearch}
-              onChange={(e) => setGroupSearch(e.target.value)}
-              placeholder={t("filters.group.search.placeholder")}
-              searchIcon
-              variant="internal"
-            />
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding={2}
-              icon={!hasGroupFilter ? SvgCheck : SvgUsers}
-              state={!hasGroupFilter ? "selected" : "empty"}
-              selectVariant={!hasGroupFilter ? "select-heavy" : "select-light"}
-              onClick={() => onGroupsChange([])}
-              title={t("filters.group.allOption.label")}
-            />
-            <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
-              {filteredGroups.map((group) => {
-                const isSelected = selectedGroups.includes(group.id);
-                return (
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    key={group.id}
-                    icon={isSelected ? SvgCheck : SvgUsers}
-                    state={isSelected ? "selected" : "empty"}
-                    selectVariant={isSelected ? "select-heavy" : "select-light"}
-                    onClick={() => toggleGroup(group.id)}
-                    rightChildren={<CountBadge count={group.memberCount} />}
-                    title={group.name}
-                  />
-                );
-              })}
-              {filteredGroups.length === 0 && (
-                <Text as="span" secondaryBody text03 className="px-2 py-1.5">
-                  {t("filters.group.empty.label")}
-                </Text>
-              )}
-            </ShadowDiv>
-          </div>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("filters.group.button.ariaLabel")}
+          search={{ placeholder: t("filters.group.search.placeholder") }}
+          noMatchText={t("filters.group.empty.label")}
+          values={picked(selectedGroups.map(String))}
+          onSelect={(option) => {
+            if (option.value === ALL) onGroupsChange([]);
+            else toggleGroup(Number(option.value));
+          }}
+          items={groupItems}
+        />
+      </Dropdown>
 
       {/* Status filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             aria-label={t("filters.status.button.ariaLabel")}
             icon={SvgUsers}
@@ -304,38 +263,22 @@ export default function UserFilters({
           >
             {statusLabel}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding={2}
-              icon={!hasStatusFilter ? SvgCheck : SvgUser}
-              state={!hasStatusFilter ? "selected" : "empty"}
-              selectVariant={!hasStatusFilter ? "select-heavy" : "select-light"}
-              onClick={() => onStatusesChange([])}
-              title={t("filters.status.allOption.label")}
-            />
-            {FILTERABLE_STATUSES.map((status) => {
-              const isSelected = selectedStatuses.includes(status);
-              const countKey = STATUS_COUNT_KEY[status];
-              return (
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  key={status}
-                  icon={isSelected ? SvgCheck : SvgUser}
-                  state={isSelected ? "selected" : "empty"}
-                  selectVariant={isSelected ? "select-heavy" : "select-light"}
-                  onClick={() => toggleStatus(status)}
-                  rightChildren={<CountBadge count={statusCounts[countKey]} />}
-                  title={statusLabels[status]}
-                />
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("filters.status.button.ariaLabel")}
+          values={picked(selectedStatuses)}
+          onSelect={(option) => {
+            if (option.value === ALL) onStatusesChange([]);
+            else {
+              const status = FILTERABLE_STATUSES.find(
+                (candidate) => candidate === option.value
               );
-            })}
-          </div>
-        </Popover.Content>
-      </Popover>
+              if (status) toggleStatus(status);
+            }
+          }}
+          items={statusItems}
+        />
+      </Dropdown>
     </div>
   );
 }

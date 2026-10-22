@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { InputSwitch } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -138,7 +138,7 @@ export function DiscordChannelsTable({
                 )}
               </TableCell>
               <TableCell>
-                <InputSelect
+                <InputSingleSelect
                   value={channel.persona_override_id?.toString() ?? "default"}
                   onValueChange={(value: string) =>
                     onChannelUpdate(
@@ -148,20 +148,16 @@ export function DiscordChannelsTable({
                     )
                   }
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger placeholder="-" />
-                  <InputSelect.Content>
-                    <InputSelect.Item value="default">-</InputSelect.Item>
-                    {personas.map((persona) => (
-                      <InputSelect.Item
-                        key={persona.id}
-                        value={persona.id.toString()}
-                      >
-                        {persona.name}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption="default"
+                  placeholder="-"
+                  options={[
+                    { value: "default", title: "-" },
+                    ...personas.map((persona) => ({
+                      value: persona.id.toString(),
+                      title: persona.name,
+                    })),
+                  ]}
+                />
               </TableCell>
             </TableRow>
           );

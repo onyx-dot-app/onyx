@@ -39,13 +39,13 @@ type searchOutput struct {
 // pretty-printed response saved at FullResponsePath (the whole multi-query
 // payload when several queries were run).
 type searchTruncation struct {
-	Truncated        bool   `json:"truncated"`
+	FullResponsePath string `json:"full_response_path"`
+	Hint             string `json:"hint"`
 	TotalResults     int    `json:"total_results"`
 	ShownResults     int    `json:"shown_results"`
 	TotalBytes       int    `json:"total_bytes"`
+	Truncated        bool   `json:"truncated"`
 	ContentTruncated bool   `json:"content_truncated"`
-	FullResponsePath string `json:"full_response_path"`
-	Hint             string `json:"hint"`
 }
 
 // multiSearchEntry is one query's outcome. On failure Error is set and
@@ -359,10 +359,10 @@ type searchFlags struct {
 	query            string
 	sources          []string
 	days             int
-	daysSet          bool
 	agentID          int
-	agentIDSet       bool
 	defaultAgentID   int
+	daysSet          bool
+	agentIDSet       bool
 	noQueryExpansion bool
 }
 

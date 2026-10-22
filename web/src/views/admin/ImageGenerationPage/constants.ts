@@ -4,9 +4,13 @@
  * of the English text while the registry stays a plain module.
  */
 export type ImageProviderDescriptionKey =
+  | "providers.openaiGptImage25Flare.description"
+  | "providers.openaiGptImage25Sunburst.description"
   | "providers.openaiGptImage2.description"
   | "providers.openaiGptImage15.description"
   | "providers.openaiGptImage1.description"
+  | "providers.azureGptImage25Flare.description"
+  | "providers.azureGptImage25Sunburst.description"
   | "providers.azureGptImage2.description"
   | "providers.azureGptImage15.description"
   | "providers.azureGptImage1.description"
@@ -34,6 +38,20 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "OpenAI",
     providers: [
       {
+        image_provider_id: "openai_gpt_image_2_5_flare",
+        model_name: "gpt-image-2.5-flare",
+        provider_name: "openai",
+        title: "GPT Image 2.5 Flare",
+        descriptionKey: "providers.openaiGptImage25Flare.description",
+      },
+      {
+        image_provider_id: "openai_gpt_image_2_5_sunburst",
+        model_name: "gpt-image-2.5-sunburst",
+        provider_name: "openai",
+        title: "GPT Image 2.5 Sunburst",
+        descriptionKey: "providers.openaiGptImage25Sunburst.description",
+      },
+      {
         image_provider_id: "openai_gpt_image_2",
         model_name: "gpt-image-2",
         provider_name: "openai",
@@ -59,6 +77,20 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
   {
     name: "Azure OpenAI",
     providers: [
+      {
+        image_provider_id: "azure_gpt_image_2_5_flare",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 2.5 Flare",
+        descriptionKey: "providers.azureGptImage25Flare.description",
+      },
+      {
+        image_provider_id: "azure_gpt_image_2_5_sunburst",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 2.5 Sunburst",
+        descriptionKey: "providers.azureGptImage25Sunburst.description",
+      },
       {
         image_provider_id: "azure_gpt_image_2",
         model_name: "", // Extracted from deployment in target URI

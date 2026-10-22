@@ -25,6 +25,8 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "allow_same_provider_subject_relink": False,
     "incognito_availability": IncognitoAvailability.OFF,
     "incognito_record_mode": IncognitoRecordMode.USAGE_ONLY,
+    "allow_connector_group_restrictions": False,
+    "allow_connector_check_findings": True,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
     "mask_credential_prefix": True,
     "llm_custom_config_env_injection": True,

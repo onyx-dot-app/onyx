@@ -3,6 +3,7 @@
 // CSV text (instead of raw binary bytes); anything else (e.g. a real CSV) is
 // passed through raw by the backend and rendered as a single CSV sheet, so
 // routing here never depends solely on the file's display name.
+import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -14,21 +15,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { parseCSV } from "./CSVContent";
-import { SvgAlertCircle, SvgSimpleLoader } from "@opal/icons";
+import { parseSpreadsheetPreview, parseSpreadsheetCsv } from "@/lib/csv";
+import type { SpreadsheetSheet } from "@/lib/types";
+import { SvgAlertCircle } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
-
-export interface SpreadsheetSheet {
-  name: string;
-  csv: string;
-  truncated: boolean;
-}
-
-export interface SpreadsheetPreviewData {
-  sheets: SpreadsheetSheet[];
-}
 
 const SPREADSHEET_EXTENSIONS = [".xlsx", ".xlsm"];
 
@@ -43,43 +35,24 @@ export function isSpreadsheetFileName(
   return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
 }
 
-export function parseSpreadsheetPreview(
-  jsonText: string
-): SpreadsheetPreviewData | null {
-  try {
-    const parsed: unknown = JSON.parse(jsonText);
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !Array.isArray((parsed as SpreadsheetPreviewData).sheets)
-    ) {
-      return null;
-    }
-    return parsed as SpreadsheetPreviewData;
-  } catch {
-    return null;
-  }
-}
-
 interface SheetTableProps {
   sheet: SpreadsheetSheet;
 }
 
 function SheetTable({ sheet }: SheetTableProps) {
   const t = useTranslations("common.spreadsheet");
-  let rows: string[][] = [];
-  try {
-    // Drop at most one trailing newline; trimming any further would mutate
-    // cell data (significant leading/trailing whitespace).
-    rows = parseCSV(sheet.csv.replace(/\r?\n$/, ""));
-  } catch (error) {
-    console.error(
-      `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,
-      error
-    );
-    rows = [];
-  }
+  const { rows, error: parseError } = parseSpreadsheetCsv(sheet.csv);
   const headers = rows[0];
+
+  if (parseError) {
+    return (
+      <div role="alert" className="py-8">
+        <Text font="main-ui-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      </div>
+    );
+  }
 
   if (!headers || headers.length === 0) {
     return (
@@ -263,7 +236,7 @@ function SpreadsheetContent({
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }
@@ -293,3 +266,6 @@ function SpreadsheetContent({
 export default SpreadsheetContent;
 
 const spreadsheetCache = new Map<string, SpreadsheetSheet[]>();
+
+export { parseSpreadsheetPreview } from "@/lib/csv";
+export type { SpreadsheetSheet, SpreadsheetPreviewData } from "@/lib/types";

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
@@ -14,7 +15,7 @@ import {
   useToolOAuthStatus,
   type ToolAuthStatus,
 } from "@/lib/hooks/useToolOAuthStatus";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -153,7 +154,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
     ? t("actionLineItem.addConnectors.label")
-    : t("actionLineItem.configureConnectors.label");
+    : t("actionLineItem.selectSearchSources.label");
 
   function handleClick() {
     if (isUnavailable) {
@@ -265,7 +266,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push("/admin/add-connector");
+              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />

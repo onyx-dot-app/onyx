@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 
@@ -28,7 +28,7 @@ def action_entry(
     *,
     display_name: str = "Action",
     description: str = "An action.",
-    policy: EndpointPolicy = EndpointPolicy.ASK,
+    policy: ActionPolicy = ActionPolicy.ASK,
 ) -> dict[str, Any]:
     """JSONB-shape dict for one ``ActionApproval.actions`` entry."""
     return MatchedAction(

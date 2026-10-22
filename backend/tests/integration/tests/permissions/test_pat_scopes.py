@@ -9,6 +9,8 @@ from tests.integration.common_utils.test_models import DATestUser
 
 BASIC_ACCESS_ENDPOINT = ("GET", "/user/pats")
 IDENTITY_ENDPOINT = ("GET", "/me")
+# The caller's own usage; scope-exempt like /me.
+OWN_USAGE_ENDPOINT = ("GET", "/user/usage")
 # Filter vocabulary a searcher needs; gated on READ_SEARCH alongside /search.
 INDEXED_SOURCES_ENDPOINT = ("GET", "/manage/indexed-sources")
 DOCUMENT_SET_LISTING_ENDPOINT = ("GET", "/manage/document-set")
@@ -58,6 +60,15 @@ def test_search_scoped_pat_reaches_identity_endpoint(
 ) -> None:
     status = request_status(search_scoped_pat_headers, IDENTITY_ENDPOINT)
     assert status < 400, f"scoped PAT should reach the scope-exempt /me, got {status}"
+
+
+def test_search_scoped_pat_reaches_own_usage(
+    search_scoped_pat_headers: dict[str, str],
+) -> None:
+    status = request_status(search_scoped_pat_headers, OWN_USAGE_ENDPOINT)
+    assert status < 400, (
+        f"scoped PAT should reach the scope-exempt /user/usage, got {status}"
+    )
 
 
 def test_search_scoped_pat_reaches_indexed_sources(

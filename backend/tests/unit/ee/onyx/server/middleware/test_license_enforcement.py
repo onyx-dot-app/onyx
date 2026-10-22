@@ -102,10 +102,6 @@ class TestLicenseEnforcementMiddleware:
         return captured_middleware, call_next
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
     @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
     async def test_gated_access_status_gets_402(
@@ -129,10 +125,6 @@ class TestLicenseEnforcementMiddleware:
         assert response.status_code == 402
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch(
         "ee.onyx.server.middleware.license_enforcement.maybe_schedule_license_reclaim"
     )
@@ -163,10 +155,6 @@ class TestLicenseEnforcementMiddleware:
         )
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
     @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
     async def test_grace_period_allows_access(
@@ -192,10 +180,6 @@ class TestLicenseEnforcementMiddleware:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch(
         "ee.onyx.server.middleware.license_enforcement.get_session_with_current_tenant"
     )
@@ -223,10 +207,6 @@ class TestLicenseEnforcementMiddleware:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
     @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
     async def test_redis_error_fails_open(
@@ -249,27 +229,6 @@ class TestLicenseEnforcementMiddleware:
         assert response.status_code == 200  # Fail open
 
     @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        False,
-    )
-    async def test_disabled_enforcement_allows_all(
-        self,
-        middleware_harness: MiddlewareHarness,
-    ) -> None:
-        """When enforcement is disabled, all requests pass through."""
-        middleware, call_next = middleware_harness
-        mock_request = MagicMock()
-        mock_request.url.path = "/api/chat"
-
-        response = await middleware(mock_request, call_next)
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
     @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
     @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
     async def test_seat_limit_exceeded_gets_402(

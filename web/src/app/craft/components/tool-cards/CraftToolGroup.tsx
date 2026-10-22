@@ -2,20 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Tag, Text } from "@opal/components";
+import { Collapsible, Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
+import { SvgCheckAll, SvgChevronDown, SvgLoader } from "@opal/icons";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CometEdge from "@/app/craft/components/CometEdge";
-import {
-  isSkillCall,
-  SvgLoader,
-} from "@/app/craft/components/tool-cards/helpers";
+import { isSkillCall } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 interface CraftToolGroupProps {
@@ -61,7 +53,6 @@ export default function CraftToolGroup({
   const [isOpen, setIsOpen] = useState(
     defaultOpen ?? aggregate === "in_progress"
   );
-  const failedCount = toolCalls.filter((t) => t.status === "failed").length;
   // Skill groups get a comet while running and a thin border at rest.
   const skillGroup = toolCalls.some(isSkillCall);
   const skillActive = aggregate === "in_progress" && skillGroup;
@@ -83,8 +74,8 @@ export default function CraftToolGroup({
           skillGroup && "border-[0.5px] border-border-01"
         )}
       >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
+        <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Collapsible.Trigger asChild>
             <button
               className={cn(
                 "w-full text-start px-3 py-2 rounded-md",
@@ -101,13 +92,6 @@ export default function CraftToolGroup({
                   {t("working.label")}
                 </Text>
                 <span className="ms-auto shrink-0 flex items-center gap-2">
-                  {failedCount > 0 && (
-                    <Tag
-                      title={t("failed.tag", { count: failedCount })}
-                      size="sm"
-                      color="red"
-                    />
-                  )}
                   <Tag
                     title={t("calls.tag", { count: toolCalls.length })}
                     size="sm"
@@ -122,15 +106,20 @@ export default function CraftToolGroup({
                 />
               </div>
             </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
             <div className="flex flex-col border-t-[0.5px] border-border-01">
               {toolCalls.map((toolCall) => (
-                <CraftToolCard key={toolCall.id} toolCall={toolCall} nested />
+                <CraftToolCard
+                  key={toolCall.id}
+                  toolCall={toolCall}
+                  nested
+                  defaultOpen={false}
+                />
               ))}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </Collapsible.Content>
+        </Collapsible.Root>
       </div>
     </CometEdge>
   );

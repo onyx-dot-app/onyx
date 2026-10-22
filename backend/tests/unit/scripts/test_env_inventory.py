@@ -78,7 +78,7 @@ def test_classify_category_axis() -> None:
     )
     # dev/test/eval -> internal (high precision)
     assert classify_var("DEV_MODE", set())[0] == "internal"
-    assert classify_var("MOCK_LLM_RESPONSE", set())[0] == "internal"
+    assert classify_var("MOCK_CONNECTOR_FILE_PATH", set())[0] == "internal"
     assert classify_var("ONYX_EVAL_API_KEY", set())[0] == "internal"
     # operator-facing knob -> tunable
     assert classify_var("AGENT_MAX_QUERY_RETRIEVAL_RESULTS", set())[0] == "tunable"

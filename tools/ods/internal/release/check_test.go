@@ -11,6 +11,8 @@ package release
 //	K3 counter skipped (cloud.1 without .0)  -> out-of-sequence error          TestCheckTag_skippedCounterErrors
 //	K4 counter superseded by a newer tag     -> out-of-sequence error          TestCheckTag_supersededCounterErrors
 //	K5 cloud tag discovered from a plain ref -> valid                          TestCheckTag_discoversCloudTagAtRef
+//	K6 tag commit not on origin/main         -> error                          TestCheckTag_cloudTagOffMainErrors
+//	K7 main fetch from origin fails          -> error, no local fallback       TestCheckTag_cloudFetchFailureErrors
 //
 // Stable tag states:
 //
@@ -21,6 +23,7 @@ package release
 //	T5 patch out of sequence (skip or stale) -> error                          TestCheckTag_stableOutOfSequenceErrors
 //	T6 predecessor not an ancestor           -> error                          TestCheckTag_predecessorNotAncestorErrors
 //	T7 tag fetch from origin fails           -> error, no local fallback       TestCheckTag_fetchFailureErrors
+//	T8 patch overflows an int                -> error                          TestCheckTag_unparseableNumbersError
 //
 // Beta tag states:
 //
@@ -31,11 +34,15 @@ package release
 //	B5 base already released as stable       -> error                          TestCheckTag_betaAfterStableErrors
 //	B6 predecessor beta not an ancestor      -> error                          TestCheckTag_betaPredecessorNotAncestorErrors
 //	B7 legacy bare -beta form                -> not a release tag, error       TestCheckTag_bareBetaFormErrors
+//	B8 tag fetch from origin fails           -> error, no local fallback       TestCheckTag_betaFetchFailureErrors
+//	B9 counter overflows an int              -> error                          TestCheckTag_unparseableNumbersError
 //
 // Tag resolution states:
 //
 //	R1 ref with no release tag               -> error                          TestCheckTag_noReleaseTagAtRefErrors
 //	R2 ref with several release tags         -> error, no guessing             TestCheckTag_ambiguousRefErrors
+//	R3 well-formed tag name that is not a tag -> error                         TestCheckTag_missingTagErrors
+//	R4 shallow clone                         -> error                          TestCheckTag_shallowCloneErrors
 
 import (
 	"strings"
@@ -348,5 +355,100 @@ func TestCheckTag_ambiguousRefErrors(t *testing.T) {
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "multiple release tags") {
 		t.Errorf("expected a multiple-release-tags error, got %v", err)
+	}
+}
+
+func TestCheckTag_cloudTagOffMainErrors(t *testing.T) {
+	// Precondition: a cloud tag on a commit that was never pushed to main.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "checkout", "--quiet", "-b", "side", repo.PostCutSHA)
+	sideSHA := gittest.Commit(t, repo.Work, "side.txt")
+	gittest.Git(t, repo.Work, "checkout", "--quiet", "main")
+	gittest.Git(t, repo.Work, "tag", "v4.6.0-cloud.0", sideSHA)
+
+	// Under test.
+	err := CheckTag("v4.6.0-cloud.0")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "not on origin/main") {
+		t.Errorf("expected a not-on-main error, got %v", err)
+	}
+}
+
+func TestCheckTag_cloudFetchFailureErrors(t *testing.T) {
+	// Precondition: a valid local cloud tag, but an unreachable origin.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "tag", "v4.6.0-cloud.0", repo.PostCutSHA)
+	gittest.Git(t, repo.Work, "remote", "set-url", "origin", t.TempDir())
+
+	// Under test.
+	err := CheckTag("v4.6.0-cloud.0")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to fetch origin/main") {
+		t.Errorf("expected a fetch failure error, got %v", err)
+	}
+}
+
+func TestCheckTag_betaFetchFailureErrors(t *testing.T) {
+	// Precondition: a valid local beta tag, but an unreachable origin.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "tag", "v4.5.0-beta.0", repo.CutSHA)
+	gittest.Git(t, repo.Work, "remote", "set-url", "origin", t.TempDir())
+
+	// Under test.
+	err := CheckTag("v4.5.0-beta.0")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to fetch v4.5.0* tags") {
+		t.Errorf("expected a fetch failure error, got %v", err)
+	}
+}
+
+func TestCheckTag_unparseableNumbersError(t *testing.T) {
+	// Precondition: the tag regexes accept any digit run, so a number past
+	// the int range reaches the parse.
+	gittest.SetupReleaseBranchRepo(t)
+
+	for _, c := range []struct{ tag, want string }{
+		{"v4.4.99999999999999999999", "failed to parse the patch number"},
+		{"v4.5.0-beta.99999999999999999999", "failed to parse the counter"},
+	} {
+		// Under test.
+		err := CheckTag(c.tag)
+
+		// Postcondition.
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("expected %q for %s, got %v", c.want, c.tag, err)
+		}
+	}
+}
+
+func TestCheckTag_missingTagErrors(t *testing.T) {
+	// Precondition: well-formed names that no tag carries, locally or on
+	// origin.
+	gittest.SetupReleaseBranchRepo(t)
+
+	for _, tag := range []string{"v4.6.0-cloud.3", "v4.4.3", "v4.5.0-beta.2"} {
+		// Under test.
+		err := CheckTag(tag)
+
+		// Postcondition.
+		if err == nil || !strings.Contains(err.Error(), "failed to resolve") {
+			t.Errorf("expected a resolve error for %s, got %v", tag, err)
+		}
+	}
+}
+
+func TestCheckTag_shallowCloneErrors(t *testing.T) {
+	// Precondition.
+	gittest.SetupShallowClone(t)
+
+	// Under test.
+	err := CheckTag("v4.5.0")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "shallow clone") {
+		t.Errorf("expected shallow-clone error, got %v", err)
 	}
 }

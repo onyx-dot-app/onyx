@@ -95,10 +95,8 @@ def upgrade() -> None:
 
         if model_configurations:
             at_least_one_is_visible = any(
-                [
-                    model_configuration.is_visible
-                    for model_configuration in model_configurations
-                ]
+                model_configuration.is_visible
+                for model_configuration in model_configurations
             )
 
             # If there is at least one model which is public, this is a valid state.
@@ -106,13 +104,11 @@ def upgrade() -> None:
             if at_least_one_is_visible:
                 continue
 
-            existing_visible_model_names: set[str] = set(
-                [
-                    model_configuration.name
-                    for model_configuration in model_configurations
-                    if model_configuration.is_visible
-                ]
-            )
+            existing_visible_model_names: set[str] = {
+                model_configuration.name
+                for model_configuration in model_configurations
+                if model_configuration.is_visible
+            }
 
             difference = display_models.difference(existing_visible_model_names)
 

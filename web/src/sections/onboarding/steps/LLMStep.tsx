@@ -12,13 +12,15 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { Disabled } from "@opal/core";
 import { ModelIcon } from "@/lib/languageModels/components";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface SelectedProvider {
   llmDescriptor?: WellKnownLLMProviderDescriptor;
@@ -93,6 +95,8 @@ const LLMStep = memo(
     disabled,
   }: LLMStepProps) => {
     const t = useTranslations("onboarding");
+    const providerNames = useProviderNames();
+    const { appName } = useSettings();
     const { llmProviderOptions, isLoading } = useLLMProviderOptions();
     const llmDescriptors = llmProviderOptions ?? [];
 
@@ -135,7 +139,7 @@ const LLMStep = memo(
             <ContentAction
               icon={SvgCpu}
               title={t("llmStep.title")}
-              description={t("llmStep.description")}
+              description={t("llmStep.description", { appName })}
               sizePreset="main-ui"
               variant="section"
               padding={2}
@@ -186,8 +190,8 @@ const LLMStep = memo(
 
                   {/* Render provider cards */}
                   {llmDescriptors.map((llmDescriptor) => {
-                    const { productName, companyName } = getProvider(
-                      llmDescriptor.name
+                    const { productName, companyName } = providerNames(
+                      getProvider(llmDescriptor.name)
                     );
                     return (
                       <div

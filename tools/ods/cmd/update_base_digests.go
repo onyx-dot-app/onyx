@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -13,15 +14,20 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
+// UpdateBaseDigestsOptions holds options for the update-base-digests command.
+type UpdateBaseDigestsOptions struct {
+	Write             bool
+	SummaryFile       string
+	Family            string
+	ListStaleFamilies bool
+	CacheFile         string
+	CachedOnly        bool
+	PinsFile          string
+}
+
 // NewUpdateBaseDigestsCommand creates the update-base-digests command.
 func NewUpdateBaseDigestsCommand() *cobra.Command {
-	var (
-		write             bool
-		summaryFile       string
-		family            string
-		listStaleFamilies bool
-		cacheFile         string
-	)
+	opts := &UpdateBaseDigestsOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "update-base-digests",
@@ -47,88 +53,177 @@ Examples:
   ods update-base-digests                                  # report every reference
   ods update-base-digests --list-stale-families            # families needing a bump
   ods update-base-digests --write --family python \
-      --cache-file digests.json                            # rewrite one family`,
+      --cache-file digests.json                            # rewrite one family
+  ods update-base-digests --pins-file digests.json         # dump this checkout's pins as a cache
+  ods update-base-digests --write --family python \
+      --cache-file digests.json --cached-only              # pin to another checkout's digests`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runUpdateBaseDigests(write, summaryFile, family, listStaleFamilies, cacheFile)
+			output, err := runUpdateBaseDigests(opts)
+			fmt.Print(output)
+			if err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
-	cmd.Flags().BoolVar(&write, "write", false, "rewrite the files; without it the command only reports")
-	cmd.Flags().StringVar(&summaryFile, "summary-file", "", "write a markdown summary of the changes to this path")
-	cmd.Flags().StringVar(&family, "family", "", "only act on one base family, for example python or node")
-	cmd.Flags().BoolVar(&listStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
-	cmd.Flags().StringVar(&cacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
+	cmd.Flags().BoolVar(&opts.Write, "write", false, "rewrite the files; without it the command only reports")
+	cmd.Flags().StringVar(&opts.SummaryFile, "summary-file", "", "write a markdown summary of the changes to this path")
+	cmd.Flags().StringVar(&opts.Family, "family", "", "only act on one base family, for example python or node")
+	cmd.Flags().BoolVar(&opts.ListStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
+	cmd.Flags().StringVar(&opts.CacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
+	cmd.Flags().BoolVar(&opts.CachedOnly, "cached-only", false, "touch only the references --cache-file covers and ask no registry; the rest are kept as pinned")
+	cmd.Flags().StringVar(&opts.PinsFile, "pins-file", "", "write the digests this checkout pins as a cache file and exit, so another checkout can be pinned to them with --cache-file --cached-only")
 
 	return cmd
 }
 
-func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamilies bool, cacheFile string) {
+// runUpdateBaseDigests returns what Run prints, and an error whose text is the
+// message Run logs before exiting.
+func runUpdateBaseDigests(opts *UpdateBaseDigestsOptions) (string, error) {
+	var out strings.Builder
+
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Could not find the repository root: %v", err)
+		return out.String(), fatalErrorf("Could not find the repository root: %v", err)
 	}
 
 	files, err := basedigest.TrackedFiles(root)
 	if err != nil {
-		log.Fatalf("Could not list the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not list the tracked files: %v", err)
 	}
 
 	refs, err := basedigest.FindRefs(root, files)
 	if err != nil {
-		log.Fatalf("Could not read the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not read the tracked files: %v", err)
 	}
 	if len(refs) == 0 {
-		log.Fatal("No pinned image references found.")
+		return out.String(), fatalErrorf("No pinned image references found.")
 	}
 
-	resolved, err := resolveWithCache(refs, cacheFile)
-	if err != nil {
-		log.Fatalf("Could not resolve every tag:\n%v", err)
-	}
-
-	stale := basedigest.Stale(refs, resolved)
-
-	if listStaleFamilies {
-		for _, name := range basedigest.Families(stale) {
-			fmt.Println(name)
+	if opts.PinsFile != "" {
+		if err := writePins(refs, opts.PinsFile); err != nil {
+			return out.String(), fatalErrorf("Could not write the pins: %v", err)
 		}
-		return
+		fmt.Fprintf(&out, "Wrote %d pinned reference(s) to %s.\n", len(refs), opts.PinsFile)
+		return out.String(), nil
 	}
 
-	if family != "" {
-		refs = basedigest.FilterFamily(refs, family)
-		stale = basedigest.FilterFamily(stale, family)
+	// Filter before resolving, so one family's rewrite never asks a registry
+	// about another family's tags.
+	if opts.Family != "" {
+		refs = basedigest.FilterFamily(refs, opts.Family)
 		if len(refs) == 0 {
-			log.Fatalf("No references in family %q.", family)
+			return out.String(), fatalErrorf("No references in family %q.", opts.Family)
 		}
+	}
+
+	var resolved map[string]string
+	if opts.CachedOnly {
+		if opts.CacheFile == "" {
+			return out.String(), fatalErrorf("--cached-only needs --cache-file.")
+		}
+		// An absent cache would read as empty and quietly touch nothing.
+		if _, err := os.Stat(opts.CacheFile); err != nil {
+			return out.String(), fatalErrorf("Could not read the cache: %v", err)
+		}
+		resolved, err = readCache(opts.CacheFile)
+		if err != nil {
+			return out.String(), fatalErrorf("Could not read the cache: %v", err)
+		}
+	} else {
+		resolved, err = resolveWithCache(refs, opts.CacheFile)
+		if err != nil {
+			return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
+		}
+	}
+
+	// A reference the cache leaves out is kept as pinned, so a tag the other
+	// checkout dropped never changes and nothing gets a blank digest.
+	var covered []basedigest.Ref
+	for _, ref := range refs {
+		if _, ok := resolved[ref.Query()]; ok {
+			covered = append(covered, ref)
+		}
+	}
+	stale := basedigest.Stale(covered, resolved)
+
+	if opts.ListStaleFamilies {
+		for _, name := range basedigest.Families(stale) {
+			out.WriteString(name + "\n")
+		}
+		return out.String(), nil
 	}
 
 	for _, ref := range refs {
 		state := "current"
-		if ref.Digest != resolved[ref.Query()] {
+		if digest, ok := resolved[ref.Query()]; !ok {
+			state = "kept"
+		} else if ref.Digest != digest {
 			state = "update"
 		}
-		fmt.Printf("%7s  %-45s %s:%d\n", state, ref.Display(), ref.Path, ref.Line)
+		fmt.Fprintf(&out, "%7s  %-45s %s:%d\n", state, ref.Display(), ref.Path, ref.Line)
 	}
 
 	summary := basedigest.SummaryTable(stale, resolved)
 
 	if len(stale) == 0 {
-		fmt.Println("\nAll pinned digests are current.")
-	} else if write {
+		out.WriteString("\nAll pinned digests are current.\n")
+	} else if opts.Write {
 		if err := basedigest.Rewrite(root, stale, resolved); err != nil {
-			log.Fatalf("Could not rewrite the digests: %v", err)
+			return out.String(), fatalErrorf("Could not rewrite the digests: %v", err)
 		}
-		fmt.Printf("\nUpdated %d reference(s).\n", len(stale))
+		fmt.Fprintf(&out, "\nUpdated %d reference(s).\n", len(stale))
 	} else {
-		fmt.Printf("\n%d reference(s) are stale. Re-run with --write to apply.\n", len(stale))
+		fmt.Fprintf(&out, "\n%d reference(s) are stale. Re-run with --write to apply.\n", len(stale))
 	}
 
-	if summaryFile != "" {
-		if err := os.WriteFile(summaryFile, []byte(summary), 0o644); err != nil {
-			log.Fatalf("Could not write the summary: %v", err)
+	if opts.SummaryFile != "" {
+		if err := os.WriteFile(opts.SummaryFile, []byte(summary), 0o644); err != nil {
+			return out.String(), fatalErrorf("Could not write the summary: %v", err)
 		}
 	}
+	return out.String(), nil
+}
+
+// writePins saves each ref's pinned digest in --cache-file form, so another
+// checkout can be rewritten to this one's digests. Two pins of one tag that
+// disagree have drifted, and the file would silently keep the last.
+func writePins(refs []basedigest.Ref, pinsFile string) error {
+	pins := map[string]string{}
+	for _, ref := range refs {
+		if other, ok := pins[ref.Query()]; ok && other != ref.Digest {
+			return fmt.Errorf("%s is pinned to two digests, %s and %s", ref.Display(), other, ref.Digest)
+		}
+		pins[ref.Query()] = ref.Digest
+	}
+	return writeCache(pinsFile, pins)
+}
+
+// readCache loads a --cache-file, empty when the file does not exist yet.
+func readCache(path string) (map[string]string, error) {
+	cached := map[string]string{}
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &cached); err != nil {
+			return nil, fmt.Errorf("read cache %s: %w", path, err)
+		}
+	case !os.IsNotExist(err):
+		return nil, fmt.Errorf("read cache %s: %w", path, err)
+	}
+	return cached, nil
+}
+
+// writeCache saves digests by query as the JSON --cache-file reads.
+func writeCache(path string, digests map[string]string) error {
+	data, err := json.MarshalIndent(digests, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode cache: %w", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write cache %s: %w", path, err)
+	}
+	return nil
 }
 
 // resolveWithCache resolves every distinct tag, reusing cacheFile when it exists.
@@ -143,14 +238,9 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 func resolveWithCache(refs []basedigest.Ref, cacheFile string) (map[string]string, error) {
 	cached := map[string]string{}
 	if cacheFile != "" {
-		data, err := os.ReadFile(cacheFile)
-		switch {
-		case err == nil:
-			if err := json.Unmarshal(data, &cached); err != nil {
-				return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
-			}
-		case !os.IsNotExist(err):
-			return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
+		var err error
+		if cached, err = readCache(cacheFile); err != nil {
+			return nil, err
 		}
 	}
 
@@ -171,12 +261,8 @@ func resolveWithCache(refs []basedigest.Ref, cacheFile string) (map[string]strin
 	maps.Copy(resolved, cached)
 
 	if cacheFile != "" {
-		data, err := json.MarshalIndent(resolved, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("encode cache: %w", err)
-		}
-		if err := os.WriteFile(cacheFile, append(data, '\n'), 0o644); err != nil {
-			return nil, fmt.Errorf("write cache %s: %w", cacheFile, err)
+		if err := writeCache(cacheFile, resolved); err != nil {
+			return nil, err
 		}
 	}
 	return resolved, nil

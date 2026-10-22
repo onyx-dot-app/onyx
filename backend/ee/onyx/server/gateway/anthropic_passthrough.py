@@ -30,8 +30,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_response import Usage
+from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.configs import (
     ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED,
@@ -43,10 +42,9 @@ from onyx.server.gateway.models import (
     AnthropicErrorEvent,
     AnthropicMessagesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
-from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -93,14 +91,6 @@ def _append_api_path(provider: LLMProviderView, suffix: str) -> str:
     return urlunsplit(parsed._replace(path=path))
 
 
-def _messages_url(provider: LLMProviderView) -> str:
-    return _append_api_path(provider, "/v1/messages")
-
-
-def _count_tokens_url(provider: LLMProviderView) -> str:
-    return _append_api_path(provider, "/v1/messages/count_tokens")
-
-
 def _timeout() -> httpx.Timeout:
     return httpx.Timeout(
         ANTHROPIC_PASSTHROUGH_READ_TIMEOUT_SECONDS,
@@ -124,6 +114,28 @@ def _build_upstream_request(
             OnyxErrorCode.INVALID_INPUT,
             "mcp_servers is not supported by the Onyx gateway.",
         )
+    if body.get("container") is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "container references are not supported by the Onyx gateway.",
+        )
+    pending: list[Any] = list(body.get("messages") or [])
+    while pending:
+        part = pending.pop()
+        if not isinstance(part, dict):
+            continue
+        source = part.get("source")
+        if part.get("file_id") or (
+            isinstance(source, dict) and source.get("type") == "file"
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "file_id references are not supported by the Onyx "
+                "gateway; send file content inline.",
+            )
+        content = part.get("content")
+        if isinstance(content, list):
+            pending.extend(content)
     body["model"] = model_name
     if stream is not None:
         # Always overwrite: opaque provider-side abuse attribution, never a
@@ -234,10 +246,6 @@ def _streaming_error_event(status_code: int, body: bytes) -> AnthropicErrorEvent
     return AnthropicErrorEvent.create(message=message, error_type=error_type)
 
 
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
-
-
 def handle_anthropic_passthrough(
     request: AnthropicMessagesRequest,
     provider: LLMProviderView,
@@ -250,9 +258,9 @@ def handle_anthropic_passthrough(
         request, model_config.name, str(user.id), request.stream
     )
     headers = _build_upstream_headers(provider, http_request)
-    url = _messages_url(provider)
+    url = _append_api_path(provider, "/v1/messages")
     # llm is built only for tracing config (model/provider metadata); the
-    # actual call goes straight over httpx, never through llm.invoke/stream.
+    # actual call goes straight over httpx, never through llm.invoke_raw/stream_raw.
     llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
 
     if request.stream:
@@ -271,7 +279,7 @@ def handle_anthropic_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=request.messages, tools=request.tools
         ) as span,
@@ -317,9 +325,9 @@ def handle_anthropic_passthrough(
             if isinstance(block, dict) and block.get("type") == "text"
         )
         converted_usage = _usage_from_anthropic_wire(usage) if usage else None
-        if converted_usage is not None and isinstance(llm, LitellmLLM):
+        if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             llm._track_llm_cost(converted_usage)
         if span is not None:
             record_llm_span_output(
@@ -347,7 +355,7 @@ def _passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
     body: dict[str, Any],
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     input_messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
@@ -368,7 +376,7 @@ def _passthrough_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
@@ -474,8 +482,8 @@ def _passthrough_stream_worker(
             if frame_lines and not cancelled.is_set():
                 _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
-            if state.usage is not None and isinstance(llm, LitellmLLM):
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
+            if state.usage is not None:
                 llm._track_llm_cost(state.usage)
 
 
@@ -488,7 +496,7 @@ def handle_anthropic_count_tokens_passthrough(
 ) -> JSONResponse:
     body = _build_upstream_request(request, model_config.name, str(user.id), None)
     headers = _build_upstream_headers(provider, http_request)
-    url = _count_tokens_url(provider)
+    url = _append_api_path(provider, "/v1/messages/count_tokens")
     try:
         with httpx.Client(timeout=_timeout()) as client:
             response = client.post(url, json=body, headers=headers)

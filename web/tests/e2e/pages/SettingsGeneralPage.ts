@@ -29,7 +29,9 @@ export class SettingsGeneralPage {
 
   /** The language select trigger, located by the endonym it displays. */
   languageSelect(currentEndonym: string): Locator {
-    return this.page.getByRole("combobox").filter({ hasText: currentEndonym });
+    return this.page
+      .getByRole("combobox")
+      .and(this.page.locator(`[value="${currentEndonym}"]`));
   }
 
   /** Open the language select and choose a language by its endonym. */

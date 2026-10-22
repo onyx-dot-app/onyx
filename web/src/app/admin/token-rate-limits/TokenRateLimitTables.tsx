@@ -2,7 +2,8 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";

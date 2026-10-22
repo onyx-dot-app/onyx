@@ -4,7 +4,7 @@ import { memo } from "react";
 import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import { Button } from "@opal/components";
 import { SvgArrowUpRight, SvgPlusCircle } from "@opal/icons";
 

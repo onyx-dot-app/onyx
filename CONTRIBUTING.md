@@ -212,10 +212,10 @@ Before starting, make sure the Docker Daemon is running.
 
 You will need Docker installed to run these containers.
 
-Navigate to `onyx/deployment/docker_compose`, then start up Postgres/OpenSearch/Redis/MinIO with:
+Navigate to `onyx/deployment/docker_compose`, then start up Postgres/OpenSearch/Redis/the object store with:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache minio
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relational_db cache object-store
 ```
 
 (index refers to OpenSearch, relational_db refers to Postgres, and cache refers to Redis)

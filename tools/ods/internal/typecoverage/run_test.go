@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/coverage"
@@ -55,4 +56,42 @@ func TestRun_rejectsARelativeOutputPath(t *testing.T) {
 	if _, err := Run(RunOptions{WebDir: t.TempDir(), OutputPath: "out.json"}); err == nil {
 		t.Fatal("expected an error for a relative output path")
 	}
+}
+
+func TestRun_failuresThatAreNotTypeErrors(t *testing.T) {
+	t.Run("missing bun", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+
+		_, err := Run(RunOptions{WebDir: t.TempDir(), OutputPath: filepath.Join(t.TempDir(), "out.json")})
+
+		var exitErr *coverage.ExitError
+		if err == nil || errors.As(err, &exitErr) || !strings.HasPrefix(err.Error(), "run bun") {
+			t.Fatalf("expected a run bun error, got %v", err)
+		}
+	})
+
+	t.Run("script wrote no measurement", func(t *testing.T) {
+		webDir, output := fakeBun(t, "exit 0\n")
+
+		_, err := Run(RunOptions{WebDir: webDir, OutputPath: output})
+
+		var exitErr *coverage.ExitError
+		if err == nil || errors.As(err, &exitErr) || !os.IsNotExist(errors.Unwrap(err)) {
+			t.Fatalf("expected a missing measurement error, got %v", err)
+		}
+	})
+
+	t.Run("output directory under a file", func(t *testing.T) {
+		webDir, output := fakeBun(t, "exit 0\n")
+		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(output, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := Run(RunOptions{WebDir: webDir, OutputPath: filepath.Join(output, "nested.json")}); err == nil {
+			t.Fatal("expected an error creating the output directory")
+		}
+	})
 }

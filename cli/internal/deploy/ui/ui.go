@@ -232,14 +232,15 @@ type wizModel struct {
 	typed  string
 
 	taskLabel, taskExtra string
-	taskActive           bool
 	taskBegan            time.Time
 	frame                int
 	services             []ServiceRow
 
-	card     []string
-	aborted  bool
-	userQuit bool // aborted by a key press, not programmatically
+	card []string
+
+	taskActive bool
+	aborted    bool
+	userQuit   bool // aborted by a key press, not programmatically
 }
 
 func tick() tea.Cmd {

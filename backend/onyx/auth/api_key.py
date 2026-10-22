@@ -53,8 +53,7 @@ def hash_api_key(api_key: str) -> str:
 
 
 def build_displayable_api_key(api_key: str) -> str:
-    if api_key.startswith(API_KEY_PREFIX):
-        api_key = api_key[len(API_KEY_PREFIX) :]
+    api_key = api_key.removeprefix(API_KEY_PREFIX)
 
     return API_KEY_PREFIX + api_key[:4] + "********" + api_key[-4:]
 

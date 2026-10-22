@@ -1,4 +1,4 @@
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -12,7 +12,6 @@ export enum PacketType {
 
   STOP = "stop",
   SECTION_END = "section_end",
-  TOP_LEVEL_BRANCHING = "top_level_branching",
   ERROR = "error",
 
   // Specific tool packets
@@ -117,11 +116,6 @@ export interface SectionEnd extends BaseObj {
   type: "section_end";
 }
 
-export interface TopLevelBranching extends BaseObj {
-  type: "top_level_branching";
-  num_parallel_branches: number;
-}
-
 export interface PacketError extends BaseObj {
   type: "error";
   message?: string;
@@ -206,7 +200,7 @@ export interface FetchToolDocuments extends BaseObj {
 // Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  status_code: number | null;
   message: string;
 }
 
@@ -368,8 +362,6 @@ export type ChatHeartbeatObj = ChatHeartbeat;
 
 export type SectionEndObj = SectionEnd;
 
-export type TopLevelBranchingObj = TopLevelBranching;
-
 export type PacketErrorObj = PacketError;
 
 // Specific tool objects
@@ -465,7 +457,6 @@ export type ObjTypes =
   | StopObj
   | ChatHeartbeatObj
   | SectionEndObj
-  | TopLevelBranchingObj
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
@@ -545,11 +536,6 @@ export interface ReasoningPacket {
 export interface SectionEndPacket {
   placement: Placement;
   obj: SectionEndObj;
-}
-
-export interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
 }
 
 export interface DeepResearchPlanPacket {

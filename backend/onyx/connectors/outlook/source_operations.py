@@ -1,4 +1,4 @@
-"""Outlook source-operations gateway: every Graph mail call lives here.
+"""Outlook source-operations gateway: every Graph mail and calendar call lives here.
 
 Indexing and the capability checks compose these operations, and nothing else
 under ``onyx/connectors/outlook`` talks to Graph. Transport, retry and token
@@ -6,57 +6,66 @@ acquisition come from the shared Microsoft package. Each operation returns the
 plain models in ``models.py`` so a Graph schema change surfaces in one file.
 
 Application permissions this gateway needs: ``Mail.Read`` for folders and
-messages, ``User.Read.All`` to enumerate and resolve mailboxes.
+messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
+enumerate and resolve mailboxes, ``GroupMember.Read.All`` when mailboxes are
+chosen by group.
 """
 
-import base64
-import json
-import re
-from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
+from uuid import UUID
 
 import bs4
 import requests
-from msal.exceptions import MsalServiceError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.config import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
     download_graph_url_with_cap,
     parse_graph_datetime,
 )
-from onyx.connectors.microsoft_utils.graph_auth import (
-    MicrosoftAuthContext,
-    MicrosoftAuthMethod,
-    acquire_graph_token,
-    build_msal_app,
+from onyx.connectors.microsoft_utils.entra import (
+    ENABLED_USERS_FILTER,
+    ENTRA_NAMED_GROUP_SELECT,
+    ENTRA_PAGE_SIZE,
+    ENTRA_USER_SELECT,
+    MAX_ENTRA_COLLECTION_PAGES,
+    EntraGroup,
+    EntraUser,
+    fetch_entra_page,
+    fetch_entra_user,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
-from onyx.connectors.microsoft_utils.graph_env import (
-    DEFAULT_AUTHORITY_HOST,
-    DEFAULT_GRAPH_API_HOST,
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    microsoft_error_from_exception,
+)
+from onyx.connectors.microsoft_utils.graph_gateway import (
+    MicrosoftGraphAuthConfig,
+    MicrosoftGraphGateway,
+    build_graph_user_url,
+)
+from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
 from onyx.connectors.outlook.models import (
-    INVALID_AUTH_METHOD_CODE,
-    INVALID_AUTHORITY_CODE,
-    INVALID_CERTIFICATE_CODE,
-    MISSING_CREDENTIAL_CODE,
     OutlookAttachment,
-    OutlookAuthError,
     OutlookDeltaPage,
+    OutlookEvent,
+    OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMailboxPage,
     OutlookMessage,
     OutlookMessageChange,
     OutlookMessagePage,
     OutlookRecipient,
-    OutlookTokenInfo,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -76,37 +85,44 @@ CREDENTIAL_PRIVATE_KEY = "outlook_private_key"
 CREDENTIAL_CERTIFICATE_PASSWORD = "outlook_certificate_password"
 # Missing means client secret, the shared package's default.
 CREDENTIAL_AUTH_METHOD = "authentication_method"
-# The fields each authentication method needs filled.
-CREDENTIAL_FIELDS_BY_METHOD: dict[MicrosoftAuthMethod, tuple[str, ...]] = {
-    MicrosoftAuthMethod.CLIENT_SECRET: (
-        CREDENTIAL_CLIENT_ID,
-        CREDENTIAL_DIRECTORY_ID,
-        CREDENTIAL_CLIENT_SECRET,
-    ),
-    MicrosoftAuthMethod.CERTIFICATE: (
-        CREDENTIAL_CLIENT_ID,
-        CREDENTIAL_DIRECTORY_ID,
-        CREDENTIAL_PRIVATE_KEY,
-        CREDENTIAL_CERTIFICATE_PASSWORD,
-    ),
-}
 
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
 
-# Graph caps $top at 999 for users. Message pages stay small because each row
-# carries a full body.
-USERS_PAGE_SIZE = 999
+# Message pages stay small because each row carries a full body.
 FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
+# The calendar view delta takes no $select, so every row carries a full body.
+EVENTS_PAGE_SIZE = 50
+# Enough to tell one group with a display name from several.
+GROUP_NAME_MATCH_LIMIT = 2
 
-MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
+MAILBOX_SELECT = "id,mail,userPrincipalName,displayName,proxyAddresses"
+# The user listing's fields plus the aliases a message may name a mailbox by.
+OUTLOOK_USER_SELECT = f"{ENTRA_USER_SELECT},proxyAddresses"
+_SMTP_PREFIX = "smtp:"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
-# The delta walk only needs to know which conversations changed.
-CHANGE_SELECT = "id,conversationId,receivedDateTime"
+# Identity, thread, placement and headers of a message, never a body. Shared
+# by the delta walk and the conversation outline, which decide who builds and
+# reads a thread from the sender and recipients.
+CHANGE_SELECT = ",".join(
+    (
+        "id",
+        "internetMessageId",
+        "conversationId",
+        "conversationIndex",
+        "parentFolderId",
+        "receivedDateTime",
+        "isDraft",
+        "sender",
+        "toRecipients",
+        "ccRecipients",
+    )
+)
 MESSAGE_SELECT = ",".join(
     (
         "id",
+        "internetMessageId",
         "conversationId",
         "parentFolderId",
         "subject",
@@ -128,74 +144,31 @@ FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment"
 
 # Graph renders bodies as HTML unless asked for text, and text spares a parse.
 TEXT_BODY_PREFERENCE = 'outlook.body-content-type="text"'
+# Graph defaults event times to UTC. Pinned so the naive dateTime never
+# needs a Windows zone table.
+UTC_TIMEZONE_PREFERENCE = 'outlook.timezone="UTC"'
+EVENT_PREFERENCES = f"{TEXT_BODY_PREFERENCE}, {UTC_TIMEZONE_PREFERENCE}"
 SEARCH_FOLDER_TYPE = "#microsoft.graph.mailSearchFolder"
 
 # Graph only orders by a property that leads the filter, so conversation reads
 # carry this always-true bound to be allowed ``$orderby=receivedDateTime desc``.
 EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 
+# MAPI ids of a folder's entry id and of an item's parent folder. Graph hides
+# which calendar an event sits in from app-only callers, so the two are compared.
+FOLDER_ENTRY_ID_PROPERTY = "Binary 0x0FFF"
+PARENT_ENTRY_ID_PROPERTY = "Binary 0x0E09"
+# Messages per page of a received-time scan, which reads headers only.
+RECEIVED_SCAN_PAGE_SIZE = 500
+
 # Graph may answer a collection request with an empty page and a next link.
 # Lookups that want a single item follow at most this many of them.
 EMPTY_PAGE_FOLLOW_LIMIT = 20
 
 
-def _exception_chain(error: BaseException) -> Generator[BaseException, None, None]:
-    """The error and what it was raised from. MSAL wraps its discovery
-    failures in a second ValueError, so the detail sits one level down."""
-    current: BaseException | None = error
-    while current is not None:
-        yield current
-        current = current.__cause__ or current.__context__
-
-
-def _is_decode_error(error: BaseException) -> bool:
-    """A discovery body MSAL cannot parse must not read as a bad directory id."""
-    return any(isinstance(e, json.JSONDecodeError) for e in _exception_chain(error))
-
-
-# MSAL reports the HTTP status of a failed discovery or token call only inside
-# the exception text: "HTTP status: 429" for a 4xx discovery answer (ValueError)
-# and "HTTP Error: 503" for any 5xx (MsalServiceError).
-_MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
-
-
-def _msal_http_status(error: BaseException) -> int | None:
-    for wrapped in _exception_chain(error):
-        match = _MSAL_STATUS_RE.search(str(wrapped))
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def _msal_error(error: BaseException) -> OutlookGraphError:
-    return OutlookGraphError(_msal_http_status(error), type(error).__name__, str(error))
-
-
 def _odata_quote(value: str) -> str:
     """Escape a value for an OData string literal. Only the quote is special."""
     return value.replace("'", "''")
-
-
-def _to_graph_error(error: Exception) -> OutlookGraphError:
-    response = error.response if isinstance(error, requests.RequestException) else None
-    if response is None:
-        return OutlookGraphError(None, type(error).__name__, str(error))
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = None
-    if not isinstance(payload, dict):
-        return OutlookGraphError(response.status_code, "<no code>", response.text[:500])
-    detail = payload.get("error")
-    # Graph nests code and message under "error". The OAuth token endpoint puts
-    # the code there as a bare string and the text in "error_description".
-    if isinstance(detail, dict):
-        code = detail.get("code") or "<no code>"
-        message = detail.get("message") or response.text
-    else:
-        code = detail or "<no code>"
-        message = payload.get("error_description") or response.text
-    return OutlookGraphError(response.status_code, str(code), str(message)[:500])
 
 
 def _recipient(raw: dict[str, Any] | None) -> OutlookRecipient | None:
@@ -219,14 +192,31 @@ def _body_text(raw: dict[str, Any] | None) -> str:
     return " ".join(soup.stripped_strings)
 
 
-def _parse_mailbox(raw: dict[str, Any]) -> OutlookMailbox | None:
-    user_id = raw.get("id")
-    address = raw.get("mail") or raw.get("userPrincipalName")
-    if not user_id or not address:
+def _mailbox(user: EntraUser) -> OutlookMailbox | None:
+    address = user.mail or user.user_principal_name
+    if not address:
         return None
+    aliases: list[str] = []
+    for proxy in user.proxy_addresses:
+        if not proxy.lower().startswith(_SMTP_PREFIX):
+            continue
+        alias = proxy[len(_SMTP_PREFIX) :].lower()
+        if alias != address.lower() and alias not in aliases:
+            aliases.append(alias)
     return OutlookMailbox(
-        id=user_id, address=address, display_name=raw.get("displayName")
+        id=user.id,
+        address=address,
+        display_name=user.display_name,
+        aliases=tuple(aliases),
     )
+
+
+def _object_id(identifier: str) -> str | None:
+    """The identifier as a canonical Entra object id, None for anything else."""
+    try:
+        return str(UUID(identifier))
+    except ValueError:
+        return None
 
 
 def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
@@ -245,8 +235,15 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
     return OutlookMessageChange(
         id=raw["id"],
         removed="@removed" in raw,
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
+        conversation_index=raw.get("conversationIndex"),
+        parent_folder_id=raw.get("parentFolderId"),
         received_at=parse_graph_datetime(received) if received else None,
+        is_draft=bool(raw.get("isDraft")),
+        sender=_recipient(raw.get("sender")),
+        to_recipients=_recipients(raw.get("toRecipients")),
+        cc_recipients=_recipients(raw.get("ccRecipients")),
     )
 
 
@@ -255,6 +252,7 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
     sent = raw.get("sentDateTime")
     return OutlookMessage(
         id=raw["id"],
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
         parent_folder_id=raw.get("parentFolderId"),
         subject=raw.get("subject"),
@@ -270,6 +268,88 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
     )
 
 
+_RECURRENCE_UNITS = {
+    "daily": "day",
+    "weekly": "week",
+    "absoluteMonthly": "month",
+    "relativeMonthly": "month",
+    "absoluteYearly": "year",
+    "relativeYearly": "year",
+}
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
+
+
+def _recurrence_summary(raw: dict[str, Any] | None) -> str | None:
+    """The pattern and range of a series in words, so a search for the weekly
+    standup or the first-Monday review finds the series document."""
+    if not raw:
+        return None
+    pattern = raw.get("pattern") or {}
+    range_ = raw.get("range") or {}
+    kind = pattern.get("type") or ""
+    interval = pattern.get("interval") or 1
+    unit = _RECURRENCE_UNITS.get(kind, "time")
+    parts = [f"every {unit}" if interval == 1 else f"every {interval} {unit}s"]
+    days = ", ".join(pattern.get("daysOfWeek") or [])
+    # Relative patterns pick a weekday by its place in the month ("the last
+    # friday"), absolute ones a day number.
+    if days and kind.startswith("relative"):
+        parts.append(f"on the {pattern.get('index') or 'first'} {days}")
+    elif days:
+        parts.append(f"on {days}")
+    if kind.startswith("absolute") and pattern.get("dayOfMonth"):
+        parts.append(f"on day {pattern['dayOfMonth']}")
+    month = pattern.get("month") or 0
+    if kind.endswith("Yearly") and 1 <= month <= len(_MONTH_NAMES):
+        parts.append(f"of {_MONTH_NAMES[month - 1]}")
+    if range_.get("startDate"):
+        parts.append(f"from {range_['startDate']}")
+    if range_.get("type") == "endDate" and range_.get("endDate"):
+        parts.append(f"until {range_['endDate']}")
+    elif range_.get("type") == "numbered" and range_.get("numberOfOccurrences"):
+        parts.append(f"for {range_['numberOfOccurrences']} occurrences")
+    return " ".join(parts)
+
+
+def _parse_event(raw: dict[str, Any]) -> OutlookEvent:
+    # Event times arrive as a naive clock in the zone every request asks for,
+    # UTC, and the shared parser reads a naive value as UTC.
+    return OutlookEvent(
+        id=raw["id"],
+        subject=raw.get("subject"),
+        body_text=_body_text(raw.get("body")),
+        body_present="body" in raw,
+        start_at=parse_graph_datetime((raw.get("start") or {}).get("dateTime")),
+        end_at=parse_graph_datetime((raw.get("end") or {}).get("dateTime")),
+        time_zone=raw.get("originalStartTimeZone") or None,
+        is_all_day=bool(raw.get("isAllDay")),
+        is_cancelled=bool(raw.get("isCancelled")),
+        sensitivity=raw.get("sensitivity") or "normal",
+        event_type=raw.get("type") or "singleInstance",
+        series_master_id=raw.get("seriesMasterId"),
+        organizer=_recipient(raw.get("organizer")),
+        attendees=_recipients(raw.get("attendees")),
+        location=(raw.get("location") or {}).get("displayName") or None,
+        web_link=raw.get("webLink"),
+        created_at=parse_graph_datetime(raw.get("createdDateTime")),
+        last_modified_at=parse_graph_datetime(raw.get("lastModifiedDateTime")),
+        recurrence=_recurrence_summary(raw.get("recurrence")),
+    )
+
+
 def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
     return OutlookAttachment(
         id=raw["id"],
@@ -278,6 +358,17 @@ def _parse_attachment(raw: dict[str, Any]) -> OutlookAttachment:
         is_inline=bool(raw.get("isInline")),
         is_file=raw.get("@odata.type") == FILE_ATTACHMENT_TYPE,
     )
+
+
+def _expand_property(property_id: str) -> str:
+    return f"singleValueExtendedProperties($filter=id eq '{property_id}')"
+
+
+def _expanded_property(raw: dict[str, Any]) -> str | None:
+    """The value of the one extended property ``_expand_property`` asked for.
+    Graph writes its id back in its own spelling, so it is not matched."""
+    props = raw.get("singleValueExtendedProperties") or []
+    return props[0].get("value") if props else None
 
 
 def _graph_timestamp(moment: datetime) -> str:
@@ -289,11 +380,11 @@ class OutlookSourceOperations(SourceOperations):
     # msal reaches this directory only through the shared package, and requests
     # is fenced so the connector cannot bypass the gateway with a raw call.
     sdk_modules = ("msal", "requests")
+    config_keys = frozenset({CONFIG_AUTHORITY_HOST, CONFIG_GRAPH_API_HOST})
 
     # Built lazily on first use so the credential is decrypted at the first
     # remote call, not at construction.
-    _auth_context: MicrosoftAuthContext | None = None
-    _graph_client: GraphApiClient | None = None
+    _graph_gateway: MicrosoftGraphGateway | None = None
 
     def _config_value(self, key: str, default: str) -> str:
         config = self.connector_specific_config or {}
@@ -304,86 +395,34 @@ class OutlookSourceOperations(SourceOperations):
         return self._config_value(CONFIG_GRAPH_API_HOST, DEFAULT_GRAPH_API_HOST)
 
     def _graph_base(self) -> str:
-        return f"{self._graph_host()}/{GRAPH_API_VERSION}"
+        return self._gateway().graph_api_base
 
-    def _auth(self) -> MicrosoftAuthContext:
-        if self._auth_context is None:
-            credentials = self.credentials_provider.get_credentials()
-            try:
-                method = MicrosoftAuthMethod.parse(
-                    credentials.get(CREDENTIAL_AUTH_METHOD)
-                )
-            except ConnectorValidationError as e:
-                raise OutlookAuthError(INVALID_AUTH_METHOD_CODE, str(e)) from e
-            missing = [
-                field
-                for field in CREDENTIAL_FIELDS_BY_METHOD[method]
-                if not str(credentials.get(field) or "").strip()
-            ]
-            if missing:
-                raise OutlookAuthError(
-                    MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
-                )
-            if method is MicrosoftAuthMethod.CERTIFICATE:
-                # Decoded here first, so a PFX that is not base64 reads as a
-                # bad upload and not as the bad directory id MSAL would report.
-                try:
-                    base64.b64decode(credentials[CREDENTIAL_PRIVATE_KEY])
-                except ValueError as e:
-                    raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
-            # MSAL checks the authority against Microsoft's discovery endpoint
-            # while building the app. 400 means a bad directory id. 429, 5xx or
-            # an unreadable body is the service's fault. A bad PFX is a RuntimeError.
-            try:
-                self._auth_context = build_msal_app(
-                    client_id=credentials[CREDENTIAL_CLIENT_ID],
-                    directory_id=credentials[CREDENTIAL_DIRECTORY_ID],
-                    authority_host=self._config_value(
-                        CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
-                    ),
-                    auth_method=method,
-                    client_secret=credentials.get(CREDENTIAL_CLIENT_SECRET),
-                    private_key_b64=credentials.get(CREDENTIAL_PRIVATE_KEY),
-                    certificate_password=credentials.get(
-                        CREDENTIAL_CERTIFICATE_PASSWORD
-                    ),
-                )
-            except ValueError as e:
-                if _is_decode_error(e) or _msal_http_status(e) == 429:
-                    raise _msal_error(e) from e
-                raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
-            except RuntimeError as e:
-                raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
-            except MsalServiceError as e:
-                raise _msal_error(e) from e
-            except requests.RequestException as e:
-                raise _to_graph_error(e) from e
-        return self._auth_context
-
-    def _token_response(self) -> dict[str, Any]:
-        # MSAL raises for a 5xx from the token endpoint, for one it cannot
-        # reach and for a body it cannot parse. A 4xx comes back as the
-        # OAuth error dict handled below.
-        try:
-            response = acquire_graph_token(self._auth().app, self._graph_host())
-        except (MsalServiceError, ValueError) as e:
-            raise _msal_error(e) from e
-        except requests.RequestException as e:
-            raise _to_graph_error(e) from e
-        if "access_token" not in response:
-            raise OutlookAuthError(
-                str(response.get("error") or "unknown_error"),
-                str(response.get("error_description") or ""),
-            )
-        return response
+    def _gateway(self) -> MicrosoftGraphGateway:
+        if self._graph_gateway is not None:
+            return self._graph_gateway
+        credentials = self.credentials_provider.get_credentials()
+        self._graph_gateway = MicrosoftGraphGateway(
+            auth_config=MicrosoftGraphAuthConfig(
+                client_id=credentials.get(CREDENTIAL_CLIENT_ID),
+                directory_id=credentials.get(CREDENTIAL_DIRECTORY_ID),
+                authority_host=self._config_value(
+                    CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
+                ),
+                auth_method=credentials.get(CREDENTIAL_AUTH_METHOD),
+                client_secret=credentials.get(CREDENTIAL_CLIENT_SECRET),
+                private_key_b64=credentials.get(CREDENTIAL_PRIVATE_KEY),
+                certificate_password=credentials.get(CREDENTIAL_CERTIFICATE_PASSWORD),
+            ),
+            graph_api_host=self._graph_host(),
+            graph_api_version=GRAPH_API_VERSION,
+        )
+        return self._graph_gateway
 
     def _access_token(self) -> str:
-        return str(self._token_response()["access_token"])
+        return self._gateway().access_token()
 
     def _client(self) -> GraphApiClient:
-        if self._graph_client is None:
-            self._graph_client = GraphApiClient(self._access_token, self._graph_base())
-        return self._graph_client
+        return self._gateway().client
 
     def _get(
         self,
@@ -391,13 +430,7 @@ class OutlookSourceOperations(SourceOperations):
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        # The shared client re-raises a transport error or a non-JSON body once
-        # its retries are spent. Both become gateway errors so callers see one
-        # failure type.
-        try:
-            return self._client().get_json(url, params, headers)
-        except (requests.RequestException, ValueError) as e:
-            raise _to_graph_error(e) from e
+        return self._gateway().get_json(url, params, headers)
 
     def _first_item(
         self,
@@ -427,31 +460,22 @@ class OutlookSourceOperations(SourceOperations):
         )
 
     def _user_url(self, mailbox_id: str) -> str:
-        # Graph rejects the slash form for a principal name that starts with
-        # ``$`` and documents the key-literal form for those.
-        if mailbox_id.startswith("$"):
-            literal = quote(_odata_quote(mailbox_id), safe="@$'")
-            return f"{self._graph_base()}/users('{literal}')"
-        return f"{self._graph_base()}/users/{quote(mailbox_id, safe='@')}"
+        return build_graph_user_url(self._graph_base(), mailbox_id)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> OutlookTokenInfo:
+    def check_token(self) -> MicrosoftTokenInfo:
         """Acquire an app-only token: proves client id, directory id and credential agree."""
-        response = self._token_response()
-        expires_in = response.get("expires_in")
-        return OutlookTokenInfo(
-            expires_in=int(expires_in) if expires_in is not None else None
-        )
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_mailbox_users(
-        self, *, page_size: int = USERS_PAGE_SIZE, next_link: str | None = None
+        self, *, page_size: int = ENTRA_PAGE_SIZE, next_link: str | None = None
     ) -> OutlookMailboxPage:
         """One page of enabled users with a mail address, the candidates in
         every-mailbox mode.
@@ -459,28 +483,113 @@ class OutlookSourceOperations(SourceOperations):
         Needs ``User.Read.All``. Whether a user actually has a mailbox is only
         known once :meth:`probe_mailbox` is called for it.
         """
-        params = None
-        url = next_link
-        if url is None:
-            url = f"{self._graph_base()}/users"
-            params = {
-                "$filter": "accountEnabled eq true",
-                "$select": MAILBOX_SELECT,
-                "$top": str(page_size),
-            }
-        data = self._get(url, params)
-        # No primary SMTP address means no Exchange mailbox, so those users are
-        # dropped here instead of costing a probe each.
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._graph_base()}/users",
+            item_model=EntraUser,
+            select_fields=OUTLOOK_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+            filter_expression=ENABLED_USERS_FILTER,
+        )
         mailboxes = [
             mailbox
-            for mailbox in (
-                _parse_mailbox(raw) for raw in data.get("value", []) if raw.get("mail")
-            )
-            if mailbox is not None
+            for user in page.items
+            if user.mail
+            if (mailbox := _mailbox(user)) is not None
         ]
         return OutlookMailboxPage(
-            mailboxes=mailboxes, next_link=data.get("@odata.nextLink")
+            mailboxes=mailboxes,
+            next_link=page.next_link,
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Runs only for a configured group, and the coverage spy carries no "
+            "connector config."
+        ),
+    )
+    def resolve_groups(self, *, identifier: str) -> list[EntraGroup]:
+        """The groups an identifier names: the one with that object id, or
+        every group with that display name. Names are not unique in Entra, so
+        the caller decides what more than one match means.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        object_id: str | None = _object_id(identifier)
+        if object_id is not None:
+            try:
+                data = self._get(
+                    f"{self._graph_base()}/groups/{object_id}",
+                    {"$select": ENTRA_NAMED_GROUP_SELECT},
+                )
+            except OutlookGraphError as e:
+                if e.status != 404:
+                    raise
+                return []
+            return [EntraGroup.model_validate(data)]
+        # Pages are followed until a second match or the end, since one
+        # match with a continuation proves nothing about the rest.
+        matches: list[EntraGroup] = []
+        next_link: str | None = None
+        for _ in range(MAX_ENTRA_COLLECTION_PAGES):
+            page = fetch_entra_page(
+                self._gateway().get_json,
+                url=f"{self._graph_base()}/groups",
+                item_model=EntraGroup,
+                select_fields=ENTRA_NAMED_GROUP_SELECT,
+                next_link=next_link,
+                page_size=GROUP_NAME_MATCH_LIMIT,
+                filter_expression=f"displayName eq '{_odata_quote(identifier)}'",
+            )
+            matches.extend(page.items)
+            next_link = page.next_link
+            if next_link is None or len(matches) >= GROUP_NAME_MATCH_LIMIT:
+                return matches
+        raise RuntimeError(f"Outlook: the group listing for {identifier} never ends")
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Group expansion needs a concrete group id unavailable to "
+            "credential checks."
+        ),
+    )
+    def list_group_mailbox_users(
+        self,
+        *,
+        group_id: str,
+        page_size: int = ENTRA_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookMailboxPage:
+        """One page of a group's enabled users with a mail address, members of
+        nested groups included.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=(
+                f"{self._graph_base()}/groups/{quote(group_id)}"
+                "/transitiveMembers/microsoft.graph.user"
+            ),
+            item_model=EntraUser,
+            select_fields=OUTLOOK_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+        # The member listing takes no accountEnabled filter without advanced
+        # query parameters, so disabled accounts are dropped here.
+        mailboxes = [
+            mailbox
+            for user in page.items
+            if user.mail and user.account_enabled is not False
+            if (mailbox := _mailbox(user)) is not None
+        ]
+        return OutlookMailboxPage(mailboxes=mailboxes, next_link=page.next_link)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -495,13 +604,19 @@ class OutlookSourceOperations(SourceOperations):
         """Find the user behind an address: by UPN or object id, then by primary SMTP."""
         params = {"$select": MAILBOX_SELECT}
         try:
-            return _parse_mailbox(self._get(self._user_url(address), params))
+            return _mailbox(
+                fetch_entra_user(
+                    self._gateway().get_json,
+                    self._graph_base(),
+                    address,
+                )
+            )
         except OutlookGraphError as e:
             if e.status != 404:
                 raise
         params["$filter"] = f"mail eq '{_odata_quote(address)}'"
         user = self._first_item(f"{self._graph_base()}/users", params)
-        return _parse_mailbox(user) if user else None
+        return _mailbox(EntraUser.model_validate(user)) if user else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -511,8 +626,8 @@ class OutlookSourceOperations(SourceOperations):
         """Read the Inbox record.
 
         The cheapest call that proves the mailbox exists, is licensed and sits
-        inside the app's Exchange scope. 403 means out of scope, 404 means no
-        mailbox behind the user.
+        inside the app's Exchange scope. 403 means out of scope, 404 no mailbox
+        behind the user, 423 a locked or archived mailbox.
         """
         return _parse_folder(
             self._get(
@@ -620,6 +735,97 @@ class OutlookSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The calendar check reads one page of it, but only when the "
+            "connector config turns calendars on, which the coverage harness's "
+            "empty config never does."
+        ),
+    )
+    def fetch_calendar_delta_page(
+        self,
+        *,
+        mailbox_id: str,
+        window_start: datetime,
+        window_end: datetime,
+        page_size: int = EVENTS_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookEventPage:
+        """One page of the events in the window, recurring series expanded into
+        their occurrences. The window rides in the state tokens, so it goes on
+        the first request only. Removed rows are dropped: pruning owns deletions,
+        and Graph also files events outside the window under @removed."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/calendarView/delta"
+            params = {
+                "startDateTime": _graph_timestamp(window_start),
+                "endDateTime": _graph_timestamp(window_end),
+            }
+        data = self._get(
+            url,
+            params,
+            {"Prefer": f"odata.maxpagesize={page_size}, {EVENT_PREFERENCES}"},
+        )
+        return OutlookEventPage(
+            events=[
+                _parse_event(raw)
+                for raw in data.get("value", [])
+                if "@removed" not in raw
+            ],
+            next_link=data.get("@odata.nextLink"),
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a series master id, which only a recurring event provides. "
+            "The calendar check reads the same calendar under the same grant."
+        ),
+    )
+    def get_event(self, *, mailbox_id: str, event_id: str) -> OutlookEvent:
+        """One event by id, read for the master of a recurring series."""
+        return _parse_event(
+            self._get(
+                f"{self._user_url(mailbox_id)}/events/{event_id}",
+                None,
+                {"Prefer": EVENT_PREFERENCES},
+            )
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs an event id, which only the calendar walk produces. The "
+            "calendar check reads the same calendar under the same grant."
+        ),
+    )
+    def get_default_calendar_event(
+        self, *, mailbox_id: str, event_id: str
+    ) -> OutlookEvent | None:
+        """One event by id when it sits in the mailbox's default calendar, the
+        one the calendar walk reads. None for an event in another calendar."""
+        calendar = self._get(
+            f"{self._user_url(mailbox_id)}/calendar",
+            {"$select": "id", "$expand": _expand_property(FOLDER_ENTRY_ID_PROPERTY)},
+        )
+        raw = self._get(
+            # The id comes from a stored document id, so it is kept to one segment.
+            f"{self._user_url(mailbox_id)}/events/{quote(event_id, safe='')}",
+            {"$expand": _expand_property(PARENT_ENTRY_ID_PROPERTY)},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        calendar_entry_id = _expanded_property(calendar)
+        parent_entry_id = _expanded_property(raw)
+        if calendar_entry_id is None or parent_entry_id != calendar_entry_id:
+            return None
+        return _parse_event(raw)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def list_message_attachments(
         self, *, mailbox_id: str, message_id: str, limit: int
@@ -655,13 +861,36 @@ class OutlookSourceOperations(SourceOperations):
         )
         try:
             return download_graph_url_with_cap(
-                access_token=self._access_token(),
+                get_access_token=self._access_token,
                 url=url,
                 cap=cap,
                 description=f"outlook attachment {attachment_id}",
             )
         except requests.RequestException as e:
-            raise _to_graph_error(e) from e
+            raise microsoft_error_from_exception(e) from e
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The calendar check reads one event body with it, but only when the "
+            "connector config turns calendars on, which the coverage harness's "
+            "empty config never does."
+        ),
+    )
+    def read_any_event(self, *, mailbox_id: str) -> OutlookEvent | None:
+        """One event from the mailbox's calendar with its body, or None when
+        the calendar holds none.
+
+        Calendars.ReadBasic.All lists events but withholds bodies, so this is
+        the call that tells it apart from Calendars.Read.
+        """
+        raw = self._first_item(
+            f"{self._user_url(mailbox_id)}/events",
+            {"$select": "id,subject,body", "$top": "1"},
+            {"Prefer": EVENT_PREFERENCES},
+        )
+        return _parse_event(raw) if raw else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -681,6 +910,65 @@ class OutlookSourceOperations(SourceOperations):
         )
         return _parse_message(raw) if raw else None
 
+    def _conversation_page(
+        self,
+        mailbox_id: str,
+        conversation_id: str,
+        select: str,
+        next_link: str | None,
+        headers: dict[str, str] | None = None,
+        oldest_first: bool = False,
+    ) -> dict[str, Any]:
+        """One page of a conversation in one mailbox, newest first unless
+        asked otherwise. Ordering needs the ordered property to lead the
+        filter, hence the always-true ``receivedDateTime`` bound ahead of the
+        conversation id."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            params = {
+                "$filter": (
+                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
+                    f"conversationId eq '{_odata_quote(conversation_id)}'"
+                ),
+                "$orderby": "receivedDateTime " + ("asc" if oldest_first else "desc"),
+                "$select": select,
+                "$top": str(MESSAGES_PAGE_SIZE),
+            }
+        return self._get(url, params, headers)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a conversation id, which only the delta walk produces. The "
+            "mail-read check proves the fields on the mailbox-wide route."
+        ),
+    )
+    def fetch_conversation_outline_page(
+        self,
+        *,
+        mailbox_id: str,
+        conversation_id: str,
+        next_link: str | None = None,
+        oldest_first: bool = False,
+    ) -> OutlookDeltaPage:
+        """One page of a conversation's messages in one mailbox, newest first
+        unless asked otherwise, the CHANGE_SELECT fields only, to decide a
+        copy's documents without reading a body."""
+        data = self._conversation_page(
+            mailbox_id,
+            conversation_id,
+            CHANGE_SELECT,
+            next_link,
+            oldest_first=oldest_first,
+        )
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
+
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
@@ -695,31 +983,56 @@ class OutlookSourceOperations(SourceOperations):
         *,
         mailbox_id: str,
         conversation_id: str,
-        page_size: int = MESSAGES_PAGE_SIZE,
         next_link: str | None = None,
     ) -> OutlookMessagePage:
         """One page of a conversation's messages in one mailbox, newest first,
-        bodies as text.
+        bodies as text. The body preference is a header, so it goes with
+        every request."""
+        data = self._conversation_page(
+            mailbox_id,
+            conversation_id,
+            MESSAGE_SELECT,
+            next_link,
+            {"Prefer": TEXT_BODY_PREFERENCE},
+        )
+        return OutlookMessagePage(
+            messages=[_parse_message(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
 
-        Ordering needs the ordered property to lead the filter, hence the
-        always-true ``receivedDateTime`` bound ahead of the conversation id.
-        The body preference is a header, so it goes with every request.
-        """
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Lists the mailbox-wide route the mail-read check proves with "
+            "read_any_message, with the CHANGE_SELECT fields the delta walk reads."
+        ),
+    )
+    def fetch_received_page(
+        self,
+        *,
+        mailbox_id: str,
+        received_from: datetime,
+        received_to: datetime | None = None,
+        next_link: str | None = None,
+    ) -> OutlookDeltaPage:
+        """One page of the mailbox's messages received in the range, oldest
+        first, the CHANGE_SELECT fields only."""
         params = None
         url = next_link
         if url is None:
             url = f"{self._user_url(mailbox_id)}/messages"
+            received = f"receivedDateTime ge {_graph_timestamp(received_from)}"
+            if received_to is not None:
+                received += f" and receivedDateTime le {_graph_timestamp(received_to)}"
             params = {
-                "$filter": (
-                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
-                    f"conversationId eq '{_odata_quote(conversation_id)}'"
-                ),
-                "$orderby": "receivedDateTime desc",
-                "$select": MESSAGE_SELECT,
-                "$top": str(page_size),
+                "$filter": received,
+                "$orderby": "receivedDateTime asc",
+                "$select": CHANGE_SELECT,
+                "$top": str(RECEIVED_SCAN_PAGE_SIZE),
             }
-        data = self._get(url, params, {"Prefer": TEXT_BODY_PREFERENCE})
-        return OutlookMessagePage(
-            messages=[_parse_message(raw) for raw in data.get("value", [])],
+        data = self._get(url, params)
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),
         )

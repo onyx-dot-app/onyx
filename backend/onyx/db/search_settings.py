@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.model_configs import (
     DEFAULT_DOCUMENT_ENCODER_MODEL,
     DOCUMENT_ENCODER_MODEL,
+    PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
 )
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.llm import fetch_embedding_provider
@@ -64,8 +65,8 @@ def create_search_settings(
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
         multipass_indexing=search_settings.multipass_indexing,
-        embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
+        vector_quantization=search_settings.vector_quantization,
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
@@ -92,7 +93,7 @@ def get_embedding_provider_from_provider_type(
         CloudEmbeddingProvider.provider_type == provider_type
     )
     provider = db_session.execute(query).scalars().first()
-    return provider if provider else None
+    return provider or None
 
 
 def get_current_db_embedding_provider(
@@ -275,15 +276,30 @@ def update_secondary_search_settings(
     logger.info("Secondary search settings updated successfully")
 
 
-def update_search_settings_status(
+def update_search_settings_status__no_commit(
     search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
 ) -> None:
     search_settings.status = new_status
+    # Flush now so callers control the UPDATE order: the unique PRESENT index rejects
+    # a new PRESENT row while the old one is still PRESENT.
+    db_session.flush()
+
+
+def update_search_settings_status(
+    search_settings: SearchSettings, new_status: IndexModelStatus, db_session: Session
+) -> None:
+    update_search_settings_status__no_commit(search_settings, new_status, db_session)
     db_session.commit()
 
 
 def user_has_overridden_embedding_model() -> bool:
-    return DOCUMENT_ENCODER_MODEL != DEFAULT_DOCUMENT_ENCODER_MODEL
+    """True if env DOCUMENT_ENCODER_MODEL names a non-default model, for the alembic
+    seed (dbaa756c2ccf). nomic, the previous default, counts as a default so that
+    DOCUMENT_ENCODER_MODEL=nomic seeds the same rows as an install before granite."""
+    return DOCUMENT_ENCODER_MODEL not in (
+        DEFAULT_DOCUMENT_ENCODER_MODEL,
+        PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
+    )
 
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).

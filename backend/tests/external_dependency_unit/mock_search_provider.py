@@ -45,9 +45,7 @@ class MockWebProvider(WebSearchProvider, WebProviderController):
         self._results[query] = results
 
     def search(self, query: str) -> Sequence[WebSearchResult]:
-        return list(
-            map(lambda result: result.to_web_search_result(), self._results[query])
-        )
+        return [result.to_web_search_result() for result in self._results[query]]
 
     def test_connection(self) -> dict[str, str]:
         return {}

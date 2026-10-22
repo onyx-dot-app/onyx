@@ -9,6 +9,7 @@ from onyx.access.models import (
     NodeExternalAccess,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch, SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
@@ -19,10 +20,14 @@ logger = setup_logger()
 
 
 def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:
-    return (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
+    """The pair's credential JSON in its connector's own keys."""
+    return to_source_credential_json(
+        cc_pair.connector.source,
+        (
+            cc_pair.credential.credential_json.get_value(apply_mask=False)
+            if cc_pair.credential.credential_json
+            else {}
+        ),
     )
 
 

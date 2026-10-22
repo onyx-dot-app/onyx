@@ -13,7 +13,7 @@ import {
   SvgUnPlugged,
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
-import { completeMCPUserOAuth } from "@/lib/tools/svc";
+import { completeMCPUserOAuth } from "@/lib/mcp/svc";
 import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
@@ -145,6 +145,13 @@ export default function MCPOAuthCallbackPage() {
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
+      if (stateParam) {
+        void completeMCPUserOAuth(null, stateParam, providerError).catch(
+          (error: unknown) => {
+            console.error("Failed to cancel MCP OAuth attempt:", error);
+          }
+        );
+      }
       setState({ phase: "error", error: cancelledError(t, errorDescription) });
       return;
     }

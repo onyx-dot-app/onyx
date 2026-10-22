@@ -98,7 +98,6 @@ def get_application() -> FastAPI:
         add_api_server_tenant_id_middleware(application, logger)
     else:
         # License enforcement middleware for self-hosted deployments only
-        # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
         # MT deployments use control plane gating via is_tenant_gated() instead
         add_license_enforcement_middleware(application, logger)
 

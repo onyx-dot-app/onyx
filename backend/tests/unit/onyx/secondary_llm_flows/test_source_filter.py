@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.llm.models import UserMessage
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    TextContent,
+    UserMessage,
+)
 from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tracing.flows import LLMFlow
 
 A = DocumentSource.ZENDESK
 B = DocumentSource.CONFLUENCE
@@ -22,22 +28,17 @@ def _run_decision(
     Returns (scope, prompt_messages)."""
     captured: dict = {}
 
-    def fake_invoke(prompt: list, **_kwargs: object) -> MagicMock:
-        captured["prompt"] = prompt
-        resp = MagicMock()
-        resp.choice.message.content = llm_returns
+    def fake_invoke(
+        request: GenerationRequest, context: GenerationContext | None = None
+    ) -> AssistantMessage:
+        assert context is not None and context.flow == LLMFlow.SOURCE_FILTER_EXTRACTION
+        captured["prompt"] = request.messages
+        resp = AssistantMessage(content=[TextContent(text=llm_returns)])
         return resp
 
     llm = MagicMock()
     llm.invoke.side_effect = fake_invoke
-    with (
-        patch(
-            "onyx.secondary_llm_flows.source_filter.llm_generation_span",
-            return_value=nullcontext(MagicMock()),
-        ),
-        patch("onyx.secondary_llm_flows.source_filter.record_llm_response"),
-    ):
-        scope = decide_search_scope(history, llm, connected, previous_cycles, ["q"])
+    scope = decide_search_scope(history, llm, connected, previous_cycles, ["q"])
     return scope, captured["prompt"]
 
 

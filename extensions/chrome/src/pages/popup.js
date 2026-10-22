@@ -1,25 +1,34 @@
-import { CHROME_SPECIFIC_STORAGE_KEYS } from "../utils/constants.js";
+import {
+  getUseOnyxAsDefaultNewTab,
+  setUseOnyxAsDefaultNewTab,
+  isNewTabOverrideManaged,
+} from "../utils/storage.js";
 
 document.addEventListener("DOMContentLoaded", async function () {
   const defaultNewTabToggle = document.getElementById("defaultNewTabToggle");
   const openSidePanelButton = document.getElementById("openSidePanel");
   const openOptionsButton = document.getElementById("openOptions");
+  const newTabManagedNotice = document.getElementById("newTabManagedNotice");
 
   async function loadSetting() {
-    const result = await chrome.storage.local.get({
-      [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: false,
-    });
+    const [value, managed] = await Promise.all([
+      getUseOnyxAsDefaultNewTab(),
+      isNewTabOverrideManaged(),
+    ]);
     if (defaultNewTabToggle) {
-      defaultNewTabToggle.checked =
-        result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+      defaultNewTabToggle.checked = !!value;
+      defaultNewTabToggle.disabled = managed;
+    }
+    if (newTabManagedNotice) {
+      newTabManagedNotice.style.display = managed ? "block" : "none";
     }
   }
 
   async function toggleSetting() {
-    const currentValue = defaultNewTabToggle.checked;
-    await chrome.storage.local.set({
-      [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: currentValue,
-    });
+    const updated = await setUseOnyxAsDefaultNewTab(
+      defaultNewTabToggle.checked
+    );
+    if (!updated) await loadSetting();
   }
 
   async function openSidePanel() {

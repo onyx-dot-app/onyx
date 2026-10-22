@@ -6,8 +6,10 @@ from unittest.mock import patch
 import pytest
 from litellm.exceptions import BadRequestError, RateLimitError
 
-from onyx.llm.models import ReasoningEffort, UserMessage
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError
+from onyx.llm.exceptions import LLMRateLimitError
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import LitellmLLM
 
 _SENTINEL = object()
 

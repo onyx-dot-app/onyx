@@ -109,6 +109,9 @@ def _create_empty_censored_chunk(uncensored_chunk: InferenceChunk) -> InferenceC
     empty_censored_chunk.content = ""
     empty_censored_chunk.blurb = ""
     empty_censored_chunk.source_links = {}
+    empty_censored_chunk.match_highlights = []
+    empty_censored_chunk.doc_summary = ""
+    empty_censored_chunk.chunk_context = ""
     return empty_censored_chunk
 
 

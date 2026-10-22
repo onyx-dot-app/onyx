@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtlClntAppOauthSettings xmlns="http://soap.sforce.com/2006/04/metadata">
+    <commaSeparatedOauthScopes>Api, RefreshToken</commaSeparatedOauthScopes>
+    <externalClientApplication>Onyx_Cloud</externalClientApplication>
+    <isFirstPartyAppEnabled>false</isFirstPartyAppEnabled>
+    <label>Onyx_Cloud_oauth</label>
+    <oauthLink>00Dbm000004ELiD:888bm000002gH3J</oauthLink>
+</ExtlClntAppOauthSettings>

@@ -1,4 +1,4 @@
-import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/interfaces";
+import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";

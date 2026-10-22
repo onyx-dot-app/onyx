@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.models import ReasoningEffort, UserMessage, resolve_reasoning_effort
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort, resolve_reasoning_effort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
@@ -237,11 +238,14 @@ class TestEffortReachesTheProvider:
         llm = _make_llm()
         assert _effort_sent(_sent_kwargs(llm, ReasoningEffort.HIGH)) == "high"
 
-    def test_off_cap_omits_reasoning_entirely(self) -> None:
-        """OFF is the one level that drops the parameter rather than lowering it."""
+    def test_off_cap_sends_explicit_none(self) -> None:
+        """OFF is the one level that turns reasoning off rather than lowering
+        it. gpt-5.1 supports the explicit "none", which beats omitting the
+        parameter for the models that default to medium."""
         llm = _make_llm(reasoning_effort_max=ReasoningEffort.OFF)
         kwargs = _sent_kwargs(llm, ReasoningEffort.XHIGH)
-        for key in ("reasoning", "thinking", "output_config", "reasoning_effort"):
+        assert kwargs["reasoning"] == {"effort": "none"}
+        for key in ("thinking", "output_config", "reasoning_effort"):
             assert key not in kwargs
 
 

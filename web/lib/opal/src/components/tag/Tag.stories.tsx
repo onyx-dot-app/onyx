@@ -1,6 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Tag } from "@opal/components";
-import { SvgAlertCircle } from "@opal/icons";
+import { Popover, Tag } from "@opal/components";
+import {
+  SvgAlertCircle,
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgPause,
+  SvgRefreshCw,
+} from "@opal/icons";
 
 const TAG_COLORS = ["green", "purple", "blue", "gray", "amber"] as const;
 
@@ -94,4 +100,91 @@ export const TruncatedWithTooltip: Story = {
     title: "A very long metadata label that gets capped",
     truncate: true,
   },
+};
+
+export const Status: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Tag
+        icon={SvgRefreshCw}
+        title="Indexing"
+        color="blue"
+        variant="status"
+        font="secondary-body"
+      />
+      <Tag
+        icon={SvgCheckCircle}
+        title="Synced"
+        color="green"
+        variant="status"
+        font="secondary-body"
+      />
+      <Tag
+        icon={SvgPause}
+        title="Paused"
+        color="amber"
+        variant="status"
+        font="secondary-body"
+      />
+      <Tag
+        icon={SvgAlertCircle}
+        title="Failed"
+        color="red"
+        variant="status"
+        font="secondary-body"
+      />
+      <Tag
+        icon={SvgAlertTriangle}
+        title="3 warnings"
+        iconColor="orange"
+        variant="status"
+        font="secondary-body"
+      />
+    </div>
+  ),
+};
+
+export const Count: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Tag icon={SvgAlertTriangle} title="12" color="orange" variant="count" />
+      <Tag icon={SvgAlertCircle} title="4" color="red" variant="count" />
+    </div>
+  ),
+};
+
+export const ClickableTrigger: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Popover>
+        <Popover.Trigger asChild>
+          <Tag
+            icon={SvgAlertCircle}
+            title="Stack Trace"
+            iconColor="red"
+            variant="status"
+            font="secondary-body"
+            onClick={() => {}}
+          />
+        </Popover.Trigger>
+        <Popover.Content width={60}>
+          <div className="p-2">Popover content</div>
+        </Popover.Content>
+      </Popover>
+      <Popover defaultOpen>
+        <Popover.Trigger asChild>
+          <Tag
+            icon={SvgAlertTriangle}
+            title="3 failed"
+            variant="status"
+            font="secondary-body"
+            onClick={() => {}}
+          />
+        </Popover.Trigger>
+        <Popover.Content width={60}>
+          <div className="p-2">Open: the tag inverts</div>
+        </Popover.Content>
+      </Popover>
+    </div>
+  ),
 };

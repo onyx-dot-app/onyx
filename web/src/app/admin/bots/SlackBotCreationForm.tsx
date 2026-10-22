@@ -25,7 +25,7 @@ export function NewSlackBotForm() {
         icon={SvgSlack}
         title={t("newBot.header.title")}
         divider
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <CardSection>

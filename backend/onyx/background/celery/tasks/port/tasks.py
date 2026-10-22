@@ -59,14 +59,13 @@ from onyx.db.port_attempt import (
     count_active_port_attempts,
     count_consecutive_failed_port_attempts_no_progress,
     create_port_attempt,
+    fail_unstarted_port_attempt,
     get_active_port_attempt,
     get_latest_port_attempt,
     get_port_attempt,
     get_stale_in_progress_port_attempts,
-    mark_port_canceled,
-    mark_port_failed,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
     pause_port_attempt,
     port_backfill_has_pending_work,
     request_port_cancel,
@@ -229,6 +228,62 @@ def _sweep_port_orphan_candidates(
         log.info("Swept %d resurrected orphan chunk(s) from the port target", deleted)
 
 
+def _resolve_port_settings(
+    db_session: Session,
+    attempt: PortAttempt,
+    log: _PortLogAdapter,
+) -> tuple[SearchSettings, SearchSettings] | None:
+    """The (source, target) settings for an unclaimed attempt. Returns None after it
+    handles an attempt that must not run (it marks or cancels it)."""
+    port_attempt_id = attempt.id
+    future_search_settings = get_search_settings_by_id(
+        db_session, attempt.search_settings_id
+    )
+    if future_search_settings is None:
+        mark_port_terminal(
+            db_session,
+            port_attempt_id,
+            PortAttemptStatus.FAILED,
+            error_msg="FUTURE search settings missing",
+        )
+        return None
+    # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
+    # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
+    # Cancel through request_port_cancel, not outright — a second dispatch of an
+    # attempt another worker owns must not ack for it.
+    target_id = port_target_settings_id(
+        get_current_search_settings(db_session),
+        get_secondary_search_settings(db_session),
+    )
+    if target_id != attempt.search_settings_id:
+        request_port_cancel(db_session, port_attempt_id)
+        log.info(
+            "PortAttempt targets settings %s, no longer the port target (now %s); "
+            "canceling",
+            attempt.search_settings_id,
+            target_id,
+        )
+        return None
+    # Source to copy from: the recorded backfill source when the target was
+    # promoted mid-port (INSTANT) — "current" is now the target itself — else
+    # the live PRESENT for a normal reindex.
+    if future_search_settings.port_backfill_source_id is not None:
+        present_search_settings = get_search_settings_by_id(
+            db_session, future_search_settings.port_backfill_source_id
+        )
+        if present_search_settings is None:
+            mark_port_terminal(
+                db_session,
+                port_attempt_id,
+                PortAttemptStatus.FAILED,
+                error_msg="port backfill source settings missing",
+            )
+            return None
+    else:
+        present_search_settings = get_current_search_settings(db_session)
+    return present_search_settings, future_search_settings
+
+
 def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) -> None:
     """Body of the port task, lifted out of @shared_task so tests call it
     directly. Resumes from the attempt's cursor and commits a new cursor after
@@ -277,47 +332,20 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         up_to_doc_id = attempt.up_to_doc_id  # snapshot upper bound (None = unbounded)
         docs_ported = attempt.docs_ported or 0
 
-        future_search_settings = get_search_settings_by_id(
-            db_session, attempt.search_settings_id
-        )
-        if future_search_settings is None:
-            mark_port_failed(
-                db_session, port_attempt_id, error_msg="FUTURE search settings missing"
+        try:
+            resolved = _resolve_port_settings(db_session, attempt, log)
+        except Exception as e:
+            # Unclaimed, so the stall watchdog does not cover this attempt. FAIL it so
+            # check_for_port retries it on the next tick (with its usual backoff).
+            log.exception("Port setup failed before claim; marking FAILED")
+            db_session.rollback()
+            fail_unstarted_port_attempt(
+                db_session, port_attempt_id, error_msg=f"setup failed: {e}"
             )
             return
-        # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
-        # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
-        # Cancel through request_port_cancel, not outright — a second dispatch of an
-        # attempt another worker owns must not ack for it.
-        target_id = port_target_settings_id(
-            get_current_search_settings(db_session),
-            get_secondary_search_settings(db_session),
-        )
-        if target_id != attempt.search_settings_id:
-            request_port_cancel(db_session, port_attempt_id)
-            log.info(
-                "PortAttempt targets settings %s, no longer the port target (now %s); "
-                "canceling",
-                attempt.search_settings_id,
-                target_id,
-            )
+        if resolved is None:
             return
-        # Source to copy from: the recorded backfill source when the target was
-        # promoted mid-port (INSTANT) — "current" is now the target itself — else
-        # the live PRESENT for a normal reindex.
-        if future_search_settings.port_backfill_source_id is not None:
-            present_search_settings = get_search_settings_by_id(
-                db_session, future_search_settings.port_backfill_source_id
-            )
-            if present_search_settings is None:
-                mark_port_failed(
-                    db_session,
-                    port_attempt_id,
-                    error_msg="port backfill source settings missing",
-                )
-                return
-        else:
-            present_search_settings = get_current_search_settings(db_session)
+        present_search_settings, future_search_settings = resolved
 
         if not mark_port_in_progress(
             db_session, port_attempt_id, celery_task_id=celery_task_id
@@ -330,7 +358,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             copier = PortCopier(present_search_settings, future_search_settings)
         except Exception as e:
             log.exception("Failed to build port copier; marking FAILED")
-            mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+            mark_port_terminal(
+                db_session, port_attempt_id, PortAttemptStatus.FAILED, error_msg=str(e)
+            )
             return
 
     start_monotonic = time.monotonic()
@@ -362,12 +392,16 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             if attempt.cancel_requested:
                 # ack between batches, after our last write: this unblocks the waiting
                 # deletion, so its cleanup writes strictly after us
-                mark_port_canceled(db_session, port_attempt_id)
+                mark_port_terminal(
+                    db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                )
                 log.info("Port cancel requested; acknowledged and stopping")
                 return
             if port_user_id is not None:
                 if not user_file_port_scope_active(db_session, port_user_id):
-                    mark_port_canceled(db_session, port_attempt_id)
+                    mark_port_terminal(
+                        db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                    )
                     log.info("user gone, stopping port")
                     return
             elif cc_pair_id is not None:
@@ -378,7 +412,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 ):
                     # A deletion is waiting on us; ack now (between batches, after our
                     # last write) so it proceeds next tick, not after the watchdog.
-                    mark_port_canceled(db_session, port_attempt_id)
+                    mark_port_terminal(
+                        db_session, port_attempt_id, PortAttemptStatus.CANCELED
+                    )
                     log.info("cc_pair gone/deleting, stopping port")
                     return
             # Thread-pool tasks ignore celery's soft_time_limit, so enforce it here.
@@ -387,9 +423,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             # stall watchdog fails it a full window later. After the cancel/deleting
             # acks so those still win.
             if time.monotonic() - start_monotonic > _PORT_SOFT_TIME_LIMIT:
-                mark_port_failed(
+                mark_port_terminal(
                     db_session,
                     port_attempt_id,
+                    PortAttemptStatus.FAILED,
                     error_msg="soft time limit reached; yielding for reschedule",
                 )
                 log.info("Port soft time limit reached; failing for prompt resume")
@@ -437,7 +474,12 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         except Exception as e:
             log.exception("Port batch failed after retries; marking FAILED")
             with get_session_with_current_tenant() as db_session:
-                mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+                mark_port_terminal(
+                    db_session,
+                    port_attempt_id,
+                    PortAttemptStatus.FAILED,
+                    error_msg=str(e),
+                )
             return
 
         chunks_ported += batch_chunks
@@ -473,11 +515,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     except Exception as e:
         log.exception("Port orphan sweep failed; marking FAILED")
         with get_session_with_current_tenant() as db_session:
-            mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+            mark_port_terminal(
+                db_session, port_attempt_id, PortAttemptStatus.FAILED, error_msg=str(e)
+            )
         return
 
     with get_session_with_current_tenant() as db_session:
-        mark_port_succeeded(db_session, port_attempt_id)
+        mark_port_terminal(db_session, port_attempt_id, PortAttemptStatus.SUCCESS)
     log.info("Port complete: %d docs, %d chunks", docs_ported, chunks_ported)
 
 
@@ -540,8 +584,11 @@ def _fail_stalled_port_attempts(db_session: Session, lock_beat: RedisLock) -> No
             stale.cc_pair_id,
             stale.port_user_id,
         )
-        mark_port_failed(
-            db_session, stale.id, error_msg="stalled: no progress within threshold"
+        mark_port_terminal(
+            db_session,
+            stale.id,
+            PortAttemptStatus.FAILED,
+            error_msg="stalled: no progress within threshold",
         )
 
 
@@ -613,7 +660,7 @@ def _resolve_port_target_settings(db_session: Session) -> SearchSettings | None:
         if port_backfill_has_pending_work(db_session, present.id):
             return present
         # Backfill drained: unpin the source so we stop re-checking a done job, the
-        # source index can be reclaimed, and the reindex/vespa guards read "not
+        # source index can be reclaimed, and the reindex/document-index-sync guards read "not
         # backfilling". Orphans were already swept per-attempt inside run_port_attempt.
         present.port_backfill_source_id = None
         db_session.commit()
@@ -765,7 +812,12 @@ def _schedule_scope_attempts(
             task_logger.exception(
                 "check_for_port: enqueue failed; failing PortAttempt %s", attempt.id
             )
-            mark_port_failed(db_session, attempt.id, error_msg="enqueue failed")
+            mark_port_terminal(
+                db_session,
+                attempt.id,
+                PortAttemptStatus.FAILED,
+                error_msg="enqueue failed",
+            )
             continue
         created_new += 1
         active_attempts += 1

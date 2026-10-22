@@ -1,0 +1,18 @@
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml }}
+{{- if and (eq (include "onyx.objectStore.enabled" .) "true") .Values.minio.enabled $objectStore.legacyCopy.enabled }}
+{{- $copy := $objectStore.legacyCopy }}
+{{- $podTemplate := include "onyx.objectStore.legacyCopyPod" (dict "ctx" . "copy" $copy) }}
+{{- /* A plain Job, not a hook, so helm upgrade does not wait out the copy. Its pod
+template is immutable, so a changed spec or retry limit gets a new Job name. */}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app: legacy-minio-copy
+spec:
+  backoffLimit: {{ $copy.backoffLimit }}
+  template:
+    {{- $podTemplate | nindent 4 }}
+{{- end }}

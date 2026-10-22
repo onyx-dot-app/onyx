@@ -119,7 +119,7 @@ def _collect_turn_events(
                 out.tool_starts.append(event)
             elif etype == "tool_call_progress":
                 out.tool_progress.append(event)
-            elif etype == "prompt_response":
+            elif etype == "turn_completed":
                 out.terminators.append(event)
             elif etype == "error":
                 out.errors.append(event)
@@ -252,9 +252,9 @@ def test_simple_message_streams_text_and_terminates(
     user, session_id = live_session
     out = _drive_turn(user, session_id, "Say hi briefly.")
 
-    assert out.term is not None, "turn never produced a prompt_response terminator"
-    assert out.term.get("stopReason") == "end_turn", (
-        f"unexpected stop reason: {out.term!r}"
+    assert out.term is not None, "turn never produced a committed completion"
+    assert out.term.get("status") == "SUCCEEDED", (
+        f"unexpected turn status: {out.term!r}"
     )
     assert out.errors == [], f"unexpected errors: {out.errors}"
     assert len(out.text) > 0, "expected at least one agent_message_chunk"

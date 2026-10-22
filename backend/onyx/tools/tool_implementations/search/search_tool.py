@@ -36,6 +36,7 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 
 import time
 from collections.abc import Callable
+from functools import cached_property
 from typing import Any, cast
 
 from pydantic import BaseModel
@@ -54,6 +55,7 @@ from onyx.context.search.models import (
     InferenceSection,
     PersonaSearchInfo,
     SearchDocsResponse,
+    UserAccessFilters,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
@@ -77,7 +79,7 @@ from onyx.db.federated import (
 from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import (
@@ -86,6 +88,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolDefinition
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -106,6 +109,8 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
 )
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatMinimalTextMessage,
@@ -138,6 +143,7 @@ from shared_configs.configs import (
     MODEL_SERVER_HOST,
     MODEL_SERVER_PORT,
 )
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -222,7 +228,7 @@ def _estimate_section_tokens(
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
@@ -268,7 +274,7 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    NAME = "internal_search"
+    NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
 
@@ -284,12 +290,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
-        # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+        # Document index metadata filters for overflowing user files.  NOT the raw IDs
         # of the current project/persona — only set when user files couldn't
         # fit in the LLM context and need to be searched via vector DB.
         project_id_filter: int | None,
         persona_id_filter: int | None = None,
-        bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
@@ -297,17 +302,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        selection_llm_factory: Callable[[], LLM] | None = None,
+        primary_llm_cost_checked: bool = True,
     ) -> None:
         super().__init__(emitter=emitter)
 
         self.user = user
         self.persona_search_info = persona_search_info
         self.llm = llm
+        self._selection_llm_factory = selection_llm_factory
+        self._primary_llm_cost_checked = primary_llm_cost_checked
         self.document_index = document_index
         self.user_selected_filters = user_selected_filters
         self.project_id_filter = project_id_filter
         self.persona_id_filter = persona_id_filter
-        self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
@@ -319,6 +327,44 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self._time_filter_computed = False
 
         self._id = tool_id
+
+    def _check_primary_llm_cost(self) -> None:
+        if self._primary_llm_cost_checked:
+            return
+        with get_session_with_current_tenant() as usage_session:
+            check_llm_cost_limit_for_provider(
+                db_session=usage_session,
+                tenant_id=get_current_tenant_id(),
+                llm_provider_api_key=self.llm.config.api_key,
+            )
+        self._primary_llm_cost_checked = True
+
+    @cached_property
+    def selection_llm(self) -> LLM:
+        if self._selection_llm_factory is not None:
+            try:
+                selection_llm = self._selection_llm_factory()
+            except Exception:
+                logger.warning(
+                    "Search selection model unavailable, using the primary model",
+                    exc_info=True,
+                )
+            else:
+                if selection_llm is not self.llm:
+                    return selection_llm
+        self._check_primary_llm_cost()
+        return self.llm
+
+    @property
+    def enforce_selection_input_budget(self) -> bool:
+        return (
+            self._selection_llm_factory is not None
+            and self.selection_llm is not self.llm
+        )
+
+    @property
+    def _is_project_only_search(self) -> bool:
+        return self.project_id_filter is not None and self.persona_id_filter is None
 
     def _prefetch_slack_data(
         self, db_session: Session
@@ -478,7 +524,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
-        acl_filters: list[str] | None,
+        acl_filters: UserAccessFilters,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
@@ -492,7 +538,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             query: The search query string
             hybrid_alpha: Hybrid search alpha parameter (None for default)
             num_hits: Maximum number of hits to return
-            acl_filters: Pre-fetched ACL filters (None when bypass_acl)
+            acl_filters: Pre-fetched ACL filters for the acting user
             embedding_model: Pre-fetched embedding model
             federated_retrieval_infos: Pre-fetched federated retrieval functions
             effective_filters: Filters for THIS search, with the per-call source
@@ -505,11 +551,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             chunk_search_request=ChunkSearchRequest(
                 query=query,
                 hybrid_alpha=hybrid_alpha,
-                # For projects, the search scope is the project and has no other limits
+                # Project-only searches ignore user-selected filters.
                 user_selected_filters=(
-                    effective_filters if self.project_id_filter is None else None
+                    effective_filters if not self._is_project_only_search else None
                 ),
-                bypass_acl=self.bypass_acl,
                 limit=num_hits,
             ),
             project_id_filter=self.project_id_filter,
@@ -562,30 +607,27 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """For explicit tool calling"""
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of search queries to execute, typically a single query. "
-                                "Query expansion and filter extraction steps will be run "
-                                "automatically downstream, do not include time or source type "
-                                "scoping details in your query."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of search queries to execute, typically a single query. "
+                            "Query expansion and filter extraction steps will be run "
+                            "automatically downstream, do not include time or source type "
+                            "scoping details in your query."
+                        ),
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -597,7 +639,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
-        print_only=True,
         debug_only=True,
     )
     def _expand_queries_and_decide_scope(
@@ -625,7 +666,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         scope_job_index: int | None = None
         time_job_index: int | None = None
         if expand_queries:
-            expansion_args = (message_history, self.llm, user_info, memories)
+            expansion_args = (
+                message_history,
+                self.llm,
+                user_info,
+                memories,
+            )
             jobs.append((semantic_query_rephrase, expansion_args))
             jobs.append((keyword_query_expansion, expansion_args))
         if decide_scope:
@@ -633,7 +679,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             jobs.append((decide_search_scope, decide_args))
         if decide_time:
             time_job_index = len(jobs)
-            jobs.append((decide_time_filter, (message_history, self.llm)))
+            jobs.append(
+                (
+                    decide_time_filter,
+                    (message_history, self.llm),
+                )
+            )
 
         results = run_functions_tuples_in_parallel(jobs) if jobs else []
 
@@ -660,13 +711,48 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             time_filter=self._time_filter,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     def run(
         self,
         placement: Placement,
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        # Malformed calls fail loudly whatever the source selection says, so
+        # the argument check comes before any short-circuit.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+
+        # An explicitly empty source selection is a statement, not an absent
+        # filter: the tool still runs (it may be forced), and it honestly
+        # finds nothing. `None` keeps its meaning of "no source filter".
+        # Project-only searches ignore user filters, so the guard must too.
+        if (
+            self.user_selected_filters is not None
+            and not self._is_project_only_search
+            and self.user_selected_filters.source_type is not None
+            and len(self.user_selected_filters.source_type) == 0
+        ):
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=None,
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=[],
+                    citation_mapping={},
+                    displayed_docs=None,
+                ),
+                llm_facing_response=empty_response,
+            )
+
         # Start overall timing
         overall_start_time = time.time()
 
@@ -680,17 +766,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
-            acl_filters: list[str] | None = (
-                None
-                if self.bypass_acl
-                else build_access_filters_for_user(self.user, db_session)
+            acl_filters: UserAccessFilters = build_access_filters_for_user(
+                self.user, db_session
             )
 
             # Validate document-set access for user-supplied filters.
             if (
                 self.user_selected_filters
                 and self.user_selected_filters.document_set
-                and not self.bypass_acl
                 and self.user
                 and not self.user.is_anonymous
             ):
@@ -724,8 +807,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id_filter is not None:
-                # Project mode ignores user filters → no federated sources
+            if self._is_project_only_search:
+                # Project-only searches ignore source selections.
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
@@ -744,8 +827,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
-            # Project mode ignores user filters, so source scoping doesn't apply.
-            if self.project_id_filter is None:
+            # Custom agents retain source selection inside projects.
+            if not self._is_project_only_search:
                 connected_sources = fetch_unique_document_sources(db_session)
 
             # Slack tokens and entity config — only prefetch when Slack
@@ -762,22 +845,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
-        message_history = (
-            override_kwargs.message_history if override_kwargs.message_history else []
-        )
+        message_history = override_kwargs.message_history or []
         memories = (
             override_kwargs.user_memory_context.as_formatted_list()
             if override_kwargs.user_memory_context
@@ -818,6 +890,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
         )
+        # Inferred connector sources must not hide files supplied as context.
+        # Explicit source selections remain the outer bound.
+        if (
+            plan_scope is not None
+            and (
+                self.project_id_filter is not None or self.persona_id_filter is not None
+            )
+            and (
+                user_source_restriction is None
+                or DocumentSource.USER_FILE in user_source_restriction
+            )
+            and DocumentSource.USER_FILE not in plan_scope
+        ):
+            resolved_scope = [*plan_scope, DocumentSource.USER_FILE]
 
         logger.info(
             "Internal search - source scope: %s",
@@ -1012,11 +1098,21 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
             search_weights.append(weight)
 
-        # Add Slack federated search (runs once in parallel with all Vespa queries)
-        # This avoids the query multiplication problem where each Vespa query
+        # Add Slack federated search (runs once in parallel with all index queries)
+        # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
-        if slack_access_token and override_kwargs.original_query:
+        run_slack_search = bool(slack_access_token and override_kwargs.original_query)
+        if run_slack_search:
+            try:
+                self._check_primary_llm_cost()
+            except Exception:
+                logger.warning(
+                    "Skipping Slack search: primary model cost check failed",
+                    exc_info=True,
+                )
+                run_slack_search = False
+        if run_slack_search:
             search_functions.append(
                 (
                     self._run_slack_search,
@@ -1032,7 +1128,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Use same weight as original query for Slack results
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
-        # Run all searches in parallel (Vespa queries + Slack)
+        # Run all searches in parallel (index queries + Slack)
         all_search_results = run_functions_tuples_in_parallel(search_functions)
         if not all_search_results:
             all_search_results = []
@@ -1065,7 +1161,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
-        # stored in Vespa).
+        # stored in the document index).
         with get_session_with_current_tenant() as enrichment_session:
             populate_file_ids_on_sections(top_sections, enrichment_session)
 
@@ -1108,8 +1204,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         selected_sections, best_doc_ids = select_sections_for_expansion(
             sections=sections_for_selection,
             user_query=secondary_flows_user_query,
-            llm=self.llm,
+            llm=self.selection_llm,
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            enforce_llm_input_budget=self.enforce_selection_input_budget,
         )
 
         # End timing for LLM document selection
@@ -1153,6 +1250,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
+                    enforce_llm_input_budget=self.enforce_selection_input_budget,
                 )
                 # Return expanded section if not None, otherwise original
                 return expanded_section if expanded_section is not None else section
@@ -1170,7 +1268,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 (
                     section,
                     secondary_flows_user_query,
-                    self.llm,
+                    self.selection_llm,
                     self.document_index,
                     section.center_chunk.document_id in best_doc_ids_set,
                 ),

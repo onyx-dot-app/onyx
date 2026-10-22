@@ -29,9 +29,14 @@ const config: StorybookConfig = {
   },
   staticDirs: ["../public"],
   typescript: {
-    reactDocgen: "react-docgen-typescript",
+    // react-docgen-typescript needs the TypeScript 5/6 JS API.
+    reactDocgen: "react-docgen",
   },
   viteFinal: async (config) => {
+    config.optimizeDeps = {
+      ...config.optimizeDeps,
+      holdUntilCrawlEnd: false,
+    };
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
       ...config.resolve.alias,

@@ -3,7 +3,8 @@ description: >-
   Logs in to dhi.io and exports the build args that point web/Dockerfile and
   backend/Dockerfile.model_server at the pinned Docker Hardened Images (DHI).
   Both Dockerfiles default to public Docker Hub images, so without DHI credentials
-  (fork pull requests) this action exports nothing and the defaults apply.
+  (fork pull requests) this action exports nothing and the defaults apply. The
+  same applies when the login fails and the `required` input is "false".
 inputs:
   docker-username:
     description: "Docker Hub username (the account must have DHI catalog access)"
@@ -13,6 +14,13 @@ inputs:
     description: "Docker Hub token"
     required: false
     default: ""
+  required:
+    description: >-
+      "true" fails the step when the dhi.io login fails. "false" falls back to the
+      public base images with a warning. Use "false" only for builds that do not
+      ship, such as PR test images.
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -30,27 +38,56 @@ runs:
           echo "No DHI credentials; the images build on their public base defaults."
         fi
 
+    # dhi.io has outages (503 on /v2/). Retry with backoff, and let callers
+    # that do not ship the image fall back to the public bases.
     - name: Login to Docker Hardened Images (dhi.io)
+      id: login
       if: steps.creds.outputs.available == 'true'
-      uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
-      with:
-        registry: dhi.io
-        username: ${{ inputs.docker-username }}
-        password: ${{ inputs.docker-token }}
+      shell: bash
+      env:
+        DOCKER_USERNAME: ${{ inputs.docker-username }}
+        DOCKER_TOKEN: ${{ inputs.docker-token }}
+        DHI_REQUIRED: ${{ inputs.required }}
+      run: |
+        set -uo pipefail
+        if [ "${DHI_REQUIRED}" != "true" ] && [ "${DHI_REQUIRED}" != "false" ]; then
+          echo "::error::input 'required' must be \"true\" or \"false\", got \"${DHI_REQUIRED}\""
+          exit 1
+        fi
+        attempts=4
+        for attempt in $(seq "${attempts}"); do
+          if printf '%s' "${DOCKER_TOKEN}" \
+            | docker login dhi.io --username "${DOCKER_USERNAME}" --password-stdin; then
+            echo "logged-in=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${attempt}" -lt "${attempts}" ]; then
+            delay=$((attempt * 15))
+            echo "dhi.io login attempt ${attempt}/${attempts} failed; retrying in ${delay}s"
+            sleep "${delay}"
+          fi
+        done
+        echo "logged-in=false" >> "$GITHUB_OUTPUT"
+        if [ "${DHI_REQUIRED}" = "false" ]; then
+          echo "::warning::dhi.io login failed after ${attempts} attempts; building on the public base images instead of the hardened ones"
+          exit 0
+        fi
+        echo "::error::dhi.io login failed after ${attempts} attempts"
+        exit 1
 
     # Single source of truth for the DHI digests. Refresh one with:
     # docker buildx imagetools inspect <image reference>
     - name: Export DHI build args
-      if: steps.creds.outputs.available == 'true'
+      if: steps.login.outputs.logged-in == 'true'
       shell: bash
       run: |
         {
           echo "DHI_NODE_BUILD_ARGS<<EOF"
-          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:f0e1923112d1d0e9346cf0ec78cfd3cd280c1b5796661f86b9c39797bd219563"
-          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:499a967b45c046a93519d2fcbd7e0e165f92ccf25cdee9893cb51980957e2d7c"
+          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:82faf1b494d48d78a3febec99e7a1f3a44488dbb0b7fa2d336baa405431adc40"
+          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:c6ddacf90691f33734423b06682a63b27abeeafee294830455e91c79614ece8b"
           echo "EOF"
           echo "DHI_PYTHON_BUILD_ARGS<<EOF"
-          echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:901a66c250f72f33997f97ac7d2ebfdf5303b1e003896d4cdfcf1effea87b888"
-          echo "PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:a74d45422d8a9a84920f95ea9650f2b7e7372f3e89c51b0b6f9a3fa697a2d112"
+          echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:bc9e05f101c0a1db112d53d99df573f1abf3143c74e258cb0887577c14165bbe"
+          echo "PYTHON_RUNTIME_IMAGE=dhi.io/python:3.13-debian13@sha256:553f074749f9e189ad2f5d5678dab4b5ae20a0496700b6a48042c2e0de34d331"
           echo "EOF"
         } >> "$GITHUB_ENV"

@@ -21,10 +21,7 @@ from tests.integration.common_utils.test_models import DATestUser, DATestUserGro
 
 
 def _set_membership_is_manager(user_id: str, group_id: int, value: bool) -> None:
-    """Flip is_manager on one (user, group) edge, then recompute.
-
-    make_group_manager lands in a later PR, so promote by writing the edge directly.
-    """
+    """Flip is_manager on one (user, group) edge, then recompute."""
     with get_session_with_current_tenant() as db_session:
         db_session.execute(
             update(User__UserGroup)
@@ -50,7 +47,7 @@ def _set_members(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_user_gets_permissions_when_added_to_group(admin_user: DATestUser) -> None:
@@ -95,7 +92,7 @@ def test_user_gets_permissions_when_added_to_group(admin_user: DATestUser) -> No
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_group_permission_change_propagates_to_all_members(
@@ -151,7 +148,7 @@ def test_group_permission_change_propagates_to_all_members(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_is_group_manager_flag_recomputed_on_manager_change(
@@ -176,7 +173,7 @@ def test_is_group_manager_flag_recomputed_on_manager_change(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_is_group_manager_true_when_managing_any_group(
@@ -205,7 +202,7 @@ def test_is_group_manager_true_when_managing_any_group(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_removing_a_users_last_group_is_rejected(admin_user: DATestUser) -> None:
@@ -244,7 +241,7 @@ def test_removing_a_users_last_group_is_rejected(admin_user: DATestUser) -> None
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_removal_allowed_while_another_group_survives(admin_user: DATestUser) -> None:
@@ -264,7 +261,7 @@ def test_removal_allowed_while_another_group_survives(admin_user: DATestUser) ->
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_deleting_a_users_last_group_is_rejected(admin_user: DATestUser) -> None:

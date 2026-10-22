@@ -6,11 +6,11 @@ annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
     # via pydantic
-anyio==4.13.0
+anyio==4.14.2
     # via
     #   starlette
     #   watchfiles
-certifi==2026.6.17
+certifi==2026.10.19
     # via requests
 cffi==2.0.0
     # via cryptography
@@ -22,7 +22,7 @@ click==8.4.1
     # via uvicorn
 contourpy==1.3.3
     # via matplotlib
-cryptography==49.0.0
+cryptography==50.0.0
     # via
     #   -r initial-requirements.in
     #   pdfminer-six
@@ -73,7 +73,7 @@ pdfminer-six==20251230
     # via pdfplumber
 pdfplumber==0.11.9
     # via -r initial-requirements.in
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -r initial-requirements.in
     #   matplotlib
@@ -123,7 +123,7 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
-urllib3==2.7.0
+urllib3==2.8.0
     # via requests
 uvicorn[standard]==0.49.0
     # via -r initial-requirements.in

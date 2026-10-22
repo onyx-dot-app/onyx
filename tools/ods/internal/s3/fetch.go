@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -109,7 +110,12 @@ func fetch(s3url string, destPath string, quiet bool) error {
 	if err != nil {
 		return err
 	}
+	return fetchFrom(parsed.HTTPEndpoint(), s3url, destPath, quiet)
+}
 
+// fetchFrom is fetch with the unsigned endpoint given, so tests can point it at
+// a local server.
+func fetchFrom(endpoint string, s3url string, destPath string, quiet bool) error {
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
@@ -122,7 +128,7 @@ func fetch(s3url string, destPath string, quiet bool) error {
 
 	// Try unsigned HTTP request first
 	progress("Attempting unsigned download...")
-	unsignedErr := fetchUnsigned(parsed.HTTPEndpoint(), destPath, progress)
+	unsignedErr := fetchUnsigned(endpoint, destPath, progress)
 	if unsignedErr == nil {
 		return nil
 	}
@@ -155,10 +161,25 @@ func fetch(s3url string, destPath string, quiet bool) error {
 	return fmt.Errorf("failed to download from S3: %w\n\nTo authenticate, run:\n  aws sso login\n\nOr configure AWS credentials with:\n  aws configure sso", cliErr)
 }
 
+var httpClient = newHTTPClient(http.DefaultTransport)
+
+// newHTTPClient bounds the wait for a response. It sets no overall timeout,
+// because large objects can take long to download. It uses a base transport
+// that is not an *http.Transport as it is.
+func newHTTPClient(base http.RoundTripper) *http.Client {
+	transport, ok := base.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: base}
+	}
+	transport = transport.Clone()
+	transport.ResponseHeaderTimeout = 30 * time.Second
+	return &http.Client{Transport: transport}
+}
+
 // fetchUnsigned attempts to download the file using an unsigned HTTP request.
 // It takes the endpoint as a string so tests can point it at a local server.
 func fetchUnsigned(endpoint string, destPath string, progress logFunc) (err error) {
-	resp, err := http.Get(endpoint)
+	resp, err := httpClient.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}

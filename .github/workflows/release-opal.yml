@@ -13,7 +13,7 @@ jobs:
     # mitigates zizmor's cache-poisoning class of finding at the source rather than
     # suppressing it. Bumping Node = bump the digest.
     container:
-      image: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+      image: node:24@sha256:14078204b6bb268c107ceff6d3c43f45a888105e5c2b18b14c32b3409d93a1b0
     environment:
       name: release-opal
     permissions:
@@ -53,7 +53,7 @@ jobs:
           npm pkg set version="${TAG_VERSION}"
 
       # Opal's CSS build inlines @onyx-ai/shared's generated design tokens, and its
-      # dts build (tsup `dts: { resolve: true }`) inlines shared's contracts types
+      # dts build (tsdown bundles devDependencies) inlines shared's contracts types
       # (TextFont/TextColor) — so shared's full build (tokens + ts) must run first.
       # The published opal is then self-contained.
       - name: Build shared (design tokens)

@@ -21,7 +21,10 @@ from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.models import SalesforceChildQueryPlan
+from onyx.connectors.salesforce.models import (
+    SalesforceChildFields,
+    SalesforceChildQueryPlan,
+)
 from onyx.connectors.salesforce.utils import (
     CREATED_FIELD,
     ID_FIELD,
@@ -171,13 +174,17 @@ def get_object_by_id_queries(
     ]
 
 
-def _child_window_selection(queryable_fields: set[str]) -> str:
+def _child_window_selection(sortable_fields: set[str]) -> str:
     # newest children first so a recently changed child makes the window, with
-    # Id as tiebreaker so the order is total
+    # Id as tiebreaker so the order is total. SOQL sorts nulls first by default
+    # and some entities reject DESC NULLS FIRST (UNSUPPORTED_QUERY).
+    order_fields = [ID_FIELD]
     for field in (MODIFIED_FIELD, CREATED_FIELD):
-        if field in queryable_fields:
-            return f"ORDER BY {field} DESC, {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
-    return f"ORDER BY {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+        if field in sortable_fields:
+            order_fields.insert(0, field)
+            break
+    order_by = SOQL_FIELD_SEPARATOR.join(f"{f} DESC NULLS LAST" for f in order_fields)
+    return f"ORDER BY {order_by} LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
 
 
 def _child_ids_selection(ids: list[str]) -> str:
@@ -199,9 +206,7 @@ def _make_child_subquery(
     return f"(SELECT {fields_fragment} FROM {child_relationship} {selection})"  # noqa: S608
 
 
-def _child_subquery_overhead(
-    child_relationship: str, queryable_fields: set[str]
-) -> int:
+def _child_subquery_overhead(child_relationship: str, window_selection: str) -> int:
     """Encoded bytes a subquery needs beyond its field chunk, for the longer selection."""
     placeholder_ids = ["0" * _SF_ID_LENGTH] * SOQL_SUBQUERY_ROW_LIMIT
     return max(
@@ -209,10 +214,7 @@ def _child_subquery_overhead(
             _make_child_subquery(child_relationship, [ID_FIELD], selection)
             + SOQL_FIELD_SEPARATOR
         )
-        for selection in (
-            _child_window_selection(queryable_fields),
-            _child_ids_selection(placeholder_ids),
-        )
+        for selection in (window_selection, _child_ids_selection(placeholder_ids))
     )
 
 
@@ -229,7 +231,7 @@ def plan_child_queries(
     object_id: str,
     sf_type: str,
     child_relationships: list[str],
-    relationships_to_fields: dict[str, set[str]],
+    relationships_to_fields: dict[str, SalesforceChildFields],
 ) -> SalesforceChildQueryPlan:
     """Window queries select each relationship's newest rows with its first field
     chunk. Every query fits the URL budget and the subquery cap."""
@@ -239,17 +241,16 @@ def plan_child_queries(
     window_subqueries: list[str] = []
     remaining_chunks: dict[str, list[list[str]]] = {}
     for child_relationship in child_relationships:
-        queryable_fields = relationships_to_fields[child_relationship]
-        fields = sorted(f for f in queryable_fields if f != ID_FIELD)
-        overhead = _child_subquery_overhead(child_relationship, queryable_fields)
+        child_fields = relationships_to_fields[child_relationship]
+        fields = sorted(f for f in child_fields.queryable if f != ID_FIELD)
+        window_selection = _child_window_selection(child_fields.sortable)
+        overhead = _child_subquery_overhead(child_relationship, window_selection)
         first_chunk, *rest = _pack_for_url(
             fields, SOQL_FIELD_SEPARATOR, budget - overhead
         ) or [[]]
         window_subqueries.append(
             _make_child_subquery(
-                child_relationship,
-                [ID_FIELD, *first_chunk],
-                _child_window_selection(queryable_fields),
+                child_relationship, [ID_FIELD, *first_chunk], window_selection
             )
         )
         if rest:

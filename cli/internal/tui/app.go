@@ -39,16 +39,17 @@ type Model struct {
 	llmModels       []modelOption
 	modelOverride   *models.LLMOverride
 	parentMessageID *int
-	isStreaming     bool
 	streamCancel    context.CancelFunc
 	streamCh        <-chan models.StreamEvent
 	citations       map[int]string
 	attachedFiles   []models.FileDescriptorPayload
-	needsRename     bool
-	agentStarted    bool
 
 	// Configure state
 	configState *configState
+
+	isStreaming  bool
+	needsRename  bool
+	agentStarted bool
 
 	// Quit state
 	quitPending    bool

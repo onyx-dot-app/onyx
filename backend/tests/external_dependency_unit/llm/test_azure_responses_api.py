@@ -20,7 +20,7 @@ import pytest
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmLLM
 from tests.utils.secret_names import TestSecret
 
@@ -50,7 +50,6 @@ def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmLLM:
         api_base=_resource_base(test_secrets[TestSecret.AZURE_API_URL]),
         api_version=_DATED_API_VERSION,
         max_input_tokens=128_000,
-        timeout=60,
     )
 
 
@@ -85,8 +84,10 @@ def test_azure_responses_bridge_targets_v1_surface(
     urls = _record_posted_urls(monkeypatch)
     llm = _build_azure_llm(test_secrets)
 
-    messages: LanguageModelInput = [UserMessage(content="Say hello in three words")]
-    response = llm.invoke(messages, max_tokens=32)
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Say hello in three words")
+    ]
+    response = llm.invoke_raw(messages, max_tokens=32)
 
     assert response.choice.message.content
     _assert_v1_surface(urls, _resource_base(test_secrets[TestSecret.AZURE_API_URL]))
@@ -100,10 +101,12 @@ def test_azure_responses_bridge_streams_on_v1_surface(
     urls = _record_posted_urls(monkeypatch)
     llm = _build_azure_llm(test_secrets)
 
-    messages: LanguageModelInput = [UserMessage(content="Say hello in three words")]
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Say hello in three words")
+    ]
     content = "".join(
         chunk.choice.delta.content or ""
-        for chunk in llm.stream(messages, max_tokens=32)
+        for chunk in llm.stream_raw(messages, max_tokens=32)
     )
 
     assert content

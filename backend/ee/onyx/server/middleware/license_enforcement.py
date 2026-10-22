@@ -4,8 +4,8 @@ NOTE: This middleware is NOT used for multi-tenant (cloud) deployments.
 Multi-tenant gating is handled separately by the control plane via the
 /tenants/product-gating endpoint and is_tenant_gated() checks.
 
-Scope (post tier-split)
-=======================
+Scope
+=====
 Per-feature gating (which paths require which tier) lives in the
 `tier_gate` middleware and the `PATH_PREFIX_MIN_TIER` map. This
 middleware only handles the orthogonal *license-state* concerns:
@@ -17,31 +17,15 @@ middleware only handles the orthogonal *license-state* concerns:
 
 Per-tier feature gating is `tier_gate`'s job, regardless of deployment.
 
-IMPORTANT: Mutual Exclusivity with ENTERPRISE_EDITION_ENABLED
-============================================================
-This middleware is controlled by LICENSE_ENFORCEMENT_ENABLED env var.
-It works alongside the legacy ENTERPRISE_EDITION_ENABLED system:
-
-- LICENSE_ENFORCEMENT_ENABLED=false (default):
-  Middleware is disabled. EE features are controlled solely by
-  ENTERPRISE_EDITION_ENABLED. This preserves legacy behavior.
-
-- LICENSE_ENFORCEMENT_ENABLED=true:
-  Middleware actively enforces license state. EE features require
-  a valid license, regardless of ENTERPRISE_EDITION_ENABLED.
-
-Eventually, ENTERPRISE_EDITION_ENABLED will be removed and license
-enforcement will be the only mechanism for gating EE features.
-
-License Enforcement States (when enabled)
-=========================================
+License Enforcement States
+==========================
 For self-hosted deployments:
 
 1. No license (never subscribed):
    - Allow community features (basic connectors, search, chat).
    - Per-feature gating (Business/Enterprise paths) is delegated to
-     `tier_gate` — see PATH_PREFIX_MIN_TIER. This middleware no
-     longer blocks EE-only paths directly.
+     `tier_gate` — see PATH_PREFIX_MIN_TIER. This middleware does
+     not block EE-only paths itself.
 
 2. GATED_ACCESS (fully expired):
    - Block all routes except billing/auth/license.
@@ -63,7 +47,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
@@ -114,9 +97,6 @@ def add_license_enforcement_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         """Block requests when license is expired/gated."""
-        if not LICENSE_ENFORCEMENT_ENABLED:
-            return await call_next(request)
-
         path = strip_api_prefix(request.url.path)
 
         if _is_path_allowed(path):

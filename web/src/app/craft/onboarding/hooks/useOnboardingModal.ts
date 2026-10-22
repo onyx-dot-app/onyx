@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { OnboardingModalController } from "@/app/craft/onboarding/types";
 import {
@@ -14,7 +14,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 export function useOnboardingModal(): OnboardingModalController {
   const { user, isAdmin } = useUser();
-  const { llmProviders, isLoading: isLoadingLlm } = useLLMProviders();
+  const { llmProviders, isLoading: isLoadingLlm } = useLanguageModels();
 
   // Get ensurePreProvisionedSession from the session store
   const ensurePreProvisionedSession = useBuildSessionStore(

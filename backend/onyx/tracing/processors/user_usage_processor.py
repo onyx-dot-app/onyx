@@ -57,6 +57,7 @@ class _UsageRecord:
     user_id: str | None
     system_attribution: SystemUsageAttribution | None
     model: str
+    routed_model: str | None
     flow: str
     provider: str | None
     incognito: bool
@@ -66,6 +67,10 @@ class _UsageRecord:
     cache_creation_tokens: int
     image_count: int
     window_start: datetime
+    # Per-call token tuples (input, output, cache_read, cache_write, images)
+    # kept through aggregation: tiered prices must apply per call — a summed
+    # prompt could clear a long-context threshold no single call crossed.
+    cost_parts: tuple[tuple[int, int, int, int, int], ...] = ()
 
 
 def _usage_field(usage: dict[str, Any], *names: str) -> int:
@@ -162,6 +167,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             user_id=user_id,
             system_attribution=(_system_attribution(flow) if user_id is None else None),
             model=model,
+            routed_model=data.routed_model,
             flow=flow,
             provider=provider,
             incognito=incognito_mode is not None,
@@ -228,6 +234,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                 str | None,
                 SystemUsageAttribution | None,
                 str,
+                str | None,
                 str,
                 str | None,
                 bool,
@@ -241,14 +248,22 @@ class UserUsageTracingProcessor(TracingProcessor):
                 record.user_id,
                 record.system_attribution,
                 record.model,
+                record.routed_model,
                 record.flow,
                 record.provider,
                 record.incognito,
                 record.window_start,
             )
+            part = (
+                record.input_tokens,
+                record.output_tokens,
+                record.cache_read_tokens,
+                record.cache_creation_tokens,
+                record.image_count,
+            )
             current = aggregated.get(key)
             if current is None:
-                aggregated[key] = record
+                aggregated[key] = replace(record, cost_parts=(part,))
                 continue
             aggregated[key] = replace(
                 current,
@@ -259,6 +274,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                     current.cache_creation_tokens + record.cache_creation_tokens
                 ),
                 image_count=current.image_count + record.image_count,
+                cost_parts=current.cost_parts + (part,),
             )
         return list(aggregated.values())
 
@@ -274,17 +290,31 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     @staticmethod
     def _write_record(db_session: Session, record: _UsageRecord) -> None:
-        input_cost, output_cost = compute_cost_cents(
-            model=record.model,
-            provider=record.provider,
-            prompt_tokens=record.input_tokens,
-            completion_tokens=record.output_tokens,
-            cache_read_tokens=record.cache_read_tokens,
-            cache_creation_tokens=record.cache_creation_tokens,
-            flow=record.flow,
-            image_count=record.image_count,
-            db_session=db_session,
+        parts = record.cost_parts or (
+            (
+                record.input_tokens,
+                record.output_tokens,
+                record.cache_read_tokens,
+                record.cache_creation_tokens,
+                record.image_count,
+            ),
         )
+        input_cost = output_cost = 0.0
+        for p_in, p_out, p_read, p_write, p_images in parts:
+            part_in, part_out = compute_cost_cents(
+                model=record.model,
+                served_model=record.routed_model,
+                provider=record.provider,
+                prompt_tokens=p_in,
+                completion_tokens=p_out,
+                cache_read_tokens=p_read,
+                cache_creation_tokens=p_write,
+                flow=record.flow,
+                image_count=p_images,
+                db_session=db_session,
+            )
+            input_cost += part_in
+            output_cost += part_out
         usage = LLMUsageRecord(
             model=record.model,
             flow=record.flow,

@@ -33,26 +33,26 @@ type agentResource struct {
 }
 
 type agentResourceModel struct {
+	DocumentSetIDs              types.Set    `tfsdk:"document_set_ids"`
+	ToolIDs                     types.Set    `tfsdk:"tool_ids"`
+	StarterMessages             types.List   `tfsdk:"starter_messages"`
+	LabelIDs                    types.Set    `tfsdk:"label_ids"`
+	Users                       types.Set    `tfsdk:"users"`
+	Groups                      types.Set    `tfsdk:"groups"`
 	ID                          types.String `tfsdk:"id"`
 	Name                        types.String `tfsdk:"name"`
 	Description                 types.String `tfsdk:"description"`
 	SystemPrompt                types.String `tfsdk:"system_prompt"`
 	TaskPrompt                  types.String `tfsdk:"task_prompt"`
+	IconName                    types.String `tfsdk:"icon_name"`
+	DefaultModelConfigurationID types.String `tfsdk:"default_model_configuration_id"`
+	SearchStartDate             types.String `tfsdk:"search_start_date"`
+	DisplayPriority             types.Int64  `tfsdk:"display_priority"`
 	ReplaceBaseSystemPrompt     types.Bool   `tfsdk:"replace_base_system_prompt"`
 	DatetimeAware               types.Bool   `tfsdk:"datetime_aware"`
-	DocumentSetIDs              types.Set    `tfsdk:"document_set_ids"`
-	ToolIDs                     types.Set    `tfsdk:"tool_ids"`
 	IsPublic                    types.Bool   `tfsdk:"is_public"`
 	IsListed                    types.Bool   `tfsdk:"is_listed"`
 	IsFeatured                  types.Bool   `tfsdk:"is_featured"`
-	DisplayPriority             types.Int64  `tfsdk:"display_priority"`
-	IconName                    types.String `tfsdk:"icon_name"`
-	StarterMessages             types.List   `tfsdk:"starter_messages"`
-	LabelIDs                    types.Set    `tfsdk:"label_ids"`
-	DefaultModelConfigurationID types.String `tfsdk:"default_model_configuration_id"`
-	SearchStartDate             types.String `tfsdk:"search_start_date"`
-	Users                       types.Set    `tfsdk:"users"`
-	Groups                      types.Set    `tfsdk:"groups"`
 	BuiltinAgent                types.Bool   `tfsdk:"builtin_agent"`
 }
 

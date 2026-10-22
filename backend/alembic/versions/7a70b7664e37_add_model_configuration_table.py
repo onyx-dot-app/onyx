@@ -100,7 +100,7 @@ def _resolve(
     if fast_default_model_name:
         display_models.add(fast_default_model_name)
 
-    return set([(model, model in display_models) for model in models])
+    return {(model, model in display_models) for model in models}
 
 
 def upgrade() -> None:

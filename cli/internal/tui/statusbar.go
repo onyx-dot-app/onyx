@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 )
 
 // statusBar manages the footer status display.
@@ -22,14 +23,14 @@ func newStatusBar() statusBar {
 	}
 }
 
-func (s *statusBar) setAgent(name string) { s.agentName = name }
-func (s *statusBar) setModel(name string) { s.modelName = name }
+func (s *statusBar) setAgent(name string) { s.agentName = sanitize.Line(name) }
+func (s *statusBar) setModel(name string) { s.modelName = sanitize.Line(name) }
 func (s *statusBar) setServer(url string) { s.serverURL = url }
 func (s *statusBar) setSession(id string) {
 	if len(id) > 8 {
 		id = id[:8]
 	}
-	s.sessionID = id
+	s.sessionID = sanitize.Line(id)
 }
 func (s *statusBar) setStreaming(v bool) { s.streaming = v }
 func (s *statusBar) setWidth(w int)      { s.width = w }

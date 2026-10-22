@@ -25,7 +25,6 @@
     "evan-onyx",
     "Weves",
     "wenxi-onyx",
-    "jmelahman",
     "rohoswagger",
     "Subash-Mohan",
     "Danelegend",
@@ -72,6 +71,10 @@
     {
       "scope": ["backend/**/*.py"],
       "rule": "Never raise HTTPException directly in business code. Use `raise OnyxError(OnyxErrorCode.XXX, \"message\")` from `onyx.error_handling.exceptions`. A global FastAPI exception handler converts OnyxError into structured JSON responses with {\"error_code\": \"...\", \"detail\": \"...\"}. Error codes are defined in `onyx.error_handling.error_codes.OnyxErrorCode`. For upstream errors with dynamic HTTP status codes, use `status_code_override`: `raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)`."
+    },
+    {
+      "scope": ["backend/**", "web/**", "mobile/**", "desktop/**", "widget/**", "extensions/**", "cli/**", "deployment/**", "docs/craft/infra/**", ".agents/feature-map/components/**"],
+      "rule": "Onyx keeps a feature map in `.agents/feature-map/`. When a PR changes behaviour, find the touched code paths in `.agents/feature-map/PATHS.md` and read the matching component documents in `.agents/feature-map/components/`. If the PR changes something a component document states (an endpoint, permission, env var, default, data model field, documented behaviour in section 4, or a contract in section 5) and does not update that document, flag it and name the stale section. Do not flag changes that leave every documented statement true. If the PR edits a component document, check the edited claims against the code in the PR."
     }
   ]
 }

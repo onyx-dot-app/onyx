@@ -54,8 +54,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  /** Renders the control that opens the menu. */
-  trigger: (open: () => void) => React.ReactNode;
+  /** Renders the control that opens the menu. `isOpen` lets it show a selected state. */
+  trigger: (open: () => void, isOpen: boolean) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -211,7 +211,7 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      {trigger(handleOpen)}
+      {trigger(handleOpen, open)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>

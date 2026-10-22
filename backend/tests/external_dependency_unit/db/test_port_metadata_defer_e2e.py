@@ -32,7 +32,10 @@ from onyx.db.document import (
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    VectorQuantization,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     DocumentByConnectorCredentialPair,
@@ -44,7 +47,7 @@ from onyx.db.port_attempt import (
     create_port_attempt,
     mark_port_in_progress,
 )
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
     TenantState,
@@ -112,7 +115,6 @@ def _make_chunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
-        title_vector=None,
         content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,
@@ -152,7 +154,7 @@ def _index(index_name: str) -> OpenSearchDocumentIndex:
         tenant_state=_TENANT_STATE,
         index_name=index_name,
         embedding_dim=_VECTOR_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
 
 
@@ -270,7 +272,6 @@ def test_deferred_metadata_sync_no_stale_permission_leak(
         primary=_index(present_name),
         secondary=_index(future_name),
         secondary_embedding_dim=_VECTOR_DIM,
-        secondary_embedding_precision=EmbeddingPrecision.FLOAT,
     )
     req = MetadataUpdateRequest(
         document_ids=[doc_id],
@@ -489,7 +490,6 @@ def test_metadata_sync_does_not_defer_non_indexable_only_doc(
             primary=_index(present_name),
             secondary=_index(future_name),
             secondary_embedding_dim=_VECTOR_DIM,
-            secondary_embedding_precision=EmbeddingPrecision.FLOAT,
         )
         req = MetadataUpdateRequest(
             document_ids=[doc_id],
@@ -618,7 +618,6 @@ def test_acl_update_during_port_applies_to_both_indices(
         primary=_index(present_name),
         secondary=_index(future_name),
         secondary_embedding_dim=_VECTOR_DIM,
-        secondary_embedding_precision=EmbeddingPrecision.FLOAT,
     )
     req = MetadataUpdateRequest(
         document_ids=[doc_id],

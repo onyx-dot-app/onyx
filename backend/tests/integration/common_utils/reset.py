@@ -296,9 +296,7 @@ def reset_postgres(
             _seed_dev_license_if_set(db_session)
             # Promote the FUTURE search-settings row (danswer_chunk_<model>) to
             # PRESENT so secondary_search_settings is None and the api_server
-            # doesn't have to perform the swap mid-request. Previously this
-            # lived in reset_vespa(); when Vespa was deprecated the swap call
-            # needs to stay.
+            # doesn't have to perform the swap mid-request.
             check_and_perform_index_swap(db_session)
 
 

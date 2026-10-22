@@ -69,10 +69,11 @@ def outbound_allow_private_network(level: SSRFProtectionLevel) -> bool:
     return level == SSRFProtectionLevel.DISABLED
 
 
-def web_connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
-    """Whether the web connector validates crawl targets. Only the most
-    restrictive level guards connectors; at VALIDATE_LLM admin-configured
-    connectors may still reach private IPs."""
+def connector_ssrf_enforced(level: SSRFProtectionLevel) -> bool:
+    """The shared SSRF policy for admin-configured connector endpoints (web
+    crawl targets, self-hosted server URLs, SharePoint sites). Only the most
+    restrictive level guards connectors; at VALIDATE_LLM and above they may
+    reach private IPs."""
     return level == SSRFProtectionLevel.VALIDATE_ALL
 
 
@@ -136,6 +137,12 @@ class SecuritySettingsOverrides(BaseModel):
         default=None, json_schema_extra=_tenant_editable()
     )
     incognito_record_mode: IncognitoRecordMode | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    allow_connector_group_restrictions: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    allow_connector_check_findings: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
@@ -243,6 +250,8 @@ class SecuritySettings(BaseModel):
     allow_same_provider_subject_relink: bool
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
+    allow_connector_group_restrictions: bool
+    allow_connector_check_findings: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool

@@ -177,3 +177,7 @@
 .opal-sidebar-section__title {
   @apply flex px-0.5 py-1.5;
 }
+
+.opal-sidebar-section__tag {
+  @apply ms-auto me-0.5;
+}

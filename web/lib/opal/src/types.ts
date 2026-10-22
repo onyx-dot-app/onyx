@@ -69,6 +69,25 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 export type Rounding = 0.5 | 1 | 2 | 3 | 4 | 5 | "full";
 
 /**
+ * A line height on the {@link Spacing} scale, one of the `--height-line-*`
+ * tokens in size.json: `N` is `N / 4` rem.
+ *
+ * | Step | px | Token                     |
+ * |------|----|---------------------------|
+ * | `3`  | 12 | `height-line-small`       |
+ * | `4`  | 16 | `height-line-secondary`   |
+ * | `5`  | 20 | `height-line-main`        |
+ * | `6`  | 24 | `height-line-label`       |
+ * | `7`  | 28 | `height-line-h3-section`  |
+ * | `8`  | 32 | `height-line-h2-sub-headline` |
+ * | `9`  | 36 | `height-line-h1-headline` |
+ * | `12` | 48 | `height-line-h1-hero`     |
+ *
+ * Closed, like {@link Rounding}: only the app's line heights are valid.
+ */
+export type LineHeight = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
+
+/**
  * Extreme size variants ("fit" and "full" only).
  *
  * Used for width and height properties that only support extremal values.
@@ -92,6 +111,13 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
  * a different one on a container; a number cannot be ambiguous that way.
  */
 export type Spacing = number;
+
+/**
+ * A floating panel's width on the Tailwind scale (units of 0.25rem), one of
+ * the `--block-width-contextual-menu-*` steps in sizes.css: 30 is 7.5rem, 160
+ * is 40rem. Dropdown and Popover take the same steps.
+ */
+export type ContextualMenuWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90 | 120 | 160;
 
 /**
  * Shadow depth variants.
@@ -141,6 +167,7 @@ export type CardColor =
   | "transparent"
   | "background-tint-00"
   | "background-tint-01"
+  | "background-tint-02"
   | "status-info-00"
   | "status-success-00"
   | "status-warning-00"
@@ -157,19 +184,16 @@ export type CardColor =
  *
  * - `"default"` — standard text/border color (`text-04` / `border-01`)
  * - `"muted"` — de-emphasized color (`text-03`)
- * - `"danger"` — destructive / error state
- * - `"muted-success"` / `"muted-warning"`: status glyph against muted body text,
- *   for messages where the icon carries the state and the text stays secondary
+ * - `"success"` / `"warning"` / `"danger"` — a status glyph against muted body
+ *   text: the icon carries the state and the text stays secondary (`text-03`)
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
 export type ColorTypes =
   | "default"
   | "muted"
   | "success"
-  | "danger"
   | "warning"
-  | "muted-success"
-  | "muted-warning"
+  | "danger"
   | "interactive";
 
 // ---------------------------------------------------------------------------
@@ -221,7 +245,11 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
 }
 
 /** Strips `className` and `style` from a props type to enforce design-system styling. */
-export type WithoutStyles<T> = Omit<T, "className" | "style">;
+// Distributive so a union prop type keeps its arms (identical to plain Omit
+// for non-union types) — e.g. the selects' mode/options pairing survives.
+export type WithoutStyles<T> = T extends unknown
+  ? Omit<T, "className" | "style">
+  : never;
 
 // ---------------------------------------------------------------------------
 // Rich Strings
@@ -281,6 +309,204 @@ export type InputVariants =
   | "error"
   | "disabled"
   | "readOnly";
+
+// ---------------------------------------------------------------------------
+// Currency
+// ---------------------------------------------------------------------------
+
+/**
+ * An active ISO 4217 currency code, for `InputCurrency`'s `currency` prop.
+ * Withdrawn codes (DEM, HRK, ZWL) are left out; `Intl.supportedValuesOf`
+ * still lists them.
+ */
+export type CurrencyCode =
+  | "AED"
+  | "AFN"
+  | "ALL"
+  | "AMD"
+  | "AOA"
+  | "ARS"
+  | "AUD"
+  | "AWG"
+  | "AZN"
+  | "BAM"
+  | "BBD"
+  | "BDT"
+  | "BHD"
+  | "BIF"
+  | "BMD"
+  | "BND"
+  | "BOB"
+  | "BOV"
+  | "BRL"
+  | "BSD"
+  | "BTN"
+  | "BWP"
+  | "BYN"
+  | "BZD"
+  | "CAD"
+  | "CDF"
+  | "CHE"
+  | "CHF"
+  | "CHW"
+  | "CLF"
+  | "CLP"
+  | "CNY"
+  | "COP"
+  | "COU"
+  | "CRC"
+  | "CUP"
+  | "CVE"
+  | "CZK"
+  | "DJF"
+  | "DKK"
+  | "DOP"
+  | "DZD"
+  | "EGP"
+  | "ERN"
+  | "ETB"
+  | "EUR"
+  | "FJD"
+  | "FKP"
+  | "GBP"
+  | "GEL"
+  | "GHS"
+  | "GIP"
+  | "GMD"
+  | "GNF"
+  | "GTQ"
+  | "GYD"
+  | "HKD"
+  | "HNL"
+  | "HTG"
+  | "HUF"
+  | "IDR"
+  | "ILS"
+  | "INR"
+  | "IQD"
+  | "IRR"
+  | "ISK"
+  | "JMD"
+  | "JOD"
+  | "JPY"
+  | "KES"
+  | "KGS"
+  | "KHR"
+  | "KMF"
+  | "KPW"
+  | "KRW"
+  | "KWD"
+  | "KYD"
+  | "KZT"
+  | "LAK"
+  | "LBP"
+  | "LKR"
+  | "LRD"
+  | "LSL"
+  | "LYD"
+  | "MAD"
+  | "MDL"
+  | "MGA"
+  | "MKD"
+  | "MMK"
+  | "MNT"
+  | "MOP"
+  | "MRU"
+  | "MUR"
+  | "MVR"
+  | "MWK"
+  | "MXN"
+  | "MXV"
+  | "MYR"
+  | "MZN"
+  | "NAD"
+  | "NGN"
+  | "NIO"
+  | "NOK"
+  | "NPR"
+  | "NZD"
+  | "OMR"
+  | "PAB"
+  | "PEN"
+  | "PGK"
+  | "PHP"
+  | "PKR"
+  | "PLN"
+  | "PYG"
+  | "QAR"
+  | "RON"
+  | "RSD"
+  | "RUB"
+  | "RWF"
+  | "SAR"
+  | "SBD"
+  | "SCR"
+  | "SDG"
+  | "SEK"
+  | "SGD"
+  | "SHP"
+  | "SLE"
+  | "SOS"
+  | "SRD"
+  | "SSP"
+  | "STN"
+  | "SVC"
+  | "SYP"
+  | "SZL"
+  | "THB"
+  | "TJS"
+  | "TMT"
+  | "TND"
+  | "TOP"
+  | "TRY"
+  | "TTD"
+  | "TWD"
+  | "TZS"
+  | "UAH"
+  | "UGX"
+  | "USD"
+  | "USN"
+  | "UYI"
+  | "UYU"
+  | "UYW"
+  | "UZS"
+  | "VED"
+  | "VES"
+  | "VND"
+  | "VUV"
+  | "WST"
+  | "XAF"
+  | "XAG"
+  | "XAU"
+  | "XBA"
+  | "XBB"
+  | "XBC"
+  | "XBD"
+  | "XCD"
+  | "XCG"
+  | "XDR"
+  | "XOF"
+  | "XPD"
+  | "XPF"
+  | "XPT"
+  | "XSU"
+  | "XTS"
+  | "XUA"
+  | "XXX"
+  | "YER"
+  | "ZAR"
+  | "ZMW"
+  | "ZWG";
+
+/**
+ * Fraction digits an amount field accepts. A number is clamped to an integer
+ * in [0, 15]: amounts are JS numbers, which hold up to 15 significant digits
+ * exactly. `"unlimited"` is 15, spelled out for callers with no business
+ * limit. Like
+ * {@link Rounding}'s `"full"`, it is a string because a literal `Infinity`
+ * would widen the union back to `number`.
+ */
+export type CurrencyPrecision = number | "unlimited";
 
 /**
  * HTML button `type` attribute values.

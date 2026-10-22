@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,7 +161,9 @@ Examples:
     --current ./web/output/screenshots/ \
     --output ./web/output/screenshot-diff/admin/index.html`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCompare(opts)
+			if err := runCompare(opts, cmd.OutOrStdout()); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -214,7 +218,9 @@ Examples:
     --dir ./web/output/screenshots/ \
     --dest s3://onyx-playwright-artifacts/baselines/admin/main/`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runUploadBaselines(opts)
+			if err := runUploadBaselines(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -303,20 +309,21 @@ func downloadS3Dir(s3URL string, prefix string) (string, error) {
 	return tmpDir, nil
 }
 
-func runCompare(opts *ScreenshotDiffCompareOptions) {
+// runCompare returns errors whose text is the message Run logs before exiting.
+func runCompare(opts *ScreenshotDiffCompareOptions, out io.Writer) error {
 	// Validate cross-revision flags are used together
 	if (opts.FromRev != "") != (opts.ToRev != "") {
-		log.Fatal("--from-rev and --to-rev must be used together")
+		return errors.New("--from-rev and --to-rev must be used together")
 	}
 
 	resolveCompareDefaults(opts)
 
 	// Validate required fields
 	if opts.Baseline == "" {
-		log.Fatal("--baseline is required (or use --project to set defaults)")
+		return errors.New("--baseline is required (or use --project to set defaults)")
 	}
 	if opts.Current == "" {
-		log.Fatal("--current is required (or use --project to set defaults)")
+		return errors.New("--current is required (or use --project to set defaults)")
 	}
 
 	// Determine the project name for the summary (use flag or derive from path)
@@ -338,7 +345,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 	if strings.HasPrefix(opts.Baseline, "s3://") {
 		dir, err := downloadS3Dir(opts.Baseline, "screenshot-baseline-*")
 		if err != nil {
-			log.Fatalf("Failed to download baselines: %v", err)
+			return fatalErrorf("Failed to download baselines: %v", err)
 		}
 		tempDirs = append(tempDirs, dir)
 		baselineDir = dir
@@ -349,7 +356,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 	if strings.HasPrefix(opts.Current, "s3://") {
 		dir, err := downloadS3Dir(opts.Current, "screenshot-current-*")
 		if err != nil {
-			log.Fatalf("Failed to download current screenshots: %v", err)
+			return fatalErrorf("Failed to download current screenshots: %v", err)
 		}
 		tempDirs = append(tempDirs, dir)
 		currentDir = dir
@@ -361,7 +368,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 		log.Warn("This may be the first run -- no baselines to compare against.")
 		// Create an empty dir so CompareDirectories works (all files will be "added")
 		if err := os.MkdirAll(baselineDir, 0755); err != nil {
-			log.Fatalf("Failed to create baseline directory: %v", err)
+			return fatalErrorf("Failed to create baseline directory: %v", err)
 		}
 	}
 
@@ -370,7 +377,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 	if !filepath.IsAbs(outputPath) {
 		cwd, err := os.Getwd()
 		if err != nil {
-			log.Fatalf("Failed to get working directory: %v", err)
+			return fatalErrorf("Failed to get working directory: %v", err)
 		}
 		outputPath = filepath.Join(cwd, outputPath)
 	}
@@ -383,10 +390,10 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 
 		summary := imgdiff.Summary{Project: project}
 		if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
-			log.Fatalf("Failed to write summary: %v", err)
+			return fatalErrorf("Failed to write summary: %v", err)
 		}
 		log.Infof("Summary written to: %s", summaryPath)
-		return
+		return nil
 	}
 
 	log.Infof("Comparing screenshots...")
@@ -396,16 +403,16 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 
 	results, err := imgdiff.CompareDirectories(baselineDir, currentDir, opts.Threshold)
 	if err != nil {
-		log.Fatalf("Comparison failed: %v", err)
+		return fatalErrorf("Comparison failed: %v", err)
 	}
 
 	// Print terminal summary
-	printSummary(results)
+	_, _ = fmt.Fprint(out, summaryText(results))
 
 	// Build and write JSON summary (always)
 	summary := imgdiff.BuildSummary(project, results)
 	if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
-		log.Fatalf("Failed to write summary: %v", err)
+		return fatalErrorf("Failed to write summary: %v", err)
 	}
 	log.Infof("Summary written to: %s", summaryPath)
 
@@ -413,31 +420,33 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 	if summary.HasDifferences {
 		log.Infof("Generating report: %s", outputPath)
 		if err := imgdiff.GenerateReport(results, outputPath); err != nil {
-			log.Fatalf("Failed to generate report: %v", err)
+			return fatalErrorf("Failed to generate report: %v", err)
 		}
 		log.Infof("Report generated successfully: %s", outputPath)
 	} else {
 		log.Infof("No visual differences detected — skipping report generation.")
 	}
+	return nil
 }
 
-func runUploadBaselines(opts *ScreenshotDiffUploadOptions) {
+// runUploadBaselines returns errors whose text is the message Run logs before exiting.
+func runUploadBaselines(opts *ScreenshotDiffUploadOptions) error {
 	resolveUploadDefaults(opts)
 
 	// Validate required fields
 	if opts.Dir == "" {
-		log.Fatal("--dir is required (or use --project to set defaults)")
+		return errors.New("--dir is required (or use --project to set defaults)")
 	}
 	if opts.Dest == "" {
-		log.Fatal("--dest is required (or use --project to set defaults)")
+		return errors.New("--dest is required (or use --project to set defaults)")
 	}
 
 	if _, err := os.Stat(opts.Dir); os.IsNotExist(err) {
-		log.Fatalf("Screenshots directory does not exist: %s", opts.Dir)
+		return fatalErrorf("Screenshots directory does not exist: %s", opts.Dir)
 	}
 
 	if !strings.HasPrefix(opts.Dest, "s3://") {
-		log.Fatalf("Destination must be an S3 URL (s3://...): %s", opts.Dest)
+		return fatalErrorf("Destination must be an S3 URL (s3://...): %s", opts.Dest)
 	}
 
 	log.Infof("Uploading baselines...")
@@ -445,13 +454,15 @@ func runUploadBaselines(opts *ScreenshotDiffUploadOptions) {
 	log.Infof("  Dest:   %s", opts.Dest)
 
 	if err := s3.SyncUp(opts.Dir, opts.Dest, opts.Delete); err != nil {
-		log.Fatalf("Failed to upload baselines: %v", err)
+		return fatalErrorf("Failed to upload baselines: %v", err)
 	}
 
 	log.Info("Baselines uploaded successfully.")
+	return nil
 }
 
-func printSummary(results []imgdiff.Result) {
+// summaryText renders the terminal summary of a comparison.
+func summaryText(results []imgdiff.Result) string {
 	changed, added, removed, unchanged := 0, 0, 0, 0
 	for _, r := range results {
 		switch r.Status {
@@ -466,29 +477,31 @@ func printSummary(results []imgdiff.Result) {
 		}
 	}
 
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════╗")
-	fmt.Println("║          Visual Regression Summary           ║")
-	fmt.Println("╠══════════════════════════════════════════════╣")
-	fmt.Printf("║  Changed:   %-32d ║\n", changed)
-	fmt.Printf("║  Added:     %-32d ║\n", added)
-	fmt.Printf("║  Removed:   %-32d ║\n", removed)
-	fmt.Printf("║  Unchanged: %-32d ║\n", unchanged)
-	fmt.Printf("║  Total:     %-32d ║\n", len(results))
-	fmt.Println("╚══════════════════════════════════════════════╝")
-	fmt.Println()
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString("╔══════════════════════════════════════════════╗\n")
+	b.WriteString("║          Visual Regression Summary           ║\n")
+	b.WriteString("╠══════════════════════════════════════════════╣\n")
+	fmt.Fprintf(&b, "║  Changed:   %-32d ║\n", changed)
+	fmt.Fprintf(&b, "║  Added:     %-32d ║\n", added)
+	fmt.Fprintf(&b, "║  Removed:   %-32d ║\n", removed)
+	fmt.Fprintf(&b, "║  Unchanged: %-32d ║\n", unchanged)
+	fmt.Fprintf(&b, "║  Total:     %-32d ║\n", len(results))
+	b.WriteString("╚══════════════════════════════════════════════╝\n")
+	b.WriteString("\n")
 
 	if changed > 0 || added > 0 || removed > 0 {
 		for _, r := range results {
 			switch r.Status {
 			case imgdiff.StatusChanged:
-				fmt.Printf("  ⚠ CHANGED  %s (%.2f%% diff)\n", r.Name, r.DiffPercent)
+				fmt.Fprintf(&b, "  ⚠ CHANGED  %s (%.2f%% diff)\n", r.Name, r.DiffPercent)
 			case imgdiff.StatusAdded:
-				fmt.Printf("  ✚ ADDED    %s\n", r.Name)
+				fmt.Fprintf(&b, "  ✚ ADDED    %s\n", r.Name)
 			case imgdiff.StatusRemoved:
-				fmt.Printf("  ✖ REMOVED  %s\n", r.Name)
+				fmt.Fprintf(&b, "  ✖ REMOVED  %s\n", r.Name)
 			}
 		}
-		fmt.Println()
+		b.WriteString("\n")
 	}
+	return b.String()
 }

@@ -8,13 +8,13 @@ Validates that:
 
 2. The process_single_user_file_project_sync worker task reads persona
    associations from the DB, passes persona_ids to the document index via
-   VespaDocumentUserFields, and clears needs_persona_sync afterwards.
+   a MetadataUpdateRequest, and clears needs_persona_sync afterwards.
 
 3. upsert_persona correctly marks affected UserFiles with
    needs_persona_sync=True when file associations change.
 
-Uses real Redis and PostgreSQL.  Document index (Vespa) calls are mocked
-since we only need to verify the arguments passed to update_single.
+Uses real Redis and PostgreSQL.  Document index calls are mocked since we
+only need to verify the arguments passed to update.
 """
 
 from collections.abc import Generator
@@ -36,7 +36,7 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Persona__UserFile, User, UserFile
 from onyx.db.persona import upsert_persona
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
 )
@@ -250,11 +250,8 @@ class TestCheckSweepIncludesPersonaSync:
 _PATCH_GET_SETTINGS = (
     "onyx.background.celery.tasks.user_file_processing.tasks.get_active_search_settings"
 )
-_PATCH_GET_INDICES = (
-    "onyx.background.celery.tasks.user_file_processing.tasks.get_all_document_indices"
-)
-_PATCH_HTTPX_INIT = (
-    "onyx.background.celery.tasks.user_file_processing.tasks.httpx_init_vespa_pool"
+_PATCH_GET_INDEX = (
+    "onyx.background.celery.tasks.user_file_processing.tasks.get_default_document_index"
 )
 _PATCH_DISABLE_VDB = (
     "onyx.background.celery.tasks.user_file_processing.tasks.DISABLE_VECTOR_DB"
@@ -312,9 +309,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -392,9 +388,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -421,7 +416,7 @@ class TestSyncTaskWritesPersonaIds:
         db_session: Session,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """A soft-deleted persona should NOT appear in the persona_ids sent to Vespa."""
+        """A soft-deleted persona should NOT appear in the persona_ids sent to the index."""
         user = create_test_user(db_session, "sync_deleted")
         uf = _create_completed_user_file(db_session, user, needs_persona_sync=True)
         persona = _create_test_persona(db_session, user)
@@ -444,9 +439,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -610,9 +604,8 @@ def _run_sync(
 
     patches: list[Any] = [
         patch(_PATCH_DISABLE_VDB, False),
-        patch(_PATCH_HTTPX_INIT),
         patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-        patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+        patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         patch(_PATCH_ACTIVE_SECONDARY, return_value=port_target),
     ]
     if supply is not None:
@@ -826,10 +819,9 @@ def _run_index_pass(uf_id: str, port_target: Any, index_secondary: MagicMock) ->
     current.status.is_current.return_value = True
 
     with (
-        patch(_PATCH_HTTPX_INIT),
         patch(_PATCH_GET_SETTINGS_LIST, return_value=[current]),
         patch(_PATCH_EMBEDDER),
-        patch(_PATCH_GET_INDICES, return_value=[MagicMock()]),
+        patch(_PATCH_GET_INDEX, return_value=MagicMock()),
         patch(_PATCH_RUN_PIPELINE, return_value=present_result),
         patch(_PATCH_ACTIVE_SECONDARY, return_value=port_target),
         patch(_PATCH_INDEX_SECONDARY, index_secondary),
@@ -955,6 +947,65 @@ class TestSecondaryPassSkipsTerminalSideEffects:
                 enrichment=enricher,
                 db_session=db_session,
                 index_to_secondary=True,
+                failed_document_ids=set(),
+            )
+            db_session.refresh(uf)
+            assert uf.status == UserFileStatus.INDEXING
+            assert uf.chunk_count == 99
+        finally:
+            _purge_user_files(db_session, user)
+
+    def test_post_index_skips_a_failed_user_file(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """A failed write left the old chunks in place. Marking the file
+        COMPLETED would also notify its owner that it is ready, and the
+        caller's own FAILED flip cannot take a notification back."""
+        user = create_test_user(db_session, "failed_write")
+        uf = UserFile(
+            id=uuid4(),
+            user_id=user.id,
+            file_id=f"fp_{uuid4().hex[:8]}",
+            name=f"{uuid4().hex[:8]}.txt",
+            file_type="text/plain",
+            status=UserFileStatus.INDEXING,
+            chunk_count=99,
+        )
+        db_session.add(uf)
+        db_session.commit()
+        db_session.refresh(uf)
+        try:
+            enricher = UserFileChunkEnricher(
+                user_file_id_to_access={},
+                user_file_id_to_project_ids={},
+                user_file_id_to_persona_ids={},
+                doc_id_to_previous_chunk_cnt={},
+                doc_id_to_new_chunk_cnt={str(uf.id): 0},
+                user_file_id_to_raw_text={str(uf.id): ""},
+                user_file_id_to_token_count={},
+                no_access=DocumentAccess.build(
+                    user_emails=[],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            )
+            adapter = UserFileIndexingAdapter(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                db_session=db_session,
+            )
+            adapter.post_index(
+                context=MagicMock(updatable_docs=[MagicMock(id=str(uf.id))]),
+                updatable_chunk_data=[],
+                filtered_documents=[],
+                enrichment=enricher,
+                db_session=db_session,
+                index_to_secondary=False,
+                failed_document_ids={str(uf.id)},
             )
             db_session.refresh(uf)
             assert uf.status == UserFileStatus.INDEXING

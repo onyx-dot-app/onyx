@@ -1,8 +1,6 @@
 import json
 from collections.abc import Generator
 
-from github.Repository import Repository
-
 from ee.onyx.external_permissions.github.utils import (
     GitHubVisibility,
     form_collaborators_group_id,
@@ -18,7 +16,9 @@ from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.github.connector import DocMetadata, GithubConnector
+from onyx.connectors.github.models import GitHubRepository
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -40,15 +40,13 @@ def github_doc_sync(
 
     # Initialize GitHub connector with credentials
     github_connector: GithubConnector = GithubConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
 
     github_connector.load_credentials(credential_json(cc_pair))
     logger.info("GitHub connector credentials loaded successfully")
-
-    if not github_connector.github_client:
-        logger.error("GitHub client initialization failed")
-        raise ValueError("github_client is required")
 
     # Get all repositories from GitHub API
     logger.info("Fetching all repositories from GitHub API")
@@ -103,9 +101,7 @@ def github_doc_sync(
                 )
 
                 # Get new external access permissions for this repository
-                new_external_access = get_external_access_permission(
-                    repo, github_connector.github_client
-                )
+                new_external_access = get_external_access_permission(repo)
 
                 logger.info(
                     "Found %s documents for repository %s",
@@ -135,7 +131,7 @@ def github_doc_sync(
 
 
 def _is_repo_visibility_changed_from_groups(
-    repo: Repository,
+    repo: GitHubRepository,
     current_external_group_ids: list[str],
 ) -> bool:
     """

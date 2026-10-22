@@ -5,6 +5,12 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.action_policies import (
+    admin_router as action_policies_admin_router,
+)
+from onyx.server.features.build.action_policies import (
+    router as action_policies_router,
+)
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.debug import router as debug_router
 from onyx.server.features.build.external_apps.api import (
@@ -50,6 +56,7 @@ admin_router = APIRouter(
     prefix="/build/admin",
     dependencies=[Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS))],
 )
+admin_router.include_router(action_policies_admin_router, tags=["build"])
 admin_router.include_router(external_apps_admin_router, tags=["build"])
 
 
@@ -75,3 +82,5 @@ router.include_router(external_apps_router, tags=["build"])
 router.include_router(external_apps_oauth_router, tags=["build"])
 router.include_router(debug_router, tags=["build-debug"])
 router.include_router(approvals_router, tags=["build"])
+
+router.include_router(action_policies_router, tags=["build"])

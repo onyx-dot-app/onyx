@@ -125,9 +125,7 @@ def test_highspot_connector_poll_source(
     # a fixed historical window eventually excludes it. Anchor the window to the
     # item's current value instead.
     target_item = highspot_connector.client.get_item(target_doc_id)
-    updated_at = datetime.fromisoformat(
-        target_item["date_updated"].replace("Z", "+00:00")
-    )
+    updated_at = datetime.fromisoformat(target_item["date_updated"])
     start_time = (updated_at - timedelta(days=1)).timestamp()
     end_time = (updated_at + timedelta(days=1)).timestamp()
 

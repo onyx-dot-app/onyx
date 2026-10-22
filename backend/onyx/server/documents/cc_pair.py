@@ -13,69 +13,114 @@ from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_genera
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
+    CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     PUBLIC_API_TAGS,
-    DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.capability_checks.applicability import get_applicable_capabilities
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
+from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
+from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.exceptions import ValidationError
-from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.models import InputType
+from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.db.cc_pair_run_resolution import resolve_runs__no_commit
+from onyx.db.cc_pair_runs import (
+    count_matching_runs,
+    get_resolvable_runs,
+    resolve_matching_runs__no_commit,
+)
+from onyx.db.cc_pair_runs_models import CCPairRunFilter
+from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
+    get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
+    get_readable_connector_credential_pair_for_user,
+    lock_connector_credential_pair_row,
     remove_credential_from_connector,
+    stamp_indexing_hold_release,
     update_connector_credential_pair_from_id,
-    user_owns_groupless_cc_pair,
-    verify_user_can_edit_all_cc_pairs,
+    verify_user_can_manage_all_cc_pairs,
+    verify_user_has_access_to_cc_pair,
 )
+from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
+    CCPairRunErrors,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
+    SyncType,
 )
 from onyx.db.index_attempt import (
+    cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
+    get_index_attempt_errors_with_document_names_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
+    get_open_doc_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
+    get_waiting_index_attempt,
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    User,
+)
 from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
-    get_recent_doc_permission_sync_attempts_for_cc_pair,
-    get_relevant_external_group_sync_attempts_for_cc_pair,
 )
+from onyx.db.search_settings import get_current_search_settings
+from onyx.db.sync_record import fetch_latest_sync_record
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair_runs_feed import (
+    connector_supports_targeted_reindex,
+    fetch_run_feed,
+    open_level_filters,
+)
+from onyx.server.documents.cc_pair_throughput import throughput_of
+from onyx.server.documents.credential import credential_ids_to_mask
+from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
     CCPairFullInfo,
-    CCPairSyncAttemptsResponse,
+    CCPairHierarchyBreakdown,
+    CCPairRunLevel,
+    CCPairRunsResolvableCountResponse,
+    CCPairRunsResolveMatchingRequest,
+    CCPairRunsResolveMatchingResponse,
+    CCPairRunsResolveRequest,
+    CCPairRunsResolveResponse,
+    CCPairRunsResponse,
+    CCPairThroughputResponse,
+    CCPairThroughputWindow,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
     ConnectorCredentialPairIdentifier,
     ConnectorCredentialPairMetadata,
-    DocPermissionSyncAttemptSnapshot,
     DocumentSyncStatus,
-    ExternalGroupSyncAttemptSnapshot,
     IndexAttemptSnapshot,
     IndexAttemptStageMetricSnapshot,
     IndexAttemptStageMetricsResponse,
@@ -83,7 +128,6 @@ from onyx.server.documents.models import (
     synthesize_unaccounted,
 )
 from onyx.server.models import StatusResponse
-from onyx.server.security.store import get_security_settings
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -91,7 +135,6 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -101,17 +144,35 @@ router = APIRouter(prefix="/manage")
 def _get_readable_cc_pair(
     cc_pair_id: int, db_session: Session, user: User
 ) -> ConnectorCredentialPair | None:
-    """Fetch a cc-pair for the detail page and its sub-resources.
+    """Fetch a cc-pair for the detail page and its sub-resources."""
+    return get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
 
-    Neither filter contains the other, so both run: the read one drops a creator's
-    groupless private pair, the editable one drops public/sync pairs and plain group
-    membership. Editable runs second, so the common case still costs one query.
-    """
-    return get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
-    ) or get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=True
-    )
+
+def _get_readable_cc_pair_or_raise(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair:
+    """Same as _get_readable_cc_pair, but 403s when the caller cannot read the pair."""
+    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    return cc_pair
+
+
+def _get_operated_cc_pair_or_raise(
+    cc_pair_id: int, db_session: Session, user: User
+) -> ConnectorCredentialPair:
+    """Same as _get_readable_cc_pair_or_raise, but 403s unless the caller also operates the pair."""
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    return _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/index-attempts", tags=PUBLIC_API_TAGS)
@@ -124,11 +185,7 @@ def get_cc_pair_index_attempts(
     ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    if _get_readable_cc_pair(cc_pair_id, db_session, user) is None:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user permissions",
-        )
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
 
     total_count = count_index_attempts_for_cc_pair(
         db_session=db_session,
@@ -140,15 +197,19 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    attempt_ids = [index_attempt.id for index_attempt in index_attempts]
     error_counts = get_error_counts_for_index_attempts(
-        db_session=db_session,
-        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+        db_session=db_session, index_attempt_ids=attempt_ids
+    )
+    open_counts = get_open_doc_error_counts_for_index_attempts(
+        db_session=db_session, index_attempt_ids=attempt_ids
     )
     return PaginatedReturn(
         items=[
             IndexAttemptSnapshot.from_index_attempt_db_model(
                 index_attempt,
                 error_count=error_counts.get(index_attempt.id, 0),
+                open_doc_error_count=open_counts.get(index_attempt.id, 0),
             )
             for index_attempt in index_attempts
         ],
@@ -166,10 +227,9 @@ def get_index_attempt_stage_metrics(
 ) -> IndexAttemptStageMetricsResponse:
     """Return the per-stage timing breakdown for a single ``IndexAttempt``.
 
-    Returned in pipeline (enum declaration) order. The frontend renders this
-    order verbatim for the default "Pipeline order" sort and re-sorts
-    client-side for the "Time taken" sort. Auth: caller must have at least
-    read access to the cc-pair that owns the attempt.
+    Returned in pipeline (enum declaration) order, which the frontend renders
+    as-is. Auth: caller must have at least read access to the cc-pair that
+    owns the attempt.
     """
     index_attempt = get_index_attempt(
         db_session=db_session,
@@ -194,7 +254,7 @@ def get_index_attempt_stage_metrics(
         index_attempt_id=index_attempt_id,
     )
     stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
-    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    # Append the BATCH_UNACCOUNTED residual (the frontend sorts, so order is fine).
     unaccounted = synthesize_unaccounted(stages)
     if unaccounted is not None:
         stages.append(unaccounted)
@@ -204,133 +264,312 @@ def get_index_attempt_stage_metrics(
     )
 
 
-# Cap on how many recent attempts the per-cc-pair sync-history endpoints
-# will scan when computing pagination. The frontend pages over this fixed
-# pool client-side; older attempts beyond the cap are not surfaced. Matches
-# the previous (pre-CCPairSyncAttemptsResponse) behavior.
-_SYNC_ATTEMPTS_HISTORY_LIMIT = 1000
+_RUNS_MAX_PAGE_SIZE = 50
 
 
-def _get_cc_pair_source_or_raise(
+def _cc_pair_run_kinds(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> list[CCPairRunKind]:
+    """Indexing always, the permission syncs a perm-synced pair's source runs,
+    pruning when the pair has a prune schedule or has ever pruned, and the
+    checks of a source that names some."""
+    source = cc_pair.connector.source
+    kinds = [CCPairRunKind.INDEXING]
+    if cc_pair.access_type.is_perm_synced():
+        capabilities = get_applicable_capabilities(source)
+        if CredentialCapability.DOC_PERMISSION_SYNC in capabilities:
+            kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
+        if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
+            kinds.append(CCPairRunKind.GROUP_SYNC)
+    # The pruning beat's gate, plus a manual prune: a file connector never prunes.
+    if (
+        cc_pair.connector.prune_freq
+        or fetch_latest_sync_record(db_session, cc_pair.id, SyncType.PRUNING)
+        is not None
+    ):
+        kinds.append(CCPairRunKind.PRUNING)
+    if has_named_capability_checks(source):
+        kinds.append(CCPairRunKind.CHECKS)
+    return kinds
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/runs")
+def get_cc_pair_runs(
     cc_pair_id: int,
-    user: User,
-    db_session: Session,
-) -> DocumentSource:
-    """Authorize ``user`` for ``cc_pair_id`` and return its source.
-
-    Raises ``OnyxError(NOT_FOUND)`` if the cc-pair doesn't exist or the user
-    can't see it. Co-located with the sync-history endpoints because both
-    routes need the same cc-pair lookup + auth + source resolution.
-    """
-    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
+    since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    status_groups: list[CCPairRunStatusGroup] | None = Query(None),
+    q: str | None = Query(None, max_length=200),
+    errors: CCPairRunErrors | None = Query(None),
+    superseded: bool | None = Query(None),
+    resolved: bool | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResponse:
+    """The pair's index attempts and permission syncs as one feed, newest
+    first. ``since`` and ``until`` window on creation time, ``until``
+    exclusive, though a run still going is listed however old it is. ``q``
+    matches error messages, including an index attempt's document errors,
+    ``errors`` keeps only runs with document errors, open or resolved,
+    ``superseded`` leaves out or keeps the failed runs a newer run of their
+    kind followed, and ``resolved`` the runs an admin resolved."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
     if cc_pair is None:
         raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
         )
-    return cc_pair.connector.source
+    pair_kinds = _cc_pair_run_kinds(db_session, cc_pair)
+    wanted = [kind for kind in pair_kinds if kinds is None or kind in kinds]
+    groups = None if status_groups is None else set(status_groups)
+    run_filter = CCPairRunFilter(
+        cc_pair_ids=[cc_pair_id],
+        source=cc_pair.connector.source,
+        shared_sources=set(),
+        since=since,
+        until=until,
+        error_query=(q or "").strip() or None,
+        status_groups=groups,
+        errors=errors,
+        superseded=superseded,
+        resolved=resolved,
+    )
+    feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
+    return CCPairRunsResponse(
+        items=feed.items,
+        total_items=feed.total_items,
+        kinds=pair_kinds,
+        status_counts=feed.status_counts,
+    )
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
-def get_cc_pair_permission_sync_attempts(
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve")
+def resolve_cc_pair_runs(
     cc_pair_id: int,
-    page_num: int = Query(0, ge=0),
-    page_size: int = Query(10, ge=1, le=1000),
+    request: CCPairRunsResolveRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveResponse:
+    """Marks failed runs, or runs with open document errors, of the pair's feed
+    resolved. They keep their status; the feed moves them out of the open
+    failures and errors. Takes the targeted reindex's permissions."""
+    cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
+    wanted = list(dict.fromkeys((run.kind, run.attempt_id) for run in request.runs))
+    run_filter = CCPairRunFilter(
+        cc_pair_ids=[cc_pair_id],
+        source=cc_pair.connector.source,
+        shared_sources=set(),
+        since=None,
+        until=None,
+        error_query=None,
+        status_groups=None,
+        errors=None,
+        superseded=None,
+        resolved=None,
+    )
+    resolvable = get_resolvable_runs(
+        db_session, _cc_pair_run_kinds(db_session, cc_pair), run_filter, wanted
+    )
+    if len(resolvable) != len(wanted):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only this connector's failed runs or runs with open errors resolve.",
+        )
+    resolved_count = resolve_runs__no_commit(db_session, resolvable, user.id)
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={
+            "resolved_runs": [
+                {"kind": kind.value, "attempt_id": run_id} for kind, run_id in wanted
+            ]
+        },
+    )
+    return CCPairRunsResolveResponse(resolved_count=resolved_count)
+
+
+def _pair_open_levels(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User,
+    db_session: Session,
+) -> tuple[list[CCPairRunKind], list[CCPairRunFilter]]:
+    """The run kinds and the per-level filters of the open runs the request
+    names on a pair the caller operates."""
+    cc_pair = _get_operated_cc_pair_or_raise(cc_pair_id, db_session, user)
+    kinds = [
+        kind
+        for kind in _cc_pair_run_kinds(db_session, cc_pair)
+        if request.kinds is None or kind in request.kinds
+    ]
+    run_filters = open_level_filters(
+        request, [cc_pair_id], cc_pair.connector.source, set()
+    )
+    return kinds, run_filters
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/runs/resolvable-count")
+def get_resolvable_cc_pair_runs_count(
+    cc_pair_id: int,
+    level: CCPairRunLevel | None = Query(None),
+    q: str | None = Query(None, max_length=200),
+    since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolvableCountResponse:
+    """How many runs ``resolve-matching`` would mark for the same filter."""
+    request = CCPairRunsResolveMatchingRequest(
+        level=level, q=q, since=since, until=until, kinds=kinds
+    )
+    wanted, run_filters = _pair_open_levels(cc_pair_id, request, user, db_session)
+    return CCPairRunsResolvableCountResponse(
+        count=count_matching_runs(db_session, wanted, run_filters)
+    )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/runs/resolve-matching")
+def resolve_matching_cc_pair_runs(
+    cc_pair_id: int,
+    request: CCPairRunsResolveMatchingRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResolveMatchingResponse:
+    """Marks every open run of the requested level, or of every level, that
+    the pair's feed lists for the filter resolved, and returns how many."""
+    kinds, run_filters = _pair_open_levels(cc_pair_id, request, user, db_session)
+    resolved = resolve_matching_runs__no_commit(db_session, kinds, run_filters, user.id)
+    db_session.commit()
+    count = sum(resolved.values())
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"resolved_matching_runs": count},
+    )
+    return CCPairRunsResolveMatchingResponse(
+        resolved_count=count, cc_pair_ids=sorted(resolved)
+    )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/throughput")
+def get_cc_pair_throughput(
+    cc_pair_id: int,
+    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_24),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
-) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
-    """Recent doc-permission sync attempts for a cc-pair, paginated.
-
-    Returns ``applicable=False`` when the source does not run a separate
-    doc-permission sync job (e.g. Salesforce, where ACLs are pulled inline
-    during indexing). The frontend uses ``applicable`` to distinguish
-    "this kind of sync isn't applicable" from "no attempts yet".
-    """
-    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
-
-    source_requires_doc_sync = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_requires_doc_sync",
-        noop_return_value=False,
-    )
-    if not source_requires_doc_sync(source):
-        return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
-            applicable=False,
-            items=[],
-            total_items=0,
+) -> CCPairThroughputResponse:
+    """Estimates the documents the pair indexed in each equal slice of the
+    window (see ``docs_indexed_per_slice``), and lists the runs that overlap
+    it."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    if (
+        get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
         )
-
-    all_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
-        db_session=db_session,
-    )
-    start_idx = page_num * page_size
-    end_idx = start_idx + page_size
-    return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
-        applicable=True,
-        items=[
-            DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
-                attempt
-            )
-            for attempt in all_attempts[start_idx:end_idx]
-        ],
-        total_items=len(all_attempts),
-    )
+    return throughput_of(db_session, [cc_pair_id], window)
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts")
-def get_cc_pair_external_group_sync_attempts(
-    cc_pair_id: int,
-    page_num: int = Query(0, ge=0),
-    page_size: int = Query(10, ge=1, le=1000),
+def _cancel_index_attempt__no_commit(
+    db_session: Session, attempt: IndexAttempt, reason: str
+) -> str | None:
+    """Cancels an active attempt the way a pause does. A first attempt that
+    waits for the capability checks has no task to see a cancel request, so it
+    ends now and stays undispatched. Any other gets the request its task reads.
+    Returns the task id to revoke after the caller commits."""
+    if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
+        db_session, attempt.id, reason
+    ):
+        return None
+    IndexingCoordination.request_cancellation__no_commit(db_session, attempt.id)
+    return attempt.celery_task_id
+
+
+@router.post("/admin/index-attempt/{index_attempt_id}/cancel")
+def cancel_index_attempt(
+    index_attempt_id: int,
     user: User = Depends(
-        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
-) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
-    """Recent external-group sync attempts a viewer of this cc-pair would
-    expect to see, paginated.
-
-    Returns ``applicable=False`` when the source does not run a separate
-    external-group sync job. For sources whose group sync is logically
-    source-wide (Confluence, Jira), attempts triggered against any sibling
-    cc-pair sharing the source are included — see
-    ``get_relevant_external_group_sync_attempts_for_cc_pair``.
-    """
-    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
-
-    source_requires_external_group_sync = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_requires_external_group_sync",
-        noop_return_value=False,
-    )
-    if not source_requires_external_group_sync(source):
-        return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
-            applicable=False,
-            items=[],
-            total_items=0,
+) -> None:
+    """Cancels one running or queued index attempt of a pair the caller operates."""
+    attempt = get_index_attempt(db_session, index_attempt_id)
+    if attempt is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Index attempt not found")
+    if not verify_user_has_access_to_cc_pair(
+        attempt.connector_credential_pair_id,
+        db_session,
+        user,
+        CCPairAccessLevel.OPERATE,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this index attempt",
         )
+    if attempt.status.is_terminal():
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Index attempt is not running.")
 
-    all_attempts = get_relevant_external_group_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        source=source,
-        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
-        db_session=db_session,
+    task_id = _cancel_index_attempt__no_commit(
+        db_session, attempt, reason="Canceled by a user."
     )
-    start_idx = page_num * page_size
-    end_idx = start_idx + page_size
-    return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
-        applicable=True,
-        items=[
-            ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
-                attempt
-            )
-            for attempt in all_attempts[start_idx:end_idx]
-        ],
-        total_items=len(all_attempts),
+    db_session.commit()
+    if task_id:
+        client_app.control.revoke(task_id)
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=attempt.connector_credential_pair_id,
+        extra={"canceled_index_attempt_id": index_attempt_id},
+    )
+
+
+def _get_indexing_hold(
+    db_session: Session, cc_pair: ConnectorCredentialPair, *, can_operate: bool
+) -> IndexingHold | None:
+    """The hold on the pair's first index attempt, with the attempt that waits
+    when it is created. The failed checks are report internals, which are
+    management data, so a viewer who cannot operate the pair gets only the
+    reason."""
+    hold = get_first_indexing_hold(db_session, cc_pair)
+    if hold is None:
+        return None
+    waiting = get_waiting_index_attempt(
+        db_session, cc_pair.id, get_current_search_settings(db_session).id
+    )
+    return IndexingHold(
+        reason=hold.reason,
+        failed_checks=hold.failed_checks if can_operate else [],
+        index_attempt_id=waiting.id if waiting is not None else None,
     )
 
 
@@ -345,21 +584,24 @@ def get_cc_pair_full_info(
     tenant_id = get_current_tenant_id()
 
     # this route needs both halves of _get_readable_cc_pair, so it fetches them directly
-    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=True
+    operable_cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
     )
     cc_pair = (
         get_connector_credential_pair_from_id_for_user(
-            cc_pair_id, db_session, user, get_editable=False
+            cc_pair_id, db_session, user, CCPairAccessLevel.READ
         )
-        or editable_cc_pair
+        or operable_cc_pair
     )
     if not cc_pair:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             "CC Pair not found for current user permissions",
         )
-    is_editable_for_current_user = editable_cc_pair is not None
+    can_operate = operable_cc_pair is not None
+    can_edit = can_operate and verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
+    )
 
     document_count_info_list = list(
         get_document_counts_for_cc_pairs(
@@ -390,7 +632,7 @@ def get_cc_pair_full_info(
 
     # Get latest permission sync attempt for status
     latest_permission_sync_attempt = None
-    if cc_pair.access_type == AccessType.SYNC:
+    if cc_pair.access_type.is_perm_synced():
         latest_permission_sync_attempt = (
             get_latest_doc_permission_sync_attempt_for_cc_pair(
                 db_session=db_session,
@@ -400,9 +642,11 @@ def get_cc_pair_full_info(
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        mask_credential_prefix=bool(
+            credential_ids_to_mask([cc_pair.credential], user, db_session)
+        ),
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
-        owns_groupless=user_owns_groupless_cc_pair(cc_pair, db_session, user),
+        can_edit=can_edit,
         groups=[
             relationship.user_group_id
             for relationship in get_cc_pair_groups_for_ids(db_session, [cc_pair_id])
@@ -427,7 +671,8 @@ def get_cc_pair_full_info(
             tenant_id=tenant_id,
         ),
         num_docs_indexed=documents_indexed,
-        is_editable_for_current_user=is_editable_for_current_user,
+        is_editable_for_current_user=can_operate,
+        indexing_hold=_get_indexing_hold(db_session, cc_pair, can_operate=can_operate),
         indexing=bool(
             latest_attempt and latest_attempt.status == IndexingStatus.IN_PROGRESS
         ),
@@ -451,19 +696,26 @@ def get_cc_pair_full_info(
             if latest_permission_sync_attempt
             else None
         ),
-        supports_targeted_reindex=_connector_supports_targeted_reindex(
+        supports_targeted_reindex=connector_supports_targeted_reindex(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
+        has_named_checks=has_named_capability_checks(cc_pair.connector.source),
     )
 
 
-def _connector_supports_targeted_reindex(
-    source: DocumentSource, input_type: InputType
-) -> bool:
-    try:
-        return issubclass(identify_connector_class(source, input_type), Resolver)
-    except Exception:
-        return False
+@router.get("/admin/cc-pair/{cc_pair_id}/hierarchy-breakdown")
+def get_cc_pair_hierarchy_breakdown(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairHierarchyBreakdown | None:
+    """Document counts per hierarchy node (e.g. Confluence spaces). None until
+    the pair has a successful index attempt. A separate route, because the count
+    reads every document of the pair and the detail page must load fast."""
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    return build_cc_pair_hierarchy_breakdown(db_session, cc_pair)
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/status", tags=PUBLIC_API_TAGS)
@@ -487,7 +739,7 @@ def update_cc_pair_status(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
 
     if not cc_pair:
@@ -496,8 +748,8 @@ def update_cc_pair_status(
             "Connection not found for current user's permissions",
         )
 
-    # Pause/resume only. Accepting DELETING here would let a scoped manager delete via
-    # the editable-scope gate, bypassing the admin-only /deletion-attempt route.
+    # Pause/resume only. Accepting DELETING here would let an Operator delete via the
+    # operate gate, bypassing the Editor-only /deletion-attempt route.
     if status_update_request.status not in (
         ConnectorCredentialPairStatus.ACTIVE,
         ConnectorCredentialPairStatus.PAUSED,
@@ -507,7 +759,13 @@ def update_cc_pair_status(
             "Connector status can only be set to ACTIVE or PAUSED.",
         )
 
+    # Held through the status commit. Attempt creation takes the same lock,
+    # so an attempt created before the pause is in the select below, and a
+    # creation after it sees PAUSED.
+    lock_connector_credential_pair_row(db_session, cc_pair_id)
+
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    task_ids_to_revoke: list[str] = []
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         redis_connector.stop.set_fence(True)
 
@@ -527,10 +785,12 @@ def update_cc_pair_status(
 
         for attempt in active_attempts:
             try:
-                IndexingCoordination.request_cancellation(db_session, attempt.id)
-                # Revoke the task to prevent it from running
-                if attempt.celery_task_id:
-                    client_app.control.revoke(attempt.celery_task_id)
+                # The status commit below commits the cancel.
+                task_id = _cancel_index_attempt__no_commit(
+                    db_session, attempt, reason="Connector paused."
+                )
+                if task_id:
+                    task_ids_to_revoke.append(task_id)
                 logger.info(
                     "Requested cancellation for active indexing attempt %s due to connector pause: cc_pair=%s",
                     attempt.id,
@@ -552,6 +812,9 @@ def update_cc_pair_status(
 
     db_session.commit()
 
+    for task_id in task_ids_to_revoke:
+        client_app.control.revoke(task_id)
+
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
         AuditOutcome.SUCCESS,
@@ -564,7 +827,7 @@ def update_cc_pair_status(
     # this speeds up the start of indexing by firing the check immediately
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
-        kwargs=dict(tenant_id=tenant_id),
+        kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
     )
 
@@ -586,7 +849,7 @@ def update_cc_pair_name(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -620,7 +883,7 @@ def update_cc_pair_property(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -630,10 +893,11 @@ def update_cc_pair_property(
 
     # GATE 2 on every pair on this connector: refresh_freq and prune_freq live on the
     # shared Connector row. No empty guard — empty is the right side to fail on here
-    if not verify_user_can_edit_all_cc_pairs(
+    if not verify_user_can_manage_all_cc_pairs(
         get_cc_pair_ids_for_connector(db_session, cc_pair.connector_id),
         db_session,
         user,
+        CCPairAccessLevel.OPERATE,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -654,6 +918,20 @@ def update_cc_pair_property(
         db_session.commit()
 
         msg = "Pruning frequency updated successfully"
+    elif update_request.name == "check_frequency":
+        if not has_named_capability_checks(cc_pair.connector.source):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This connector's source has no checks to schedule.",
+            )
+        # Blank clears the schedule: the checks then run only on request.
+        set_connector_check_frequency(
+            db_session,
+            cc_pair.connector,
+            int(update_request.value) if update_request.value else None,
+        )
+
+        msg = "Check frequency updated successfully"
     else:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -661,6 +939,58 @@ def update_cc_pair_property(
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/release-indexing-hold")
+def release_indexing_hold(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    """Starts the pair's first index attempt despite the hold its connector
+    checks put on it. A check run started after this holds again."""
+    tenant_id = get_current_tenant_id()
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        access_level=CCPairAccessLevel.OPERATE,
+    )
+    if not cc_pair:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
+        )
+    if get_first_indexing_hold(db_session, cc_pair) is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Indexing is not held.")
+    stamp_indexing_hold_release(db_session, cc_pair)
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"indexing_hold": "released"},
+    )
+    # The indexing beat would dispatch the waiting attempt within its interval.
+    # Firing it now starts sooner. The release is saved, so a failed kick only
+    # logs and the beat picks it up.
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_INDEXING,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+        )
+    except Exception:
+        logger.exception(
+            "Could not kick off indexing after a hold release: cc_pair=%s", cc_pair_id
+        )
+    return StatusResponse(
+        success=True, message="Indexing hold released", data=cc_pair_id
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
@@ -671,13 +1001,7 @@ def get_cc_pair_last_pruned(
     ),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
-    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
-    if not cc_pair:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "CC Pair not found for current user's permissions",
-        )
-
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
     return cc_pair.last_pruned
 
 
@@ -696,7 +1020,7 @@ def prune_cc_pair(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -740,9 +1064,13 @@ def prune_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/get-docs-sync-status")
 def get_docs_sync_status(
     cc_pair_id: int,
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[DocumentSyncStatus]:
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+
     all_docs_for_cc_pair = get_documents_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
@@ -756,7 +1084,11 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
-    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
+    index_attempt_id: int | None = Query(None),
+    q: str | None = Query(None, max_length=200),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptErrorPydantic]:
     """Gives back all errors for a given CC Pair. Allows pagination based on page and page_size params.
@@ -766,29 +1098,70 @@ def get_cc_pair_indexing_errors(
         include_resolved: Whether to include resolved errors in the results
         page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
-        _: Current user, must be curator or admin
+        index_attempt_id: Keeps only the errors of this attempt
+        q: Keeps only errors whose message or document id contains this text
+        user: Current user; must be able to read this CC pair
         db_session: Database session
 
     Returns:
         Paginated list of indexing errors for the CC pair.
     """
+    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    query = (q or "").strip() or None
+
     total_count = count_index_attempt_errors_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
+        index_attempt_id=index_attempt_id,
+        query=query,
     )
 
-    index_attempt_errors = get_index_attempt_errors_for_cc_pair(
+    index_attempt_errors = get_index_attempt_errors_with_document_names_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
         page=page_num,
         page_size=page_size,
+        index_attempt_id=index_attempt_id,
+        query=query,
     )
     return PaginatedReturn(
-        items=[IndexAttemptErrorPydantic.from_model(e) for e in index_attempt_errors],
+        items=[
+            IndexAttemptErrorPydantic.from_model(error, document_name=name)
+            for error, name in index_attempt_errors
+        ],
         total_items=total_count,
     )
+
+
+def authorize_pairing(
+    metadata: ConnectorCredentialPairMetadata, user: User, db_session: Session
+) -> dict[int, ConnectorManageRole]:
+    """Runs the GATE 2 scope check for a new pair's manage groups, and returns
+    them. Shared by every path that pairs a connector with a credential. The
+    access-type rules are ``validate_pairing_access``."""
+
+    # GATE 2 write authorization (see assert_within_scope).
+    #
+    # A permission-synced connector carrying no groups is exempt: its ACLs are
+    # mirrored from the source, so it cannot surface a document to anyone who
+    # could not already read it there. There is no reach for a group to bound,
+    # and requiring one would attach a group that does not affect access at all.
+    # Groups may still be supplied to scope who may *manage* it, and those are
+    # checked normally below.
+    manage_access = metadata.manage_roles_by_group()
+    is_groupless_perm_sync = metadata.access_type.is_perm_synced() and not manage_access
+    if not is_groupless_perm_sync:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=manage_access.keys(),
+            is_non_public=metadata.access_type != AccessType.PUBLIC,
+        )
+    return manage_access
 
 
 @router.put(
@@ -810,41 +1183,63 @@ def associate_credential_to_connector(
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
 
-    # GATE 2 write authorization (see assert_within_scope).
-    #
-    # A permission-synced connector carrying no groups is exempt: its ACLs are
-    # mirrored from the source, so it cannot surface a document to anyone who
-    # could not already read it there. There is no reach for a group to bound,
-    # and requiring one would attach a group that does not affect access at all.
-    # Groups may still be supplied to scope who may *manage* it, and those are
-    # checked normally below.
-    is_groupless_perm_sync = (
-        metadata.access_type == AccessType.SYNC and not metadata.groups
-    )
-    if not is_groupless_perm_sync:
-        assert_within_scope(
-            user,
-            db_session,
-            permission=Permission.MANAGE_CONNECTORS,
-            current_group_ids=[],
-            requested_group_ids=metadata.groups or [],
-            is_non_public=metadata.access_type != AccessType.PUBLIC,
-        )
+    manage_access = authorize_pairing(metadata, user, db_session)
 
     # GATE 2 on the connector: it carries no creator or groups, so its pairs are what
     # says who may edit it. Empty means nobody owns it yet (create-then-associate)
     existing_cc_pair_ids = get_cc_pair_ids_for_connector(db_session, connector_id)
-    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
-        existing_cc_pair_ids, db_session, user
+    if existing_cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
 
+    # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
+    # connector, so ownership has to be settled before it runs.
+    if fetch_credential_by_id_for_user(credential_id, user, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
+        )
+
+    # After GATE 2: the access rules name the connector's source in their
+    # errors, so only a user who may edit the connector reaches them.
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector {connector_id} does not exist",
+        )
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector.source,
+        access_type=metadata.access_type,
+        data_access_group_ids=metadata.data_access,
+    )
+
+    # Validation claims the pairing's report row, so a duplicate request must
+    # stop before it: it would replace the live pair's report and fence out its
+    # run. The add below still answers a concurrent duplicate.
+    if (
+        get_connector_credential_pair(db_session, connector_id, credential_id)
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {connector_id} is already associated with credential "
+            f"{credential_id}.",
+        )
+
     try:
         validate_ccpair_for_user(
-            connector_id, credential_id, metadata.access_type, db_session
+            connector_id,
+            credential_id,
+            metadata.access_type,
+            db_session,
+            user=user,
         )
 
         response = add_credential_to_connector(
@@ -855,7 +1250,8 @@ def associate_credential_to_connector(
             cc_pair_name=metadata.name,
             access_type=metadata.access_type,
             auto_sync_options=metadata.auto_sync_options,
-            groups=metadata.groups,
+            manage_access=manage_access,
+            data_access_group_ids=metadata.data_access,
             processing_mode=metadata.processing_mode,
         )
 
@@ -935,7 +1331,7 @@ def dissociate_credential_from_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
     cc_pair_id = cc_pair.id if cc_pair else None
 

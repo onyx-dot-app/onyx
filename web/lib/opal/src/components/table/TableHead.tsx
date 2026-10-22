@@ -78,7 +78,7 @@ export default function TableHead({
   ...thProps
 }: TableHeadProps) {
   const resolvedSize = useTableSize();
-  const isSmall = resolvedSize === "md";
+  const isSmall = resolvedSize === 2.25;
   const strings = useOpalStrings();
   return (
     <th

@@ -1,0 +1,206 @@
+{
+  "aliases": {},
+  "models": {
+    "MiniMaxAI/MiniMax-M2.5": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.06,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "minimax",
+      "limit": {
+        "context": 196608,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiniMax-M2.5",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-02-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-ai/DeepSeek-V3.2": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.25,
+        "input": 0.5,
+        "output": 1.5
+      },
+      "family": "deepseek",
+      "limit": {
+        "context": 163840,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V3.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-12-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "google/gemma-4-31B-it": {
+      "attachment": true,
+      "cost": {
+        "input": 0.14,
+        "output": 0.4
+      },
+      "family": "gemma",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Gemma 4 31B IT",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-02",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai-org/GLM-5.1": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 202752,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.1",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-04-07",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai-org/GLM-5.2": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.26,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai-org/GLM-5.3": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.234,
+        "input": 1.26,
+        "output": 3.96
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "zai-org/GLM-5.3-Flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.15,
+        "output": 0.5
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "friendli"
+  ]
+}

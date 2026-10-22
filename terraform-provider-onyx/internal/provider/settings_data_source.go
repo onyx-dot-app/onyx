@@ -25,9 +25,18 @@ type settingsDataSource struct {
 
 // settingsDataSourceModel mirrors the full Settings object, read-only.
 type settingsDataSourceModel struct {
-	MaximumChatRetentionDays          types.Float64 `tfsdk:"maximum_chat_retention_days"`
 	CompanyName                       types.String  `tfsdk:"company_name"`
 	CompanyDescription                types.String  `tfsdk:"company_description"`
+	QueryHistoryType                  types.String  `tfsdk:"query_history_type"`
+	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
+	ApplicationStatus                 types.String  `tfsdk:"application_status"`
+	Tier                              types.String  `tfsdk:"tier"`
+	MaximumChatRetentionDays          types.Float64 `tfsdk:"maximum_chat_retention_days"`
+	ImageAnalysisMaxSizeMB            types.Int64   `tfsdk:"image_analysis_max_size_mb"`
+	UserFileMaxUploadSizeMB           types.Int64   `tfsdk:"user_file_max_upload_size_mb"`
+	FileTokenCountThresholdK          types.Int64   `tfsdk:"file_token_count_threshold_k"`
+	SeatCount                         types.Int64   `tfsdk:"seat_count"`
+	UsedSeats                         types.Int64   `tfsdk:"used_seats"`
 	AnonymousUserEnabled              types.Bool    `tfsdk:"anonymous_user_enabled"`
 	InviteOnlyEnabled                 types.Bool    `tfsdk:"invite_only_enabled"`
 	DeepResearchEnabled               types.Bool    `tfsdk:"deep_research_enabled"`
@@ -36,24 +45,15 @@ type settingsDataSourceModel struct {
 	AutoDetectSearchFilters           types.Bool    `tfsdk:"auto_detect_search_filters"`
 	TemperatureOverrideEnabled        types.Bool    `tfsdk:"temperature_override_enabled"`
 	AutoScroll                        types.Bool    `tfsdk:"auto_scroll"`
-	QueryHistoryType                  types.String  `tfsdk:"query_history_type"`
 	HideQueryHistoryFromAdminPanel    types.Bool    `tfsdk:"hide_query_history_from_admin_panel"`
 	ImageExtractionAndAnalysisEnabled types.Bool    `tfsdk:"image_extraction_and_analysis_enabled"`
-	ImageAnalysisMaxSizeMB            types.Int64   `tfsdk:"image_analysis_max_size_mb"`
 	UserKnowledgeEnabled              types.Bool    `tfsdk:"user_knowledge_enabled"`
-	UserFileMaxUploadSizeMB           types.Int64   `tfsdk:"user_file_max_upload_size_mb"`
-	FileTokenCountThresholdK          types.Int64   `tfsdk:"file_token_count_threshold_k"`
 	ShowExtraConnectors               types.Bool    `tfsdk:"show_extra_connectors"`
 	DisableDefaultAssistant           types.Bool    `tfsdk:"disable_default_assistant"`
 	CraftDefaultEnabled               types.Bool    `tfsdk:"craft_default_enabled"`
-	CraftInstructions                 types.String  `tfsdk:"craft_instructions"`
 	OpenSearchIndexingEnabled         types.Bool    `tfsdk:"opensearch_indexing_enabled"`
-	ApplicationStatus                 types.String  `tfsdk:"application_status"`
-	Tier                              types.String  `tfsdk:"tier"`
 	EEFeaturesEnabled                 types.Bool    `tfsdk:"ee_features_enabled"`
 	GPUEnabled                        types.Bool    `tfsdk:"gpu_enabled"`
-	SeatCount                         types.Int64   `tfsdk:"seat_count"`
-	UsedSeats                         types.Int64   `tfsdk:"used_seats"`
 }
 
 func (d *settingsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {

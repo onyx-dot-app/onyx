@@ -80,3 +80,31 @@ func TestRunCoverageGate_reportsAgainstTheBaseAndGatesOnTheFloors(t *testing.T) 
 		t.Errorf("expected the report to name the base:\n%s", got)
 	}
 }
+
+// A baseline or markdown path the gate cannot use fails the run, rather than
+// silently turning the gate off.
+func TestRunCoverageGate_unusableFilesExitOne(t *testing.T) {
+	profile := &coverage.Profile{Packages: []coverage.PackageCoverage{{Package: "cmd", Covered: 1, Total: 2}}}
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "file")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	malformed := filepath.Join(dir, "malformed.yaml")
+	if err := os.WriteFile(malformed, []byte("total: -5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, g := range map[string]coverageGate{
+		"malformed baseline":    {BaselinePath: malformed, Check: true},
+		"markdown under a file": {BaselinePath: filepath.Join(dir, "none.yaml"), Markdown: filepath.Join(blocker, "report.md")},
+		"baseline under a file": {BaselinePath: filepath.Join(blocker, "baseline.yaml"), Update: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			g.Kind, g.Profile, g.Name, g.Command = coverage.GoTests, profile, "tools/ods", "ods coverage ods"
+			if got := runCoverageGate(g); got != 1 {
+				t.Fatalf("expected exit code 1, got %d", got)
+			}
+		})
+	}
+}

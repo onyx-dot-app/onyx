@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { TextProps } from "@/refresh-components/texts/Text";
-import { Tooltip } from "@opal/components";
+import { Tooltip, type TooltipSide } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 
@@ -37,7 +37,7 @@ function useTruncated(children: React.ReactNode) {
 }
 
 export interface TruncatedProps extends TextProps {
-  side?: "top" | "right" | "bottom" | "left";
+  side?: TooltipSide;
   sideOffset?: number;
   disable?: boolean;
 }

@@ -37,11 +37,11 @@ var argCommands = map[string]bool{
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
 	textInput     textinput.Model
-	menuVisible   bool
 	menuItems     []slashCommand
-	menuIndex     int
 	attachedFiles []string
 	customPrompt  string
+	menuIndex     int
+	menuVisible   bool
 	suppressMenu  bool
 }
 

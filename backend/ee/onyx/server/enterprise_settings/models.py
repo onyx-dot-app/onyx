@@ -111,9 +111,6 @@ class EnterpriseSettings(BaseModel):
     custom_help_link_url: str | None = None
     custom_help_link_label: str | None = None
 
-    # hide the "Powered by Onyx" tagline under the sidebar logo
-    hide_onyx_branding: bool | None = None
-
     @field_validator("custom_help_link_url")
     @classmethod
     def _validate_help_link_scheme(cls, v: str | None) -> str | None:

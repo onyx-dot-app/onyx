@@ -117,18 +117,18 @@ def record_stage_aggregate(
 
     upsert_stmt = insert_stmt.on_conflict_do_update(
         index_elements=["index_attempt_id", "stage"],
-        set_=dict(
-            m2_duration_ms=new_m2,
-            event_count=new_count,
-            total_duration_ms=metric.total_duration_ms + excluded.total_duration_ms,
-            min_duration_ms=func.least(
+        set_={
+            "m2_duration_ms": new_m2,
+            "event_count": new_count,
+            "total_duration_ms": metric.total_duration_ms + excluded.total_duration_ms,
+            "min_duration_ms": func.least(
                 metric.min_duration_ms, excluded.min_duration_ms
             ),
-            max_duration_ms=func.greatest(
+            "max_duration_ms": func.greatest(
                 metric.max_duration_ms, excluded.max_duration_ms
             ),
-            time_last_event=excluded.time_last_event,
-        ),
+            "time_last_event": excluded.time_last_event,
+        },
     )
 
     db_session.execute(upsert_stmt)
@@ -368,8 +368,7 @@ class StageEventBuffer:
 # --- Read helpers ---------------------------------------------------------
 
 # Cached lookup from stage -> declaration index. Used to sort query results
-# in the natural pipeline order so the API response order is the canonical
-# "Pipeline order" the frontend renders by default.
+# in the natural pipeline order, which the frontend renders.
 _STAGE_PIPELINE_ORDER: dict[IndexAttemptStage, int] = {
     stage: idx for idx, stage in enumerate(IndexAttemptStage)
 }
@@ -382,8 +381,7 @@ def get_stage_metrics_for_attempt(
     """Return all stage metric rows for an attempt, in pipeline order.
 
     Pipeline order matches the declaration order of ``IndexAttemptStage`` so
-    the frontend can render the default "Pipeline order" sort by simply
-    rendering the response as-is.
+    the frontend can render the response as-is.
     """
     # Imported here to avoid a circular dependency: ``onyx.db.models`` imports
     # ``IndexAttemptStage`` from this module.

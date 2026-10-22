@@ -273,7 +273,7 @@ def get_cached_user_profile(
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
             # Empty string means user was not found previously
-            return cached_str if cached_str else None
+            return cached_str or None
     except Exception as e:
         logger.debug("Error reading user profile cache: %s", e)
 
@@ -993,7 +993,7 @@ def convert_slack_score(slack_score: float) -> float:
     return max(0.0, min(1.0, slack_score / 90_000))
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,
