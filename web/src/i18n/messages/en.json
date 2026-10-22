@@ -2977,7 +2977,7 @@
           "checks": "View Check Results"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# document failed} other {# documents failed}}",
+          "tooltip": "{count, plural, one {# item failed} other {# items failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}"
         },
         "newModel": {

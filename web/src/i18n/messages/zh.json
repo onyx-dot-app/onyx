@@ -2977,7 +2977,7 @@
           "checks": "查看检查结果"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {# 个文档失败}}",
+          "tooltip": "{count, plural, other {# 个项目失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}"
         },
         "newModel": {

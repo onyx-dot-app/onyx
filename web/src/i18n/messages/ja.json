@@ -2977,7 +2977,7 @@
           "checks": "チェック結果を表示"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "tooltip": "{count, plural, other {# 件の項目が失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
         },
         "newModel": {

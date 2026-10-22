@@ -2977,7 +2977,7 @@
           "checks": "검사 결과 보기"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {문서 #개 실패}}",
+          "tooltip": "{count, plural, other {항목 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
         "newModel": {

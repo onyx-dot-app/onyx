@@ -2977,7 +2977,7 @@
           "checks": "Prüfergebnisse anzeigen"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
+          "tooltip": "{count, plural, one {# Element fehlgeschlagen} other {# Elemente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
         },
         "newModel": {

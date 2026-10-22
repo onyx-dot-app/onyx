@@ -2977,7 +2977,7 @@
           "checks": "Voir les résultats des vérifications"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# document en échec} other {# documents en échec}}",
+          "tooltip": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}"
         },
         "newModel": {

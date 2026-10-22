@@ -2977,7 +2977,7 @@
           "checks": "Ver resultados de las comprobaciones"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
+          "tooltip": "{count, plural, one {# elemento falló} other {# elementos fallaron}}",
           "checks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}"
         },
         "newModel": {

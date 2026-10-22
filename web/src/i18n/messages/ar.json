@@ -2977,7 +2977,7 @@
           "checks": "عرض نتائج الفحوصات"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "tooltip": "{count, plural, one {فشل عنصر واحد} other {فشل # عناصر}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
         },
         "newModel": {

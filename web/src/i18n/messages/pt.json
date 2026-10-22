@@ -2977,7 +2977,7 @@
           "checks": "Ver resultados das verificações"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "tooltip": "{count, plural, one {# item falhou} other {# itens falharam}}",
           "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
         },
         "newModel": {
