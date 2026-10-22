@@ -1,6 +1,6 @@
 import re
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 from urllib.parse import urlparse
 
 from pydantic import field_validator
@@ -35,6 +35,7 @@ from onyx.db.enums import HierarchyNodeType
 _OAUTH_WIKI_BASE_KEY = "wiki_base"
 
 _COSMETIC = FieldPolicy(FieldClass.COSMETIC)
+_CLOUD_WIKI_PATH = "/wiki"
 _SPACE = "space"
 _PAGE_ID = "page_id"
 _INDEX_RECURSIVELY = "index_recursively"
@@ -114,6 +115,16 @@ class ConfluenceCredentialBinding(CredentialBinding):
     is_cloud: Annotated[bool, FieldPolicy(FieldClass.IDENTITY)]
     # Only selects the API gateway: document ids keep wiki_base.
     scoped_token: Annotated[bool, _COSMETIC] = False
+
+    site_url_fields: ClassVar[frozenset[str]] = frozenset({"wiki_base"})
+
+    def comparison_values(self) -> dict[str, Any]:
+        # Cloud document ids add "/wiki" when the base lacks it, so a cloud
+        # base with and without it is one site.
+        values = super().comparison_values()
+        if self.is_cloud:
+            values["wiki_base"] = values["wiki_base"].removesuffix(_CLOUD_WIKI_PATH)
+        return values
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
         authorized_wiki_base = credential_json.get(_OAUTH_WIKI_BASE_KEY)
