@@ -13,4 +13,4 @@ uv run pytest backend/tests/integration/tests/craft/k8s/cleanup -v
 ```
 
 Set `SANDBOX_CONTAINER_IMAGE` to the deployment's sandbox image when it is not the default.
-The Kubernetes CI workflow discovers these files and runs each in its own deployment shard.
+The Kubernetes CI workflow runs this directory in one deployment shard.
