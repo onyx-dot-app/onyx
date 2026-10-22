@@ -19,7 +19,7 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { useProjectsContext } from "@/lib/projects/providers";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -284,6 +284,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
+
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -295,6 +302,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
+      restoreInputBar,
     });
 
   // Chat session controller for loading sessions

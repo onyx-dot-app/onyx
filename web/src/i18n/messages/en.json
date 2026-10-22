@@ -11987,6 +11987,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Could not start a new chat. Try again."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
       },

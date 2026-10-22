@@ -11987,6 +11987,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Neuer Chat konnte nicht gestartet werden. Versuche es erneut."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
       },
