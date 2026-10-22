@@ -6820,6 +6820,10 @@
           "description": "Arrêtez dès maintenant de générer du contexte pour les documents nouveaux et mis à jour, ou reconstruisez tous les documents pour supprimer aussi le contexte déjà généré.",
           "title": "Choisissez comment désactiver la récupération contextuelle"
         },
+        "contextualEnableOnly": {
+          "description": "Générez du contexte pour les documents nouveaux et mis à jour à partir de maintenant, ou reconstruisez tous les documents pour que chaque document reçoive du contexte.",
+          "title": "Choisissez comment activer la récupération contextuelle"
+        },
         "contextualModelMissing": {
           "description": "La récupération contextuelle est activée mais aucun modèle n'est sélectionné. Choisissez un LLM de récupération contextuelle ci-dessous avant de réindexer : sans modèle, la réindexation ne peut pas démarrer.",
           "title": "Sélectionnez un LLM de récupération contextuelle"
@@ -6947,6 +6951,10 @@
       "disableForwardModal": {
         "description": "La récupération contextuelle s'arrête pour les documents ajoutés ou mis à jour à partir de maintenant. Les documents existants conservent le contexte déjà généré jusqu'à leur mise à jour ou jusqu'à la prochaine réindexation.",
         "title": "Désactiver la récupération contextuelle à partir de maintenant"
+      },
+      "enableForwardModal": {
+        "description": "La récupération contextuelle démarre pour les documents ajoutés ou mis à jour à partir de maintenant. Les documents existants restent tels quels jusqu'à leur mise à jour ou jusqu'à la prochaine réindexation, l'enrichissement contextuel peut donc varier d'un document à l'autre.",
+        "title": "Activer la récupération contextuelle à partir de maintenant"
       },
       "header": {
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
@@ -7167,6 +7175,8 @@
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",
         "contextualRetrievalDisableFailed": "Échec de la désactivation de la récupération contextuelle",
         "contextualRetrievalDisabled": "Récupération contextuelle désactivée",
+        "contextualRetrievalEnableFailed": "Échec de l'activation de la récupération contextuelle",
+        "contextualRetrievalEnabled": "Récupération contextuelle activée",
         "modelNotFound": "Impossible de trouver le modèle sélectionné",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "reindexCanceled": "Réindexation annulée",
