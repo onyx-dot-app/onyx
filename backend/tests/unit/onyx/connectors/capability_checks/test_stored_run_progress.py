@@ -93,3 +93,30 @@ def test_progress_runs_the_first_open_check_and_queues_the_rest() -> None:
         ]
 
         assert load_stored_run_progress(uuid4()) is None
+
+
+def test_progress_takes_results_in_the_order_they_finish() -> None:
+    """Checks run side by side, so a later check can finish first."""
+    cache = _FakeCache()
+    run_id = uuid4()
+    with patch(
+        "onyx.connectors.capability_checks.stored_run_progress.get_cache_backend",
+        return_value=cache,
+    ):
+        recorder = StoredRunProgressRecorder(
+            run_id,
+            [_Check("auth"), _Check("scopes"), _Check("channels")],
+            prior_results=[],
+            ttl=timedelta(minutes=5),
+        )
+        recorder.start()
+
+        recorder.on_result([_result("channels")])
+        recorder.on_result([_result("channels"), _result("auth")])
+
+        progress = load_stored_run_progress(run_id)
+        assert progress is not None
+        assert [r.check_id for r in progress.check_results] == ["channels", "auth"]
+        assert [(c.check_id, c.state) for c in progress.open_checks] == [
+            ("scopes", DraftCheckStateKind.RUNNING),
+        ]

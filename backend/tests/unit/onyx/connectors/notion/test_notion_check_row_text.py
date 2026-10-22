@@ -182,6 +182,7 @@ def test_an_unreachable_notion_fails_only_a_form_run(
     assert form.error_kind == stored.error_kind == kind
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
     gateway = workspace_gateway()
     gateway.iter_search.side_effect = api_error(429, "rate_limited")

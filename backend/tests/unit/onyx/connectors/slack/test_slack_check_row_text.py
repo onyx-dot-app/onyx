@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock
 from urllib.error import URLError
 
+import pytest
 from slack_sdk.web import SlackResponse
 
 from onyx.configs.constants import DocumentSource
@@ -203,6 +204,7 @@ def test_a_rate_limit_at_sign_in_is_incomplete() -> None:
     assert auth.summary == "Rate limited by Slack"
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_stops_the_checks_after_it() -> None:
     gateway = autospec_gateway()
     gateway.list_channels.side_effect = slack_error("ratelimited")

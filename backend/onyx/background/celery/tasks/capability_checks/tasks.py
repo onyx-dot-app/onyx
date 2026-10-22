@@ -89,6 +89,10 @@ from onyx.server.documents.capability_check_runs import (
     start_capability_check_run,
 )
 
+_UNFINISHED_STATES = frozenset(
+    {DraftCheckStateKind.PENDING, DraftCheckStateKind.RUNNING}
+)
+
 
 def _await_draft_results(
     check_ids: list[str],
@@ -332,10 +336,16 @@ def run_draft_capability_checks_task(
             )
         ) is not None:
             next_check.state = DraftCheckStateKind.RUNNING
-            # The check's hang guard, plus the guard of a connector
-            # instantiation that can run before it.
+        # Checks run side by side, so the lease covers the longest hang guard
+        # of the checks without a result, plus the guard of a connector
+        # instantiation that can run before them.
+        if unfinished := [
+            timeout_by_check_id[c.check_id]
+            for c in pending
+            if c.state in _UNFINISHED_STATES
+        ]:
             run.renew_lease(
-                timeout_by_check_id[next_check.check_id]
+                max(unfinished)
                 + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
             )
 

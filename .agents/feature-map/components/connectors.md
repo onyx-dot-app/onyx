@@ -501,7 +501,10 @@ INDEXING check, so its plan and runs hold no row). A source with named checks mu
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
 instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
-sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
+via `run_capability_checks`: a check starts once every check it depends on has
+a result, at most `MAX_PARALLEL_CHECKS` (4) at a time because source APIs
+rate-limit. Results come back in `run_order`; `on_result` gets them on the
+calling thread in the order they finish. The runner maps
 `ConnectorValidationError` to `FAILED` and anything else ambiguous to
 `INCOMPLETE`. Each result carries an `error_kind` (`models.py:CheckErrorKind`:
 rejected, permission, invalid, rate limited, timeout, unreachable, unexpected).
@@ -538,8 +541,9 @@ as `INCOMPLETE`. A check lists the checks it runs after in `depends_on`;
 only when every one that ran did not pass; the first one names the cause. An
 alternative that does not apply, or that lacked its own config or instance, is
 left out (HubSpot's sample checks after the read checks, Notion's page content
-after shared pages or the root page). After a rate limit, the rest of the run is
-`SKIPPED` too. A probe whose sample cannot decide raises
+after shared pages or the root page). After a rate limit, no other check
+starts: the checks not started are `SKIPPED`, and checks already running
+finish. Discovery checks start after every validation check has a result. A probe whose sample cannot decide raises
 `InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
 proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
 `not_run_reason: nothing_in_scope`, still a row). An empty scope fails the

@@ -62,12 +62,15 @@ _PROPOSED_CONFIG: dict[str, Any] = {"channels": ["proposed"]}
 
 
 class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
-    def __init__(self, harness: "_Harness", check_id: str) -> None:
+    def __init__(
+        self, harness: "_Harness", check_id: str, depends_on: tuple[str, ...] = ()
+    ) -> None:
         super().__init__(
             capability=CredentialCapability.INDEXING,
             check_id=check_id,
             display_name=f"{check_id} display",
             requires_connector_instance=False,
+            depends_on=depends_on,
         )
         self._harness = harness
 
@@ -113,7 +116,11 @@ class _Harness:
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
-        return [_FakeCheck(self, _TOKEN), _FakeConfigCheck(self, _CHANNELS)]
+        # Like a real source, the channels check runs after sign-in.
+        return [
+            _FakeCheck(self, _TOKEN),
+            _FakeConfigCheck(self, _CHANNELS, depends_on=(_TOKEN,)),
+        ]
 
     def run_last_task(self) -> None:
         run_draft_capability_checks_task(**self.send_task.call_args.kwargs["kwargs"])

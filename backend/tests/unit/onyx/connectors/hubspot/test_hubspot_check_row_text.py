@@ -5,6 +5,8 @@ and what a check that tested nothing says."""
 from collections.abc import Callable
 from unittest.mock import MagicMock
 
+import pytest
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -196,6 +198,7 @@ def test_an_api_error_carries_the_request_and_body() -> None:
     assert result.error_detail.response_excerpt == '{"status": "error"}'
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_is_incomplete_and_stops_the_run() -> None:
     gateway = healthy_gateway()
     gateway.list_records.side_effect = RateLimitTriedTooManyTimesError("429")

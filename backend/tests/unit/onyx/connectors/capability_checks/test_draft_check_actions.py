@@ -184,7 +184,11 @@ def _state(snapshot: DraftCheckRunSnapshot, check_id: str) -> DraftCheckState:
 
 
 @pytest.fixture
-def harness(monkeypatch: pytest.MonkeyPatch) -> _Harness:
+def harness(
+    monkeypatch: pytest.MonkeyPatch,
+    one_check_at_a_time: None,  # noqa: ARG001
+) -> _Harness:
+    # One at a time, so the tests can pin the order checks execute in.
     return _Harness(monkeypatch)
 
 

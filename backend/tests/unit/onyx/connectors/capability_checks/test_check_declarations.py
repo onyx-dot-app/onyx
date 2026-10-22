@@ -217,9 +217,14 @@ def test_dependencies_name_registered_checks_without_a_cycle(
 ) -> None:
     checks = _registered_checks(source)
     check_ids = {check.check_id for check in checks}
+    # Discovery checks start after every validation check, so none can be a
+    # validation check's dependency.
+    discovery_ids = {check.check_id for check in checks if check.discovery}
     for check in checks:
         assert set(check.dependency_ids) <= check_ids, check.check_id
         assert check.check_id not in check.dependency_ids, check.check_id
+        if not check.discovery:
+            assert not discovery_ids & set(check.dependency_ids), check.check_id
     # Raises on a cycle.
     run_order(checks)
 

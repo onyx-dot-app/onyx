@@ -175,6 +175,7 @@ def test_a_prior_failure_stops_a_dependent() -> None:
     assert results["list"].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
 
 
+@pytest.mark.usefixtures("one_check_at_a_time")
 def test_a_rate_limit_stops_the_rest_of_the_run() -> None:
     later = _Check("later")
     results = _run(
