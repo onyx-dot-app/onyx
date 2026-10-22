@@ -9,6 +9,7 @@ import {
   type Locale,
 } from "@/i18n/config";
 import englishMessages from "@/i18n/messages/en.json";
+import { getAuthTypeMetadataSS } from "@/lib/auth/svcSS";
 import { fetchStandardSettingsSS } from "@/lib/settings/svcSS";
 
 type MessageTree = { [key: string]: string | MessageTree };
@@ -35,10 +36,13 @@ function withEnglishFallback(base: MessageTree, overlay: MessageTree) {
 // objects of the same shape; the i18n catalog test enforces this.
 const english = englishMessages as MessageTree;
 
-// Only consulted when the request carries no usable locale cookie: anonymous
-// access or a first render before GET /me sets it. Any failure means English.
+// Only consulted without a usable locale cookie. Signed-out requests fall back
+// to the public /auth/type when GET /settings is denied. Any failure means
+// English.
 async function workspaceDefaultLocale(): Promise<Locale> {
-  const language = (await fetchStandardSettingsSS())?.default_language;
+  const language =
+    (await fetchStandardSettingsSS())?.default_language ??
+    (await getAuthTypeMetadataSS().catch(() => null))?.defaultLanguage;
   return isSupportedLocale(language) ? language : DEFAULT_LOCALE;
 }
 
