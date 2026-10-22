@@ -949,10 +949,29 @@ def get_open_doc_error_counts_for_index_attempts(
     db_session: Session,
     index_attempt_ids: list[int],
 ) -> dict[int, int]:
-    """Per-attempt counts of open document-level errors: unresolved, on an
-    attempt no admin resolved. Resolving the attempt leaves ``is_resolved``
-    alone, since the poll cursor and a targeted reindex read it. Attempt ids
+    """Per-attempt counts of open document-level errors, the ones a targeted
+    reindex can retry. Attempt ids with none are absent."""
+    return _open_error_counts(
+        db_session, index_attempt_ids, IndexAttemptError.document_id.isnot(None)
+    )
+
+
+def get_open_error_counts_for_index_attempts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+) -> dict[int, int]:
+    """Per-attempt counts of open errors, whole entities included. Attempt ids
     with none are absent."""
+    return _open_error_counts(db_session, index_attempt_ids)
+
+
+def _open_error_counts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+    *conditions: ColumnElement[bool],
+) -> dict[int, int]:
+    """An error is open while unresolved on an attempt no admin resolved. The
+    run resolution leaves ``is_resolved`` alone for the poll cursor and Retry."""
     if not index_attempt_ids:
         return {}
 
@@ -961,10 +980,10 @@ def get_open_doc_error_counts_for_index_attempts(
         .where(
             IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
             IndexAttemptError.is_resolved.is_(False),
-            IndexAttemptError.document_id.isnot(None),
             ~run_is_resolved(
                 CCPairRunKind.INDEXING, IndexAttemptError.index_attempt_id
             ),
+            *conditions,
         )
         .group_by(IndexAttemptError.index_attempt_id)
     )

@@ -113,7 +113,7 @@ type CardState =
 function cardState(
   run: CCPairRun,
   group: ActivityGroup,
-  closed: boolean
+  resolved: boolean
 ): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
@@ -121,7 +121,7 @@ function cardState(
     case "failures":
       return "failed";
     case "errors":
-      if (closed && !closedBySupersede(run)) return "resolved";
+      if (resolved) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -229,7 +229,9 @@ export default function ActivityCard({
     );
   const tRuns = useTranslations("admin.connector.runs");
   const active = isActive(run);
-  const state = cardState(run, group, closed);
+  const superseded = closed && closedBySupersede(run);
+  const resolved = closed && !superseded;
+  const state = cardState(run, group, resolved);
   const style = GROUP_STYLE[group];
   const { icon: StatusIcon, stroke: statusStroke } = statusIcon(
     state,
@@ -258,7 +260,6 @@ export default function ActivityCard({
   // A run still going can fail again, so it is resolved once it ends.
   const resolvesRun = canResolveRuns && !closed && !active && group !== "other";
   const mutedColor = closed ? "text-02" : "text-03";
-  const superseded = closed && closedBySupersede(run);
 
   // A failure, superseded or not, titles with the error's first sentence and describes with the rest. A run with errors reports what it still did.
   let description: string | null = null;
@@ -282,7 +283,7 @@ export default function ActivityCard({
   }
   // A resolved card counts the documents it resolved. A superseded one keeps the pill it had when open, only faded.
   const docsLabel =
-    closed && !superseded && run.kind !== "checks"
+    resolved && run.kind !== "checks"
       ? t("tags.resolvedDocs", { count: warnings })
       : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 

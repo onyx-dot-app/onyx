@@ -543,34 +543,31 @@ class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
-class CCPairIndexRun(BaseModel):
+class CCPairRunClosure(BaseModel):
+    """How a run left the open failures and errors. A closed run keeps its status."""
+
+    # When an admin resolved the run.
+    resolved_at: datetime | None = None
+    # A newer run of its kind closed the run.
+    superseded: bool = False
+
+
+class CCPairIndexRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
     time_created: datetime
     attempt: IndexAttemptSnapshot
-    # When an admin resolved the run. It keeps its status.
-    resolved_at: datetime | None = None
-    # A newer run of its kind closed the run.
-    superseded: bool = False
 
 
-class CCPairDocPermissionSyncRun(BaseModel):
+class CCPairDocPermissionSyncRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
     time_created: datetime
     attempt: DocPermissionSyncAttemptSnapshot
-    # When an admin resolved the run. It keeps its status.
-    resolved_at: datetime | None = None
-    # A newer run of its kind closed the run.
-    superseded: bool = False
 
 
-class CCPairGroupSyncRun(BaseModel):
+class CCPairGroupSyncRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
     time_created: datetime
     attempt: ExternalGroupSyncAttemptSnapshot
-    # When an admin resolved the run. It keeps its status.
-    resolved_at: datetime | None = None
-    # A newer run of its kind closed the run.
-    superseded: bool = False
 
 
 class PruneRunSnapshot(BaseModel):
@@ -641,24 +638,16 @@ class CheckRunSnapshot(BaseModel):
         )
 
 
-class CCPairPruneRun(BaseModel):
+class CCPairPruneRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.PRUNING] = CCPairRunKind.PRUNING
     time_created: datetime
     attempt: PruneRunSnapshot
-    # When an admin resolved the run. It keeps its status.
-    resolved_at: datetime | None = None
-    # A newer run of its kind closed the run.
-    superseded: bool = False
 
 
-class CCPairChecksRun(BaseModel):
+class CCPairChecksRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.CHECKS] = CCPairRunKind.CHECKS
     time_created: datetime
     attempt: CheckRunSnapshot
-    # When an admin resolved the run. It keeps its status.
-    resolved_at: datetime | None = None
-    # A newer run of its kind closed the run.
-    superseded: bool = False
 
 
 CCPairRun = Annotated[
@@ -849,6 +838,8 @@ class IndexingConnectorRow(BaseModel):
     docs_indexed: int
     last_success: datetime | None
     latest_index_attempt: IndexAttemptSnapshot | None
+    # The latest attempt's open errors, whole entities included.
+    open_error_count: int
     # Place by age in the line of index attempts handed to the queue, from 1,
     # while the latest waits there. The queue serves first runs ahead of
     # repeats, so a repeat can wait a little longer than its place says.

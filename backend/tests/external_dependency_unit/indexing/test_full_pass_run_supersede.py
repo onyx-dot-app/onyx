@@ -1,9 +1,6 @@
-"""Coverage for superseding in the activity levels: a later settled, non-canceled
-run of a full-pass kind (permission sync, prune) supersedes an earlier settled
-run of that kind with errors, completed-with-errors and stopped ones included,
-while an index attempt with open document errors stays open. The open errors
-level leaves superseded runs out, the closed one lists them, and every run says
-whether it is superseded."""
+"""Coverage for superseding: a later succeeded or failed full-pass run closes an
+earlier run of its kind with errors, stopped ones included, while an index
+attempt's open document errors stay open. Each run says whether it is superseded."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone

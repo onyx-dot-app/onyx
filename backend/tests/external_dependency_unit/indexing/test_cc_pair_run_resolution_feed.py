@@ -1,9 +1,6 @@
-"""Coverage for run resolution: a resolved failed index attempt and a resolved
-failed permission sync leave the failures feed and show under resolved with
-their status kept, a resolved run with open document errors moves the same way
-within the errors level and counts none of them open, and only a caller who
-operates the pair resolves. A
-fleet batch resolve marks only the matching runs of the pairs the caller operates."""
+"""Coverage for run resolution: resolved runs leave the open levels with their status
+kept and count no open document errors, only a pair's operator resolves, and a fleet
+batch resolve marks only the matching runs of the pairs the caller operates."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
