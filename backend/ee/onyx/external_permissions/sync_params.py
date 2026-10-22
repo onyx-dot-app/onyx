@@ -1,7 +1,7 @@
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ee.onyx.configs.app_configs import (
     BOX_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -34,6 +34,8 @@ from ee.onyx.configs.app_configs import (
 )
 from ee.onyx.external_permissions.perm_sync_types import (
     CensoringFuncType,
+    CheckpointedDocSyncFuncType,
+    DocSyncCheckpointer,
     DocSyncFuncType,
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
@@ -60,6 +62,23 @@ def _lazy_doc_sync(load: Callable[[], DocSyncFuncType]) -> DocSyncFuncType:
         callback: Optional["IndexingHeartbeatInterface"],
     ) -> Generator["ElementExternalAccess", None, None]:
         return load()(cc_pair, fetch_all_docs_fn, fetch_all_docs_ids_fn, callback)
+
+    return run
+
+
+def _lazy_checkpointed_doc_sync(
+    load: Callable[[], CheckpointedDocSyncFuncType],
+) -> CheckpointedDocSyncFuncType:
+    def run(
+        cc_pair: "ConnectorCredentialPair",
+        fetch_all_docs_fn: FetchAllDocumentsFunction,
+        fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,
+        callback: Optional["IndexingHeartbeatInterface"],
+        checkpointer: DocSyncCheckpointer,
+    ) -> Generator["ElementExternalAccess", None, None]:
+        return load()(
+            cc_pair, fetch_all_docs_fn, fetch_all_docs_ids_fn, callback, checkpointer
+        )
 
     return run
 
@@ -140,7 +159,7 @@ def _load_hubspot_doc_sync() -> DocSyncFuncType:
     return hubspot_doc_sync
 
 
-def _load_gdrive_doc_sync() -> DocSyncFuncType:
+def _load_gdrive_checkpointed_doc_sync() -> CheckpointedDocSyncFuncType:
     from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 
     return gdrive_doc_sync
@@ -258,8 +277,19 @@ def _load_zoom_group_sync() -> GroupSyncFuncType:
 
 class DocSyncConfig(BaseModel):
     doc_sync_frequency: int
-    doc_sync_func: DocSyncFuncType
     initial_index_should_sync: bool
+    # Exactly one sync func. The checkpointed one is for sources whose crawl can
+    # outlast PERMISSION_SYNC_TIMEOUT, so a stopped attempt continues where it stopped.
+    doc_sync_func: DocSyncFuncType | None = None
+    checkpointed_doc_sync_func: CheckpointedDocSyncFuncType | None = None
+
+    @model_validator(mode="after")
+    def _one_sync_func(self) -> "DocSyncConfig":
+        if (self.doc_sync_func is None) == (self.checkpointed_doc_sync_func is None):
+            raise ValueError(
+                "Set exactly one of doc_sync_func and checkpointed_doc_sync_func"
+            )
+        return self
 
 
 class GroupSyncConfig(BaseModel):
@@ -300,8 +330,10 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.GOOGLE_DRIVE: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=_lazy_doc_sync(_load_gdrive_doc_sync),
             initial_index_should_sync=True,
+            checkpointed_doc_sync_func=_lazy_checkpointed_doc_sync(
+                _load_gdrive_checkpointed_doc_sync
+            ),
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,

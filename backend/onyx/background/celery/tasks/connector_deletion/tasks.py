@@ -591,6 +591,13 @@ def monitor_connector_deletion_taskset(
                 db_session.delete(connector)
             db_session.commit()
 
+            # The pair's doc permission sync checkpoint is a file, not a row
+            fetch_versioned_implementation_with_fallback(
+                "onyx.background.celery.tasks.doc_permission_syncing.checkpointer",
+                "delete_doc_sync_checkpoint",
+                noop_fallback,
+            )(cc_pair_id)
+
             if deleted_raw_ids or reparented_nodes:
                 for attempt in range(3):
                     try:
