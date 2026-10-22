@@ -721,12 +721,15 @@ class CCPairThroughputResponse(BaseModel):
 
 class IndexingOverviewResponse(BaseModel):
     """The pairs the caller can read at a glance: how many run an index now and
-    how many are active at all, the documents indexed in the window against the
-    documents held, and the window's throughput."""
+    how many are active at all, the documents held, the documents the window's
+    runs processed, and the window's throughput."""
 
     indexing_connectors: int
     active_connectors: int
+    # Estimated from each run's count spread over its span. A run counts a
+    # document each time it processes it, failures included.
     recent_docs_indexed: int
+    # Sums each pair's documents, so a document two pairs hold counts twice.
     total_docs_indexed: int
     throughput: CCPairThroughputResponse
 
@@ -810,6 +813,7 @@ class IndexingConnectorStatus(str, Enum):
     INDEXING = "indexing"
     FAILED = "failed"
     PAUSED = "paused"
+    DELETING = "deleting"
     SCHEDULED = "scheduled"
     INDEXED = "indexed"
 
@@ -821,8 +825,8 @@ class IndexingConnectorRow(BaseModel):
     name: str
     source: DocumentSource
     access_type: AccessType
-    # The pair's own state, which names the tag for a pair that is deleting,
-    # invalid or on its first index. `status` is the bucket.
+    # The pair's own state, which names the tag for a pair that is invalid or
+    # on its first index. `status` is the bucket.
     cc_pair_status: ConnectorCredentialPairStatus
     status: IndexingConnectorStatus
     creator_email: str | None
@@ -906,6 +910,14 @@ class CCPairHierarchyBreakdown(BaseModel):
     config_fields: list[str]
 
 
+def _source_requires_doc_sync(source: DocumentSource) -> bool:
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_doc_sync",
+        noop_return_value=False,
+    )(source)
+
+
 class CCPairFullInfo(BaseModel):
     id: int
     name: str
@@ -941,6 +953,8 @@ class CCPairFullInfo(BaseModel):
     permission_syncing: bool
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
+    # The source syncs document permissions, so a sync can be started for the pair.
+    supports_doc_permission_sync: bool
 
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
@@ -968,18 +982,10 @@ class CCPairFullInfo(BaseModel):
             "source_requires_external_group_sync",
             noop_return_value=False,
         )
-        check_if_source_requires_doc_sync = fetch_ee_implementation_or_noop(
-            "onyx.external_permissions.sync_params",
-            "source_requires_doc_sync",
-            noop_return_value=False,
-        )
-
         needs_group_sync = check_if_source_requires_external_group_sync(
             cc_pair_model.connector.source
         )
-        needs_doc_sync = check_if_source_requires_doc_sync(
-            cc_pair_model.connector.source
-        )
+        needs_doc_sync = _source_requires_doc_sync(cc_pair_model.connector.source)
 
         last_group_sync = (
             cc_pair_model.last_time_external_group_sync
@@ -1083,6 +1089,9 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_doc_permission_sync=_source_requires_doc_sync(
+                cc_pair_model.connector.source
+            ),
             supports_targeted_reindex=supports_targeted_reindex,
             has_named_checks=has_named_checks,
             groups=groups or [],

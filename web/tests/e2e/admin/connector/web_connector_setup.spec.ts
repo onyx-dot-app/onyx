@@ -32,7 +32,7 @@ test.describe("Web connector setup", () => {
       ccPairId = null;
       if (idToDelete === null) return;
 
-      // Deletion requires the connector to be paused first.
+      // Deletion accepts an active connector, so this pause is not required.
       await apiClient.pauseConnector(idToDelete);
       await apiClient.deleteCCPair(idToDelete);
     } catch (error) {

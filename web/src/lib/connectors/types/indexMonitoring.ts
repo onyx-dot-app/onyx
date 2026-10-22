@@ -16,8 +16,9 @@ import type {
 export interface IndexingOverviewResponse {
   indexing_connectors: number;
   active_connectors: number;
-  /** Documents indexed inside the window. */
+  /** An estimate of the documents the window's runs processed, each time a run processed one. */
   recent_docs_indexed: number;
+  /** The sum of each pair's documents, so a document two pairs hold counts twice. */
   total_docs_indexed: number;
   throughput: CCPairThroughputResponse;
 }
@@ -27,6 +28,7 @@ export const INDEXING_CONNECTOR_STATUSES = [
   "indexing",
   "failed",
   "paused",
+  "deleting",
   "scheduled",
   "indexed",
 ] as const;
@@ -39,7 +41,7 @@ export interface IndexingConnectorRow {
   name: string;
   source: ValidSources;
   access_type: AccessType;
-  /** The pair's own state, which names the tag for a pair that is deleting, invalid or on its first index. */
+  /** The pair's own state, which names the tag for a pair that is invalid or on its first index. */
   cc_pair_status: ConnectorCredentialPairStatus;
   status: IndexingConnectorStatus;
   creator_email: string | null;

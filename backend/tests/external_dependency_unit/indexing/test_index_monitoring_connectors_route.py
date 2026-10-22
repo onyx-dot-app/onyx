@@ -165,6 +165,7 @@ def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_cou
         IndexingConnectorStatus.INDEXING: 1,
         IndexingConnectorStatus.FAILED: 1,
         IndexingConnectorStatus.PAUSED: 1,
+        IndexingConnectorStatus.DELETING: 0,
         IndexingConnectorStatus.SCHEDULED: 2,
         IndexingConnectorStatus.INDEXED: 3,
     }
@@ -184,6 +185,36 @@ def test_pairs_sort_by_bucket_then_source_then_name_and_the_filter_keeps_the_cou
         indexed_b.name,
     ]
     assert filtered.total_items == 3
+    assert filtered.status_counts == response.status_counts
+
+
+def test_a_deleting_pair_has_its_own_bucket_and_an_invalid_one_reads_failed(
+    db_session: Session,
+) -> None:
+    now = datetime.now(timezone.utc)
+    prefix = _prefix()
+    deleting = _create_cc_pair(
+        db_session, prefix, "deleting", ConnectorCredentialPairStatus.DELETING
+    )
+    invalid = _create_cc_pair(
+        db_session, prefix, "invalid", ConnectorCredentialPairStatus.INVALID
+    )
+    # A failed last run does not pull a deleting pair into the failed bucket.
+    _index_attempt(db_session, deleting, IndexingStatus.FAILED, now)
+
+    response = _connectors(db_session, prefix)
+
+    statuses = {row.name: row.status for row in response.items}
+    assert statuses == {
+        deleting.name: IndexingConnectorStatus.DELETING,
+        invalid.name: IndexingConnectorStatus.FAILED,
+    }
+    assert response.status_counts[IndexingConnectorStatus.DELETING] == 1
+    assert response.status_counts[IndexingConnectorStatus.FAILED] == 1
+
+    filtered = _connectors(db_session, prefix, status=IndexingConnectorStatus.DELETING)
+
+    assert [row.name for row in filtered.items] == [deleting.name]
     assert filtered.status_counts == response.status_counts
 
 

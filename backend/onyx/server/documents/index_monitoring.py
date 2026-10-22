@@ -201,10 +201,9 @@ def _connector_status(
     then the latest attempt's. A live attempt outranks the sticky error."""
     if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
         return IndexingConnectorStatus.PAUSED
-    if cc_pair.status in (
-        ConnectorCredentialPairStatus.DELETING,
-        ConnectorCredentialPairStatus.INVALID,
-    ):
+    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        return IndexingConnectorStatus.DELETING
+    if cc_pair.status == ConnectorCredentialPairStatus.INVALID:
         return IndexingConnectorStatus.FAILED
     running = latest is not None and latest.status == IndexingStatus.IN_PROGRESS
     if cc_pair.in_repeated_error_state and not running:

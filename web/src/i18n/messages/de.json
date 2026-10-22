@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Löschen",
-          "tooltip": {
-            "active": "Pausieren Sie den Konnektor vor dem Löschen"
-          }
+          "label": "Löschen"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "Indexierung starten",
           "description": "Konnektorprüfungen überspringen und jetzt indexieren."
+        },
+        "syncPermissions": {
+          "label": "Berechtigungen synchronisieren",
+          "description": "Jetzt aus der Quelle abrufen, wer welches Dokument lesen darf.",
+          "tooltip": {
+            "syncing": "Eine Berechtigungssynchronisierung ist bereits geplant oder läuft"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden",
         "runResolved": "Als behoben markiert.",
         "runResolveFailed": "Konnte nicht als behoben markiert werden: {message}",
-        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert."
+        "runsResolved": "{count, plural, one {# Lauf} other {# Läufe}} als behoben markiert.",
+        "permissionSyncStarted": "Berechtigungssynchronisierung gestartet",
+        "permissionSyncFailed": "Die Berechtigungssynchronisierung konnte nicht gestartet werden"
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -2993,8 +2999,8 @@
           "checks": "Prüfungen ausgeführt"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
-          "updatedDocs": "Aktualisierte Dokumente",
+          "newDocs": "{count, plural, one {# Dokument, das dieser Lauf neu in den Index aufgenommen hat} other {# Dokumente, die dieser Lauf neu in den Index aufgenommen hat}}",
+          "updatedDocs": "{count, plural, one {# Dokument, das schon im Index war und von diesem Lauf verarbeitet wurde, geändert oder nicht} other {# Dokumente, die schon im Index waren und von diesem Lauf verarbeitet wurden, geändert oder nicht}}",
           "removedDocs": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}",
           "users": "{count, plural, one {# Benutzer} other {# Benutzer}}",
           "groups": "{count, plural, one {# Gruppe} other {# Gruppen}}",
@@ -3008,7 +3014,7 @@
           "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
         "search": {
-          "placeholder": "Indexläufe durchsuchen…"
+          "placeholder": "Fehler der Läufe durchsuchen…"
         },
         "window": {
           "label": "Zeitraum",
@@ -7317,13 +7323,19 @@
           "label": "Konnektoren"
         },
         "documents": {
-          "caption": "Kürzlich indexiert / gesamt",
-          "label": "Dokumente"
+          "caption": "Im Index",
+          "label": "Dokumente",
+          "tooltip": "Summiert die Dokumente jedes Konnektors, daher zählt ein Dokument, das zwei Konnektoren enthalten, doppelt."
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Die Übersicht konnte nicht geladen werden."
+        "loadError": "Die Übersicht konnte nicht geladen werden.",
+        "processed": {
+          "caption": "Im Zeitraum verarbeitet",
+          "label": "Dokumente",
+          "tooltip": "Ein Schätzwert, da die Zahl jedes Laufs gleichmäßig über seine Laufzeit verteilt wird. Ein Dokument zählt jedes Mal, wenn ein Lauf es verarbeitet, auch fehlgeschlagene, daher kann die Zahl größer sein als die Dokumente im Index."
+        }
       },
       "activities": {
         "title": "Aktivitäten",
@@ -7347,7 +7359,9 @@
           "indexed": "{count, plural, one {# Konnektor indexiert} other {# Konnektoren indexiert}}",
           "indexing": "{count, plural, one {# Konnektor indexiert gerade} other {# Konnektoren indexieren gerade}}",
           "failed": "{count, plural, one {# Konnektor fehlgeschlagen} other {# Konnektoren fehlgeschlagen}}",
-          "paused": "{count, plural, one {# Konnektor pausiert} other {# Konnektoren pausiert}}"
+          "paused": "{count, plural, one {# Konnektor pausiert} other {# Konnektoren pausiert}}",
+          "scheduled": "{count, plural, one {# Konnektor geplant} other {# Konnektoren geplant}}",
+          "deleting": "{count, plural, one {# Konnektor wird gelöscht} other {# Konnektoren werden gelöscht}}"
         },
         "access": {
           "public": "Öffentlich",
@@ -7362,7 +7376,11 @@
         },
         "docs": {
           "label": "Dokumente",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} verarbeitet",
+          "processedTooltip": {
+            "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet, zählt doppelt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
+            "finished": "Dokumente, die der letzte Lauf verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet hat, zählt doppelt, und seitdem entfernte Dokumente zählen nicht mehr zum Konnektor, daher kann die Zahl größer sein als die Dokumente des Konnektors."
+          }
         },
         "actions": {
           "manage": "Verwalten",

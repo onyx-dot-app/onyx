@@ -60,6 +60,8 @@ export interface CCPairFullInfo {
   permission_syncing: boolean;
   last_permission_sync_attempt_finished: string | null;
   last_permission_sync_attempt_error_message: string | null;
+  // The source syncs document permissions, so a sync can be started.
+  supports_doc_permission_sync: boolean;
 
   // True if the connector implements `Resolver.reindex` (targeted reindex).
   // False -> Resolve All falls back to a full connector reindex.

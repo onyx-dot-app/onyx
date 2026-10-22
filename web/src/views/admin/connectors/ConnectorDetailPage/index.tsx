@@ -33,13 +33,22 @@ import {
   SvgSettings,
   SvgSlowMotion,
   SvgTrash,
+  SvgUserSync,
 } from "@opal/icons";
+import { isPermSynced } from "@/lib/connectors/accessType";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { releaseIndexingHold, triggerIndexing } from "@/lib/connectors/svc";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import {
+  releaseIndexingHold,
+  triggerIndexing,
+  triggerPermissionSync,
+} from "@/lib/connectors/svc";
+import {
+  ConnectorCredentialPairStatus,
+  PermissionSyncStatusEnum,
+} from "@/lib/connectors/types";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
@@ -88,7 +97,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  // A re-index or error resolve in flight: the Manage button spins meanwhile.
+  // A Manage menu action in flight: the Manage button spins meanwhile.
   const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
@@ -169,6 +178,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
       return;
     }
     toast.success(t("statusCard.hold.released"));
+    refresh();
+  };
+
+  const syncPermissions = async () => {
+    if (!ccPair) return;
+    setBusy(true);
+    const failure = await triggerPermissionSync(
+      ccPair.id,
+      t("toasts.permissionSyncFailed")
+    );
+    setBusy(false);
+    if (failure !== null) {
+      toast.error(failure);
+      return;
+    }
+    toast.success(t("toasts.permissionSyncStarted"));
     refresh();
   };
 
@@ -294,6 +319,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
             onSelect: () => void triggerReIndex(true),
           },
         ];
+  // The route refuses a second sync while one is queued or running.
+  const syncOpen =
+    ccPair.permission_syncing ||
+    ccPair.last_permission_sync_attempt_status ===
+      PermissionSyncStatusEnum.NOT_STARTED;
+  // Only a source with document permission sync gets the row, and a deleting pair's sync is refused.
+  const syncItems: DropdownMenuItem[] =
+    isPermSynced(ccPair.access_type) &&
+    ccPair.supports_doc_permission_sync &&
+    !isDeleting
+      ? [
+          {
+            kind: "action",
+            id: "sync-permissions",
+            icon: SvgUserSync,
+            title: t("manageMenu.syncPermissions.label"),
+            description: t("manageMenu.syncPermissions.description"),
+            tooltip: syncOpen
+              ? t("manageMenu.syncPermissions.tooltip.syncing")
+              : undefined,
+            disabled: busy || syncOpen,
+            onSelect: () => void syncPermissions(),
+          },
+        ]
+      : [];
   const toggleItems: DropdownMenuItem[] = isDeleting
     ? []
     : [
@@ -332,10 +382,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 icon: SvgTrash,
                 danger: true,
                 title: t("manageMenu.delete.label"),
-                tooltip: paused
-                  ? undefined
-                  : t("manageMenu.delete.tooltip.active"),
-                disabled: !paused,
                 onSelect: () => setShowDeleteConnectorConfirmModal(true),
               },
             ],
@@ -344,7 +390,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
       : [];
   const manageItems: DropdownMenuItem[] = strictlyPaused
     ? [...toggleItems, ...dangerItems]
-    : [...startItems, ...reIndexItems, ...toggleItems, ...dangerItems];
+    : [
+        ...startItems,
+        ...reIndexItems,
+        ...syncItems,
+        ...toggleItems,
+        ...dangerItems,
+      ];
 
   return (
     <SettingsLayouts.Root width="xl">

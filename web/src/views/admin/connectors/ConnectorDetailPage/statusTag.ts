@@ -142,15 +142,17 @@ export function runStatusTag(run: CCPairRun): StatusTag {
   }
 }
 
+/** A status page bucket's tag, as its row and its header count show it. */
+export function bucketStatusTag(status: IndexingConnectorStatus): StatusTag {
+  return TAGS[status];
+}
+
 /** The tag for a row of the status page: its bucket, unless the pair's own state or a stopped latest run says more. */
 export function connectorRowStatusTag(
   ccPairStatus: ConnectorCredentialPairStatus,
   status: IndexingConnectorStatus,
   lastAttemptStatus: ValidStatuses | null | undefined
 ): StatusTag {
-  if (ccPairStatus === ConnectorCredentialPairStatus.DELETING) {
-    return TAGS.deleting;
-  }
   if (ccPairStatus === ConnectorCredentialPairStatus.INVALID) {
     return TAGS.invalid;
   }
@@ -166,7 +168,7 @@ export function connectorRowStatusTag(
   if (status === "scheduled" && lastAttemptStatus === "interrupted") {
     return TAGS.interrupted;
   }
-  return TAGS[status];
+  return bucketStatusTag(status);
 }
 
 /** One attempt's tag. A sync reads "Syncing" and "Synced" where indexing reads "Indexing" and "Indexed". */

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { LARGE_BREAKPOINT_PX } from "@/lib/constants";
 import type {
   CCPairFullInfo,
   IndexingConnectorRow,
@@ -22,13 +23,23 @@ import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/Th
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
+// Tailwind's lg breakpoint, from which the history panel sits beside the list.
+const SIDE_BY_SIDE_QUERY = `(min-width: ${LARGE_BREAKPOINT_PX}px)`;
+
+/** Stacked on a narrow screen, the history sits above the list and out of view, so it scrolls there. */
+export function revealHistory(panel: HTMLDivElement | null) {
+  if (panel === null || window.matchMedia(SIDE_BY_SIDE_QUERY).matches) return;
+  panel.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
 interface PairActivityPanelProps {
   row: IndexingConnectorRow;
   onClose: () => void;
+  ref: React.Ref<HTMLDivElement>;
 }
 
 /** The history panel on one connector's runs, opened from its row. */
-function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
+function PairActivityPanel({ row, onClose, ref }: PairActivityPanelProps) {
   const t = useTranslations("admin.indexing");
   // The row does not say whether its source resolves errors one by one, so the pair's details do.
   const { data: ccPair } = useSWR<CCPairFullInfo>(
@@ -48,6 +59,7 @@ function PairActivityPanel({ row, onClose }: PairActivityPanelProps) {
       onClose={onClose}
       sticky
       className="max-lg:order-first"
+      ref={ref}
     />
   );
 }
@@ -64,6 +76,17 @@ export default function IndexingStatusPage() {
   const [range, setRange] = useState<SliceRange | null>(null);
   // A connector's open popover steps the overview and the Activities card back with the other connectors.
   const [listFocused, setListFocused] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // What the history shows: the fleet over a span, or one connector. A new subject brings the panel into view.
+  const subject =
+    history === null
+      ? null
+      : history === "fleet"
+        ? `fleet ${range?.since ?? ""} ${range?.until ?? ""}`
+        : `pair ${history.cc_pair_id}`;
+  useEffect(() => {
+    if (subject !== null) revealHistory(panelRef.current);
+  }, [subject]);
 
   useToastFromQuery({
     "connector-created": {
@@ -151,6 +174,7 @@ export default function IndexingStatusPage() {
               range={range}
               sticky
               className="max-lg:order-first"
+              ref={panelRef}
             />
           ) : (
             history !== null && (
@@ -158,6 +182,7 @@ export default function IndexingStatusPage() {
                 key={history.cc_pair_id}
                 row={history}
                 onClose={() => setHistory(null)}
+                ref={panelRef}
               />
             )
           )}

@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除",
-          "tooltip": {
-            "active": "削除する前にコネクターを一時停止してください"
-          }
+          "label": "削除"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "インデックス作成を開始",
           "description": "コネクターのチェックをスキップして、今すぐインデックスを作成します。"
+        },
+        "syncPermissions": {
+          "label": "権限を同期",
+          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "tooltip": {
+            "syncing": "権限の同期はすでに待機中または実行中です"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
         "runResolved": "解決済みにしました。",
         "runResolveFailed": "解決できませんでした: {message}",
-        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。"
+        "runsResolved": "{count, plural, other {# 件の実行}}を解決済みにしました。",
+        "permissionSyncStarted": "権限の同期を開始しました",
+        "permissionSyncFailed": "権限の同期を開始できませんでした"
       },
       "backButton": {
         "label": "すべてのコネクタ"
@@ -2993,8 +2999,8 @@
           "checks": "件のチェックを実行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
-          "updatedDocs": "更新されたドキュメント",
+          "newDocs": "{count, plural, other {この実行でインデックスに新しく追加されたドキュメント # 件}}",
+          "updatedDocs": "{count, plural, other {すでにインデックスにあり、変更の有無にかかわらずこの実行で処理されたドキュメント # 件}}",
           "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
           "users": "{count, plural, other {# 人のユーザー}}",
           "groups": "{count, plural, other {# 件のグループ}}",
@@ -3008,7 +3014,7 @@
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
         "search": {
-          "placeholder": "インデックス実行を検索…"
+          "placeholder": "実行エラーを検索…"
         },
         "window": {
           "label": "期間",
@@ -7317,13 +7323,19 @@
           "label": "コネクタ"
         },
         "documents": {
-          "caption": "最近インデックス済み / 合計",
-          "label": "ドキュメント"
+          "caption": "インデックス内",
+          "label": "ドキュメント",
+          "tooltip": "各コネクタのドキュメント数を合計するため、2 つのコネクタが持つドキュメントは 2 回数えられます。"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "概要を読み込めませんでした。"
+        "loadError": "概要を読み込めませんでした。",
+        "processed": {
+          "caption": "期間内に処理",
+          "label": "ドキュメント",
+          "tooltip": "推定値です。各実行の件数は実行時間全体に均等に配分されます。ドキュメントは実行が処理するたびに数えられ、失敗したものも含まれるため、インデックス内のドキュメント数を超えることがあります。"
+        }
       },
       "activities": {
         "title": "アクティビティ",
@@ -7347,7 +7359,9 @@
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
           "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
-          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}"
+          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
+          "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
+          "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
           "public": "公開",
@@ -7362,7 +7376,11 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} 件処理済み",
+          "processedTooltip": {
+            "running": "現在の実行がこれまでに処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられるため、コネクタのドキュメント数を超えることがあります。",
+            "finished": "前回の実行が処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられ、その後に削除されたドキュメントはコネクタの件数から外れるため、コネクタのドキュメント数を超えることがあります。"
+          }
         },
         "actions": {
           "manage": "管理",
