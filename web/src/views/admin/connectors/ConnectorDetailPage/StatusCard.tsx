@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -24,9 +24,8 @@ import {
   runStatusTag,
 } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import {
-  isActive,
   RATE_FORMAT,
-  syncRate,
+  useSyncRateLabel,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
@@ -47,7 +46,7 @@ const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
 interface StatBlockProps {
   children: React.ReactNode;
 }
-/** One column of a card: a status or a figure over its label. */
+/** One column of a card: a title, status tag and detail line, or a figure over its label. */
 function StatBlock({ children }: StatBlockProps) {
   return (
     // Columns share the row evenly and wrap below 12rem, so three fit at 640px.
@@ -70,7 +69,7 @@ const POLL_MS = 5000;
 
 type SyncRunKind = Extract<CCPairRunKind, "doc_permission_sync" | "group_sync">;
 
-/** The pair's newest run of one kind, with the kinds the pair runs. */
+/** The pair's newest run of one kind. The response's `kinds` lists every kind the pair runs. */
 function useLatestRun(ccPairId: number, kind: SyncRunKind, enabled: boolean) {
   return useSWR<CCPairRunsResponse>(
     enabled
@@ -96,32 +95,27 @@ interface SyncStatBlockProps {
   title: string;
   /** The sync's newest run, undefined before its first. */
   run: CCPairRun | undefined;
-  /** When the sync last succeeded, null until it first does. */
+  /** The pair's last successful sync of this kind, null until one succeeds. */
   lastSynced: string | null;
 }
 /** A permission sync's column: its newest run's tag over its live rate or its last success. */
 function SyncStatBlock({ title, run, lastSynced }: SyncStatBlockProps) {
   const t = useTranslations("admin.connector.statusCard.sync");
-  const tRuns = useTranslations("admin.connector.runs.detail");
   const tBadges = useTranslations("admin.status.badges");
-  const format = useFormatter();
   const locale = useLocale();
-  // A sync that succeeded before its runs were recorded has none, so its last success sets the tag.
+  const syncRateLabel = useSyncRateLabel();
+  // A pair can have a success with no run of its own: an old sync, or a shared group sync another pair ran.
   const tag =
     run !== undefined
       ? runStatusTag(run)
       : attemptStatusTag(lastSynced === null ? null : "success", true);
-  const rate =
-    run !== undefined && isActive(run) ? syncRate(run, Date.now()) : null;
-  const neverSynced = rate === null && lastSynced === null;
-  const detail =
-    rate !== null && run !== undefined
-      ? tRuns(run.kind === "group_sync" ? "membershipRate" : "rate", {
-          rate: format.number(rate, RATE_FORMAT),
-        })
-      : neverSynced
-        ? t("never")
-        : t("last", { when: timeAgo(lastSynced, locale) ?? "-" });
+  const liveRate = run === undefined ? null : syncRateLabel(run);
+  const neverSynced = liveRate === null && lastSynced === null;
+  function detail(): string {
+    if (liveRate !== null) return liveRate;
+    if (lastSynced === null) return t("never");
+    return t("last", { when: timeAgo(lastSynced, locale) ?? "-" });
+  }
   return (
     <StatBlock>
       <Text font="secondary-action" color="text-04">
@@ -137,7 +131,7 @@ function SyncStatBlock({ title, run, lastSynced }: SyncStatBlockProps) {
       <Tooltip tooltip={neverSynced ? t("neverTooltip") : undefined} side="top">
         <Section width="fit" height="fit">
           <Text font="secondary-body" color="text-03">
-            {detail}
+            {detail()}
           </Text>
         </Section>
       </Tooltip>
@@ -183,7 +177,7 @@ export default function StatusCard({
   const permSynced = isPermSynced(ccPair.access_type);
   const docSync = useLatestRun(ccPair.id, "doc_permission_sync", permSynced);
   const groupSync = useLatestRun(ccPair.id, "group_sync", permSynced);
-  // Waits for the latest attempt, so a running pair never flashes as indexed.
+  // Waits for the latest attempt, so a running pair never flashes as indexed, and for the sync runs, so the columns land together.
   if (
     (latestIndexAttempts === undefined && error === undefined) ||
     (permSynced &&
@@ -204,10 +198,7 @@ export default function StatusCard({
     ccPair.indexing &&
     ccPair.overall_indexing_speed !== null &&
     ccPair.num_docs_indexed > 0
-      ? ccPair.overall_indexing_speed.toLocaleString(locale, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
+      ? ccPair.overall_indexing_speed.toLocaleString(locale, RATE_FORMAT)
       : null;
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
   const lastIndexed = t("lastIndexed.value", {
@@ -216,13 +207,11 @@ export default function StatusCard({
   // The rate is the connector's average over every run, where a run row shows one run's live rate.
   const showsSpeed = !paused && hold === null && speed !== null;
   // A paused pair names only its last run.
-  const statusLine = paused
-    ? lastIndexed
-    : hold !== null
-      ? t(`hold.${hold.reason}`)
-      : speed === null
-        ? lastIndexed
-        : t("indexingSpeed", { speed });
+  function statusLine(): string {
+    if (paused) return lastIndexed;
+    if (hold !== null) return t(`hold.${hold.reason}`);
+    return speed === null ? lastIndexed : t("indexingSpeed", { speed });
+  }
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
   // Before the first run, or while it is held, there is no recent run to count.
@@ -240,7 +229,7 @@ export default function StatusCard({
       height="fit"
       data-testid="connector-indexing-status"
     >
-      {/* The stage details popover spans the card, so the card is its anchor. */}
+      {/* The stage details popover spans the status card, so that card is its anchor. */}
       <Popover>
         <Popover.Anchor asChild>
           <Card border="solid" rounding={4} padding={2}>
@@ -290,7 +279,7 @@ export default function StatusCard({
                 >
                   <Section width="fit" height="fit">
                     <Text font="secondary-body" color="text-03">
-                      {statusLine}
+                      {statusLine()}
                     </Text>
                   </Section>
                 </Tooltip>

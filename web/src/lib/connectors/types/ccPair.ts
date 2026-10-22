@@ -52,7 +52,7 @@ export interface CCPairFullInfo {
   last_indexed: string | null;
   last_pruned: string | null;
   last_full_permission_sync: string | null;
-  // Each sync's last success, null until it first succeeds.
+  // Last successful sync of each kind, null until one succeeds.
   last_time_perm_sync: string | null;
   last_time_external_group_sync: string | null;
   overall_indexing_speed: number | null;

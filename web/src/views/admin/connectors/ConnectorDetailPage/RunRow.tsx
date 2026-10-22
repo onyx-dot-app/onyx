@@ -183,7 +183,7 @@ function finishedIndexRate(run: CCPairRun): number | null {
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
-export function syncRate(run: CCPairRun, now: number): number | null {
+function syncRate(run: CCPairRun, now: number): number | null {
   if (run.kind !== "doc_permission_sync" && run.kind !== "group_sync") {
     return null;
   }
@@ -204,6 +204,20 @@ export const RATE_FORMAT = {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 } as const;
+
+/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min"; `null` for any other run. */
+export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+  const t = useTranslations("admin.connector.runs.detail");
+  const format = useFormatter();
+  return (run) => {
+    if (!isActive(run)) return null;
+    const rate = syncRate(run, Date.now());
+    if (rate === null) return null;
+    return t(run.kind === "group_sync" ? "membershipRate" : "rate", {
+      rate: format.number(rate, RATE_FORMAT),
+    });
+  };
+}
 
 interface FigureProps {
   value: number;
@@ -468,6 +482,7 @@ export default function RunRow({
   const t = useTranslations("admin.connector.runs");
   const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
+  const syncRateLabel = useSyncRateLabel();
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
@@ -489,15 +504,8 @@ export default function RunRow({
         return t("detail.rate", { rate: format.number(rate, RATE_FORMAT) });
       }
     }
-    if (active) {
-      const rate = syncRate(run, Date.now());
-      if (rate !== null) {
-        return t(
-          run.kind === "group_sync" ? "detail.membershipRate" : "detail.rate",
-          { rate: format.number(rate, RATE_FORMAT) }
-        );
-      }
-    }
+    const liveSyncRate = syncRateLabel(run);
+    if (liveSyncRate !== null) return liveSyncRate;
     if (finished === null) return t("detail.running");
     const ms = runDurationMs(run);
     if (ms === null) return formatDateTimeLog(finished);
