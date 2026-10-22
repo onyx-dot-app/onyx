@@ -327,7 +327,7 @@ DOCX scroll restoration waits for rendered content on initial load and each repl
 ### Static HTML in Apps
 
 The Apps tab lists `.html` and `.htm` files from the session output inventory alongside registered webapps.
-Both use matching cards in a centered single column, with centered icons and labels.
+Both use matching bordered cards in a centered single column, with aligned icons and left-aligned labels.
 Selecting an HTML file opens its file tab. It does not register a webapp or start a server.
 `POST /build/sessions/{session_id}/static-preview/{path}` issues a read-only capability after checking session ownership.
 `GET /build/static-preview/{token}/{path}` serves listed static assets without browser login credentials.

@@ -118,8 +118,8 @@ export default function BrowserTab({
                 tabIndex={0}
                 aria-label={candidate.name}
                 state="filled"
-                border="none"
-                padding={3}
+                border="solid"
+                padding={4}
                 rounding={3}
                 onClick={candidate.onOpen}
               >
@@ -127,7 +127,7 @@ export default function BrowserTab({
                   flexDirection="row"
                   height="auto"
                   gap={3}
-                  justifyContent="center"
+                  justifyContent="start"
                   className="min-w-0"
                 >
                   <SvgGlobe
@@ -136,11 +136,10 @@ export default function BrowserTab({
                     aria-hidden
                   />
                   <Section
-                    width="auto"
                     height="auto"
                     gap={0}
-                    alignItems="center"
-                    className="min-w-0 text-center"
+                    alignItems="start"
+                    className="min-w-0 text-start"
                   >
                     <Text
                       font="main-ui-muted"
