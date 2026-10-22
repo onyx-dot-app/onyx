@@ -308,6 +308,7 @@ export function ResetPasswordModal({
           : t("resetPasswordModal.title")
       }
       onClose={isSubmitting ? undefined : handleClose}
+      hideCancel={!!newPassword}
       submit={
         newPassword ? (
           <Button onClick={handleClose}>

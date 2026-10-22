@@ -43,7 +43,7 @@ interface FailedDocRowProps {
   resolving: boolean;
   onResolve: () => void;
 }
-/** One failed document: when, which, why, and a resolve action. */
+/** One failed item, a document or a whole entity: when, which, why, and a resolve action. */
 function FailedDocRow({
   error,
   canResolve,
@@ -315,7 +315,7 @@ function FailedDocsBody({
   );
 }
 
-/** One attempt's open document errors beside or below its card. Radix mounts the content only while open, so nothing is fetched until then. */
+/** One attempt's open errors, documents and whole entities, beside or below its card. Radix mounts the content only while open, so nothing is fetched until then. */
 export default function FailedDocsPopoverContent({
   placement = "beside",
   ...props

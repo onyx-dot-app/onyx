@@ -169,7 +169,7 @@ describe("buildEditProposal", () => {
 
     const proposal = proposalFor(ccPair, [], (values) => ({
       ...values,
-      repositories: "onyx,docs",
+      repositories: ["onyx", "docs"],
       name: "Renamed",
       refreshFreq: 60,
     }));

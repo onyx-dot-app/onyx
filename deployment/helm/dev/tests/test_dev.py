@@ -5,6 +5,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -253,6 +254,28 @@ class DevTests(unittest.TestCase):
         self.assertEqual(len(patches), 6)
         self.assertFalse(any("delete" in call for call in calls))
 
+    def test_build_passes_trusted_ca_as_a_secret(self) -> None:
+        """Pass a local trust bundle to BuildKit without embedding its contents."""
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "trusted-ca.pem"
+            bundle.write_text("local certificate bundle")
+            with (
+                patch.dict(os.environ, {"CRAFT_BUILD_CA_BUNDLE": str(bundle)}),
+                patch.object(dev, "nodes"),
+                patch.object(dev, "source_hash", return_value="new"),
+                patch.object(dev, "inspect_image", return_value=None),
+                patch.object(dev, "run") as run,
+            ):
+                dev.images(options(force=True, load_only=True))
+            build = next(
+                call.args
+                for call in run.call_args_list
+                if call.args[:2] == ("docker", "build")
+            )
+            self.assertIn("--secret", build)
+            self.assertIn(f"id=build_ca_bundle,src={bundle.resolve()}", build)
+            self.assertNotIn(bundle.read_text(), " ".join(build))
+
     def test_startup_reuses_old_image_without_a_build(self) -> None:
         """Allow normal startup to reuse an existing image until an explicit refresh."""
         with (
@@ -282,18 +305,20 @@ class DevTests(unittest.TestCase):
 
     def test_check_reports_dirty_source_and_never_mutates_runtime(self) -> None:
         """Make image inspection detect stale source without changing runtime resources."""
-        with (
-            patch.object(dev, "nodes"),
-            patch.object(dev, "source_hash", return_value="new"),
-            patch.object(
-                dev,
-                "inspect_image",
-                return_value={"Config": {"Labels": {dev.SOURCE_LABEL: "old"}}},
-            ),
-            patch.object(dev, "run") as run,
-        ):
-            self.assertEqual(dev.images(options(check=True)), 1)
-        run.assert_not_called()
+        for config in ({"Labels": {dev.SOURCE_LABEL: "old"}}, {"Labels": None}, {}):
+            with self.subTest(config=config):
+                with (
+                    patch.object(dev, "nodes"),
+                    patch.object(dev, "source_hash", return_value="new"),
+                    patch.object(
+                        dev,
+                        "inspect_image",
+                        return_value={"Config": config},
+                    ),
+                    patch.object(dev, "run") as run,
+                ):
+                    self.assertEqual(dev.images(options(check=True)), 1)
+                run.assert_not_called()
 
     def test_daemon_error_is_not_a_missing_image(self) -> None:
         """Preserve Docker access failures instead of attempting an unintended image build."""

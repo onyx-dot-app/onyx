@@ -815,7 +815,7 @@ with that configuration and preserves the existing reload implementations.
 Infrastructure startup waits for active Onyx controllers and the Telepresence manager.
 Application readiness checks the real API readiness response through the frontend proxy,
 then checks the frontend HTML page. It does not verify worker readiness, login, or licensing.
-The intercept command reuses an existing intercept. A known stale-agent identity failure
+The intercept command checks the existing intercept forwards container port 8080 to local port 8080 before reuse. A known stale-agent identity failure
 allows one targeted rollout and retry after command failures or timeouts; unrelated failures propagate.
 A failed log probe preserves the original intercept failure. Captured command errors show stderr, never configuration stdout.
 Migration upgrades detect this checkout's API launcher even when its relative script path outlives a directory change.
@@ -827,3 +827,22 @@ Startup forwards `SANDBOX_IMAGE` overrides to Helm, and doctor detects template 
 Image refresh updates init and main containers together and does not recycle live pods.
 Cleanup previews checkout-labeled dangling images and never deletes volumes.
 See `docs/craft/dev/local-kubernetes.md` for command scope and cache retention.
+
+### Zed local startup
+
+Zed records only intercepts it creates and preserves reused intercepts on exit.
+A failed rollout check releases an intercept created by that command.
+
+`.zed/run-all-k8s.sh` prepares the API intercept through the shared Craft command, including targeted stale-agent recovery.
+`.zed/process-compose.k8s.yaml` starts the API and workers through `deployment/helm/dev/launch.py`.
+Deployed secrets stay in process memory; the local environment file supplies personal overrides.
+A one-shot readiness process waits for API health, then checks the API through the frontend.
+Failed readiness leaves local services running for diagnosis.
+
+Local image checks treat missing Docker image labels as an unknown source and rebuild on refresh.
+With `ENABLE_SKILLS=true`, the sandbox image includes LibreOffice Writer, Calc, Impress, and Draw.
+Writer and Calc provide document and spreadsheet conversions, including DOCX, XLSX, and ODS to PDF.
+With a custom build certificate bundle, backend tokenizer downloads use standard HTTPS without the optional Xet client.
+Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend Python dependencies, Chromium, tokenizers, and sandbox npm, pip, GitHub CLI, OpenCode, and Bun downloads behind a trusted TLS inspection proxy.
+The certificate bundle is a BuildKit secret and does not enter the image.
+Without this bundle, downloads retain their default certificate and transport settings.

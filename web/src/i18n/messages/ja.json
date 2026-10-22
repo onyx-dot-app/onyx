@@ -1268,14 +1268,10 @@
         "title": "プロバイダー",
         "description": "プロバイダーを接続するか、判断モデルを管理します。",
         "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
-        "edit": "設定",
         "connect": "接続"
       },
       "loadFailed": "判断モデルを読み込めませんでした。",
       "retry": "再試行",
-      "saveFailed": "接続を保存できませんでした。",
-      "cancel": "キャンセル",
-      "save": "保存",
       "zoom": {
         "title": "Zoom AI Services に接続",
         "description": "Zoom Scribe と Zoom AI Decisions に同じ接続を使用します。変更は両方に適用されます。",
@@ -2261,9 +2257,6 @@
         "description": "チャットが応答を生成するときに、新しい内容へ自動的にスクロールします。ユーザーは個人設定でこれを変更できます。",
         "title": "チャットの自動スクロール"
       },
-      "betaTag": {
-        "label": "ベータ"
-      },
       "connectors": {
         "description": "チャットの内部検索で使用されるソースです。追加や変更はインデックス作成ステータスのページで行います。",
         "empty": {
@@ -2857,7 +2850,10 @@
         "refreshFrequencyUpdateFailed": "コネクターの更新頻度を変更できませんでした",
         "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
+        "targetedReindexRunning": "{count, plural, one {# 件のエラー} other {# 件のエラー}}を再試行しています…",
+        "targetedReindexDone": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決しました。",
+        "targetedReindexPartial": "再試行が完了しました。{resolved, plural, one {# 件のエラー} other {# 件のエラー}}が解決し、{failing, plural, one {# 件のドキュメント} other {# 件のドキュメント}}は引き続き失敗しています。",
+        "targetedReindexIncomplete": "再試行は完了しませんでした。未解決のエラーは一覧に残ります。",
         "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
         "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした",
         "runResolved": "解決済みにしました。",
@@ -3165,6 +3161,7 @@
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "indexingItems": "{count, plural, other {# 件の項目が失敗}}",
           "doc_permission_sync": "{count, plural, other {# 件のドキュメントの権限の同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
@@ -3186,9 +3183,9 @@
           "title": "アクティビティを読み込めませんでした。"
         },
         "docs": {
-          "title": "失敗したドキュメント",
+          "title": "失敗した項目",
           "search": {
-            "placeholder": "ドキュメントを検索…"
+            "placeholder": "項目を検索…"
           },
           "resolveAll": "すべて再試行",
           "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
@@ -3198,8 +3195,8 @@
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",
-          "empty": "未解決のドキュメントエラーはありません",
-          "loadError": "失敗したドキュメントを読み込めませんでした。",
+          "empty": "未解決のエラーはありません",
+          "loadError": "失敗した項目を読み込めませんでした。",
           "open": "ドキュメントを開く"
         },
         "trace": {
@@ -3616,7 +3613,7 @@
         }
       },
       "content": {
-        "title": "コネクタのコンテンツ",
+        "title": "インデックス設定",
         "description": "このコネクタでインデックスするコンテンツを選択してください。"
       },
       "selectInput": {
@@ -3670,7 +3667,8 @@
       "settings": {
         "description": "コネクタの情報とアクセス。",
         "displayName": {
-          "title": "コネクタの表示名"
+          "title": "表示名",
+          "placeholder": "表示名を入力"
         },
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
@@ -3729,7 +3727,7 @@
               "label": "添付ファイルを含める"
             },
             "scoped_token": {
-              "label": "スコープ付き API トークンを使用する",
+              "label": "スコープ付き API トークン",
               "description": "スコープ付きトークンは、Atlassian の API ゲートウェイ経由のルーティングが必要です。従来型トークンの場合はオフのままにしてください。"
             }
           }
@@ -3856,13 +3854,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "リポジトリのオーナー"
+              "label": "リポジトリのオーナー",
+              "placeholder": "リポジトリのオーナーを指定"
             },
             "github_mode": {
-              "label": "インデックスする GitHub コンテンツ",
               "tabs": {
                 "repo": {
-                  "label": "特定のリポジトリ"
+                  "label": "指定したリポジトリ"
                 },
                 "everything": {
                   "label": "すべて"
@@ -3870,12 +3868,12 @@
               }
             },
             "repositories": {
-              "label": "リポジトリ名",
-              "description": "複数のリポジトリを指定する場合は、名前をカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+              "label": "リポジトリ名の一覧",
+              "placeholder": "リポジトリ名を入力"
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのリポジトリをインデックスします。"
+              "label": "すべてをインデックス",
+              "description": "Onyx は、オーナー {owner} について見つかったすべてのリポジトリをインデックスします。"
             },
             "include_prs": {
               "label": "プルリクエストを含める",
@@ -3891,7 +3889,8 @@
             },
             "branch": {
               "label": "ブランチ",
-              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。"
+              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。",
+              "placeholder": "ブランチ名を入力"
             }
           }
         },
@@ -3974,8 +3973,8 @@
               "description": "1 つ以上の Bitbucket プロジェクトキー(カンマ区切り)。それらのプロジェクト内のすべてのリポジトリをインデックスします(例: PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "ワークスペース",
-              "description": "このコネクターは、ワークスペース内のすべてのリポジトリをインデックスします。"
+              "label": "ワークスペース内のすべてのリポジトリをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるワークスペース内のすべてのリポジトリをインデックスします。対象を絞るには、別のタブを選択してください。"
             }
           }
         },
@@ -4099,8 +4098,8 @@
               }
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのページをインデックスします。"
+              "label": "アカウントが読み取れるすべてのページをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのスペースのすべてのページをインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "space": {
               "label": "スペースキー",
@@ -4142,8 +4141,8 @@
               }
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべての Issue をインデックスします。"
+              "label": "アカウントが読み取れるすべての課題をインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのプロジェクトのすべての課題をインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "project_key": {
               "label": "プロジェクトキー",
@@ -4330,8 +4329,8 @@
               }
             },
             "everything_description": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスペースをインデックスします。"
+              "label": "アカウントが読み取れるすべてのスペースをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのスペースのすべてのページをインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "spaces": {
               "label": "スペース ID",
@@ -4771,8 +4770,8 @@
               }
             },
             "everything_description": {
-              "label": "すべて",
-              "description": "このコネクターは、API トークンでアクセスできるすべてのベースとテーブルを自動的に検出してインデックスします。"
+              "label": "トークンが読み取れるすべてのベースをインデックスします",
+              "description": "Onyx は、API トークンが読み取れるすべてのベースとテーブルを検出してインデックスします。対象を絞るには、別のタブを選択してください。"
             },
             "airtable_url": {
               "label": "Airtable の URL",
@@ -4811,8 +4810,8 @@
               "description": "複数のスポットを指定する場合は、スポット名を 1 つずつ入力してください。"
             },
             "everything": {
-              "label": "すべて",
-              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスポットをインデックスします。"
+              "label": "アカウントが読み取れるすべてのスポットをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべてのスポットをインデックスします。対象を絞るには、別のタブを選択してください。"
             }
           }
         },
@@ -4952,9 +4951,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "ベータ"
-        },
         "disabled": {
           "description": "Craft は全員に対してオフです。下で個別のユーザーを切り替えられます。"
         },
@@ -6835,6 +6831,10 @@
           "description": "新規および更新されたドキュメントのコンテキスト生成を今すぐ停止するか、すべてのドキュメントを再構築して生成済みのコンテキストも削除します。",
           "title": "コンテキスト検索をオフにする方法を選択してください"
         },
+        "contextualEnableOnly": {
+          "description": "今後の新規および更新されたドキュメントにコンテキストを生成するか、すべてのドキュメントを再構築してすべてのドキュメントにコンテキストを付与します。",
+          "title": "コンテキスト検索をオンにする方法を選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -6861,6 +6861,9 @@
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"
+        },
+        "reindexModel": {
+          "title": "{provider} / {model} に切り替えます。完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {
@@ -6962,6 +6965,10 @@
       "disableForwardModal": {
         "description": "今後追加または更新されるドキュメントではコンテキスト検索が停止します。既存のドキュメントは、更新されるか再インデックスするまで生成済みのコンテキストを保持します。",
         "title": "コンテキスト検索を以降のドキュメントでオフにする"
+      },
+      "enableForwardModal": {
+        "description": "今後追加または更新されるドキュメントからコンテキスト検索が始まります。既存のドキュメントは、更新されるか再インデックスするまでそのままなので、コンテキストの付与状況はドキュメントごとに異なる場合があります。",
+        "title": "コンテキスト検索を以降のドキュメントでオンにする"
       },
       "header": {
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
@@ -7191,6 +7198,8 @@
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
         "contextualRetrievalDisableFailed": "コンテキスト検索をオフにできませんでした",
         "contextualRetrievalDisabled": "コンテキスト検索をオフにしました",
+        "contextualRetrievalEnableFailed": "コンテキスト検索をオンにできませんでした",
+        "contextualRetrievalEnabled": "コンテキスト検索をオンにしました",
         "modelNotFound": "選択したモデルが見つかりませんでした",
         "providerResolveFailed": "プロバイダーを特定できませんでした",
         "reindexCanceled": "再インデックスをキャンセルしました",
@@ -8607,7 +8616,7 @@
           },
           "title": "SSRF 保護",
           "validateAll": {
-            "description": "最も厳しい設定です。Web コネクターを含め、すべての外向きリクエストがプライベート IP や内部 IP に接続できません。",
+            "description": "最も厳しい設定です。Web コネクターを含め、外向きリクエストはプライベート IP や内部 IP に接続できません。例外として、カスタムツールは引き続きプライベートネットワークのアドレスに接続できます。ループバック、リンクローカル、クラウドメタデータは引き続きブロックされます。",
             "label": "すべてのリクエストを検証"
           },
           "validateLlm": {
@@ -10315,7 +10324,7 @@
         "copyButton": {
           "label": "パスワードをコピー"
         },
-        "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。",
+        "description": "<strong>{email}</strong> の新しいランダムなパスワードを生成します。現在のパスワードは直ちに使用できなくなります。すべてのセッションからサインアウトされ、個人用アクセストークンは無効化されます。",
         "doneButton": {
           "label": "完了"
         },
@@ -12041,6 +12050,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "新しいチャットを開始できませんでした。もう一度お試しください。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
       },
@@ -12542,6 +12554,9 @@
         },
         "runningStatus": {
           "text": "{toolName} を実行中..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} はサーバーに接続できませんでした"
         },
         "waitingIndicator": {
           "text": "レスポンスを待っています..."
@@ -13584,9 +13599,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "新規追加"
-      },
       "removeButton": {
         "tooltip": "削除"
       }
@@ -14116,7 +14128,10 @@
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能"
+      "availableFor": "{plan}で利用可能",
+      "beta": {
+        "title": "ベータ"
+      }
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14147,6 +14162,9 @@
       "globalDefault": {
         "label": "グローバルデフォルト"
       }
+    },
+    "appFooter": {
+      "slogan": "オープンソース AI プラットフォーム"
     }
   },
   "craft": {
@@ -14566,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "ファイルをプレビューできません"
+        "title": "このファイル形式のプレビューは現在サポートされていません"
       },
       "error": {
         "inline": "エラー: {message}",
-        "title": "ファイルの読み込みエラー"
+        "title": "プレビューを読み込めませんでした",
+        "description": "もう一度お試しいただくか、ファイルをダウンロードして開いてください。"
       },
       "loading": {
         "label": "ファイルを読み込んでいます..."
@@ -14583,10 +14602,25 @@
         "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
       },
       "imageTooLarge": {
-        "description": "この画像は大きすぎるためプレビューできません。元のファイルをダウンロードして開いてください。"
+        "description": "10 MBまでの画像をプレビューできます。ファイルをダウンロードして開いてください。",
+        "title": "画像が大きすぎるためプレビューできません"
       },
       "unsupported": {
-        "description": "このファイルはプレビューできません。元のファイルをダウンロードして開いてください。"
+        "description": "ファイルをダウンロードして内容を確認してください。"
+      },
+      "retry": {
+        "label": "再試行"
+      },
+      "download": {
+        "label": "ファイルをダウンロード"
+      },
+      "tooLarge": {
+        "title": "ファイルが大きすぎるためプレビューできません",
+        "description": "ここでは{size, number} MBまでのファイルをプレビューできます。ファイルをダウンロードして開いてください。"
+      },
+      "playback": {
+        "title": "再生は未対応です",
+        "description": "お使いのブラウザーではこのファイルを再生できません。ダウンロードして開いてください。"
       }
     },
     "filesTab": {
@@ -15980,6 +16014,10 @@
     },
     "toast": {
       "moreCount": "他 {count} 件"
+    },
+    "sidebar": {
+      "open": "サイドバーを開く",
+      "close": "サイドバーを閉じる"
     }
   },
   "settings": {
@@ -16001,6 +16039,7 @@
         "currentPassword": {
           "title": "現在のパスワード"
         },
+        "description": "他のセッションはサインアウトされ、個人用アクセストークンは無効化されます。",
         "newPassword": {
           "title": "新しいパスワード"
         },
@@ -16589,9 +16628,6 @@
       },
       "searchInput": {
         "placeholder": "検索..."
-      },
-      "betaTag": {
-        "label": "ベータ"
       }
     },
     "appSidebar": {
@@ -16603,8 +16639,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "ベータ"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "エージェントを探す"

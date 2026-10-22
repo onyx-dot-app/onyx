@@ -347,13 +347,62 @@ class RuntimeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "POSTGRES_DB"):
                     Cluster(Path(directory)).database_environment(path)
 
+    def test_intercept_ownership_and_rollout_failure(self) -> None:
+        """Only newly acquired intercepts belong to this launcher and get failure cleanup."""
+        for reused in (False, True):
+            for failed in (False, True):
+                with (
+                    self.subTest(reused=reused, failed=failed),
+                    tempfile.TemporaryDirectory() as directory,
+                    patch.object(Cluster, "connect"),
+                    patch.object(
+                        Cluster,
+                        "api_workload",
+                        return_value={"metadata": {"name": "api"}},
+                    ),
+                    patch.object(Cluster, "intercept_active", return_value=reused),
+                    patch.object(Cluster, "command") as command,
+                    patch.object(
+                        Cluster,
+                        "kube",
+                        side_effect=ValueError("rollout failed") if failed else None,
+                    ),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    marker = Path(directory) / "owner"
+                    cluster = Cluster(Path(directory))
+                    if failed:
+                        with self.assertRaisesRegex(ValueError, "rollout failed"):
+                            cluster.intercept(marker)
+                    else:
+                        cluster.intercept(marker)
+                    self.assertEqual(marker.exists(), not reused)
+                    if not reused:
+                        self.assertEqual(marker.read_text(), "" if failed else "api\n")
+                    leaves = [
+                        call
+                        for call in command.call_args_list
+                        if call.args[:2] == ("telepresence", "leave")
+                    ]
+                    self.assertEqual(len(leaves), int(failed and not reused))
+
     def test_readiness_requires_active_intercept_in_the_selected_context(self) -> None:
         """Require the selected local API intercept instead of accepting another cluster or waiting intercept."""
         cluster = Cluster(Path.cwd(), "selected")
         active = [
             {
                 "name": "api",
-                "intercept_info": [{"disposition": 1, "spec": {"name": "api"}}],
+                "intercept_info": [
+                    {
+                        "disposition": 1,
+                        "spec": {
+                            "name": "api",
+                            "target_host": "127.0.0.1",
+                            "target_port": 8080,
+                            "container_port": 8080,
+                        },
+                    }
+                ],
             }
         ]
         correct = {
@@ -363,6 +412,23 @@ class RuntimeTests(unittest.TestCase):
             Cluster, "command", side_effect=[json.dumps(correct), json.dumps(active)]
         ):
             self.assertTrue(cluster.intercept_active("api"))
+        for field, value in (
+            ("target_port", 8081),
+            ("container_port", 9000),
+            ("target_host", "other-host"),
+        ):
+            with self.subTest(field=field):
+                spec = active[0]["intercept_info"][0]["spec"]
+                original = spec[field]
+                spec[field] = value
+                with patch.object(
+                    Cluster,
+                    "command",
+                    side_effect=[json.dumps(correct), json.dumps(active)],
+                ):
+                    with self.assertRaisesRegex(ValueError, "incompatible intercept"):
+                        cluster.intercept_active("api")
+                spec[field] = original
         active[0]["intercept_info"][0]["disposition"] = 2
         with patch.object(
             Cluster, "command", side_effect=[json.dumps(correct), json.dumps(active)]

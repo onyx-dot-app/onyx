@@ -1268,14 +1268,10 @@
         "title": "제공업체",
         "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
         "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
-        "edit": "구성",
         "connect": "연결"
       },
       "loadFailed": "판단 모델을 불러올 수 없습니다.",
       "retry": "다시 시도",
-      "saveFailed": "연결을 저장할 수 없습니다.",
-      "cancel": "취소",
-      "save": "저장",
       "zoom": {
         "title": "Zoom AI Services 연결",
         "description": "Zoom Scribe와 Zoom AI Decisions에 하나의 연결을 사용합니다. 변경 사항은 둘 다에 적용됩니다.",
@@ -2261,9 +2257,6 @@
         "description": "채팅이 응답을 생성하는 동안 새 내용으로 자동 스크롤합니다. 사용자는 개인 설정에서 이 값을 변경할 수 있습니다.",
         "title": "채팅 자동 스크롤"
       },
-      "betaTag": {
-        "label": "베타"
-      },
       "connectors": {
         "description": "채팅의 내부 검색에서 사용하는 소스입니다. 인덱싱 상태 페이지에서 추가하거나 변경하세요.",
         "empty": {
@@ -2857,7 +2850,10 @@
         "refreshFrequencyUpdateFailed": "커넥터 새로 고침 주기를 업데이트하지 못했습니다",
         "refreshFrequencyUpdated": "커넥터 새로 고침 주기를 업데이트했습니다",
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다.",
+        "targetedReindexRunning": "{count, plural, one {오류 #개} other {오류 #개}}를 다시 시도하는 중…",
+        "targetedReindexDone": "다시 시도가 끝났습니다. {resolved, plural, one {오류 #개} other {오류 #개}}가 해결되었습니다.",
+        "targetedReindexPartial": "다시 시도가 끝났습니다. {resolved, plural, one {오류 #개} other {오류 #개}}가 해결되었고 {failing, plural, one {문서 #개} other {문서 #개}}는 여전히 실패합니다.",
+        "targetedReindexIncomplete": "다시 시도가 끝나지 않았습니다. 해결되지 않은 오류는 목록에 남습니다.",
         "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
         "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
         "runResolved": "해결됨으로 표시했습니다.",
@@ -3165,6 +3161,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
+          "indexingItems": "{count, plural, other {항목 #개 실패}}",
           "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -3186,9 +3183,9 @@
           "title": "활동을 불러올 수 없습니다."
         },
         "docs": {
-          "title": "실패한 문서",
+          "title": "실패한 항목",
           "search": {
-            "placeholder": "문서 검색…"
+            "placeholder": "항목 검색…"
           },
           "resolveAll": "모두 다시 시도",
           "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
@@ -3198,8 +3195,8 @@
           "more": "더 보기",
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
-          "empty": "미해결 문서 오류가 없습니다",
-          "loadError": "실패한 문서를 불러올 수 없습니다.",
+          "empty": "미해결 오류가 없습니다",
+          "loadError": "실패한 항목을 불러올 수 없습니다.",
           "open": "문서 열기"
         },
         "trace": {
@@ -3616,7 +3613,7 @@
         }
       },
       "content": {
-        "title": "커넥터 콘텐츠",
+        "title": "색인 구성",
         "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
@@ -3670,7 +3667,8 @@
       "settings": {
         "description": "커넥터 정보 및 액세스.",
         "displayName": {
-          "title": "커넥터 표시 이름"
+          "title": "표시 이름",
+          "placeholder": "표시 이름 추가"
         },
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
@@ -3729,7 +3727,7 @@
               "label": "첨부 파일 포함"
             },
             "scoped_token": {
-              "label": "범위가 지정된 API 토큰입니다",
+              "label": "범위 지정 API 토큰",
               "description": "범위가 지정된 토큰은 Atlassian API 게이트웨이를 거쳐야 합니다. 기존 토큰이면 끄세요."
             }
           }
@@ -3856,13 +3854,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "저장소 소유자"
+              "label": "저장소 소유자",
+              "placeholder": "저장소 소유자 지정"
             },
             "github_mode": {
-              "label": "인덱싱할 GitHub 콘텐츠",
               "tabs": {
                 "repo": {
-                  "label": "특정 저장소"
+                  "label": "지정한 저장소"
                 },
                 "everything": {
                   "label": "전체"
@@ -3870,12 +3868,12 @@
               }
             },
             "repositories": {
-              "label": "저장소 이름",
-              "description": "저장소가 여러 개이면 쉼표로 구분하여 이름을 입력하세요 (예: repo1,repo2,repo3)"
+              "label": "저장소 이름 목록",
+              "placeholder": "저장소 이름 추가"
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 저장소를 인덱싱합니다!"
+              "label": "모두 색인",
+              "description": "Onyx가 소유자 {owner}에 대해 찾은 모든 저장소를 색인합니다."
             },
             "include_prs": {
               "label": "풀 리퀘스트 포함",
@@ -3891,7 +3889,8 @@
             },
             "branch": {
               "label": "브랜치",
-              "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요."
+              "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요.",
+              "placeholder": "브랜치 이름 추가"
             }
           }
         },
@@ -3974,8 +3973,8 @@
               "description": "해당 프로젝트의 모든 저장소를 인덱싱할 Bitbucket 프로젝트 키를 하나 이상 쉼표로 구분하여 입력하세요 (예: PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "워크스페이스",
-              "description": "이 커넥터는 워크스페이스의 모든 저장소를 인덱싱합니다."
+              "label": "워크스페이스의 모든 저장소를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 워크스페이스의 모든 저장소를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             }
           }
         },
@@ -4099,8 +4098,8 @@
               }
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 페이지를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 페이지를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스페이스의 모든 페이지를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "space": {
               "label": "스페이스 키",
@@ -4142,8 +4141,8 @@
               }
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 이슈를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 이슈를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 프로젝트의 모든 이슈를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "project_key": {
               "label": "프로젝트 키",
@@ -4330,8 +4329,8 @@
               }
             },
             "everything_description": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스페이스를 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 스페이스를 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스페이스의 모든 페이지를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "spaces": {
               "label": "스페이스 ID",
@@ -4771,8 +4770,8 @@
               }
             },
             "everything_description": {
-              "label": "전체",
-              "description": "이 커넥터는 API 토큰으로 액세스할 수 있는 모든 베이스와 테이블을 자동으로 찾아 인덱싱합니다."
+              "label": "토큰이 읽을 수 있는 모든 베이스를 색인합니다",
+              "description": "Onyx는 API 토큰이 읽을 수 있는 모든 베이스와 테이블을 찾아 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4811,8 +4810,8 @@
               "description": "스팟이 여러 개이면 하나씩 입력하세요."
             },
             "everything": {
-              "label": "전체",
-              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스팟을 인덱싱합니다!"
+              "label": "계정이 읽을 수 있는 모든 스팟을 색인합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스팟을 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             }
           }
         },
@@ -4952,9 +4951,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "베타"
-        },
         "disabled": {
           "description": "Craft가 모든 사용자에게 꺼져 있습니다. 아래에서 사용자별로 전환하세요."
         },
@@ -6835,6 +6831,10 @@
           "description": "새 문서와 업데이트된 문서에 대한 컨텍스트 생성을 지금 중지하거나, 모든 문서를 다시 구축하여 이미 생성된 컨텍스트도 제거하세요.",
           "title": "컨텍스트 검색을 끄는 방식을 선택하세요"
         },
+        "contextualEnableOnly": {
+          "description": "지금부터 새 문서와 업데이트된 문서에 컨텍스트를 생성하거나, 모든 문서를 다시 구축하여 모든 문서에 컨텍스트를 적용하세요.",
+          "title": "컨텍스트 검색을 켜는 방식을 선택하세요"
+        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"
@@ -6861,6 +6861,9 @@
         "reindex": {
           "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "전체 재인덱싱이 실행됩니다."
+        },
+        "reindexModel": {
+          "title": "{provider} / {model}(으)로 전환합니다. 전체 재인덱싱이 실행됩니다."
         }
       },
       "cloudDisabled": {
@@ -6962,6 +6965,10 @@
       "disableForwardModal": {
         "description": "지금부터 추가되거나 업데이트되는 문서에는 컨텍스트 검색이 적용되지 않습니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 이미 생성된 컨텍스트를 유지합니다.",
         "title": "이후 문서부터 컨텍스트 검색 끄기"
+      },
+      "enableForwardModal": {
+        "description": "지금부터 추가되거나 업데이트되는 문서에 컨텍스트 검색이 적용됩니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 그대로 유지되므로 문서마다 컨텍스트 보강이 다를 수 있습니다.",
+        "title": "이후 문서부터 컨텍스트 검색 켜기"
       },
       "header": {
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
@@ -7191,6 +7198,8 @@
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",
         "contextualRetrievalDisableFailed": "컨텍스트 검색을 끄지 못했습니다",
         "contextualRetrievalDisabled": "컨텍스트 검색을 껐습니다",
+        "contextualRetrievalEnableFailed": "컨텍스트 검색을 켜지 못했습니다",
+        "contextualRetrievalEnabled": "컨텍스트 검색을 켰습니다",
         "modelNotFound": "선택한 모델을 찾을 수 없습니다",
         "providerResolveFailed": "제공업체를 확인할 수 없습니다",
         "reindexCanceled": "재인덱싱을 취소했습니다",
@@ -8607,7 +8616,7 @@
           },
           "title": "SSRF 보호",
           "validateAll": {
-            "description": "가장 엄격합니다. 웹 커넥터를 포함한 모든 아웃바운드 요청이 사설 또는 내부 IP에 연결할 수 없습니다.",
+            "description": "가장 엄격합니다. 웹 커넥터를 포함한 아웃바운드 요청은 사설 또는 내부 IP에 연결할 수 없습니다. 예외: 사용자 지정 도구는 계속 사설 네트워크 주소에 연결할 수 있습니다. 루프백, 링크 로컬, 클라우드 메타데이터는 계속 차단됩니다.",
             "label": "모든 요청 검증"
           },
           "validateLlm": {
@@ -10315,7 +10324,7 @@
         "copyButton": {
           "label": "비밀번호 복사"
         },
-        "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다.",
+        "description": "<strong>{email}</strong>의 새 임의 비밀번호를 생성합니다. 현재 비밀번호는 즉시 사용할 수 없게 됩니다. 모든 세션에서 로그아웃되고 개인 액세스 token이 해지됩니다.",
         "doneButton": {
           "label": "완료"
         },
@@ -12041,6 +12050,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "새 채팅을 시작할 수 없습니다. 다시 시도하세요."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
       },
@@ -12542,6 +12554,9 @@
         },
         "runningStatus": {
           "text": "{toolName} 실행 중..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
         },
         "waitingIndicator": {
           "text": "응답 대기 중..."
@@ -13584,9 +13599,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "새로 추가"
-      },
       "removeButton": {
         "tooltip": "제거"
       }
@@ -14116,7 +14128,10 @@
       "upgrade": {
         "label": "플랜 업그레이드"
       },
-      "availableFor": "{plan}에서 사용 가능"
+      "availableFor": "{plan}에서 사용 가능",
+      "beta": {
+        "title": "베타"
+      }
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -14147,6 +14162,9 @@
       "globalDefault": {
         "label": "전역 기본값"
       }
+    },
+    "appFooter": {
+      "slogan": "오픈 소스 AI 플랫폼"
     }
   },
   "craft": {
@@ -14566,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "파일을 미리 볼 수 없습니다"
+        "title": "이 파일 형식의 미리보기는 현재 지원되지 않습니다"
       },
       "error": {
         "inline": "오류: {message}",
-        "title": "파일 불러오기 오류"
+        "title": "미리보기를 불러올 수 없음",
+        "description": "미리보기를 불러오지 못했습니다. 다시 시도하거나 파일을 다운로드하여 여세요."
       },
       "loading": {
         "label": "파일을 불러오는 중..."
@@ -14583,10 +14602,25 @@
         "malformed": "이 CSV에는 따옴표로 묶인 잘못된 필드가 있습니다. 확인하려면 원본을 다운로드하세요."
       },
       "imageTooLarge": {
-        "description": "이미지가 너무 커서 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
+        "description": "최대 10 MB의 이미지를 미리볼 수 있습니다. 파일을 다운로드하여 여세요.",
+        "title": "이미지가 너무 커서 미리볼 수 없음"
       },
       "unsupported": {
-        "description": "이 파일은 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
+        "description": "파일을 다운로드하여 내용을 확인하세요."
+      },
+      "retry": {
+        "label": "다시 시도"
+      },
+      "download": {
+        "label": "파일 다운로드"
+      },
+      "tooLarge": {
+        "title": "파일이 너무 커서 미리볼 수 없음",
+        "description": "여기서는 최대 {size, number} MB의 파일을 미리볼 수 있습니다. 파일을 다운로드하여 여세요."
+      },
+      "playback": {
+        "title": "재생이 지원되지 않음",
+        "description": "브라우저에서 이 파일을 재생할 수 없습니다. 파일을 다운로드하여 여세요."
       }
     },
     "filesTab": {
@@ -15980,6 +16014,10 @@
     },
     "toast": {
       "moreCount": "+{count}개 더"
+    },
+    "sidebar": {
+      "open": "사이드바 열기",
+      "close": "사이드바 닫기"
     }
   },
   "settings": {
@@ -16001,6 +16039,7 @@
         "currentPassword": {
           "title": "현재 비밀번호"
         },
+        "description": "다른 세션은 로그아웃되고 개인 액세스 token이 해지됩니다.",
         "newPassword": {
           "title": "새 비밀번호"
         },
@@ -16589,9 +16628,6 @@
       },
       "searchInput": {
         "placeholder": "검색..."
-      },
-      "betaTag": {
-        "label": "베타"
       }
     },
     "appSidebar": {
@@ -16603,8 +16639,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "베타"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"

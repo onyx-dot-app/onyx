@@ -12,6 +12,7 @@ import type {
 } from "@/lib/connectors/types/source";
 import {
   connectorConfigFromForm,
+  findConfigField,
   connectorFormControlFieldNames,
   createConnectorInitialValues,
   formOnlyFieldNames,
@@ -128,6 +129,26 @@ function accessValues(
  * over the form defaults, the pair's name, schedule and access, and the tab
  * that holds the stored values.
  */
+/** The stored config as form values: a list field stored as one
+ * comma-joined string (see its `transform`) edits as its entries. */
+function listValues(
+  configuration: ConnectionConfiguration,
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(config).map(([name, value]) => [
+      name,
+      typeof value === "string" &&
+      findConfigField(configuration, name)?.type === "list"
+        ? value
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== "")
+        : value,
+    ])
+  );
+}
+
 export function editInitialValues(
   source: ConfigurableSources,
   configuration: ConnectionConfiguration,
@@ -143,7 +164,7 @@ export function editInitialValues(
       [...configuration.values, ...configuration.advanced_values],
       config
     ),
-    ...config,
+    ...listValues(configuration, config),
     ...credentialRealmValues(source, ccPair),
     ...accessValues(ccPair.access_type, dataAccessGroupIds),
     name: ccPair.name,

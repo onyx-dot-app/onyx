@@ -126,8 +126,6 @@ const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
 interface ConnectorChecksGates {
-  /** The checks that validate the credential passed: the form may unlock. */
-  formUnlocked: boolean;
   /** Every required check passed for the current form: Create may run. */
   createReady: boolean;
   /** How many non-required checks failed: Create warns of them first. */
@@ -153,7 +151,7 @@ function ConnectorChecksGate({
   ccPairId,
   children,
 }: ConnectorChecksGateProps) {
-  const { formUnlocked, createReady, results } = useConnectorChecks({
+  const { createReady, results } = useConnectorChecks({
     source,
     credential,
     ccPairId,
@@ -161,7 +159,7 @@ function ConnectorChecksGate({
   const optionalFailedCount: number = results.filter(
     (result) => result.status === "failed" && !result.required
   ).length;
-  return children({ formUnlocked, createReady, optionalFailedCount });
+  return children({ createReady, optionalFailedCount });
 }
 
 async function submitConnector<T>(
@@ -409,6 +407,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   );
   const configUnlocked = gate?.status === "unlocked";
   const gateMessage = useBindingGateMessage(gate?.reason ?? null);
+  const selectAccountMessage = useBindingGateMessage({
+    kind: "selectCredential",
+  });
   // The rest of the form also waits for the capability checks. Each visit
   // starts without a run. Sources without a credential step have no checks.
   useResetConnectorChecks(connector);
@@ -746,16 +747,31 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             ccPairId={edit?.ccPair.id ?? null}
           >
             {(checks) => {
-              const formUnlocked: boolean =
-                configUnlocked && (noCredentials || checks.formUnlocked);
+              // Only a missing account locks the configuration. The bound
+              // fields and the checks hold back Create, not the form, so a
+              // check run never locks the field that started it.
+              const formUnlocked: boolean = canCreate;
+              const formLockReason: string | undefined = formUnlocked
+                ? undefined
+                : (selectAccountMessage ?? undefined);
               // Non-required checks never block Create.
               const createReady: boolean =
-                formUnlocked && (noCredentials || checks.createReady);
-              const formLockReason: string | undefined = !configUnlocked
+                configUnlocked && (noCredentials || checks.createReady);
+              const createLockReason: string | undefined = !configUnlocked
                 ? (gateMessage ?? undefined)
-                : formUnlocked
+                : createReady
                   ? undefined
                   : checksT("lockReason");
+              const hasContentFields: boolean =
+                visibleConnectorFields(
+                  contentConfiguration,
+                  formikProps.values,
+                  formCredential
+                ).length > 0 ||
+                contentConfiguration.subtext !== undefined ||
+                editsFileList;
+              // The file source has no start date.
+              const indexesFromStart: boolean = connector !== "file";
               // Disabled while the credentials load or after they fail, since
               // nothing can be connected then.
               const createDisabled: boolean =
@@ -809,6 +825,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                       <Button
                         key="connect"
                         disabled={createDisabled}
+                        tooltip={createDisabled ? createLockReason : undefined}
                         icon={busy ? IconLoader : undefined}
                         onClick={async () => {
                           const errors = await formikProps.validateForm();
@@ -948,11 +965,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                             />
                           )}
 
-                          {/* The wizard could not reach these sections without a
-                      valid credential; on one page they stay locked, under one
-                      Disabled that blocks pointer and keyboard, until the
-                      credential and the bound fields are valid and the
-                      capability checks pass. */}
+                          {/* Locked, under one Disabled that blocks pointer
+                      and keyboard, until an account is selected. */}
                           <Disabled
                             disabled={!formUnlocked}
                             tooltip={formLockReason}
@@ -962,15 +976,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
-                              {/* A source with nothing to configure (Gmail) skips the
-                              section. */}
-                              {(visibleConnectorFields(
-                                contentConfiguration,
-                                formikProps.values,
-                                formCredential
-                              ).length > 0 ||
-                                contentConfiguration.subtext !== undefined ||
-                                editsFileList) && (
+                              {/* A source with no fields (Gmail) shows only the
+                              start date; the file source shows neither. */}
+                              {(hasContentFields || indexesFromStart) && (
                                 <>
                                   <ConnectorContentSection
                                     config={contentConfiguration}
@@ -987,6 +995,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                           }
                                     }
                                     disabled={!formUnlocked}
+                                    hasFields={hasContentFields}
+                                    indexingStart={indexesFromStart}
                                   >
                                     {edit && editsFileList && (
                                       <EditFileLocations

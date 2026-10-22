@@ -15,6 +15,8 @@ from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 PUBLIC_ENDPOINT_SPECS = [
+    # Tenant-scoped, expiring read-only capability; cookies do not authorize access.
+    ("/build/static-preview/{token}/{path:path}", {"GET"}),
     # Built-in API docs / schema. These routes only exist when ENABLE_PUBLIC_DOCS
     # is set (see get_application); they are gated off by default so the API
     # surface is not exposed publicly. When the flag is off the routes are not

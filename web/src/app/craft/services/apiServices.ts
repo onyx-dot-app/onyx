@@ -1184,3 +1184,40 @@ export async function saveAppActionPolicies(
   if (!response.ok)
     throw new Error(await parseErrorDetail(response, errorMessage));
 }
+
+/** Mint a folder-scoped URL; the isolated frame never receives login credentials. */
+export async function createStaticPreview(
+  sessionId: string,
+  path: string,
+  renewToken?: string
+): Promise<{ url: string; expiresAt: number; token: string }> {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/static-preview/${encodedPath}${renewToken ? `?renew_token=${encodeURIComponent(renewToken)}` : ""}`,
+    {
+      method: "POST",
+      cache: "no-store",
+    }
+  );
+  if (!response.ok)
+    throw new FetchError("Failed to load HTML preview", response.status, null);
+  const result: unknown = await response.json();
+  if (
+    !result ||
+    typeof result !== "object" ||
+    !("path" in result) ||
+    typeof result.path !== "string" ||
+    !/^[\w-]{43}\/[^/]+$/.test(result.path) ||
+    !("expires_in" in result) ||
+    typeof result.expires_in !== "number" ||
+    !Number.isFinite(result.expires_in) ||
+    result.expires_in <= 60
+  ) {
+    throw new Error("Invalid HTML preview response");
+  }
+  return {
+    url: `${BUILD_API_BASE}/static-preview/${result.path}`,
+    expiresAt: Date.now() + result.expires_in * 1000,
+    token: result.path.split("/")[0]!,
+  };
+}

@@ -309,8 +309,10 @@ Recovery settlement checks run every 250ms for the first second, then every seco
 Each card belongs to the latest indexed producing turn and opens the current resource.
 Three cards appear inline; the overflow action opens Outputs filtered to that turn.
 Unread dots compare artifact version with the owner’s saved viewed revision.
-An explicit output open acknowledges the captured card revision, even if its preview cannot render.
-This records user acknowledgement, not successful content delivery. Newer revisions retain their unread state.
+The open output panel acknowledges the active file revision, even if its preview cannot render.
+Updates to that active file are acknowledged while the runtime is ready. Hidden file tabs do not acknowledge updates.
+App card clicks acknowledge the captured revision. This records user acknowledgement, not successful content delivery.
+Mark all viewed applies to the current Outputs scope, including folder descendants, and preserves newer revisions.
 Opening the overview or loading a thumbnail does not mark an output viewed.
 Live inventory determines file availability when a saved card still records a prior deletion.
 Turn collections retain saved cards when a complete live inventory confirms that their files are missing.
@@ -356,6 +358,8 @@ App readiness requests coalesce per runtime and reject retired session, task, or
 Existing local app tabs are reused. The first automatic opening also retains an Outputs overview tab.
 Explicit file clicks open a file tab and use medium when the panel was closed.
 Explicit opening preserves an existing medium or full layout.
+Uploaded attachment Expand actions also open file tabs, including files without preview support.
+Expand never starts a download. The output panel provides the Download action.
 Outputs, All Files, file previews, and Browser share one ordered, closeable tab collection per session.
 File identity uses a normalized session-relative path. Browser identity remains separate from its selected app.
 Resource tabs and their active ID are the only tab-selection model.

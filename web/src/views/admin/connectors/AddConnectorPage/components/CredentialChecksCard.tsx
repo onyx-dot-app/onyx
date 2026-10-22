@@ -199,12 +199,9 @@ function CheckLog({ check }: CheckLogProps) {
             />
           )}
           {check.required && (
-            <Tag
-              title={t("required.label")}
-              color="white"
-              variant="status"
-              font="secondary-action"
-            />
+            <Text font="secondary-action" color="text-03">
+              {t("required.label")}
+            </Text>
           )}
         </Section>
       }
@@ -220,7 +217,14 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
+      {/* Inside the fold, so a folded group adds no space. */}
+      <Section
+        justifyContent="start"
+        alignItems="stretch"
+        height="fit"
+        gap={1}
+        className="mt-1"
+      >
         {checks.map((check) => (
           // The backend repeats some checks across capabilities under the
           // same ID, so the capability keeps the key unique.
@@ -250,7 +254,7 @@ export function CheckLineGroups({ lines }: CheckLineGroupsProps) {
     [lines]
   );
   return (
-    <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+    <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
       {groups.map((group) => (
         <CheckGroup
           key={group.label}
@@ -398,18 +402,29 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {(notice !== undefined || stateCounts.failed > 0) &&
-            onRerun !== undefined && (
-              // A run that broke or failed a check can be tried again without editing settings.
+          {onRerun !== undefined &&
+            (notice ? (
+              // The way to try again, so it says what it does.
               <Button
                 rightIcon={SvgRefreshCw}
-                prominence="tertiary"
+                prominence="internal"
                 disabled={isRunning}
                 onClick={onRerun}
               >
                 {tAccount("rerunButton.label")}
               </Button>
-            )}
+            ) : (
+              !collapsed && (
+                <Button
+                  icon={SvgRefreshCw}
+                  prominence="internal"
+                  tooltip={tAccount("rerunButton.label")}
+                  aria-label={tAccount("rerunButton.label")}
+                  disabled={isRunning}
+                  onClick={onRerun}
+                />
+              )
+            ))}
           {collapsed && requiredFailed > 0 && (
             <Tag
               icon={SvgXOctagon}
@@ -421,7 +436,9 @@ export function CheckCardView({
           {(!notice || hasRows) && (
             <Button
               icon={collapsed ? SvgExpand : SvgFold}
-              prominence="tertiary"
+              // Folded, the card hovers grey itself; tertiary matches that
+              // grey, where internal would paint a white square on it.
+              prominence={collapsed ? "tertiary" : "internal"}
               tooltip={
                 collapsed ? t("foldButton.expand") : t("foldButton.fold")
               }

@@ -18,6 +18,12 @@ here. Read the component that documents the setting in its env table.
 
 ---
 
+## Deployment proxy
+
+| Path | Component(s) |
+|---|---|
+| `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | auth-and-identity |
+
 ## Terraform: custom tools
 
 | Path | Component(s) |
@@ -172,6 +178,7 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/server/features/build/` | craft-sessions |
+| `backend/onyx/server/features/build/static_preview.py` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-external-apps |
@@ -193,7 +200,10 @@ so verify the callers rather than a single component.
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
+| `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts` | craft-webapp-proxy |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
+| `web/src/lib/docx/` | chat-frontend, craft-webapp-proxy |
+| `web/src/lib/spreadsheetPreview.ts`, `web/src/app/craft/services/filePreview.ts` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
 | `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts` | craft-webapp-proxy |
@@ -238,6 +248,7 @@ so verify the callers rather than a single component.
 | `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
+| `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
 
 ---

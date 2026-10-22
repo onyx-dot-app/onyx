@@ -710,3 +710,73 @@ test("keeps preview subscriptions alive when switching between cached sessions",
   );
   expect(screen.getByRole("button", { name: first.path })).toBeInTheDocument();
 });
+
+test("marks only the current folder and descendants, and includes all folders at the root", async () => {
+  const cards: OutputCard[] = [
+    { ...outputCard, id: "report", path: "outputs/reports/report.xlsx" },
+    { ...outputCard, id: "nested", path: "outputs/reports/nested/data.csv" },
+    { ...outputCard, id: "sibling", path: "outputs/reports-other/other.xlsx" },
+    { ...outputCard, id: "root", path: "outputs/root.md" },
+  ];
+  const onMarkAllViewed = jest.fn(async () => {});
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    outputCards: cards,
+    onMarkAllViewed,
+  };
+  const { rerender } = render(<OutputsTab {...props} />);
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "reports" }));
+  await user.click(screen.getByRole("button", { name: "Mark all viewed" }));
+  expect(onMarkAllViewed).toHaveBeenLastCalledWith(cards.slice(0, 2));
+
+  rerender(
+    <OutputsTab
+      {...props}
+      outputCards={cards.map((card, index) =>
+        index < 2 ? { ...card, viewed_revision: card.revision } : card
+      )}
+    />
+  );
+  expect(
+    screen.getByRole("button", { name: "Mark all viewed" })
+  ).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "Outputs" }));
+  rerender(<OutputsTab {...props} />);
+  await user.click(screen.getByRole("button", { name: "Mark all viewed" }));
+  expect(onMarkAllViewed).toHaveBeenLastCalledWith(cards);
+});
+
+test("keeps mark-all-viewed within the search and turn scope", async () => {
+  const cards: OutputCard[] = [
+    {
+      ...outputCard,
+      id: "current",
+      path: "outputs/reports/current.xlsx",
+      turn_index: 1,
+    },
+    {
+      ...outputCard,
+      id: "old",
+      path: "outputs/reports/old.xlsx",
+      turn_index: 0,
+    },
+    { ...outputCard, id: "other", path: "outputs/other.md", turn_index: 1 },
+  ];
+  const onMarkAllViewed = jest.fn(async () => {});
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    outputCards: cards,
+    onMarkAllViewed,
+  };
+  render(<OutputsTab {...props} searchQuery="current" turnIndex={1} />);
+  await setupUser().click(
+    screen.getByRole("button", { name: "Mark all viewed" })
+  );
+  expect(onMarkAllViewed).toHaveBeenCalledWith([cards[0]]);
+});

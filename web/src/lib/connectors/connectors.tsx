@@ -212,9 +212,11 @@ export function translateConfiguration(
     const out: ConnectorField = {
       ...f,
       ...(f.label !== undefined && { label: text(f.label) }),
-      ...(f.description !== undefined && {
-        description: text(f.description),
-      }),
+      // A description with form arguments is formatted when it is shown.
+      ...(f.description !== undefined &&
+        !(f.type === "string_tab" && f.descriptionValues) && {
+          description: text(f.description),
+        }),
     };
     if (out.type === "tab") {
       out.tabs = out.tabs.map((tab) => ({
@@ -229,7 +231,10 @@ export function translateConfiguration(
         name: translate(option.name),
       }));
     }
-    if (out.type === "text" && out.placeholder !== undefined) {
+    if (
+      (out.type === "text" || out.type === "list") &&
+      out.placeholder !== undefined
+    ) {
       out.placeholder = translate(out.placeholder);
     }
     if (out.type === "string_pair_list") {
@@ -442,27 +447,13 @@ export const connectorConfigs: Record<
         label: "connectors.github.fields.repo_owner.label",
         name: "repo_owner",
         optional: false,
+        placeholder: "connectors.github.fields.repo_owner.placeholder",
       },
       {
         type: "tab",
         name: "github_mode",
-        label: "connectors.github.fields.github_mode.label",
         optional: true,
         tabs: [
-          {
-            value: "repo",
-            label: "connectors.github.fields.github_mode.tabs.repo.label",
-            fields: [
-              {
-                type: "text",
-                label: "connectors.github.fields.repositories.label",
-                name: "repositories",
-                optional: false,
-                description:
-                  "connectors.github.fields.repositories.description",
-              },
-            ],
-          },
           {
             value: "everything",
             label: "connectors.github.fields.github_mode.tabs.everything.label",
@@ -472,6 +463,27 @@ export const connectorConfigs: Record<
                 label: "connectors.github.fields.everything.label",
                 name: "everything",
                 description: "connectors.github.fields.everything.description",
+                descriptionValues: (values) =>
+                  typeof values.repo_owner === "string" &&
+                  values.repo_owner.trim() !== ""
+                    ? { owner: values.repo_owner.trim() }
+                    : null,
+              },
+            ],
+          },
+          {
+            value: "repo",
+            label: "connectors.github.fields.github_mode.tabs.repo.label",
+            fields: [
+              {
+                type: "list",
+                label: "connectors.github.fields.repositories.label",
+                name: "repositories",
+                optional: false,
+                placeholder:
+                  "connectors.github.fields.repositories.placeholder",
+                // The config takes one comma-separated string.
+                transform: (names: string[]) => names.join(","),
               },
             ],
           },
@@ -506,6 +518,7 @@ export const connectorConfigs: Record<
         name: "branch",
         optional: true,
         description: "connectors.github.fields.branch.description",
+        placeholder: "connectors.github.fields.branch.placeholder",
       },
     ],
   },

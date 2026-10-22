@@ -50,7 +50,11 @@ export interface MultiSelectOption extends Option {
 export interface ListOption extends Option {
   type: "list";
   default?: string[];
-  transform?: (values: string[]) => string[];
+  /** Runs on the entries before they are sent, e.g. to join them into the
+   * one string the config stores. */
+  transform?: (values: string[]) => string[] | string;
+  /** Example entry shown in each empty input. */
+  placeholder?: string;
   /** Discovery finding whose options the field offers: stores the value, shows the label. Typed entries stay allowed. */
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */
@@ -114,6 +118,11 @@ export interface FileOption extends Option {
 export interface StringTabOption extends Option {
   type: "string_tab";
   default?: string;
+  /** The description's arguments, read from the form; null hides the
+   * description. With it, the description key is formatted when shown. */
+  descriptionValues?: (
+    values: Record<string, unknown>
+  ) => Record<string, string> | null;
 }
 
 export type ConnectorValueField =
