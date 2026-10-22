@@ -14103,8 +14103,7 @@
     },
     "plans": {
       "free": {
-        "title": "免费版",
-        "tooltip": "所有版本均可用。"
+        "title": "免费版"
       },
       "business": {
         "title": "商业版",

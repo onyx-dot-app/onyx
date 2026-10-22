@@ -14103,8 +14103,7 @@
     },
     "plans": {
       "free": {
-        "title": "Free Plan",
-        "tooltip": "Available on every plan."
+        "title": "Free Plan"
       },
       "business": {
         "title": "Business Plan",
