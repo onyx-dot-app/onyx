@@ -14092,6 +14092,9 @@
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "开源 AI 平台"
     }
   },
   "craft": {
@@ -15918,6 +15921,10 @@
     "tabs": {
       "scrollLeft": "向左滚动标签",
       "scrollRight": "向右滚动标签"
+    },
+    "sidebar": {
+      "open": "打开侧边栏",
+      "close": "关闭侧边栏"
     }
   },
   "settings": {

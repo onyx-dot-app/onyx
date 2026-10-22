@@ -14092,6 +14092,9 @@
         "projectId": "mon-projet-vertex",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "Plateforme d'IA open source"
     }
   },
   "craft": {
@@ -15918,6 +15921,10 @@
     "tabs": {
       "scrollLeft": "Faire défiler les onglets vers la gauche",
       "scrollRight": "Faire défiler les onglets vers la droite"
+    },
+    "sidebar": {
+      "open": "Ouvrir la barre latérale",
+      "close": "Fermer la barre latérale"
     }
   },
   "settings": {

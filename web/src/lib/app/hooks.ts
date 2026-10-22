@@ -2,9 +2,9 @@
 
 import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { APP_SLOGAN } from "@/lib/constants";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
 import { useActiveAgent, useAgents } from "@/lib/agents/hooks";
@@ -12,9 +12,10 @@ import { SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID } from "@/lib/tools/constants";
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();
+  const t = useTranslations("common.appFooter");
   return (
     settings.enterprise?.custom_lower_disclaimer_content ||
-    `[Onyx ${settings.version ?? "dev"}](https://www.onyx.app/) - ${APP_SLOGAN}`
+    `[Onyx ${settings.version ?? "dev"}](https://www.onyx.app/) - ${t("slogan")}`
   );
 }
 

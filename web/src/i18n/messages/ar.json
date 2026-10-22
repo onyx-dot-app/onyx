@@ -14092,6 +14092,9 @@
         "projectId": "mashrue-vertex",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "منصة ذكاء اصطناعي مفتوحة المصدر"
     }
   },
   "craft": {
@@ -15918,6 +15921,10 @@
     "tabs": {
       "scrollLeft": "تمرير التبويبات لليسار",
       "scrollRight": "تمرير التبويبات لليمين"
+    },
+    "sidebar": {
+      "open": "فتح الشريط الجانبي",
+      "close": "إغلاق الشريط الجانبي"
     }
   },
   "settings": {

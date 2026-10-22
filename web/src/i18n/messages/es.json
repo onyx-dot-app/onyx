@@ -14092,6 +14092,9 @@
         "projectId": "mi-proyecto-vertex",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "Plataforma de IA de código abierto"
     }
   },
   "craft": {
@@ -15918,6 +15921,10 @@
     "tabs": {
       "scrollLeft": "Desplazar pestañas a la izquierda",
       "scrollRight": "Desplazar pestañas a la derecha"
+    },
+    "sidebar": {
+      "open": "Abrir barra lateral",
+      "close": "Cerrar la barra lateral"
     }
   },
   "settings": {

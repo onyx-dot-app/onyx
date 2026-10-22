@@ -14092,6 +14092,9 @@
         "projectId": "nae-vertex-peurojekteu",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "오픈 소스 AI 플랫폼"
     }
   },
   "craft": {
@@ -15918,6 +15921,10 @@
     "tabs": {
       "scrollLeft": "탭을 왼쪽으로 스크롤",
       "scrollRight": "탭을 오른쪽으로 스크롤"
+    },
+    "sidebar": {
+      "open": "사이드바 열기",
+      "close": "사이드바 닫기"
     }
   },
   "settings": {
