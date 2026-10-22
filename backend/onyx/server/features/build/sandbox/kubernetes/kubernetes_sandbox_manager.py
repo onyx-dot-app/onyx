@@ -1439,6 +1439,8 @@ class KubernetesSandboxManager(SandboxManager):
                 or labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
                 or labels.get(LABEL_TENANT_ID) != resource.tenant_id
                 or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+                or labels.get(LABEL_K8S_COMPONENT)
+                not in {LABEL_K8S_COMPONENT_SANDBOX, LABEL_K8S_COMPONENT_AUTH}
             ):
                 raise RuntimeError(f"Resource ownership changed: {resource.name}")
             delete(

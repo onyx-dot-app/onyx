@@ -530,7 +530,9 @@ labels. Kubernetes uses namespace-scoped, paginated lists of Pods, Services, and
 Secrets. New auth Secrets carry tenant and attempt labels. Docker scopes containers
 and volumes by sandbox network, with a Compose project fallback for older resources.
 Resources without enough ownership metadata require operator inspection.
-`delete_resource` checks the observed identity again. Kubernetes deletes with UID
+`delete_resource` checks the observed identity again. Kubernetes also requires
+the component label to be `sandbox` or `sandbox-opencode-auth` before deletion.
+Kubernetes deletes with UID
 and resource-version preconditions. Docker deletes containers by ID and checks
 volume creation time. It refuses volume removal while a container uses the volume.
 Runtime Kubernetes clients have request deadlines and disable hidden HTTP retries.
