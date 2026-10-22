@@ -547,9 +547,12 @@ export function CheckCardView({
       [t("summary.unverified", { count: incompleteCount }), incompleteCount],
       [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
       [t("summary.expected", { count: expectedCount }), expectedCount],
+      // A stopped check is still open, so it is counted from the run's states.
       [
-        t("summary.skipped", { count: count("skipped") + count("stopped") }),
-        count("skipped") + count("stopped"),
+        t("summary.skipped", {
+          count: count("skipped") + stateCounts.stopped,
+        }),
+        count("skipped") + stateCounts.stopped,
       ],
       [t("summary.successful", { count: count("passed") }), count("passed")],
     ];
@@ -564,6 +567,7 @@ export function CheckCardView({
     count,
     inProgressCount,
     expectedCount,
+    stateCounts.stopped,
     t,
     format,
   ]);
