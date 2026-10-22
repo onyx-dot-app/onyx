@@ -15,6 +15,7 @@ from onyx.background.celery.tasks.docfetching.tasks import docfetching_proxy_tas
 from onyx.background.indexing.run_docfetching import mark_attempt_failed_unless_terminal
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
@@ -173,17 +174,17 @@ def test_a_terminal_status_is_kept_under_the_row_lock(
     web_cc_pair: ConnectorCredentialPair,
 ) -> None:
     attempt = _add_attempt(db_session, web_cc_pair, cancellation_requested=False)
-    # The session already holds the row, as a caller that read it earlier would.
-    loaded = _reload(db_session, attempt.id)
-    db_session.execute(
-        update(IndexAttempt)
-        .where(IndexAttempt.id == attempt.id)
-        .values(status=IndexingStatus.INTERRUPTED)
-    )
-    db_session.commit()
+    # This session keeps the row loaded as NOT_STARTED while another writer finalizes it.
+    assert _reload(db_session, attempt.id).status == IndexingStatus.NOT_STARTED
+    with get_session_with_current_tenant() as other_session:
+        other_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == attempt.id)
+            .values(status=IndexingStatus.INTERRUPTED)
+        )
+        other_session.commit()
 
-    mark_attempt_failed_unless_terminal(attempt.id, RuntimeError("late failure"))
     mark_attempt_canceled(attempt.id, db_session, "late cancel", unless_terminal=True)
+    mark_attempt_failed_unless_terminal(attempt.id, RuntimeError("late failure"))
 
-    finished = _reload(db_session, loaded.id)
-    assert finished.status == IndexingStatus.INTERRUPTED
+    assert _reload(db_session, attempt.id).status == IndexingStatus.INTERRUPTED
