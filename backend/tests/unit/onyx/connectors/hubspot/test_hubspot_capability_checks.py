@@ -209,7 +209,7 @@ def test_a_sample_check_stops_when_no_selected_type_reads(check_id: str) -> None
     assert sample.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
     assert sample.blocked_by == "hubspot_deals_readable"
     assert sample.summary == "Not run: Read deals failed"
-    gateway.list_associations.assert_not_called()
+    gateway.read_associations.assert_not_called()
 
 
 def test_a_missing_users_scope_names_it() -> None:
