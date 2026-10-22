@@ -85,6 +85,13 @@
   animation: opal-toast-slide-out 500ms ease;
 }
 
+/* Closed while in the pile: it is already out of sight, so it plays no exit
+   (the exit's first frame would show it at full height). */
+.opal-toast[data-leaving][data-pile],
+.opal-toast[data-leaving][data-pile] .opal-toast-spacer {
+  animation: none;
+}
+
 /* No clipping: min-height 0 lets the row reach 0, and min-width 0 keeps a
    long title from widening the toast. */
 .opal-toast-body {
