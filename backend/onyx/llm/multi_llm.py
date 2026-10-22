@@ -101,6 +101,7 @@ from onyx.llm.models import (
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.inworld import inworld_authorization
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -740,6 +741,13 @@ class LitellmLLM(LLM):
             self._custom_llm_provider = "anthropic"
             if self._api_base is not None:
                 self._api_base = self._api_base.rstrip("/")
+
+        # Replaces the OpenAI SDK's Bearer header, which Inworld reads as a JWT.
+        if model_provider == LlmProviderNames.INWORLD and self._api_key:
+            model_kwargs["extra_headers"] = {
+                **(model_kwargs.get("extra_headers") or {}),
+                "Authorization": inworld_authorization(self._api_key),
+            }
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:

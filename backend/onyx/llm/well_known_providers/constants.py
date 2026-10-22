@@ -27,6 +27,12 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 # Public, unauthenticated catalog; also litellm's default base for this provider.
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
+INWORLD_PROVIDER_NAME = "inworld"
+# Model catalog path on the API host; `/v1/models` is not routed publicly.
+INWORLD_MODELS_PATH = "/llm/v1alpha/models"
+# Inworld's own model selection; `models`/`sort` in the request narrow it.
+INWORLD_AUTO_ROUTER_MODEL = "auto"
+
 PORTKEY_PROVIDER_NAME = "portkey"
 # Which API surface a Portkey provider targets; stored in custom_config.
 PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"
