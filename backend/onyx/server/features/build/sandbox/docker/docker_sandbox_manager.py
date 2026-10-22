@@ -1079,15 +1079,18 @@ class DockerSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         self._close_all_sandbox_buses(sandbox_id)
 
+        errors: list[Exception] = []
         container = self._get_container(sandbox_id)
         if container is not None:
             try:
                 container.remove(force=True, v=False)
                 logger.info("Removed sandbox container %s.", container.name)
-            except (APIError, NotFound) as e:
+            except NotFound:
                 logger.warning(
-                    "Error removing sandbox container %s: %s", container.name, e
+                    "Sandbox container %s disappeared during removal.", container.name
                 )
+            except Exception as e:
+                errors.append(e)
 
         # Volume removal is separate so terminate works after manual container
         # rm.
@@ -1098,8 +1101,13 @@ class DockerSandboxManager(SandboxManager):
             logger.info("Removed sandbox volume %s.", volume_name)
         except NotFound:
             pass
-        except APIError as e:
-            logger.warning("Error removing sandbox volume %s: %s", volume_name, e)
+        except Exception as e:
+            errors.append(e)
+
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
 
         logger.info("Terminated Docker sandbox %s.", sandbox_id)
 

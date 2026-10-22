@@ -416,22 +416,6 @@ class KubernetesSandboxManager(SandboxManager):
             return None
         return base64.b64decode(raw).decode("utf-8")
 
-    def _delete_opencode_password_secret(self, sandbox_id: str | UUID) -> None:
-        """Delete the per-pod opencode-serve auth Secret. Idempotent."""
-        secret_name = self._get_opencode_secret_name(sandbox_id)
-        try:
-            self._core_api.delete_namespaced_secret(
-                name=secret_name, namespace=self._namespace
-            )
-            logger.info("Deleted opencode auth secret %s", secret_name)
-        except ApiException as e:
-            if e.status not in (404, 410):
-                logger.warning(
-                    "Failed to delete opencode auth secret %s: %s",
-                    secret_name,
-                    e,
-                )
-
     def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
         """Get the internal cluster URL for a session's Next.js server.
 
@@ -1248,16 +1232,16 @@ class KubernetesSandboxManager(SandboxManager):
         polls until the resource returns 404 (not found).
 
         Args:
-            resource_type: Type of resource ("pod" or "service")
+            resource_type: Type of resource ("pod", "service", or "secret")
             name: Name of the resource
             timeout: Maximum time to wait in seconds
 
         Returns:
             True if resource was deleted, False if timeout
         """
-        start_time = time.time()
+        start_time = time.monotonic()
 
-        while time.time() - start_time < timeout:
+        while True:
             try:
                 if resource_type == "pod":
                     self._core_api.read_namespaced_pod(
@@ -1269,13 +1253,16 @@ class KubernetesSandboxManager(SandboxManager):
                         name=name,
                         namespace=self._namespace,
                     )
+                elif resource_type == "secret":
+                    self._core_api.read_namespaced_secret(
+                        name=name,
+                        namespace=self._namespace,
+                    )
                 else:
                     raise ValueError(f"Unknown resource type: {resource_type}")
 
                 # Resource still exists, wait and retry
                 logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
-                time.sleep(POLL_INTERVAL_SECONDS)
-
             except ApiException as e:
                 if e.status == 404:
                     # Resource is gone
@@ -1287,7 +1274,10 @@ class KubernetesSandboxManager(SandboxManager):
                 logger.warning(
                     "Error checking %s %s status: %s", resource_type, name, e
                 )
-                time.sleep(POLL_INTERVAL_SECONDS)
+            remaining = timeout - (time.monotonic() - start_time)
+            if remaining <= 0:
+                break
+            time.sleep(min(POLL_INTERVAL_SECONDS, remaining))
 
         logger.warning(
             "Timeout waiting for %s %s to be deleted after %ss",
@@ -1316,55 +1306,39 @@ class KubernetesSandboxManager(SandboxManager):
         pod_name = self._get_pod_name(sandbox_id)
         service_name = self._get_pod_name(sandbox_id)
 
-        # Delete in reverse order of creation
-        service_deleted = False
-        try:
-            self._core_api.delete_namespaced_service(
-                name=service_name,
-                namespace=self._namespace,
-            )
-            logger.debug("Deleted Service %s", service_name)
-            service_deleted = True
-        except ApiException as e:
-            if e.status == 404:
-                # Already deleted
-                service_deleted = True
-            else:
-                logger.error("Error deleting Service %s: %s", service_name, e)
-                raise
+        errors: list[Exception] = []
+        deletions = (
+            ("service", service_name, self._core_api.delete_namespaced_service),
+            ("pod", pod_name, self._core_api.delete_namespaced_pod),
+            (
+                "secret",
+                self._get_opencode_secret_name(sandbox_id),
+                self._core_api.delete_namespaced_secret,
+            ),
+        )
+        for _resource_type, name, delete in deletions:
+            try:
+                delete(name=name, namespace=self._namespace)
+            except ApiException as e:
+                if e.status != 404:
+                    errors.append(e)
+            except Exception as e:
+                errors.append(e)
 
-        pod_deleted = False
-        try:
-            self._core_api.delete_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
-            )
-            logger.debug("Deleted Pod %s", pod_name)
-            pod_deleted = True
-        except ApiException as e:
-            if e.status == 404:
-                # Already deleted
-                pod_deleted = True
-            else:
-                logger.error("Error deleting Pod %s: %s", pod_name, e)
-                raise
-
-        # Delete the per-pod opencode-serve auth Secret. Idempotent.
-        # Done after the Pod is being torn down so no live container is
-        # still trying to resolve the secretKeyRef.
-        self._delete_opencode_password_secret(sandbox_id)
-
-        # Wait for resources to be fully deleted to prevent 409 conflicts
-        # on immediate re-provisioning
         if wait_for_deletion:
-            if service_deleted:
-                self._wait_for_resource_deletion(
-                    "service", service_name, RUNTIME_TEARDOWN_SECONDS
-                )
-            if pod_deleted:
-                self._wait_for_resource_deletion(
-                    "pod", pod_name, RUNTIME_TEARDOWN_SECONDS
-                )
+            deadline = time.monotonic() + RUNTIME_TEARDOWN_SECONDS
+            for resource_type, name, _delete in deletions:
+                try:
+                    if not self._wait_for_resource_deletion(
+                        resource_type, name, max(0.0, deadline - time.monotonic())
+                    ):
+                        errors.append(RuntimeError(f"{resource_type} {name} remains"))
+                except Exception as e:
+                    errors.append(e)
+        if errors:
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} cleanup incomplete: {errors}"
+            ) from errors[0]
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Tear down event buses, then delete Service + Pod."""

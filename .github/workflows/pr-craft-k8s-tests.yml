@@ -156,6 +156,7 @@ jobs:
             shard="${base#test_}"
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
+          entries="${entries}{\"path\":\"backend/tests/integration/tests/craft/k8s/cleanup\",\"name\":\"cleanup-resources\"},"
           if [ -z "${entries}" ]; then
             echo "::error::no craft k8s test files discovered"
             exit 1
