@@ -384,6 +384,7 @@
   "PATCH /admin/agents/display-priorities": "admin",
   "PATCH /admin/api-key/{api_key_id}": "manage:service_account_api_keys",
   "PATCH /admin/default-assistant": "admin",
+  "PATCH /admin/default-assistant/tools": "admin",
   "PATCH /admin/hooks/{hook_id}": "admin",
   "PATCH /admin/llm/model-routing": "manage:llms",
   "PATCH /admin/mcp/server/{server_id}": "manage:actions +scope",

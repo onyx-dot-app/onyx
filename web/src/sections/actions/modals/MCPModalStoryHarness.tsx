@@ -171,18 +171,26 @@ function MockEnvironment({
       if (!path.startsWith("/api/")) return originalFetch(input, init);
       if (path === "/api/admin/default-assistant/configuration")
         return json({ tool_ids: defaultToolIds });
-      if (path === "/api/admin/default-assistant" && init?.method === "PATCH") {
+      if (
+        path === "/api/admin/default-assistant/tools" &&
+        init?.method === "PATCH"
+      ) {
         const payload: unknown =
           typeof init.body === "string" ? JSON.parse(init.body) : null;
         if (
           payload &&
           typeof payload === "object" &&
           "tool_ids" in payload &&
-          Array.isArray(payload.tool_ids)
+          Array.isArray(payload.tool_ids) &&
+          "enabled" in payload
         ) {
-          defaultToolIds = payload.tool_ids.filter(
-            (id): id is number => typeof id === "number"
+          const changed = new Set(
+            payload.tool_ids.filter(
+              (id): id is number => typeof id === "number"
+            )
           );
+          const others = defaultToolIds.filter((id) => !changed.has(id));
+          defaultToolIds = payload.enabled ? [...others, ...changed] : others;
           return json({ tool_ids: defaultToolIds });
         }
         return json(

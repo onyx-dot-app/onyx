@@ -58,24 +58,13 @@ test.describe("ToolsPopover Tool Toggles", () => {
       if (t.in_code_tool_id) toolIdsByCodeId[t.in_code_tool_id] = t.id;
     });
 
-    const configResp = await page.request.get(
-      "/api/admin/default-assistant/configuration"
-    );
-    const currentConfig = await configResp.json();
-
     const desiredToolIds = [
       toolIdsByCodeId["SearchTool"],
       toolIdsByCodeId["WebSearchTool"],
       toolIdsByCodeId["ImageGenerationTool"],
-    ].filter(Boolean);
+    ].filter((id) => id !== undefined);
 
-    const uniqueToolIds = Array.from(
-      new Set([...(currentConfig.tool_ids || []), ...desiredToolIds])
-    );
-
-    await page.request.patch("/api/admin/default-assistant", {
-      data: { tool_ids: uniqueToolIds },
-    });
+    await apiClient.addToolsToDefaultAssistant(desiredToolIds);
 
     await ctx.close();
   });

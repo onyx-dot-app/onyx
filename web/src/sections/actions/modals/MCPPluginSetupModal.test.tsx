@@ -200,7 +200,7 @@ beforeEach(() => {
         body: init.body ? JSON.parse(String(init.body)) : undefined,
       });
     if (
-      path === "/api/admin/default-assistant" ||
+      path === "/api/admin/default-assistant/tools" ||
       path === "/api/admin/default-assistant/configuration"
     )
       return defaultChatFails
@@ -269,9 +269,10 @@ test.each([true, false])(
     await setupUser().click(screen.getByRole("button", { name: copy.connect }));
     await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
     expect(
-      writes.find((write) => write.path === "/api/admin/default-assistant")
-        ?.body
-    ).toEqual({ tool_ids: [81] });
+      writes.find(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )?.body
+    ).toEqual({ tool_ids: [81], enabled: true });
     expect(
       writes.find((write) => write.path === "/api/admin/mcp/server")?.body
     ).toEqual(expect.objectContaining({ available_in_craft: available }));
@@ -297,7 +298,9 @@ test.each([false, true])(
     await user.click(screen.getByRole("button", { name: copy.connect }));
     await waitFor(() => expect(mockCompleted).toHaveBeenCalled());
     expect(
-      writes.find((write) => write.path === "/api/admin/default-assistant")
+      writes.find(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )
     ).toBeUndefined();
     expect(
       writes.find((write) => write.path === "/api/admin/mcp/server")?.body
@@ -332,8 +335,9 @@ test("first OAuth setup carries the Chat enable intent and enables after already
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant")?.body
-  ).toEqual({ tool_ids: [81] });
+    writes.find((write) => write.path === "/api/admin/default-assistant/tools")
+      ?.body
+  ).toEqual({ tool_ids: [81], enabled: true });
 });
 
 test("personal API-key setup keeps the admin's credential personal while enabling Chat", async () => {
@@ -362,8 +366,9 @@ test("personal API-key setup keeps the admin's credential personal while enablin
     })
   );
   expect(
-    writes.find((write) => write.path === "/api/admin/default-assistant")?.body
-  ).toEqual({ tool_ids: [81] });
+    writes.find((write) => write.path === "/api/admin/default-assistant/tools")
+      ?.body
+  ).toEqual({ tool_ids: [81], enabled: true });
 });
 
 test("a rejected Chat enable remains an actionable setup error, not success", async () => {
@@ -372,7 +377,7 @@ test("a rejected Chat enable remains an actionable setup error, not success", as
   const fetchSetup = jest.mocked(global.fetch).getMockImplementation();
   jest.mocked(global.fetch).mockImplementation(async (input, init) => {
     if (
-      String(input) === "/api/admin/default-assistant" &&
+      String(input) === "/api/admin/default-assistant/tools" &&
       init?.method === "PATCH"
     )
       return new Response(JSON.stringify({ detail: "Enable failed" }), {
@@ -398,7 +403,7 @@ test("failed discovery never enables Chat or completes setup", async () => {
     "Tool listing failed"
   );
   expect(
-    writes.some((write) => write.path === "/api/admin/default-assistant")
+    writes.some((write) => write.path === "/api/admin/default-assistant/tools")
   ).toBe(false);
   expect(mockCompleted).not.toHaveBeenCalled();
 });
@@ -489,7 +494,7 @@ test("missing Chat configuration cannot silently complete first setup", async ()
   expect(await screen.findByRole("alert")).toBeVisible();
   expect(mockCompleted).not.toHaveBeenCalled();
   expect(
-    writes.some((write) => write.path === "/api/admin/default-assistant")
+    writes.some((write) => write.path === "/api/admin/default-assistant/tools")
   ).toBe(false);
 });
 
