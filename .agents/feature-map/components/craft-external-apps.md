@@ -225,6 +225,11 @@ Reads return `effective_policy`, `workspace_policy`, and `stored_policy` for eac
 Saves validate catalog IDs and workspace restrictions directly; they do not construct UI responses.
 All workspace write routes call `replace_workspace_action_policies` for validation and persistence. `db/external_app.py` owns app configuration and credentials.
 
+Slack exposes `POST /api/auth.test` as the configurable **Check connection** action
+(`slack.auth.test`). Its catalog default is Auto-approve. Existing tasks must
+explicitly save this action as Auto-approve for unattended connection checks;
+missing task choices still resolve to Ask. Other unrecognized endpoints still ask.
+
 `ApprovalChoice` accepts `approve_once`, `approve_session`, or `reject`. These are request choices;
 `ApprovalDecision` stores `APPROVED`, `REJECTED`, or `EXPIRED`. There is one decision endpoint.
 
