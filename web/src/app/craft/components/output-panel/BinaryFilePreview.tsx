@@ -53,9 +53,9 @@ export default function BinaryFilePreview({
       if (result.tooLarge) return { ...result, sheets: undefined };
       const sheets =
         kind === "spreadsheet"
-          ? (await import("@/lib/spreadsheetPreview")).parseSpreadsheet(
-              await result.blob.arrayBuffer()
-            )
+          ? await (
+              await import("@/lib/readSpreadsheetPreview")
+            ).readSpreadsheetPreview(await result.blob.arrayBuffer())
           : undefined;
       return { ...result, sheets };
     },

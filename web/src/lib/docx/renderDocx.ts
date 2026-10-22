@@ -25,5 +25,15 @@ export async function renderDocx(buffer: ArrayBuffer) {
   for (const child of Array.from(styles.children)) {
     if (child.tagName !== "STYLE") child.remove();
   }
+  const paperStyle = document.createElement("style");
+  paperStyle.textContent = `
+    section.docx {
+      background-color: var(--background-neutral-light-00, white);
+      border-radius: var(--radius-08, 8px);
+      margin-inline: auto;
+    }
+    section.docx + section.docx { margin-top: 1rem; }
+  `;
+  styles.append(paperStyle);
   return { body, styles };
 }

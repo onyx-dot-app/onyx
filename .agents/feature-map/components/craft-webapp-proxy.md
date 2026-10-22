@@ -322,6 +322,9 @@ Successful logout retires retained writes and clears Craft snapshots and prefere
 PowerPoint conversion and PDF thumbnails use the managed converter bundle described in [[craft-sandboxes]].
 Installation does not replace agent-managed skills or enter session snapshots.
 
+DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
+DOCX scroll restoration waits for rendered content. Spreadsheet parsing runs in a worker with a ten-second deadline.
+
 ## 5. Contracts and invariants
 
 MCP host attribution remains workspace-wide when resolving targets without a

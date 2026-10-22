@@ -193,6 +193,7 @@ so verify the callers rather than a single component.
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
+| `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts` | craft-webapp-proxy |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
 | `web/src/lib/docx/` | chat-frontend, craft-webapp-proxy |
 | `web/src/lib/spreadsheetPreview.ts`, `web/src/app/craft/services/filePreview.ts` | craft-webapp-proxy |

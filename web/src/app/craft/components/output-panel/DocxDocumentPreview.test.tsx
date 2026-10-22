@@ -1,4 +1,4 @@
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import DocxDocumentPreview from "@/app/craft/components/output-panel/DocxDocumentPreview";
 
 // Minimal DOCX containing one paragraph; exercises the real ZIP reader and renderer.
@@ -11,12 +11,25 @@ it("renders a DOCX document and reopens cached content without a loading flash",
     arrayBuffer: jest.fn(async () => bytes.buffer),
   });
   const onError = jest.fn();
-  const first = render(<DocxDocumentPreview blob={blob} onError={onError} />);
-  expect(await screen.findByText("Craft document preview")).toBeInTheDocument();
+  const first = render(
+    <DocxDocumentPreview blob={blob} onError={onError} initialScrollTop={240} />
+  );
+  const host = first.container.querySelector(".docx-host");
+  const scrollArea = host?.parentElement;
+  expect(scrollArea?.scrollTop).toBe(0);
+  await waitFor(() =>
+    expect(host?.shadowRoot?.textContent).toContain("Craft document preview")
+  );
+  expect(scrollArea?.scrollTop).toBe(240);
+  expect(first.container.querySelector("style")).toBeNull();
   expect(onError).not.toHaveBeenCalled();
   first.unmount();
-  render(<DocxDocumentPreview blob={blob} onError={onError} />);
-  expect(screen.getByText("Craft document preview")).toBeInTheDocument();
+  const second = render(
+    <DocxDocumentPreview blob={blob} onError={onError} initialScrollTop={240} />
+  );
+  const reopened = second.container.querySelector(".docx-host");
+  expect(reopened?.shadowRoot?.textContent).toContain("Craft document preview");
+  expect(reopened?.parentElement?.scrollTop).toBe(240);
   expect(screen.queryByText("Loading file")).not.toBeInTheDocument();
   expect(blob.arrayBuffer).toHaveBeenCalledTimes(1);
 });

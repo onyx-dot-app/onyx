@@ -364,6 +364,8 @@ Craft uses the same parser with bounded preview limits; chat keeps its complete-
 
 ---
 
+DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
+
 ## 5. Contracts and invariants
 
 ### Component rules (`web/AGENTS.md`, verified against source)

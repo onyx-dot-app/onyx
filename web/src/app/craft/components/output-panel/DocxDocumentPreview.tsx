@@ -7,7 +7,6 @@ import {
   FilePreviewScrollArea,
   type FilePreviewScrollPosition,
 } from "@/app/craft/components/output-panel/FilePreviewScrollArea";
-import "@/lib/docx/styles.css";
 
 // Entries expire with the preview's cached blob.
 const renderedDocuments = new WeakMap<
@@ -30,11 +29,11 @@ export default function DocxDocumentPreview({
   const [loaded, setLoaded] = useState<Blob>();
   useLayoutEffect(() => {
     let cancelled = false;
+    if (!host.current) return;
+    const root =
+      host.current.shadowRoot ?? host.current.attachShadow({ mode: "open" });
     function display({ body, styles }: Awaited<ReturnType<typeof renderDocx>>) {
-      host.current?.replaceChildren(
-        styles.cloneNode(true),
-        body.cloneNode(true)
-      );
+      root.replaceChildren(styles.cloneNode(true), body.cloneNode(true));
       setLoaded(blob);
     }
     const cached = renderedDocuments.get(blob);
@@ -42,7 +41,7 @@ export default function DocxDocumentPreview({
       display(cached);
       return;
     }
-    host.current?.replaceChildren();
+    root.replaceChildren();
     void blob
       .arrayBuffer()
       .then(renderDocx)
@@ -58,7 +57,7 @@ export default function DocxDocumentPreview({
     };
   }, [blob]);
   return (
-    <FilePreviewScrollArea {...scroll}>
+    <FilePreviewScrollArea {...scroll} contentReady={loaded === blob}>
       {loaded !== blob && <FilePreviewLoading />}
       <div ref={host} className="docx-host" />
     </FilePreviewScrollArea>

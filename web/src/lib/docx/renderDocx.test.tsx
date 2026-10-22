@@ -15,7 +15,7 @@ it("sanitizes document markup before exposing rendered nodes", async () => {
   expect(result.body.textContent).toContain("Document text");
   expect(result.body.querySelector("img")).not.toHaveAttribute("onerror");
   expect(result.body.querySelector("a")).not.toHaveAttribute("href");
-  expect(result.styles.children).toHaveLength(1);
+  expect(result.styles.children).toHaveLength(2);
   expect(result.styles.firstElementChild?.tagName).toBe("STYLE");
 });
 

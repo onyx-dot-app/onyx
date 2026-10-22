@@ -12,7 +12,6 @@ import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CopyButton } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
-import "@/lib/docx/styles.css";
 
 const DOCX_MIMES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -39,7 +38,6 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const styleRef = useRef<HTMLDivElement>(null);
   const onLoadRef = useRef(onLoad);
 
   useEffect(() => {
@@ -60,11 +58,13 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
         const rendered = await renderDocx(buffer);
         if (cancelled) return;
-        bodyRef.current?.replaceChildren(...rendered.body.childNodes);
-        styleRef.current?.replaceChildren(...rendered.styles.childNodes);
+        const host = bodyRef.current;
+        if (!host) return;
+        const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+        root.replaceChildren(rendered.styles, rendered.body);
 
         // Extract plain text from the rendered DOM
-        const text = bodyRef.current?.innerText ?? "";
+        const text = rendered.body.innerText ?? "";
         const words = text
           .split(/\s+/)
           .filter((w: string) => w.length > 0).length;
@@ -102,8 +102,6 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
           <IconLoader className="h-8 w-8" />
         </Section>
       )}
-      {/* Style container for docx-preview generated styles */}
-      <div ref={styleRef} />
       {/* Body container where docx-preview renders the document */}
       <div ref={bodyRef} className="docx-host px-32 py-16" />
     </ScrollIndicatorDiv>
