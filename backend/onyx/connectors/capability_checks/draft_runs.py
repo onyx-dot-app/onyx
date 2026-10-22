@@ -390,30 +390,35 @@ def draft_result_cache_key(
     form_values: dict[str, Any] | None,
     cc_pair_id: int | None,
 ) -> str:
-    """The result cache key of one check. A check that reads the config,
-    directly or through a connector instance, keys on the validated form
-    values. Any other check keys on the form values that the source's gateway
-    reads, and on the credential. A dry run of a pair also keys on the pair."""
+    """The result cache key of one check. A check that reads the config
+    through a connector instance, or without declaring ``config_fields``, keys
+    on the validated form values. Any other check keys on its
+    ``config_fields`` and the form values that the source's gateway reads, and
+    on the credential. A dry run of a pair also keys on the pair."""
     config_hash = _CONFIG_INDEPENDENT_HASH
     if form_values is not None:
-        if check.reads_connector_config or check.requires_connector_instance:
+        if check.requires_connector_instance or (
+            check.reads_connector_config and check.config_fields is None
+        ):
             config_hash = _config_hash(form_values)
         else:
             gateway_class = get_source_operations_class(source)
             gateway_keys = (
                 gateway_class.config_keys if gateway_class is not None else frozenset()
             )
-            gateway_values = (
+            check_fields = check.config_fields or frozenset()
+            read_values = (
                 form_values
                 if gateway_keys is None
                 else {
                     key: value
                     for key, value in form_values.items()
-                    if key in gateway_keys and value not in (None, "")
+                    if key in check_fields
+                    or (key in gateway_keys and value not in (None, ""))
                 }
             )
-            if gateway_values:
-                config_hash = _config_hash(gateway_values)
+            if read_values:
+                config_hash = _config_hash(read_values)
     access = access_type.value if access_type is not None else "none"
     key = (
         f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_id}:"

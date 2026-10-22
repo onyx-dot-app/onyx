@@ -540,6 +540,9 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
       to make a permission-sync check apply to all of them.
     - ``applies``: a predicate on the form state, for anything the two
       declarations above cannot express.
+    - ``config_fields``: the config fields its result depends on, including
+      reads through helpers. A form run then reuses its cached result while
+      other fields change. Omitted or None, every field counts.
 
     ``validates_binding`` marks a check whose pass unlocks the rest of the
     create form: every source's sign-in check, and a check that proves the
@@ -560,6 +563,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         requires_connector_instance: bool = True,
         requires_connector_config: bool = False,
         requires_fields: frozenset[str] = frozenset(),
+        config_fields: frozenset[str] | None = None,
         access_types: frozenset[AccessType] | None = None,
         timeout_seconds: float | None = None,
         is_fallback: bool = False,
@@ -592,6 +596,12 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
             requires_fields
         )
         self.requires_fields = requires_fields
+        if config_fields is not None and not requires_fields <= config_fields:
+            raise ValueError(
+                f"{check_id} requires fields its config_fields leave out: "
+                f"{sorted(requires_fields - config_fields)}."
+            )
+        self.config_fields = config_fields
         self.access_types = (
             access_types
             if access_types is not None

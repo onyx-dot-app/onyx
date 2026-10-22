@@ -398,18 +398,29 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {(notice !== undefined || stateCounts.failed > 0) &&
-            onRerun !== undefined && (
-              // A run that broke or failed a check can be tried again without editing settings.
+          {onRerun !== undefined &&
+            (notice ? (
+              // The way to try again, so it says what it does.
               <Button
                 rightIcon={SvgRefreshCw}
-                prominence="tertiary"
+                prominence="internal"
                 disabled={isRunning}
                 onClick={onRerun}
               >
                 {tAccount("rerunButton.label")}
               </Button>
-            )}
+            ) : (
+              !collapsed && (
+                <Button
+                  icon={SvgRefreshCw}
+                  prominence="internal"
+                  tooltip={tAccount("rerunButton.label")}
+                  aria-label={tAccount("rerunButton.label")}
+                  disabled={isRunning}
+                  onClick={onRerun}
+                />
+              )
+            ))}
           {collapsed && requiredFailed > 0 && (
             <Tag
               icon={SvgXOctagon}
@@ -421,7 +432,9 @@ export function CheckCardView({
           {(!notice || hasRows) && (
             <Button
               icon={collapsed ? SvgExpand : SvgFold}
-              prominence="tertiary"
+              // Folded, the card hovers grey itself; tertiary matches that
+              // grey, where internal would paint a white square on it.
+              prominence={collapsed ? "tertiary" : "internal"}
               tooltip={
                 collapsed ? t("foldButton.expand") : t("foldButton.fold")
               }

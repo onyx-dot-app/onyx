@@ -80,6 +80,9 @@ _SSO_GUIDE_LINK = (
     "authorizing-a-personal-access-token-for-use-with-saml-single-sign-on"
 )
 _OWNER_FIELDS = frozenset({"repo_owner"})
+# The config fields each check's result reads, see ``config_fields``.
+_REPOSITORY_FIELDS = _OWNER_FIELDS | {"repositories"}
+_DOCUMENT_TYPE_FIELDS = frozenset({"include_prs", "include_issues", "include_files"})
 _ERROR_DETAIL_CHARS = 300
 # GitHub's text when a SAML organization has not authorized the token.
 _SAML_TEXT = "saml enforcement"
@@ -280,6 +283,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = _OWNER_FIELDS,
+        config_fields: frozenset[str] | None = None,
         requires_connector_config: bool = False,
         validates_binding: bool = False,
         fails_when_unreachable: bool = False,
@@ -294,6 +298,7 @@ class _GitHubCheck(CapabilityCheck[GithubConnectorConfig]):
             requires_connector_instance=False,
             requires_connector_config=requires_connector_config,
             requires_fields=requires_fields,
+            config_fields=config_fields,
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
@@ -317,6 +322,7 @@ class _AuthCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id=_AUTH_CHECK_ID,
+            config_fields=frozenset(),
             display_name="Sign in to GitHub",
             remediation=(
                 "Create a new personal access token (classic or fine-grained) and "
@@ -392,6 +398,7 @@ class _TokenScopesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_token_scopes",
+            config_fields=frozenset(),
             display_name="Read token scopes",
             required=False,
             remediation=(
@@ -438,6 +445,7 @@ class _DocumentTypesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_document_types",
+            config_fields=_DOCUMENT_TYPE_FIELDS,
             display_name="Check selected content",
             remediation="Select pull requests, issues or files.",
             requires_fields=frozenset(),
@@ -496,6 +504,7 @@ class _OwnerCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id=_OWNER_CHECK_ID,
+            config_fields=_OWNER_FIELDS,
             display_name="Find repository owner",
             remediation=(
                 "Enter the organization or user name from the repository URL "
@@ -556,6 +565,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_repositories_visible",
+            config_fields=_OWNER_FIELDS,
             display_name="List repositories",
             remediation=(
                 f"{_TOKEN_ACCESS_HINT} A user owner lists only public repositories; "
@@ -672,6 +682,7 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_configured_repositories",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Find selected repos",
             remediation=(
                 "Check each repository name (without the owner) and the owner. "
@@ -910,6 +921,7 @@ class _BranchCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_branch",
+            config_fields=_REPOSITORY_FIELDS | {"branch"},
             display_name="Find selected branch",
             remediation=(
                 "Check the branch name, or leave it blank to index each "
@@ -998,6 +1010,7 @@ class _PullRequestsCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_pull_requests",
+            config_fields=_REPOSITORY_FIELDS | {"state_filter"},
             display_name="Sample pull requests",
             remediation=(
                 "Fine-grained token: give it read access to Pull requests. Classic "
@@ -1075,6 +1088,7 @@ class _IssuesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_issues",
+            config_fields=_REPOSITORY_FIELDS | {"state_filter"},
             display_name="Sample issues",
             remediation=(
                 "Fine-grained token: give it read access to Issues. Classic token: "
@@ -1151,6 +1165,7 @@ class _FilesCheck(_GitHubCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="github_files",
+            config_fields=_REPOSITORY_FIELDS | {"branch"},
             display_name="Sample files",
             remediation=(
                 "Fine-grained token: give it read access to Contents. Classic "
@@ -1312,6 +1327,7 @@ class _RepositoryVisibilityCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="github_repository_visibility",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Read repo visibility",
             remediation=(
                 "Give the token read access to the repositories (see the indexing "
@@ -1441,6 +1457,7 @@ class _CollaboratorsCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id=_COLLABORATORS_CHECK_ID,
+            config_fields=_REPOSITORY_FIELDS,
             display_name="List collaborators",
             remediation=(
                 "Use a token of an account with write access to the private "
@@ -1526,6 +1543,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id=_MEMBERS_CHECK_ID,
+            config_fields=_REPOSITORY_FIELDS,
             display_name="List org members",
             remediation=_MEMBERS_HINT,
         )
@@ -1594,6 +1612,7 @@ class _UserEmailsCheck(_GitHubCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="github_user_emails",
+            config_fields=_REPOSITORY_FIELDS,
             display_name="Read public emails",
             required=False,
             remediation=(
