@@ -207,6 +207,54 @@ def test_no_selected_mailbox_found_fails() -> None:
     assert result.summary == "No selected mailbox found"
 
 
+def test_no_selected_mailbox_found_fails_one_row_only() -> None:
+    gateway = _healthy()
+    gateway.resolve_mailbox.return_value = None
+
+    results = _run_all(
+        [
+            "outlook_configured_mailboxes",
+            "outlook_mail_read",
+            "outlook_calendar_read",
+        ],
+        gateway,
+        {"mailboxes": ["a@contoso.com"], "include_calendar": True},
+    )
+
+    assert results["outlook_configured_mailboxes"].status == (
+        CapabilityCheckStatus.FAILED
+    )
+    for check_id in ("outlook_mail_read", "outlook_calendar_read"):
+        assert results[check_id].status == CapabilityCheckStatus.SKIPPED
+        assert results[check_id].blocked_by == "outlook_configured_mailboxes"
+
+
+def test_a_credential_only_run_still_samples_mail() -> None:
+    """Without a config nothing is selected, so the selected-scope checks do
+    not apply and the mail sample runs on any mailbox."""
+    checks = [
+        _CHECKS[check_id]
+        for check_id in (
+            "outlook_token_auth",
+            "outlook_mailbox_listing",
+            "outlook_configured_mailboxes",
+            "outlook_configured_groups",
+            "outlook_mail_read",
+        )
+    ]
+    results = {
+        result.check_id: result
+        for result in run_capability_checks(checks, check_context(_healthy()))
+    }
+
+    for check_id in ("outlook_configured_mailboxes", "outlook_configured_groups"):
+        assert results[check_id].status == CapabilityCheckStatus.SKIPPED
+        assert not results[check_id].applicable
+    mail = results["outlook_mail_read"]
+    assert mail.status == CapabilityCheckStatus.PASSED
+    assert mail.blocked_by is None
+
+
 def test_a_group_that_matches_nothing_names_it() -> None:
     gateway = _healthy()
     gateway.resolve_groups.return_value = []
@@ -215,6 +263,17 @@ def test_a_group_that_matches_nothing_names_it() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.summary == "Group not found: Ghost"
+
+
+def test_a_sample_on_an_ambiguous_group_says_it_is_ambiguous() -> None:
+    gateway = _healthy()
+    gateway.resolve_groups.return_value = [EntraGroup(id="a"), EntraGroup(id="b")]
+
+    result = _run("outlook_mail_read", gateway, {"mailbox_groups": ["Sales"]})
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Group name not unique: Sales"
+    assert "More than one group is named Sales" in (result.description or "")
 
 
 def test_a_refused_group_read_names_the_grant() -> None:

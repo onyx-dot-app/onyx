@@ -605,6 +605,12 @@ class CheckRowText(BaseModel):
     description: str
 
 
+def counted(count: int | str, noun: str, plural: str) -> str:
+    """``count`` with its noun: "1 repository", "3 repositories", "100+
+    repositories"."""
+    return f"{count} {noun if str(count) == '1' else plural}"
+
+
 def fit_summary(prefix: str, name: str, suffix: str = "") -> str:
     """``prefix``, ``name`` and ``suffix``, with the name cut to fit a row's
     summary."""

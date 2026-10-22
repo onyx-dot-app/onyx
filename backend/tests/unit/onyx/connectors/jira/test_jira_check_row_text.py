@@ -76,6 +76,13 @@ def test_passing_checks_give_the_values_they_found() -> None:
     assert _run("jira_issue_read", gateway).summary == "Read an issue from AS"
 
 
+def test_one_visible_project_is_singular() -> None:
+    gateway = _gateway()
+    gateway.list_projects.return_value = [{"key": "AS", "name": "Onyx Support"}]
+
+    assert _run("jira_projects_visible", gateway).summary == "1 project visible"
+
+
 @pytest.mark.parametrize("status", [429, 500])
 def test_a_missing_email_is_not_blamed_for_a_rate_limit_or_a_server_error(
     status: int,

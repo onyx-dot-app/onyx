@@ -62,7 +62,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     UnreachableValidationError,
 )
-from onyx.connectors.models import CheckRowText
+from onyx.connectors.models import CheckRowText, counted
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.slack.connector import (
     channel_keys,
@@ -167,11 +167,6 @@ _ROW_IDS: dict[str, str] = {
 def _need(scope: str) -> str:
     """The line that says what the bot token needs."""
     return f"Add the `{scope}` bot scope, then reinstall the app."
-
-
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 channel", "3 channels", "1000+ channels"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
 
 
 def _channel_name(channel: dict[str, Any]) -> str:
@@ -657,7 +652,7 @@ class _GridWorkspaceListingCheck(_SlackCheck):
             raise _no_grid_workspaces_error()
         shown = f"{count}+" if more else count
         return CheckOutput(
-            summary=f"{_counted(shown, 'workspace', 'workspaces')} in the org"
+            summary=f"{counted(shown, 'workspace', 'workspaces')} in the org"
         )
 
 
@@ -1087,7 +1082,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
         missing = [entry for entry in configured if entry not in visible_channels]
         if not missing:
             return CheckOutput(
-                summary=f"All {_counted(len(configured), 'selected channel', 'selected channels')} found"
+                summary=f"All {counted(len(configured), 'selected channel', 'selected channels')} found"
             )
         message = (
             f"Configured channels are not visible to the bot: {missing}. Each may "
@@ -1107,7 +1102,7 @@ class _ConfiguredChannelsVisibleCheck(_SlackCheck):
             )
         return CheckOutput(
             summary=(
-                f"{_counted(len(missing), 'selected channel', 'selected channels')} "
+                f"{counted(len(missing), 'selected channel', 'selected channels')} "
                 "not visible"
             ),
             description=(
@@ -1212,7 +1207,7 @@ class _ReadableChannelListingCheck(_SlackCheck):
             )
         return CheckOutput(
             summary=(
-                f"{_counted(len(finding.options), 'public channel', 'public channels')} "
+                f"{counted(len(finding.options), 'public channel', 'public channels')} "
                 "found"
             ),
             findings=[finding],
@@ -1473,7 +1468,7 @@ class _PrivateChannelMemberListingCheck(_SlackCheck):
             else len(members)
         )
         return CheckOutput(
-            summary=f"Listed {_counted(count, 'member', 'members')} of #{name}"
+            summary=f"Listed {counted(count, 'member', 'members')} of #{name}"
         )
 
 

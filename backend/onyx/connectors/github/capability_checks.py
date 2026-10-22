@@ -61,7 +61,11 @@ from onyx.connectors.github.source_operations import (
     GitHubSourceOperations,
 )
 from onyx.connectors.github.utils import parse_repository_names
-from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    CheckRowText,
+    ConnectorMissingCredentialError,
+    counted,
+)
 from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/github"
@@ -584,7 +588,7 @@ class _RepositoriesVisibleCheck(_GitHubCheck):
                 else str(len(repositories))
             )
             return CheckOutput(
-                summary=f"{_counted(count, 'repository', 'repositories')} visible"
+                summary=f"{counted(count, 'repository', 'repositories')} visible"
             )
         if is_organization:
             raise InsufficientPermissionsError(
@@ -645,12 +649,6 @@ def _raise_unless_denied(error: GitHubApiError, *, denied: str) -> None:
     repository: a bad token, a rate limit, or a GitHub outage."""
     if isinstance(error, GitHubRateLimitError) or error.status_code not in (403, 404):
         _raise_for_api_error(error, denied=denied)
-
-
-def _counted(count: int | str, noun: str, plural: str) -> str:
-    """``count`` with its noun: "1 repository", "3 repositories", "100+
-    repositories"."""
-    return f"{count} {noun if str(count) == '1' else plural}"
 
 
 def _names(names: list[str]) -> str:
@@ -745,7 +743,39 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
             if denied
             else ""
         )
+        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
+        # One line for each kind of failure, so the row names every repository.
+        mixed_row: CheckRowText | None = (
+            CheckRowText(
+                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
+                description="\n".join(
+                    line
+                    for line in (
+                        _not_found_line(missing, token) if missing else "",
+                        denied_line,
+                        f"Unreadable files: {_names(unreadable)}. Index attempts "
+                        "reject these."
+                        if unreadable
+                        else "",
+                    )
+                    if line
+                ),
+            )
+            if failure_kinds > 1
+            else None
+        )
         if len(problems) + len(content_problems) == len(names):
+            if mixed_row is not None:
+                error_class: type[ConnectorValidationError] = (
+                    ConnectorValidationError
+                    if missing
+                    else InsufficientPermissionsError
+                )
+                raise error_class(
+                    message,
+                    summary=mixed_row.summary,
+                    description=mixed_row.description,
+                )
             if not missing:
                 raise InsufficientPermissionsError(
                     message,
@@ -771,24 +801,8 @@ class _ConfiguredRepositoriesCheck(_GitHubCheck):
                     f"{_not_found_line(missing, token)}"
                 ),
             )
-        failure_kinds: int = sum(map(bool, (missing, denied, unreadable)))
-        if failure_kinds > 1:
-            # One line for each kind of failure, so the row names every repository.
-            row: CheckRowText = CheckRowText(
-                summary=f"Cannot read {len(messages)} of {len(names)} repositories",
-                description="\n".join(
-                    line
-                    for line in (
-                        _not_found_line(missing, token) if missing else "",
-                        denied_line,
-                        f"Unreadable files: {_names(unreadable)}. Index attempts "
-                        "reject these."
-                        if unreadable
-                        else "",
-                    )
-                    if line
-                ),
-            )
+        if mixed_row is not None:
+            row: CheckRowText = mixed_row
         elif missing:
             row = CheckRowText(
                 summary=f"{len(missing)} of {len(names)} repositories not found",
@@ -955,7 +969,7 @@ class _BranchCheck(_GitHubCheck):
                 "index each repository's default branch.",
                 summary=(
                     "Branch not found in "
-                    f"{_counted(len(missing), 'repository', 'repositories')}"
+                    f"{counted(len(missing), 'repository', 'repositories')}"
                 ),
                 description=(
                     "Indexing would stop at the first repository without this "
@@ -966,7 +980,7 @@ class _BranchCheck(_GitHubCheck):
         return CheckOutput(
             summary=(
                 f"Found {branch} in "
-                f"{_counted(len(repositories), 'repository', 'repositories')}"
+                f"{counted(len(repositories), 'repository', 'repositories')}"
             )
         )
 
@@ -1205,7 +1219,7 @@ class _FilesCheck(_GitHubCheck):
             _raise_for_api_error(e, denied=denied, denied_row=denied_row)
         return CheckOutput(
             summary=(
-                f"{_counted(len(paths), 'document', 'documents')} found in "
+                f"{counted(len(paths), 'document', 'documents')} found in "
                 f"{repository.full_name}"
             )
         )
@@ -1468,7 +1482,7 @@ class _CollaboratorsCheck(_GitHubCheck):
         logins: list[str] = _read_collaborators(context, repository, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'collaborator', 'collaborators')} "
                 f"in {repository.full_name}"
             )
         )
@@ -1564,7 +1578,7 @@ class _OrganizationMembersCheck(_GitHubCheck):
         logins: list[str] = _read_members(context, org_login, _COUNT_LIMIT)
         return CheckOutput(
             summary=(
-                f"{_counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
+                f"{counted(_count(logins, _COUNT_LIMIT), 'member', 'members')} in "
                 f"{org_login}"
             )
         )

@@ -39,6 +39,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     save_draft_run,
     set_latest_draft_run,
     skip_draft_check,
+    stop_blocked_draft_checks,
     wait_for_dependencies,
 )
 from onyx.connectors.capability_checks.form_state import (
@@ -478,19 +479,22 @@ def start_draft_capability_check_run(
             checks[-1] = kept
 
     has_pending = any(check.state == DraftCheckStateKind.PENDING for check in checks)
+    snapshot = DraftCheckRunSnapshot(
+        run_id=uuid4(),
+        draft_key=draft_key,
+        source=source,
+        credential_id=credential.id,
+        access_type=access_type,
+        status=DraftRunStatus.RUNNING if has_pending else DraftRunStatus.COMPLETED,
+        form_errors=form_state.errors,
+        unknown_fields=sorted(form_state.unknown),
+        checks=checks,
+    )
+    # A reused result after a skipped or failed dependency is "Not run".
+    stop_blocked_draft_checks(snapshot, [check for check, _ in plan.checks])
     run = StoredDraftRun(
         user_id=user_id,
-        snapshot=DraftCheckRunSnapshot(
-            run_id=uuid4(),
-            draft_key=draft_key,
-            source=source,
-            credential_id=credential.id,
-            access_type=access_type,
-            status=DraftRunStatus.RUNNING if has_pending else DraftRunStatus.COMPLETED,
-            form_errors=form_state.errors,
-            unknown_fields=sorted(form_state.unknown),
-            checks=checks,
-        ),
+        snapshot=snapshot,
         result_cache_keys=result_cache_keys,
         first_check_id=actions.start_check_id,
         pair_scope=pair_scope,

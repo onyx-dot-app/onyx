@@ -141,6 +141,18 @@ def test_sign_in_names_the_user() -> None:
     assert result.summary == "Signed in as ada@x.com"
 
 
+def test_a_long_email_falls_back_to_a_short_sign_in_line() -> None:
+    gateway = _gateway()
+    gateway.get_viewer.return_value = LinearViewer(
+        email="ada.lovelace.engineering@example.com", guest=False
+    )
+
+    result = _run("linear_token", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.summary == "Signed in to Linear"
+
+
 def test_a_rejected_key_names_a_new_key_and_oauth_names_reconnect() -> None:
     gateway = _gateway()
     gateway.get_viewer.side_effect = LinearAuthError(
@@ -355,6 +367,33 @@ def test_a_paging_fault_says_so() -> None:
 
 def test_sampling_names_the_issue_read() -> None:
     assert _run("linear_issues", _gateway()).summary == "Read issue ENG-1"
+
+
+def test_a_credential_only_run_still_samples_issues() -> None:
+    """Without a config nothing is selected, so the selected-scope checks do
+    not apply and the issues sample runs."""
+    checks: list[CapabilityCheck] = [
+        check
+        for check in _all_checks()
+        if check.check_id
+        in ("linear_token", "linear_teams", "linear_projects", "linear_issues")
+    ]
+    context = CapabilityCheckContext(
+        source=DocumentSource.LINEAR,
+        credential_json=_API_KEY_CREDENTIAL,
+        connector_specific_config=None,
+        source_operations=_gateway(),
+    )
+    results: dict[str, CapabilityCheckResult] = {
+        result.check_id: result for result in run_capability_checks(checks, context)
+    }
+
+    for check_id in ("linear_teams", "linear_projects"):
+        assert results[check_id].status == CapabilityCheckStatus.SKIPPED
+        assert not results[check_id].applicable
+    issues: CapabilityCheckResult = results["linear_issues"]
+    assert issues.status == CapabilityCheckStatus.PASSED
+    assert issues.blocked_by is None
 
 
 def test_an_empty_scope_fails() -> None:

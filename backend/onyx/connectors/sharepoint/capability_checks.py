@@ -14,7 +14,7 @@ some are missing they are INCOMPLETE, and the checks after them run on the
 sites and libraries they found.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import NoReturn
 
 from onyx.connectors.capability_checks.form_state import FormState
@@ -43,7 +43,10 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
     ValidationError,
 )
-from onyx.connectors.microsoft_utils.check_text import format_date
+from onyx.connectors.microsoft_utils.check_text import (
+    credential_rejected_row,
+    format_date,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaItem,
@@ -79,7 +82,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
     is_public_login_name,
     resolve_group_id,
 )
-from onyx.connectors.models import CheckRowText, fit_summary
+from onyx.connectors.models import CheckRowText, counted, fit_summary
 from onyx.connectors.sharepoint import connector_utils
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.sharepoint.connector import (
@@ -263,10 +266,6 @@ def _graph_api_base(config: SharepointConnectorConfig) -> str:
 def _site_name(site_url: str) -> str:
     """The short name of a site, the last part of its URL."""
     return site_url.rstrip("/").rsplit("/", 1)[-1]
-
-
-def _counted(count: int, noun: str, plural: str) -> str:
-    return f"{count} {noun if count == 1 else plural}"
 
 
 def _row(summary: str, description: str) -> CheckRowText:
@@ -1111,7 +1110,7 @@ def _sites_output(
                 ],
             )
         return CheckOutput(
-            summary=f"{_counted(len(probed), 'selected site', 'selected sites')} found"
+            summary=f"{counted(len(probed), 'selected site', 'selected sites')} found"
         )
     message: str = "; ".join(problem.message for problem in problems)
     first: SiteProblem = problems[0]
@@ -1204,7 +1203,7 @@ class _SitesVisibleCheck(_SharepointCheck):
                 ),
             )
         return CheckOutput(
-            summary=f"{_counted(len(site_urls), 'site', 'sites')} visible"
+            summary=f"{counted(len(site_urls), 'site', 'sites')} visible"
         )
 
 
@@ -1258,9 +1257,8 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
         named: list[SiteDescriptor] = [
             site for site in _descriptors(_config(context)) if site.drive_name
         ]
-        scoped: list[SiteDescriptor] = _found_sites(
-            _gateway(context), named[:_PROBE_SITES]
-        )
+        probed: list[SiteDescriptor] = named[:_PROBE_SITES]
+        scoped: list[SiteDescriptor] = _found_sites(_gateway(context), probed)
         if not scoped:
             _raise_row(
                 NothingToCheckError,
@@ -1274,13 +1272,13 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
             problem for site in scoped if (problem := self._probe(context, site))
         ]
         if not problems:
-            if len(named) > len(scoped):
+            if len(named) > len(probed):
                 return CheckOutput(
-                    summary=f"First {len(scoped)} of {len(named)} libraries found",
+                    summary=f"First {len(probed)} of {len(named)} libraries checked",
                     advisories=[
                         CheckAdvisory(
                             message=(
-                                f"Only the first {len(scoped)} site URLs that name "
+                                f"Only the first {len(probed)} site URLs that name "
                                 "a library were checked."
                             )
                         )
@@ -1288,7 +1286,7 @@ class _ConfiguredLibrariesCheck(_SharepointCheck):
                 )
             return CheckOutput(
                 summary=(
-                    _counted(len(scoped), "selected library", "selected libraries")
+                    counted(len(scoped), "selected library", "selected libraries")
                     + " found"
                 )
             )
@@ -1569,6 +1567,14 @@ class _CertificateAuthCheck(_SharepointCheck):
             )
         if not_after is None:
             return CheckOutput(summary="Signed in with a certificate")
+        if not_after < datetime.now(timezone.utc):
+            _raise_row(
+                CredentialInvalidError,
+                f"The certificate expired on {format_date(not_after)}.",
+                credential_rejected_row(
+                    _ACCOUNT_LABELS, certificate=True, certificate_not_after=not_after
+                ),
+            )
         return CheckOutput(summary=f"Certificate valid until {format_date(not_after)}")
 
 
@@ -1587,7 +1593,7 @@ class _SitePermissionsCheck(_SharepointCheck):
         for site in sites:
             _site_assignments(gateway, site)
         return CheckOutput(
-            summary=f"Read permissions of {_counted(len(sites), 'site', 'sites')}"
+            summary=f"Read permissions of {counted(len(sites), 'site', 'sites')}"
         )
 
 

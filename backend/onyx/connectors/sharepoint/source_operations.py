@@ -200,10 +200,12 @@ class SharepointSourceOperations(SourceOperations):
         )
 
     def _gateway(self) -> MicrosoftGraphGateway:
-        if self._graph_gateway is not None:
-            return self._graph_gateway
+        # Read once: another thread's REST rebuild may reset the attribute.
+        gateway: MicrosoftGraphGateway | None = self._graph_gateway
+        if gateway is not None:
+            return gateway
         credential: SharepointCredentials = self._credentials()
-        self._graph_gateway = MicrosoftGraphGateway(
+        gateway = MicrosoftGraphGateway(
             auth_config=MicrosoftGraphAuthConfig(
                 client_id=credential.sp_client_id,
                 directory_id=credential.sp_directory_id,
@@ -216,7 +218,8 @@ class SharepointSourceOperations(SourceOperations):
             graph_api_host=self._env().graph_host,
             graph_api_version=GRAPH_API_VERSION,
         )
-        return self._graph_gateway
+        self._graph_gateway = gateway
+        return gateway
 
     def _auth(self) -> MicrosoftAuthContext:
         return self._gateway().auth_context

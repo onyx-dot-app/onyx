@@ -87,18 +87,32 @@ _UNEXPECTED_ROW = CheckRowText(
 )
 
 
-def _http_status(error: BaseException) -> int | None:
-    """The HTTP status of the first error in the chain that carries one."""
+def http_response_in_chain(
+    error: BaseException,
+) -> SourceApiError | requests.Response | None:
+    """The first source error with response data, or HTTP response, in the
+    chain. The chain follows the cause, else the context the traceback would
+    show."""
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
-        if isinstance(current, SourceApiError):
-            return current.status_code
-        if isinstance(current, requests.HTTPError) and current.response is not None:
-            return current.response.status_code
         seen.add(id(current))
-        current = current.__cause__ or current.__context__
+        # A source error without response data can wrap the HTTP error.
+        if isinstance(current, SourceApiError) and (
+            current.status_code is not None or current.url is not None or current.body
+        ):
+            return current
+        if isinstance(current, requests.HTTPError) and current.response is not None:
+            return current.response
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
     return None
+
+
+def _http_status(error: BaseException) -> int | None:
+    response = http_response_in_chain(error)
+    return response.status_code if response is not None else None
 
 
 def _with_status(row: CheckRowText, status: int | None) -> CheckRowText:

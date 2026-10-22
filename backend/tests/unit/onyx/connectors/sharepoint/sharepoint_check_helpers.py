@@ -81,6 +81,7 @@ def healthy_gateway() -> MagicMock:
     Entra group, holding one library with one file in a folder and one page."""
     gateway: MagicMock = create_autospec(SharepointSourceOperations, instance=True)
     gateway.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
+    gateway.get_certificate_not_after.return_value = None
     gateway.list_site_urls.return_value = SiteUrlListing(
         site_urls=[SITE_URL, OTHER_SITE_URL], complete=True
     )

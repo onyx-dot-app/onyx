@@ -1,4 +1,5 @@
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from pydantic import field_validator
 
@@ -31,9 +32,10 @@ _CONTENT_TYPE_TOGGLE = FieldPolicy(
 
 def is_site_url_well_formed(site_url: str) -> bool:
     """A full SharePoint or OneDrive site URL: https and a site path."""
-    return site_url.startswith("https://") and (
-        "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
-    )
+    if not site_url.startswith("https://"):
+        return False
+    path = urlsplit(site_url).path
+    return "/sites/" in path or "/teams/" in path or "/personal/" in path
 
 
 class SharepointCredentialBinding(MicrosoftCloudBinding):

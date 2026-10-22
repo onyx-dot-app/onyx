@@ -493,11 +493,28 @@ def _users_output(identifiers: list[str], problems: list[UserProblem]) -> CheckO
         )
     message: str = " ".join(problem.message for problem in problems)
     first: CheckRowText = _user_problem_row(problems[0])
-    names: str = ", ".join(problem.identifier for problem in problems)
+    missing: list[str] = [p.identifier for p in problems if not p.locked]
+    locked: list[str] = [p.identifier for p in problems if p.locked]
+    lines: list[str] = []
+    if missing:
+        lines.append(
+            f"Not found: {', '.join(missing)}.\nCorrect or remove them in Users."
+        )
+    if locked:
+        lines.append(
+            f"Microsoft refused the lookup of: {', '.join(locked)}.\n{_RETRY_LINE}"
+        )
+    detail: str = "\n".join(lines)
     if len(problems) == len(identifiers):
-        if all(problem.locked for problem in problems):
+        # A locked user may come back, so only a missing one FAILS.
+        if not missing:
+            row: CheckRowText = (
+                first
+                if len(problems) == 1
+                else _row("Selected users are locked", detail)
+            )
             raise UnexpectedValidationError(
-                message, summary=first.summary, description=first.description
+                message, summary=row.summary, description=row.description
             )
         _raise_row(
             message,
@@ -505,17 +522,19 @@ def _users_output(identifiers: list[str], problems: list[UserProblem]) -> CheckO
             if len(problems) == 1
             else _row(
                 "No selected user found",
-                "None of the selected users is visible to this account.\nNot "
-                f"found: {names}.",
+                f"None of the selected users is visible to this account.\n{detail}",
             ),
         )
     if len(problems) == 1:
         return CheckOutput(
             summary=first.summary, description=first.description, partial=True
         )
+    state: str = (
+        "locked" if not missing else "not found" if not locked else "unavailable"
+    )
     return CheckOutput(
-        summary=f"{len(problems)} of {len(identifiers)} users not found",
-        description=f"Not found: {names}.\nCorrect or remove them in Users.",
+        summary=f"{len(problems)} of {len(identifiers)} users {state}",
+        description=detail,
         partial=True,
     )
 

@@ -16,6 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckErrorKind,
     CheckNotRunReason,
+    StoredRunProgress,
     TwoStepEntry,
     TwoStepRow,
 )
@@ -138,3 +139,20 @@ def two_step_rows_of_results(
     results: Sequence[CapabilityCheckResult],
 ) -> list[TwoStepRow]:
     return two_step_rows([TwoStepEntry.of_result(result) for result in results])
+
+
+def two_step_rows_of_progress(progress: StoredRunProgress) -> list[TwoStepRow]:
+    """The rows of a stored run in flight: an open step counts."""
+    return two_step_rows(
+        [TwoStepEntry.of_result(result) for result in progress.check_results]
+        + [
+            TwoStepEntry(
+                check_id=check.check_id,
+                row_id=check.row_id or check.check_id,
+                step=check.step,
+                status=None,
+                summary=check.summary,
+            )
+            for check in progress.open_checks
+        ]
+    )

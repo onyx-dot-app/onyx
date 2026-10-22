@@ -38,6 +38,7 @@ from onyx.connectors.capability_checks.stored_run_progress import (
     load_stored_run_progress,
 )
 from onyx.connectors.capability_checks.two_step import (
+    two_step_rows_of_progress,
     two_step_rows_of_results,
 )
 from onyx.connectors.credential_families import is_credential_usable_for_source
@@ -106,7 +107,8 @@ class CapabilityReportSnapshot(BaseModel):
     report: CredentialCapabilityReport | None
     # The per-check progress of the run in flight; None unless RUNNING.
     progress: StoredRunProgress | None = None
-    # How each two-step row of ``report`` shows.
+    # How each two-step row shows: of ``progress`` while a run is in flight,
+    # else of ``report``.
     two_step_rows: list[TwoStepRow] = []
     time_updated: datetime
 
@@ -138,7 +140,9 @@ class CapabilityReportSnapshot(BaseModel):
             report=report,
             progress=progress,
             two_step_rows=(
-                two_step_rows_of_results(report.check_results)
+                two_step_rows_of_progress(progress)
+                if progress is not None
+                else two_step_rows_of_results(report.check_results)
                 if report is not None
                 else []
             ),

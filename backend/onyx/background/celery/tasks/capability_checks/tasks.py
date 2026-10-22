@@ -39,10 +39,12 @@ from onyx.connectors.capability_checks.draft_runs import (
     pending_in_run_order,
     save_draft_run,
     settled_results,
+    stop_blocked_draft_checks,
     wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
     CapabilityCheckResult,
     DraftCheckState,
     DraftCheckStateKind,
@@ -330,6 +332,7 @@ def run_draft_capability_checks_task(
     pending: list[DraftCheckState] = []
     pending_result_keys: list[str] = []
     timeout_by_check_id: dict[str, float] = {}
+    registered_checks: list[CapabilityCheck] = []
 
     def mark_next_running() -> None:
         if (
@@ -360,6 +363,7 @@ def run_draft_capability_checks_task(
             and check.capability == result.capability
         )
         apply_check_result(check_state, result)
+        stop_blocked_draft_checks(snapshot, registered_checks)
         cache_run_result(run, result)
         clear_draft_result_in_flight(run.result_cache_keys[result.check_id])
         if is_superseded(run):
@@ -370,9 +374,8 @@ def run_draft_capability_checks_task(
     try:
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
-        pending = pending_in_run_order(
-            snapshot, get_capability_checks(snapshot.source), run.first_check_id
-        )
+        registered_checks = get_capability_checks(snapshot.source)
+        pending = pending_in_run_order(snapshot, registered_checks, run.first_check_id)
         pending_result_keys = list(
             dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
         )
@@ -380,7 +383,7 @@ def run_draft_capability_checks_task(
             check.check_id: min(
                 effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
             )
-            for check in get_capability_checks(snapshot.source)
+            for check in registered_checks
         }
         if is_superseded(run):
             raise _DraftRunSupersededError()

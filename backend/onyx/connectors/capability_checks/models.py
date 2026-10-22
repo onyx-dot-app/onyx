@@ -8,7 +8,6 @@ from functools import cached_property
 from typing import Annotated, Any, Generic, Literal
 from urllib.parse import urlsplit
 
-import requests
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -25,6 +24,7 @@ from onyx.connectors.capability_checks.form_state import (
     FormState,
     validate_form_state,
 )
+from onyx.connectors.capability_checks.generic_row import http_response_in_chain
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -322,35 +322,23 @@ def _cut_for_redaction(text: str, secrets: list[str]) -> str:
 
 def _http_detail(error: BaseException) -> CheckErrorDetail | None:
     """The HTTP response of the first error in the chain that has one, with
-    the whole body: ``check_error_detail`` redacts it, then cuts it. The
-    chain follows the cause, else the context the traceback would show."""
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        # A source error without response data can wrap the HTTP error.
-        if isinstance(current, SourceApiError) and (
-            current.status_code is not None or current.url is not None or current.body
-        ):
-            return CheckErrorDetail(
-                status_code=current.status_code,
-                request=_request_line(current.method, current.url),
-                response_excerpt=current.body or None,
-            )
-        if isinstance(current, requests.HTTPError) and current.response is not None:
-            response = current.response
-            return CheckErrorDetail(
-                status_code=response.status_code,
-                request=_request_line(
-                    response.request.method if response.request else None,
-                    response.url,
-                ),
-                response_excerpt=response.text or None,
-            )
-        current = current.__cause__ or (
-            None if current.__suppress_context__ else current.__context__
+    the whole body: ``check_error_detail`` redacts it, then cuts it."""
+    response = http_response_in_chain(error)
+    if response is None:
+        return None
+    if isinstance(response, SourceApiError):
+        return CheckErrorDetail(
+            status_code=response.status_code,
+            request=_request_line(response.method, response.url),
+            response_excerpt=response.body or None,
         )
-    return None
+    return CheckErrorDetail(
+        status_code=response.status_code,
+        request=_request_line(
+            response.request.method if response.request else None, response.url
+        ),
+        response_excerpt=response.text or None,
+    )
 
 
 def check_error_detail(

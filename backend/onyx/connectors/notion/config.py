@@ -22,6 +22,7 @@ _RECURSIVE_INDEX_ENABLED = "recursive_index_enabled"
 
 ROOT_PAGE_ID_FORMAT_ERROR = "Paste the page URL or its 32-character ID."
 
+_NOTION_DOMAINS = ("notion.so", "notion.site", "app.notion.com")
 _HEX_ID = re.compile(r"[0-9a-fA-F]{32}")
 _DASHED_ID = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -37,9 +38,10 @@ def _dashed(hex_id: str) -> str:
 def page_id_from_url(url: str) -> str | None:
     """The page ID (a dashed UUID) in a Notion page URL, or None."""
     parsed = urlparse(url)
-    netloc = parsed.netloc.lower()
-    if not (
-        "notion.so" in netloc or "notion.site" in netloc or "app.notion.com" in netloc
+    hostname = (parsed.hostname or "").lower()
+    if not any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in _NOTION_DOMAINS
     ):
         return None
 

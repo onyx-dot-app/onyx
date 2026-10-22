@@ -41,7 +41,10 @@ from onyx.connectors.capability_checks.models import (
     aggregate_capability_verdict,
 )
 from onyx.connectors.capability_checks.runner import run_order
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential, User
@@ -69,6 +72,7 @@ class _Check(CapabilityCheck):
         *,
         required: bool = True,
         depends_on: tuple[str, ...] = (),
+        depends_on_any: tuple[str, ...] = (),
         discovery: bool = False,
         error: Exception | None = None,
     ) -> None:
@@ -79,6 +83,7 @@ class _Check(CapabilityCheck):
             required=required,
             requires_connector_instance=False,
             depends_on=depends_on,
+            depends_on_any=depends_on_any,
             discovery=discovery,
         )
         self._runs = runs
@@ -579,3 +584,94 @@ def test_a_run_that_does_not_skip_a_check_clears_its_old_skip(
     assert _state(snapshot, _EXTRA).state == DraftCheckStateKind.INCOMPLETE
     ran, _ = _create(harness, monkeypatch, harness.user.id)
     assert _EXTRA in ran
+
+
+def test_a_rerun_of_a_fixed_check_runs_the_skipped_discovery_check(
+    harness: _Harness,
+) -> None:
+    """A discovery check skipped for a failed required check has no result of
+    its own, so a Re-run of the fixed check runs it again."""
+    harness.check(_SIGN_IN).error = ConnectorValidationError("bad token")
+    first = harness.run()
+    assert _state(first, _SIGN_IN).state == DraftCheckStateKind.FAILED
+    assert _state(first, _FIND).state == DraftCheckStateKind.SKIPPED
+
+    harness.check(_SIGN_IN).error = None
+    snapshot = harness.run(DraftCheckActions(check_ids=[_SIGN_IN]))
+
+    assert _FIND in harness.runs
+    found = _state(snapshot, _FIND)
+    assert found.state == DraftCheckStateKind.PASSED
+    assert found.from_cache is False
+
+
+def test_a_skip_makes_a_cached_dependent_not_run(harness: _Harness) -> None:
+    harness.run()
+
+    snapshot = harness.run(DraftCheckActions(skip_check_ids=[_LIST]))
+
+    assert harness.runs == []
+    dependent = _state(snapshot, _READ)
+    assert dependent.state == DraftCheckStateKind.SKIPPED
+    assert dependent.not_run_reason == CheckNotRunReason.DEPENDENCY_SKIPPED
+    assert dependent.blocked_by == _LIST
+    assert dependent.from_cache is False
+    # The shared pass stays for a run that does not skip the dependency.
+    run = load_draft_run(snapshot.run_id)
+    assert run is not None
+    assert get_cached_draft_result(run.result_cache_keys[_READ]) is not None
+
+
+def test_a_failed_rerun_makes_cached_dependents_not_run(harness: _Harness) -> None:
+    harness.run()
+    harness.check(_SIGN_IN).error = ConnectorValidationError("bad token")
+
+    snapshot = harness.run(DraftCheckActions(check_ids=[_SIGN_IN]))
+
+    assert harness.runs == [_SIGN_IN]
+    assert _state(snapshot, _SIGN_IN).state == DraftCheckStateKind.FAILED
+    for check_id in (_LIST, _READ, _EXTRA):
+        dependent = _state(snapshot, check_id)
+        assert dependent.state == DraftCheckStateKind.SKIPPED
+        assert dependent.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+        assert dependent.blocked_by == _SIGN_IN
+
+
+def test_an_any_of_dependent_waits_for_every_member_to_settle(
+    harness: _Harness,
+) -> None:
+    harness.checks = [
+        _Check(_LIST, harness.runs, required=False),
+        _Check(_EXTRA, harness.runs, required=False),
+        _Check(_READ, harness.runs, depends_on_any=(_LIST, _EXTRA)),
+    ]
+    harness.run()
+
+    # One member still passes, so the cached pass stays.
+    one_skipped = harness.run(DraftCheckActions(skip_check_ids=[_LIST]))
+    assert _state(one_skipped, _READ).state == DraftCheckStateKind.PASSED
+
+    # The pending member decides the group once it settles.
+    harness.check(_EXTRA).error = ConnectorValidationError("no access")
+    started = harness.start(
+        DraftCheckActions(check_ids=[_EXTRA], skip_check_ids=[_LIST])
+    )
+    assert _state(started, _READ).state == DraftCheckStateKind.PASSED
+    capability_check_tasks.run_draft_capability_checks_task(
+        **harness.send_task.call_args.kwargs["kwargs"]
+    )
+    run = load_draft_run(started.run_id)
+    assert run is not None
+    dependent = _state(run.snapshot, _READ)
+    assert dependent.state == DraftCheckStateKind.SKIPPED
+    assert dependent.blocked_by == _LIST
+
+
+def test_the_admins_stop_of_a_dependent_stays(harness: _Harness) -> None:
+    harness.run()
+
+    snapshot = harness.run(DraftCheckActions(skip_check_ids=[_LIST, _READ]))
+
+    stopped = _state(snapshot, _READ)
+    assert stopped.state == DraftCheckStateKind.STOPPED
+    assert stopped.not_run_reason == CheckNotRunReason.STOPPED_BY_USER

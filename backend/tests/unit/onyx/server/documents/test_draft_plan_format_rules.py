@@ -54,6 +54,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
         ),
         (
             DocumentSource.CONFLUENCE,
+            {**_CONFLUENCE_FORM, "page_id": "12\u00b2"},
+            "page_id",
+            PAGE_ID_FORMAT_ERROR,
+        ),
+        (
+            DocumentSource.CONFLUENCE,
             {
                 **_CONFLUENCE_FORM,
                 "cql_query": "space = ENG AND lastModified > now('-7d')",
@@ -91,6 +97,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
             "sites",
             SITE_URL_FORMAT_ERROR,
         ),
+        (
+            DocumentSource.SHAREPOINT,
+            {"sites": ["https://acme.sharepoint.com/eng?next=/sites/hr"]},
+            "sites",
+            SITE_URL_FORMAT_ERROR,
+        ),
         # Indexing validates every entry, blanks included.
         (
             DocumentSource.SHAREPOINT,
@@ -113,6 +125,12 @@ def _form_errors(source: DocumentSource, form_values: dict[str, Any]) -> dict[st
         (
             DocumentSource.NOTION,
             {"root_page_id": "https://example.com/Roadmap-" + _NOTION_PAGE_ID},
+            "root_page_id",
+            ROOT_PAGE_ID_FORMAT_ERROR,
+        ),
+        (
+            DocumentSource.NOTION,
+            {"root_page_id": f"https://notion.so.example.com/{_NOTION_PAGE_ID}"},
             "root_page_id",
             ROOT_PAGE_ID_FORMAT_ERROR,
         ),

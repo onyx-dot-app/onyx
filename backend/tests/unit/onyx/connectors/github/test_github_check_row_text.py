@@ -280,6 +280,39 @@ def test_no_selected_repository_found_fails() -> None:
     assert result.summary == "No selected repo found"
 
 
+def test_all_repositories_failing_for_different_reasons_names_each() -> None:
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = [
+        api_error(404, "Not Found"),
+        api_error(403, "Forbidden"),
+    ]
+
+    result = _run(
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.summary == "Cannot read 2 of 2 repositories"
+    assert "Not found: a." in (result.description or "")
+    assert "Denied: b." in (result.description or "")
+
+
+def test_denied_and_unreadable_repositories_are_not_all_denied() -> None:
+    gateway = healthy_gateway()
+    gateway.get_repository.side_effect = [make_repo("a"), api_error(403, "Forbidden")]
+    gateway.list_root_contents.side_effect = api_error(403, "Resource not accessible")
+
+    result = _run(
+        "github_configured_repositories", gateway, form_config(repositories="a, b")
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "InsufficientPermissionsError"
+    assert result.summary == "Cannot read 2 of 2 repositories"
+    assert "Denied: b." in (result.description or "")
+    assert "Unreadable files: acme/a." in (result.description or "")
+
+
 def test_checks_after_a_partial_find_run_on_the_found_repositories() -> None:
     gateway = healthy_gateway()
     found = make_repo("a")

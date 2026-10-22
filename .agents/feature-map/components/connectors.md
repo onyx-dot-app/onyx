@@ -531,7 +531,8 @@ deployments) and a probe's discovery step.
 A two-step row links its second check to the parent with `CheckStep`
 (`step_of`, the running line, the caveat when the step does not finish).
 `two_step.py:two_step_row` decides how the row shows, and draft snapshots,
-stored reports and run history return it as `two_step_rows`. The registry
+stored reports and run history return it as `two_step_rows`. While a stored
+run is in flight, its rows come from its progress, so a step counts. The registry
 validates the links (`validate_step_links`).
 One exception: on a form run (a draft run or a pair dry run) a sign-in check
 that sets `fails_when_unreachable` is `FAILED` on a timeout or an unreachable
@@ -587,7 +588,10 @@ A draft run or a pair dry run (`/admin/cc-pair/{cc_pair_id}/edit/checks`) also
 takes per-check actions (`capability_checks/models.py:DraftCheckActions`). `check_ids` runs
 only those checks, without their cached results. Every other check keeps its
 cached result or its result in the latest run of the draft key, and runs only
-when it has none, for example after a dependency that now runs.
+when it has none, for example after a dependency that now runs. A discovery
+check skipped in the latest run runs again. A kept or cached result whose
+dependency now stops it is "Not run" too, once all its dependencies have a
+result (`draft_runs.py:stop_blocked_draft_checks`).
 `skip_check_ids` do not run: an optional check is `SKIPPED`
 (`not_run_reason: skipped_by_user`), and a required one is `STOPPED`
 (`stopped_by_user`), which is no pass and holds Create. Their dependents are
