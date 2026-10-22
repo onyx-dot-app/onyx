@@ -505,13 +505,20 @@ def mark_attempt_canceled(
     index_attempt_id: int,
     db_session: Session,
     reason: str = "Unknown",
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
@@ -540,13 +547,20 @@ def mark_attempt_failed(
     db_session: Session,
     failure_reason: str = "Unknown",
     full_exception_trace: str | None = None,
+    unless_terminal: bool = False,
 ) -> None:
+    """``unless_terminal`` keeps a status another writer set first, checked under the lock."""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one()
+
+        if unless_terminal and attempt.status.is_terminal():
+            db_session.rollback()
+            return
 
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
