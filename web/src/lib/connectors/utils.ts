@@ -113,17 +113,17 @@ export function findConfigField(
   return find([...configuration.values, ...configuration.advanced_values]);
 }
 
-/** A form value as the config takes it: a list with the field's `transform`
+/** A list's entries as the config takes them: with the field's `transform`
  * applied. */
-export function toConfigValue(
+export function listConfigValue(
   configuration: ConnectionConfiguration,
   name: string,
-  value: unknown
-): unknown {
+  entries: string[]
+): string[] | string {
   const field = findConfigField(configuration, name);
-  return field?.type === "list" && field.transform && Array.isArray(value)
-    ? field.transform(value)
-    : value;
+  return field?.type === "list" && field.transform
+    ? field.transform(entries)
+    : entries;
 }
 
 function withoutBlankEntries(items: readonly unknown[]): unknown[] {
@@ -161,7 +161,11 @@ export function connectorConfigFromForm(
   for (const [key, raw] of Object.entries(values)) {
     if (formControlFieldNames.has(key)) continue;
     const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
-    config[key] = toConfigValue(configuration, key, value);
+    config[key] =
+      Array.isArray(value) &&
+      value.every((entry): entry is string => typeof entry === "string")
+        ? listConfigValue(configuration, key, value)
+        : value;
   }
   return withoutFormOnlyFields(source, config);
 }
