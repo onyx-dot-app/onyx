@@ -36,7 +36,9 @@ from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (  
 )
 from onyx.background.celery.tasks.docprocessing.utils import (
     IndexingCallback,
+    failures_before_repeated_error_state,
     is_in_repeated_error_state,
+    repeated_error_alert,
     should_index,
 )
 from onyx.background.celery.tasks.models import DocProcessingContext
@@ -69,6 +71,9 @@ from onyx.configs.constants import (
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.backfill_models import PendingBackfill
+from onyx.db.cc_pair_run_resolution import (
+    clear_resolved_repeated_error_states__no_commit,
+)
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
     clear_connector_alerts__no_commit,
@@ -76,7 +81,9 @@ from onyx.db.connector_alerts import (
 )
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_cc_pairs_in_repeated_error_state,
     get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
     set_cc_pair_repeated_error_state,
     update_connector_credential_pair_from_id,
 )
@@ -1096,6 +1103,37 @@ def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) 
         mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
 
 
+def _report_error_state(cc_pair: ConnectorCredentialPair, tenant_id: str) -> None:
+    on_connector_error_state_change(
+        tenant_id=tenant_id,
+        source=cc_pair.connector.source.value,
+        cc_pair_id=cc_pair.id,
+        connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair.id}",
+        in_error=cc_pair.in_repeated_error_state,
+    )
+
+
+def heal_resolved_repeated_error_states(db_session: Session, tenant_id: str) -> None:
+    """Clears the flag and alert of every flagged pair, paused ones included, whose
+    latest failure is resolved."""
+    flagged_pairs = {
+        cc_pair.id: cc_pair
+        for cc_pair in get_cc_pairs_in_repeated_error_state(db_session)
+    }
+    for cc_pair_id in clear_resolved_repeated_error_states__no_commit(
+        db_session, set(flagged_pairs)
+    ):
+        cc_pair = flagged_pairs[cc_pair_id]
+        on_connector_error_state_change(
+            tenant_id=tenant_id,
+            source=cc_pair.connector.source.value,
+            cc_pair_id=cc_pair_id,
+            connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
+            in_error=False,
+        )
+    db_session.commit()
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_INDEXING,
     soft_time_limit=300,
@@ -1241,38 +1279,29 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         db_session=db_session,
                     )
                 ):
-                    set_cc_pair_repeated_error_state(
-                        db_session=db_session,
-                        cc_pair_id=cc_pair_id,
-                        in_repeated_error_state=True,
-                    )
-                    error_connector_name = (
-                        cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
-                    )
-                    on_connector_error_state_change(
-                        tenant_id=tenant_id,
-                        source=cc_pair.connector.source.value,
-                        cc_pair_id=cc_pair_id,
-                        connector_name=error_connector_name,
-                        in_error=True,
-                    )
-
                     connector_name = (
                         cc_pair.name
                         or cc_pair.connector.name
                         or f"CC pair {cc_pair.id}"
                     )
                     source = cc_pair.connector.source.value
+                    alert_title, alert_description = repeated_error_alert(
+                        connector_name,
+                        source,
+                        failures_before_repeated_error_state(cc_pair.connector),
+                    )
+                    # The alert goes first, so a resolve racing this beat deletes it.
                     notify_admins_of_connector_alert(
                         db_session=db_session,
                         cc_pair_id=cc_pair.id,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
-                        title=f"Connector '{connector_name}' has entered repeated error state",
-                        description=(
-                            f"The {source} connector has failed repeatedly "
-                            f"and has been flagged. Check its indexing "
-                            f"history and credentials."
-                        ),
+                        title=alert_title,
+                        description=alert_description,
+                    )
+                    set_cc_pair_repeated_error_state(
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
+                        in_repeated_error_state=True,
                     )
 
                     task_logger.error(
@@ -1291,6 +1320,25 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             cc_pair_id=cc_pair.id,
                             status=ConnectorCredentialPairStatus.PAUSED,
                         )
+
+                # A resolve in the API also clears the flag, so the gauge follows the row.
+                if cc_pair is not None:
+                    _report_error_state(cc_pair, tenant_id)
+
+            # Paused pairs skip the loop above, but a resolve clears their flag too.
+            paused_ids = set(
+                fetch_indexable_standard_connector_credential_pair_ids(
+                    db_session, active_cc_pairs_only=False
+                )
+            ) - set(primary_cc_pair_ids)
+            if paused_ids:
+                for cc_pair in get_connector_credential_pairs(
+                    db_session, list(paused_ids), eager_load_connector=True
+                ):
+                    _report_error_state(cc_pair, tenant_id)
+
+            # A resolve can land between the alert and the flag above, leaving it set.
+            heal_resolved_repeated_error_states(db_session, tenant_id)
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks

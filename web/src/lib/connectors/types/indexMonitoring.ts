@@ -48,6 +48,8 @@ export interface IndexingConnectorRow {
   docs_indexed: number;
   last_success: string | null;
   latest_index_attempt: IndexAttemptSnapshot | null;
+  /** The latest attempt's open errors, whole entities included. */
+  open_error_count: number;
   /** Place in the line of queued index attempts, from 1, while the latest waits. */
   queue_position: number | null;
   permissions: PermissionsOf<"CCPair">;

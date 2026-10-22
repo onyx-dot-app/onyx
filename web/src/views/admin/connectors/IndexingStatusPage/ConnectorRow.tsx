@@ -82,7 +82,8 @@ export default function ConnectorRow({
     row.status,
     attempt?.status
   );
-  const warnings = attempt?.error_count ?? 0;
+  // Open errors only, so the badge clears once Retry or Resolve closes them.
+  const warnings = row.open_error_count;
   // An empty display name falls back to the email, as an unset one does.
   const owner = row.creator_name?.trim() || row.creator_email;
   // A paused or scheduled row has no run in flight, so its stages and file counts stay hidden.

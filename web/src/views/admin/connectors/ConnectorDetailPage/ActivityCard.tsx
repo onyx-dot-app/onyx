@@ -20,6 +20,7 @@ import {
   SvgCheckSquare,
   SvgClock,
   SvgFiles,
+  SvgHistory,
   SvgRefreshCw,
   SvgTextLines,
   SvgUserShield,
@@ -37,6 +38,7 @@ import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
+import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/closedRun";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
@@ -107,11 +109,11 @@ type CardState =
   | "canceled"
   | "succeeded";
 
-/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run whose document errors were all resolved, which says so. */
+/** The title's state key: how the run stands in its group. A closed card reads as it did when open, except a run with errors that Retry or an admin resolved, which says so. */
 function cardState(
   run: CCPairRun,
   group: ActivityGroup,
-  closed: boolean
+  resolved: boolean
 ): CardState {
   const stopped =
     run.attempt.status === "canceled" || run.attempt.status === "interrupted";
@@ -119,7 +121,7 @@ function cardState(
     case "failures":
       return "failed";
     case "errors":
-      if (closed && run.resolved_at === null) return "resolved";
+      if (resolved) return "resolved";
       if (isActive(run)) return "running";
       return stopped ? "stopped" : "errors";
     case "other":
@@ -227,7 +229,9 @@ export default function ActivityCard({
     );
   const tRuns = useTranslations("admin.connector.runs");
   const active = isActive(run);
-  const state = cardState(run, group, closed);
+  const superseded = closed && closedBySupersede(run);
+  const resolved = closed && !superseded;
+  const state = cardState(run, group, resolved);
   const style = GROUP_STYLE[group];
   const { icon: StatusIcon, stroke: statusStroke } = statusIcon(
     state,
@@ -277,10 +281,11 @@ export default function ActivityCard({
       minutes,
     });
   }
-  // A closed card keeps the pill it had when open, only faded.
-  const docsLabel = t(`tags.${run.kind}`, {
-    count: listsDocs ? openDocs : warnings,
-  });
+  // A resolved card counts the items it resolved, whole entities included. A superseded one keeps the pill it had when open, only faded.
+  const docsLabel =
+    resolved && run.kind !== "checks"
+      ? t("tags.resolvedDocs", { count: warnings })
+      : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
   const pillIconColor = closed ? undefined : "orange";
 
@@ -503,10 +508,10 @@ export default function ActivityCard({
                 <SelectButton
                   variant="select-heavy"
                   state="selected"
-                  rightIcon={SvgCheckSquare}
+                  rightIcon={superseded ? SvgHistory : SvgCheckSquare}
                   size="xs"
                 >
-                  {t("tags.resolved")}
+                  {t(superseded ? "tags.superseded" : "tags.resolved")}
                 </SelectButton>
               ) : (
                 resolvesRun && (

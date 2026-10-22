@@ -2977,7 +2977,7 @@
           "checks": "عرض نتائج الفحوصات"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "tooltip": "{count, plural, one {فشل عنصر واحد} other {فشل # عناصر}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
         },
         "newModel": {
@@ -3156,7 +3156,8 @@
           "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
           "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
           "resolved": "تم الحل",
-          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}"
+          "resolvedDocs": "{count, plural, zero {لم يتم حل أي عنصر} one {تم حل عنصر واحد} two {تم حل عنصرين} few {تم حل # عناصر} many {تم حل # عنصرًا} other {تم حل # عنصر}}",
+          "superseded": "مُستبدَل"
         },
         "more": "عرض المزيد",
         "empty": {
