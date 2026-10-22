@@ -13,9 +13,10 @@ _FIELD_FORMAT_ERROR_TYPE = "connector_config_format"
 
 def site_url_key(url: str) -> str:
     """``url`` as the credential use rule compares it: the scheme and host in
-    lower case and no trailing slash. A URL with no scheme reads as https."""
+    lower case and no trailing slash. A URL with no scheme keeps none, so it
+    never matches a URL with one: the connector gets the value as entered."""
     url = url.strip()
-    parsed = urlparse(url if "://" in url else f"https://{url}")
+    parsed = urlparse(url if "://" in url else f"//{url}")
     return urlunparse(
         parsed._replace(
             scheme=parsed.scheme.lower(),

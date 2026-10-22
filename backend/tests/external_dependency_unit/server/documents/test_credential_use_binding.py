@@ -235,6 +235,8 @@ def test_spellings_of_the_pairs_site_match(env: _Env, db_session: Session) -> No
     for wiki_base in (
         "https://acme.atlassian.net.attacker.example.com/wiki",
         "http://acme.atlassian.net",
+        # The connector gets the value as entered, and needs a scheme.
+        "acme.atlassian.net/wiki",
     ):
         _refused(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
