@@ -23,6 +23,7 @@ from onyx.connectors.edit_plan.state import (
     fetch_proposed_credential,
 )
 from onyx.connectors.factory import (
+    CredentialBindingFieldErrorKind,
     assert_user_can_use_credential,
     validate_ccpair_for_user,
 )
@@ -246,6 +247,29 @@ def test_spellings_of_the_pairs_site_match(env: _Env, db_session: Session) -> No
             env.shared,
             _config(wiki_base),
         )
+
+
+def test_unparseable_site_url_is_refused_and_reported(
+    env: _Env, db_session: Session
+) -> None:
+    broken = _config("https://[broken")
+    _refused(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        _use,
+        db_session,
+        env.admin,
+        env.shared,
+        broken,
+    )
+    result = check_credential_binding(
+        env.shared.id,
+        CredentialBindingCheckRequest(source=_SOURCE, connector_specific_config=broken),
+        user=env.admin,
+        db_session=db_session,
+    )
+    assert result.field_errors["wiki_base"].kind == (
+        CredentialBindingFieldErrorKind.INVALID
+    )
 
 
 def test_bound_credential_without_a_pair_is_for_its_owner(
