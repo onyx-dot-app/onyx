@@ -1268,7 +1268,6 @@
         "title": "Anbieter",
         "description": "Verbinden Sie einen Anbieter oder verwalten Sie seine Entscheidungsmodelle.",
         "clearBeforeRemoval": "Löschen Sie die Auswahl des Entscheidungsmodells, bevor Sie diesen Anbieter entfernen.",
-        "edit": "Konfigurieren",
         "connect": "Verbinden"
       },
       "loadFailed": "Entscheidungsmodelle konnten nicht geladen werden.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "Scrollt automatisch zu neuen Inhalten, während der Chat die Antwort generiert. Benutzer können dies in ihren persönlichen Einstellungen überschreiben.",
         "title": "Automatisches Scrollen im Chat"
-      },
-      "betaTag": {
-        "label": "Beta"
       },
       "connectors": {
         "description": "Quellen, die die interne Suche im Chat verwendet. Fügen Sie sie auf der Seite zum Indexierungsstatus hinzu oder ändern Sie sie dort.",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "Beta"
-        },
         "disabled": {
           "description": "Craft ist für alle deaktiviert. Aktivieren Sie unten einzelne Benutzer."
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "Tarif upgraden"
       },
-      "availableFor": "Verfügbar im {plan}"
+      "availableFor": "Verfügbar im {plan}",
+      "beta": {
+        "title": "beta"
+      }
     },
     "placeholders": {
       "email": "e-mail@ihrefirma.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "Suchen..."
-      },
-      "betaTag": {
-        "label": "Beta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Beta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Agenten erkunden"

@@ -1268,7 +1268,6 @@
         "title": "الموفرون",
         "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
         "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
-        "edit": "تكوين",
         "connect": "ربط"
       },
       "loadFailed": "تعذر تحميل نماذج القرار.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "تمرير تلقائي إلى المحتوى الجديد أثناء توليد الإجابة. يمكن للمستخدمين تجاوز هذا في إعداداتهم الشخصية.",
         "title": "التمرير التلقائي للمحادثة"
-      },
-      "betaTag": {
-        "label": "تجريبي"
       },
       "connectors": {
         "description": "المصادر التي يستخدمها البحث الداخلي في الدردشة. أضفها أو غيّرها في صفحة حالة الفهرسة.",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "تجريبي"
-        },
         "disabled": {
           "description": "Craft معطّل للجميع. بدّل مستخدمين أفرادًا أدناه."
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "ترقية الخطة"
       },
-      "availableFor": "متاح في {plan}"
+      "availableFor": "متاح في {plan}",
+      "beta": {
+        "title": "تجريبي"
+      }
     },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "بحث..."
-      },
-      "betaTag": {
-        "label": "تجريبي"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "الأعمال",
-        "betaTag": "تجريبي"
+        "businessTag": "الأعمال"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

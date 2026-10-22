@@ -1268,7 +1268,6 @@
         "title": "Fournisseurs",
         "description": "Connectez un fournisseur ou gérez ses modèles de décision.",
         "clearBeforeRemoval": "Effacez le modèle de décision sélectionné avant de supprimer ce fournisseur.",
-        "edit": "Configurer",
         "connect": "Connecter"
       },
       "loadFailed": "Impossible de charger les modèles de décision.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "Faites défiler automatiquement vers le nouveau contenu pendant que le chat génère une réponse. Les utilisateurs peuvent modifier ce réglage dans leurs paramètres personnels.",
         "title": "Défilement automatique du chat"
-      },
-      "betaTag": {
-        "label": "bêta"
       },
       "connectors": {
         "description": "Sources utilisées par la recherche interne dans le chat. Ajoutez-les ou modifiez-les sur la page d'état de l'indexation.",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "bêta"
-        },
         "disabled": {
           "description": "Craft est désactivé pour tout le monde. Activez-le utilisateur par utilisateur ci-dessous."
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}"
+      "availableFor": "Disponible avec l’{plan}",
+      "beta": {
+        "title": "bêta"
+      }
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "Rechercher..."
-      },
-      "betaTag": {
-        "label": "Bêta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Bêta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorer les agents"
