@@ -1275,7 +1275,14 @@
       "retry": "Try again",
       "saveFailed": "Could not save the connection.",
       "cancel": "Cancel",
-      "save": "Save"
+      "save": "Save",
+      "zoom": {
+        "title": "Connect Zoom AI Services",
+        "description": "Use one connection for Zoom Scribe and Zoom AI Decisions. Changes apply to both.",
+        "connection": "Zoom connection",
+        "selectConnection": "Select a Zoom connection",
+        "removeDescription": "This removes the shared Zoom connection from Voice and Decision Models."
+      }
     },
     "addConnector": {
       "categories": {
@@ -10505,7 +10512,7 @@
           "required": "API key is required"
         },
         "apiSecret": {
-          "description": "Paste your [API secret]({url}) from {provider} to access Scribe.",
+          "description": "Paste your [API secret]({url}) from {provider} to access Zoom AI Services.",
           "label": "API Secret",
           "placeholder": "API secret",
           "required": "API secret is required"

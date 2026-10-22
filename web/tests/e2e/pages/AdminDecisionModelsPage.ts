@@ -30,4 +30,23 @@ export class AdminDecisionModelsPage {
       this.page.getByText("Providers", { exact: true })
     ).toBeVisible();
   }
+
+  async openZoomSetup(): Promise<void> {
+    await this.page
+      .getByTestId(/^decision-provider-zoom_ai-/)
+      .getByRole("button", { name: /Connect|Configure/ })
+      .click();
+    const dialog = this.page.getByRole("dialog");
+    await expect(
+      dialog.getByText("Connect Zoom AI Services", { exact: true })
+    ).toBeVisible();
+    await expect(dialog.getByLabel("API Key")).toBeVisible();
+    await expect(dialog.getByLabel("API Secret")).toBeVisible();
+    await expect(dialog).toContainText(
+      "Use one connection for Zoom Scribe and Zoom AI Decisions. Changes apply to both."
+    );
+    await expect(
+      dialog.getByRole("link", { name: "Set up Voice" })
+    ).toHaveCount(0);
+  }
 }

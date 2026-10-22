@@ -37,8 +37,10 @@ TypeSafe appears only on this page; shared OpenAI and OpenRouter connections
 remain available on Language Models. Dedicated decision-provider saves preserve shared
 chat settings, defaults, visibility, and access. New shared models stay hidden
 from chat. Clear the selected decision model before removing its model or provider.
-TypeSafe System One, OpenAI Decisions, and OpenRouter Decisions use the separate
+TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions use the separate
 client in `backend/onyx/llm/decisions/`.
+Zoom decision requests carry a shared Zoom Scribe connection ID. Only full admins
+can validate or save this link. Each request signs with the current connection credentials.
 
 A user picks a model per chat session, or leaves it on the assistant's default,
 or leaves that on the workspace default. Whichever call actually reaches the
@@ -76,7 +78,7 @@ Admin router, prefix `/admin/llm`:
 | POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
 | POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
-| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Explicit selection only. GET includes all eligible configured models without pagination. |
+| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Decision Models page selection. Explicit opt-in only. GET includes all eligible configured models without pagination. |
 | POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Requires a chat-capable model; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
 | GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
@@ -134,9 +136,16 @@ It manages decision providers and an optional model selection. Shared provider
 modals use dedicated decision-provider requests for saves and tests.
 These saves preserve chat settings, defaults, model visibility, and provider access.
 Shared model settings link to Language Models instead of offering edits here.
-TypeSafe uses `decisionOnly` metadata to appear only on Decision Models.
+TypeSafe and Zoom use `decisionOnly` metadata to appear only on Decision Models.
 Decision-only provider cards have deletion controls. Clear the selected decision
 model before removing its provider, including through the provider API.
+
+Zoom uses `LLMProvider.zoom_voice_provider_id` to reference its shared connection.
+Its encrypted key and secret stay in the VoiceProvider record. Both pages reuse
+the same setup form. Only a Decision Models save creates the decision provider
+and its hidden decision models. A Voice save keeps an existing link in sync but
+never creates one. Decision setup does not activate Voice or choose a decision
+model. Removing Zoom from Decision Models deletes only the decision provider.
 
 `web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration and the
 default chat model. Model selection for naming and search lives in Chat Preferences.
@@ -319,8 +328,8 @@ General saves preserve stored mappings. Discovery never selects additional model
 `decisions/client.py:DecisionClient.decide` accepts text input and typed predicate,
 choice, or score questions. It requires an operation `LLMFlow` and validates the
 provider response. It preserves probabilities, confidence, scores, and refusals.
-TypeSafe and OpenRouter use the System One request shape. OpenAI uses question
-arrays. Requests have a finite timeout and no automatic retries.
+TypeSafe and OpenRouter use the System One request shape. OpenAI and Zoom use
+question arrays. Requests have a finite timeout and no automatic retries.
 Image input and product use cases are outside this implementation.
 
 ### 4.4 The LiteLLM wrapper: `LitellmLLM`
@@ -497,6 +506,13 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
    settings, defaults, visibility, and provider access. New shared models stay
    hidden from chat. Loading a catalog must not select additional decision models
    on an existing connection.
+10. **Zoom Decisions use a linked Zoom Scribe connection.** Do not copy its
+    credentials into the LLM provider row or accept a custom destination. Each
+    request reads the linked credentials and signs a fresh token. Only full
+    admins can test or change a linked connection. Every `zoom_ai` provider must
+    be linked, and a link cannot move to another connection. Shared connection
+    saves are atomic and idempotent from either admin page. A failed validation must not
+    leave credentials or a paired provider behind.
 
 ---
 
@@ -629,6 +645,10 @@ See `backend/AGENTS.md` for authoritative commands and required env
   whenever it is available; a stale `model_configuration_id` falls back to
   the default LLM rather than attempting a name-based lookup, specifically to
   avoid picking a different same-named provider.
+- **Disconnecting Zoom on Voice also removes its linked decision provider.**
+  Clear the selected decision model first. The foreign key uses
+  `ON DELETE RESTRICT` to prevent dangling credential references outside this
+  shared deletion path.
 - **The tracing admin API and DB-backed tracing config are unavailable under
   `MULTI_TENANT`.** Env vars are the only configuration surface on cloud;
   `_reject_if_multi_tenant` enforces this at the endpoint level.

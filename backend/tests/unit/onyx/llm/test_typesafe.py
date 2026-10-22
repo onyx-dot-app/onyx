@@ -116,7 +116,7 @@ def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
 def test_discovery_rejects_another_provider_before_reading_credentials() -> None:
     from onyx.server.manage.llm import api
 
-    stored = MagicMock(provider="openai")
+    stored = MagicMock(provider="openai", zoom_voice_provider_id=None)
     with patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored):
         with pytest.raises(OnyxError, match="requires a TypeSafe"):
             api.get_typesafe_available_models(
@@ -128,7 +128,7 @@ def test_discovery_rejects_another_provider_before_reading_credentials() -> None
 def test_update_cannot_reuse_another_providers_key() -> None:
     from onyx.server.manage.llm.api import put_llm_provider
 
-    stored = MagicMock(provider="openai")
+    stored = MagicMock(provider="openai", zoom_voice_provider_id=None)
     with (
         patch(
             "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
@@ -150,7 +150,12 @@ def test_update_cannot_reuse_another_providers_key() -> None:
 def test_admin_test_dispatch_restores_key_without_chat_client() -> None:
     from onyx.server.manage.llm.api import test_decision_provider as test_configuration
 
-    stored = MagicMock(provider="typesafe", api_base=None, custom_config=None)
+    stored = MagicMock(
+        provider="typesafe",
+        api_base=None,
+        custom_config=None,
+        zoom_voice_provider_id=None,
+    )
     stored.api_key.get_value.return_value = "stored-secret"
     with (
         patch(
@@ -161,7 +166,7 @@ def test_admin_test_dispatch_restores_key_without_chat_client() -> None:
             "onyx.server.manage.llm.api._decision_provider_catalog",
             return_value={"jev-latest": False},
         ),
-        patch("onyx.server.manage.llm.api.DecisionClient") as check,
+        patch("onyx.server.manage.llm.api.build_decision_client") as check,
         patch("onyx.server.manage.llm.api.get_llm") as chat,
     ):
         test_configuration(
@@ -196,7 +201,7 @@ def test_saved_credentials_cannot_move_between_providers(
             "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
             return_value=stored,
         ),
-        patch("onyx.server.manage.llm.api.DecisionClient") as check,
+        patch("onyx.server.manage.llm.api.build_decision_client") as check,
         patch("onyx.server.manage.llm.api.get_llm") as chat,
     ):
         with pytest.raises(OnyxError, match="must match"):

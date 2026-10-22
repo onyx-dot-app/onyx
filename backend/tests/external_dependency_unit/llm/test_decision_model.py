@@ -45,6 +45,7 @@ def db_session() -> Generator[Session, None, None]:
             tables=[
                 Base.metadata.tables[name]
                 for name in (
+                    "voice_provider",
                     "llm_provider",
                     "model_configuration",
                     "llm_model_flow",

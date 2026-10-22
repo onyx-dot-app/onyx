@@ -1275,7 +1275,14 @@
       "retry": "重试",
       "saveFailed": "无法保存连接。",
       "cancel": "取消",
-      "save": "保存"
+      "save": "保存",
+      "zoom": {
+        "title": "连接 Zoom AI Services",
+        "description": "Zoom Scribe 和 Zoom AI Decisions 共用一个连接。更改会同时应用于两者。",
+        "connection": "Zoom 连接",
+        "selectConnection": "选择 Zoom 连接",
+        "removeDescription": "这将从语音和决策模型中删除共享的 Zoom 连接。"
+      }
     },
     "addConnector": {
       "categories": {
@@ -10505,7 +10512,7 @@
           "required": "API 密钥为必填项"
         },
         "apiSecret": {
-          "description": "粘贴来自 {provider} 的 [API 机密]({url})，以访问 Scribe。",
+          "description": "粘贴来自 {provider} 的 [API 密钥机密]({url}) 以访问 Zoom AI Services。",
           "label": "API 机密",
           "placeholder": "API 机密",
           "required": "API 机密为必填项"

@@ -3747,6 +3747,12 @@ class LLMProvider(Base):
     )
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    zoom_voice_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("voice_provider.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+        unique=True,
+    )
     # custom configs that should be passed to the LLM provider at inference time
     # (e.g. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. for bedrock)
     custom_config: Mapped[dict[str, str] | None] = mapped_column(

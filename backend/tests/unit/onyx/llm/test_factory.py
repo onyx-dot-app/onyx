@@ -221,7 +221,9 @@ def test_decision_client_uses_selected_provider_and_model() -> None:
         patch("onyx.llm.factory.get_session_with_current_tenant"),
         patch("onyx.llm.factory.fetch_default_model", return_value=model),
         patch("onyx.llm.factory.check_llm_cost_limit_for_provider") as cost,
-        patch("onyx.llm.factory.DecisionClient", wraps=DecisionClient) as build,
+        patch(
+            "onyx.llm.decisions.factory.DecisionClient", wraps=DecisionClient
+        ) as build,
     ):
         client = get_decision_client(additional_headers={"X-Test": "value"})
     assert client is not None
