@@ -340,11 +340,12 @@ shape the table above does not cover:
 - **Decided per mailbox, from headers.** Each mailbox is walked on its own,
   eight side by side. Its folders are read through delta pages of metadata
   with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
-  step, and the rows are held in the connector process (`_MailboxListing`)
-  until the last folder is done. The checkpoint (`OutlookCheckpoint`) holds
-  cursors only; a process that resumes an attempt has no listing for the
-  mailboxes in flight and walks them again from the start (`_resumable`).
-  Nothing is written outside the process: no file store, no database.
+  step, and the rows are kept by the connector process in an anonymous
+  SQLite temp file (`_MailboxListing`) until the mailbox is built. The
+  checkpoint (`OutlookCheckpoint`) holds cursors only; a process that resumes
+  an attempt has no listing for the mailboxes in flight and walks them again
+  from the start (`_resumable`). Nothing shared is written: no file store, no
+  Postgres, and the kernel drops the temp file with the process.
 - **Builder, readers, copies.** `threads.py:plan_documents` turns one
   mailbox's copy of a thread into documents. The first message names the
   builder (`designated_builder`: its sender when the run walks that mailbox,
@@ -365,11 +366,12 @@ shape the table above does not cover:
   built at all; the other holders keep only their own documents of the
   replies that left the builder out. The
   builder's first message sits in its Sent Items, so excluding that folder
-  has the same effect on every thread the mailbox started. The listing in
-  memory is bounded by one mailbox per worker, eight at once, and by
-  `MAX_LISTING_ROWS_PER_MAILBOX` (250k): a larger mailbox is a recorded
-  failure for indexing and aborts a slim walk. A checkpoint from the earlier
-  table-based walk starts the attempt over.
+  has the same effect on every thread the mailbox started. Each listing
+  lives in an anonymous SQLite temp file (`_MailboxListing`), one mailbox
+  per worker, eight at once, and a read returns each conversation's root and
+  newest `MAX_MESSAGES_PER_CONVERSATION` messages, so memory holds one read
+  slice however large the mailbox or a conversation. A checkpoint from the earlier table-based walk starts the
+  attempt over.
 - **Polls.** Only messages in the window are listed, so each conversation
   with new mail is read whole through its outline (`_conversation_outline`),
   the oldest message fetched separately when the outline stops short of it,
@@ -377,7 +379,7 @@ shape the table above does not cover:
   messages, so the daily permission sync can widen a document's readers
   before the next poll rebuilds its text.
 - **Prune and permission sync.** `_slim_docs` lists each mailbox the same way,
-  in memory one mailbox per worker, and yields the ids and readers
+  on disk one mailbox per worker, and yields the ids and readers
   `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
   documents indexing built.
 - **Targeted reindex.** `OutlookConnector` is a `Resolver`. `reindex` finds

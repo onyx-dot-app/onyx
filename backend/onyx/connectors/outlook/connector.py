@@ -6,9 +6,9 @@ goes through ``OutlookSourceOperations``.
 
 Each mailbox is walked on its own, a few side by side. Its folders are read
 through delta pages of message metadata, headers included, one page per
-checkpoint step, and the rows are held in memory until the last folder is
-done. Each conversation is then decided from that copy alone and the bodies
-of the messages its documents need are read.
+checkpoint step, and the rows are kept in a sqlite temp file. Once the
+last folder is done, each conversation is decided from that copy alone and
+the bodies of the messages its documents need are read.
 
 Incremental runs come from the poll window rather than saved delta links: an
 index attempt starts from a fresh checkpoint, so each folder's delta round
@@ -21,6 +21,7 @@ full re-index. A thread that lost one message keeps the stale text until it
 gains a message or a full re-index rebuilds it.
 """
 
+import sqlite3
 from collections import deque
 from collections.abc import Callable, Container, Generator, Iterable, Iterator
 from dataclasses import dataclass
@@ -122,6 +123,7 @@ from onyx.connectors.outlook.source_operations import (
     OutlookSourceOperations,
 )
 from onyx.connectors.outlook.threads import (
+    MAX_MESSAGES_PER_CONVERSATION,
     Roster,
     ThreadDocumentRef,
     designated_builder,
@@ -182,10 +184,9 @@ THREAD_CLOCK_SKEW = timedelta(days=1)
 FIRST_MESSAGE_ARRIVAL_WINDOW = timedelta(days=7)
 # Messages one scan reads before it gives up on the threads not found.
 RECEIVED_SCAN_LIMIT = 10_000
-# Listing rows one mailbox may hold in memory, a few hundred megabytes at
-# most across the mailboxes in flight. A mailbox past it is skipped by
-# indexing and fails a slim walk, since its threads cannot be decided whole.
-MAX_LISTING_ROWS_PER_MAILBOX = 250_000
+# Conversations all_conversations loads per read, so a slim walk holds one
+# slice, not the mailbox.
+LISTING_READ_SIZE = 1_000
 
 # Series ids the checkpoint carries across all active mailboxes. It is
 # written after every step, so the per-mailbox cap shrinks as more mailboxes run.
@@ -238,22 +239,94 @@ SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 class _MailboxListing:
     """One mailbox's listing rows while its folders are read, then its
-    conversations in listing order once they are. Lives in the process that
-    listed the mailbox, never in the checkpoint, so its size is bounded by
-    one mailbox, not the tenant."""
+    conversations in listing order once they are. Rows live in an anonymous
+    sqlite database, a temp file the kernel drops with the process, never in
+    the checkpoint, so memory holds one read slice however large the mailbox
+    and an interrupted run leaves nothing behind. ``close`` releases the file.
+
+    Adds and groups happen in the step loop, reads in a build thread or at
+    whichever thread drives the slim walk's generator: one thread at a time,
+    not always the same one, so the connection is shared without a lock."""
 
     def __init__(self) -> None:
-        self.rows: list[ThreadListing] = []
-        self.conversations: list[list[ThreadListing]] = []
+        self._conn = sqlite3.connect("", check_same_thread=False)
+        # The build's default keeps temp tables in memory; the file is the point.
+        self._conn.executescript(
+            "PRAGMA temp_store = FILE;"
+            "CREATE TABLE rows (seq INTEGER PRIMARY KEY, "
+            "conversation_id TEXT NOT NULL, message_id TEXT NOT NULL, "
+            "received_at REAL, is_root INTEGER NOT NULL, "
+            "kept INTEGER NOT NULL DEFAULT 0, row TEXT NOT NULL);"
+            "CREATE INDEX rows_by_conversation ON rows (conversation_id, seq);"
+            "CREATE TABLE conversations (seq INTEGER PRIMARY KEY, "
+            "conversation_id TEXT NOT NULL UNIQUE);"
+        )
         self.grouped = False
+        self.conversation_count = 0
+
+    def add(self, rows: Iterable[ThreadListing]) -> None:
+        with self._conn:
+            self._conn.executemany(
+                "INSERT INTO rows (conversation_id, message_id, received_at, "
+                "is_root, row) VALUES (?, ?, ?, ?, ?)",
+                (
+                    (
+                        row.conversation_id,
+                        row.message_id,
+                        row.received_at.timestamp() if row.received_at else None,
+                        row.is_root,
+                        row.model_dump_json(),
+                    )
+                    for row in rows
+                ),
+            )
 
     def group(self) -> None:
-        by_conversation: dict[str, list[ThreadListing]] = {}
-        for row in self.rows:
-            by_conversation.setdefault(row.conversation_id, []).append(row)
-        self.conversations = list(by_conversation.values())
-        self.rows = []
+        """Numbers the conversations in the order their first row was listed
+        and marks the rows a read returns: each conversation's root messages
+        and its newest MAX_MESSAGES_PER_CONVERSATION, each message once,
+        which is all ``plan_documents`` keeps."""
+        with self._conn:
+            self.conversation_count = self._conn.execute(
+                "INSERT INTO conversations (conversation_id) "
+                "SELECT conversation_id FROM rows GROUP BY conversation_id "
+                "ORDER BY MIN(seq)"
+            ).rowcount
+            # Bare columns beside MIN(seq) come from that row, the first copy
+            # of a message the listing saw. A null received_at sorts oldest.
+            self._conn.execute(
+                "UPDATE rows SET kept = 1 WHERE seq IN ("
+                "SELECT seq FROM ("
+                "SELECT seq, is_root, ROW_NUMBER() OVER ("
+                "PARTITION BY conversation_id "
+                "ORDER BY received_at DESC, message_id DESC) AS newest "
+                "FROM (SELECT MIN(seq) AS seq, conversation_id, message_id, "
+                "received_at, is_root FROM rows "
+                "GROUP BY conversation_id, message_id)"
+                ") WHERE is_root OR newest <= ?)",
+                (MAX_MESSAGES_PER_CONVERSATION,),
+            )
         self.grouped = True
+
+    def conversations(self, start: int, count: int) -> list[list[ThreadListing]]:
+        """The ``count`` conversations from 0-based ``start`` of the grouped
+        listing, each its kept rows in listing order."""
+        by_seq: dict[int, list[ThreadListing]] = {}
+        for seq, row in self._conn.execute(
+            "SELECT c.seq, r.row FROM conversations c "
+            "JOIN rows r ON r.conversation_id = c.conversation_id "
+            "WHERE c.seq > ? AND c.seq <= ? AND r.kept ORDER BY c.seq, r.seq",
+            (start, start + count),
+        ):
+            by_seq.setdefault(seq, []).append(ThreadListing.model_validate_json(row))
+        return list(by_seq.values())
+
+    def all_conversations(self) -> Iterator[list[ThreadListing]]:
+        for start in range(0, self.conversation_count, LISTING_READ_SIZE):
+            yield from self.conversations(start, LISTING_READ_SIZE)
+
+    def close(self) -> None:
+        self._conn.close()
 
 
 class OutlookCheckpoint(ConnectorCheckpoint):
@@ -271,7 +344,7 @@ class OutlookCheckpoint(ConnectorCheckpoint):
         if not isinstance(data, dict):
             return data
         # The table-based shape kept its listing in a store this connector
-        # no longer reads, so such an attempt starts over.
+        # does not read, so such an attempt starts over.
         if "listing_pages" in data:
             return {"has_more": True}
         if not data.get("current_mailbox"):
@@ -324,18 +397,6 @@ def _mailbox_failure(
         failure_message=message,
         exception=exception,
     )
-
-
-def _oversized_mailbox_message(mailbox: OutlookMailbox) -> str:
-    return (
-        f"Mailbox {mailbox.address} holds more than "
-        f"{MAX_LISTING_ROWS_PER_MAILBOX} messages, more than the connector "
-        "decides in memory. Exclude its largest folders or leave it out."
-    )
-
-
-def _oversized_mailbox_failure(mailbox: OutlookMailbox) -> ConnectorFailure:
-    return _mailbox_failure(mailbox.address, _oversized_mailbox_message(mailbox))
 
 
 def _format_recipient(recipient: OutlookRecipient) -> str:
@@ -902,21 +963,17 @@ class OutlookConnector(
             max_workers=MAILBOX_WORKERS,
         )
         for cursor, result in zip(cursors, results, strict=True):
-            listing: _MailboxListing = self._listings.setdefault(
-                cursor.mailbox.id, _MailboxListing()
-            )
-            listing.rows.extend(result.rows)
+            listing: _MailboxListing | None = self._listings.get(cursor.mailbox.id)
+            if listing is None:
+                listing = self._listings[cursor.mailbox.id] = _MailboxListing()
+            listing.add(result.rows)
             yield from result.items
-            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
-                yield _oversized_mailbox_failure(cursor.mailbox)
-                cursor.finished = True
-                continue
             if cursor.listed and not listing.grouped:
                 listing.group()
-                cursor.to_build = len(listing.conversations)
+                cursor.to_build = listing.conversation_count
         for cursor in cursors:
             if cursor.finished:
-                self._listings.pop(cursor.mailbox.id, None)
+                self._listings.pop(cursor.mailbox.id).close()
         checkpoint.mailboxes = queued
         checkpoint.active = [cursor for cursor in cursors if not cursor.finished]
 
@@ -974,12 +1031,9 @@ class OutlookConnector(
     ) -> list[Document | ConnectorFailure]:
         """Builds the next CONVERSATIONS_PER_STEP conversations of the
         mailbox's listing, side by side."""
-        conversations: list[list[ThreadListing]] = self._listings[
+        batch: list[list[ThreadListing]] = self._listings[
             cursor.mailbox.id
-        ].conversations
-        batch: list[list[ThreadListing]] = conversations[
-            cursor.built : cursor.built + CONVERSATIONS_PER_STEP
-        ]
+        ].conversations(cursor.built, CONVERSATIONS_PER_STEP)
         excluded: set[str] = set(cursor.excluded_folder_ids)
         results: list[list[Document | ConnectorFailure]] = (
             run_functions_tuples_in_parallel(
@@ -1258,26 +1312,26 @@ class OutlookConnector(
         # A copy's documents are decided across its folders, so the mailbox's
         # listing is held whole. One mailbox per worker at a time.
         listing: _MailboxListing = _MailboxListing()
-        for rows in self._thread_listing_pages(mailbox, tree):
-            listing.rows.extend(rows)
-            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
-                # Listing nothing for it would prune its documents.
-                raise ConnectorValidationError(_oversized_mailbox_message(mailbox))
-            yield []
-        listing.group()
-        documents: list[SlimDocument | HierarchyNode] = []
-        for rows in listing.conversations or []:
-            documents.extend(
-                slim_documents(
-                    plan_documents(rows, mailbox, self._mailbox_available),
-                    include_permissions,
+        try:
+            for rows in self._thread_listing_pages(mailbox, tree):
+                listing.add(rows)
+                yield []
+            listing.group()
+            documents: list[SlimDocument | HierarchyNode] = []
+            for rows in listing.all_conversations():
+                documents.extend(
+                    slim_documents(
+                        plan_documents(rows, mailbox, self._mailbox_available),
+                        include_permissions,
+                    )
                 )
-            )
-            if len(documents) >= SLIM_BATCH_SIZE:
+                if len(documents) >= SLIM_BATCH_SIZE:
+                    yield documents
+                    documents = []
+            if documents:
                 yield documents
-                documents = []
-        if documents:
-            yield documents
+        finally:
+            listing.close()
         if self.include_calendar:
             for events in self._event_slim_pages(mailbox, include_permissions):
                 yield [*events]
