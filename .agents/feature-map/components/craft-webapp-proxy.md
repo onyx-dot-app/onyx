@@ -326,6 +326,11 @@ DOCX previews render sanitized content and document styles inside a shadow root 
 DOCX scroll restoration waits for rendered content on initial load and each replacement, preserving position during hidden updates. Spreadsheet parsing runs in a worker with a ten-second deadline.
 ### Static HTML in Apps
 
+Authenticated renewal extends the existing grant without changing the iframe URL. Explicit reload still creates a new grant.
+Asset bytes are shared by tenant, session, path, and inventory revision; every read still checks grant access.
+Transient refresh failures retain the accepted iframe and show an inline warning. Access failures clear the preview.
+The deployment proxy preserves the incoming host and port for scoped preview CSP URLs.
+
 The Apps tab lists `.html` and `.htm` files from the session output inventory alongside registered webapps.
 Both use matching bordered cards in a centered single column, with aligned icons and left-aligned labels.
 Apps reload refreshes both webapp discovery and the output inventory. Loading, failed, and incomplete inventories stay distinct from empty results.
@@ -334,11 +339,11 @@ Selecting an HTML file opens its file tab. It does not register a webapp or star
 `GET /build/static-preview/{token}/{path}` serves listed static assets without browser login credentials.
 The shared cache stores the issuing tenant, owner, folder, and allowed file paths for one hour.
 The capability selects its issuing tenant; each read checks the active owner's permissions and session ownership.
-First reads check the current output inventory, then cache immutable bytes under that capability.
+First reads check the granted inventory revision, then cache bytes by tenant, session, path, and revision.
 Page navigation reuses those bytes without sandbox reads. Reload creates a new capability and discards the old preview.
 The folder scope includes descendants. Hidden files, other folders, and non-static file types are excluded.
 Previews allow at most 1,000 files, 20 MiB per asset, and 50 MiB per folder.
-Missing uncached files and expired capabilities fail closed. Cached bytes remain until expiry or reload.
+Missing uncached revisions and expired capabilities fail closed. Cached bytes expire independently of their grants.
 HTML uses a real document URL, so relative CSS, images, fonts, script imports, and local JSON reads work normally.
 The iframe and response CSP both allow scripts without same-origin access.
 Forms, popups, frames, and top-level navigation remain blocked. Referrers and HTTP caching are disabled.

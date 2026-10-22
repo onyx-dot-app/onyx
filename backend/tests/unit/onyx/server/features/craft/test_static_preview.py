@@ -273,3 +273,67 @@ def test_routes_pass_auth_registration_check() -> None:
     app.include_router(preview.router, prefix="/build")
     app.include_router(preview.public_router)
     check_router_auth(app)
+
+
+def test_reload_shares_unchanged_assets_but_reads_new_revisions(
+    request_scope: Request,
+    setup_preview: tuple[MagicMock, MagicMock, User, Session],
+) -> None:
+    cache, manager, user, db = setup_preview
+    stored: dict[str, str | bytes] = {}
+    cache.set.side_effect = lambda key, value, **_kwargs: stored.__setitem__(key, value)
+    cache.get.side_effect = stored.get
+    session_id = uuid4()
+    manager.download_artifact.return_value = (b"first", "text/html", "index.html")
+    first = preview.create_static_preview(
+        session_id, "outputs/site/index.html", user, db
+    )
+    preview.read_static_preview(first.path.split("/")[0], "index.html", request_scope)
+    second = preview.create_static_preview(
+        session_id, "outputs/site/index.html", user, db
+    )
+    assert second.path != first.path
+    preview.read_static_preview(second.path.split("/")[0], "index.html", request_scope)
+    assert manager.download_artifact.call_count == 1
+    manager.get_output_inventory.return_value.files[0].revision = "2"
+    manager.download_artifact.return_value = (b"second", "text/html", "index.html")
+    third = preview.create_static_preview(
+        session_id, "outputs/site/index.html", user, db
+    )
+    response = preview.read_static_preview(
+        third.path.split("/")[0], "index.html", request_scope
+    )
+    assert response.body == b"second"
+    assert manager.download_artifact.call_count == 2
+    assert len([key for key in stored if key.startswith("craft:static-asset:")]) == 2
+
+
+def test_renewal_preserves_url_and_rejects_other_owners_and_sessions(
+    setup_preview: tuple[MagicMock, MagicMock, User, Session],
+) -> None:
+    cache, _, user, db = setup_preview
+    session_id = uuid4()
+    issued = preview.create_static_preview(
+        session_id, "outputs/site/index.html", user, db
+    )
+    encoded = cache.set.call_args.args[1]
+    cache.get.return_value = encoded
+    token = issued.path.split("/")[0]
+    renewed = preview.create_static_preview(
+        session_id, "outputs/site/index.html", user, db, token
+    )
+    assert renewed.path == issued.path
+    assert cache.set.call_args.args[1] == encoded
+    for other_session, other_user in [
+        (uuid4(), user),
+        (session_id, User(id=uuid4(), is_active=True)),
+    ]:
+        with pytest.raises(OnyxError):
+            preview.create_static_preview(
+                other_session, "outputs/site/index.html", other_user, db, token
+            )
+    cache.get.return_value = None
+    with pytest.raises(OnyxError):
+        preview.create_static_preview(
+            session_id, "outputs/site/index.html", user, db, token
+        )

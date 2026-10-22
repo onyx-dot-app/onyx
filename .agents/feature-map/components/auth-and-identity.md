@@ -519,6 +519,12 @@ It returns success and the PKCE setting used, without saving configuration or us
 Both test endpoints require action-management permission; the popup marker grants no access.
 Provider consent can still create a grant, even though Onyx discards the tokens.
 
+### Proxy request authority
+
+The deployment nginx templates forward the incoming Host header, including its port, to upstream services.
+They overwrite X-Forwarded-Host with that same value. This preserves public origins for generated URLs and preview policies.
+The CLI embeds generated copies of these templates. Run `ods generate-compose --write` after changing them.
+
 ## 5. Contracts and invariants
 
 This area is security-critical. Claims here are stated at the confidence the

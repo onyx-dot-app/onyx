@@ -1188,11 +1188,12 @@ export async function saveAppActionPolicies(
 /** Mint a folder-scoped URL; the isolated frame never receives login credentials. */
 export async function createStaticPreview(
   sessionId: string,
-  path: string
-): Promise<{ url: string; expiresAt: number }> {
+  path: string,
+  renewToken?: string
+): Promise<{ url: string; expiresAt: number; token: string }> {
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   const response = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/static-preview/${encodedPath}`,
+    `${BUILD_API_BASE}/sessions/${sessionId}/static-preview/${encodedPath}${renewToken ? `?renew_token=${encodeURIComponent(renewToken)}` : ""}`,
     {
       method: "POST",
       cache: "no-store",
@@ -1217,5 +1218,6 @@ export async function createStaticPreview(
   return {
     url: `${BUILD_API_BASE}/static-preview/${result.path}`,
     expiresAt: Date.now() + result.expires_in * 1000,
+    token: result.path.split("/")[0]!,
   };
 }

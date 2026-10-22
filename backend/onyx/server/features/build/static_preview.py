@@ -1,13 +1,15 @@
 """Read-only, short-lived capabilities for isolated static output previews."""
 
 import hashlib
+import json
 import mimetypes
 import secrets
 from pathlib import PurePosixPath
+from typing import Annotated
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
@@ -62,6 +64,7 @@ class StaticPreviewGrant(BaseModel):
     user_id: UUID
     root: str
     files: dict[str, int]
+    revisions: dict[str, str]
 
 
 class StaticPreviewResponse(BaseModel):
@@ -75,6 +78,7 @@ def create_static_preview(
     path: str,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    renew_token: Annotated[str | None, Query(min_length=43, max_length=43)] = None,
 ) -> StaticPreviewResponse:
     target = PurePosixPath(path)
     if (
@@ -101,6 +105,31 @@ def create_static_preview(
         raise OnyxError(
             OnyxErrorCode.BAD_REQUEST, "Preview folder exceeds the size limit"
         )
+    cache = get_shared_cache_backend()
+    if renew_token is not None:
+        raw = cache.get(f"craft:static-preview:{renew_token}")
+        try:
+            previous = StaticPreviewGrant.model_validate_json(raw or b"")
+        except ValidationError as error:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND, "Preview expired; reload the file"
+            ) from error
+        if (
+            previous.tenant_id != get_current_tenant_id()
+            or previous.session_id != session_id
+            or previous.user_id != user.id
+            or previous.root != root
+            or target.name not in previous.files
+        ):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND)
+        cache.set(
+            f"craft:static-preview:{renew_token}",
+            previous.model_dump_json(),
+            ex=PREVIEW_TTL_SECONDS,
+        )
+        return StaticPreviewResponse(
+            path=f"{renew_token}/{quote(target.name, safe='')}"
+        )
     token = secrets.token_urlsafe(32)
     grant = StaticPreviewGrant(
         tenant_id=get_current_tenant_id(),
@@ -108,8 +137,13 @@ def create_static_preview(
         user_id=user.id,
         root=root,
         files=files,
+        revisions={
+            file.path[len(root) :]: file.revision
+            for file in inventory.files
+            if file.path[len(root) :] in files and file.path.startswith(root)
+        },
     )
-    get_shared_cache_backend().set(
+    cache.set(
         f"craft:static-preview:{token}", grant.model_dump_json(), ex=PREVIEW_TTL_SECONDS
     )
     return StaticPreviewResponse(path=f"{token}/{quote(target.name, safe='')}")
@@ -147,18 +181,30 @@ def read_static_preview(
                 raise OnyxError(OnyxErrorCode.NOT_FOUND)
             if get_build_session(grant.session_id, grant.user_id, db_session) is None:
                 raise OnyxError(OnyxErrorCode.NOT_FOUND)
-            # A grant owns a bounded snapshot. Reuse bytes across page navigation.
-            asset_key = f"craft:static-asset:{token}:{hashlib.sha256(path.encode()).hexdigest()}"
+            # Authorization remains grant-scoped; identical revisions share bytes.
+            full_path = grant.root + path
+            identity = json.dumps(
+                [
+                    grant.tenant_id,
+                    str(grant.session_id),
+                    full_path,
+                    grant.revisions[path],
+                ]
+            )
+            asset_key = (
+                f"craft:static-asset:{hashlib.sha256(identity.encode()).hexdigest()}"
+            )
             content = cache.get(asset_key)
             mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
             if content is None:
                 manager = SessionManager(db_session)
-                full_path = grant.root + path
                 inventory = manager.get_output_inventory(
                     grant.session_id, grant.user_id
                 )
                 if not any(
-                    file.path == full_path and file.size <= grant.files[path]
+                    file.path == full_path
+                    and file.size <= grant.files[path]
+                    and file.revision == grant.revisions[path]
                     for file in inventory.files
                 ):
                     raise OnyxError(OnyxErrorCode.NOT_FOUND)

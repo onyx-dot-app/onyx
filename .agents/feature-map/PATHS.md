@@ -18,6 +18,12 @@ here. Read the component that documents the setting in its env table.
 
 ---
 
+## Deployment proxy
+
+| Path | Component(s) |
+|---|---|
+| `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | auth-and-identity |
+
 ## Terraform: custom tools
 
 | Path | Component(s) |
