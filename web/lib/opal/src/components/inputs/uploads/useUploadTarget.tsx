@@ -101,22 +101,25 @@ export default function useUploadTarget({
   // selection, not to a focused button or read-only field, so the event's
   // target can be any element; the control takes it while focus is inside.
   const pasteRef = useRef<(event: ClipboardEvent) => void>(() => {});
-  pasteRef.current = (event) => {
-    const root = rootRef.current;
-    if (disabled || !root || !root.contains(document.activeElement)) return;
-    const data = event.clipboardData;
-    if (!data) return;
-    const files = Array.from(data.files);
-    if (files.length > 0) {
+  // Kept current after each commit, as `focusTargetRef` is.
+  useEffect(() => {
+    pasteRef.current = (event) => {
+      const root = rootRef.current;
+      if (disabled || !root || !root.contains(document.activeElement)) return;
+      const data = event.clipboardData;
+      if (!data) return;
+      const files = Array.from(data.files);
+      if (files.length > 0) {
+        event.preventDefault();
+        takeFiles(files);
+        return;
+      }
+      const text = data.getData("text");
+      if (!text || !onPasteText) return;
       event.preventDefault();
-      takeFiles(files);
-      return;
-    }
-    const text = data.getData("text");
-    if (!text || !onPasteText) return;
-    event.preventDefault();
-    onPasteText(text);
-  };
+      onPasteText(text);
+    };
+  });
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => pasteRef.current(event);
     document.addEventListener("paste", onPaste);
