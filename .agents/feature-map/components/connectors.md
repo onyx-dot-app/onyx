@@ -650,7 +650,9 @@ required and never counts toward a verdict. The runner runs it after the
 required validation checks of the same run. When findings are off, it skips it
 (`applicable=False`). When a required check failed, it does not run it and
 shows "Not run" (`dependency_failed`), naming its own stopped dependency or else
-the first failed required check. Creation does not run it: a cached
+the first failed required check. A discovery check that does not apply to the
+scope or access type is `applicable=False` first, so a failed check does not
+show it as "Not run". Creation does not run it: a cached
 draft result is reused, else it is recorded as not run, so neither creation nor
 the first index attempt waits on it. `findings.py:bounded_options` and
 `bounded_count` read a listing lazily up to a cap.

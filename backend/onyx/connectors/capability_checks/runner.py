@@ -856,7 +856,11 @@ class _CheckRun:
     def _own_skip_outcome(self, check: CapabilityCheck) -> CheckOutcome | None:
         """The outcome of a check that must not run for a reason of its own, or
         None. Discovery checks run only when validation found the credential
-        usable: they exist to show what a working credential reaches."""
+        usable: they exist to show what a working credential reaches. A check
+        that does not apply drops out before a failed check can stop it."""
+        unrunnable = _unrunnable_outcome(check, self._context, self._form_run)
+        if unrunnable is not None and not unrunnable.applicable:
+            return unrunnable
         if check.discovery and (
             discovery_outcome := _discovery_skip_outcome(
                 check,
@@ -866,7 +870,7 @@ class _CheckRun:
             )
         ):
             return discovery_outcome
-        return _unrunnable_outcome(check, self._context, self._form_run)
+        return unrunnable
 
     def _record_finished_checks(self) -> None:
         # Each worker returns within its check's hang guard; the wait's
