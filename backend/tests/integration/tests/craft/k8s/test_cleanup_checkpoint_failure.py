@@ -55,7 +55,16 @@ def test_worker_preserves_files_runtime_and_ports_after_checkpoint_failure(
     original_port = session.nextjs_port
     assert original_port is not None
     if failure == "workspace-discovery":
-        blocked_path = "/workspace/sessions"
+        blocked_path = "/workspace/.venv/bin/ls"
+        inject_fault = (
+            f"test ! -e {blocked_path} && "
+            f"printf '#!/bin/sh\\nexit 1\\n' > {blocked_path} && "
+            f"chmod 700 {blocked_path} && "
+            f'test "$(command -v ls)" = {blocked_path} && '
+            "! ls -1 /workspace/sessions/ && printf fault-installed"
+        )
+        restore = f"rm -f {blocked_path}"
+        fault_container = "sandbox"
     else:
         blocked_path = pod_exec(
             k8s_client,
@@ -65,23 +74,30 @@ def test_worker_preserves_files_runtime_and_ports_after_checkpoint_failure(
             container="sidecar",
         ).strip()
         assert blocked_path.startswith("/workspace/opencode-data/"), blocked_path
-    blocked_path = shlex.quote(blocked_path)
-    original_mode = pod_exec(
-        k8s_client,
-        owned.pod_name,
-        SANDBOX_NAMESPACE,
-        f"stat -c %a {blocked_path}",
-        container="sidecar",
-    ).strip()
-    assert original_mode.isdigit(), original_mode
-    try:
-        pod_exec(
+        blocked_path = shlex.quote(blocked_path)
+        original_mode = pod_exec(
             k8s_client,
             owned.pod_name,
             SANDBOX_NAMESPACE,
-            f"chmod 000 {blocked_path}",
+            f"stat -c %a {blocked_path}",
             container="sidecar",
+        ).strip()
+        assert original_mode.isdigit(), original_mode
+        inject_fault = (
+            f"chmod 000 {blocked_path} && "
+            f'test "$(stat -c %a {blocked_path})" = 0 && printf fault-installed'
         )
+        restore = f"chmod {original_mode} {blocked_path}"
+        fault_container = "sidecar"
+    try:
+        installed = pod_exec(
+            k8s_client,
+            owned.pod_name,
+            SANDBOX_NAMESPACE,
+            inject_fault,
+            container=fault_container,
+        )
+        assert installed.strip() == "fault-installed", installed
         sandbox = db_session.get(Sandbox, owned.sandbox_id)
         assert sandbox is not None
         sandbox.last_heartbeat = datetime.now(timezone.utc) - timedelta(
@@ -105,8 +121,8 @@ def test_worker_preserves_files_runtime_and_ports_after_checkpoint_failure(
             k8s_client,
             owned.pod_name,
             SANDBOX_NAMESPACE,
-            f"chmod {original_mode} {blocked_path}",
-            container="sidecar",
+            restore,
+            container=fault_container,
         )
     assert (
         pod_exec(k8s_client, owned.pod_name, SANDBOX_NAMESPACE, f"cat {path}").strip()
