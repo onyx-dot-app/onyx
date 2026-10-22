@@ -658,9 +658,9 @@ tooltip, until the bound fields pass the binding check and a run passes every
 check with `validates_binding` (`formUnlocked` in
 `web/src/lib/connectors/checks/hooks.ts`).
 The checks card shows the server's reason when it refuses a start (e.g. the
-credential use rule's 403). It stops polling a run when a fetch fails or the run
-still runs after `DRAFT_RUN_CLIENT_DEADLINE_MS`, and shows the run as failed to
-run. Cancel, shown while a run runs, stops it and returns the card to Start Checks.
+credential use rule's 403). It stops polling a run when a fetch fails, does not
+settle within `DRAFT_RUN_POLL_TIMEOUT_MS`, or reads the run as still running after
+`DRAFT_RUN_CLIENT_DEADLINE_MS`, and shows the run as failed to run. Cancel, shown while a run runs, stops it and returns the card to Start Checks.
 Each source with named checks sets it on its sign-in check, and some sources also
 on a listing that runs after it (e.g. Jira's "List projects").
 When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory

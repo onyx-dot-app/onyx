@@ -64,6 +64,8 @@ const RUNNING_POLL_INTERVAL_MS = 1500;
 // The server keeps a draft run for 30 minutes (`DRAFT_RUN_TTL_SECONDS`); a
 // run still "running" after that, plus a margin, has stopped responding.
 export const DRAFT_RUN_CLIENT_DEADLINE_MS = 31 * 60 * 1000;
+// A poll that has not settled by then ends, so a hung request cannot spin.
+export const DRAFT_RUN_POLL_TIMEOUT_MS = 60 * 1000;
 
 /**
  * One add-connector form's check session, kept in the SWR cache so every
@@ -335,13 +337,19 @@ export function useConnectorChecks({
   const { data: run, error: runError } = useSWR<DraftCheckRunSnapshot>(
     runId ? SWR_KEYS.connectorCheckRun(runId) : null,
     async (url: string) => {
+      const latest = await errorHandlingFetcher<DraftCheckRunSnapshot>(url, {
+        signal: AbortSignal.timeout(DRAFT_RUN_POLL_TIMEOUT_MS),
+      });
+      // Judged after the fetch, so a run that finished while the tab slept
+      // past the deadline still shows its results.
       if (
+        latest.status === "running" &&
         startedAt !== null &&
         Date.now() > startedAt + DRAFT_RUN_CLIENT_DEADLINE_MS
       ) {
         throw new Error("Capability check run passed its client deadline");
       }
-      return errorHandlingFetcher<DraftCheckRunSnapshot>(url);
+      return latest;
     },
     {
       // An error (e.g. the expired run's 404) keeps the last snapshot, so

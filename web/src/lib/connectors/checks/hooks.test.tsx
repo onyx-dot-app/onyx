@@ -500,6 +500,68 @@ it("fails to run once a running run passes the client deadline", async () => {
   }
 });
 
+it("shows a run that finished while the tab slept past the client deadline", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.status).toBe("running"));
+
+  const fetcher = jest.mocked(errorHandlingFetcher);
+  const replayLatestStart = fetcher.getMockImplementation();
+  fetcher.mockResolvedValue(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const now: number = Date.now();
+  const clock = jest
+    .spyOn(Date, "now")
+    .mockReturnValue(now + DRAFT_RUN_CLIENT_DEADLINE_MS + 1);
+  try {
+    await waitFor(() => expect(result.current.checks.status).toBe("passed"), {
+      timeout: 3000,
+    });
+    expect(result.current.checks.failure).toBeNull();
+  } finally {
+    clock.mockRestore();
+    fetcher.mockImplementation(replayLatestStart);
+  }
+});
+
+it("fails to run when a poll does not settle in time", async () => {
+  startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
+  // Stands in for the poll timeout, so the test can end the request.
+  const timeout = new AbortController();
+  const timeoutSpy = jest
+    .spyOn(AbortSignal, "timeout")
+    .mockReturnValue(timeout.signal);
+  const fetcher = jest.mocked(errorHandlingFetcher);
+  const replayLatestStart = fetcher.getMockImplementation();
+  fetcher.mockClear();
+  fetcher.mockImplementation(
+    (_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason)
+        );
+      })
+  );
+  try {
+    const { result } = renderChecks();
+    act(() => result.current.checks.begin());
+    await waitFor(() => expect(fetcher).toHaveBeenCalled());
+    expect(result.current.checks.status).toBe("running");
+
+    act(() => timeout.abort(new DOMException("timed out", "TimeoutError")));
+
+    await waitFor(() =>
+      expect(result.current.checks.status).toBe("failedToRun")
+    );
+    expect(result.current.checks.failure).toEqual({ kind: "lost" });
+  } finally {
+    timeoutSpy.mockRestore();
+    fetcher.mockImplementation(replayLatestStart);
+  }
+});
+
 it("cancels a running run and returns to the start prompt", async () => {
   startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
   const { result } = renderChecks();

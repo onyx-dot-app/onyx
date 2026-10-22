@@ -105,8 +105,11 @@ export const skipRetryOnAuthError: NonNullable<
   }, delay);
 };
 
-export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url);
+export const errorHandlingFetcher = async <T>(
+  url: string,
+  init?: RequestInit
+): Promise<T> => {
+  const res = await fetch(url, init);
 
   if (res.status === 403) {
     const redirect = new RedirectError(
