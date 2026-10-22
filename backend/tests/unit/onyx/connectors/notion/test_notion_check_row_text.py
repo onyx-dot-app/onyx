@@ -329,13 +329,17 @@ def test_root_page_failures_have_the_design_lines(
 
 
 def test_a_run_without_config_reads_every_shared_page() -> None:
-    """No config means no root page, as in indexing: the root page check does
-    not apply, and page content runs after the shared pages check."""
+    """No config means no root page, as in indexing: the root page row waits
+    for the settings, and page content runs after the shared pages check."""
     gateway = _titled_gateway(pages=[_page("Roadmap")])
 
     results = _run_all(_ALL_CHECK_IDS, gateway, None)
 
-    assert not results["notion_root_page"].applicable
+    root_page = results["notion_root_page"]
+    assert root_page.status == CapabilityCheckStatus.SKIPPED
+    assert root_page.applicable
+    assert root_page.not_run_reason is None
+    gateway.get_page.assert_not_called()
     assert results["notion_shared_content"].status == CapabilityCheckStatus.PASSED
     assert results["notion_page_content"].status == CapabilityCheckStatus.PASSED
 

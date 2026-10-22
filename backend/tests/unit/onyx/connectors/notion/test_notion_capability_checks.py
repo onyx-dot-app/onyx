@@ -152,27 +152,25 @@ def test_root_page_applies_only_with_a_root_page() -> None:
     assert not _run("notion_root_page", workspace_gateway()).applicable
 
 
-def test_root_page_does_not_apply_to_a_run_without_config() -> None:
-    """A credential-time run has no config, so no root page: the check does
-    not apply and calls nothing."""
-    gateway: MagicMock = workspace_gateway()
-    (check,) = [
-        check
-        for check in build_notion_indexing_checks()
-        if check.check_id == "notion_root_page"
-    ]
+def test_page_content_stops_when_shared_content_fails_without_config() -> None:
+    """On a run without a config the root page waits for settings, so the
+    shared-content check alone decides page content."""
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.NOTION,
         credential_json=_CREDENTIAL,
         connector_specific_config=None,
-        source_operations=gateway,
+        source_operations=workspace_gateway(pages=[], data_sources=[]),
     )
 
-    (result,) = run_capability_checks([check], context)
+    results = {
+        result.check_id: result
+        for result in run_capability_checks(build_notion_indexing_checks(), context)
+    }
 
-    assert result.status == CapabilityCheckStatus.SKIPPED
-    assert not result.applicable
-    gateway.get_page.assert_not_called()
+    content = results["notion_page_content"]
+    assert content.status == CapabilityCheckStatus.SKIPPED
+    assert content.not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert content.blocked_by == "notion_shared_content"
 
 
 def test_connector_reads_a_blank_root_page_id_as_unset() -> None:

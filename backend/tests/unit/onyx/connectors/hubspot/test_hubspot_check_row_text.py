@@ -318,10 +318,17 @@ def test_linked_records_run_past_an_empty_type() -> None:
     gateway.list_records.side_effect = _records_only_in(HubSpotObjectType.CONTACTS)
 
     results = _run_all(
-        ["hubspot_token", _READ_TICKETS, "hubspot_associations"], gateway
+        [
+            "hubspot_token",
+            _READ_TICKETS,
+            "hubspot_contacts_readable",
+            "hubspot_associations",
+        ],
+        gateway,
     )
 
     assert results[_READ_TICKETS].status == CapabilityCheckStatus.SKIPPED
+    assert results["hubspot_contacts_readable"].status == CapabilityCheckStatus.PASSED
     associations = results["hubspot_associations"]
     assert associations.status == CapabilityCheckStatus.PASSED
     assert associations.summary == "Listed companies linked to contacts"

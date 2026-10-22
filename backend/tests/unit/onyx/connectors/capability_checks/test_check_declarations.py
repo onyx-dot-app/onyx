@@ -218,8 +218,8 @@ def test_dependencies_name_registered_checks_without_a_cycle(
     checks = _registered_checks(source)
     check_ids = {check.check_id for check in checks}
     for check in checks:
-        assert set(check.depends_on) <= check_ids, check.check_id
-        assert check.check_id not in check.depends_on, check.check_id
+        assert set(check.dependency_ids) <= check_ids, check.check_id
+        assert check.check_id not in check.dependency_ids, check.check_id
     # Raises on a cycle.
     run_order(checks)
 
