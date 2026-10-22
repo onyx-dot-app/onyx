@@ -4113,8 +4113,8 @@
               "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
             },
             "index_recursively": {
-              "label": "Indexar recursivamente",
-              "description": "Se ativado, indexaremos a página indicada pelo ID da página, bem como todas as suas páginas filhas."
+              "label": "Incluir páginas filhas",
+              "description": "Também indexa todas as páginas aninhadas nas páginas indicadas acima, em qualquer profundidade."
             },
             "cql_query": {
               "label": "Consulta CQL",

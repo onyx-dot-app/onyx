@@ -4113,8 +4113,8 @@
               "description": "要索引的特定页面 ID（例如 `131368`）"
             },
             "index_recursively": {
-              "label": "递归索引",
-              "description": "设置后，将索引页面 ID 所指定的页面及其所有子页面。"
+              "label": "包含子页面",
+              "description": "同时索引嵌套在上述页面下的所有页面，无论层级深浅。"
             },
             "cql_query": {
               "label": "CQL 查询",

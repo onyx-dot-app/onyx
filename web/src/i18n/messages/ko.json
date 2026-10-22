@@ -4113,8 +4113,8 @@
               "description": "인덱싱할 특정 페이지 ID입니다 (예: `131368`)"
             },
             "index_recursively": {
-              "label": "재귀적으로 인덱싱",
-              "description": "이 옵션을 설정하면 페이지 ID로 지정한 페이지와 모든 하위 페이지를 인덱싱합니다."
+              "label": "하위 페이지 포함",
+              "description": "위에 지정한 페이지 아래에 중첩된 모든 페이지도 깊이에 관계없이 색인합니다."
             },
             "cql_query": {
               "label": "CQL 쿼리",

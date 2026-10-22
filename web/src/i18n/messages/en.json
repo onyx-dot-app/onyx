@@ -4113,8 +4113,8 @@
               "description": "Specific page ID to index (e.g. `131368`)"
             },
             "index_recursively": {
-              "label": "Index Recursively",
-              "description": "If this is set, we will index the page indicated by the Page ID as well as all of its children."
+              "label": "Include Child Pages",
+              "description": "Also index all pages nested under the named pages above, at any depth."
             },
             "cql_query": {
               "label": "CQL Query",

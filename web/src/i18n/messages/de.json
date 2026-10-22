@@ -4113,8 +4113,8 @@
               "description": "ID der zu indexierenden Seite (z. B. `131368`)"
             },
             "index_recursively": {
-              "label": "Rekursiv indexieren",
-              "description": "Wenn aktiviert, indexieren wir die über die Seiten-ID angegebene Seite sowie alle ihre untergeordneten Seiten."
+              "label": "Unterseiten einbeziehen",
+              "description": "Indexiert auch alle Seiten, die unter den oben genannten Seiten verschachtelt sind, in jeder Tiefe."
             },
             "cql_query": {
               "label": "CQL-Abfrage",
