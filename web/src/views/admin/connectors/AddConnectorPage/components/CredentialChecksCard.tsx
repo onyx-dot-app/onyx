@@ -150,9 +150,9 @@ const GROUPS = [
 
 /** What the live checks card lets an admin do to one check. */
 interface CheckActions {
-  /** Stops a running or queued check. */
-  onCancelCheck?: (checkId: string) => void;
-  /** Runs a skipped check again, or a queued one next. */
+  /** Skips a running check, or an optional expected one. */
+  onSkipCheck?: (checkId: string) => void;
+  /** Runs a skipped check again, or an expected one next. */
   onRunCheck?: (checkId: string) => void;
 }
 
@@ -163,7 +163,7 @@ const ROW_HOVER_GROUP = "check-log";
 interface CheckLogProps extends CheckActions {
   check: CheckLine;
 }
-function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
+function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
   const [expanded, setExpanded] = useState(false);
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
@@ -177,7 +177,9 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
     check.state === "indeterminate";
   const expandable: boolean =
     finished && (check.remediation !== null || check.docs_link !== null);
-  const open: boolean = check.state === "running" || check.state === "pending";
+  // Expected: queued, or waiting on a field.
+  const expected: boolean =
+    check.state === "pending" || check.state === "waiting";
 
   const logVariant: LogVariant = blocking ? "error-heavy" : variant;
   const messageFont: TextFont = blocking ? "main-ui-action" : font;
@@ -193,9 +195,13 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
     />
   ) : undefined;
 
-  // Left slot: "Required", or on hover a running or queued check's Cancel.
+  // Left slot: "Required", or on hover Skip Check for a running check or an
+  // optional expected one.
+  // A required expected check cannot be skipped.
+  const skippable: boolean =
+    check.state === "running" || (expected && !check.required);
   const leftSlot =
-    open && onCancelCheck ? (
+    skippable && onSkipCheck ? (
       <Hoverable.Item
         group={ROW_HOVER_GROUP}
         variant="replace-on-hover"
@@ -203,11 +209,11 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
       >
         <Button
           icon={SvgXCircle}
-          prominence="internal"
+          prominence="tertiary"
           size="sm"
-          tooltip={t("actions.cancel.label")}
-          aria-label={t("actions.cancel.label")}
-          onClick={noProp(() => onCancelCheck(check.check_id))}
+          tooltip={t("actions.skip.label")}
+          aria-label={t("actions.skip.label")}
+          onClick={noProp(() => onSkipCheck(check.check_id))}
         />
       </Hoverable.Item>
     ) : (
@@ -235,12 +241,12 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
         aria-label={t(expanded ? "details.collapse" : "details.expand")}
       />
     </div>
-  ) : (check.state === "skipped" || check.state === "pending") && onRunCheck ? (
+  ) : (check.state === "skipped" || expected) && onRunCheck ? (
     // Hidden at rest, but its width stays.
     <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
       <Button
         icon={SvgPlay}
-        prominence="internal"
+        prominence="tertiary"
         size="md"
         tooltip={t("actions.run.label")}
         aria-label={t("actions.run.label")}
@@ -307,6 +313,9 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
           expanded={expanded}
           expandedContent={details}
         />
+      ) : (check.state === "skipped" || expected) && onRunCheck ? (
+        // The row does what its end button does: a click anywhere runs it.
+        <Log {...line} onClick={() => onRunCheck(check.check_id)} />
       ) : (
         <Log {...line} />
       )}
@@ -407,9 +416,9 @@ interface CheckCardViewProps {
   stateCounts: Record<DraftCheckStateKind, number>;
   /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
   onRerun?: () => void;
-  /** Stops a running or queued check. A stored report has none. */
-  onCancelCheck?: (checkId: string) => void;
-  /** Runs a skipped check again, or a queued one next. */
+  /** Skips a running check, or an optional expected one. A stored report has none. */
+  onSkipCheck?: (checkId: string) => void;
+  /** Runs a skipped check again, or an expected one next. */
   onRunCheck?: (checkId: string) => void;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
@@ -422,7 +431,7 @@ export function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
-  onCancelCheck,
+  onSkipCheck,
   onRunCheck,
   defaultCollapsed = false,
   expandRequest = 0,
@@ -605,7 +614,7 @@ export function CheckCardView({
             {hasRows ? (
               <CheckLineGroups
                 lines={lines}
-                onCancelCheck={onCancelCheck}
+                onSkipCheck={onSkipCheck}
                 onRunCheck={onRunCheck}
               />
             ) : (
@@ -697,7 +706,7 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
-      onCancelCheck={checks.cancelCheck}
+      onSkipCheck={checks.skipCheck}
       onRunCheck={checks.runCheck}
       expandRequest={expandRequest}
     />

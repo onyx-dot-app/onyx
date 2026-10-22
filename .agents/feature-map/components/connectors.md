@@ -604,8 +604,9 @@ result (`draft_runs.py:stop_blocked_draft_checks`).
 apart from the shared results (`draft_runs.py:cache_user_skip`). Creation by
 the same user reuses an optional skip and always runs a stopped required
 check. A later run that does not skip the check clears the skip.
-On the create form's checks card, a running or queued check's Cancel Check
-adds it to the session's skips (`useConnectorChecks().cancelCheck`), and every
+On the create form's checks card, Skip Check on a running check or an
+optional expected one adds it to the session's skips
+(`useConnectorChecks().skipCheck`), and every
 later run sends them as `skip_check_ids`. Run Check runs a skipped check
 (`check_ids`) or a queued one next (`start_check_id`) and drops its skip. A
 finished check with a fix or a docs link opens to show them.

@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "Cancel Check"
-        },
         "run": {
           "label": "Run Check"
+        },
+        "skip": {
+          "label": "Skip Check"
         }
       },
       "details": {

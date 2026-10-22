@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "取消检查"
-        },
         "run": {
           "label": "运行检查"
+        },
+        "skip": {
+          "label": "跳过检查"
         }
       },
       "details": {

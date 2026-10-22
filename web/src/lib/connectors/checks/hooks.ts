@@ -240,8 +240,8 @@ export interface UseConnectorChecksResult {
   rerun: () => void;
   /** Starts a run for the current form, reusing cached results. */
   refresh: () => void;
-  /** Stops a running or queued check; later runs skip it until it runs. */
-  cancelCheck: (checkId: string) => void;
+  /** Skips a check, running or expected; later runs skip it until it runs. */
+  skipCheck: (checkId: string) => void;
   /** Runs one check: a skipped one again, or a queued one next. */
   runCheck: (checkId: string) => void;
 }
@@ -510,7 +510,7 @@ export function useConnectorChecks({
     begin: () => void start("none"),
     rerun: () => void start("all"),
     refresh: () => void start("none"),
-    cancelCheck: (checkId) => {
+    skipCheck: (checkId) => {
       const skipped = session?.skippedCheckIds ?? [];
       if (skipped.includes(checkId)) return;
       void start("none", { skip: [...skipped, checkId] });

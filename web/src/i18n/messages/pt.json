@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "Cancelar verificação"
-        },
         "run": {
           "label": "Executar verificação"
+        },
+        "skip": {
+          "label": "Ignorar verificação"
         }
       },
       "details": {

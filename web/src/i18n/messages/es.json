@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "Cancelar comprobación"
-        },
         "run": {
           "label": "Ejecutar comprobación"
+        },
+        "skip": {
+          "label": "Omitir comprobación"
         }
       },
       "details": {

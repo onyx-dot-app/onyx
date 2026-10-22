@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "Prüfung abbrechen"
-        },
         "run": {
           "label": "Prüfung ausführen"
+        },
+        "skip": {
+          "label": "Prüfung überspringen"
         }
       },
       "details": {

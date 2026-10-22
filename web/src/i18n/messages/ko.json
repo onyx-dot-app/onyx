@@ -10802,11 +10802,11 @@
         }
       },
       "actions": {
-        "cancel": {
-          "label": "검사 취소"
-        },
         "run": {
           "label": "검사 실행"
+        },
+        "skip": {
+          "label": "검사 건너뛰기"
         }
       },
       "details": {
