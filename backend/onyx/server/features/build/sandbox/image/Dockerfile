@@ -234,7 +234,9 @@ COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 # own copy (version pinned to match initial-requirements.txt): the exec path
 # must share nothing with the sandbox-owned venv.
 COPY --exclude=__pycache__ sandbox_daemon/ /opt/sandbox_daemon/
-RUN /usr/local/bin/python3 -m pip install --no-cache-dir --only-binary=:all: \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export PIP_CERT=/run/secrets/build_ca_bundle; fi && \
+    /usr/local/bin/python3 -m pip install --no-cache-dir --only-binary=:all: \
     pydantic==2.13.4 && \
     rm -rf /root/.cache/pip
 COPY entrypoint.sh /workspace/entrypoint.sh
