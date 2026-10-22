@@ -573,7 +573,11 @@ export default function LanguageModelsPage() {
   // Auto Mode needs a router. Turning it off stays possible, so a router
   // removed after the fact cannot lock it on.
   const noRouterModels = routerProviders?.length === 0;
-  const autoModeLocked = noRouterModels && !routingEnabled;
+  // Turning Auto Mode on waits for a router list that has one. Turning it
+  // off stays possible, so a router removed after the fact cannot lock it on.
+  const routersUnknown =
+    routerProviders === undefined || !!routerProvidersError;
+  const autoModeLocked = (routersUnknown || noRouterModels) && !routingEnabled;
   const routingTargetId: number | null = pendingRoutingTarget
     ? pendingRoutingTarget.id
     : (settings.model_routing_model_configuration_id ?? null);
@@ -689,7 +693,9 @@ export default function LanguageModelsPage() {
               >
                 <Tooltip
                   tooltip={
-                    autoModeLocked
+                    // Only once the list is known to be empty; while it loads
+                    // the switch is locked without a reason to give.
+                    autoModeLocked && noRouterModels
                       ? t("modelRouting.autoMode.noRoutersTooltip")
                       : undefined
                   }
