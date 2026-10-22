@@ -29,6 +29,7 @@ def _matching_actions(method: str, path: str) -> set[str]:
 @pytest.mark.parametrize(
     "method, path, expected",
     [
+        ("POST", "/api/auth.test", {SlackAction.AUTH_TEST}),
         ("POST", "/api/conversations.list", {SlackAction.CHANNELS_READ}),
         ("POST", "/api/conversations.info", {SlackAction.CHANNELS_READ}),
         ("POST", "/api/conversations.history", {SlackAction.MESSAGES_READ}),
@@ -55,6 +56,7 @@ def test_rest_route_resolves_to_exactly_one_action(
 @pytest.mark.parametrize(
     "action, expected_policy",
     [
+        (SlackAction.AUTH_TEST, ActionPolicy.ALWAYS),
         (SlackAction.CHANNELS_READ, ActionPolicy.ALWAYS),
         (SlackAction.MESSAGES_READ, ActionPolicy.ALWAYS),
         (SlackAction.USERS_READ, ActionPolicy.ALWAYS),
@@ -76,3 +78,8 @@ def test_files_write_scope_and_upstream_pattern() -> None:
         "https://files\\.slack\\.com/upload/v1/.*"
         in spec.descriptor.upstream_url_patterns
     )
+
+
+@pytest.mark.parametrize("path", ["/api/auth.revoke", "/api/auth.test.extra"])
+def test_other_auth_endpoints_remain_unrecognized(path: str) -> None:
+    assert _matching_actions("POST", path) == set()
