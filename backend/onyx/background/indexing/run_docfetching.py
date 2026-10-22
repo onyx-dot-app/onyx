@@ -438,15 +438,14 @@ def _check_failure_threshold(
 def mark_attempt_failed_unless_terminal(
     index_attempt_id: int, error: Exception
 ) -> None:
-    """Fail the attempt with ``error`` unless it is already terminal. The watchdog
-    sees only the exit code, so the real cause is recorded in-process. Best
-    effort: the caller re-raises, and the watchdog fails the attempt if this
-    write does not land."""
+    """Fail the attempt with ``error`` unless it is already terminal. The
+    watchdog's reason names only the exit code, so the real message is recorded
+    here. Best effort: the watchdog still fails the attempt if this write misses."""
     try:
         with get_session_with_current_tenant() as db_session:
             attempt = get_index_attempt(db_session, index_attempt_id)
             if attempt is None or attempt.status.is_terminal():
-                logger.info(
+                logger.debug(
                     "Attempt %s is missing or already terminal, skipping marking as failed.",
                     index_attempt_id,
                 )
@@ -455,7 +454,7 @@ def mark_attempt_failed_unless_terminal(
             mark_attempt_failed(
                 index_attempt_id,
                 db_session,
-                failure_reason=str(error),
+                failure_reason=str(error) or type(error).__name__,
                 full_exception_trace="".join(traceback.format_exception(error)),
             )
     except Exception:
@@ -1115,7 +1114,7 @@ def connector_document_extraction(
                 )
 
         else:
-            # A black-box generator raise can't be pinned to one entity, and
+            # Even under PERSISTENT_INDEXING an unattributed raise fails the attempt:
             # COMPLETED_WITH_ERRORS would advance past missed source data.
             mark_attempt_failed_unless_terminal(index_attempt_id, e)
             raise e

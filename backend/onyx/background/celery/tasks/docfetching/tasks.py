@@ -45,7 +45,7 @@ from onyx.configs.constants import (
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
 from onyx.db.index_attempt import (
     get_index_attempt,
     mark_attempt_canceled,
@@ -303,6 +303,15 @@ def process_job_result(
         index_attempt = get_index_attempt(db_session, index_attempt_id)
         if index_attempt and index_attempt.total_batches is not None:
             ignore_exitcode = True
+        # A stop fence left by a pause whose commit failed is not a requested stop.
+        stop_requested = index_attempt is not None and (
+            index_attempt.cancellation_requested
+            or index_attempt.connector_credential_pair.status
+            in (
+                ConnectorCredentialPairStatus.PAUSED,
+                ConnectorCredentialPairStatus.DELETING,
+            )
+        )
 
     if ignore_exitcode:
         result.status = IndexingWatchdogTerminalStatus.SUCCEEDED
@@ -316,8 +325,11 @@ def process_job_result(
         if result.exit_code is not None:
             result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
 
-        # A stop or cancel request seen before the run started is not a failure.
-        if result.status == IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL:
+        # A requested stop seen before the run started is not a failure.
+        if (
+            result.status == IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL
+            and stop_requested
+        ):
             return result
 
         job_level_exception = job.exception()

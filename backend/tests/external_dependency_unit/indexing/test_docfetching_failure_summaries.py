@@ -1,9 +1,5 @@
-"""The attempt row must say why a docfetching run ended. A failure before the
-run's main loop, such as a 5xx during connector validation, fails the attempt
-with that error, not with the spawned process's exit code. A stop request seen
-before the run starts cancels the attempt.
-
-Both tests run the real watchdog, which spawns docfetching in a new process."""
+"""The attempt row says why docfetching ended: a pre-run 5xx fails it with that
+error, a requested stop cancels it, and a stale stop fence still fails it."""
 
 import contextlib
 import threading
@@ -20,6 +16,7 @@ from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
+from onyx.redis.redis_connector import RedisConnector
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -139,3 +136,30 @@ def test_cancel_request_before_start_cancels_the_attempt(
 
     finished = _reload(db_session, attempt.id)
     assert finished.status == IndexingStatus.CANCELED
+
+
+@pytest.fixture
+def stale_stop_fence(
+    web_cc_pair: ConnectorCredentialPair,
+) -> Generator[None, None, None]:
+    """A stop fence on an active pair, as a pause whose commit failed leaves."""
+    stop = RedisConnector(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, web_cc_pair.id).stop
+    stop.set_fence(True)
+    try:
+        yield
+    finally:
+        stop.set_fence(False)
+
+
+def test_stale_stop_fence_on_an_active_pair_fails_the_attempt(
+    db_session: Session,
+    web_cc_pair: ConnectorCredentialPair,
+    stale_stop_fence: None,  # noqa: ARG001
+) -> None:
+    attempt = _add_attempt(db_session, web_cc_pair, cancellation_requested=False)
+
+    with pytest.raises(RuntimeError):
+        _run_watchdog(attempt)
+
+    finished = _reload(db_session, attempt.id)
+    assert finished.status == IndexingStatus.FAILED
