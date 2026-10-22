@@ -10807,6 +10807,9 @@
         },
         "skip": {
           "label": "Skip Check"
+        },
+        "rerun": {
+          "label": "Re-run Check"
         }
       },
       "details": {

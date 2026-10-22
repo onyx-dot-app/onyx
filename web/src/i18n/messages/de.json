@@ -10807,6 +10807,9 @@
         },
         "skip": {
           "label": "Prüfung überspringen"
+        },
+        "rerun": {
+          "label": "Prüfung erneut ausführen"
         }
       },
       "details": {

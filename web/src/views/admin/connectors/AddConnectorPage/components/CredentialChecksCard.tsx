@@ -201,62 +201,83 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     onSkipCheck !== undefined;
   const runnable: boolean =
     (check.state === "skipped" || expected) && onRunCheck !== undefined;
+  // A finished check, whatever its outcome, can run again.
+  const rerunnable: boolean = finished && onRunCheck !== undefined;
+  const skipButton = (
+    <Button
+      icon={SvgXCircle}
+      prominence="tertiary"
+      size="md"
+      tooltip={t("actions.skip.label")}
+      aria-label={t("actions.skip.label")}
+      onClick={noProp(() => onSkipCheck?.(check.check_id))}
+    />
+  );
+  const runButton = (label: "actions.run.label" | "actions.rerun.label") => (
+    <Button
+      icon={label === "actions.run.label" ? SvgPlay : SvgRefreshCw}
+      prominence="tertiary"
+      size="md"
+      tooltip={t(label)}
+      aria-label={t(label)}
+      onClick={noProp(() => onRunCheck?.(check.check_id))}
+    />
+  );
+  const chevron = (
+    // Points right closed and turns down open, as a Divider's chevron does.
+    // Its click reaches the line's, which toggles the details.
+    <div
+      className={cn(
+        "transition-transform duration-200 ease-in-out",
+        expanded && "rotate-90"
+      )}
+    >
+      <Button
+        icon={SvgChevronRight}
+        prominence="tertiary"
+        size="md"
+        aria-expanded={expanded}
+        tooltip={t(expanded ? "details.collapse" : "details.expand")}
+        aria-label={t(expanded ? "details.collapse" : "details.expand")}
+      />
+    </div>
+  );
+  const onHover = (button: React.ReactNode) => (
+    <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
+      {button}
+    </Hoverable.Item>
+  );
 
-  // Every action button sits at the end, side by side: Skip and Run appear on
-  // hover, and a finished check's chevron always shows. At least 1.25rem
-  // wide, so rows without a button still line up.
+  // A row has at most two action buttons. The right-most sits at the end, in a
+  // slot of one fixed width, so "Required" stays in one column; the other
+  // takes the place of "Required" on hover.
+  const endButtonNode: React.ReactNode = expandable
+    ? chevron
+    : runnable
+      ? onHover(runButton("actions.run.label"))
+      : rerunnable
+        ? onHover(runButton("actions.rerun.label"))
+        : skippable
+          ? onHover(skipButton)
+          : undefined;
+  const secondButton: React.ReactNode =
+    expandable && rerunnable
+      ? runButton("actions.rerun.label")
+      : runnable && skippable
+        ? skipButton
+        : undefined;
   const actions = (
     <Section
       flexDirection="row"
       justifyContent="end"
-      width="fit"
+      // One width for every row, a md button's (1.75rem), so "Required"
+      // stays in one column whether or not the row has a button here.
+      width={1.75}
       height="fit"
       gap={0}
-      className="min-w-5"
+      className="shrink-0"
     >
-      {skippable && (
-        <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
-          <Button
-            icon={SvgXCircle}
-            prominence="tertiary"
-            size="md"
-            tooltip={t("actions.skip.label")}
-            aria-label={t("actions.skip.label")}
-            onClick={noProp(() => onSkipCheck?.(check.check_id))}
-          />
-        </Hoverable.Item>
-      )}
-      {runnable && (
-        <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
-          <Button
-            icon={SvgPlay}
-            prominence="tertiary"
-            size="md"
-            tooltip={t("actions.run.label")}
-            aria-label={t("actions.run.label")}
-            onClick={noProp(() => onRunCheck?.(check.check_id))}
-          />
-        </Hoverable.Item>
-      )}
-      {expandable && (
-        // Points right closed and turns down open, as a Divider's chevron
-        // does. Its click reaches the line's, which toggles the details.
-        <div
-          className={cn(
-            "transition-transform duration-200 ease-in-out",
-            expanded && "rotate-90"
-          )}
-        >
-          <Button
-            icon={SvgChevronRight}
-            prominence="tertiary"
-            size="md"
-            aria-expanded={expanded}
-            tooltip={t(expanded ? "details.collapse" : "details.expand")}
-            aria-label={t(expanded ? "details.collapse" : "details.expand")}
-          />
-        </div>
-      )}
+      {endButtonNode}
     </Section>
   );
 
@@ -309,7 +330,17 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
         >
           {check.message || t(detail)}
         </OverflowText>
-        {required}
+        {secondButton !== undefined ? (
+          <Hoverable.Item
+            group={ROW_HOVER_GROUP}
+            variant="replace-on-hover"
+            resting={required}
+          >
+            {secondButton}
+          </Hoverable.Item>
+        ) : (
+          required
+        )}
       </Section>
     ),
     endButton: actions,
@@ -325,9 +356,12 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
           expanded={expanded}
           expandedContent={details}
         />
-      ) : runnable && onRunCheck ? (
-        // The row does what its end button does: a click anywhere runs it.
+      ) : (runnable || rerunnable) && onRunCheck ? (
+        // A row does what its right-most button does: here, Run or Re-run.
         <Log {...line} onClick={() => onRunCheck(check.check_id)} />
+      ) : skippable && onSkipCheck ? (
+        // A running check's right-most button is Skip.
+        <Log {...line} onClick={() => onSkipCheck(check.check_id)} />
       ) : (
         <Log {...line} />
       )}

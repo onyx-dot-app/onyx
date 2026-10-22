@@ -10807,6 +10807,9 @@
         },
         "skip": {
           "label": "Ignorer la vérification"
+        },
+        "rerun": {
+          "label": "Relancer la vérification"
         }
       },
       "details": {

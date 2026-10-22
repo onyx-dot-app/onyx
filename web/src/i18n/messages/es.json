@@ -10807,6 +10807,9 @@
         },
         "skip": {
           "label": "Omitir comprobación"
+        },
+        "rerun": {
+          "label": "Volver a ejecutar comprobación"
         }
       },
       "details": {
