@@ -327,6 +327,13 @@ export const RenderField: FC<RenderFieldProps> = ({
               )
             )
           );
+  // A text field's placeholder can follow the form's values.
+  const textPlaceholder: string | undefined =
+    field.type === "text"
+      ? typeof field.placeholder === "function"
+        ? field.placeholder(values)
+        : field.placeholder
+      : undefined;
   const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
     : undefined;
@@ -555,7 +562,7 @@ export const RenderField: FC<RenderFieldProps> = ({
               name={field.name}
               // Tests find a config text field by its config name.
               data-testid={field.name}
-              placeholder={field.placeholder}
+              placeholder={textPlaceholder}
               variant={disabled ? "disabled" : undefined}
               rows={1}
             />
@@ -563,7 +570,7 @@ export const RenderField: FC<RenderFieldProps> = ({
             <InputTypeInField
               name={field.name}
               data-testid={field.name}
-              placeholder={field.placeholder}
+              placeholder={textPlaceholder}
               variant={disabled ? "disabled" : undefined}
             />
           )}

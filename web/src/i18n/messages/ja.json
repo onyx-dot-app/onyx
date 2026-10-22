@@ -4084,7 +4084,8 @@
             },
             "wiki_base": {
               "label": "サイト URL",
-              "placeholder": "https://domein-mei.atlassian.net/wiki"
+              "placeholder": "https://domein-mei.atlassian.net/wiki",
+              "placeholderDataCenter": "https://domein-mei.com/wiki"
             },
             "indexing_scope": {
               "tabs": {

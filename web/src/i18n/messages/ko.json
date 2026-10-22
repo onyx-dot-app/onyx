@@ -4084,7 +4084,8 @@
             },
             "wiki_base": {
               "label": "사이트 URL",
-              "placeholder": "https://domein.atlassian.net/wiki"
+              "placeholder": "https://domein.atlassian.net/wiki",
+              "placeholderDataCenter": "https://domein.com/wiki"
             },
             "indexing_scope": {
               "tabs": {

@@ -231,10 +231,14 @@ export function translateConfiguration(
         name: translate(option.name),
       }));
     }
-    if (
-      (out.type === "text" || out.type === "list") &&
-      out.placeholder !== undefined
-    ) {
+    if (out.type === "text" && out.placeholder !== undefined) {
+      const placeholder = out.placeholder;
+      out.placeholder =
+        typeof placeholder === "function"
+          ? (values) => translate(placeholder(values))
+          : translate(placeholder);
+    }
+    if (out.type === "list" && out.placeholder !== undefined) {
       out.placeholder = translate(out.placeholder);
     }
     if (out.type === "string_pair_list") {
@@ -891,7 +895,11 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        placeholder: "connectors.confluence.fields.wiki_base.placeholder",
+        // Cloud sites live on atlassian.net; Data Center is self-hosted.
+        placeholder: (values) =>
+          values.is_cloud === false
+            ? "connectors.confluence.fields.wiki_base.placeholderDataCenter"
+            : "connectors.confluence.fields.wiki_base.placeholder",
         subDescription: "siteUrl",
       },
       ATLASSIAN_SCOPED_TOKEN_FIELD,

@@ -81,8 +81,9 @@ export interface TextOption extends Option {
   default?: string;
   initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
-  /** Example value shown in the empty input. */
-  placeholder?: string;
+  /** Example value shown in the empty input: a message key, or one picked by
+   * the form's values (e.g. Confluence's site URL per Cloud or Data Center). */
+  placeholder?: string | ((values: Record<string, unknown>) => string);
   /** Text below the input. It gets the connector's name as `connectorName`. */
   subDescription?: TextSubDescriptionKey;
 }

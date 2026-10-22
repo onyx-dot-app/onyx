@@ -4084,7 +4084,8 @@
             },
             "wiki_base": {
               "label": "عنوان URL للموقع",
-              "placeholder": "https://nitaquk.atlassian.net/wiki"
+              "placeholder": "https://nitaquk.atlassian.net/wiki",
+              "placeholderDataCenter": "https://nitaquk.com/wiki"
             },
             "indexing_scope": {
               "tabs": {

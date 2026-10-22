@@ -4084,7 +4084,8 @@
             },
             "wiki_base": {
               "label": "URL del sitio",
-              "placeholder": "https://tu-dominio.atlassian.net/wiki"
+              "placeholder": "https://tu-dominio.atlassian.net/wiki",
+              "placeholderDataCenter": "https://tu-dominio.com/wiki"
             },
             "indexing_scope": {
               "tabs": {

@@ -4084,7 +4084,8 @@
             },
             "wiki_base": {
               "label": "站点 URL",
-              "placeholder": "https://nide-yuming.atlassian.net/wiki"
+              "placeholder": "https://nide-yuming.atlassian.net/wiki",
+              "placeholderDataCenter": "https://nide-yuming.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
