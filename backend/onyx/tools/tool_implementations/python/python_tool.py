@@ -13,6 +13,8 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import (
     CODE_INTERPRETER_BASE_URL,
     CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+    CODE_INTERPRETER_MAX_OUTPUT_BYTES,
+    CODE_INTERPRETER_MAX_OUTPUT_FILES,
     CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
     CODE_INTERPRETER_MAX_STAGED_BYTES,
     CODE_INTERPRETER_MAX_STAGED_FILES,
@@ -51,6 +53,7 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
 from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
+from onyx.utils.bounded_http import BoundedBodyError
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -215,6 +218,27 @@ def _build_staging_notice(
             f"Failed to stage {len(failed_files)} file(s): {', '.join(failed_files)}."
         )
     return " ".join(parts) if parts else None
+
+
+_MAX_LISTED_DROPPED_PATHS = 10
+_MAX_DROPPED_PATHS_CHARS = 1000
+
+
+def _build_output_notice(dropped_paths: list[str]) -> str | None:
+    """LLM-facing note when generated files were not saved because of the
+    per-execution output caps. ``None`` when every file was saved."""
+    if not dropped_paths:
+        return None
+    listed = ", ".join(dropped_paths[:_MAX_LISTED_DROPPED_PATHS])
+    if len(listed) > _MAX_DROPPED_PATHS_CHARS:
+        listed = listed[:_MAX_DROPPED_PATHS_CHARS] + "..."
+    unlisted = len(dropped_paths) - _MAX_LISTED_DROPPED_PATHS
+    more = f" and {unlisted} more" if unlisted > 0 else ""
+    return (
+        f"{len(dropped_paths)} generated file(s) were not saved due to "
+        f"per-execution limits ({CODE_INTERPRETER_MAX_OUTPUT_FILES} files / "
+        f"{CODE_INTERPRETER_MAX_OUTPUT_BYTES} bytes): {listed}{more}."
+    )
 
 
 class PythonTool(Tool[PythonToolOverrideKwargs]):
@@ -473,15 +497,29 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 generated_files: list[PythonExecutionFile] = []
                 generated_file_ids: list[str] = []
                 file_ids_to_cleanup: list[str] = []
+                dropped_paths: list[str] = []
+                remaining_bytes = CODE_INTERPRETER_MAX_OUTPUT_BYTES
                 file_store = get_default_file_store()
 
+                output_file_count = 0
                 for workspace_file in result_event.files:
-                    if workspace_file.kind != "file" or not workspace_file.file_id:
+                    workspace_file_id = workspace_file.file_id
+                    if workspace_file.kind != "file" or not workspace_file_id:
+                        continue
+
+                    if (
+                        output_file_count >= CODE_INTERPRETER_MAX_OUTPUT_FILES
+                        or remaining_bytes <= 0
+                    ):
+                        dropped_paths.append(workspace_file.path)
+                        file_ids_to_cleanup.append(workspace_file_id)
                         continue
 
                     try:
-                        # Download file from Code Interpreter
-                        file_content = client.download_file(workspace_file.file_id)
+                        file_content = client.download_file(
+                            workspace_file_id, max_bytes=remaining_bytes
+                        )
+                        remaining_bytes -= len(file_content)
 
                         # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
@@ -507,10 +545,17 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                             )
                         )
                         generated_file_ids.append(onyx_file_id)
+                        output_file_count += 1
 
                         # Mark for cleanup
-                        file_ids_to_cleanup.append(workspace_file.file_id)
+                        file_ids_to_cleanup.append(workspace_file_id)
 
+                    except BoundedBodyError as e:
+                        logger.warning(
+                            "Dropped generated file %s: %s", workspace_file.path, e
+                        )
+                        dropped_paths.append(workspace_file.path)
+                        file_ids_to_cleanup.append(workspace_file_id)
                     except Exception as e:
                         logger.error(
                             "Failed to handle generated file %s: %s",
@@ -552,6 +597,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     generated_files=generated_files,
                     error=(None if result_event.exit_code == 0 else truncated_stderr),
                     staging_notice=staging_notice,
+                    output_notice=_build_output_notice(dropped_paths),
                 )
 
                 # Serialize result for LLM

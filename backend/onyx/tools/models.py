@@ -372,3 +372,5 @@ class LlmPythonExecutionResult(BaseModel):
     error: str | None = None
     # Set when some session files are absent
     staging_notice: str | None = None
+    # Set when some generated files were dropped by the output caps
+    output_notice: str | None = None
