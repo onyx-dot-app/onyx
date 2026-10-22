@@ -238,36 +238,52 @@ def test_bound_credential_without_a_pair_is_for_its_owner(
         )
 
 
+# Linear has no binding model. Drive's only bound field is derived from the
+# credential. Neither has a setting that can send the secret elsewhere.
+@pytest.mark.parametrize(
+    "source, credential_json, config",
+    [
+        (DocumentSource.LINEAR, {"linear_api_key": "secret"}, {}),
+        (
+            DocumentSource.GOOGLE_DRIVE,
+            {"google_tokens": "{}"},
+            {"credential_kind": "oauth", "include_shared_drives": True},
+        ),
+    ],
+)
 def test_unbound_credential_without_a_pair_is_usable_by_a_visible_user(
-    env: _Env, db_session: Session
+    env: _Env,
+    db_session: Session,
+    source: DocumentSource,
+    credential_json: dict[str, Any],
+    config: dict[str, Any],
 ) -> None:
-    # Linear has no bound fields, so no setting can send the secret elsewhere.
-    linear = Credential(
+    credential = Credential(
         name=f"use-{uuid4().hex[:8]}",
-        source=DocumentSource.LINEAR,
-        credential_json={"linear_api_key": "secret"},
+        source=source,
+        credential_json=credential_json,
         user_id=env.owner.id,
         admin_public=True,
     )
-    db_session.add(linear)
+    db_session.add(credential)
     db_session.commit()
 
-    for config in ({}, None):
+    for use_config in (config, None):
         assert_user_can_use_credential(
             db_session,
             user=env.admin,
-            credential=linear,
-            source=DocumentSource.LINEAR,
-            connector_specific_config=config,
+            credential=credential,
+            source=source,
+            connector_specific_config=use_config,
         )
     _refused(
         OnyxErrorCode.CREDENTIAL_NOT_FOUND,
         assert_user_can_use_credential,
         db_session,
         user=env.member,
-        credential=linear,
-        source=DocumentSource.LINEAR,
-        connector_specific_config={},
+        credential=credential,
+        source=source,
+        connector_specific_config=config,
     )
 
 
