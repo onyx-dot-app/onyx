@@ -1333,7 +1333,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             ) - set(primary_cc_pair_ids)
             if paused_ids:
                 for cc_pair in get_connector_credential_pairs(
-                    db_session, list(paused_ids)
+                    db_session, list(paused_ids), eager_load_connector=True
                 ):
                     _report_error_state(cc_pair, tenant_id)
 
