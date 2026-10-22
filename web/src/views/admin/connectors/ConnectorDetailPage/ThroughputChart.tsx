@@ -142,18 +142,15 @@ export function rangeWithin(
   };
 }
 
-const SLICE_TIME_FORMAT = {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-} as const;
 const DAY_LABEL_FORMAT = { month: "short", day: "numeric" } as const;
 const TIME_LABEL_FORMAT = {
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
+} as const;
+const SLICE_TIME_FORMAT = {
+  ...DAY_LABEL_FORMAT,
+  ...TIME_LABEL_FORMAT,
 } as const;
 
 type Formatter = ReturnType<typeof useFormatter>;
@@ -426,8 +423,7 @@ export function ThroughputBars({
   const dataEnd = Date.parse(data.window_end);
   const sliceMs = (dataEnd - dataStart) / data.docs_indexed.length;
   const tickMs = sliceMs / STRIP_TICKS_PER_SLICE;
-  // A selection shows only the slices near it, so the bars widen to fill the span and a
-  // slice that drifts half out as the window rolls keeps its bar, clipped at the axis, until it leaves.
+  // A selection shows only the slices near it, so the bars widen to fill the span.
   const start = selection === null ? dataStart : Date.parse(selection.since);
   const end = selection === null ? dataEnd : Date.parse(selection.until);
   const slices = chartSlices(data.docs_indexed, dataStart, sliceMs, start, end);
