@@ -14086,6 +14086,9 @@
         "projectId": "vertex-purojekuto",
         "location": "global"
       }
+    },
+    "appFooter": {
+      "slogan": "オープンソース AI プラットフォーム"
     }
   },
   "craft": {
@@ -15912,6 +15915,10 @@
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
       "scrollRight": "タブを右にスクロール"
+    },
+    "sidebar": {
+      "open": "サイドバーを開く",
+      "close": "サイドバーを閉じる"
     }
   },
   "settings": {

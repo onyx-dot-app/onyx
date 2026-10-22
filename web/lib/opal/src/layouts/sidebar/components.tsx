@@ -26,6 +26,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
 import { SidebarFoldedContext } from "@opal/layouts/sidebar/context";
 import useScreenSize from "@opal/hooks/useScreenSize";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -176,12 +177,13 @@ function SidebarHeader({
 }: SidebarHeaderProps) {
   const foldable = useContext(SidebarFoldableContext);
   const { folded, setFolded } = useSidebarState();
+  const strings = useOpalStrings();
   const toggleFolded = useCallback(
     () => setFolded((prev) => !prev),
     [setFolded]
   );
 
-  const foldLabel = folded ? "Open Sidebar" : "Close Sidebar";
+  const foldLabel = folded ? strings.sidebarOpen : strings.sidebarClose;
 
   const closeButton = useMemo(
     () => (
