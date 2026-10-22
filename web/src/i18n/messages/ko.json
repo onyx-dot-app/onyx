@@ -2638,10 +2638,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "삭제",
-          "tooltip": {
-            "active": "삭제하기 전에 커넥터를 일시 중지하세요"
-          }
+          "label": "삭제"
         },
         "reIndex": {
           "tooltip": {
@@ -2677,6 +2674,13 @@
         "startIndexing": {
           "label": "인덱싱 시작",
           "description": "커넥터 검사를 건너뛰고 지금 인덱싱합니다."
+        },
+        "syncPermissions": {
+          "label": "권한 동기화",
+          "description": "각 문서를 읽을 수 있는 사용자를 지금 소스에서 가져옵니다.",
+          "tooltip": {
+            "syncing": "권한 동기화가 이미 대기 중이거나 실행 중입니다"
+          }
         }
       },
       "reEnableModal": {
@@ -2850,7 +2854,9 @@
         "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다",
         "runResolved": "해결됨으로 표시했습니다.",
         "runResolveFailed": "해결하지 못했습니다: {message}",
-        "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다."
+        "runsResolved": "{count, plural, other {실행 #개}}를 해결됨으로 표시했습니다.",
+        "permissionSyncStarted": "권한 동기화를 시작했습니다",
+        "permissionSyncFailed": "권한 동기화를 시작하지 못했습니다"
       },
       "backButton": {
         "label": "모든 커넥터"
@@ -2977,7 +2983,7 @@
           "checks": "검사 결과 보기"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {문서 #개 실패}}",
+          "tooltip": "{count, plural, other {항목 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
         "newModel": {
@@ -2993,8 +2999,8 @@
           "checks": "개 검사 실행됨"
         },
         "counts": {
-          "newDocs": "{count, plural, other {새 문서 #개}}",
-          "updatedDocs": "업데이트된 문서",
+          "newDocs": "{count, plural, other {이번 실행에서 인덱스에 새로 추가된 문서 #개}}",
+          "updatedDocs": "{count, plural, other {이미 인덱스에 있었고 변경 여부와 관계없이 이번 실행에서 처리된 문서 #개}}",
           "removedDocs": "{count, plural, other {문서 #개 제거됨}}",
           "users": "{count, plural, other {사용자 #명}}",
           "groups": "{count, plural, other {그룹 #개}}",
@@ -3008,7 +3014,7 @@
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
         "search": {
-          "placeholder": "인덱싱 실행 검색…"
+          "placeholder": "실행 오류 검색…"
         },
         "window": {
           "label": "기간",
@@ -3156,7 +3162,8 @@
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
           "resolved": "해결됨",
-          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}"
+          "resolvedDocs": "{count, plural, other {항목 #개 해결됨}}",
+          "superseded": "대체됨"
         },
         "more": "더 보기",
         "empty": {
@@ -7316,13 +7323,19 @@
           "label": "커넥터"
         },
         "documents": {
-          "caption": "최근 인덱싱 / 전체",
-          "label": "문서"
+          "caption": "인덱스에 있음",
+          "label": "문서",
+          "tooltip": "각 커넥터의 문서 수를 더하므로 두 커넥터에 있는 문서는 두 번 계산됩니다."
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "개요를 불러올 수 없습니다."
+        "loadError": "개요를 불러올 수 없습니다.",
+        "processed": {
+          "caption": "기간 내 처리됨",
+          "label": "문서",
+          "tooltip": "추정치입니다. 각 실행의 수는 실행 시간 전체에 고르게 나누어집니다. 문서는 실행이 처리할 때마다 계산되며 실패한 문서도 포함되므로 인덱스에 있는 문서 수보다 많을 수 있습니다."
+        }
       },
       "activities": {
         "title": "활동",
@@ -7346,7 +7359,9 @@
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
           "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
-          "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}"
+          "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
+          "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",
+          "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
           "public": "공개",
@@ -7361,7 +7376,11 @@
         },
         "docs": {
           "label": "문서",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number}개 처리됨",
+          "processedTooltip": {
+            "running": "현재 실행이 지금까지 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되므로 커넥터의 문서 수보다 많을 수 있습니다.",
+            "finished": "마지막 실행이 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되고 그 후 삭제된 문서는 커넥터 수에서 빠지므로 커넥터의 문서 수보다 많을 수 있습니다."
+          }
         },
         "actions": {
           "manage": "관리",

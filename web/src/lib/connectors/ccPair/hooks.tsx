@@ -124,8 +124,8 @@ interface ActivityGroupQuery {
 
 const NOT_FAILED: CCPairRunStatusGroup[] = ["running", "succeeded", "canceled"];
 
-/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or followed by a newer run of its kind, a closed
- * error run was resolved or had all its document errors resolved, and nothing in "other" is open, so it has no closed runs. */
+/** How each level narrows the runs feed, for its open runs and its closed ones: a closed failure was resolved or a newer succeeded or failed run of its kind followed it,
+ * a closed error run was resolved, had all its document errors resolved, or a newer succeeded or failed run followed it on a kind other than indexing, and nothing in "other" is open, so it has no closed runs. */
 const ACTIVITY_GROUP_QUERY = {
   failures: {
     open: {
@@ -145,13 +145,13 @@ const ACTIVITY_GROUP_QUERY = {
     open: {
       statusGroups: NOT_FAILED,
       errors: "unresolved",
-      superseded: null,
+      superseded: false,
       resolved: false,
     },
     closed: {
       statusGroups: NOT_FAILED,
       errors: "resolved",
-      superseded: null,
+      superseded: true,
       resolved: true,
     },
   },
@@ -283,7 +283,7 @@ export function useActivityItems(
           kinds: null,
           q,
           ...groupQuery,
-          // A search finds old failures too, under the failures group. The closed feed keeps its superseded ones.
+          // A search finds superseded runs too, under their open level. The closed feed keeps its superseded ones.
           superseded: q && !closed ? null : groupQuery.superseded,
         };
         return ccPairId === null

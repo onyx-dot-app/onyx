@@ -18,37 +18,39 @@ import type {
 // Indexing
 // ---------------------------------------------------------------------------
 
-/** Cancels one running or queued index attempt. Resolves to `null` once the
- * server takes it, else to its error detail or `fallback`. */
-export async function cancelIndexAttempt(
-  indexAttemptId: number,
+/** POSTs `url`. Resolves to `null` once the server takes it, else to its error detail or `fallback`. */
+async function postForError(
+  url: string,
   fallback: string
 ): Promise<string | null> {
   try {
-    const response = await fetch(
-      `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
-      { method: "POST" }
-    );
+    const response = await fetch(url, { method: "POST" });
     return response.ok ? null : await parseErrorDetail(response, fallback);
   } catch {
     return fallback;
   }
 }
 
-/** Starts a pair's first index attempt despite its failed checks. Resolves to the error message, or `null` on success. */
-export async function releaseIndexingHold(
+/** Cancels one running or queued index attempt. Resolves to `null` or the error message. */
+export function cancelIndexAttempt(
+  indexAttemptId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/index-attempt/${indexAttemptId}/cancel`,
+    fallback
+  );
+}
+
+/** Starts a pair's first index attempt despite its failed checks. Resolves to `null` or the error message. */
+export function releaseIndexingHold(
   ccPairId: number,
   fallback: string
 ): Promise<string | null> {
-  try {
-    const response = await fetch(
-      `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
-      { method: "POST" }
-    );
-    return response.ok ? null : await parseErrorDetail(response, fallback);
-  } catch {
-    return fallback;
-  }
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+    fallback
+  );
 }
 
 export async function triggerIndexing(
@@ -76,6 +78,17 @@ export async function triggerIndexing(
       message: "Triggered connector run",
     };
   }
+}
+
+/** Starts a permission sync on a perm-synced pair. Resolves to `null` or the error message. */
+export function triggerPermissionSync(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  return postForError(
+    `/api/manage/admin/cc-pair/${ccPairId}/sync-permissions`,
+    fallback
+  );
 }
 
 // ---------------------------------------------------------------------------

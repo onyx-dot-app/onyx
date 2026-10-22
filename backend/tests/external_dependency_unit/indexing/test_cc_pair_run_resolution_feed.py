@@ -1,8 +1,6 @@
-"""Coverage for run resolution: a resolved failed index attempt and a resolved
-failed permission sync leave the failures feed and show under resolved with
-their status kept, a resolved run with open document errors moves the same way
-within the errors level, and only a caller who operates the pair resolves. A
-fleet batch resolve marks only the matching runs of the pairs the caller operates."""
+"""Coverage for run resolution: resolved runs leave the open levels with their status
+kept and count no open document errors, only a pair's operator resolves, and a fleet
+batch resolve marks only the matching runs of the pairs the caller operates."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -215,15 +213,14 @@ def test_a_resolved_run_with_open_doc_errors_stays_in_the_errors_level(
     db_session: Session, admin: User, cc_pair: ConnectorCredentialPair
 ) -> None:
     attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
-    db_session.add(
-        IndexAttemptError(
-            index_attempt_id=attempt.id,
-            connector_credential_pair_id=cc_pair.id,
-            document_id=f"doc-{attempt.id}",
-            failure_message="boom",
-            is_resolved=False,
-        )
+    doc_error = IndexAttemptError(
+        index_attempt_id=attempt.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id=f"doc-{attempt.id}",
+        failure_message="boom",
+        is_resolved=False,
     )
+    db_session.add(doc_error)
     db_session.commit()
     key = (CCPairRunKind.INDEXING, attempt.id)
     unresolved = CCPairRunErrors.UNRESOLVED
@@ -235,7 +232,12 @@ def test_a_resolved_run_with_open_doc_errors_stays_in_the_errors_level(
     assert _keys(closed) == [key]
     run = closed.items[0]
     assert isinstance(run, CCPairIndexRun)
-    assert run.attempt.open_doc_error_count == 1
+    # The resolution closes the run's document errors without marking the rows,
+    # which the poll cursor and Retry still read.
+    assert run.attempt.error_count == 1
+    assert run.attempt.open_doc_error_count == 0
+    db_session.refresh(doc_error)
+    assert doc_error.is_resolved is False
 
 
 def test_resolve_refuses_a_run_with_nothing_open(

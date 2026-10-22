@@ -60,6 +60,8 @@ export interface CCPairFullInfo {
   permission_syncing: boolean;
   last_permission_sync_attempt_finished: string | null;
   last_permission_sync_attempt_error_message: string | null;
+  // The source syncs document permissions, so a sync can be started.
+  supports_doc_permission_sync: boolean;
 
   // True if the connector implements `Resolver.reindex` (targeted reindex).
   // False -> Resolve All falls back to a full connector reindex.
@@ -262,13 +264,14 @@ export interface CCPairHierarchyBreakdown {
 /** Mirrors `CCPairRunErrors`: runs with open document errors, with all of them resolved, or with none. */
 export type CCPairRunErrors = "unresolved" | "resolved" | "none";
 
-/** When an admin resolved the run, on every run. A resolved run keeps its status. */
-interface CCPairRunResolution {
+/** How a run left the open failures and errors, on every run: when an admin resolved it, and whether a newer run of its kind superseded it. A closed run keeps its status. */
+interface CCPairRunClosure {
   resolved_at: string | null;
+  superseded: boolean;
 }
 
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
-export type CCPairRun = CCPairRunResolution &
+export type CCPairRun = CCPairRunClosure &
   (
     | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
     | {
@@ -310,7 +313,7 @@ export interface CCPairRunsQuery {
   q: string;
   /** Keeps only runs with document errors, open or resolved, or only runs without any. */
   errors: CCPairRunErrors | null;
-  /** Leaves out (`false`) or keeps only (`true`) the failed runs a newer run of their kind followed. With `errors`, `true` keeps the runs either matches. */
+  /** Leaves out (`false`) or keeps only (`true`) the runs a newer run of their kind superseded: failed runs, and a full-pass kind's runs with errors. With `errors`, `true` keeps the runs either matches. */
   superseded: boolean | null;
   /** Reads the runs an admin resolved the way `superseded` reads the superseded ones. */
   resolved: boolean | null;
