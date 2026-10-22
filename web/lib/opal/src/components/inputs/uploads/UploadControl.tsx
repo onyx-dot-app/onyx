@@ -54,9 +54,10 @@ type UploadControlProps = UploadBaseProps & {
 
 /**
  * `InputSingleUpload`'s control: the input chrome with no caret, showing one
- * value's label. A click (or Enter or Space) opens the file picker, and a
- * file can be dropped on it (see `useUploadTarget`). With a value, the × at
- * the end, or Delete or Backspace, clears it.
+ * value's label. A click focuses it, so a copied file can be pasted; a double
+ * click (or Enter or Space) opens the file picker, and a file can be dropped
+ * on it (see `useUploadTarget`). With a value, the × at the end, or Delete or
+ * Backspace, clears it.
  */
 export default function UploadControl({
   variant = "primary",
@@ -79,8 +80,14 @@ export default function UploadControl({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const isNonEditable = variant === "disabled" || variant === "readOnly";
   const hasValue: boolean = label !== null;
-  const { getRootProps, drag, fileInput, openFilePicker, pickerOpenRef } =
-    useUploadTarget({
+  const {
+    getRootProps,
+    drag,
+    fileInput,
+    openFilePicker,
+    pasteFiles,
+    pickerOpenRef,
+  } = useUploadTarget({
       multiple: false,
       disabled: isNonEditable,
       name,
@@ -118,10 +125,14 @@ export default function UploadControl({
           disabled={isNonEditable}
           data-testid={rest["data-testid"]}
           className="opal-input-upload-trigger"
-          onClick={openFilePicker}
+          // A click only focuses, as some browsers do not focus a clicked
+          // button, so a copied file can be pasted next.
+          onClick={() => triggerRef.current?.focus()}
+          onDoubleClick={openFilePicker}
           ref={triggerRef}
           onPaste={(e) => {
-            if (!isNonEditable) onPaste?.(e);
+            if (isNonEditable || pasteFiles(e)) return;
+            onPaste?.(e);
           }}
           onKeyDown={(e) => {
             // Delete or Backspace clears the value, as the × does.

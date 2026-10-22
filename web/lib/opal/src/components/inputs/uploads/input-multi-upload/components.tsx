@@ -62,8 +62,14 @@ export default function InputMultiUpload({
     onFilesChange(next);
   }
 
-  const { getRootProps, drag, fileInput, openFilePicker, pickerOpenRef } =
-    useUploadTarget({
+  const {
+    getRootProps,
+    drag,
+    fileInput,
+    openFilePicker,
+    pasteFiles,
+    pickerOpenRef,
+  } = useUploadTarget({
       multiple: true,
       disabled: isNonEditable,
       // The trigger is not a labelable element; a field label opens the
@@ -107,6 +113,10 @@ export default function InputMultiUpload({
       {...getRootProps({ className: "opal-input-upload" })}
       data-drag={drag ?? undefined}
       data-testid={rest["data-testid"]}
+      // A paste on the focused field adds its files.
+      onPaste={(e: React.ClipboardEvent<HTMLDivElement>) => {
+        pasteFiles(e);
+      }}
       // Focus moving to the picker is not the user leaving the field.
       onBlur={(e: React.FocusEvent<HTMLDivElement>) => {
         if (pickerOpenRef.current) return;
@@ -133,7 +143,9 @@ export default function InputMultiUpload({
         }
         readOnly
         triggerRef={triggerRef}
-        onInputClick={openFilePicker}
+        // A click focuses the field, so a copied file can be pasted; a
+        // double click opens the picker.
+        onInputDoubleClick={openFilePicker}
         // Enter and Space open the picker, as on a button.
         onInputKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;

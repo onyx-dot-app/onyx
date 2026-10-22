@@ -99,6 +99,8 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputClick?: () => void;
 
+  onInputDoubleClick?: () => void;
+
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
@@ -147,6 +149,7 @@ function TagField({
   onEnter,
   onInputFocus,
   onInputClick,
+  onInputDoubleClick,
   inputAriaProps,
   children,
   readOnly = false,
@@ -357,6 +360,7 @@ function TagField({
             aria-disabled={disabled || undefined}
             onFocus={disabled ? undefined : onInputFocus}
             onClick={disabled ? undefined : onInputClick}
+            onDoubleClick={disabled ? undefined : onInputDoubleClick}
             onKeyDown={disabled ? undefined : handleTriggerKeyDown}
           >
             {tags.length === 0 && placeholder && (
@@ -378,6 +382,7 @@ function TagField({
             onChange={(event) => onChange(event.target.value)}
             onFocus={onInputFocus}
             onClick={onInputClick}
+            onDoubleClick={onInputDoubleClick}
             onKeyDown={handleInputKeyDown}
             placeholder={placeholder}
             aria-label={placeholder}

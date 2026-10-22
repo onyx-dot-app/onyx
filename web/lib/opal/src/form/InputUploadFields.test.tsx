@@ -89,8 +89,9 @@ describe("InputSingleUploadField", () => {
     );
     const trigger = screen.getByRole("button", { name: "Upload a key" });
 
-    // The picker takes focus; the field is still being filled in.
-    await user.click(trigger);
+    // A double click opens the picker, which takes focus; the field is still
+    // being filled in.
+    await user.dblClick(trigger);
     fireEvent.blur(trigger);
     expect(form?.touched.key).toBeFalsy();
     expect(container.querySelector(".opal-input")).toHaveAttribute(
