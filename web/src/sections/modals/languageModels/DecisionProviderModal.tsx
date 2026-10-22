@@ -11,6 +11,7 @@ import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 import {
   fetchOpenRouterModels,
   fetchTypeSafeModels,
+  fetchVercelAIGatewayModels,
 } from "@/lib/languageModels/svc";
 import { getProvider } from "@/lib/languageModels/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -99,7 +100,11 @@ function DecisionProviderFields({
     if (providerName === "typesafe") {
       setFetchedModels(await fetchTypeSafeModels(params));
     } else {
-      const result = await fetchOpenRouterModels({
+      const fetchModels =
+        providerName === "vercel_ai_gateway"
+          ? fetchVercelAIGatewayModels
+          : fetchOpenRouterModels;
+      const result = await fetchModels({
         ...params,
         api_key: values.api_key,
         api_base: values.api_base,
@@ -128,7 +133,8 @@ function DecisionProviderFields({
             onClose={onClose}
           />
           <Modal.Body padding={2} gap={0}>
-            {providerName === "openrouter" && <APIBaseField />}
+            {(providerName === "openrouter" ||
+              providerName === "vercel_ai_gateway") && <APIBaseField />}
             <APIKeyField providerName={companyName} />
             <InputDivider />
             <DisplayNameField />
@@ -157,7 +163,8 @@ function DecisionProviderFields({
                       )}
                     </Button>
                     {(providerName === "typesafe" ||
-                      providerName === "openrouter") &&
+                      providerName === "openrouter" ||
+                      providerName === "vercel_ai_gateway") &&
                       (values.api_key || existingLlmProvider) && (
                         <RefetchButton onRefetch={refreshModels} />
                       )}
@@ -243,7 +250,11 @@ export default function DecisionProviderModal(
     api_key: existingLlmProvider?.api_key ?? "",
     api_base:
       existingLlmProvider?.api_base ??
-      (providerName === "openrouter" ? "https://openrouter.ai/api/v1" : ""),
+      (providerName === "vercel_ai_gateway"
+        ? "https://ai-gateway.vercel.sh/v1"
+        : providerName === "openrouter"
+          ? "https://openrouter.ai/api/v1"
+          : ""),
     selected_model_names:
       existingLlmProvider?.model_configurations
         .filter((model) => model.supports_decisions)
@@ -262,7 +273,8 @@ export default function DecisionProviderModal(
             t("validation.modelNameRequired")
           ),
         }),
-        ...(providerName === "openrouter" && {
+        ...((providerName === "openrouter" ||
+          providerName === "vercel_ai_gateway") && {
           api_base: Yup.string().required(t("validation.apiBaseRequired")),
         }),
       })}

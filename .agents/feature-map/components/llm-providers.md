@@ -39,6 +39,8 @@ chat settings, defaults, visibility, and access. New shared models stay hidden
 from chat. Clear the selected decision model before removing its model or provider.
 TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions use the separate
 client in `backend/onyx/llm/decisions/`.
+Vercel AI Gateway discovers `evaluation` catalog entries through the dedicated
+decision provider request. Its `language` entries remain chat models.
 Zoom decision requests carry a shared Zoom Scribe connection ID. Only full admins
 can validate or save this link. Each request signs with the current connection credentials.
 

@@ -353,4 +353,5 @@ def test_decision_page_catalog_contains_supported_providers_without_selecting_a_
         "zoom_ai",
         "openai",
         "openrouter",
+        "vercel_ai_gateway",
     }

@@ -68,6 +68,7 @@ def test_catalog_does_not_select_a_model() -> None:
         "openai",
         "openrouter",
         "zoom_ai",
+        "vercel_ai_gateway",
     }
 
 
