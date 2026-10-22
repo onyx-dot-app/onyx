@@ -625,7 +625,9 @@ def connector_permission_sync_generator_task(
                 checkpointer,
             )
         else:
-            document_external_accesses = sync_config.doc_sync_config.doc_sync_func(
+            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
+            assert doc_sync_func is not None  # DocSyncConfig sets exactly one
+            document_external_accesses = doc_sync_func(
                 cc_pair,
                 fetch_all_existing_docs_fn,
                 fetch_all_existing_docs_ids_fn,

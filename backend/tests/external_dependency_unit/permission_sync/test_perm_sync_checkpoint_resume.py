@@ -107,7 +107,6 @@ def _run(
     sync_config = SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=1,
-            doc_sync_func=lambda *_: iter(()),
             initial_index_should_sync=False,
             checkpointed_doc_sync_func=crawl,
         )

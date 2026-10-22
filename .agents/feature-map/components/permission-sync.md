@@ -608,7 +608,8 @@ document to the wrong person.
    (timeout, stop signal, or lost lease), because connectors raise a generic
    "Stop signal detected" for all of them.
    A source whose crawl can outlast that timeout (Google Drive) sets
-   `DocSyncConfig.checkpointed_doc_sync_func`. The task passes it a
+   `DocSyncConfig.checkpointed_doc_sync_func` instead of `doc_sync_func`. The
+   task passes it a
    `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
    which saves one checkpoint file per cc_pair to the file store at most every
    `CHECKPOINT_SAVE_INTERVAL_SECONDS`, holding the crawl window, the saving
