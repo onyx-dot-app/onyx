@@ -1,4 +1,4 @@
-/** The Manage Index menu's Sync Permissions row: what the helper posts and what it hands back for each outcome. */
+/** The Sync Permissions route, and the three outcomes of the POST helper it shares with cancel and release. */
 import { triggerPermissionSync } from "@/lib/connectors/svc";
 
 const FALLBACK = "Failed to start the permission sync";
@@ -8,16 +8,13 @@ afterEach(() => {
 });
 
 function respond(ok: boolean, body: unknown): Response {
-  return {
-    ok,
-    json: jest.fn().mockResolvedValue(body),
-  } as unknown as Response;
+  return { ok, json: jest.fn().mockResolvedValue(body) } as unknown as Response;
 }
 
 test("posts to the EE sync route and resolves to null once the server takes it", async () => {
   const fetchMock = jest
     .spyOn(global, "fetch")
-    .mockResolvedValue(respond(true, { success: true }));
+    .mockResolvedValue(respond(true, {}));
 
   await expect(triggerPermissionSync(7, FALLBACK)).resolves.toBeNull();
   expect(fetchMock).toHaveBeenCalledWith(
@@ -26,20 +23,14 @@ test("posts to the EE sync route and resolves to null once the server takes it",
   );
 });
 
-test("hands back the server's detail when a sync already runs", async () => {
+test("hands back the server's detail, else the fallback when the request fails", async () => {
   jest
     .spyOn(global, "fetch")
-    .mockResolvedValue(
-      respond(false, { detail: "Permissions sync task already in progress." })
-    );
+    .mockResolvedValueOnce(respond(false, { detail: "Already in progress." }))
+    .mockRejectedValueOnce(new TypeError("offline"));
 
   await expect(triggerPermissionSync(7, FALLBACK)).resolves.toBe(
-    "Permissions sync task already in progress."
+    "Already in progress."
   );
-});
-
-test("falls back when the request never reaches the server", async () => {
-  jest.spyOn(global, "fetch").mockRejectedValue(new TypeError("offline"));
-
   await expect(triggerPermissionSync(7, FALLBACK)).resolves.toBe(FALLBACK);
 });

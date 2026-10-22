@@ -2679,7 +2679,7 @@
           "label": "Synchroniser les autorisations",
           "description": "Récupérer maintenant depuis la source qui peut lire chaque document.",
           "tooltip": {
-            "syncing": "Une synchronisation des autorisations est déjà en cours"
+            "syncing": "Une synchronisation des autorisations est déjà en file d'attente ou en cours"
           }
         }
       },

@@ -2679,7 +2679,7 @@
           "label": "Berechtigungen synchronisieren",
           "description": "Jetzt aus der Quelle abrufen, wer welches Dokument lesen darf.",
           "tooltip": {
-            "syncing": "Eine Berechtigungssynchronisierung läuft bereits"
+            "syncing": "Eine Berechtigungssynchronisierung ist bereits geplant oder läuft"
           }
         }
       },

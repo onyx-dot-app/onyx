@@ -2679,7 +2679,7 @@
           "label": "Sincronizar permisos",
           "description": "Obtener ahora de la fuente quién puede leer cada documento.",
           "tooltip": {
-            "syncing": "Ya hay una sincronización de permisos en curso"
+            "syncing": "Ya hay una sincronización de permisos en cola o en curso"
           }
         }
       },

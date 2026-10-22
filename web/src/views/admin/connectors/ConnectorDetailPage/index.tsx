@@ -45,7 +45,10 @@ import {
   triggerIndexing,
   triggerPermissionSync,
 } from "@/lib/connectors/svc";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import {
+  ConnectorCredentialPairStatus,
+  PermissionSyncStatusEnum,
+} from "@/lib/connectors/types";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
@@ -94,7 +97,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  // A re-index or error resolve in flight: the Manage button spins meanwhile.
+  // A Manage menu action in flight: the Manage button spins meanwhile.
   const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
@@ -316,6 +319,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
             onSelect: () => void triggerReIndex(true),
           },
         ];
+  // The route refuses a second sync while one is queued or running.
+  const syncOpen =
+    ccPair.permission_syncing ||
+    ccPair.last_permission_sync_attempt_status ===
+      PermissionSyncStatusEnum.NOT_STARTED;
   // A deleting pair's sync is refused, so the row goes with the pair.
   const syncItems: DropdownMenuItem[] =
     isPermSynced(ccPair.access_type) && !isDeleting
@@ -326,10 +334,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
             icon: SvgUserSync,
             title: t("manageMenu.syncPermissions.label"),
             description: t("manageMenu.syncPermissions.description"),
-            tooltip: ccPair.permission_syncing
+            tooltip: syncOpen
               ? t("manageMenu.syncPermissions.tooltip.syncing")
               : undefined,
-            disabled: busy || ccPair.permission_syncing,
+            disabled: busy || syncOpen,
             onSelect: () => void syncPermissions(),
           },
         ]

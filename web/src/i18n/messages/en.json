@@ -2679,7 +2679,7 @@
           "label": "Sync Permissions",
           "description": "Pull who can read each doc from the source now.",
           "tooltip": {
-            "syncing": "A permission sync is already running"
+            "syncing": "A permission sync is already queued or running"
           }
         }
       },
