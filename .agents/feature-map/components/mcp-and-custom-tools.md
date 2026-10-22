@@ -359,6 +359,7 @@ and opening Tools. Workspace availability and
 deletion stay in the directory. Saved configuration shows the server URL beneath the name. Users with edit permission
 can change it; other viewers see a read-only field. URL edits require a valid HTTP(S) URL.
 A changed URL clears credentials and header values in the form draft, without changing saved credentials.
+An empty API-token header template restores `Authorization: Bearer {api_key}`, so the replacement token field remains available.
 Changing Configuration fields again invalidates that proposal; save Configuration again before validating it.
 Successful authentication preserves unsaved Tools edits.
 In-form authentication or discovery failures retain the draft and leave the saved server intact.
