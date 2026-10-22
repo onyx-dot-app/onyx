@@ -34,7 +34,7 @@ export class AdminDecisionModelsPage {
   async openZoomSetup(): Promise<void> {
     await this.page
       .getByTestId(/^decision-provider-zoom_ai-/)
-      .getByRole("button", { name: /Connect|Configure/ })
+      .getByRole("button", { name: /^(Connect|Edit )/ })
       .click();
     const dialog = this.page.getByRole("dialog");
     await expect(

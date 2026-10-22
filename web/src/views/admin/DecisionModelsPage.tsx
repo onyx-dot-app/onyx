@@ -158,6 +158,7 @@ function DecisionProviderCard({
           padding={2}
           rounding={4}
           aria-label={displayName}
+          data-testid={`decision-provider-${providerName}-${provider?.id ?? "new"}`}
           onClick={() => setOpen(true)}
         >
           <ContentAction
