@@ -2221,10 +2221,7 @@
     "chatPreferences": {
       "chatNaming": {
         "description": "セッションのタイトルを生成します。高速で低コストのモデルが適しています。",
-        "title": "チャット命名モデル",
-        "chatDefault": {
-          "label": "チャットのデフォルト"
-        }
+        "title": "チャット命名モデル"
       },
       "searchSelectionModel": {
         "description": "取得したドキュメントを選択して確認します。高速で低コストのモデルは検索コストを削減できますが、回答の品質に影響する場合があります。",
@@ -2238,8 +2235,8 @@
         "addProvider": {
           "label": "プロバイダーを追加"
         },
-        "globalDefault": {
-          "description": "各チャットのモデル"
+        "chatDefault": {
+          "label": "チャットのデフォルト"
         }
       },
       "advanced": {

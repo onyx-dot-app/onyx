@@ -117,15 +117,10 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
     control = (
       <SimpleModelSelector
         nullable
-        // Unset, naming always runs on the chat's own model, so it reads as
-        // the Chat Default. Search selection also runs in the Search UI,
-        // where the fallback is the workspace default: it stays the Global
-        // Default, described by its chat fallback.
-        globalDefault={
-          task === "chatNaming"
-            ? { label: t("chatNaming.chatDefault.label") }
-            : { description: t("taskModels.globalDefault.description") }
-        }
+        // Unset, a task runs on the chat's own model. In the Search UI,
+        // search selection falls back to the workspace default instead; the
+        // one label covers the common case.
+        globalDefault={{ label: t("taskModels.chatDefault.label") }}
         providers={
           llmProviders
             ? filterModelConfigurations(llmProviders, { keep: modelConfigId })
