@@ -21,7 +21,6 @@ import {
   type MCPSetupProbeResult,
   type MCPProbeProgress,
 } from "@/lib/mcp/types";
-import { refreshMCPServerTools } from "@/lib/mcp/svc";
 import { Permission } from "@/lib/types";
 import type { ToolSnapshot } from "@/lib/tools/types";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
@@ -384,11 +383,31 @@ function MockEnvironment({
       }
       if (path.includes("/status")) return json({});
       if (
+        path === "/api/admin/mcp/setup" ||
         path === "/api/admin/mcp/servers/create" ||
         path === "/api/admin/mcp/server" ||
         path === "/api/admin/mcp/server/42"
       ) {
         if (scenario.submit === "pending") return pendingResponse();
+        if (
+          path === "/api/admin/mcp/setup" &&
+          scenario.submit === "oauth-error"
+        )
+          return json(
+            {
+              oauth_error: "client_registration_failed",
+              detail: "Provider registration failed.",
+            },
+            400
+          );
+        if (
+          path === "/api/admin/mcp/setup" &&
+          scenario.submit === "tools-error"
+        )
+          return json(
+            { detail: "The server tools could not be loaded. Try again." },
+            503
+          );
         if (scenario.submit === "save-error")
           return json(
             { detail: "The server configuration could not be saved." },
@@ -440,6 +459,10 @@ function MockEnvironment({
             typeof payload.description === "string"
           )
             savedServer.description = payload.description;
+        }
+        if (path === "/api/admin/mcp/setup") {
+          savedServer.status = MCPServerStatus.CONNECTED;
+          return json({ status: "connected", server: savedServer });
         }
         return json({ ...savedServer, server_id: 42 });
       }
@@ -513,9 +536,6 @@ function SavedEditorCanvas({ kind }: { kind: "auth" | "add" }) {
                 variant="modal"
                 footerTarget={footerTarget}
                 mcpServer={server}
-                onTriggerFetchTools={async () => {
-                  await refreshMCPServerTools(server.id);
-                }}
                 onBusyChange={setBusy}
                 onCancel={close}
                 onSaved={async () => {}}

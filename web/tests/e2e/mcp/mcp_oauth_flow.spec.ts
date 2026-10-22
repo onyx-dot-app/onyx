@@ -112,9 +112,8 @@ async function configureOauthServer(
   await adminMcp.fillServerDetails({
     name: options.serverName,
   });
-  let serverId: number | null = null;
   await oauthFlow.clickAndWaitForPossibleUrlChange(async () => {
-    serverId = await adminMcp.connectAndWaitForCreation();
+    await adminMcp.connectAndWaitForSetup();
   }, "OAuth connect click");
 
   await oauthFlow.completeFlow({
@@ -126,8 +125,7 @@ async function configureOauthServer(
 
   await adminMcp.expectServerDetail(options.serverName);
   await adminMcp.setToolEnabled(options.toolName, true);
-  if (serverId === null) throw new Error("MCP server was not created");
-  return serverId;
+  return adminMcp.connectedServerId();
 }
 
 /** Confirm the server is present in chat, then prove the tool actually runs. */

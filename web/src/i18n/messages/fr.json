@@ -332,7 +332,7 @@
         "loadStage": "Impossible de charger les paramètres de connexion",
         "clientRegistrationFailed": "L’enregistrement automatique du client a échoué. Utilisez votre propre client OAuth ou vérifiez les exigences de configuration du fournisseur.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
-        "connectionFailed": "Le serveur OAuth est inaccessible. Vérifiez l’URL du serveur et réessayez.",
+        "connectionFailed": "Le serveur est inaccessible. Vérifiez l’URL du serveur et réessayez.",
         "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
         "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
