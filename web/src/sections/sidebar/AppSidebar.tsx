@@ -662,7 +662,9 @@ export default function AppSidebar() {
                         title={t("appSidebar.craft.businessTag")}
                         color="blue"
                       />
-                    ) : undefined
+                    ) : (
+                      <Tag title={t("appSidebar.craft.betaTag")} color="blue" />
+                    )
                   }
                 >
                   {t("appSidebar.craft.label")}

@@ -16601,6 +16601,9 @@
       },
       "searchInput": {
         "placeholder": "بحث..."
+      },
+      "betaTag": {
+        "label": "تجريبي"
       }
     },
     "appSidebar": {
@@ -16612,7 +16615,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "الأعمال"
+        "businessTag": "الأعمال",
+        "betaTag": "تجريبي"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

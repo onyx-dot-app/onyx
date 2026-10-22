@@ -16601,6 +16601,9 @@
       },
       "searchInput": {
         "placeholder": "Suchen..."
+      },
+      "betaTag": {
+        "label": "Beta"
       }
     },
     "appSidebar": {
@@ -16612,7 +16615,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business"
+        "businessTag": "Business",
+        "betaTag": "Beta"
       },
       "exploreAgents": {
         "label": "Agenten erkunden"

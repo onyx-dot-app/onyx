@@ -16601,6 +16601,9 @@
       },
       "searchInput": {
         "placeholder": "検索..."
+      },
+      "betaTag": {
+        "label": "ベータ"
       }
     },
     "appSidebar": {
@@ -16612,7 +16615,8 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business"
+        "businessTag": "Business",
+        "betaTag": "ベータ"
       },
       "exploreAgents": {
         "label": "エージェントを探す"
