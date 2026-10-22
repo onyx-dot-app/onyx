@@ -542,6 +542,58 @@ def test_sampled_checks_move_past_an_open_project_of_a_jql_scope(
     assert gateway.get_project_permission_scheme.call_count == 2
 
 
+def _jql_issues(*project_keys: str) -> list[dict[str, Any]]:
+    return [{"fields": {"project": {"key": key}}} for key in project_keys]
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_are_incomplete_when_the_jql_matches_more_cloud_issues(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1", "2"], next_page_token="next"
+    )
+    gateway.bulk_fetch_issues.return_value = _jql_issues("OPEN", "TEAM")
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.description is not None
+    assert result.description.startswith(
+        "Checked 2 projects, and the JQL query matches more"
+    )
+
+
+@pytest.mark.parametrize(
+    ("next_offset_issues", "expected"),
+    [
+        ([], CapabilityCheckStatus.SKIPPED),
+        # Jira returned a short page, but more issues match.
+        (_jql_issues("ROLE"), CapabilityCheckStatus.INCOMPLETE),
+    ],
+)
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_of_a_data_center_jql_scope(
+    check_id: str,
+    next_offset_issues: list[dict[str, Any]],
+    expected: CapabilityCheckStatus,
+) -> None:
+    gateway = _gateway(is_cloud=False)
+    _schemes_by_project(gateway, {"OPEN": _OPEN_SCHEME, "TEAM": _GROUP_SCHEME})
+    pages: list[list[dict[str, Any]]] = [
+        _jql_issues("OPEN", "TEAM"),
+        next_offset_issues,
+    ]
+    gateway.search_issues.side_effect = pages
+
+    result = _run(check_id, gateway, {**_ALL_PROJECTS, "jql_query": "type = Bug"})
+
+    assert result.status == expected, result
+    assert gateway.search_issues.call_args.kwargs["start_at"] == 2
+
+
 @pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
 def test_sampled_checks_are_incomplete_when_more_projects_exist(
     check_id: str,
@@ -610,6 +662,28 @@ def test_sampled_checks_are_incomplete_when_a_project_cannot_be_read(
     assert result.description.startswith(
         "Checked 1 of 2 projects (1 more could not be read)"
     )
+
+
+@pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)
+def test_sampled_checks_stop_when_jira_rate_limits_a_later_project(
+    check_id: str,
+) -> None:
+    gateway = _gateway()
+    _schemes_by_project(
+        gateway, {"OPEN": _OPEN_SCHEME, "BUSY": {}, "ROLE": _ROLE_SCHEME}
+    )
+    schemes_or_errors: list[dict[str, Any] | JiraApiError] = [
+        _OPEN_SCHEME,
+        _api_error(429),
+        _ROLE_SCHEME,
+    ]
+    gateway.get_project_permission_scheme.side_effect = schemes_or_errors
+
+    result = _run(check_id, gateway, _ALL_PROJECTS)
+
+    assert result.status == CapabilityCheckStatus.INCOMPLETE, result
+    assert result.summary == "Rate limited by Jira"
+    assert gateway.get_project_permission_scheme.call_count == 2
 
 
 @pytest.mark.parametrize("check_id", _SAMPLE_CHECK_IDS)

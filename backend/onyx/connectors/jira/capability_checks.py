@@ -916,7 +916,11 @@ def _jql_issue_projects(
         )
         if not issues:
             return None
-        complete = len(issues) < _PROBE_ISSUE_PAGE
+        # Jira can return fewer issues than asked for, so a short page is
+        # complete only when the next offset holds no issue.
+        complete = len(issues) < _PROBE_ISSUE_PAGE and not gateway.search_issues(
+            jql=jql, start_at=len(issues), max_results=1, fields="project", fast=True
+        )
     project_keys: list[str] = []
     for issue in issues:
         project: Any = get_issue_field(issue, "project")
@@ -1099,6 +1103,9 @@ def _check_sampled_projects(
         if index:
             try:
                 scheme = _read_permission_scheme(context, config, project_key)
+            except RateLimitedValidationError:
+                # More calls to a throttled Jira only add load.
+                raise
             except (ConnectorValidationError, UnexpectedValidationError) as e:
                 logger.warning(
                     "Jira check skipped project %s: cannot read its permission "
