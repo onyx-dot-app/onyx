@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "incompleteChecks": "{count, plural, one {# 件のチェックが未完了} other {# 件のチェックが未完了}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "コネクターチェック",
       "groups": {
         "failed": "失敗 {count} 件",
-        "indeterminate": "未検証 {count} 件",
+        "indeterminate": "未完了 {count} 件",
         "passed": "成功 {count} 件",
         "skipped": "スキップ {count} 件",
-        "running": "実行中 {count} 件",
+        "running": "進行中 {count} 件",
         "expected": "予定 {count} 件"
       },
       "status": {
-        "passed": "合格",
+        "passed": "成功",
         "failed": "失敗",
-        "indeterminate": "検証できませんでした",
+        "indeterminate": "未完了",
         "skipped": "スキップ",
-        "running": "テスト中…",
+        "running": "実行中…",
         "pending": "待機中",
         "waiting": "設定を待っています",
         "stopped": "ユーザーが停止"
@@ -10826,9 +10827,10 @@
         "expand": "すべて表示"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "失敗 {count} 件",
-        "unverified": "未検証 {count} 件",
+        "unverified": "未完了 {count} 件",
         "inProgress": "実行中 {count} 件",
         "expected": "予定 {count} 件",
         "skipped": "スキップ {count} 件",

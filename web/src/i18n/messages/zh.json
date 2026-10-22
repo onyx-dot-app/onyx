@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "incompleteChecks": "{count, plural, one {# 项检查未完成} other {# 项检查未完成}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "连接器检查",
       "groups": {
         "failed": "{count} 项失败",
-        "indeterminate": "{count} 项未验证",
+        "indeterminate": "{count} 项未完成",
         "passed": "{count} 项成功",
         "skipped": "{count} 项跳过",
-        "running": "{count} 项运行中",
+        "running": "{count} 项进行中",
         "expected": "{count} 项待运行"
       },
       "status": {
-        "passed": "通过",
+        "passed": "成功",
         "failed": "失败",
-        "indeterminate": "无法验证",
+        "indeterminate": "未完成",
         "skipped": "已跳过",
-        "running": "正在测试…",
+        "running": "正在运行…",
         "pending": "排队中",
         "waiting": "正在等待设置",
         "stopped": "已由你停止"
@@ -10826,9 +10827,10 @@
         "expand": "查看全部"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "{count} 项失败",
-        "unverified": "{count} 项未验证",
+        "unverified": "{count} 项未完成",
         "inProgress": "{count} 项进行中",
         "expected": "{count} 项待执行",
         "skipped": "{count} 项跳过",

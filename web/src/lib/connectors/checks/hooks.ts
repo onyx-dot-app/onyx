@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { useDebouncedValue } from "@opal/hooks";
-import { SvgProgressRing } from "@opal/icons";
+import { SvgCheckCircle, SvgProgressRing, SvgXOctagon } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import useSWR, { type SWRResponse, useSWRConfig } from "swr";
@@ -28,7 +28,10 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
-import { checksProgress } from "@/lib/connectors/checks/progress";
+import {
+  type ChecksEndIcon,
+  checksProgress,
+} from "@/lib/connectors/checks/progress";
 import {
   optionsFinding,
   storedCheckResults,
@@ -139,6 +142,12 @@ function toCheckResult(
     required: check.required,
     status: check.state,
     message: check.message,
+    summary: check.summary,
+    description: check.description,
+    error_kind: check.error_kind,
+    not_run_reason: check.not_run_reason,
+    // A draft check that does not apply is `not_applicable`, never finished.
+    applicable: true,
     remediation: check.remediation,
     docs_link: check.docs_link,
     duration_ms: check.duration_ms,
@@ -705,10 +714,34 @@ export function useResetConnectorChecks(source: ConfigurableSources): void {
   }, [source, mutate]);
 }
 
+/**
+ * A red stop sign: a required check failed, or the run broke. Content colors
+ * its icon from its own stylesheet, so the color is an inline style.
+ */
+export function ChecksFailedIcon({ style, ...props }: IconProps) {
+  return createElement(SvgXOctagon, {
+    ...props,
+    style: { ...style, color: "var(--status-error-05)" },
+  });
+}
+
+/** A green check: every check succeeded. */
+function ChecksSucceededIcon({ style, ...props }: IconProps) {
+  return createElement(SvgCheckCircle, {
+    ...props,
+    style: { ...style, color: "var(--status-success-05)" },
+  });
+}
+
+const END_ICONS: Record<ChecksEndIcon, IconFunctionComponent> = {
+  succeeded: ChecksSucceededIcon,
+  requiredFailed: ChecksFailedIcon,
+};
+
 export interface ConnectorChecksProgress {
-  /** The header icon: the ring, or the spinner before anything starts. */
+  /** The header icon: the ring, the spinner before anything finishes, or an end state. */
   icon: IconFunctionComponent;
-  /** The `(complete/counted)` title suffix; absent with nothing to count. */
+  /** `(complete/counted)` while checks run, `(counted)` once all finished; absent with nothing to count. */
   suffix: string | undefined;
 }
 
@@ -718,10 +751,15 @@ export interface ConnectorChecksProgress {
  */
 export function useConnectorChecksProgress(
   counts: Record<DraftCheckStateKind, number>,
-  status: ConnectorChecksStatus
+  status: ConnectorChecksStatus,
+  requiredFailed: boolean
 ): ConnectorChecksProgress {
   const t = useTranslations("admin.connectorChecks");
-  const { ring, complete, counted } = checksProgress(counts, status);
+  const { ring, end, complete, counted } = checksProgress(
+    counts,
+    status,
+    requiredFailed
+  );
   const success = ring?.success;
   const error = ring?.error;
   const warning = ring?.warning;
@@ -745,9 +783,13 @@ export function useConnectorChecksProgress(
     [showRing, success, error, warning, neutral, rest]
   );
   return {
-    icon,
+    icon: end === null ? icon : END_ICONS[end],
     suffix:
-      counted > 0 ? t("titleCount", { complete, total: counted }) : undefined,
+      counted === 0
+        ? undefined
+        : complete === counted
+          ? t("titleTotal", { total: counted })
+          : t("titleCount", { complete, total: counted }),
   };
 }
 

@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, one {# ejecución cancelada} other {# ejecuciones canceladas}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+          "incompleteChecks": "{count, plural, one {# comprobación incompleta} other {# comprobaciones incompletas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "Comprobaciones del conector",
       "groups": {
         "failed": "{count} fallidas",
-        "indeterminate": "{count} sin verificar",
+        "indeterminate": "{count} incompletas",
         "passed": "{count} correctas",
         "skipped": "{count} omitidas",
-        "running": "{count} en curso",
+        "running": "{count} en progreso",
         "expected": "{count} pendientes"
       },
       "status": {
-        "passed": "Superada",
+        "passed": "Correcta",
         "failed": "Fallida",
-        "indeterminate": "No se pudo verificar",
+        "indeterminate": "Incompleta",
         "skipped": "Omitida",
-        "running": "Probando…",
+        "running": "En ejecución…",
         "pending": "En cola",
         "waiting": "Esperando la configuración",
         "stopped": "Detenida por ti"
@@ -10826,9 +10827,10 @@
         "expand": "Ver todo"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} fallidas",
-        "unverified": "{count} sin verificar",
+        "unverified": "{count} incompletas",
         "inProgress": "{count} en curso",
         "expected": "{count} más pendientes",
         "skipped": "{count} omitidas",

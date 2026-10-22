@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "incompleteChecks": "{count, plural, one {# check incomplete} other {# checks incomplete}}",
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "Connector Checks",
       "groups": {
         "failed": "{count} Failed",
-        "indeterminate": "{count} Unverified",
+        "indeterminate": "{count} Incomplete",
         "passed": "{count} Successful",
         "skipped": "{count} Skipped",
-        "running": "{count} Running",
+        "running": "{count} in Progress",
         "expected": "{count} Expected"
       },
       "status": {
-        "passed": "Passed",
+        "passed": "Successful",
         "failed": "Failed",
-        "indeterminate": "Could not be verified",
+        "indeterminate": "Incomplete",
         "skipped": "Skipped",
-        "running": "Testing…",
+        "running": "Running…",
         "pending": "Queued",
         "waiting": "Waiting for settings",
         "stopped": "Stopped by you"
@@ -10826,9 +10827,10 @@
         "expand": "View All"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} failed",
-        "unverified": "{count} unverified",
+        "unverified": "{count} incomplete",
         "inProgress": "{count} in progress",
         "expected": "{count} more expected",
         "skipped": "{count} skipped",

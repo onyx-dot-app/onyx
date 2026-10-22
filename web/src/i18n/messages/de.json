@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, one {# Lauf abgebrochen} other {# Läufe abgebrochen}}",
           "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
           "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "incompleteChecks": "{count, plural, one {# Prüfung unvollständig} other {# Prüfungen unvollständig}}",
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
           "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "Konnektor-Prüfungen",
       "groups": {
         "failed": "{count} Fehlgeschlagen",
-        "indeterminate": "{count} Nicht verifiziert",
+        "indeterminate": "{count} Unvollständig",
         "passed": "{count} Erfolgreich",
         "skipped": "{count} Übersprungen",
-        "running": "{count} laufen",
+        "running": "{count} in Bearbeitung",
         "expected": "{count} erwartet"
       },
       "status": {
-        "passed": "Bestanden",
+        "passed": "Erfolgreich",
         "failed": "Fehlgeschlagen",
-        "indeterminate": "Konnte nicht verifiziert werden",
+        "indeterminate": "Unvollständig",
         "skipped": "Übersprungen",
-        "running": "Wird getestet…",
+        "running": "Wird ausgeführt…",
         "pending": "In der Warteschlange",
         "waiting": "Wartet auf Einstellungen",
         "stopped": "Von Ihnen angehalten"
@@ -10826,9 +10827,10 @@
         "expand": "Alle anzeigen"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} fehlgeschlagen",
-        "unverified": "{count} nicht verifiziert",
+        "unverified": "{count} unvollständig",
         "inProgress": "{count} in Bearbeitung",
         "expected": "{count} weitere erwartet",
         "skipped": "{count} übersprungen",

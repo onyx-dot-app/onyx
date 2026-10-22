@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, one {# exécution annulée} other {# exécutions annulées}}",
           "passedChecks": "{count, plural, one {# vérification réussie} other {# vérifications réussies}}",
           "failedChecks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "incompleteChecks": "{count, plural, one {# vérification incomplète} other {# vérifications incomplètes}}",
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}",
           "syncedDocs": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "Vérifications du connecteur",
       "groups": {
         "failed": "{count} échouées",
-        "indeterminate": "{count} non vérifiées",
+        "indeterminate": "{count} incomplètes",
         "passed": "{count} réussies",
         "skipped": "{count} ignorées",
-        "running": "{count} en cours",
+        "running": "{count} en cours d’exécution",
         "expected": "{count} attendues"
       },
       "status": {
-        "passed": "Réussie",
+        "passed": "Réussite",
         "failed": "Échouée",
-        "indeterminate": "Impossible à vérifier",
+        "indeterminate": "Incomplète",
         "skipped": "Ignorée",
-        "running": "Test en cours…",
+        "running": "En cours…",
         "pending": "En file d’attente",
         "waiting": "En attente des paramètres",
         "stopped": "Arrêtée par vous"
@@ -10826,9 +10827,10 @@
         "expand": "Tout voir"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} échouées",
-        "unverified": "{count} non vérifiées",
+        "unverified": "{count} incomplètes",
         "inProgress": "{count} en cours",
         "expected": "{count} autres attendues",
         "skipped": "{count} ignorées",

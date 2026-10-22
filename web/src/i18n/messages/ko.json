@@ -3019,6 +3019,7 @@
           "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "incompleteChecks": "{count, plural, one {검사 #개 미완료} other {검사 #개 미완료}}",
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
@@ -10799,18 +10800,18 @@
       "title": "커넥터 검사",
       "groups": {
         "failed": "실패 {count}개",
-        "indeterminate": "미확인 {count}개",
+        "indeterminate": "미완료 {count}개",
         "passed": "성공 {count}개",
         "skipped": "건너뜀 {count}개",
-        "running": "실행 중 {count}개",
+        "running": "진행 중 {count}개",
         "expected": "예정 {count}개"
       },
       "status": {
-        "passed": "통과",
+        "passed": "성공",
         "failed": "실패",
-        "indeterminate": "확인할 수 없음",
+        "indeterminate": "미완료",
         "skipped": "건너뜀",
-        "running": "테스트 중…",
+        "running": "실행 중…",
         "pending": "대기 중",
         "waiting": "설정을 기다리는 중",
         "stopped": "사용자가 중지함"
@@ -10826,9 +10827,10 @@
         "expand": "전체 보기"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "실패 {count}개",
-        "unverified": "미확인 {count}개",
+        "unverified": "미완료 {count}개",
         "inProgress": "진행 중 {count}개",
         "expected": "예정 {count}개",
         "skipped": "건너뜀 {count}개",
