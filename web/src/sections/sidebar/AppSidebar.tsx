@@ -56,6 +56,7 @@ import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { BetaTag } from "@/lib/tiers/components";
 import { Tier } from "@/lib/tiers/types";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
@@ -662,7 +663,7 @@ export default function AppSidebar() {
                         color="blue"
                       />
                     ) : (
-                      <Tag title={t("appSidebar.craft.betaTag")} color="blue" />
+                      <BetaTag />
                     )
                   }
                 >

@@ -35,6 +35,7 @@ import type { User } from "@/lib/types";
 import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
+import { useBetaTag } from "@/lib/tiers/hooks";
 
 const PAGE_SIZE = 10;
 
@@ -48,6 +49,7 @@ const PAGE_SIZE = 10;
 
 export default function CraftPage() {
   const t = useTranslations("admin.craft");
+  const betaTag = useBetaTag();
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const defaultEnabled = settings?.craft_default_enabled !== false;
@@ -203,7 +205,7 @@ export default function CraftPage() {
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal
               title={t("defaultToggle.title")}
-              tag={{ title: t("defaultToggle.betaTag.label"), color: "blue" }}
+              tag={betaTag}
               description={
                 defaultEnabled
                   ? t("defaultToggle.enabled.description")

@@ -24,7 +24,7 @@ import {
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { Tier } from "@/lib/tiers/types";
-import { usePlans } from "@/lib/tiers/hooks";
+import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
 import useFilter from "@/hooks/useFilter";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import {
@@ -102,10 +102,7 @@ export default function AdminSidebar() {
     [t]
   );
 
-  const betaTag: TagProps = {
-    title: t("adminSidebar.betaTag.label"),
-    color: "blue",
-  };
+  const betaTag: TagProps = useBetaTag();
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
   const itemTag = (beta: boolean | undefined) =>
