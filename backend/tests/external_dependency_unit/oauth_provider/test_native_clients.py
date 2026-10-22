@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, Queue
 from types import ModuleType
-from typing import Never, TextIO
+from typing import Any, Never, TextIO
 from urllib.parse import SplitResult, parse_qs, urlsplit
 from uuid import uuid4
 
@@ -25,6 +25,8 @@ import pytest
 import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
+from fastmcp.server.auth import cimd
+from fastmcp.server.auth.ssrf import SSRFFetchResponse
 from redis.asyncio import Redis
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -53,6 +55,7 @@ from onyx.oauth_provider import config as oauth_config
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.oauth_provider.api import router as user_router
 from onyx.server.oauth_provider.protocol import router as protocol_router
+from onyx.server.oauth_provider.provider import _cimd_fetcher
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
@@ -61,6 +64,32 @@ pytestmark = pytest.mark.usefixtures("tenant_context")
 
 _CLI_TIMEOUT_SECONDS = 120
 _STRICT_ENV = "MCP_NATIVE_CLIENTS_REQUIRED"
+_LIVE_METADATA_ENV = "MCP_NATIVE_CLIENTS_LIVE_METADATA"
+# Copies of the hosted client ID metadata documents, so pull request runs do not
+# depend on chatgpt.com or claude.ai. Scheduled runs fetch the live documents.
+_PINNED_CLIENT_METADATA: dict[str, dict[str, object]] = {
+    "https://chatgpt.com/oauth/codex/client.json": {
+        "client_id": "https://chatgpt.com/oauth/codex/client.json",
+        "client_uri": "https://chatgpt.com/codex",
+        "application_type": "native",
+        "redirect_uris": ["http://127.0.0.1/callback", "http://localhost/callback"],
+        "token_endpoint_auth_method": "none",
+        "token_endpoint_auth_methods_supported": ["none"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "client_name": "Codex",
+        "logo_uri": "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
+    },
+    "https://claude.ai/oauth/claude-code-client-metadata": {
+        "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+        "client_name": "Claude Code",
+        "client_uri": "https://claude.ai",
+        "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    },
+}
 _URL_PATTERN = re.compile(r"https?://[^\s'\"<>\x00-\x1f]+")
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine")
@@ -613,6 +642,23 @@ def native_oauth_server(
         "OAUTH_PROVIDER_SETTINGS",
         oauth_config.load_oauth_provider_settings(),
     )
+    if not os.environ.get(_LIVE_METADATA_ENV):
+        live_fetch = cimd.ssrf_safe_fetch_response
+
+        async def _pinned_fetch(
+            url: str, *args: Any, **kwargs: Any
+        ) -> SSRFFetchResponse:
+            document: dict[str, object] | None = _PINNED_CLIENT_METADATA.get(url)
+            if document is None:
+                return await live_fetch(url, *args, **kwargs)
+            return SSRFFetchResponse(
+                content=json.dumps(document).encode(),
+                status_code=200,
+                headers={"Cache-Control": "no-store"},
+            )
+
+        monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", _pinned_fetch)
+    _cimd_fetcher.cache_clear()
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
     db_session_context: AbstractContextManager[Session] = (
@@ -753,6 +799,7 @@ def native_oauth_server(
         db_session_context.__exit__(None, None, None)
         event_loop.close()
         monkeypatch.undo()
+        _cimd_fetcher.cache_clear()
         CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_token)
 
 

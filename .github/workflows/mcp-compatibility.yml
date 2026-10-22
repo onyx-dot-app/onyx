@@ -68,6 +68,7 @@ jobs:
       AUTH_BACKEND: redis
       CACHE_BACKEND: redis
       MCP_NATIVE_CLIENTS_REQUIRED: "true"
+      MCP_NATIVE_CLIENTS_LIVE_METADATA: ${{ github.event_name == 'schedule' && 'true' || '' }}
       DISABLE_TELEMETRY: "true"
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
