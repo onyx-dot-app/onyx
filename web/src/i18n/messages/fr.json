@@ -15977,6 +15977,9 @@
     "tabs": {
       "scrollLeft": "Faire défiler les onglets vers la gauche",
       "scrollRight": "Faire défiler les onglets vers la droite"
+    },
+    "toast": {
+      "moreCount": "+{count} de plus"
     }
   },
   "settings": {

@@ -15977,6 +15977,9 @@
     "tabs": {
       "scrollLeft": "تمرير التبويبات لليسار",
       "scrollRight": "تمرير التبويبات لليمين"
+    },
+    "toast": {
+      "moreCount": "+{count} أخرى"
     }
   },
   "settings": {

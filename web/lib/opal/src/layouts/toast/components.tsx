@@ -3,13 +3,13 @@
 import "@opal/layouts/toast/styles.css";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
-import { Button, MessageCard, Text } from "@opal/components";
+import { Button, MessageCard, Tag, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { useOpalStrings } from "@opal/strings";
 import useOverflow from "@opal/hooks/useOverflow";
 import {
-  MAX_VISIBLE_TOASTS,
+  shownToasts,
   toast,
   toastStore,
   type Toast,
@@ -19,6 +19,8 @@ import { Section } from "@opal/layouts/general/components";
 
 // How long a toast lingers after the user expands it. Long enough to read a
 // multi-line stack trace or API error without forcing a manual dismiss.
+// Piled layers that peek out as edges; deeper ones are out of sight.
+const MAX_PILE_DEPTH_SHOWN = 2;
 const EXPANDED_DURATION_MS = 30000;
 
 function buildDescription(
@@ -60,6 +62,13 @@ function ToastChevronIcon({ className, ...props }: IconProps) {
 
 interface ToastCardProps {
   toast: Toast;
+  /**
+   * Its layer in the pile below the stack: 1 and 2 peek out as edges behind
+   * the toast above, deeper ones are hidden. Undefined while on show.
+   */
+  pileDepth?: number;
+  /** Its z-index: its place in the stack, top highest. */
+  layer: number;
   errorAppendix?: string;
   expanded: boolean;
   onToggle: (t: Toast) => void;
@@ -72,6 +81,8 @@ interface ToastCardProps {
  */
 function ToastCard({
   toast: t,
+  pileDepth,
+  layer,
   errorAppendix,
   expanded,
   onToggle,
@@ -100,7 +111,20 @@ function ToastCard({
   } as const;
 
   return (
-    <div ref={ref} className="opal-toast" data-leaving={t.leaving || undefined}>
+    <div
+      ref={ref}
+      className="opal-toast"
+      data-leaving={t.leaving || undefined}
+      data-pile={
+        pileDepth === undefined
+          ? undefined
+          : pileDepth > MAX_PILE_DEPTH_SHOWN
+            ? "deep"
+            : pileDepth
+      }
+      inert={pileDepth !== undefined}
+      style={{ zIndex: layer }}
+    >
       <div className="opal-toast-body">
         <div className="opal-toast-spacer">
           {truncated || action ? (
@@ -166,16 +190,21 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   );
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  // The newest toasts that are not leaving, plus any still leaving in place.
-  // A closed toast stops counting as it starts to leave, so the next hidden
-  // one slides in while it slides out.
-  const shownIds = new Set(
-    allToasts
-      .filter((t) => !t.leaving)
-      .slice(-MAX_VISIBLE_TOASTS)
-      .map((t) => t.id)
+  const strings = useOpalStrings();
+  // Newest first. The toasts holding the stack's slots are on show; older
+  // ones pile below. A leaving toast holds its slot until its space starts to
+  // close, so the next one rises out of the pile as the stack moves up.
+  const shownIds = new Set(shownToasts(allToasts).map((t) => t.id));
+  // A leaving toast keeps the place it left from until it is gone: one that
+  // slid off a slot never joins the pile, so the pile's layers hold still.
+  const piled = allToasts.filter((t) => !t.leaving && !shownIds.has(t.id));
+  const pileCount = piled.length;
+  // Each piled toast's layer, newest first: the newest piled toast sits just
+  // behind the stack.
+  const pileDepths = new Map(
+    [...piled].reverse().map((t, index) => [t.id, index + 1])
   );
-  const visible = allToasts.filter((t) => t.leaving || shownIds.has(t.id));
+  const DEEP = MAX_PILE_DEPTH_SHOWN + 1;
 
   // A gone toast leaves no expanded state behind for a later one with its id.
   useEffect(() => {
@@ -203,23 +232,46 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
-  if (visible.length === 0) return null;
+  if (allToasts.length === 0) return null;
 
   return (
     <div
       data-testid="toast-container"
       className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
-      {visible.map((t) => (
-        <ToastCard
-          key={t.id}
-          toast={t}
-          errorAppendix={errorAppendix}
-          expanded={expandedIds.has(t.id)}
-          onToggle={handleToggle}
-          onClose={handleClose}
-        />
-      ))}
+      <div className="opal-toast-stack">
+        {[...allToasts].reverse().map((t, index) => (
+          <ToastCard
+            key={t.id}
+            toast={t}
+            // Layered by place, top highest: piling and rising never change
+            // the order, so a card stays behind the one above it throughout.
+            layer={allToasts.length - index}
+            pileDepth={
+              t.leaving
+                ? t.leavingFromPile
+                  ? DEEP
+                  : undefined
+                : pileDepths.get(t.id)
+            }
+            errorAppendix={errorAppendix}
+            expanded={expandedIds.has(t.id)}
+            onToggle={handleToggle}
+            onClose={handleClose}
+          />
+        ))}
+      </div>
+      {/* A count, not a control: the pile does not expand (see the README's
+          design decisions). */}
+      {pileCount > 0 && (
+        <div className="opal-toast-pile-count">
+          <Tag
+            title={strings.toastMoreCount(pileCount)}
+            color="white"
+            size="md"
+          />
+        </div>
+      )}
     </div>
   );
 }

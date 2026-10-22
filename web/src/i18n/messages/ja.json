@@ -15977,6 +15977,9 @@
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
       "scrollRight": "タブを右にスクロール"
+    },
+    "toast": {
+      "moreCount": "他 {count} 件"
     }
   },
   "settings": {

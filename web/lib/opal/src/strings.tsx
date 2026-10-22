@@ -53,6 +53,8 @@ export type OpalStrings = {
   remove: string;
   removeItem: (title: string) => string;
   showFullMessage: string;
+  /** The collapsed toast pile's label, e.g. "+2 more". */
+  toastMoreCount: (count: number) => string;
   selectAnOption: string;
   openCalendar: string;
   month: string;
@@ -175,6 +177,7 @@ export const defaultOpalStrings: OpalStrings = {
   remove: "Remove",
   removeItem: (title) => `Remove ${title}`,
   showFullMessage: "Show the full message",
+  toastMoreCount: (count) => `+${count} more`,
   selectAnOption: "Select an option",
   openCalendar: "Open calendar",
   month: "Month",

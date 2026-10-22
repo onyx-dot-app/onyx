@@ -15977,6 +15977,9 @@
     "tabs": {
       "scrollLeft": "Tabs nach links scrollen",
       "scrollRight": "Tabs nach rechts scrollen"
+    },
+    "toast": {
+      "moreCount": "+{count} weitere"
     }
   },
   "settings": {
