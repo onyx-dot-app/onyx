@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
+from onyx.background.celery.tasks.pruning.tasks import (
+    reset_prune_and_cancel_sync_record,
+    try_creating_prune_generator_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
@@ -814,6 +817,17 @@ def update_cc_pair_status(
 
     for task_id in task_ids_to_revoke:
         client_app.control.revoke(task_id)
+
+    # A started prune exits on the stop signal. A queued one is dropped here,
+    # and its generator also exits on PAUSED if the revoke comes too late.
+    if (
+        status_update_request.status == ConnectorCredentialPairStatus.PAUSED
+        and (prune_payload := redis_connector.prune.payload)
+        and prune_payload.started is None
+    ):
+        if prune_payload.celery_task_id:
+            client_app.control.revoke(prune_payload.celery_task_id)
+        reset_prune_and_cancel_sync_record(redis_connector, db_session)
 
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
