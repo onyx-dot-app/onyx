@@ -162,6 +162,7 @@ class _Sites:
     def get_by_url(self, url: str) -> Any:
         site = MagicMock(id=self._site_id, web_url=url, drives=self.drives)
         site.execute_query.side_effect = self._site_error
+        site.execute_query.return_value = site
         return site
 
     def get_all_sites(self) -> _Query:
