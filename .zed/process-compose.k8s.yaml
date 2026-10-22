@@ -156,7 +156,10 @@ processes:
       ${ONYX_ZED_ROOT}/.venv/bin/python ${ONYX_ZED_ROOT}/deployment/helm/dev/launch.py
       --cluster-name onyx-dev --namespace onyx ready
     working_dir: ${ONYX_ZED_ROOT}
-    availability:
-      restart: exit_on_failure
+    depends_on:
+      api:
+        condition: process_healthy
+      web:
+        condition: process_started
     log_location: ${ONYX_ZED_ROOT}/.zed/logs/ready.log
     namespace: readiness

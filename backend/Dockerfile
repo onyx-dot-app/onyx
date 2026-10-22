@@ -40,7 +40,11 @@ COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 # without re-resolving. It is also required, not just an optimization: mitmproxy pins tight
 # transitive caps (e.g. hyperframe<=6.0.1) that are only loosened by [tool.uv] override-dependencies
 # in pyproject.toml, which is absent from this build context — a resolving install would fail.
-RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
+RUN --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export SSL_CERT_FILE=/run/secrets/build_ca_bundle; \
+    fi && \
+    uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
     # https://github.com/tornadoweb/tornado/issues/3107
@@ -88,6 +92,10 @@ RUN apt-get update && \
 # chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
 # runtime image stays perl-free from here on.
 RUN --mount=type=bind,source=requirements/default.txt,target=/requirements.txt \
+    --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export PIP_CERT=/run/secrets/build_ca_bundle; \
+    fi && \
     pip install --no-cache-dir --no-deps "playwright==$(sed -n 's/^playwright==\([^ \\]*\).*/\1/p' /requirements.txt)" && \
     playwright install-deps chromium && \
     apt-get remove -y --allow-remove-essential perl-base && \
@@ -137,7 +145,11 @@ COPY --from=builder \
 # `--only-shell` installs the headless shell and skips the full headed Chromium build (~364 MB). Every
 # launch site in the backend passes headless=True with no channel, so Playwright picks the shell.
 # Remove the flag if a call site ever needs a headed browser or a branded channel.
-RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
+RUN --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; \
+    fi && \
+    ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install --only-shell chromium
 
 # Pre-downloading models for setups with limited egress

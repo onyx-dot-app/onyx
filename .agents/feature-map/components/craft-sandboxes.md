@@ -819,12 +819,13 @@ A failed rollout check releases an intercept created by that command.
 `.zed/run-all-k8s.sh` prepares the API intercept through the shared Craft command, including targeted stale-agent recovery.
 `.zed/process-compose.k8s.yaml` starts the API and workers through `deployment/helm/dev/launch.py`.
 Deployed secrets stay in process memory; the local environment file supplies personal overrides.
-A one-shot readiness process checks the API through the frontend. Failed readiness stops the local stack.
+A one-shot readiness process waits for API health, then checks the API through the frontend.
+Failed readiness leaves local services running for diagnosis.
 
 Local image checks treat missing Docker image labels as an unknown source and rebuild on refresh.
 With `ENABLE_SKILLS=true`, the sandbox image includes LibreOffice Writer, Calc, Impress, and Draw.
 Writer and Calc provide document and spreadsheet conversions, including DOCX, XLSX, and ODS to PDF.
 With a custom build certificate bundle, backend tokenizer downloads use standard HTTPS without the optional Xet client.
-Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend tokenizer and sandbox npm, pip, GitHub CLI, OpenCode, and Bun downloads behind a trusted TLS inspection proxy.
+Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend Python dependencies, Chromium, tokenizers, and sandbox npm, pip, GitHub CLI, OpenCode, and Bun downloads behind a trusted TLS inspection proxy.
 The certificate bundle is a BuildKit secret and does not enter the image.
 Without this bundle, downloads retain their default certificate and transport settings.
