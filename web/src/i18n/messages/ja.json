@@ -3454,6 +3454,12 @@
           },
           "viewDetails": {
             "tooltip": "詳細を表示"
+          },
+          "failedToRun": {
+            "title": "チェックを実行できませんでした"
+          },
+          "unavailable": {
+            "label": "利用不可"
           }
         },
         "accountUnavailable": {
@@ -10871,6 +10877,13 @@
       },
       "docsButton": {
         "label": "ドキュメント"
+      },
+      "runLost": "チェックが応答しなくなりました。もう一度お試しください。",
+      "cancelButton": {
+        "label": "キャンセル"
+      },
+      "cancelFailed": {
+        "toast": "チェックをキャンセルできませんでした。もう一度お試しください。"
       }
     },
     "connectorEdit": {

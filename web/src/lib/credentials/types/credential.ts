@@ -74,6 +74,10 @@ export interface CredentialUsage {
  */
 export interface SimilarCredential extends AnyCredential {
   usages: CredentialUsage[];
+  /** The current user may use it with no specific connector settings. */
+  usable: boolean;
+  /** Why it is not `usable`, for the user; `null` when it is. */
+  refusal_reason: string | null;
 }
 
 /**

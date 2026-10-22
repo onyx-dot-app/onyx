@@ -3454,6 +3454,12 @@
           },
           "viewDetails": {
             "tooltip": "세부 정보 보기"
+          },
+          "failedToRun": {
+            "title": "검사를 실행하지 못했습니다"
+          },
+          "unavailable": {
+            "label": "사용할 수 없음"
           }
         },
         "accountUnavailable": {
@@ -10871,6 +10877,13 @@
       },
       "docsButton": {
         "label": "문서"
+      },
+      "runLost": "검사가 응답하지 않습니다. 다시 시도하세요.",
+      "cancelButton": {
+        "label": "취소"
+      },
+      "cancelFailed": {
+        "toast": "검사를 취소하지 못했습니다. 다시 시도하세요."
       }
     },
     "connectorEdit": {

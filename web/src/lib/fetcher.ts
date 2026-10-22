@@ -37,6 +37,24 @@ export async function parseErrorDetail(
   }
 }
 
+/** A `FetchError` for a failed Response, keeping its JSON body when it has one. */
+export async function fetchErrorFrom(
+  res: Response,
+  message: string
+): Promise<FetchError> {
+  const info: ErrorResponseBody | null = await res
+    .json()
+    .catch((): null => null);
+  return new FetchError(message, res.status, info);
+}
+
+/** The backend's text `detail` of a failed request; `null` when it gave none. */
+export function fetchErrorDetail(error: unknown): string | null {
+  if (!(error instanceof FetchError)) return null;
+  const detail: unknown = error.info?.detail;
+  return typeof detail === "string" && detail !== "" ? detail : null;
+}
+
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";
 

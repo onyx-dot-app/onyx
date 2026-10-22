@@ -3454,6 +3454,12 @@
           },
           "viewDetails": {
             "tooltip": "View Details"
+          },
+          "failedToRun": {
+            "title": "Checks Failed to Run"
+          },
+          "unavailable": {
+            "label": "Not Available"
           }
         },
         "accountUnavailable": {
@@ -10871,6 +10877,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "The checks stopped responding. Try again.",
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "cancelFailed": {
+        "toast": "Couldn't cancel the checks. Try again."
       }
     },
     "connectorEdit": {

@@ -657,6 +657,10 @@ The create form locks its configuration only while no account is selected
 tooltip, until the bound fields pass the binding check and a run passes every
 check with `validates_binding` (`formUnlocked` in
 `web/src/lib/connectors/checks/hooks.ts`).
+The checks card shows the server's reason when it refuses a start (e.g. the
+credential use rule's 403). It stops polling a run when a fetch fails or the run
+still runs after `DRAFT_RUN_CLIENT_DEADLINE_MS`, and shows the run as failed to
+run. Cancel, shown while a run runs, stops it and returns the card to Start Checks.
 Each source with named checks sets it on its sign-in check, and some sources also
 on a listing that runs after it (e.g. Jira's "List projects").
 When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory
@@ -746,7 +750,10 @@ not hold it. On the add-connector form the realm is a form-only field
 (`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
 spec's `realm` fields). The form shows it above the account section, copies it into
 a new account's values, and disables saved accounts whose stored realm differs
-(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+(`credentialMatchesBoundFields`). It also disables a saved account that the
+similar-credentials listing marks not `usable` (the credential use rule, §4.9) and
+shows its `refusal_reason`. Only the picked account offers Re-run Checks; on the
+connector page, Re-run Checks runs the pair's checks (`connector_id`). `withoutFormOnlyFields` removes it from every
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 

@@ -3454,6 +3454,12 @@
           },
           "viewDetails": {
             "tooltip": "Voir les détails"
+          },
+          "failedToRun": {
+            "title": "Échec de l'exécution des vérifications"
+          },
+          "unavailable": {
+            "label": "Non disponible"
           }
         },
         "accountUnavailable": {
@@ -10871,6 +10877,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "Les vérifications ne répondent plus. Réessayez.",
+      "cancelButton": {
+        "label": "Annuler"
+      },
+      "cancelFailed": {
+        "toast": "Impossible d'annuler les vérifications. Réessayez."
       }
     },
     "connectorEdit": {
