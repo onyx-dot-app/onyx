@@ -65,7 +65,7 @@ and §9).
 | `web/src/app/admin/groups/`, `admin/groups2/` | User group management (create, rename, membership, agents). Two generations of the same UI coexist; both call the same backend. |
 | `web/src/app/admin/documents/sets` | Document set management. |
 | `web/src/app/admin/users/` | User list, role assignment. |
-| `web/src/app/admin/scim/` | SCIM provisioning config (`ScimSyncCard.tsx`, `svc.ts`). |
+| `web/src/views/admin/ScimPage/` | SCIM provisioning config (`ScimSyncCard.tsx`, `svc.ts`). |
 
 ### Backend endpoints
 
