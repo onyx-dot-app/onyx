@@ -1,13 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "unicorn",
-    "oxc",
-    "react",
-    "nextjs",
-    "jsx-a11y"
-  ],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
   "jsPlugins": [
     {
       "name": "react-doctor",
@@ -26,6 +19,9 @@
       "specifier": "./tools/oxlint/opal/index.ts"
     }
   ],
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
   "categories": {
     "correctness": "error"
   },
@@ -88,10 +84,22 @@
       "error",
       {
         "forbid": [
-          { "element": "button", "message": "Use `Button` from `@opal/components`." },
-          { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
-          { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
-          { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+          {
+            "element": "button",
+            "message": "Use `Button` from `@opal/components`."
+          },
+          {
+            "element": "input",
+            "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`."
+          },
+          {
+            "element": "select",
+            "message": "Use `InputSingleSelect` from `@opal/components`."
+          },
+          {
+            "element": "textarea",
+            "message": "Use `InputTextArea` from `@opal/components`."
+          }
         ]
       }
     ]
@@ -303,10 +311,22 @@
           "warn",
           {
             "forbid": [
-              { "element": "button", "message": "Use `Button` from `@opal/components`." },
-              { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
-              { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
-              { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+              {
+                "element": "button",
+                "message": "Use `Button` from `@opal/components`."
+              },
+              {
+                "element": "input",
+                "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`."
+              },
+              {
+                "element": "select",
+                "message": "Use `InputSingleSelect` from `@opal/components`."
+              },
+              {
+                "element": "textarea",
+                "message": "Use `InputTextArea` from `@opal/components`."
+              }
             ]
           }
         ]

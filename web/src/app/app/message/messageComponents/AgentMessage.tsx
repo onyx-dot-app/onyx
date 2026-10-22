@@ -152,7 +152,6 @@ const AgentMessage = React.memo(function AgentMessage({
       ...chatState.citations,
       ...citationMap,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [chatState.citations, citationMap, citations.length]
   );
 
@@ -166,7 +165,6 @@ const AgentMessage = React.memo(function AgentMessage({
       (d) => !seen.has(d.document_id)
     );
     return extras.length > 0 ? [...propDocs, ...extras] : propDocs;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatState.docs, documentMap, documentMap.size]);
 
   // Create a chatState that uses streaming citations and documents for immediate rendering.

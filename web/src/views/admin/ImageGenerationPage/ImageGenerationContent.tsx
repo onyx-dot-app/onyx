@@ -190,7 +190,7 @@ export default function ImageGenerationContent() {
       const firstModel = firstGroup?.providers[0];
       if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
-  }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disconnectProvider]);
 
   if (configError) {
     return <div className="text-error">{t("loadError.message")}</div>;

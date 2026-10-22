@@ -420,7 +420,6 @@ export function VoiceProviderSetupModal({
                     >
                       <InputTypeInField
                         name="stt_languages"
-                        // oxlint-disable-next-line i18n/no-raw-jsx-text -- locale-code example, not copy
                         placeholder={t("placeholders.languages")}
                       />
                     </InputVertical>

@@ -113,7 +113,6 @@ function BedrockModalInternals({
       formikProps.setFieldValue(FIELD_AWS_ROLE_NAME, "");
       formikProps.setFieldValue(FIELD_AWS_EXTERNAL_ID, "");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
 
   const isAuthComplete =
@@ -250,7 +249,6 @@ function BedrockModalInternals({
             >
               <InputTypeInField
                 name={FIELD_AWS_ROLE_NAME}
-                // oxlint-disable-next-line i18n/no-raw-jsx-text -- AWS ARN format, not copy
                 placeholder="arn:aws:iam::123456789012:role/bedrock-access"
               />
             </InputVertical>

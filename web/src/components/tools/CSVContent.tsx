@@ -37,7 +37,6 @@ const CsvContent: React.FC<ContentComponentProps> = ({
     }
 
     fetchCSV(fileDescriptor.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileDescriptor.id]);
 
   const fetchCSV = async (id: string) => {

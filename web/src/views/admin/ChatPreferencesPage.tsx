@@ -640,7 +640,7 @@ export default function ChatPreferencesPage() {
       setCompanyName(incoming);
       savedCompanyName.current = incoming;
     }
-  }, [s.company_name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.company_name]);
 
   useEffect(() => {
     const incoming = s.company_description ?? "";
@@ -651,7 +651,7 @@ export default function ChatPreferencesPage() {
       setCompanyDescription(incoming);
       savedCompanyDescription.current = incoming;
     }
-  }, [s.company_description]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s.company_description]);
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();

@@ -283,7 +283,6 @@ export default function useDataTable<TData extends RowData>(
     }
 
     setGlobalFilter((prev) => ({ ...prev, searchTerm: term }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally
     // omits `globalFilter` and `pagination.pageIndex`: we only read snapshot
     // values to detect the search enter/clear transition, not to react to
     // every filter or page change.
@@ -445,7 +444,6 @@ export default function useDataTable<TData extends RowData>(
     if (changed) {
       setGlobalFilter((prev) => ({ ...prev, selectedIds: next }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to
     // selection changes while in view mode
   }, [rowSelection, isServerSide]);
 
