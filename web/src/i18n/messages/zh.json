@@ -3000,7 +3000,7 @@
         },
         "counts": {
           "newDocs": "{count, plural, other {本次运行新加入索引的文档 # 个}}",
-          "updatedDocs": "{count, plural, other {已在索引中、本次运行重新索引的文档 # 个}}",
+          "updatedDocs": "{count, plural, other {已在索引中、本次运行处理过的文档 # 个，无论是否有变化}}",
           "removedDocs": "{count, plural, other {已移除 # 个文档}}",
           "users": "{count, plural, other {# 个用户}}",
           "groups": "{count, plural, other {# 个群组}}",

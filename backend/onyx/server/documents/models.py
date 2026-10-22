@@ -917,6 +917,14 @@ class CCPairHierarchyBreakdown(BaseModel):
     config_fields: list[str]
 
 
+def _source_requires_doc_sync(source: DocumentSource) -> bool:
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_doc_sync",
+        noop_return_value=False,
+    )(source)
+
+
 class CCPairFullInfo(BaseModel):
     id: int
     name: str
@@ -952,6 +960,8 @@ class CCPairFullInfo(BaseModel):
     permission_syncing: bool
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
+    # The source syncs document permissions, so a sync can be started for the pair.
+    supports_doc_permission_sync: bool
 
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
@@ -979,18 +989,10 @@ class CCPairFullInfo(BaseModel):
             "source_requires_external_group_sync",
             noop_return_value=False,
         )
-        check_if_source_requires_doc_sync = fetch_ee_implementation_or_noop(
-            "onyx.external_permissions.sync_params",
-            "source_requires_doc_sync",
-            noop_return_value=False,
-        )
-
         needs_group_sync = check_if_source_requires_external_group_sync(
             cc_pair_model.connector.source
         )
-        needs_doc_sync = check_if_source_requires_doc_sync(
-            cc_pair_model.connector.source
-        )
+        needs_doc_sync = _source_requires_doc_sync(cc_pair_model.connector.source)
 
         last_group_sync = (
             cc_pair_model.last_time_external_group_sync
@@ -1094,6 +1096,9 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_doc_permission_sync=_source_requires_doc_sync(
+                cc_pair_model.connector.source
+            ),
             supports_targeted_reindex=supports_targeted_reindex,
             has_named_checks=has_named_checks,
             groups=groups or [],

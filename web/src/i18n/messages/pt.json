@@ -3000,7 +3000,7 @@
         },
         "counts": {
           "newDocs": "{count, plural, one {# documento novo no índice nesta execução} other {# documentos novos no índice nesta execução}}",
-          "updatedDocs": "{count, plural, one {# documento que já estava no índice, reindexado nesta execução} other {# documentos que já estavam no índice, reindexados nesta execução}}",
+          "updatedDocs": "{count, plural, one {# documento que já estava no índice, processado nesta execução, alterado ou não} other {# documentos que já estavam no índice, processados nesta execução, alterados ou não}}",
           "removedDocs": "{count, plural, one {# documento removido} other {# documentos removidos}}",
           "users": "{count, plural, one {# usuário} other {# usuários}}",
           "groups": "{count, plural, one {# grupo} other {# grupos}}",

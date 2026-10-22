@@ -324,9 +324,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
     ccPair.permission_syncing ||
     ccPair.last_permission_sync_attempt_status ===
       PermissionSyncStatusEnum.NOT_STARTED;
-  // A deleting pair's sync is refused, so the row goes with the pair.
+  // Only a source with document permission sync gets the row, and a deleting pair's sync is refused.
   const syncItems: DropdownMenuItem[] =
-    isPermSynced(ccPair.access_type) && !isDeleting
+    isPermSynced(ccPair.access_type) &&
+    ccPair.supports_doc_permission_sync &&
+    !isDeleting
       ? [
           {
             kind: "action",

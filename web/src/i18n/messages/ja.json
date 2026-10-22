@@ -3000,7 +3000,7 @@
         },
         "counts": {
           "newDocs": "{count, plural, other {この実行でインデックスに新しく追加されたドキュメント # 件}}",
-          "updatedDocs": "{count, plural, other {すでにインデックスにあり、この実行で再インデックスされたドキュメント # 件}}",
+          "updatedDocs": "{count, plural, other {すでにインデックスにあり、変更の有無にかかわらずこの実行で処理されたドキュメント # 件}}",
           "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
           "users": "{count, plural, other {# 人のユーザー}}",
           "groups": "{count, plural, other {# 件のグループ}}",

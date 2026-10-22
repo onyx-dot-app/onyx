@@ -257,7 +257,8 @@ The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
 `/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
 for a cc_pair that is not perm-synced, and `CONFLICT` while a sync is queued or
 running. The connector page's Manage Index menu offers Sync Permissions on a
-perm-synced pair, hidden while the pair is paused or deleting. It posts
+perm-synced pair whose source syncs document permissions (`supports_doc_permission_sync`
+on the pair, so Salesforce gets none), hidden while the pair is paused or deleting. It posts
 `sync-permissions` and is disabled while a sync is queued or running. The indexing pipeline
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
