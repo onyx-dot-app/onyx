@@ -6846,6 +6846,9 @@
         "reindex": {
           "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Eine vollständige Neuindexierung wird ausgeführt."
+        },
+        "reindexModel": {
+          "title": "Wechsel zu {provider} / {model}. Eine vollständige Neuindexierung wird ausgeführt."
         }
       },
       "cloudDisabled": {

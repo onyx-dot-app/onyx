@@ -235,9 +235,12 @@ interface ProviderGroupProps {
    * `LiteLLMProviderModal` can preload its model-spec fields on edit.
    */
   existingModel?: EmbeddingModel;
+  /** Spec of the staged model when it belongs to THIS provider. */
+  stagedModel?: EmbeddingModel;
   /**
    * `customModel` is set only for providers with no pre-registered models
-   * (LiteLLM / Azure), where the user defines the spec in the connect modal.
+   * (LiteLLM / Azure / Bifrost), where the user defines the spec in the
+   * connect modal.
    */
   onSelectModel: (
     modelName: string,
@@ -253,11 +256,23 @@ function ProviderGroup({
   isCloud = false,
   existingCredentials,
   existingModel,
+  stagedModel,
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
   const t = useTranslations("admin.indexSettings");
-  const models = provider.embeddingModels;
+  // Bring-your-own models are not in the registry, so list the current and
+  // staged specs too. The first entry for a name wins, so a staged spec
+  // replaces the current spec of the same name.
+  const isBringYourOwn = provider.embeddingModels.length === 0;
+  const models = [
+    ...provider.embeddingModels,
+    ...(stagedModel ? [stagedModel] : []),
+    ...(existingModel ? [existingModel] : []),
+  ].filter(
+    (model, index, all) =>
+      all.findIndex((m) => m.modelName === model.modelName) === index
+  );
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
@@ -299,9 +314,11 @@ function ProviderGroup({
 
   const getModelState = useCallback(
     (model: EmbeddingModel): EmbeddingModelState => {
-      if (isCloud && !isConfigured) return "unconnected";
+      // Before the credential check: a model just staged from the connect
+      // modal can render before the refreshed provider list arrives.
       if (model.modelName === selectedModelName) return "selected";
       if (model.modelName === currentModelName) return "current";
+      if (isCloud && !isConfigured) return "unconnected";
       return "connected";
     },
     [isCloud, isConfigured, selectedModelName, currentModelName]
@@ -456,7 +473,22 @@ function ProviderGroup({
           </GeneralLayouts.Section>
         </div>
 
-        {models.length === 0 ? (
+        {models.map((model) => {
+          const state = getModelState(model);
+          const isPrioritized =
+            state === "selected" || (state === "current" && !selectedModelName);
+          return (
+            <EmbeddingModelCard
+              key={model.modelName}
+              model={model}
+              provider={provider}
+              modelState={state}
+              cardState={isPrioritized ? "selected" : "filled"}
+              onSelect={() => handleModelSelect(model)}
+            />
+          );
+        })}
+        {isBringYourOwn && (
           <SelectCard
             state="filled"
             rounding={3}
@@ -483,23 +515,6 @@ function ProviderGroup({
               center
             />
           </SelectCard>
-        ) : (
-          models.map((model) => {
-            const state = getModelState(model);
-            const isPrioritized =
-              state === "selected" ||
-              (state === "current" && !selectedModelName);
-            return (
-              <EmbeddingModelCard
-                key={model.modelName}
-                model={model}
-                provider={provider}
-                modelState={state}
-                cardState={isPrioritized ? "selected" : "filled"}
-                onSelect={() => handleModelSelect(model)}
-              />
-            );
-          })
         )}
       </GeneralLayouts.Section>
     </>
@@ -1275,6 +1290,25 @@ export default function IndexSettingsPage() {
                 values.model_name !== initialFormValues.model_name &&
                 !!values.model_name;
               const stagedModelName = isModelStaged ? values.model_name : null;
+              const existingModelFor = (provider: EmbeddingProvider) =>
+                currentEmbeddingModel?.provider_type === provider.providerName
+                  ? (currentEmbeddingModelSpec ?? undefined)
+                  : undefined;
+              const stagedModelFor = (provider: EmbeddingProvider) =>
+                isModelStaged && values.model_provider === provider.providerName
+                  ? (values.model_spec ?? undefined)
+                  : undefined;
+              // The search also matches the current and staged bring-your-own
+              // models, which are not in the registry.
+              const needle = query.trim().toLowerCase();
+              const searchedCloudProviders = CLOUD_BASED_PROVIDERS.filter(
+                (provider) =>
+                  filteredCloudProviders.includes(provider) ||
+                  [existingModelFor(provider), stagedModelFor(provider)].some(
+                    (model) =>
+                      model?.modelName.toLowerCase().includes(needle) ?? false
+                  )
+              );
               // Block apply when Contextual Retrieval is on but no LLM is set.
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
@@ -1329,6 +1363,18 @@ export default function IndexSettingsPage() {
                 strategyCopy,
                 quantizationOnlyChange
               );
+              // A staged embedding model is named, so the admin can see which
+              // model the re-index uses.
+              const bannerTitle =
+                bannerCopy === "reindex" && stagedModelName
+                  ? t("changesBanner.reindexModel.title", {
+                      provider: findProvider(
+                        values.model_provider ??
+                          resolveProviderName(stagedModelName, null)
+                      ).displayName,
+                      model: stagedModelName,
+                    })
+                  : t(`changesBanner.${bannerCopy}.title`);
               const forwardModalKey = contextualDisableOnlyChange
                 ? "disableForwardModal"
                 : "forwardOnlyModal";
@@ -1636,7 +1682,7 @@ export default function IndexSettingsPage() {
                       >
                         <MessageCard
                           variant={bannerVariant}
-                          title={t(`changesBanner.${bannerCopy}.title`)}
+                          title={bannerTitle}
                           description={markdown(
                             t(`changesBanner.${bannerCopy}.description`)
                           )}
@@ -1765,12 +1811,12 @@ export default function IndexSettingsPage() {
                                 expandedContent={
                                   <>
                                     <Tabs.Content value={MODEL_TAB_CLOUD}>
-                                      {filteredCloudProviders.length > 0 ? (
+                                      {searchedCloudProviders.length > 0 ? (
                                         <GeneralLayouts.Section
                                           gap={2}
                                           padding={2}
                                         >
-                                          {filteredCloudProviders.map(
+                                          {searchedCloudProviders.map(
                                             (provider) => (
                                               <ProviderGroup
                                                 key={provider.providerName}
@@ -1785,13 +1831,12 @@ export default function IndexSettingsPage() {
                                                 existingCredentials={configuredProviders?.get(
                                                   provider.providerName
                                                 )}
-                                                existingModel={
-                                                  currentEmbeddingModel?.provider_type ===
-                                                  provider.providerName
-                                                    ? (currentEmbeddingModelSpec ??
-                                                      undefined)
-                                                    : undefined
-                                                }
+                                                existingModel={existingModelFor(
+                                                  provider
+                                                )}
+                                                stagedModel={stagedModelFor(
+                                                  provider
+                                                )}
                                                 onSelectModel={(
                                                   name,
                                                   customModel
