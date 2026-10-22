@@ -11,7 +11,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import { toast } from "@opal/layouts";
 import { downloadFile } from "@/lib/download";
 
-import type { ScimModalView } from "./interfaces";
+import type { ScimModalView } from "@/views/admin/ScimPage/types";
 
 // ---------------------------------------------------------------------------
 // Props
