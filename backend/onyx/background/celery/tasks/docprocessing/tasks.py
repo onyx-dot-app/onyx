@@ -83,6 +83,7 @@ from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_cc_pairs_in_repeated_error_state,
     get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
     set_cc_pair_repeated_error_state,
     update_connector_credential_pair_from_id,
 )
@@ -1102,6 +1103,16 @@ def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) 
         mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
 
 
+def _report_error_state(cc_pair: ConnectorCredentialPair, tenant_id: str) -> None:
+    on_connector_error_state_change(
+        tenant_id=tenant_id,
+        source=cc_pair.connector.source.value,
+        cc_pair_id=cc_pair.id,
+        connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair.id}",
+        in_error=cc_pair.in_repeated_error_state,
+    )
+
+
 def heal_resolved_repeated_error_states(db_session: Session, tenant_id: str) -> None:
     """Clears the flag and alert of every flagged pair, paused ones included, whose
     latest failure is resolved."""
@@ -1312,14 +1323,19 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                 # A resolve in the API also clears the flag, so the gauge follows the row.
                 if cc_pair is not None:
-                    on_connector_error_state_change(
-                        tenant_id=tenant_id,
-                        source=cc_pair.connector.source.value,
-                        cc_pair_id=cc_pair.id,
-                        connector_name=cc_pair.connector.name
-                        or f"cc_pair_{cc_pair.id}",
-                        in_error=cc_pair.in_repeated_error_state,
-                    )
+                    _report_error_state(cc_pair, tenant_id)
+
+            # Paused pairs skip the loop above, but a resolve clears their flag too.
+            paused_ids = set(
+                fetch_indexable_standard_connector_credential_pair_ids(
+                    db_session, active_cc_pairs_only=False
+                )
+            ) - set(primary_cc_pair_ids)
+            if paused_ids:
+                for cc_pair in get_connector_credential_pairs(
+                    db_session, list(paused_ids)
+                ):
+                    _report_error_state(cc_pair, tenant_id)
 
             # A resolve can land between the alert and the flag above, leaving it set.
             heal_resolved_repeated_error_states(db_session, tenant_id)
