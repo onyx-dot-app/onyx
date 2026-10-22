@@ -35,6 +35,10 @@ streaming instead of restarting (`web/src/hooks/useChatSessionController.ts:resu
 
 ---
 
+DOCX modal previews share the detached, sanitized renderer and page styles in `web/src/lib/docx/` with Craft.
+The renderer owns HTML sanitization; callers receive only sanitized document nodes.
+Superseded document loads cannot replace the current modal document.
+
 ## 2. Surfaces
 
 ### Routes (`web/src/app/app/`)
@@ -359,6 +363,8 @@ Craft uses the same parser with bounded preview limits; chat keeps its complete-
   memo), so it never drifts out of sync with the manager in single-model mode.
 
 ---
+
+DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
 
 ## 5. Contracts and invariants
 

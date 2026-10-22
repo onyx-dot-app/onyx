@@ -91,6 +91,8 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
   modelPaging?: ModelPaging;
   /** Where the list portals to; inside a modal, pass the modal content. */
   container?: InputSingleSelectProps["container"];
+  /** The select input's id, so a `<label htmlFor>` (`withLabel="<id>"`) opens it. */
+  id?: string;
 }
 
 /**
@@ -113,6 +115,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   placeholder,
   modelPaging,
   container,
+  id,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
@@ -246,6 +249,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}
       container={container}
+      id={id}
     />
   );
 }

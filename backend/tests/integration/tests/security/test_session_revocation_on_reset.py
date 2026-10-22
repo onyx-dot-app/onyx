@@ -1,7 +1,9 @@
-"""A password reset or change signs out the user's existing sessions."""
+"""A password reset or change signs out the user's existing sessions and
+revokes their personal access tokens."""
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -66,3 +68,43 @@ def test_change_password_keeps_current_session_only() -> None:
 
     assert _me_status(user) == 200
     assert _me_status(other_session) in (401, 403)
+
+
+def _new_pat_token(user: DATestUser) -> str:
+    token = PATManager.create("reset-test", None, user).token
+    assert token is not None
+    assert PATManager.authenticate(token).status_code == 200
+    return token
+
+
+def test_admin_reset_revokes_target_pats(admin_user: DATestUser) -> None:
+    target = UserManager.create()
+    target_token = _new_pat_token(target)
+    admin_token = _new_pat_token(admin_user)
+
+    response = client.post(
+        ADMIN_RESET_URL,
+        json={"user_email": target.email},
+        headers=admin_user.headers,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+
+    assert PATManager.authenticate(target_token).status_code in (401, 403)
+    assert PATManager.authenticate(admin_token).status_code == 200
+
+
+def test_change_password_revokes_pats() -> None:
+    user = UserManager.create()
+    token = _new_pat_token(user)
+
+    response = client.post(
+        CHANGE_URL,
+        json={"old_password": user.password, "new_password": "Changed-Passw0rd-456!"},
+        headers=user.headers,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+
+    assert PATManager.authenticate(token).status_code in (401, 403)
+    assert _me_status(user) == 200

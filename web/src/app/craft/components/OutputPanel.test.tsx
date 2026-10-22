@@ -1,3 +1,5 @@
+import * as buildHooks from "@/lib/build/hooks";
+import type { OutputCard } from "@/app/craft/types/streamingTypes";
 import PdfDocumentViewer from "@/app/craft/components/output-panel/PdfDocumentViewer";
 import {
   act,
@@ -37,6 +39,12 @@ jest.mock("@/lib/users/hooks", () => ({
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: { id: "test-user" } }),
 }));
+
+jest.mock("@/lib/build/hooks", () => {
+  const actual =
+    jest.requireActual<typeof import("@/lib/build/hooks")>("@/lib/build/hooks");
+  return { ...actual, useOutputCards: jest.fn(actual.useOutputCards) };
+});
 
 jest.mock("@/lib/download", () => ({ downloadFile: jest.fn() }));
 
@@ -1264,3 +1272,95 @@ it.each([false, true])(
     );
   }
 );
+
+// Viewed output revisions.
+it("acknowledges updates to the visible file, but preserves unread revisions in hidden tabs and closed panels", () => {
+  const card: OutputCard = {
+    id: "spreadsheet",
+    kind: "file",
+    path: "outputs/report.xlsx",
+    name: "report.xlsx",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 100,
+    deleted: false,
+    viewed_revision: 1,
+  };
+  const markViewed = jest.fn().mockResolvedValue(undefined);
+  const markAllViewed = jest.fn().mockResolvedValue(undefined);
+  const cards = jest.mocked(buildHooks.useOutputCards);
+  cards.mockReturnValue({ cards: [card], markViewed, markAllViewed });
+  openFile(card.path);
+  const view = render(<BuildOutputPanel panelMode="full" />);
+  expect(markViewed).not.toHaveBeenCalled();
+
+  const updated = { ...card, revision: 2 };
+  cards.mockReturnValue({ cards: [updated], markViewed, markAllViewed });
+  view.rerender(<BuildOutputPanel panelMode="full" />);
+  expect(markViewed).toHaveBeenCalledWith(updated);
+  expect(markViewed).toHaveBeenCalledTimes(1);
+
+  cards.mockReturnValue({
+    cards: [{ ...updated, viewed_revision: 2 }],
+    markViewed,
+    markAllViewed,
+  });
+  view.rerender(<BuildOutputPanel panelMode="full" />);
+  expect(markViewed).toHaveBeenCalledTimes(1);
+  act(() => store().openOutputsTab(sessionId));
+  const backgroundUpdate = { ...updated, revision: 3 };
+  cards.mockReturnValue({
+    cards: [backgroundUpdate],
+    markViewed,
+    markAllViewed,
+  });
+  view.rerender(<BuildOutputPanel panelMode="full" />);
+  expect(markViewed).toHaveBeenCalledTimes(1);
+
+  view.rerender(<BuildOutputPanel panelMode="closed" />);
+  openFile(card.path);
+  expect(markViewed).toHaveBeenCalledTimes(1);
+  view.rerender(<BuildOutputPanel panelMode="full" />);
+  expect(markViewed).toHaveBeenLastCalledWith(backgroundUpdate);
+  expect(markViewed).toHaveBeenCalledTimes(2);
+  view.unmount();
+  cards.mockImplementation(
+    jest.requireActual<typeof import("@/lib/build/hooks")>("@/lib/build/hooks")
+      .useOutputCards
+  );
+});
+
+it("refreshes HTML inventory from Apps and retains failure state until the read finishes", async () => {
+  jest.mocked(fetchWebappInfo).mockResolvedValue({
+    has_webapp: false,
+    ready: false,
+    status: "running",
+    webapp_url: null,
+    sharing_scope: "private",
+  });
+  store().updateSessionData(sessionId, { outputInventoryStatus: "error" });
+  store().openBrowserTab(sessionId);
+  const request = deferred<OutputInventory>();
+  jest.mocked(fetchOutputInventory).mockReturnValue(request.promise);
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(
+    screen.getByText("Could not refresh outputs. Try again.")
+  ).toBeInTheDocument();
+  const reload = screen.getByRole("button", { name: "Refresh" });
+  await waitFor(() => expect(reload).toBeEnabled());
+  fireEvent.click(reload);
+  await waitFor(() => expect(fetchOutputInventory).toHaveBeenCalled());
+  expect(screen.getByText("Loading outputs…")).toBeInTheDocument();
+  await act(async () =>
+    request.resolve({
+      complete: true,
+      files: [{ path: "outputs/report.html", revision: "1", size: 100 }],
+    })
+  );
+  expect(
+    await screen.findByRole("button", { name: "report.html" })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("Could not refresh outputs. Try again.")
+  ).not.toBeInTheDocument();
+});

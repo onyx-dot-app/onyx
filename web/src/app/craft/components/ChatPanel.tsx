@@ -115,10 +115,12 @@ function ChatPanelContent({
     (card: OutputCard) => {
       if (!outputSessionId || card.deleted) return;
       const store = useBuildSessionStore.getState();
-      if (card.kind === "app")
+      if (card.kind === "app") {
         store.openBrowserTab(outputSessionId, outputSessionId);
-      else store.openFilePreview(outputSessionId, card.path, card.name);
-      void markViewed(card);
+        void markViewed(card);
+      } else {
+        store.openFilePreview(outputSessionId, card.path, card.name);
+      }
     },
     [outputSessionId, markViewed]
   );
@@ -128,12 +130,8 @@ function ChatPanelContent({
       useBuildSessionStore
         .getState()
         .openFilePreview(outputSessionId, path, name);
-      const card = outputCards.find(
-        (output) => output.kind === "file" && output.path === path
-      );
-      if (card) void markViewed(card);
     },
-    [outputSessionId, outputCards, markViewed]
+    [outputSessionId]
   );
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
   // Gate on origin so interactive sessions don't 404 on scheduled-run-context.

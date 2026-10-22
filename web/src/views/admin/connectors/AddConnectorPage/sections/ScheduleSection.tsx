@@ -37,7 +37,42 @@ function formatIndexingStart(date: Date | null): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-/** The connector's schedule: refresh and prune frequency, and the start date. */
+interface IndexingStartFieldProps {
+  disabled?: boolean;
+}
+
+/** The date before which the connector indexes nothing. The Index
+ * Configurations section shows it. */
+export function IndexingStartField({ disabled }: IndexingStartFieldProps) {
+  const t = useTranslations("admin.connectorsList.scheduled");
+  return (
+    <InputHorizontal
+      withLabel="indexingStart"
+      disabled={disabled}
+      title={t("indexingStart.title")}
+      description={t("indexingStart.description")}
+      suffix="optional"
+      fillInput
+      center
+    >
+      <FormikField<string | undefined>
+        name="indexingStart"
+        render={(field, helper) => (
+          <InputDatePicker
+            id="indexingStart"
+            value={parseIndexingStart(field.value)}
+            onChange={(date) => helper.setValue(formatIndexingStart(date))}
+            placeholder={t("indexingStart.placeholder")}
+            clearable
+            disabled={disabled}
+          />
+        )}
+      />
+    </InputHorizontal>
+  );
+}
+
+/** The connector's schedule: refresh and prune frequency. */
 export default function ScheduleSection({
   defaultPruneFreqHours = 600,
   disabled,
@@ -105,32 +140,6 @@ export default function ScheduleSection({
                   decimalPlaces={3}
                   placeholder={String(defaultPruneFreqHours)}
                   suffix={t("units.hours")}
-                  disabled={disabled}
-                />
-              )}
-            />
-          </InputHorizontal>
-
-          <InputHorizontal
-            withLabel="indexingStart"
-            disabled={disabled}
-            title={t("indexingStart.title")}
-            description={t("indexingStart.description")}
-            suffix="optional"
-            fillInput
-            center
-          >
-            <FormikField<string | undefined>
-              name="indexingStart"
-              render={(field, helper) => (
-                <InputDatePicker
-                  id="indexingStart"
-                  value={parseIndexingStart(field.value)}
-                  onChange={(date) =>
-                    helper.setValue(formatIndexingStart(date))
-                  }
-                  placeholder={t("indexingStart.placeholder")}
-                  clearable
                   disabled={disabled}
                 />
               )}

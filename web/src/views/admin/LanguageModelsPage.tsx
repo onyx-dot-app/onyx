@@ -12,6 +12,7 @@ import {
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { DropdownLoader, PageLoader } from "@opal/loaders";
 import {
+  CardGrid,
   Content,
   ContentAction,
   InputHorizontal,
@@ -883,7 +884,7 @@ export default function LanguageModelsPage() {
 
         {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <div className="@container/providercards flex flex-col gap-8">
+          <div className="flex flex-col gap-8">
             {providerGroups.map((group) => (
               <GeneralLayouts.Section
                 key={group.id}
@@ -905,7 +906,7 @@ export default function LanguageModelsPage() {
                   </Text>
                 )}
 
-                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
+                <CardGrid>
                   {group.providerNames.map((name) => (
                     <NewProviderCard
                       key={name}
@@ -916,7 +917,7 @@ export default function LanguageModelsPage() {
                   {group.includeCustom && (
                     <NewCustomProviderCard isFirstProvider={isFirstProvider} />
                   )}
-                </div>
+                </CardGrid>
               </GeneralLayouts.Section>
             ))}
           </div>

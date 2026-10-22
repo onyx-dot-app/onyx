@@ -49,7 +49,7 @@ test.describe("Credentialed connector setup", () => {
     credentialIds = [];
   });
 
-  test("configuration unlocks once the credential and site URL pass the binding check", async ({
+  test("a credential unlocks the configuration; Connect waits for the binding check and the checks", async ({
     page,
   }) => {
     const setupPage = new ConnectorSetupPage(page, SOURCE);
@@ -67,24 +67,22 @@ test.describe("Credentialed connector setup", () => {
 
     await setupPage.selectCredential(credentialId);
 
-    // A credential alone does not unlock the configuration: the site URL is a
-    // credential-bound field and is still empty.
-    await expect(setupPage.connectorNameInput).toBeDisabled();
+    // A selected credential unlocks the configuration. Connect waits for the
+    // bound site URL, which is still empty, and for the checks.
+    await expect(setupPage.connectorNameInput).toBeEnabled();
+    await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
+    await expect(setupPage.createConnectorButton).toBeDisabled();
 
-    // The bound field sits above the credential and is editable already. Once
-    // it is filled and the binding check passes, the checks can start. The
-    // configuration unlocks once they pass. Connect still waits for the
-    // required fields.
+    // The bound field sits above the credential. Once it is filled and the
+    // binding check passes, the checks can start; once they pass, Connect
+    // enables.
     const siteUrl = setupPage.textField("wiki_base");
     await expect(siteUrl).toBeEnabled();
     await siteUrl.fill(WIKI_BASE);
     await siteUrl.blur();
     await expect(setupPage.startChecksButton).toBeEnabled({ timeout: 10_000 });
-    await expect(setupPage.connectorNameInput).toBeDisabled();
-    await setupPage.runChecks();
     await expect(setupPage.createConnectorButton).toBeDisabled();
-
-    await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
+    await setupPage.runChecks();
 
     await expect(setupPage.createConnectorButton).toBeEnabled();
   });

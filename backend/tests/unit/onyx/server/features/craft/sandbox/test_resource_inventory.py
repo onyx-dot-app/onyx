@@ -15,6 +15,9 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_COMPONENT,
+    LABEL_K8S_COMPONENT_AUTH,
+    LABEL_K8S_COMPONENT_SANDBOX,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_SANDBOX_ID,
@@ -146,11 +149,14 @@ def _metadata(resource: SandboxResource) -> client.V1ObjectMeta:
             LABEL_SANDBOX_ID: str(resource.sandbox_id),
             LABEL_TENANT_ID: resource.tenant_id,
             LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+            LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
         },
     )
 
 
-@pytest.mark.parametrize("change", ["uid", "tenant", "sandbox"])
+@pytest.mark.parametrize(
+    "change", ["uid", "tenant", "sandbox", "component", "missing_component"]
+)
 def test_delete_rejects_replaced_or_foreign_resource(change: str) -> None:
     resource = _resource()
     metadata = _metadata(resource)
@@ -158,8 +164,12 @@ def test_delete_rejects_replaced_or_foreign_resource(change: str) -> None:
         metadata.uid = "new-uid"
     elif change == "tenant":
         metadata.labels[LABEL_TENANT_ID] = "tenant-b"
-    else:
+    elif change == "sandbox":
         metadata.labels[LABEL_SANDBOX_ID] = str(uuid4())
+    elif change == "component":
+        metadata.labels[LABEL_K8S_COMPONENT] = "other"
+    else:
+        metadata.labels.pop(LABEL_K8S_COMPONENT)
     manager = object.__new__(KubernetesSandboxManager)
     manager._namespace = "sandbox-test"
     manager._core_api = MagicMock()
@@ -169,13 +179,18 @@ def test_delete_rejects_replaced_or_foreign_resource(change: str) -> None:
     manager._core_api.delete_namespaced_pod.assert_not_called()
 
 
-def test_delete_uses_uid_and_resource_version_preconditions() -> None:
+@pytest.mark.parametrize(
+    "component", [LABEL_K8S_COMPONENT_SANDBOX, LABEL_K8S_COMPONENT_AUTH]
+)
+def test_delete_uses_uid_and_resource_version_preconditions(component: str) -> None:
     resource = _resource()
+    metadata = _metadata(resource)
+    metadata.labels[LABEL_K8S_COMPONENT] = component
     manager = object.__new__(KubernetesSandboxManager)
     manager._namespace = "sandbox-test"
     manager._core_api = MagicMock()
     manager._core_api.read_namespaced_pod.side_effect = [
-        client.V1Pod(metadata=_metadata(resource)),
+        client.V1Pod(metadata=metadata),
         ApiException(status=404),
     ]
     manager.delete_resource(resource, time.monotonic() + 10)

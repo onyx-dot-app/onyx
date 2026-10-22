@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import type { SelectOption, SelectOptions } from "@opal/components";
+import type { SelectOption, SelectOptions, TagProps } from "@opal/components";
 import { SvgArrowUpCircle, SvgOrganization, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { markdown } from "@opal/utils";
@@ -67,6 +67,15 @@ export function usePlans(): Record<Tier, PlanMetadata> {
       [Tier.ENTERPRISE]: metadata(Tier.ENTERPRISE),
     };
   }, [t]);
+}
+
+/**
+ * The tag every beta feature carries, for a `tag` slot: lowercase "beta" in
+ * blue. Use `BetaTag` to render it on its own.
+ */
+export function useBetaTag(): TagProps {
+  const t = useTranslations("common.plans");
+  return useMemo(() => ({ title: t("beta.title"), color: "blue" }), [t]);
 }
 
 // The value of the "Upgrade Plan" row. It is a link, so it is never picked.

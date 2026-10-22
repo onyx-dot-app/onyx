@@ -1268,14 +1268,10 @@
         "title": "Fournisseurs",
         "description": "Connectez un fournisseur ou gérez ses modèles de décision.",
         "clearBeforeRemoval": "Effacez le modèle de décision sélectionné avant de supprimer ce fournisseur.",
-        "edit": "Configurer",
         "connect": "Connecter"
       },
       "loadFailed": "Impossible de charger les modèles de décision.",
       "retry": "Réessayer",
-      "saveFailed": "Impossible d’enregistrer la connexion.",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
       "zoom": {
         "title": "Connecter Zoom AI Services",
         "description": "Utilisez une connexion pour Zoom Scribe et Zoom AI Decisions. Les modifications s’appliquent aux deux.",
@@ -2261,9 +2257,6 @@
         "description": "Faites défiler automatiquement vers le nouveau contenu pendant que le chat génère une réponse. Les utilisateurs peuvent modifier ce réglage dans leurs paramètres personnels.",
         "title": "Défilement automatique du chat"
       },
-      "betaTag": {
-        "label": "bêta"
-      },
       "connectors": {
         "description": "Sources utilisées par la recherche interne dans le chat. Ajoutez-les ou modifiez-les sur la page d'état de l'indexation.",
         "empty": {
@@ -2857,7 +2850,10 @@
         "refreshFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence d'actualisation du connecteur",
         "refreshFrequencyUpdated": "Fréquence d'actualisation du connecteur mise à jour avec succès",
         "targetedReindexFailed": "Échec de la réindexation ciblée : {message}",
-        "targetedReindexSubmitted": "Réindexation ciblée envoyée pour {count, plural, one {# document} other {# documents}}. Les erreurs disparaîtront de la liste au fur et à mesure de la réindexation des documents.",
+        "targetedReindexRunning": "Nouvelle tentative pour {count, plural, one {# erreur} other {# erreurs}}…",
+        "targetedReindexDone": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}.",
+        "targetedReindexPartial": "Nouvelle tentative terminée. {resolved, plural, one {# erreur résolue} other {# erreurs résolues}}, {failing, plural, one {# document toujours en échec} other {# documents toujours en échec}}.",
+        "targetedReindexIncomplete": "La nouvelle tentative n’a pas abouti. Les erreurs non résolues restent dans la liste.",
         "checkFrequencyUpdated": "Fréquence de vérification du connecteur mise à jour",
         "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
         "runResolved": "Marqué comme résolu.",
@@ -3165,6 +3161,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
+          "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
           "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
@@ -3186,9 +3183,9 @@
           "title": "Impossible de charger l'activité."
         },
         "docs": {
-          "title": "Documents en échec",
+          "title": "Éléments en échec",
           "search": {
-            "placeholder": "Rechercher des documents…"
+            "placeholder": "Rechercher des éléments…"
           },
           "resolveAll": "Tout réessayer",
           "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
@@ -3198,8 +3195,8 @@
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
-          "empty": "Aucune erreur de document ouverte",
-          "loadError": "Impossible de charger les documents en échec.",
+          "empty": "Aucune erreur ouverte",
+          "loadError": "Impossible de charger les éléments en échec.",
           "open": "Ouvrir le document"
         },
         "trace": {
@@ -3616,7 +3613,7 @@
         }
       },
       "content": {
-        "title": "Contenu du connecteur",
+        "title": "Configurations d'indexation",
         "description": "Sélectionnez le contenu à indexer pour ce connecteur."
       },
       "selectInput": {
@@ -3670,7 +3667,8 @@
       "settings": {
         "description": "Informations et accès du connecteur.",
         "displayName": {
-          "title": "Nom d'affichage du connecteur"
+          "title": "Nom d'affichage",
+          "placeholder": "Ajoutez un nom d'affichage"
         },
         "documentAccess": {
           "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
@@ -3729,7 +3727,7 @@
               "label": "Inclure les pièces jointes"
             },
             "scoped_token": {
-              "label": "Il s'agit d'un jeton d'API avec des portées",
+              "label": "Jeton d'API à portée limitée",
               "description": "Les jetons à portée nécessitent un routage via la passerelle d'API d'Atlassian. Laissez désactivé pour les jetons classiques."
             }
           }
@@ -3856,13 +3854,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Propriétaire du dépôt"
+              "label": "Propriétaire du dépôt",
+              "placeholder": "Indiquez un propriétaire de dépôt"
             },
             "github_mode": {
-              "label": "Contenu GitHub à indexer",
               "tabs": {
                 "repo": {
-                  "label": "Dépôt précis"
+                  "label": "Dépôts précis"
                 },
                 "everything": {
                   "label": "Tout"
@@ -3870,12 +3868,12 @@
               }
             },
             "repositories": {
-              "label": "Nom(s) du dépôt",
-              "description": "Pour plusieurs dépôts, saisissez les noms séparés par des virgules (par ex. repo1,repo2,repo3)"
+              "label": "Noms des dépôts",
+              "placeholder": "Ajoutez un nom de dépôt"
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les dépôts auxquels les identifiants fournis donnent accès !"
+              "label": "Tout indexer",
+              "description": "Onyx indexera tous les dépôts trouvés pour le propriétaire {owner}."
             },
             "include_prs": {
               "label": "Inclure les pull requests",
@@ -3891,7 +3889,8 @@
             },
             "branch": {
               "label": "Branche",
-              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement."
+              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement.",
+              "placeholder": "Ajoutez un nom de branche"
             }
           }
         },
@@ -3974,8 +3973,8 @@
               "description": "Une ou plusieurs clés de projet Bitbucket (séparées par des virgules) pour indexer tous les dépôts de ces projets (par ex. PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Espace de travail",
-              "description": "Ce connecteur indexera tous les dépôts de l'espace de travail."
+              "label": "Indexe tous les dépôts de l'espace de travail",
+              "description": "Onyx indexe tous les dépôts de l'espace de travail que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             }
           }
         },
@@ -4099,8 +4098,8 @@
               }
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera toutes les pages auxquelles les identifiants fournis donnent accès !"
+              "label": "Indexe toutes les pages que le compte peut lire",
+              "description": "Onyx indexe toutes les pages de chaque espace que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "space": {
               "label": "Clé de l'espace",
@@ -4142,8 +4141,8 @@
               }
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les tickets auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les tickets que le compte peut lire",
+              "description": "Onyx indexe tous les tickets de chaque projet que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "project_key": {
               "label": "Clé du projet",
@@ -4330,8 +4329,8 @@
               }
             },
             "everything_description": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les espaces auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les espaces que le compte peut lire",
+              "description": "Onyx indexe toutes les pages de chaque espace que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "spaces": {
               "label": "ID d'espace",
@@ -4771,8 +4770,8 @@
               }
             },
             "everything_description": {
-              "label": "Tout",
-              "description": "Ce connecteur détectera et indexera automatiquement toutes les bases et toutes les tables accessibles avec votre jeton d'API."
+              "label": "Indexe toutes les bases que le jeton peut lire",
+              "description": "Onyx trouve et indexe toutes les bases et tables que le jeton d'API peut lire. Pour en indexer moins, choisissez un autre onglet."
             },
             "airtable_url": {
               "label": "URL Airtable",
@@ -4811,8 +4810,8 @@
               "description": "Pour plusieurs spots, saisissez-les un par un."
             },
             "everything": {
-              "label": "Tout",
-              "description": "Ce connecteur indexera tous les spots auxquels les identifiants fournis donnent accès !"
+              "label": "Indexe tous les spots que le compte peut lire",
+              "description": "Onyx indexe tous les spots que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             }
           }
         },
@@ -4952,9 +4951,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "bêta"
-        },
         "disabled": {
           "description": "Craft est désactivé pour tout le monde. Activez-le utilisateur par utilisateur ci-dessous."
         },
@@ -6835,6 +6831,10 @@
           "description": "Arrêtez dès maintenant de générer du contexte pour les documents nouveaux et mis à jour, ou reconstruisez tous les documents pour supprimer aussi le contexte déjà généré.",
           "title": "Choisissez comment désactiver la récupération contextuelle"
         },
+        "contextualEnableOnly": {
+          "description": "Générez du contexte pour les documents nouveaux et mis à jour à partir de maintenant, ou reconstruisez tous les documents pour que chaque document reçoive du contexte.",
+          "title": "Choisissez comment activer la récupération contextuelle"
+        },
         "contextualModelMissing": {
           "description": "La récupération contextuelle est activée mais aucun modèle n'est sélectionné. Choisissez un LLM de récupération contextuelle ci-dessous avant de réindexer : sans modèle, la réindexation ne peut pas démarrer.",
           "title": "Sélectionnez un LLM de récupération contextuelle"
@@ -6861,6 +6861,9 @@
         "reindex": {
           "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Une réindexation complète va s’exécuter."
+        },
+        "reindexModel": {
+          "title": "Passage à {provider} / {model}. Une réindexation complète va s’exécuter."
         }
       },
       "cloudDisabled": {
@@ -6962,6 +6965,10 @@
       "disableForwardModal": {
         "description": "La récupération contextuelle s'arrête pour les documents ajoutés ou mis à jour à partir de maintenant. Les documents existants conservent le contexte déjà généré jusqu'à leur mise à jour ou jusqu'à la prochaine réindexation.",
         "title": "Désactiver la récupération contextuelle à partir de maintenant"
+      },
+      "enableForwardModal": {
+        "description": "La récupération contextuelle démarre pour les documents ajoutés ou mis à jour à partir de maintenant. Les documents existants restent tels quels jusqu'à leur mise à jour ou jusqu'à la prochaine réindexation, l'enrichissement contextuel peut donc varier d'un document à l'autre.",
+        "title": "Activer la récupération contextuelle à partir de maintenant"
       },
       "header": {
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
@@ -7191,6 +7198,8 @@
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",
         "contextualRetrievalDisableFailed": "Échec de la désactivation de la récupération contextuelle",
         "contextualRetrievalDisabled": "Récupération contextuelle désactivée",
+        "contextualRetrievalEnableFailed": "Échec de l'activation de la récupération contextuelle",
+        "contextualRetrievalEnabled": "Récupération contextuelle activée",
         "modelNotFound": "Impossible de trouver le modèle sélectionné",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "reindexCanceled": "Réindexation annulée",
@@ -8607,7 +8616,7 @@
           },
           "title": "Protection SSRF",
           "validateAll": {
-            "description": "Option la plus restrictive. Toutes les requêtes sortantes refusent de joindre des IP privées ou internes, y compris les connecteurs web.",
+            "description": "Option la plus restrictive. Les requêtes sortantes, y compris les connecteurs web, ne peuvent pas joindre d'IP privées ou internes. Exception : les outils personnalisés peuvent toujours joindre des adresses du réseau privé. La boucle locale, les adresses link-local et les métadonnées cloud restent bloquées.",
             "label": "Valider toutes les requêtes"
           },
           "validateLlm": {
@@ -10315,7 +10324,7 @@
         "copyButton": {
           "label": "Copier le mot de passe"
         },
-        "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement.",
+        "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement. Toutes ses sessions seront déconnectées et ses jetons d'accès personnels seront révoqués.",
         "doneButton": {
           "label": "Terminé"
         },
@@ -12041,6 +12050,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Impossible de démarrer une nouvelle discussion. Réessayez."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
       },
@@ -12542,6 +12554,9 @@
         },
         "runningStatus": {
           "text": "{toolName} en cours d'exécution..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} n'a pas pu joindre son serveur"
         },
         "waitingIndicator": {
           "text": "En attente de réponse..."
@@ -13584,9 +13599,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "Ajouter"
-      },
       "removeButton": {
         "tooltip": "Retirer"
       }
@@ -14116,7 +14128,10 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}"
+      "availableFor": "Disponible avec l’{plan}",
+      "beta": {
+        "title": "bêta"
+      }
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14147,6 +14162,9 @@
       "globalDefault": {
         "label": "Valeur par défaut globale"
       }
+    },
+    "appFooter": {
+      "slogan": "Plateforme d'IA open source"
     }
   },
   "craft": {
@@ -14566,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Impossible de prévisualiser le fichier"
+        "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement"
       },
       "error": {
         "inline": "Erreur : {message}",
-        "title": "Erreur de chargement du fichier"
+        "title": "Impossible de charger l’aperçu",
+        "description": "L’aperçu n’a pas pu être chargé. Réessayez ou téléchargez le fichier pour l’ouvrir."
       },
       "loading": {
         "label": "Chargement du fichier..."
@@ -14583,10 +14602,25 @@
         "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
       },
       "imageTooLarge": {
-        "description": "Cette image est trop volumineuse pour un aperçu. Téléchargez l’original pour l’ouvrir."
+        "description": "Les images jusqu’à 10 Mo peuvent être prévisualisées. Téléchargez le fichier pour l’ouvrir.",
+        "title": "Image trop volumineuse pour l’aperçu"
       },
       "unsupported": {
-        "description": "Ce fichier ne peut pas être prévisualisé. Téléchargez l’original pour l’ouvrir."
+        "description": "Téléchargez le fichier pour consulter son contenu."
+      },
+      "retry": {
+        "label": "Réessayer"
+      },
+      "download": {
+        "label": "Télécharger le fichier"
+      },
+      "tooLarge": {
+        "title": "Fichier trop volumineux pour l’aperçu",
+        "description": "Les fichiers jusqu’à {size, number} Mo peuvent être prévisualisés ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "playback": {
+        "title": "Lecture non prise en charge",
+        "description": "Votre navigateur ne peut pas lire ce fichier. Téléchargez-le pour l’ouvrir."
       }
     },
     "filesTab": {
@@ -15980,6 +16014,10 @@
     },
     "toast": {
       "moreCount": "+{count} de plus"
+    },
+    "sidebar": {
+      "open": "Ouvrir la barre latérale",
+      "close": "Fermer la barre latérale"
     }
   },
   "settings": {
@@ -16001,6 +16039,7 @@
         "currentPassword": {
           "title": "Mot de passe actuel"
         },
+        "description": "Vos autres sessions seront déconnectées et vos jetons d'accès personnels seront révoqués.",
         "newPassword": {
           "title": "Nouveau mot de passe"
         },
@@ -16589,9 +16628,6 @@
       },
       "searchInput": {
         "placeholder": "Rechercher..."
-      },
-      "betaTag": {
-        "label": "Bêta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16639,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Bêta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorer les agents"

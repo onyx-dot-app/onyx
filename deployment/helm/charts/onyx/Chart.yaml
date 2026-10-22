@@ -23,6 +23,10 @@ annotations:
     - kind: fixed
       description: Allow Craft cleanup workers to inventory sandbox Services and
         Secrets in the sandbox namespace.
+    - kind: fixed
+      description: While MinIO files move to the object store, the install
+        notes name the legacy MinIO copy Job, give the command to watch it,
+        and link MIGRATION.md.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

@@ -4,8 +4,9 @@
 **Formik:** `import { InputMultiUploadField } from "@opal/form";`
 
 An upload control for many files. Each file is a removable tag inside the input chrome, as on
-`InputMultiSelect` (it uses the same `TagField`). A click on the field, or Enter or Space, opens the
-file picker, and files can be dropped on it. Each pick or drop **adds** files, skipping ones it
+`InputMultiSelect` (it uses the same `TagField`). A click focuses the field, so copied files can be
+pasted; a double click, Enter or Space opens the file picker; and files can be dropped on it. Each
+pick, paste or drop **adds** files, skipping ones it
 already holds. Backspace arms the last tag and Backspace or Delete removes an armed one; the clear
 button removes them all.
 
@@ -22,16 +23,16 @@ picker does not count as leaving the field, so a form does not mark it touched m
 
 ## Props
 
-| Prop                 | Type                            | Description                                                      |
-| -------------------- | ------------------------------- | ---------------------------------------------------------------- |
-| `value`              | `File[]`                        | The files, when the caller owns them                             |
-| `onFilesChange`      | `(files: File[]) => void`       | Receives every file held, after each add or removal              |
-| `placeholder`        | `string`                        | Shown while empty. Default: "Add files…"                         |
-| `variant`            | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"`, `"readOnly"`      |
-| `accept`             | `string`                        | The picker's filter, as the HTML `accept` attribute               |
-| `maxSizeKb`          | `number`                        | Rejects a file larger than this                                  |
-| `onFileSizeExceeded` | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                      |
-| `id`, `name`, `onBlur`, `data-testid` | —              | `id` goes on the hidden file input, so a field label opens the picker |
+| Prop                                  | Type                            | Description                                                                                             |
+| ------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `value`                               | `File[]`                        | The files, when the caller owns them                                                                    |
+| `onFilesChange`                       | `(files: File[]) => void`       | Receives every file held, after each add or removal                                                     |
+| `placeholder`                         | `string`                        | Shown while empty. Default: "Add files…"                                                                |
+| `variant`                             | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"`, `"readOnly"`                                            |
+| `accept`                              | `string`                        | The picker's filter, as the HTML `accept` attribute                                                     |
+| `maxSizeKb`                           | `number`                        | Rejects a file larger than this                                                                         |
+| `onFileSizeExceeded`                  | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                                             |
+| `id`, `name`, `onBlur`, `data-testid` | —                               | `id` goes on a hidden proxy, so a click on a field label focuses the field and does not open the picker |
 
 `InputMultiUploadField` binds it to a Formik `File[]` field, holding `null` when empty so a required
 check fails.

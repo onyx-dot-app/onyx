@@ -70,7 +70,7 @@ import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
-import { useProjectsContext } from "@/lib/projects/providers";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
@@ -349,6 +349,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setCurrentMessageFiles([]);
   }, [setCurrentMessageFiles]);
 
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
+
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
@@ -501,6 +508,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     selectedDocuments,
     searchParams,
     resetInputBar,
+    restoreInputBar,
   });
 
   const { onMessageSelection, sessionFetchError } = useChatSessionController({

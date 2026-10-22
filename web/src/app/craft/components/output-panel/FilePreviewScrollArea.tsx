@@ -11,6 +11,7 @@ export interface FilePreviewScrollPosition {
 
 interface FilePreviewScrollAreaProps extends FilePreviewScrollPosition {
   children: ReactNode;
+  contentReady?: boolean;
   padding?: 0 | 4 | 6;
   paddingX?: 0 | 4 | 6;
 }
@@ -21,6 +22,7 @@ export function FilePreviewScrollArea({
   initialScrollTop = 0,
   onScrollTopChange,
   isActive = true,
+  contentReady = true,
   padding = 4,
   paddingX,
 }: FilePreviewScrollAreaProps) {
@@ -28,11 +30,12 @@ export function FilePreviewScrollArea({
   const position = useRef(initialScrollTop);
   const restored = useRef(false);
   useLayoutEffect(() => {
-    if (isActive && element.current && !restored.current) {
+    if (!contentReady) restored.current = false;
+    if (isActive && contentReady && element.current && !restored.current) {
       element.current.scrollTop = position.current;
       restored.current = true;
     }
-  }, [isActive]);
+  }, [isActive, contentReady]);
   return (
     <div
       ref={element}
@@ -46,7 +49,7 @@ export function FilePreviewScrollArea({
             : paddingX === 0 && "px-0"
       )}
       onScroll={(event) => {
-        if (!isActive) return;
+        if (!isActive || !contentReady) return;
         position.current = event.currentTarget.scrollTop;
         onScrollTopChange?.(position.current);
       }}
