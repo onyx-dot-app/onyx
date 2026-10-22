@@ -89,17 +89,17 @@ def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows
         db_session.commit()
 
         assert lease.acquire(blocking=True, blocking_timeout=30)
+        saved_table = f"sandbox_unavailable_{uuid4().hex}"
         try:
             wait_for_resource_grace(
                 k8s_client, f"sandbox-{str(owners[2])[:8]}", SANDBOX_NAMESPACE
             )
+            db_session.execute(text(f'ALTER TABLE sandbox RENAME TO "{saved_table}"'))
+            db_session.commit()
         finally:
             if lease.owned():
                 lease.release()
 
-        saved_table = f"sandbox_unavailable_{uuid4().hex}"
-        db_session.execute(text(f'ALTER TABLE sandbox RENAME TO "{saved_table}"'))
-        db_session.commit()
         try:
             run_cleanup(k8s_client, expected_state="FAILURE")
             for owner in owners:
