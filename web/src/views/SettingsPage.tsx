@@ -2101,6 +2101,9 @@ function AccountsAccessSettings() {
 
         if (response.ok) {
           setShowPasswordModal(false);
+          // The server revoked every token. Clear the cached list first so
+          // a failed refetch cannot show revoked tokens.
+          await mutate([], { revalidate: true });
         } else {
           const errorData: ErrorResponseBody = await response.json();
           toast.error(
@@ -2111,7 +2114,7 @@ function AccountsAccessSettings() {
         toast.error(t("accounts.passwordModal.toasts.networkError"));
       }
     },
-    [t]
+    [mutate, t]
   );
 
   return (
@@ -2190,6 +2193,7 @@ function AccountsAccessSettings() {
               <ConfirmationModalLayout
                 icon={SvgLock}
                 title={t("accounts.passwordModal.title")}
+                description={t("accounts.passwordModal.description")}
                 submit={
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}

@@ -60,6 +60,26 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
     return raw_token
 
 
+def has_active_craft_pat(db_session: Session, user_id: UUID) -> bool:
+    """True if the user has an unexpired, unrevoked Craft PAT."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (
+        db_session.scalar(
+            select(
+                select(PersonalAccessToken.id)
+                .where(PersonalAccessToken.user_id == user_id)
+                .where(PersonalAccessToken.pat_type == PatType.CRAFT)
+                .where(
+                    (PersonalAccessToken.expires_at.is_(None))
+                    | (PersonalAccessToken.expires_at > now)
+                )
+                .exists()
+            )
+        )
+        is True
+    )
+
+
 def create_sandbox__no_commit(
     db_session: Session,
     user_id: UUID,

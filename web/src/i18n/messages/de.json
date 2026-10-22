@@ -10308,7 +10308,7 @@
         "copyButton": {
           "label": "Passwort kopieren"
         },
-        "description": "Dadurch wird ein neues zufälliges Passwort für <strong>{email}</strong> erzeugt. Das aktuelle Passwort funktioniert sofort nicht mehr.",
+        "description": "Dadurch wird ein neues zufälliges Passwort für <strong>{email}</strong> erzeugt. Das aktuelle Passwort funktioniert sofort nicht mehr. Die Person wird von allen Sitzungen abgemeldet, und ihre persönlichen Zugriffstoken werden widerrufen.",
         "doneButton": {
           "label": "Fertig"
         },
@@ -16010,6 +16010,7 @@
         "currentPassword": {
           "title": "Aktuelles Passwort"
         },
+        "description": "Ihre anderen Sitzungen werden abgemeldet, und Ihre persönlichen Zugriffstoken werden widerrufen.",
         "newPassword": {
           "title": "Neues Passwort"
         },
