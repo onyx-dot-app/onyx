@@ -29,6 +29,14 @@ def _headers_with_locale_cookie(user: DATestUser, locale: str) -> dict[str, str]
     }
 
 
+def patch_settings(admin_user: DATestUser, **settings: str | bool) -> None:
+    client.patch(
+        url=f"{API_SERVER_URL}/admin/settings",
+        json=settings,
+        headers=admin_user.headers,
+    ).raise_for_status()
+
+
 def test_language_patch_sets_locale_cookie(reset: None) -> None:  # noqa: ARG001
     user: DATestUser = UserManager.create()
 
@@ -81,14 +89,7 @@ def test_workspace_default_applies_until_user_chooses(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
-    def patch_settings(**settings: str | bool) -> None:
-        client.patch(
-            url=f"{API_SERVER_URL}/admin/settings",
-            json=settings,
-            headers=admin_user.headers,
-        ).raise_for_status()
-
-    patch_settings(default_language="fr", anonymous_user_enabled=True)
+    patch_settings(admin_user, default_language="fr", anonymous_user_enabled=True)
     try:
         # An anonymous visitor whose browser still carries a signed-out
         # user's cookie is moved to the workspace default.
@@ -130,4 +131,23 @@ def test_workspace_default_applies_until_user_chooses(
     finally:
         # The settings record is cached outside the database the reset fixture
         # rebuilds, so later tests would otherwise inherit these values.
-        patch_settings(default_language="en", anonymous_user_enabled=False)
+        patch_settings(admin_user, default_language="en", anonymous_user_enabled=False)
+
+
+def test_auth_type_returns_workspace_language_without_session(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    patch_settings(admin_user, default_language="de")
+    try:
+        # An explicit empty Cookie header keeps the client's jar, and any
+        # session in it, off these requests.
+        signed_out = {"Cookie": ""}
+        settings = client.get(url=f"{API_SERVER_URL}/settings", headers=signed_out)
+        assert settings.status_code == 403
+
+        auth_type = client.get(url=f"{API_SERVER_URL}/auth/type", headers=signed_out)
+        auth_type.raise_for_status()
+        assert auth_type.json()["default_language"] == "de"
+    finally:
+        patch_settings(admin_user, default_language="en")
