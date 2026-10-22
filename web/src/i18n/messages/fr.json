@@ -8556,7 +8556,7 @@
           },
           "title": "Protection SSRF",
           "validateAll": {
-            "description": "Option la plus restrictive. Toutes les requêtes sortantes refusent de joindre des IP privées ou internes, y compris les connecteurs web.",
+            "description": "Option la plus restrictive. Les requêtes sortantes, y compris les connecteurs web, ne peuvent pas joindre d'IP privées ou internes. Exception : les outils personnalisés peuvent toujours joindre des adresses du réseau privé. La boucle locale, les adresses link-local et les métadonnées cloud restent bloquées.",
             "label": "Valider toutes les requêtes"
           },
           "validateLlm": {
@@ -12491,6 +12491,9 @@
         },
         "runningStatus": {
           "text": "{toolName} en cours d'exécution..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} n'a pas pu joindre son serveur"
         },
         "waitingIndicator": {
           "text": "En attente de réponse..."
