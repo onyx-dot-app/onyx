@@ -25,7 +25,7 @@ from ee.onyx.external_permissions.perm_sync_types import (
 )
 from ee.onyx.external_permissions.sync_params import DocSyncConfig, SyncConfig
 from onyx.access.models import DocExternalAccess, ElementExternalAccess, ExternalAccess
-from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, PermissionSyncStatus
@@ -34,7 +34,6 @@ from onyx.db.permission_sync_attempt import (
     get_open_doc_permission_sync_attempt,
     try_create_doc_permission_sync_attempt,
 )
-from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE as TEST_TENANT_ID,
@@ -135,14 +134,6 @@ def _run(
         ).get()
 
 
-def _has_checkpoint(cc_pair_id: int) -> bool:
-    return get_default_file_store().has_file(
-        checkpointer_module._checkpoint_pointer(cc_pair_id),
-        FileOrigin.PERM_SYNC_CHECKPOINT,
-        "application/json",
-    )
-
-
 def _dispatch(cc_pair_id: int, db_session: Session) -> int:
     attempt_id = try_create_doc_permission_sync_attempt(
         cc_pair_id, f"task-{uuid4().hex[:8]}", db_session
@@ -168,7 +159,7 @@ def test_stopped_sync_resumes_from_checkpoint(
     first = db_session.get(DocPermissionSyncAttempt, first_attempt_id)
     assert first is not None
     assert first.status == PermissionSyncStatus.FAILED
-    assert _has_checkpoint(cc_pair.id)
+    assert checkpointer_module.has_doc_sync_checkpoint(cc_pair.id)
 
     second_attempt_id = _dispatch(cc_pair.id, db_session)
     _run(cc_pair.id, crawl)
@@ -186,7 +177,7 @@ def test_stopped_sync_resumes_from_checkpoint(
     # Changes after the chain's window are left for the next incremental sync
     db_session.refresh(cc_pair)
     assert cc_pair.last_time_perm_sync == _FIRST_WINDOW_END
-    assert not _has_checkpoint(cc_pair.id)
+    assert not checkpointer_module.has_doc_sync_checkpoint(cc_pair.id)
 
 
 def test_failed_write_is_retried_on_resume(

@@ -3,9 +3,8 @@ from collections.abc import Callable, Generator
 from datetime import datetime
 from typing import Optional, Protocol
 
-from pydantic import BaseModel
-
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+from ee.onyx.external_permissions.models import DocSyncResume
 from onyx.access.models import (
     DocExternalAccess,  # noqa
     ElementExternalAccess,  # noqa
@@ -61,12 +60,6 @@ DocSyncFuncType = Callable[
     ],
     Generator[ElementExternalAccess, None, None],
 ]
-
-
-class DocSyncResume(BaseModel):
-    checkpoint_json: str
-    poll_range_start: datetime | None
-    poll_range_end: datetime
 
 
 class DocSyncCheckpointer(ABC):

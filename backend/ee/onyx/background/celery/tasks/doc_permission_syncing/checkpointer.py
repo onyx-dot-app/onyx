@@ -3,12 +3,11 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
-from pydantic import BaseModel
-
-from ee.onyx.external_permissions.perm_sync_types import (
-    DocSyncCheckpointer,
-    DocSyncResume,
+from ee.onyx.background.celery.tasks.doc_permission_syncing.models import (
+    SavedDocSyncCheckpoint,
 )
+from ee.onyx.external_permissions.models import DocSyncResume
+from ee.onyx.external_permissions.perm_sync_types import DocSyncCheckpointer
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
 from onyx.connectors.models import ConnectorCheckpoint
@@ -22,18 +21,6 @@ logger = setup_logger()
 # Bounds file store writes. A stopped attempt loses at most this much crawl.
 CHECKPOINT_SAVE_INTERVAL_SECONDS = 5 * 60
 _CHECKPOINT_FILE_TYPE = "application/json"
-
-
-class _SavedDocSyncCheckpoint(BaseModel):
-    """The checkpoint file: the crawl state plus what decides whether a later
-    attempt may continue it."""
-
-    attempt_id: int
-    saved_at: datetime
-    connector_config_hash: str | None
-    poll_range_start: datetime | None
-    poll_range_end: datetime
-    checkpoint_json: str
 
 
 def _checkpoint_pointer(cc_pair_id: int) -> str:
@@ -53,15 +40,21 @@ def delete_doc_sync_checkpoint(cc_pair_id: int) -> None:
     _delete_checkpoint_file(_checkpoint_pointer(cc_pair_id))
 
 
-def _load_saved_checkpoint(pointer: str) -> _SavedDocSyncCheckpoint | None:
-    file_store = get_default_file_store()
-    if not file_store.has_file(
-        pointer, FileOrigin.PERM_SYNC_CHECKPOINT, _CHECKPOINT_FILE_TYPE
-    ):
+def has_doc_sync_checkpoint(cc_pair_id: int) -> bool:
+    return get_default_file_store().has_file(
+        _checkpoint_pointer(cc_pair_id),
+        FileOrigin.PERM_SYNC_CHECKPOINT,
+        _CHECKPOINT_FILE_TYPE,
+    )
+
+
+def _load_saved_checkpoint(cc_pair_id: int) -> SavedDocSyncCheckpoint | None:
+    if not has_doc_sync_checkpoint(cc_pair_id):
         return None
+    pointer = _checkpoint_pointer(cc_pair_id)
     try:
-        return _SavedDocSyncCheckpoint.model_validate_json(
-            file_store.read_file(pointer, mode="rb").read()
+        return SavedDocSyncCheckpoint.model_validate_json(
+            get_default_file_store().read_file(pointer, mode="rb").read()
         )
     except Exception:
         logger.exception("Could not load the permission sync checkpoint %s", pointer)
@@ -91,7 +84,7 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
         self._resume = self._find_resume(cc_pair_id)
 
     def _find_resume(self, cc_pair_id: int) -> DocSyncResume | None:
-        saved = _load_saved_checkpoint(self._pointer)
+        saved = _load_saved_checkpoint(cc_pair_id)
         if saved is None:
             return None
         if saved.connector_config_hash != self._connector_config_hash:
@@ -144,7 +137,7 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
             return
 
         check_checkpoint_size(checkpoint)
-        saved = _SavedDocSyncCheckpoint(
+        saved = SavedDocSyncCheckpoint(
             attempt_id=self._attempt_id,
             saved_at=datetime.now(timezone.utc),
             connector_config_hash=self._connector_config_hash,
