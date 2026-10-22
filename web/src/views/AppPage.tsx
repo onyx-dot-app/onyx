@@ -463,7 +463,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setFolded(preMultiModelFoldedRef.current);
       preMultiModelFoldedRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.isMultiModelActive]);
 
   // Sync single-model selection to llmManager so the submission path uses

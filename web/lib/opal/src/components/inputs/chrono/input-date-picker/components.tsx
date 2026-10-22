@@ -172,7 +172,6 @@ function InputDatePicker({
     setSegments(toSegments(value));
     // Key on the instant, not Date identity, so parent re-renders that
     // recreate an equal Date don't clobber in-progress typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueTime]);
 
   function inRange(date: Date): boolean {

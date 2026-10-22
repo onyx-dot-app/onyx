@@ -191,7 +191,6 @@ export default function AuthenticationAccountCard({
     setSavedSharing(next);
     setSharing(next);
     // Only a new server value resets the select.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverSharing]);
 
   // A rename shows at once, until the list refetch brings the stored name.

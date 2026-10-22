@@ -262,7 +262,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           "Drag-and-drop reordering is not supported with server-side pagination."
       );
     }
-  }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!serverSide, !!draggable]);
   const effectiveDraggable = serverSide ? undefined : draggable;
   // Drag indexes come from the rows the query leaves visible, so hidden rows
   // keep their positions.

@@ -173,7 +173,6 @@ export function SlackChannelConfigFormFields({
       );
     }
     return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values.knowledge_source, values.document_sets, values.persona_id]);
 
   return (

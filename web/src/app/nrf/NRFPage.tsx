@@ -133,7 +133,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
 
   const toolConfiguration = useToolConfiguration();

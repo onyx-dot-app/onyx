@@ -182,7 +182,6 @@ function TagField({
   useEffect(() => {
     if (focusOnMount) focusField();
     // Mount only: later prop changes must not steal focus back.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A new chip lands on the last row, next to the input or the trigger.

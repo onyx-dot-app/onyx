@@ -120,7 +120,7 @@ export function useContentEditable({
   useEffect(() => {
     if (disabled) return;
     ref.current?.focus();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
