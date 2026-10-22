@@ -330,10 +330,12 @@ export function useConnectorChecks({
       : (session?.heldUnlock ?? false);
   // A current run of this form that started fine. It need not be finished:
   // `createReady` waits only on required checks (see `blocks`), so a slow
-  // optional check such as discovery does not hold Create back.
+  // optional check such as discovery does not hold Create back. A failed
+  // start keeps the previous run, which checked other settings.
   const ranThisForm: boolean =
     !!session &&
     !session.requesting &&
+    !session.startFailed &&
     session.ranWithForm === formKey &&
     snapshot !== null &&
     snapshot.status !== "failed_to_run";

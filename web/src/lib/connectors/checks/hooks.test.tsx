@@ -293,6 +293,24 @@ it("needs a run of the current form before Create", async () => {
   expect(startMock.mock.calls[1]?.[0].form_state).toEqual({ space: "ENG" });
 });
 
+it("keeps Create locked when the re-run of changed settings fails to start", async () => {
+  startMock.mockResolvedValueOnce(
+    run([
+      check({ ...BINDING, state: "passed" }),
+      check({ ...CONTENT, state: "passed" }),
+    ])
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.createReady).toBe(true));
+
+  await act(() => result.current.form.setFieldValue("space", "ENG"));
+  startMock.mockRejectedValueOnce(new Error("boom"));
+  act(() => result.current.checks.refresh());
+  await waitFor(() => expect(result.current.checks.status).toBe("failedToRun"));
+  expect(result.current.checks.createReady).toBe(false);
+});
+
 it("starts no run when a field changes, and only flags the change", async () => {
   startMock.mockResolvedValue(
     run([check({ ...BINDING, state: "passed" }), CONTENT])
