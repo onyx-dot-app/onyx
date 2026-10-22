@@ -344,6 +344,9 @@ export default function MCPAuthenticationPage({
         client_registration_failed: t(
           "mcpAuthModal.errors.clientRegistrationFailed"
         ),
+        client_metadata_rejected: t(
+          "mcpAuthModal.errors.clientMetadataRejected"
+        ),
         discovery_failed: t("mcpAuthModal.errors.discoveryFailed"),
         connection_failed: t("mcpAuthModal.errors.connectionFailed"),
         oauth_failed: t("mcpAuthModal.errors.oauthFailed"),
@@ -554,6 +557,19 @@ export default function MCPAuthenticationPage({
                           }}
                         >
                           {t("mcpAuthModal.discovery.useOwnClient")}
+                        </Button>
+                      )}
+                      {connectionError.reason ===
+                        "client_metadata_rejected" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setFieldValue("oauth_cimd_enabled", false);
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.cimd.turnOff")}
                         </Button>
                       )}
                       {connectionError.reason === "discovery_failed" && (

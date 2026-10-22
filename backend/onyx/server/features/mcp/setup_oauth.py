@@ -39,6 +39,7 @@ from onyx.server.features.mcp.oauth import (
 from onyx.server.features.mcp.oauth_flow import (
     OAuthAuthorizationRedirect,
     run_oauth_discovery,
+    validate_client_metadata_authorization,
 )
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 
@@ -191,6 +192,9 @@ async def start_setup_oauth(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT, "OAuth discovery did not register a client"
             )
+        await validate_client_metadata_authorization(
+            authorization.authorization_url, context.client_info.client_id
+        )
         _store_attempt(
             owner_id,
             authorization.state,

@@ -345,6 +345,7 @@ export function getMCPUserOAuthNavigationUrl(
 
 export type MCPOAuthFailureReason =
   | "client_registration_failed"
+  | "client_metadata_rejected"
   | "discovery_failed"
   | "connection_failed"
   | "oauth_failed";
@@ -378,6 +379,7 @@ async function readMCPOAuthError(
   const reason = "oauth_error" in body ? body.oauth_error : undefined;
   if (
     reason === "client_registration_failed" ||
+    reason === "client_metadata_rejected" ||
     reason === "discovery_failed" ||
     reason === "connection_failed" ||
     reason === "oauth_failed"
