@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "إنشاء الموصل على أي حال"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "إلغاء الفحص"
+        },
+        "run": {
+          "label": "تشغيل الفحص"
+        }
+      },
+      "details": {
+        "expand": "إظهار التفاصيل",
+        "collapse": "إخفاء التفاصيل"
       }
     },
     "connectorEdit": {

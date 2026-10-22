@@ -45,6 +45,7 @@ import type {
   CapabilityCheckStatus,
   CheckFindingKey,
   ConnectorChecksStatus,
+  DraftCheckActions,
   DraftCheckPlan,
   DraftCheckRunSnapshot,
   DraftCheckState,
@@ -80,6 +81,18 @@ interface ConnectorChecksSession {
   request: number;
   /** The next start runs every check again, cached results included. */
   rerunAll: boolean;
+  /** Checks the admin cancelled. Every run skips them until one is run. */
+  skippedCheckIds?: string[];
+}
+
+/** What a start asks of single checks, beyond the session's skips. */
+interface StartActions {
+  /** Runs only this check, ignoring its cached result. */
+  run?: string;
+  /** Runs this check next. */
+  startNow?: string;
+  /** Replaces the session's skipped checks. */
+  skip?: string[];
 }
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
@@ -227,6 +240,10 @@ export interface UseConnectorChecksResult {
   rerun: () => void;
   /** Starts a run for the current form, reusing cached results. */
   refresh: () => void;
+  /** Stops a running or queued check; later runs skip it until it runs. */
+  cancelCheck: (checkId: string) => void;
+  /** Runs one check: a skipped one again, or a queued one next. */
+  runCheck: (checkId: string) => void;
 }
 
 /**
@@ -285,11 +302,22 @@ export function useConnectorChecks({
   );
 
   const start = useCallback(
-    async (rerun: DraftRerunMode) => {
+    async (rerun: DraftRerunMode, actions: StartActions = {}) => {
       if (credential === null) return;
       const draftKey: string = session?.draftKey ?? crypto.randomUUID();
       const request: number = (session?.request ?? 0) + 1;
       const mode: DraftRerunMode = session?.rerunAll ? "all" : rerun;
+      const skipped: string[] = actions.skip ?? session?.skippedCheckIds ?? [];
+      const checkActions: DraftCheckActions = {};
+      if (skipped.length > 0) checkActions.skip_check_ids = skipped;
+      // A run of every check takes no single-check run; it runs that check
+      // anyway.
+      if (actions.run !== undefined && mode === "none") {
+        checkActions.check_ids = [actions.run];
+      }
+      if (actions.startNow !== undefined) {
+        checkActions.start_check_id = actions.startNow;
+      }
       await mutate<ConnectorChecksSession>(
         sessionKey,
         {
@@ -302,6 +330,7 @@ export function useConnectorChecks({
           startFailed: false,
           request,
           rerunAll: false,
+          skippedCheckIds: skipped,
         },
         { revalidate: false }
       );
@@ -332,6 +361,7 @@ export function useConnectorChecks({
                 access_type: accessType,
                 credential_id: credential.credential_id,
                 rerun: mode,
+                ...checkActions,
               })
             : await startDraftCheckRun({
                 source,
@@ -340,6 +370,7 @@ export function useConnectorChecks({
                 draft_key: draftKey,
                 form_state: formState,
                 rerun: mode,
+                ...checkActions,
               });
         if ("credential_json" in credential) {
           await rememberDraft(
@@ -479,6 +510,25 @@ export function useConnectorChecks({
     begin: () => void start("none"),
     rerun: () => void start("all"),
     refresh: () => void start("none"),
+    cancelCheck: (checkId) => {
+      const skipped = session?.skippedCheckIds ?? [];
+      if (skipped.includes(checkId)) return;
+      void start("none", { skip: [...skipped, checkId] });
+    },
+    runCheck: (checkId) => {
+      const skip = (session?.skippedCheckIds ?? []).filter(
+        (id) => id !== checkId
+      );
+      const queued: boolean = checks.some(
+        (check) =>
+          check.check_id === checkId &&
+          (check.state === "pending" || check.state === "waiting")
+      );
+      void start(
+        "none",
+        queued ? { skip, startNow: checkId } : { skip, run: checkId }
+      );
+    },
   };
 }
 

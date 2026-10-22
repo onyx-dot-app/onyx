@@ -604,6 +604,11 @@ result (`draft_runs.py:stop_blocked_draft_checks`).
 apart from the shared results (`draft_runs.py:cache_user_skip`). Creation by
 the same user reuses an optional skip and always runs a stopped required
 check. A later run that does not skip the check clears the skip.
+On the create form's checks card, a running or queued check's Cancel Check
+adds it to the session's skips (`useConnectorChecks().cancelCheck`), and every
+later run sends them as `skip_check_ids`. Run Check runs a skipped check
+(`check_ids`) or a queued one next (`start_check_id`) and drops its skip. A
+finished check with a fix or a docs link opens to show them.
 A result of an older run does not replace a skip or stop of the latest run
 (`draft_runs.py:cache_run_result`). `start_check_id` runs that check and the
 checks it needs first, also through a dependency that keeps a cached result. An unknown check id, or a check to run and to skip, is

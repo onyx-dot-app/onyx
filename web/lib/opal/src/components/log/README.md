@@ -5,17 +5,22 @@
 One line of a log or report: an icon, a title, centre content and trailing
 content.
 A list of checks, the steps of a job, or the entries of an audit trail are each
-a column of `Log`s. A line is not interactive.
+a column of `Log`s. A line is plain unless it gets `onClick`, and it can open a
+body below it with `expandable`.
 
 ## Props
 
-| Prop             | Type                    | Default     | Description                                                                  |
-| ---------------- | ----------------------- | ----------- | ---------------------------------------------------------------------------- |
-| `variant`        | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also tints the line               |
-| `icon`           | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                          |
-| `title`          | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                 |
-| `centerChildren` | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit |
-| `rightChildren`  | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                     |
+| Prop              | Type                    | Default     | Description                                                                  |
+| ----------------- | ----------------------- | ----------- | ---------------------------------------------------------------------------- |
+| `variant`         | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also tints the line               |
+| `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                          |
+| `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                 |
+| `centerChildren`  | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit |
+| `rightChildren`   | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                     |
+| `onClick`         | `() => void`            | —           | Makes the line interactive (`Interactive.Stateless`, `internal`)             |
+| `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                     |
+| `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state              |
+| `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the title                     |
 
 ## Variants
 
@@ -45,6 +50,13 @@ can match it to the variant.
   the trailing content.
 - A title too long for its column is cut with an ellipsis and shows in full
   in a tooltip. `centerChildren` handles its own overflow.
+- With `onClick`, the line hovers and presses as an `internal` stateless
+  surface, and a click anywhere on it calls `onClick`. Put a button inside it
+  (e.g. a chevron) as its keyboard target: that button's click reaches
+  `onClick` too. A button with its own action stops its click from bubbling.
+- With `expandable`, the body opens below the line in a `Fold`, indented to
+  start under the title. While `expanded`, the line keeps its hover look. A
+  heavy variant tints the body too, so the line and its body read as one.
 
 ## Usage
 

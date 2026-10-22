@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "Créer le connecteur quand même"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "Annuler la vérification"
+        },
+        "run": {
+          "label": "Lancer la vérification"
+        }
+      },
+      "details": {
+        "expand": "Afficher les détails",
+        "collapse": "Masquer les détails"
       }
     },
     "connectorEdit": {

@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "それでもコネクタを作成"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "チェックをキャンセル"
+        },
+        "run": {
+          "label": "チェックを実行"
+        }
+      },
+      "details": {
+        "expand": "詳細を表示",
+        "collapse": "詳細を非表示"
       }
     },
     "connectorEdit": {

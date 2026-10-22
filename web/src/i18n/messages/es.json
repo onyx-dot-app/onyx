@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "Crear el conector de todos modos"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "Cancelar comprobación"
+        },
+        "run": {
+          "label": "Ejecutar comprobación"
+        }
+      },
+      "details": {
+        "expand": "Mostrar detalles",
+        "collapse": "Ocultar detalles"
       }
     },
     "connectorEdit": {

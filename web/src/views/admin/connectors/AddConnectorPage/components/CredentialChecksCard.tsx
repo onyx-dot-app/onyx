@@ -11,7 +11,6 @@ import {
   Card,
   Divider,
   Fold,
-  IconTooltip,
   Log,
   type LogVariant,
   OverflowText,
@@ -22,6 +21,8 @@ import {
 import {
   SvgAlertCircle,
   SvgCheckCircle,
+  SvgChevronDown,
+  SvgChevronUp,
   SvgClock,
   SvgExpand,
   SvgFold,
@@ -32,7 +33,8 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { escapeMarkdown, markdown } from "@opal/utils";
+import { escapeMarkdown, markdown, noProp } from "@opal/utils";
+import { Hoverable } from "@opal/core";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -147,73 +149,169 @@ const GROUPS = [
   states: readonly CheckLineState[];
 }>;
 
-interface CheckLogProps {
+/** What the live checks card lets an admin do to one check. */
+interface CheckActions {
+  /** Stops a running or queued check. */
+  onCancelCheck?: (checkId: string) => void;
+  /** Runs a skipped check again, or a queued one next. */
+  onRunCheck?: (checkId: string) => void;
+}
+
+// Each row is its own hover group: hover is CSS `:hover`, so rows do not
+// reveal each other's buttons.
+const ROW_HOVER_GROUP = "check-log";
+
+interface CheckLogProps extends CheckActions {
   check: CheckLine;
 }
-function CheckLog({ check }: CheckLogProps) {
+function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
   const t = useTranslations("admin.connectorChecks");
+  const [expanded, setExpanded] = useState(false);
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
   // A failed required check blocks the form or Create, so its line is heavy.
   const blocking = check.state === "failed" && check.required;
-  // How to fix a failed or unverified check, with a link to the docs.
-  const guidance: RichStr | undefined =
-    (check.state === "failed" ||
-      check.state === "incomplete" ||
-      check.state === "indeterminate") &&
-    (check.remediation !== null || check.docs_link !== null)
-      ? markdown(
-          ...(check.remediation !== null
-            ? [escapeMarkdown(check.remediation)]
-            : []),
-          ...(check.docs_link !== null
-            ? [`[${escapeMarkdown(t("docsLink.label"))}](${check.docs_link})`]
-            : [])
-        )
-      : undefined;
+  // A finished check with a fix or docs opens to show them.
+  const finished: boolean =
+    check.state === "passed" ||
+    check.state === "failed" ||
+    check.state === "incomplete" ||
+    check.state === "indeterminate";
+  const expandable: boolean =
+    finished && (check.remediation !== null || check.docs_link !== null);
+  const open: boolean = check.state === "running" || check.state === "pending";
 
   const logVariant: LogVariant = blocking ? "error-heavy" : variant;
   const messageFont: TextFont = blocking ? "main-ui-action" : font;
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
-  return (
-    <Log
-      variant={logVariant}
-      icon={icon}
-      title={check.display_name}
-      centerChildren={
-        <OverflowText
-          as="p"
-          font={messageFont}
-          color={messageColor}
-          textPosition="text-start"
-        >
-          {check.message || t(detail)}
-        </OverflowText>
-      }
-      rightChildren={
-        <Section flexDirection="row" width="fit" height="fit" gap={1}>
-          {guidance !== undefined && (
-            <IconTooltip
-              status={check.state === "failed" ? "error" : "warning"}
-              tooltip={guidance}
-            />
-          )}
-          {check.required && (
-            <Text font="secondary-action" color="text-03">
-              {t("required.label")}
-            </Text>
-          )}
-        </Section>
-      }
+  const required = check.required ? (
+    <Text font="secondary-action" color="text-03">
+      {t("required.label")}
+    </Text>
+  ) : undefined;
+
+  // Left slot: "Required", or on hover a running or queued check's Cancel.
+  const leftSlot =
+    open && onCancelCheck ? (
+      <Hoverable.Item
+        group={ROW_HOVER_GROUP}
+        variant="replace-on-hover"
+        resting={required}
+      >
+        <Button
+          icon={SvgXCircle}
+          prominence="internal"
+          size="sm"
+          tooltip={t("actions.cancel.label")}
+          aria-label={t("actions.cancel.label")}
+          onClick={noProp(() => onCancelCheck(check.check_id))}
+        />
+      </Hoverable.Item>
+    ) : (
+      required
+    );
+
+  // Right slot: a finished check's chevron, or on hover a skipped or queued
+  // check's Run. Otherwise an empty slot of the same width keeps the rows
+  // aligned.
+  const rightSlot = expandable ? (
+    // Its click reaches the line's, which toggles the details.
+    <Button
+      icon={expanded ? SvgChevronUp : SvgChevronDown}
+      prominence="internal"
+      size="sm"
+      aria-expanded={expanded}
+      tooltip={t(expanded ? "details.collapse" : "details.expand")}
+      aria-label={t(expanded ? "details.collapse" : "details.expand")}
     />
+  ) : (check.state === "skipped" || check.state === "pending") && onRunCheck ? (
+    // Hidden at rest, but its width stays.
+    <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
+      <Button
+        icon={SvgPlay}
+        prominence="internal"
+        size="sm"
+        tooltip={t("actions.run.label")}
+        aria-label={t("actions.run.label")}
+        onClick={noProp(() => onRunCheck(check.check_id))}
+      />
+    </Hoverable.Item>
+  ) : (
+    <div aria-hidden className="w-(--height-line-label) shrink-0" />
+  );
+
+  const docs: RichStr | undefined =
+    check.docs_link !== null
+      ? markdown(`[${escapeMarkdown(t("docsLink.label"))}](${check.docs_link})`)
+      : undefined;
+  // The docs link sits under the title, the fix under the message.
+  const details = (
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      alignItems="start"
+      height="fit"
+      gap={4}
+    >
+      <Section width={10} height="fit" alignItems="start" className="shrink-0">
+        {docs !== undefined && (
+          <Text font="secondary-body" color="text-03">
+            {docs}
+          </Text>
+        )}
+      </Section>
+      {check.remediation !== null && (
+        <Text font="secondary-body" color="text-03">
+          {check.remediation}
+        </Text>
+      )}
+    </Section>
+  );
+
+  const line = {
+    variant: logVariant,
+    icon,
+    title: check.display_name,
+    centerChildren: (
+      <OverflowText
+        as="p"
+        font={messageFont}
+        color={messageColor}
+        textPosition="text-start"
+      >
+        {check.message || t(detail)}
+      </OverflowText>
+    ),
+    rightChildren: (
+      <Section flexDirection="row" width="fit" height="fit" gap={1}>
+        {leftSlot}
+        {rightSlot}
+      </Section>
+    ),
+  };
+
+  return (
+    <Hoverable.Root group={ROW_HOVER_GROUP}>
+      {expandable ? (
+        <Log
+          {...line}
+          onClick={() => setExpanded((value) => !value)}
+          expandable
+          expanded={expanded}
+          expandedContent={details}
+        />
+      ) : (
+        <Log {...line} />
+      )}
+    </Hoverable.Root>
   );
 }
 
-interface CheckGroupProps {
+interface CheckGroupProps extends CheckActions {
   label: (typeof GROUPS)[number]["label"];
   checks: CheckLine[];
 }
-function CheckGroup({ label, checks }: CheckGroupProps) {
+function CheckGroup({ label, checks, ...actions }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
@@ -231,6 +329,7 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
           <CheckLog
             key={`${check.capability}:${check.check_id}`}
             check={check}
+            {...actions}
           />
         ))}
       </Section>
@@ -238,11 +337,11 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   );
 }
 
-export interface CheckLineGroupsProps {
+export interface CheckLineGroupsProps extends CheckActions {
   lines: CheckLine[];
 }
 /** The lines grouped by outcome, blocking failures first. Empty groups are left out. */
-export function CheckLineGroups({ lines }: CheckLineGroupsProps) {
+export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
   const groups = useMemo(
     () =>
       GROUPS.map((group) => ({
@@ -260,6 +359,7 @@ export function CheckLineGroups({ lines }: CheckLineGroupsProps) {
           key={group.label}
           label={group.label}
           checks={group.checks}
+          {...actions}
         />
       ))}
     </Section>
@@ -300,6 +400,10 @@ interface CheckCardViewProps {
   stateCounts: Record<DraftCheckStateKind, number>;
   /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
   onRerun?: () => void;
+  /** Stops a running or queued check. A stored report has none. */
+  onCancelCheck?: (checkId: string) => void;
+  /** Runs a skipped check again, or a queued one next. */
+  onRunCheck?: (checkId: string) => void;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
@@ -311,6 +415,8 @@ export function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  onCancelCheck,
+  onRunCheck,
   defaultCollapsed = false,
   expandRequest = 0,
 }: CheckCardViewProps) {
@@ -490,7 +596,11 @@ export function CheckCardView({
             gap={1}
           >
             {hasRows ? (
-              <CheckLineGroups lines={lines} />
+              <CheckLineGroups
+                lines={lines}
+                onCancelCheck={onCancelCheck}
+                onRunCheck={onRunCheck}
+              />
             ) : (
               !notice && (
                 <Text font="main-ui-body" color="text-03">
@@ -580,6 +690,8 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
+      onCancelCheck={checks.cancelCheck}
+      onRunCheck={checks.runCheck}
       expandRequest={expandRequest}
     />
   );

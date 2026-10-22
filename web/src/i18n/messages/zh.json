@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "仍然创建连接器"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "取消检查"
+        },
+        "run": {
+          "label": "运行检查"
+        }
+      },
+      "details": {
+        "expand": "显示详情",
+        "collapse": "隐藏详情"
       }
     },
     "connectorEdit": {

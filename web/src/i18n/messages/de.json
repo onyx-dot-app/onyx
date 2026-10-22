@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "Konnektor trotzdem erstellen"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "Prüfung abbrechen"
+        },
+        "run": {
+          "label": "Prüfung ausführen"
+        }
+      },
+      "details": {
+        "expand": "Details anzeigen",
+        "collapse": "Details ausblenden"
       }
     },
     "connectorEdit": {

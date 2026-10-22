@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "Create Connector Anyway"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "Cancel Check"
+        },
+        "run": {
+          "label": "Run Check"
+        }
+      },
+      "details": {
+        "expand": "Show details",
+        "collapse": "Hide details"
       }
     },
     "connectorEdit": {

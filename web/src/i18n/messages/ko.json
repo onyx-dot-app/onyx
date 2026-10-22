@@ -10800,6 +10800,18 @@
         "proceedButton": {
           "label": "그래도 커넥터 만들기"
         }
+      },
+      "actions": {
+        "cancel": {
+          "label": "검사 취소"
+        },
+        "run": {
+          "label": "검사 실행"
+        }
+      },
+      "details": {
+        "expand": "세부 정보 표시",
+        "collapse": "세부 정보 숨기기"
       }
     },
     "connectorEdit": {
