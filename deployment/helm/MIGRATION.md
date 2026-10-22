@@ -119,18 +119,23 @@ since.
    running, so it fails and MinIO stays in use. Otherwise it writes a marker to
    the object store, and within a minute every pod stops writing to MinIO,
    with no restart.
-2. Make sure Helm keeps the MinIO PVC. Chart 0.9.0 marks it
-   `helm.sh/resource-policy: keep`, but an upgrade with `--reuse-values` keeps
-   the old values, which lack that annotation. Check it, and add it if it is
-   missing:
+2. Set `minio.enabled: false` and `objectStore.enabled: true`, then upgrade.
+   MinIO stops and the app pods roll out without downtime. From chart 0.9.21,
+   the upgrade keeps the MinIO PVC and marks it
+   `helm.sh/resource-policy: keep`, also with `--reuse-values`. On an earlier
+   0.9.x chart, add the annotation by hand before this upgrade, or Helm deletes
+   the PVC:
 
    ```bash
    kubectl annotate pvc -n <namespace> <fullname>-minio \
      helm.sh/resource-policy=keep --overwrite
    ```
-3. Set `minio.enabled: false` and `objectStore.enabled: true`, then upgrade.
-   MinIO stops and the app pods roll out without downtime. The MinIO PVC
-   stays. Delete it when you no longer need that data.
+3. Delete the MinIO PVC when you no longer need that data. Helm does not delete
+   it, and `helm uninstall` leaves it too:
+
+   ```bash
+   kubectl delete pvc -n <namespace> <fullname>-minio
+   ```
 
 New installs set `minio.enabled: false` and `objectStore.enabled: true`.
 
