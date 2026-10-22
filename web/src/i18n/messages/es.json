@@ -4101,8 +4101,8 @@
               }
             },
             "everything": {
-              "label": "Indexa todas las páginas que la cuenta puede leer",
-              "description": "Onyx indexa todas las páginas de cada espacio que la cuenta seleccionada puede leer. Para indexar menos, elige otra pestaña."
+              "label": "Indexar todo",
+              "description": "Onyx indexará todos los espacios y páginas a los que tiene acceso la cuenta seleccionada."
             },
             "space": {
               "label": "Clave de espacio",

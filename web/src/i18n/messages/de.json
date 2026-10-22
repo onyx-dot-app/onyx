@@ -4101,8 +4101,8 @@
               }
             },
             "everything": {
-              "label": "Indexiert jede Seite, die das Konto lesen kann",
-              "description": "Onyx indexiert alle Seiten in jedem Bereich, den das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
+              "label": "Alles indexieren",
+              "description": "Onyx indexiert alle Bereiche und Seiten, auf die das ausgewählte Konto Zugriff hat."
             },
             "space": {
               "label": "Space-Schlüssel",

@@ -4101,8 +4101,8 @@
               }
             },
             "everything": {
-              "label": "Indexes every page the account can read",
-              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
+              "label": "Index Everything",
+              "description": "Onyx will index all spaces and pages that the selected account has access to."
             },
             "space": {
               "label": "Space Key",
