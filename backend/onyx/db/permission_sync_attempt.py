@@ -442,7 +442,14 @@ def get_resumable_doc_permission_sync_checkpoint(
 ) -> DocPermissionSyncCheckpointRef | None:
     """The newest recent checkpoint of a failed attempt, when every attempt
     after it also failed. An attempt that dies before its first save leaves the
-    older checkpoint resumable; any other outcome since means a fresh crawl."""
+    older checkpoint resumable; any other outcome since means a fresh crawl.
+    A checkpoint older than the pair's perm_sync_pending_since predates a
+    requested full refresh and is never resumed."""
+    pending_since = db_session.execute(
+        select(ConnectorCredentialPair.perm_sync_pending_since).where(
+            ConnectorCredentialPair.id == cc_pair_id
+        )
+    ).scalar_one_or_none()
     holder = db_session.execute(
         select(DocPermissionSyncAttempt)
         .where(
@@ -461,6 +468,7 @@ def get_resumable_doc_permission_sync_checkpoint(
         holder is None
         or holder.checkpoint_pointer is None
         or holder.poll_range_end is None
+        or (pending_since is not None and holder.time_created < pending_since)
     ):
         return None
 

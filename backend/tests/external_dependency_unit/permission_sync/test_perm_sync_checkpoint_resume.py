@@ -1,10 +1,13 @@
 """A checkpointed doc sync stopped mid-crawl must hand its progress to the next
 attempt: the next attempt continues after the last saved element instead of
 restarting the crawl, keeps the stopped attempt's window, and on success marks
-the cc_pair synced as of that window and drops the checkpoints."""
+the cc_pair synced as of that window and drops the checkpoints. A failed
+element write or a requested full refresh keeps the crawl from skipping
+elements."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
+from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -84,7 +87,20 @@ class _FakeCheckpointedCrawl:
             checkpointer.save(checkpoint, None, window_end)
 
 
-def _run(cc_pair_id: int, crawl: _FakeCheckpointedCrawl) -> None:
+def _run(
+    cc_pair_id: int,
+    crawl: _FakeCheckpointedCrawl,
+    failing_doc_ids: frozenset[str] = frozenset(),
+) -> None:
+    def write(
+        new_permissions: list[ElementExternalAccess], **_: object
+    ) -> perm_tasks.PermissionSyncResult:
+        # The fake crawl yields only documents
+        failed = cast(DocExternalAccess, new_permissions[0]).doc_id in failing_doc_ids
+        return perm_tasks.PermissionSyncResult(
+            num_updated=0 if failed else 1, num_errors=1 if failed else 0
+        )
+
     sync_config = SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=1,
@@ -102,7 +118,7 @@ def _run(cc_pair_id: int, crawl: _FakeCheckpointedCrawl) -> None:
         patch.object(
             perm_tasks,
             "update_element_permissions_batch",
-            return_value=perm_tasks.PermissionSyncResult(num_updated=1, num_errors=0),
+            side_effect=write,
         ),
     ):
         with get_session_with_current_tenant() as db_session:
@@ -162,3 +178,48 @@ def test_stopped_sync_resumes_from_checkpoint(
     assert cc_pair.last_time_perm_sync == _FIRST_WINDOW_END
     assert first.checkpoint_pointer is None
     assert second.checkpoint_pointer is None
+
+
+def test_failed_write_is_retried_on_resume(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    cc_pair = create_test_connector_credential_pair(
+        db_session, source=DocumentSource.GOOGLE_DRIVE, access_type=AccessType.SYNC
+    )
+    crawl = _FakeCheckpointedCrawl()
+
+    _dispatch(cc_pair.id, db_session)
+    with pytest.raises(RuntimeError, match="Stop signal detected"):
+        _run(cc_pair.id, crawl, failing_doc_ids=frozenset({"doc-1"}))
+
+    _dispatch(cc_pair.id, db_session)
+    _run(cc_pair.id, crawl)
+
+    # The checkpoint stopped before doc-1, so the resume writes it again
+    assert crawl.crawled_by_run[1] == list(range(1, _NUM_ELEMENTS))
+
+
+def test_full_refresh_ignores_older_checkpoint(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    cc_pair = create_test_connector_credential_pair(
+        db_session, source=DocumentSource.GOOGLE_DRIVE, access_type=AccessType.SYNC
+    )
+    crawl = _FakeCheckpointedCrawl()
+
+    _dispatch(cc_pair.id, db_session)
+    with pytest.raises(RuntimeError, match="Stop signal detected"):
+        _run(cc_pair.id, crawl)
+
+    # Re-entering a synced access type stamps this to request a full refresh
+    cc_pair.perm_sync_pending_since = datetime.now(timezone.utc)
+    db_session.commit()
+
+    # A fresh crawl starts at element 0 and stops like the first run
+    _dispatch(cc_pair.id, db_session)
+    with pytest.raises(RuntimeError, match="Stop signal detected"):
+        _run(cc_pair.id, crawl)
+
+    assert crawl.crawled_by_run[1] == list(range(_STOP_AFTER))

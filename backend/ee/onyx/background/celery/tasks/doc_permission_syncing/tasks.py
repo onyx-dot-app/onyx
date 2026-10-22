@@ -618,6 +618,8 @@ def connector_permission_sync_generator_task(
             )
             tasks_generated += result.num_updated
             docs_with_errors += result.num_errors
+            if result.num_errors and checkpointer:
+                checkpointer.freeze()
             progress.total_docs_synced = tasks_generated
             progress.docs_with_permission_errors = docs_with_errors
             progress.last_progress_at = datetime.now(timezone.utc)

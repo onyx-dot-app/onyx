@@ -44,6 +44,7 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
         self._resumed_attempt_id: int | None = None
         self._resumed_pointer: str | None = None
         self._saved_pointer: str | None = None
+        self._frozen = False
         self._last_save_monotonic = time.monotonic()
 
         with get_session_with_current_tenant() as db_session:
@@ -91,6 +92,8 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
         poll_range_start: datetime | None,
         poll_range_end: datetime,
     ) -> None:
+        if self._frozen:
+            return
         now = time.monotonic()
         if now - self._last_save_monotonic < CHECKPOINT_SAVE_INTERVAL_SECONDS:
             return
@@ -119,6 +122,11 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
             _delete_checkpoint(self._resumed_attempt_id, self._resumed_pointer)
             self._resumed_attempt_id = None
             self._resumed_pointer = None
+
+    def freeze(self) -> None:
+        """Stop saving after a failed element write, so a resume starts before
+        that element and retries it."""
+        self._frozen = True
 
     def discard(self) -> None:
         """Drop every checkpoint this chain holds, once the crawl has finished.
