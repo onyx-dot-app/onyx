@@ -14294,7 +14294,7 @@
         "title": "Habilidades associadas",
         "unavailable": {
           "duplicateName": "Uma habilidade chamada “{name}” já está associada.",
-          "invalid": "Habilidade inválida: corrija-a antes de associar.",
+          "invalid": "Habilidade inválida. Corrija-a antes de associar.",
           "otherApp": "Já associada ao app “{name}”."
         },
         "unlink": {

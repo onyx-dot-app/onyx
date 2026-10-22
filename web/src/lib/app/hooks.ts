@@ -27,7 +27,7 @@ export function useAppDocumentTitle(): void {
     const appendChatNameToDocumentTitle =
       appPosition.isChattable() && currentChatSession?.name;
     document.title = appendChatNameToDocumentTitle
-      ? `${currentChatSession.name} — ${appName}`
+      ? `${currentChatSession.name} | ${appName}`
       : appName;
   }, [currentChatSession?.name, appName, appPosition]);
 }
@@ -36,7 +36,7 @@ export function useAdminDocumentTitle(): void {
   const pathname = usePathname();
   const { appName } = useSettings();
   useLayoutEffect(() => {
-    document.title = `Admin — ${appName}`;
+    document.title = `Admin | ${appName}`;
   }, [pathname, appName]);
 }
 
