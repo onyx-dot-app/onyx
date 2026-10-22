@@ -4090,13 +4090,10 @@
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "كل شيء"
+                  "label": "فهرسة الكل"
                 },
-                "space": {
-                  "label": "مساحة"
-                },
-                "page": {
-                  "label": "صفحة"
+                "select": {
+                  "label": "تحديد المساحات/الصفحات"
                 },
                 "cql": {
                   "label": "استعلام CQL"

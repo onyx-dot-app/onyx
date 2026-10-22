@@ -4090,13 +4090,10 @@
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "全部"
+                  "label": "索引全部"
                 },
-                "space": {
-                  "label": "空间"
-                },
-                "page": {
-                  "label": "页面"
+                "select": {
+                  "label": "选择空间/页面"
                 },
                 "cql": {
                   "label": "CQL 查询"

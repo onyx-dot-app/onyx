@@ -4090,13 +4090,10 @@
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Alles"
+                  "label": "Alles indexieren"
                 },
-                "space": {
-                  "label": "Space"
-                },
-                "page": {
-                  "label": "Seite"
+                "select": {
+                  "label": "Spaces/Seiten auswählen"
                 },
                 "cql": {
                   "label": "CQL-Abfrage"

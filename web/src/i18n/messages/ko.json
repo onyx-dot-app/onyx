@@ -4090,13 +4090,10 @@
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "전체"
+                  "label": "모두 색인"
                 },
-                "space": {
-                  "label": "스페이스"
-                },
-                "page": {
-                  "label": "페이지"
+                "select": {
+                  "label": "스페이스/페이지 선택"
                 },
                 "cql": {
                   "label": "CQL 쿼리"

@@ -923,9 +923,9 @@ export const connectorConfigs: Record<
             ],
           },
           {
-            value: "space",
+            value: "select",
             label:
-              "connectors.confluence.fields.indexing_scope.tabs.space.label",
+              "connectors.confluence.fields.indexing_scope.tabs.select.label",
             fields: [
               {
                 type: "text",
@@ -934,13 +934,6 @@ export const connectorConfigs: Record<
                 default: "",
                 description: "connectors.confluence.fields.space.description",
               },
-            ],
-          },
-          {
-            value: "page",
-            label:
-              "connectors.confluence.fields.indexing_scope.tabs.page.label",
-            fields: [
               {
                 type: "text",
                 label: "connectors.confluence.fields.page_id.label",
@@ -974,7 +967,7 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "space",
+        defaultTab: "select",
       },
       buildIncludeAttachmentsOption(true),
     ],
