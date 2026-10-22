@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "새 문서 세트"
         },
+        "noResults": {
+          "description": "\"{query}\"와(과) 일치하는 문서 세트가 없습니다",
+          "title": "문서 세트를 찾을 수 없습니다"
+        },
         "notFound": {
           "message": "id가 {id}인 문서 세트를 찾을 수 없습니다",
           "title": "문서 세트를 찾을 수 없습니다"
+        },
+        "search": {
+          "placeholder": "문서 세트 검색..."
         },
         "status": {
           "deleting": {

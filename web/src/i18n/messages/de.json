@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "Neuer Dokumentensatz"
         },
+        "noResults": {
+          "description": "Keine Dokumentensätze entsprechen „{query}“",
+          "title": "Keine Dokumentensätze gefunden"
+        },
         "notFound": {
           "message": "Dokumentensatz mit der ID {id} nicht gefunden",
           "title": "Dokumentensatz nicht gefunden"
+        },
+        "search": {
+          "placeholder": "Dokumentensätze durchsuchen..."
         },
         "status": {
           "deleting": {

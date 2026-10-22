@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "Novo conjunto de documentos"
         },
+        "noResults": {
+          "description": "Nenhum conjunto de documentos corresponde a \"{query}\"",
+          "title": "Nenhum conjunto de documentos encontrado"
+        },
         "notFound": {
           "message": "Conjunto de documentos com id {id} não encontrado",
           "title": "Conjunto de documentos não encontrado"
+        },
+        "search": {
+          "placeholder": "Pesquisar conjuntos de documentos..."
         },
         "status": {
           "deleting": {

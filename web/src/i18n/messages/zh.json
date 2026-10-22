@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "新建文档集"
         },
+        "noResults": {
+          "description": "没有与“{query}”匹配的文档集",
+          "title": "未找到文档集"
+        },
         "notFound": {
           "message": "未找到 id 为 {id} 的文档集",
           "title": "未找到文档集"
+        },
+        "search": {
+          "placeholder": "搜索文档集..."
         },
         "status": {
           "deleting": {

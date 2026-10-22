@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "新しいドキュメントセット"
         },
+        "noResults": {
+          "description": "「{query}」に一致するドキュメントセットはありません",
+          "title": "ドキュメントセットが見つかりません"
+        },
         "notFound": {
           "message": "id が {id} のドキュメントセットは見つかりません",
           "title": "ドキュメントセットが見つかりません"
+        },
+        "search": {
+          "placeholder": "ドキュメントセットを検索..."
         },
         "status": {
           "deleting": {
