@@ -3,6 +3,72 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: fixed
+          description: The api server and the legacy MinIO copy Job wait for the
+            bundled object store to answer before they start, so they no longer
+            crash-loop while SeaweedFS starts.
+        - kind: fixed
+          description: Setting minio.enabled to false keeps the MinIO PVC and marks
+            it helm.sh/resource-policy keep, also after upgrades with
+            --reuse-values, so retiring MinIO needs no manual annotation.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-10-22T00:51:36.831772421Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.9
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 23d4786e483b457920bd263bfd02c9608c82906da4445df8688a81099e566bee
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.21/onyx-0.9.21.tgz
+    version: 0.9.21
+  - annotations:
+      artifacthub.io/changes: |
         - kind: changed
           description: Default Craft sandbox API callbacks to the chart's internal
             API Service, while preserving explicit ONYX_SERVER_URL overrides.
@@ -10103,4 +10169,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-10-21T23:21:19.975090122Z"
+generated: "2026-10-22T00:51:36.832153161Z"
