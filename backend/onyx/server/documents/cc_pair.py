@@ -1046,6 +1046,13 @@ def prune_cc_pair(
             "Connection not found for current user's permissions",
         )
 
+    # The generator drops a prune for a paused pair, so refuse it here.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to prune.",
+        )
+
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
