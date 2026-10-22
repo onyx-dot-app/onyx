@@ -156,16 +156,64 @@ jobs:
           mkdir -p upload/.next
           cp -r web/.next/standalone upload/.next/standalone
 
+      # A GitHub Actions OIDC token expires minutes after it is minted.
+      # `preview upload --deploy` mints one at the start and polls the deploy
+      # with it, so a slow upload plus build failed with "invalid or
+      # unauthorized token" about 5 minutes in.
+      # The CLI uploads with its own token; the deploy and the wait mint a
+      # fresh one for each request (the server accepts OIDC on exactly these).
       - name: Upload the frontend and deploy
         id: deploy
         run: |
           # Without pipefail the tee below would mask a failed upload.
-          set -o pipefail
+          set -euo pipefail
           # stderr into the capture too: on a failure it holds the reason, and
           # the next step quotes the tail of it into the PR comment.
           preview upload frontend upload "$PREVIEW_SHA" \
-            --repo onyx --server "$PREVIEW_URL" --oidc --deploy 2>&1 | tee out.txt
-          URL=$(sed -n 's/^ready: //p' out.txt)
+            --repo onyx --server "$PREVIEW_URL" --oidc 2>&1 | tee out.txt
+
+          token() {
+            curl -fsS --retry 3 --retry-all-errors -G \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              -H "Accept: application/json; api-version=2.0" \
+              --data-urlencode "audience=$PREVIEW_GITHUB_OIDC_AUDIENCE" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value
+          }
+          # method path [body]. On an HTTP error the body (the server's reason)
+          # goes into out.txt for the PR comment.
+          api() {
+            local res
+            if ! res=$(curl -sS --fail-with-body --retry 3 --retry-all-errors -X "$1" \
+              -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
+              ${3:+--data "$3"} "$PREVIEW_URL$2" 2>&1); then
+              echo "Error: $1 $2: $res" | tee -a out.txt >&2
+              return 1
+            fi
+            printf '%s' "$res"
+          }
+
+          DEPLOY=$(api POST /api/deploys "$(jq -nc --arg ref "$PREVIEW_SHA" '{repo: "onyx", ref: $ref, rebuild: false}')")
+          ID=$(jq -r .id <<<"$DEPLOY")
+          STATUS=$(jq -r .status <<<"$DEPLOY")
+          echo "deploy $ID: $STATUS" | tee -a out.txt
+          # The build runs on the server; 20 minutes is well past its slowest.
+          DEADLINE=$((SECONDS + 1200))
+          while [ "$STATUS" = queued ] || [ "$STATUS" = building ]; do
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "deploy $ID still $STATUS after 20 minutes" | tee -a out.txt
+              exit 1
+            fi
+            sleep 5
+            DEPLOY=$(api GET "/api/deploys/$ID")
+            STATUS=$(jq -r .status <<<"$DEPLOY")
+          done
+          if [ "$STATUS" != ready ]; then
+            echo "deploy $ID $STATUS: $(jq -r .error <<<"$DEPLOY")" | tee -a out.txt
+            echo "full logs: preview deploy logs $ID" | tee -a out.txt
+            exit 1
+          fi
+          URL=$(jq -r .preview_url <<<"$DEPLOY")
+          echo "ready: $URL" | tee -a out.txt
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
       # Reports failure as well as success. Gated on the deploy's URL, a failed
