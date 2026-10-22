@@ -1,0 +1,546 @@
+"""Exercise real LiteLLM HTTP connections without external provider credentials."""
+
+import datetime as dt
+import ipaddress
+import json
+import select
+import ssl
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
+
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.events import AgentEvent, MessageUpdateEvent
+from onyx.agents.runtime import Agent
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import GenerationRequest, TextDeltaEvent, UserMessage
+from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
+
+
+class ProviderState:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.disconnected = threading.Event()
+        self.release = threading.Event()
+        self.requests = 0
+        self.path = ""
+        self.headers: dict[str, str] = {}
+
+
+def _first_events(provider: str) -> bytes:
+    if provider == "responses":
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {
+                    "id": "resp_test",
+                    "object": "response",
+                    "created_at": 1,
+                    "model": "gpt-5-mini",
+                    "status": "in_progress",
+                    "output": [],
+                },
+            },
+            {
+                "type": "response.output_item.added",
+                "sequence_number": 1,
+                "output_index": 0,
+                "item": {
+                    "id": "msg_test",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [],
+                    "status": "in_progress",
+                },
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 2,
+                "item_id": "msg_test",
+                "output_index": 0,
+                "content_index": 0,
+                "delta": "hello",
+            },
+        ]
+        return "".join(
+            f"event: {body['type']}\ndata: {json.dumps(body)}\n\n" for body in events
+        ).encode()
+    if provider == "anthropic":
+        events = [
+            (
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {
+                        "id": "msg_test",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [],
+                        "model": "claude-haiku-4-5",
+                        "usage": {"input_tokens": 1, "output_tokens": 0},
+                    },
+                },
+            ),
+            (
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            ),
+            (
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": "hello"},
+                },
+            ),
+        ]
+        return "".join(
+            f"event: {name}\ndata: {json.dumps(body)}\n\n" for name, body in events
+        ).encode()
+    chunk = {
+        "id": "chat-test",
+        "object": "chat.completion.chunk",
+        "created": 1,
+        "model": "harness-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": "hello"},
+                "finish_reason": None,
+            }
+        ],
+    }
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+@contextmanager
+def provider_server(
+    provider: str,
+    send_chunk: bool,
+    complete: bool = False,
+    tls: ssl.SSLContext | None = None,
+    complete_after_first: bool = False,
+) -> Iterator[tuple[str, ProviderState]]:
+    state = ProviderState()
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            request_body = json.loads(
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            )
+            state.requests += 1
+            finish = complete or (complete_after_first and state.requests > 1)
+            state.path = self.path
+            state.headers = dict(self.headers)
+            if not request_body.get("stream"):
+                if not finish:
+                    state.started.set()
+                    if not state.release.wait(15):
+                        return
+                body = json.dumps(
+                    {
+                        "id": "chat-test",
+                        "object": "chat.completion",
+                        "created": 1,
+                        "model": "harness-model",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "hello"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+                return
+            if send_chunk or finish:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(_first_events(provider))
+                if finish:
+                    self.wfile.write(
+                        b'data: {"id":"chat-test","object":"chat.completion.chunk","created":1,"model":"harness-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
+                    )
+                self.wfile.flush()
+                if finish:
+                    self.close_connection = True
+                    return
+            state.started.set()
+            # Observe EOF on the actual provider socket, not only a local task flag.
+            while not state.release.is_set():
+                readable, _, _ = select.select([self.connection], [], [], 0.05)
+                if readable:
+                    try:
+                        disconnected = not self.connection.recv(1)
+                    except ConnectionResetError:
+                        disconnected = True
+                    if disconnected:
+                        state.disconnected.set()
+                        return
+            if not send_chunk:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(_first_events(provider))
+                self.wfile.flush()
+            self.close_connection = True
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    if tls is not None:
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        scheme = "https" if tls is not None else "http"
+        yield f"{scheme}://127.0.0.1:{server.server_port}", state
+    finally:
+        state.release.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.fixture(params=[False, True], ids=["http", "https"])
+def provider_tls(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> ssl.SSLContext | None:
+    if not request.param:
+        return None
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = dt.datetime.now(dt.timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=1))
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+            ),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = tmp_path / "provider.crt"
+    key_path = tmp_path / "provider.key"
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setenv("SSL_CERT_FILE", str(cert_path))
+    # Cached clients retain the previous test's certificate trust settings.
+    from litellm.caching.in_memory_cache import InMemoryCache
+
+    from onyx.llm.litellm_singleton import litellm
+
+    monkeypatch.setattr(litellm, "in_memory_llm_clients_cache", InMemoryCache())
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [
+        "openai",
+        "anthropic",
+        "responses",
+        "gateway_responses",
+        "azure",
+        "lm_studio",
+        "vercel_ai_gateway",
+        "together_ai",
+    ],
+)
+@pytest.mark.parametrize("send_chunk", [False, True])
+@pytest.mark.parametrize("invoke", [False, True])
+def test_cancel_waits_for_provider_read_then_stops_without_retry(
+    provider: str, send_chunk: bool, invoke: bool, provider_tls: ssl.SSLContext | None
+) -> None:
+    with provider_server(
+        "responses" if provider == "gateway_responses" else provider,
+        send_chunk,
+        tls=provider_tls,
+    ) as (url, state):
+        signal = CancellationSignal()
+        stopped = threading.Event()
+        yielded = threading.Event()
+        errors: list[BaseException] = []
+        llm = LitellmLLM(
+            api_key="local-test-key",
+            model_provider="bifrost"
+            if provider == "gateway_responses"
+            else "openai"
+            if provider == "responses"
+            else provider,
+            custom_config={"bifrost_api_mode": "responses"}
+            if provider == "gateway_responses"
+            else None,
+            model_name="claude-haiku-4-5"
+            if provider == "anthropic"
+            else "gpt-5-mini"
+            if provider == "responses"
+            else "harness-model",
+            max_input_tokens=4096,
+            api_base=url,
+        )
+
+        def generate() -> None:
+            request = GenerationRequest(messages=[UserMessage(content="test")])
+            context = GenerationContext(
+                cancellation=signal, flow=LLMFlow.MODEL_VALIDATION
+            )
+            if invoke:
+                llm.invoke(request, context)
+            else:
+                for event in llm.stream(request, context):
+                    if isinstance(event, TextDeltaEvent):
+                        yielded.set()
+
+        def execute() -> None:
+            try:
+                generate()
+            except AgentCancelled:
+                stopped.set()
+            except BaseException as error:
+                errors.append(error)
+
+        worker = threading.Thread(target=execute, daemon=True)
+        worker.start()
+        try:
+            assert state.started.wait(10), errors
+            if send_chunk and not invoke:
+                assert yielded.wait(5), errors
+            signal.cancel()
+            if not send_chunk:
+                assert not stopped.wait(0.05), errors
+                assert worker.is_alive()
+            state.release.set()
+            assert stopped.wait(10), errors
+            worker.join(timeout=3)
+            assert not worker.is_alive()
+            assert not errors
+            assert state.requests == 1, "Cancellation must not retry inference"
+        finally:
+            signal.cancel()
+            state.release.set()
+            worker.join(timeout=3)
+            assert not worker.is_alive()
+
+
+@pytest.mark.parametrize(
+    "provider", ["openai", "lm_studio", "vercel_ai_gateway", "together_ai"]
+)
+@pytest.mark.parametrize("invoke", [False, True])
+@pytest.mark.parametrize("from_environment", [False, True])
+def test_cancellable_model_completes_normally(
+    invoke: bool, provider: str, from_environment: bool
+) -> None:
+    with (
+        provider_server("openai", True, complete=True) as (url, state),
+        pytest.MonkeyPatch.context() as env,
+    ):
+        url += "/v1"
+        if from_environment:
+            env.setenv(f"{provider.upper()}_API_BASE", url)
+            env.setenv(f"{provider.upper()}_API_KEY", "local-test-key")
+        llm = LitellmLLM(
+            api_key=None if from_environment else "local-test-key",
+            model_provider=provider,
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=None if from_environment else url,
+            # The factory sends LM Studio credentials as an explicit header.
+            extra_headers={"Authorization": "Bearer local-test-key"}
+            if provider == "lm_studio" and not from_environment
+            else None,
+        )
+        request = GenerationRequest(messages=[UserMessage(content="test")])
+        context = GenerationContext(
+            cancellation=CancellationSignal(), flow=LLMFlow.MODEL_VALIDATION
+        )
+        if invoke:
+            text = llm.invoke(request, context).text
+        else:
+            text = "".join(
+                event.text
+                for event in llm.stream(request, context)
+                if isinstance(event, TextDeltaEvent)
+            )
+        assert text == "hello"
+        assert state.requests == 1
+        assert state.path == "/v1/chat/completions"
+        assert state.headers["Authorization"] == "Bearer local-test-key"
+
+
+@pytest.mark.parametrize("api_version", ["2024-02-01", "v1"])
+@pytest.mark.parametrize("ad_token", [False, True])
+def test_azure_preserves_authentication_and_endpoint(
+    api_version: str, ad_token: bool
+) -> None:
+    with provider_server("azure", send_chunk=True, complete=True) as (url, state):
+        client = LitellmLLM(
+            api_key=None if ad_token else "azure-test-key",
+            model_provider="azure",
+            model_name="harness-model",
+            api_base=url,
+            api_version=api_version,
+            custom_config={"AZURE_AD_TOKEN": "azure-test-token"} if ad_token else None,
+            max_input_tokens=4096,
+        )
+        result = client.invoke(
+            GenerationRequest(messages=[UserMessage(content="test")]),
+            GenerationContext(flow=LLMFlow.MODEL_VALIDATION),
+        )
+    assert result.text == "hello"
+    if api_version == "v1":
+        assert state.path == "/openai/v1/chat/completions"
+        assert state.headers["Authorization"] == (
+            "Bearer azure-test-token" if ad_token else "Bearer azure-test-key"
+        )
+    else:
+        assert (
+            state.path
+            == "/openai/deployments/harness-model/chat/completions?api-version=2024-02-01"
+        )
+        if ad_token:
+            assert state.headers["Authorization"] == "Bearer azure-test-token"
+        else:
+            assert state.headers["api-key"] == "azure-test-key"
+
+
+@pytest.mark.parametrize(
+    "provider", ["openai", "lm_studio", "vercel_ai_gateway", "together_ai"]
+)
+def test_agent_reuse_waits_for_cancelled_provider_read(
+    provider: str, provider_tls: ssl.SSLContext | None
+) -> None:
+    with provider_server(
+        "openai", False, tls=provider_tls, complete_after_first=True
+    ) as (url, state):
+        llm = LitellmLLM(
+            api_key="local-test-key",
+            model_provider=provider,
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=url,
+        )
+        coordinator = AgentCoordinator()
+        agent = Agent(llm)
+        old = agent.start(
+            messages=[UserMessage(content="First")],
+            max_steps=1,
+            coordinator=coordinator,
+        )
+        try:
+            assert state.started.wait(10)
+            old.cancel()
+            with pytest.raises(TimeoutError):
+                old.result(timeout=0.05)
+            assert not old.wait_for_idle(timeout=0)
+            assert coordinator.active_run(agent.id) is old
+            with pytest.raises(RuntimeError, match="already running or draining"):
+                agent.start(
+                    messages=[UserMessage(content="Second")],
+                    max_steps=1,
+                    coordinator=coordinator,
+                )
+            assert state.requests == 1
+            state.release.set()
+            with pytest.raises(AgentCancelled):
+                old.result(timeout=5)
+            assert old.wait_for_idle(timeout=5)
+            snapshot = old.snapshot()
+            new = agent.start(
+                messages=[UserMessage(content="Second")],
+                max_steps=1,
+                coordinator=coordinator,
+            )
+            assert new.result(timeout=5).output.text == "hello"
+            assert new.wait_for_idle(timeout=3)
+            assert state.requests == 2
+        finally:
+            state.release.set()
+            assert old.wait_for_idle(timeout=5)
+            assert coordinator.close(timeout=5)
+        assert old.snapshot() == snapshot
+        assert agent.state.messages[-1].text == "hello"
+
+
+@pytest.mark.parametrize("send_chunk", [False, True])
+def test_cancelled_provider_read_finishes_at_socket_timeout(send_chunk: bool) -> None:
+    with provider_server("openai", send_chunk=send_chunk) as (url, state):
+        llm = LitellmLLM(
+            api_key="local-test-key",
+            model_provider="openai",
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=url,
+        )
+        agent = Agent(
+            llm,
+            generation_context=GenerationContext(stall_timeout_s=1),
+        )
+        yielded = threading.Event()
+
+        def observe(event: AgentEvent) -> None:
+            if isinstance(event, MessageUpdateEvent) and isinstance(
+                event.generation_event, TextDeltaEvent
+            ):
+                yielded.set()
+
+        with patch.object(llm, "_completion", wraps=llm._completion) as complete:
+            run = agent.start(
+                messages=[UserMessage(content="Test")], max_steps=1, on_event=observe
+            )
+            try:
+                assert state.started.wait(5)
+                if send_chunk:
+                    assert yielded.wait(5)
+                run.cancel()
+                with pytest.raises(AgentCancelled):
+                    run.result(timeout=10)
+                assert run.wait_for_idle(timeout=1)
+                assert not state.release.is_set()
+                assert complete.call_count == 1
+                if send_chunk:
+                    assert state.requests == 1
+            finally:
+                state.release.set()
+                assert run.wait_for_idle(timeout=5)

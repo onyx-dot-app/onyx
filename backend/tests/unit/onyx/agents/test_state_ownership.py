@@ -1,0 +1,417 @@
+"""Runtime ownership across hooks, observation, snapshots, and lazy resources."""
+
+import threading
+from collections.abc import Callable
+
+import pytest
+from pydantic import BaseModel
+
+from onyx.agents.concurrency import EventDelivery
+from onyx.agents.events import (
+    AgentEvent,
+    MessageEndEvent,
+)
+from onyx.agents.models import (
+    AgentState,
+    PreparedStep,
+    StepInput,
+    StepResult,
+    ToolCallContext,
+)
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_response import Delta
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    GenerationToolCallEvent,
+    Message,
+    TextContent,
+    ThinkingDeltaEvent,
+    ToolCall,
+    ToolDefinition,
+    ToolResult,
+    ToolResultMessage,
+    UserMessage,
+)
+from tests.unit.onyx.agents.fakes import (
+    FakeModelClient,
+    ScriptedLLM,
+    collect_generation,
+)
+
+
+class ResultDetails(BaseModel):
+    tool_name: str
+    response_type: str
+    tool_result: dict[str, int]
+
+
+class ExtraData(BaseModel):
+    value: str = "private metadata"
+
+
+def _tool(execute: Callable[[ToolInvocation], ToolResult] | None = None) -> AgentTool:
+    return AgentTool(
+        definition=ToolDefinition(name="lookup", description="", parameters={}),
+        execute=execute
+        or (lambda _invocation: ToolResult(content="original", details=ExtraData())),
+    )
+
+
+def _model(
+    context: GenerationRequest, _signal: CancellationSignal | None = None
+) -> AssistantMessage:
+    if any(isinstance(message, ToolResultMessage) for message in context.messages):
+        return AssistantMessage(content=[TextContent(text=context.messages[-1].text)])
+    return AssistantMessage(
+        content=[
+            TextContent(text="Searching"),
+            ToolCall(id="c", name="lookup", arguments={}),
+        ]
+    )
+
+
+def test_default_model_accepts_application_metadata_without_chat_policy() -> None:
+    llm = ScriptedLLM([Delta(content="done")])
+    message = UserMessage(content="plain input", metadata=ExtraData())
+    model = llm
+    output = collect_generation(
+        model.stream(
+            GenerationRequest(messages=[message]),
+            GenerationContext(cancellation=CancellationSignal()),
+        )
+    )
+    assert output.text == "done"
+    assert llm.requests[0]["prompt"][0].content == "plain input"
+    assert "private metadata" not in str(llm.requests)
+
+
+@pytest.mark.parametrize("inherited", [False, True])
+def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) -> None:
+    def corrupt(event: AgentEvent) -> None:
+        if event.type == "message_end":
+            event.message.content.clear()
+        elif event.type == "message_update":
+            update = event.generation_event
+            if isinstance(update, GenerationToolCallEvent):
+                update.tool_call.arguments.clear()
+            elif isinstance(update, ThinkingDeltaEvent) and update.blocks:
+                update.blocks.clear()
+        elif event.type == "tool_end":
+            event.result.content = "corrupted"
+            event.tool_call.arguments["bad"] = True
+
+    ready = threading.Event()
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        assert ready.wait(2)
+        return _model(request)
+
+    agent = Agent(FakeModelClient(generate), tools=[_tool()])
+    observed: list[AgentEvent] = []
+    parent = EventDelivery() if inherited else None
+    if parent is not None:
+        parent.subscribe(corrupt)
+    run = agent.start(
+        max_steps=2,
+        on_event=None if inherited else corrupt,
+        _event_parent=parent,
+    )
+    run.subscribe(observed.append)
+    ready.set()
+    result = run.result()
+    assert run.wait_for_idle(2)
+    assert result.output.text == "original"
+    assert agent.state.messages[-1].text == "original"
+    assert (
+        next(event for event in observed if event.type == "message_end").message.text
+        == "Searching"
+    )
+    result.output.content.clear()
+    run.snapshot().messages.clear()
+    agent.state.messages.clear()
+    assert run.snapshot().messages[-1].text == "original"
+    if parent is not None:
+        parent.close()
+
+
+def test_after_step_cannot_rewrite_accepted_output() -> None:
+    def complete(step: StepResult) -> bool:
+        step.message.content.clear()
+        step.tool_results.clear()
+        return False
+
+    run = Agent(FakeModelClient(_model), tools=[_tool()], after_step=complete).start(
+        max_steps=1
+    )
+    run.result()
+    assert run.wait_for_idle(2)
+    assert run.snapshot().messages[0].text == "Searching"
+    assert run.snapshot().messages[-1].text == "original"
+
+
+@pytest.mark.parametrize("cancel_observer", [False, True])
+def test_observer_failure_does_not_change_execution(
+    cancel_observer: bool,
+) -> None:
+    def observe(_event: AgentEvent) -> None:
+        if cancel_observer:
+            raise AgentCancelled()
+        raise ValueError("observer failed")
+
+    run = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        )
+    ).start(max_steps=1, on_event=observe)
+    assert (run.result()).output.text == "answer"
+    assert run.wait_for_idle(2)
+    assert run.snapshot().status == "complete"
+    assert run.delivery_failed
+
+
+def test_completed_tools_survive_sibling_cancellation() -> None:
+    blocked = threading.Event()
+    release = threading.Event()
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        if invocation.call_id == "first":
+            return ToolResult(content="completed result")
+        blocked.set()
+        release.wait()
+        return ToolResult(content="second")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[
+                    ToolCall(id="first", name="lookup", arguments={}),
+                    ToolCall(id="second", name="lookup", arguments={}),
+                ]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="lookup", description="", parameters={}),
+                execute=execute,
+            )
+        ],
+    )
+    run = agent.start(max_steps=1)
+    assert blocked.wait(2)
+    run.cancel()
+    with pytest.raises(AgentCancelled):
+        run.result(2)
+    assert not run.wait_for_idle(0)
+    release.set()
+    assert run.wait_for_idle(2)
+    snapshot = run.snapshot()
+    assert snapshot.messages[-1].text == "completed result"
+    assert [
+        execution.status for step in snapshot.steps for execution in step.tools.values()
+    ] == ["complete", "cancelled"]
+    assert snapshot.messages == agent.state.messages
+
+
+def test_live_and_completed_history_match_and_are_isolated() -> None:
+    step_ready = threading.Event()
+    finish_step = threading.Event()
+
+    def after_step(_step: StepResult) -> bool:
+        step_ready.set()
+        assert finish_step.wait(5)
+        return False
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        ),
+        state=AgentState(messages=[UserMessage(content="earlier")]),
+        after_step=after_step,
+    )
+    run = agent.start(messages=[UserMessage(content="question")], max_steps=1)
+    try:
+        assert step_ready.wait(5)
+        live_state = agent.state
+        assert [message.text for message in live_state.messages] == [
+            "earlier",
+            "question",
+            "answer",
+        ]
+        detached = agent.state
+        first, last = detached.messages[0], detached.messages[-1]
+        assert isinstance(first, UserMessage)
+        assert isinstance(last, AssistantMessage)
+        first.content = "changed"
+        last.content.clear()
+        assert agent.state == live_state
+    finally:
+        finish_step.set()
+        run.result(timeout=5)
+        assert run.wait_for_idle(5)
+    assert agent.state == live_state
+    live_state.messages.clear()
+    assert len(agent.state.messages) == 3
+
+
+@pytest.mark.parametrize("with_assembly", [False, True])
+def test_prepared_request_isolates_nested_tool_arguments(with_assembly: bool) -> None:
+    original = AssistantMessage(
+        content=[
+            ToolCall(id="call", name="lookup", arguments={"filters": {"q": "original"}})
+        ]
+    )
+    messages: list[Message] = [
+        original,
+        ToolResultMessage(tool_call_id="call", tool_name="lookup", content="found"),
+    ]
+    retained: list[Message] = []
+
+    def assemble(history: list[Message]) -> list[Message]:
+        assistant = history[0]
+        assert isinstance(assistant, AssistantMessage)
+        assistant.tool_calls[0].arguments["filters"] = {"q": "assembled"}
+        retained.extend(history)
+        return history
+
+    request = PreparedStep(
+        assemble_messages=assemble if with_assembly else None
+    ).generation_request(messages)
+    assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
+    output = request.messages[0]
+    assert isinstance(output, AssistantMessage)
+    filters = output.tool_calls[0].arguments["filters"]
+    assert isinstance(filters, dict)
+    assert filters["q"] == ("assembled" if with_assembly else "original")
+    filters["q"] = "changed"
+    request.messages.clear()
+    assert len(messages) == 2
+    assert original.tool_calls[0].arguments == {"filters": {"q": "original"}}
+    if with_assembly:
+        assembled = retained[0]
+        assert isinstance(assembled, AssistantMessage)
+        assert assembled.tool_calls[0].arguments == {"filters": {"q": "assembled"}}
+
+
+def test_message_end_observer_cannot_mutate_recorded_generation() -> None:
+    observed: list[MessageEndEvent] = []
+
+    def on_event(event: AgentEvent) -> None:
+        if isinstance(event, MessageEndEvent):
+            observed.append(event)
+            event.message.content.clear()
+            if isinstance(event.message.metadata, ExtraData):
+                event.message.metadata.value = "changed"
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="answer")])
+        ),
+        prepare_step=lambda _: PreparedStep(output_metadata=ExtraData()),
+    )
+    run = agent.start(max_steps=1, on_event=on_event)
+    result = run.result(timeout=5)
+    assert run.wait_for_idle(5)
+    assert len(observed) == 1
+    recorded = run.snapshot().messages[0]
+    assert isinstance(recorded, AssistantMessage)
+    assert recorded.text == result.output.text == "answer"
+    assert recorded.metadata == ExtraData()
+    assert recorded.id == observed[0].message_id
+
+
+@pytest.mark.parametrize("replace", [False, True])
+def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
+    requests: list[list[Message]] = []
+
+    def model(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request.messages)
+        return _model(request)
+
+    def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
+        if replace:
+            return result.model_copy(update={"content": "accepted"})
+        result.content = "accepted"
+        return result
+
+    agent = Agent(
+        FakeModelClient(model),
+        tools=[
+            _tool(
+                lambda _: ToolResult(
+                    content="original",
+                    details=ResultDetails(
+                        tool_name="lookup", response_type="json", tool_result={"id": 1}
+                    ),
+                    metadata=ExtraData(),
+                )
+            )
+        ],
+        after_tool_call=finalize,
+    )
+    run = agent.start(max_steps=2)
+    result = run.result()
+    assert run.wait_for_idle(2)
+    snapshot = run.snapshot()
+    assert result.output.text == "accepted"
+    assert (
+        requests[1][-1].text
+        == agent.state.messages[1].text
+        == snapshot.messages[1].text
+        == "accepted"
+    )
+    saved_result = run.snapshot().messages[1]
+    assert isinstance(saved_result, ToolResultMessage)
+    assert isinstance(saved_result.details, ResultDetails)
+    assert saved_result.details.tool_result == {"id": 1}
+    saved_result.details.tool_result = {"id": 2}
+    runtime_result = snapshot.messages[1]
+    assert isinstance(runtime_result, ToolResultMessage)
+    assert isinstance(runtime_result.details, ResultDetails)
+    assert runtime_result.details.tool_result == {"id": 1}
+
+
+def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
+    tool_histories: list[list[str]] = []
+    model_histories: list[list[str]] = []
+    metadata = ExtraData(value="application phase")
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        tool_histories.append([message.text for message in invocation.messages])
+        return ToolResult(content="evidence")
+
+    def prepare(_input: StepInput) -> PreparedStep:
+        return PreparedStep(
+            tools=[_tool(execute)],
+            output_metadata=metadata,
+            assemble_messages=lambda _: [UserMessage(content="provider prompt")],
+        )
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        model_histories.append([message.text for message in request.messages])
+        return _model(request)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        state=AgentState(messages=[UserMessage(content="original task")]),
+        prepare_step=prepare,
+    )
+    events: list[AgentEvent] = []
+    run = agent.start(max_steps=1, on_event=events.append)
+    result = run.result()
+    assert run.wait_for_idle(2)
+    assert model_histories == [["provider prompt"]]
+    assert tool_histories == [["original task"]]
+    assert result.output.metadata == metadata
+    assert run.snapshot().messages[0].metadata == metadata
+    starts = [event for event in events if event.type == "message_start"]
+    assert len(starts) == 1 and starts[0].metadata == metadata
