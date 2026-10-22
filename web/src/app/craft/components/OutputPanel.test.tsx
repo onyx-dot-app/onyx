@@ -1329,3 +1329,38 @@ it("acknowledges updates to the visible file, but preserves unread revisions in 
       .useOutputCards
   );
 });
+
+it("refreshes HTML inventory from Apps and retains failure state until the read finishes", async () => {
+  jest.mocked(fetchWebappInfo).mockResolvedValue({
+    has_webapp: false,
+    ready: false,
+    status: "running",
+    webapp_url: null,
+    sharing_scope: "private",
+  });
+  store().updateSessionData(sessionId, { outputInventoryStatus: "error" });
+  store().openBrowserTab(sessionId);
+  const request = deferred<OutputInventory>();
+  jest.mocked(fetchOutputInventory).mockReturnValue(request.promise);
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(
+    screen.getByText("Could not refresh outputs. Try again.")
+  ).toBeInTheDocument();
+  const reload = screen.getByRole("button", { name: "Refresh" });
+  await waitFor(() => expect(reload).toBeEnabled());
+  fireEvent.click(reload);
+  await waitFor(() => expect(fetchOutputInventory).toHaveBeenCalled());
+  expect(screen.getByText("Loading outputs…")).toBeInTheDocument();
+  await act(async () =>
+    request.resolve({
+      complete: true,
+      files: [{ path: "outputs/report.html", revision: "1", size: 100 }],
+    })
+  );
+  expect(
+    await screen.findByRole("button", { name: "report.html" })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("Could not refresh outputs. Try again.")
+  ).not.toBeInTheDocument();
+});

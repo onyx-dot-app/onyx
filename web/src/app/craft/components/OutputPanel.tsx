@@ -377,12 +377,17 @@ function OutputResources({
           refreshKey: (activeResource?.refreshKey ?? 0) + 1,
         });
       } else {
-        void refreshWebapps()
-          .catch(() => undefined)
-          .finally(() => {
-            if (scopeAlive.current)
-              updateResource(active, { manualRefresh: false });
-          });
+        void Promise.allSettled([
+          refreshWebapps(),
+          active.appId === null && contentSessionId
+            ? useBuildSessionStore
+                .getState()
+                .refreshOutputInventory(contentSessionId, { silent: true })
+            : Promise.resolve(),
+        ]).finally(() => {
+          if (scopeAlive.current)
+            updateResource(active, { manualRefresh: false });
+        });
       }
     } else if (contentSessionId) {
       updateResource(active, {
@@ -656,6 +661,10 @@ function OutputResources({
                         path.startsWith("outputs/") && /\.html?$/i.test(path)
                     )
                     .sort()}
+                  htmlInventoryStatus={
+                    session?.outputInventoryStatus ?? "unloaded"
+                  }
+                  htmlInventoryLoading={!!outputInventoryLoading}
                   onFileOpen={openFile}
                   appId={tab.appId}
                   discoveryState={discoveryState}

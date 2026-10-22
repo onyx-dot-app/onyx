@@ -186,6 +186,7 @@ function FetchedFilePreview({
   } else if (/\.html?$/i.test(filePath)) {
     viewer = (
       <iframe
+        key={refreshKey}
         title={fileName}
         srcDoc={data.content}
         sandbox="allow-scripts"

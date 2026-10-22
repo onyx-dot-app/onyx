@@ -7,6 +7,7 @@ import { SvgGlobe, SvgLoader } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
+import type { BuildSessionData } from "@/app/craft/hooks/useBuildSessionStore";
 import type { RegisteredWebapp, AppDiscoveryState } from "@/lib/build/types";
 import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
 
@@ -15,6 +16,8 @@ interface BrowserTabProps {
   onLoadingChange?: (id: string, loading: boolean) => void;
   apps: RegisteredWebapp[];
   htmlFiles?: string[];
+  htmlInventoryStatus?: BuildSessionData["outputInventoryStatus"];
+  htmlInventoryLoading?: boolean;
   onFileOpen?: (path: string, name: string) => void;
   appId: string | null;
   discoveryState: AppDiscoveryState;
@@ -28,6 +31,8 @@ export default function BrowserTab({
   onLoadingChange,
   apps,
   htmlFiles = [],
+  htmlInventoryStatus = "complete",
+  htmlInventoryLoading = false,
   onFileOpen,
   appId,
   discoveryState,
@@ -36,6 +41,7 @@ export default function BrowserTab({
   onNavigate,
 }: BrowserTabProps) {
   const t = useTranslations("craft.browserTab");
+  const outputsT = useTranslations("craft.outputsTab");
   const reportLoading = useEffectEvent((id: string, loading: boolean) => {
     onLoadingChange?.(id, loading);
   });
@@ -85,7 +91,29 @@ export default function BrowserTab({
             </Text>
           </div>
         ) : null}
+        {(htmlInventoryLoading || htmlInventoryStatus !== "complete") && (
+          <Section height="auto" flexDirection="row" gap={2} role="status">
+            {htmlInventoryLoading && (
+              <SvgLoader
+                size={20}
+                className="motion-safe:animate-spin shrink-0"
+                aria-hidden
+              />
+            )}
+            <Text font="secondary-body" color="text-03">
+              {outputsT(
+                htmlInventoryLoading || htmlInventoryStatus === "unloaded"
+                  ? "loading.label"
+                  : htmlInventoryStatus === "error"
+                    ? "error.description"
+                    : "incomplete.description"
+              )}
+            </Text>
+          </Section>
+        )}
         {discoveryState === "ready" &&
+        htmlInventoryStatus === "complete" &&
+        !htmlInventoryLoading &&
         apps.length === 0 &&
         htmlFiles.length === 0 ? (
           <Section height="auto" gap={2} className="max-w-sm">

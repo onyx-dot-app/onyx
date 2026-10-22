@@ -328,6 +328,7 @@ DOCX scroll restoration waits for rendered content on initial load and each repl
 
 The Apps tab lists `.html` and `.htm` files from the session output inventory alongside registered webapps.
 Both use matching bordered cards in a centered single column, with aligned icons and left-aligned labels.
+Apps reload refreshes both webapp discovery and the output inventory. Loading, failed, and incomplete inventories stay distinct from empty results.
 Selecting an HTML file opens its file tab. It does not register a webapp or start a server.
 `POST /build/sessions/{session_id}/static-preview/{path}` issues a read-only capability after checking session ownership.
 `GET /build/static-preview/{token}/{path}` serves listed static assets without browser login credentials.
@@ -342,6 +343,8 @@ HTML uses a real document URL, so relative CSS, images, fonts, script imports, a
 The iframe and response CSP both allow scripts without same-origin access.
 Forms, popups, frames, and top-level navigation remain blocked. Referrers and HTTP caching are disabled.
 CORS permits credential-free asset reads. CSP limits fetch requests to capability URLs; HTTPS CDN assets can load.
+Explicit reload resets static and uploaded HTML documents, including unchanged uploads.
+Hidden HTML frames retain their document state within the bounded viewer cache, like registered app frames.
 Active viewers renew before expiry. Uploaded HTML outside Outputs keeps its self-contained `srcdoc` preview.
 Root-relative workspace asset URLs are not rewritten; use relative paths.
 File revision updates use the existing preview cache and viewed-revision handling.

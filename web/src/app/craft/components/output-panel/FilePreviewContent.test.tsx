@@ -422,7 +422,7 @@ test.each(["report.html", "report.htm"])(
       mimeType: "text/html",
       isImage: false,
     });
-    render(
+    const { rerender } = render(
       <FilePreviewContent
         sessionId="html-session"
         filePath={`uploads/${name}`}
@@ -432,5 +432,15 @@ test.each(["report.html", "report.htm"])(
     expect(frame).toHaveAttribute("srcdoc", content);
     expect(frame).toHaveAttribute("sandbox", "allow-scripts");
     expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    rerender(
+      <FilePreviewContent
+        sessionId="html-session"
+        filePath={`uploads/${name}`}
+        refreshKey={1}
+      />
+    );
+    const reloaded = await screen.findByTitle(name);
+    expect(reloaded).not.toBe(frame);
+    expect(reloaded).toHaveAttribute("srcdoc", content);
   }
 );
