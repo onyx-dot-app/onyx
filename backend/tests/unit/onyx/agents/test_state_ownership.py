@@ -31,12 +31,12 @@ from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
-    GenerationToolCallEvent,
     ImageContentPart,
     Message,
     TextContent,
     ThinkingDeltaEvent,
     ToolCall,
+    ToolCallEndEvent,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -211,7 +211,7 @@ def test_listeners_cannot_edit_history_or_each_others_events(inherited: bool) ->
             event.message.content.clear()
         elif event.type == "message_update":
             update = event.generation_event
-            if isinstance(update, GenerationToolCallEvent):
+            if isinstance(update, ToolCallEndEvent):
                 update.tool_call.arguments.clear()
             elif isinstance(update, ThinkingDeltaEvent) and update.blocks:
                 update.blocks.clear()

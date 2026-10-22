@@ -33,7 +33,7 @@ from onyx.chat.renderer import (
     ResponseLayout,
     ToolRenderer,
 )
-from onyx.chat.response import response_record
+from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_TOOL_NAME,
 )
@@ -153,7 +153,7 @@ def _tool_record(
         tool_call_id=tool_call.id,
         tool_id=tool_id,
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
-        tool_call_arguments=tool_call.arguments,
+        tool_call_arguments=tool_arguments_for_display(tool_call),
         tool_call_response=tool_response.text if tool_response else "",
         search_docs=displayed_docs if displayed_docs is not None else search_docs,
         generated_images=generated_images,
