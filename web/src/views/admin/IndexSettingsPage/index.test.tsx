@@ -403,6 +403,61 @@ describe("IndexSettingsPage embedding model picker", () => {
     ).toBeNull();
   });
 
+  it("finds a current bring-your-own model by its name", async () => {
+    setCurrentModel("acme/embed-v2", EmbeddingProviderName.LITELLM, 768);
+    configureProviders(EmbeddingProviderName.LITELLM);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+
+    await user.type(
+      screen.getByPlaceholderText("Search models..."),
+      "acme/embed"
+    );
+
+    expect(
+      within(
+        modelCard(EmbeddingProviderName.LITELLM, "acme/embed-v2")
+      ).getByRole("button", { name: "Current Model" })
+    ).toBeInTheDocument();
+  });
+
+  it("edits the staged spec when it has the current model's name", async () => {
+    const modelName = "acme/embed-v2";
+    setCurrentModel(modelName, EmbeddingProviderName.LITELLM, 768);
+    configureProviders(EmbeddingProviderName.LITELLM);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+
+    await user.click(
+      screen.getByText("Add configs for your LiteLLM embedding providers.")
+    );
+    const createDialog = await screen.findByRole("dialog");
+    await user.type(
+      within(createDialog).getByLabelText(/api base url/i),
+      "https://litellm.example.com"
+    );
+    await user.type(within(createDialog).getByLabelText(/api key/i), "sk-new");
+    await user.type(
+      within(createDialog).getByLabelText(/model name/i),
+      modelName
+    );
+    const createDim = within(createDialog).getByLabelText(/model dimension/i);
+    await user.clear(createDim);
+    await user.type(createDim, "1024");
+    await user.click(
+      within(createDialog).getByRole("button", { name: "Connect" })
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Edit credentials" }));
+    const editDialog = await screen.findByRole("dialog");
+    expect(
+      within(editDialog).getByLabelText(/model dimension/i)
+    ).toHaveDisplayValue("1024");
+  });
+
   it("keeps a current Azure deployment apart from the OpenAI model of the same name", async () => {
     setCurrentModel(
       "text-embedding-3-large",

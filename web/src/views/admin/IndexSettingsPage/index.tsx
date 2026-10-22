@@ -267,11 +267,12 @@ function ProviderGroup({
 }: ProviderGroupProps) {
   const t = useTranslations("admin.indexSettings");
   // Bring-your-own models are not in the registry, so list the current and
-  // staged specs too. The first entry for a name wins.
+  // staged specs too. The first entry for a name wins, so a staged spec
+  // replaces the current spec of the same name.
   const models = [
     ...provider.embeddingModels,
-    ...(existingModel ? [existingModel] : []),
     ...(stagedModel ? [stagedModel] : []),
+    ...(existingModel ? [existingModel] : []),
   ].filter(
     (model, index, all) =>
       all.findIndex((m) => m.modelName === model.modelName) === index
@@ -1010,31 +1011,31 @@ export default function IndexSettingsPage() {
   const isSearching = query.trim() !== "";
   // The search runs over the visible groups, so it cannot find a hidden
   // legacy model.
-  const {
-    filteredCloudProviders,
-    filteredBringYourOwnProviders,
-    filteredSelfHostedProviders,
-    customModelMatched,
-  } = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matches = (provider: EmbeddingProvider) =>
-      `${provider.displayName} ${provider.embeddingModels
-        .map((model) => model.modelName)
-        .join(" ")}`
-        .toLowerCase()
-        .includes(needle);
-    const cloud = visibleCloudProviders.filter(matches);
-    return {
-      filteredCloudProviders: cloud.filter(
-        (p) => !isBringYourOwnProvider(p.providerName)
-      ),
-      filteredBringYourOwnProviders: cloud.filter((p) =>
-        isBringYourOwnProvider(p.providerName)
-      ),
-      filteredSelfHostedProviders: visibleSelfHostedProviders.filter(matches),
-      customModelMatched: matches(CUSTOM_PROVIDER),
-    };
-  }, [query, visibleCloudProviders, visibleSelfHostedProviders]);
+  const { matchesQuery, filteredSelfHostedProviders, customModelMatched } =
+    useMemo(() => {
+      const needle = query.trim().toLowerCase();
+      // `extraModelNames` covers the current and staged bring-your-own
+      // models, which are not in the registry.
+      const matches = (
+        provider: EmbeddingProvider,
+        extraModelNames: string[] = []
+      ) =>
+        [
+          provider.displayName,
+          ...provider.embeddingModels.map((model) => model.modelName),
+          ...extraModelNames,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      return {
+        matchesQuery: matches,
+        filteredSelfHostedProviders: visibleSelfHostedProviders.filter((p) =>
+          matches(p)
+        ),
+        customModelMatched: matches(CUSTOM_PROVIDER),
+      };
+    }, [query, visibleSelfHostedProviders]);
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
     useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
@@ -1463,6 +1464,28 @@ export default function IndexSettingsPage() {
                 isSearching || (bringYourOwnOpen ?? holdsBringYourOwnModel);
               const selfHostedBringYourOwnExpanded =
                 isSearching || (bringYourOwnOpen ?? false);
+              const existingModelFor = (provider: EmbeddingProvider) =>
+                currentEmbeddingModel?.provider_type === provider.providerName
+                  ? (currentEmbeddingModelSpec ?? undefined)
+                  : undefined;
+              const stagedModelFor = (provider: EmbeddingProvider) =>
+                isModelStaged && values.model_provider === provider.providerName
+                  ? (values.model_spec ?? undefined)
+                  : undefined;
+              const filteredCloud = visibleCloudProviders.filter((provider) =>
+                matchesQuery(
+                  provider,
+                  [existingModelFor(provider), stagedModelFor(provider)]
+                    .filter((model) => model !== undefined)
+                    .map((model) => model.modelName)
+                )
+              );
+              const filteredCloudProviders = filteredCloud.filter(
+                (p) => !isBringYourOwnProvider(p.providerName)
+              );
+              const filteredBringYourOwnProviders = filteredCloud.filter((p) =>
+                isBringYourOwnProvider(p.providerName)
+              );
               const renderCloudProviderGroup = (
                 provider: EmbeddingProvider
               ) => (
@@ -1475,18 +1498,8 @@ export default function IndexSettingsPage() {
                   existingCredentials={configuredProviders?.get(
                     provider.providerName
                   )}
-                  existingModel={
-                    currentEmbeddingModel?.provider_type ===
-                    provider.providerName
-                      ? (currentEmbeddingModelSpec ?? undefined)
-                      : undefined
-                  }
-                  stagedModel={
-                    isModelStaged &&
-                    values.model_provider === provider.providerName
-                      ? (values.model_spec ?? undefined)
-                      : undefined
-                  }
+                  existingModel={existingModelFor(provider)}
+                  stagedModel={stagedModelFor(provider)}
                   onSelectModel={(name, customModel) =>
                     applySelection({
                       model_name: name,
