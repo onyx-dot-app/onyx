@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "Modo automático",
           "description": "Agrega una opción Auto al selector de modelos que elige el modelo más adecuado para cada mensaje.",
-          "noRoutersTooltip": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace."
+          "noRoutersTooltip": "No se encontraron modelos de router. Primero habilite un modelo de router en un proveedor de puerta de enlace.",
+          "noRoutersError": "No se encontraron modelos enrutadores, así que los usuarios no pueden seleccionar Auto. Habilita un modelo enrutador en un proveedor de gateway."
         },
         "target": {
           "title": "Modelo de enrutamiento",
           "description": "Gestiona el enrutamiento de modelos para el modo Auto.",
           "error": "No se pudieron cargar los modelos de enrutamiento.",
-          "retry": "Reintentar"
+          "retry": "Reintentar",
+          "missing": "Elige un modelo enrutador para que los usuarios puedan usar el modo de enrutamiento automático."
         }
       },
       "providers": {

@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "自动模式",
           "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。",
-          "noRoutersTooltip": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。"
+          "noRoutersTooltip": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "noRoutersError": "未找到路由模型，因此用户无法选择 Auto。请在网关提供商上启用路由模型。"
         },
         "target": {
           "title": "路由器模型",
           "description": "负责 Auto 模式的模型路由。",
           "error": "无法加载路由器模型。",
-          "retry": "重试"
+          "retry": "重试",
+          "missing": "请选择路由模型，以便用户使用自动路由模式。"
         }
       },
       "providers": {

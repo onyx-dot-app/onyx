@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "Mode auto",
           "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message.",
-          "noRoutersTooltip": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle."
+          "noRoutersTooltip": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
+          "noRoutersError": "Aucun modèle routeur trouvé : les utilisateurs ne peuvent pas sélectionner Auto. Activez un modèle routeur chez un fournisseur de passerelle."
         },
         "target": {
           "title": "Modèle de routage",
           "description": "Gère le routage des modèles pour le mode Auto.",
           "error": "Impossible de charger les modèles de routage.",
-          "retry": "Réessayer"
+          "retry": "Réessayer",
+          "missing": "Choisissez un modèle routeur pour permettre aux utilisateurs d'utiliser le mode de routage automatique."
         }
       },
       "providers": {

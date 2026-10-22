@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "Modo automático",
           "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem.",
-          "noRoutersTooltip": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway."
+          "noRoutersTooltip": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
+          "noRoutersError": "Nenhum modelo roteador encontrado, então os usuários não podem selecionar Auto. Ative um modelo roteador em um provedor de gateway."
         },
         "target": {
           "title": "Modelo de roteamento",
           "description": "Gerencia o roteamento de modelos para o modo Auto.",
           "error": "Falha ao carregar os modelos de roteamento.",
-          "retry": "Tentar novamente"
+          "retry": "Tentar novamente",
+          "missing": "Escolha um modelo roteador para que os usuários possam usar o modo de roteamento automático."
         }
       },
       "providers": {

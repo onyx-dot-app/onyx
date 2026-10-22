@@ -392,9 +392,10 @@ export default function LanguageModelsPage() {
   const [pendingRoutingEnabled, setPendingRoutingEnabled] = useState<
     boolean | null
   >(null);
-  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<
-    number | null
-  >(null);
+  // The router being saved, wrapped so clearing it (id null) still counts.
+  const [pendingRoutingTarget, setPendingRoutingTarget] = useState<{
+    id: number | null;
+  } | null>(null);
   const [pendingChatControls, setPendingChatControls] = useState<
     Partial<Record<ChatControlKey, boolean>>
   >({});
@@ -573,6 +574,17 @@ export default function LanguageModelsPage() {
   // removed after the fact cannot lock it on.
   const noRouterModels = routerProviders?.length === 0;
   const autoModeLocked = noRouterModels && !routingEnabled;
+  const routingTargetId: number | null = pendingRoutingTarget
+    ? pendingRoutingTarget.id
+    : (settings.model_routing_model_configuration_id ?? null);
+  // On without a router that exists (none chosen, cleared, or deleted since):
+  // the chat picker offers no Auto option, so the admin is told.
+  const routingTargetMissing =
+    routingEnabled &&
+    routerProviders !== undefined &&
+    !routerProviders.some((provider) =>
+      provider.model_configurations.some((mc) => mc.id === routingTargetId)
+    );
 
   async function handleRoutingEnabledChange(checked: boolean) {
     if (pendingRoutingEnabled !== null) return;
@@ -589,9 +601,11 @@ export default function LanguageModelsPage() {
     }
   }
 
-  async function handleRoutingTargetChange(modelConfigurationId: number) {
+  async function handleRoutingTargetChange(
+    modelConfigurationId: number | null
+  ) {
     if (pendingRoutingTarget !== null) return;
-    setPendingRoutingTarget(modelConfigurationId);
+    setPendingRoutingTarget({ id: modelConfigurationId });
     try {
       await updateModelRouting({
         model_routing_model_configuration_id: modelConfigurationId,
@@ -664,6 +678,13 @@ export default function LanguageModelsPage() {
               <InputHorizontal
                 title={t("modelRouting.autoMode.title")}
                 description={t("modelRouting.autoMode.description")}
+                // On with no router model at all: the Router Model row is
+                // hidden, so the error sits here.
+                error={
+                  routingEnabled && noRouterModels
+                    ? t("modelRouting.autoMode.noRoutersError")
+                    : undefined
+                }
                 withLabel
               >
                 <Tooltip
@@ -690,6 +711,11 @@ export default function LanguageModelsPage() {
                 <InputHorizontal
                   title={t("modelRouting.target.title")}
                   description={t("modelRouting.target.description")}
+                  error={
+                    routingTargetMissing
+                      ? t("modelRouting.target.missing")
+                      : undefined
+                  }
                   withLabel
                 >
                   {routerProvidersError ? (
@@ -709,12 +735,10 @@ export default function LanguageModelsPage() {
                     <OnyxLoader size={24} />
                   ) : (
                     <SimpleModelSelector
+                      // Clearable: re-picking the chosen router unsets it.
+                      nullable
                       providers={routerProviders}
-                      value={
-                        pendingRoutingTarget ??
-                        settings.model_routing_model_configuration_id ??
-                        null
-                      }
+                      value={routingTargetId}
                       disabled={pendingRoutingTarget !== null}
                       grouped={
                         !(

@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "Auto Mode",
           "description": "Add an Auto option to the model picker that picks the best-fit model for each message.",
-          "noRoutersTooltip": "No router models found. Enable a router model on a gateway provider first."
+          "noRoutersTooltip": "No router models found. Enable a router model on a gateway provider first.",
+          "noRoutersError": "No router models found, so users can't select Auto. Enable a router model on a gateway provider."
         },
         "target": {
           "title": "Router Model",
           "description": "Handles model routing for Auto mode.",
           "error": "Failed to load router models.",
-          "retry": "Retry"
+          "retry": "Retry",
+          "missing": "Choose a router model to enable users to use the auto routing mode."
         }
       },
       "providers": {

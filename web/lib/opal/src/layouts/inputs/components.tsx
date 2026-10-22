@@ -64,6 +64,26 @@ interface InputLayoutProps {
   tag?: TagProps;
   description?: string | RichStr;
   suffix?: "optional" | (string & {});
+  /**
+   * A message under the input, for inputs outside Formik: an `error` (red)
+   * or a `warning` (amber). An `error` wins over a `warning`, and either
+   * replaces the Formik message for `withLabel`'s field.
+   */
+  error?: string | RichStr;
+  warning?: string | RichStr;
+}
+
+interface InputMessageProps {
+  error?: string | RichStr;
+  warning?: string | RichStr;
+  fieldName?: string;
+}
+
+/** The message under an input: an explicit error or warning, else Formik's. */
+function InputMessage({ error, warning, fieldName }: InputMessageProps) {
+  if (error) return <InputErrorText type="error">{error}</InputErrorText>;
+  if (warning) return <InputErrorText type="warning">{warning}</InputErrorText>;
+  return fieldName ? <FormikInputError name={fieldName} /> : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +107,8 @@ function Vertical({
   tag,
   description,
   suffix,
+  error,
+  warning,
 }: VerticalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -123,7 +145,7 @@ function Vertical({
     <Section ref={ref} gap={1} alignItems="start">
       {titleRow}
       {children}
-      {fieldName && <FormikInputError name={fieldName} />}
+      <InputMessage error={error} warning={warning} fieldName={fieldName} />
       {subDescription && (
         <Text font="secondary-body" color="text-03">
           {subDescription}
@@ -177,6 +199,8 @@ function Horizontal({
   suffix,
   responsive,
   fillInput,
+  error,
+  warning,
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -198,7 +222,7 @@ function Horizontal({
         fillRight={fillInput}
         rightChildren={children}
       />
-      {fieldName && <FormikInputError name={fieldName} />}
+      <InputMessage error={error} warning={warning} fieldName={fieldName} />
     </Section>
   );
 

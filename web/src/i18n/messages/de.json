@@ -7942,13 +7942,15 @@
         "autoMode": {
           "title": "Auto-Modus",
           "description": "Fügt der Modellauswahl eine Auto-Option hinzu, die für jede Nachricht das am besten passende Modell wählt.",
-          "noRoutersTooltip": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter."
+          "noRoutersTooltip": "Keine Router-Modelle gefunden. Aktivieren Sie zuerst ein Router-Modell bei einem Gateway-Anbieter.",
+          "noRoutersError": "Keine Router-Modelle gefunden, daher können Nutzer Auto nicht auswählen. Aktivieren Sie ein Router-Modell bei einem Gateway-Anbieter."
         },
         "target": {
           "title": "Router-Modell",
           "description": "Übernimmt das Modell-Routing für den Auto-Modus.",
           "error": "Router-Modelle konnten nicht geladen werden.",
-          "retry": "Erneut versuchen"
+          "retry": "Erneut versuchen",
+          "missing": "Wählen Sie ein Router-Modell, damit Nutzer den automatischen Routing-Modus verwenden können."
         }
       },
       "providers": {

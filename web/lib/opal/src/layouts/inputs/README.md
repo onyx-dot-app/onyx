@@ -31,6 +31,8 @@ Stacks title, description, input, error, and sub-description vertically.
 | `description`    | `string \| RichStr`    | —       | Section description                                                                                                  |
 | `subDescription` | `string \| RichStr`    | —       | Text below the input                                                                                                 |
 | `suffix`         | `"optional" \| string` | —       | Suffix after the title                                                                                               |
+| `error`   | `string \| RichStr` | — | A red message under the input, for inputs outside Formik. Wins over `warning` and the Formik message. |
+| `warning` | `string \| RichStr` | — | An amber message under the input, for inputs outside Formik. Replaces the Formik message. |
 
 ### Horizontal
 
@@ -48,6 +50,8 @@ Places title/description on the left, input control on the right.
 | `tag`         | `TagProps`              | —       | Tag rendered beside the title                                                                                                                                                                                                                                    |
 | `description` | `string \| RichStr`     | —       | Section description                                                                                                                                                                                                                                              |
 | `suffix`      | `"optional" \| string`  | —       | Suffix after the title                                                                                                                                                                                                                                           |
+| `error`   | `string \| RichStr` | — | A red message under the input, for inputs outside Formik. Wins over `warning` and the Formik message. |
+| `warning` | `string \| RichStr` | — | An amber message under the input, for inputs outside Formik. Replaces the Formik message. |
 
 With `withLabel`, hovering anywhere on the row also paints an `InputSwitch` child's hover state, since the whole row is the switch's hit area.
 
