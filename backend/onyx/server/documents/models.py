@@ -733,8 +733,10 @@ class IndexingOverviewResponse(BaseModel):
 
     indexing_connectors: int
     active_connectors: int
-    # Counts a document once per run that touched it, so it can exceed the total.
+    # Estimated from each run's count spread over its span. A run counts a
+    # document each time it processes it, failures included.
     recent_docs_indexed: int
+    # Sums each pair's documents, so a document two pairs hold counts twice.
     total_docs_indexed: int
     throughput: CCPairThroughputResponse
 

@@ -7352,7 +7352,8 @@
         },
         "documents": {
           "caption": "En el índice",
-          "label": "Documentos"
+          "label": "Documentos",
+          "tooltip": "Suma los documentos de cada conector, así que un documento que tienen dos conectores cuenta dos veces."
         },
         "ratio": {
           "whole": "/ {whole}"
@@ -7361,7 +7362,7 @@
         "processed": {
           "caption": "Procesados en el intervalo",
           "label": "Documentos",
-          "tooltip": "Documentos que procesaron las ejecuciones de este intervalo. Un documento cuenta una vez por cada ejecución que lo tocó, así que la cifra puede superar los documentos del índice."
+          "tooltip": "Una estimación, ya que el recuento de cada ejecución se reparte por igual a lo largo de su duración. Un documento cuenta cada vez que una ejecución lo procesa, incluidos los fallidos, así que la cifra puede superar los documentos del índice."
         }
       },
       "activities": {
@@ -7405,8 +7406,8 @@
           "label": "docs",
           "processed": "{count, number} procesados",
           "processedTooltip": {
-            "running": "Documentos que la ejecución actual ha procesado hasta ahora. Cada ejecución cuenta cada documento que toca, así que la cifra puede superar los documentos del conector.",
-            "finished": "Documentos que procesó la última ejecución. Cada ejecución cuenta cada documento que toca, así que la cifra puede superar los documentos del conector."
+            "running": "Documentos que la ejecución actual ha procesado hasta ahora, incluidos los fallidos. Un documento que la ejecución procesa dos veces cuenta dos veces, así que la cifra puede superar los documentos del conector.",
+            "finished": "Documentos que procesó la última ejecución, incluidos los fallidos. Un documento que la ejecución procesó dos veces cuenta dos veces, y los documentos eliminados desde entonces ya no cuentan para el conector, así que la cifra puede superar los documentos del conector."
           }
         },
         "actions": {

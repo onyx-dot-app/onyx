@@ -135,6 +135,7 @@ export default function OverviewCard({
             value={data.total_docs_indexed}
             caption={t("documents.caption")}
             label={t("documents.label")}
+            tooltip={t("documents.tooltip")}
           />
           <Stat
             value={data.recent_docs_indexed}

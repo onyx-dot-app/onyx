@@ -7352,7 +7352,8 @@
         },
         "documents": {
           "caption": "In the index",
-          "label": "Documents"
+          "label": "Documents",
+          "tooltip": "Adds up each connector's documents, so a document that two connectors hold counts twice."
         },
         "ratio": {
           "whole": "/ {whole}"
@@ -7361,7 +7362,7 @@
         "processed": {
           "caption": "Processed in time range",
           "label": "Documents",
-          "tooltip": "Documents the runs in this time range processed. A document counts once for each run that touched it, so this can be more than the documents in the index."
+          "tooltip": "An estimate, since each run's count is spread evenly over the time it ran. A document counts each time a run processes it, failed ones included, so this can be more than the documents in the index."
         }
       },
       "activities": {
@@ -7405,8 +7406,8 @@
           "label": "docs",
           "processed": "{count, number} processed",
           "processedTooltip": {
-            "running": "Documents the current run has processed so far. Each run counts every document it touches, so this can be more than the connector's documents.",
-            "finished": "Documents the last run processed. Each run counts every document it touches, so this can be more than the connector's documents."
+            "running": "Documents the current run has processed so far, failed ones included. A document the run processes twice counts twice, so this can be more than the connector's documents.",
+            "finished": "Documents the last run processed, failed ones included. A document the run processed twice counts twice, and documents removed since then no longer count for the connector, so this can be more than the connector's documents."
           }
         },
         "actions": {

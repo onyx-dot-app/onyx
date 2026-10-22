@@ -7352,7 +7352,8 @@
         },
         "documents": {
           "caption": "Im Index",
-          "label": "Dokumente"
+          "label": "Dokumente",
+          "tooltip": "Summiert die Dokumente jedes Konnektors, daher zählt ein Dokument, das zwei Konnektoren enthalten, doppelt."
         },
         "ratio": {
           "whole": "/ {whole}"
@@ -7361,7 +7362,7 @@
         "processed": {
           "caption": "Im Zeitraum verarbeitet",
           "label": "Dokumente",
-          "tooltip": "Dokumente, die die Läufe in diesem Zeitraum verarbeitet haben. Ein Dokument zählt einmal je Lauf, der es berührt hat, daher kann die Zahl größer sein als die Dokumente im Index."
+          "tooltip": "Ein Schätzwert, da die Zahl jedes Laufs gleichmäßig über seine Laufzeit verteilt wird. Ein Dokument zählt jedes Mal, wenn ein Lauf es verarbeitet, auch fehlgeschlagene, daher kann die Zahl größer sein als die Dokumente im Index."
         }
       },
       "activities": {
@@ -7405,8 +7406,8 @@
           "label": "Dokumente",
           "processed": "{count, number} verarbeitet",
           "processedTooltip": {
-            "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat. Jeder Lauf zählt jedes Dokument, das er berührt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
-            "finished": "Dokumente, die der letzte Lauf verarbeitet hat. Jeder Lauf zählt jedes Dokument, das er berührt, daher kann die Zahl größer sein als die Dokumente des Konnektors."
+            "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet, zählt doppelt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
+            "finished": "Dokumente, die der letzte Lauf verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet hat, zählt doppelt, und seitdem entfernte Dokumente zählen nicht mehr zum Konnektor, daher kann die Zahl größer sein als die Dokumente des Konnektors."
           }
         },
         "actions": {

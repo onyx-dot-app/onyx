@@ -16,8 +16,9 @@ import type {
 export interface IndexingOverviewResponse {
   indexing_connectors: number;
   active_connectors: number;
-  /** Documents the window's runs processed, once per run that touched each, so it can exceed the total. */
+  /** An estimate of the documents the window's runs processed, each time a run processed one. */
   recent_docs_indexed: number;
+  /** The sum of each pair's documents, so a document two pairs hold counts twice. */
   total_docs_indexed: number;
   throughput: CCPairThroughputResponse;
 }

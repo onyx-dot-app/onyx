@@ -7352,7 +7352,8 @@
         },
         "documents": {
           "caption": "No índice",
-          "label": "Documentos"
+          "label": "Documentos",
+          "tooltip": "Soma os documentos de cada conector, então um documento que dois conectores têm conta duas vezes."
         },
         "ratio": {
           "whole": "/ {whole}"
@@ -7361,7 +7362,7 @@
         "processed": {
           "caption": "Processados no período",
           "label": "Documentos",
-          "tooltip": "Documentos que as execuções deste período processaram. Um documento conta uma vez para cada execução que o processou, então o número pode passar dos documentos no índice."
+          "tooltip": "Uma estimativa, pois a contagem de cada execução é distribuída igualmente pelo tempo em que ela rodou. Um documento conta cada vez que uma execução o processa, incluindo os que falharam, então o número pode passar dos documentos no índice."
         }
       },
       "activities": {
@@ -7405,8 +7406,8 @@
           "label": "docs",
           "processed": "{count, number} processados",
           "processedTooltip": {
-            "running": "Documentos que a execução atual processou até agora. Cada execução conta cada documento que processa, então o número pode passar dos documentos do conector.",
-            "finished": "Documentos que a última execução processou. Cada execução conta cada documento que processa, então o número pode passar dos documentos do conector."
+            "running": "Documentos que a execução atual processou até agora, incluindo os que falharam. Um documento que a execução processa duas vezes conta duas vezes, então o número pode passar dos documentos do conector.",
+            "finished": "Documentos que a última execução processou, incluindo os que falharam. Um documento que a execução processou duas vezes conta duas vezes, e documentos removidos desde então não contam mais para o conector, então o número pode passar dos documentos do conector."
           }
         },
         "actions": {
