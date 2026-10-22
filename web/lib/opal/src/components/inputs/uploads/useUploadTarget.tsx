@@ -27,15 +27,15 @@ interface UseUploadTargetOptions {
   multiple: boolean;
   /** No picking or dropping. */
   disabled: boolean;
-  /** An id for the hidden file input, so a `<label htmlFor>` opens it. */
-  inputId?: string;
   name?: string;
   /** The picker's filter, as the HTML `accept` attribute; a drop must match it too. */
   accept?: string;
   maxSizeKb?: number;
   onFileSizeExceeded?: (args: { file: File; maxSizeKb: number }) => void;
-  /** Receives the picked or dropped files that pass `accept` and the size limit. */
+  /** Receives the picked, dropped or pasted files that pass `accept` and the size limit. */
   onFiles: (files: File[]) => void;
+  /** Receives a paste without files, for an input that takes text. */
+  onPasteText?: (text: string) => void;
   /** Where focus returns when the picker closes. */
   focusTarget: () => void;
 }
@@ -53,12 +53,12 @@ interface UseUploadTargetOptions {
 export default function useUploadTarget({
   multiple,
   disabled,
-  inputId,
   name,
   accept,
   maxSizeKb,
   onFileSizeExceeded,
   onFiles,
+  onPasteText,
   focusTarget,
 }: UseUploadTargetOptions) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,16 +85,43 @@ export default function useUploadTarget({
     if (allowed.length > 0) onFiles(multiple ? allowed : allowed.slice(0, 1));
   }
 
-  // Drop and paste: a paste of files on the root or a focused child takes
-  // them as a drop does. A click focuses the control, so a copied file can
-  // be pasted; a double click opens the picker.
-  const { getRootProps, isDragActive } = useDropzone({
+  // Drag and drop only: a click focuses the control, so a copied file can
+  // be pasted; a double click opens the picker. The dropzone's own paste is
+  // off, see the paste listener below.
+  const { getRootProps, isDragActive, rootRef } = useDropzone({
     onDrop: takeFiles,
     multiple,
     disabled,
     noClick: true,
     noKeyboard: true,
+    noPaste: true,
   });
+
+  // A paste goes to the focused control. Browsers send `paste` to the text
+  // selection, not to a focused button or read-only field, so the event's
+  // target can be any element; the control takes it while focus is inside.
+  const pasteRef = useRef<(event: ClipboardEvent) => void>(() => {});
+  pasteRef.current = (event) => {
+    const root = rootRef.current;
+    if (disabled || !root || !root.contains(document.activeElement)) return;
+    const data = event.clipboardData;
+    if (!data) return;
+    const files = Array.from(data.files);
+    if (files.length > 0) {
+      event.preventDefault();
+      takeFiles(files);
+      return;
+    }
+    const text = data.getData("text");
+    if (!text || !onPasteText) return;
+    event.preventDefault();
+    onPasteText(text);
+  };
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => pasteRef.current(event);
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
   const filesDragged = useWindowFileDrag(!disabled);
   const drag: "page" | "over" | null = isDragActive
     ? "over"
@@ -133,7 +160,6 @@ export default function useUploadTarget({
   const fileInput = (
     <input
       ref={fileInputRef}
-      id={inputId}
       type="file"
       name={name}
       accept={accept}

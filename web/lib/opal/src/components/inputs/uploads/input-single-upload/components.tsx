@@ -137,13 +137,10 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
         if (file) takeFile(file);
       }}
       onClear={clear}
-      onPaste={
+      onPasteText={
         props.mode === "file"
           ? undefined
-          : (e) => {
-              const pastedText = e.clipboardData.getData("text");
-              if (!pastedText) return;
-              e.preventDefault();
+          : (pastedText) => {
               setSource({ kind: "paste" });
               reportText(pastedText);
             }

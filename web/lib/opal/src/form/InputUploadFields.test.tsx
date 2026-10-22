@@ -18,8 +18,9 @@ interface FilesForm {
   files: File[];
 }
 
-/** Pastes `files` on `target`, as a copied file does. */
-function pasteFiles(target: Element, files: File[]): void {
+/** Focuses `target` and pastes `files`, as a click then Cmd+V does. */
+function pasteFiles(target: HTMLElement, files: File[]): void {
+  target.focus();
   fireEvent.paste(target, {
     clipboardData: {
       types: ["Files"],
@@ -323,7 +324,9 @@ describe("InputMultiUploadField", () => {
         }}
       </Formik>
     );
-    const trigger = container.querySelector(".opal-input-type-in-tag-trigger");
+    const trigger = container.querySelector<HTMLElement>(
+      ".opal-input-type-in-tag-trigger"
+    );
     if (!trigger) throw new Error("no trigger");
     const one = new File(["one"], "one.txt");
     const two = new File(["two"], "two.txt");
@@ -332,5 +335,49 @@ describe("InputMultiUploadField", () => {
     await waitFor(() => expect(form?.values.files).toEqual([one, two]));
     pasteFiles(trigger, [two]);
     await waitFor(() => expect(form?.values.files).toEqual([one, two]));
+  });
+});
+
+describe("upload paste", () => {
+  test("a paste goes to the focused upload, wherever the event lands", async () => {
+    let form: FormikProps<FilesForm & CertificateForm> | null = null;
+    render(
+      <Formik<FilesForm & CertificateForm>
+        initialValues={{ certificate: null, files: [] }}
+        onSubmit={() => {}}
+      >
+        {(formik) => {
+          form = formik;
+          return (
+            <>
+              <InputSingleUploadField
+                name="certificate"
+                mode="file"
+                placeholder="Upload a certificate"
+              />
+              <InputMultiUploadField name="files" />
+            </>
+          );
+        }}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Upload a certificate",
+    });
+    const file = new File(["one"], "one.pfx");
+    trigger.focus();
+
+    // Browsers send the event to the text selection, here the page body.
+    fireEvent.paste(document.body, {
+      clipboardData: {
+        types: ["Files"],
+        items: [{ kind: "file", getAsFile: () => file }],
+        files: [file],
+        getData: () => "",
+      },
+    });
+
+    await waitFor(() => expect(form?.values.certificate).toBe(file));
+    expect(form?.values.files).toEqual([]);
   });
 });

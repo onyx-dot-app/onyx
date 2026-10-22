@@ -48,8 +48,9 @@ type UploadControlProps = UploadBaseProps & {
   onFiles: (files: File[]) => void;
   /** Clears the value: the ×, or Delete or Backspace on the control. */
   onClear: () => void;
-  /** A paste on the focused control, for an input that takes text. */
-  onPaste?: (event: React.ClipboardEvent<HTMLButtonElement>) => void;
+  /** Receives a paste without files on the focused control, for an input
+   * that takes text. */
+  onPasteText?: (text: string) => void;
 };
 
 /**
@@ -73,7 +74,7 @@ export default function UploadControl({
   dropOverValue,
   onFiles,
   onClear,
-  onPaste,
+  onPasteText,
   ...rest
 }: UploadControlProps) {
   const strings = useOpalStrings();
@@ -89,6 +90,7 @@ export default function UploadControl({
       maxSizeKb,
       onFileSizeExceeded,
       onFiles,
+      onPasteText,
       focusTarget: () => triggerRef.current?.focus(),
     });
 
@@ -124,14 +126,6 @@ export default function UploadControl({
           onClick={() => triggerRef.current?.focus()}
           onDoubleClick={openFilePicker}
           ref={triggerRef}
-          onPaste={(e) => {
-            // A paste with files goes on to the root, which takes them as a
-            // drop.
-            if (isNonEditable || e.clipboardData.types.includes("Files")) {
-              return;
-            }
-            onPaste?.(e);
-          }}
           onKeyDown={(e) => {
             // Enter and Space open the picker: the click they would send
             // only focuses.

@@ -23,16 +23,16 @@ picker does not count as leaving the field, so a form does not mark it touched m
 
 ## Props
 
-| Prop                                  | Type                            | Description                                                           |
-| ------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `value`                               | `File[]`                        | The files, when the caller owns them                                  |
-| `onFilesChange`                       | `(files: File[]) => void`       | Receives every file held, after each add or removal                   |
-| `placeholder`                         | `string`                        | Shown while empty. Default: "Add files…"                              |
-| `variant`                             | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"`, `"readOnly"`          |
-| `accept`                              | `string`                        | The picker's filter, as the HTML `accept` attribute                   |
-| `maxSizeKb`                           | `number`                        | Rejects a file larger than this                                       |
-| `onFileSizeExceeded`                  | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                           |
-| `id`, `name`, `onBlur`, `data-testid` | —                               | `id` goes on the hidden file input, so a field label opens the picker |
+| Prop                                  | Type                            | Description                                                                                             |
+| ------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `value`                               | `File[]`                        | The files, when the caller owns them                                                                    |
+| `onFilesChange`                       | `(files: File[]) => void`       | Receives every file held, after each add or removal                                                     |
+| `placeholder`                         | `string`                        | Shown while empty. Default: "Add files…"                                                                |
+| `variant`                             | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"`, `"readOnly"`                                            |
+| `accept`                              | `string`                        | The picker's filter, as the HTML `accept` attribute                                                     |
+| `maxSizeKb`                           | `number`                        | Rejects a file larger than this                                                                         |
+| `onFileSizeExceeded`                  | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                                             |
+| `id`, `name`, `onBlur`, `data-testid` | —                               | `id` goes on the field's root, not the file input, so a click in a field label does not open the picker |
 
 `InputMultiUploadField` binds it to a Formik `File[]` field, holding `null` when empty so a required
 check fails.

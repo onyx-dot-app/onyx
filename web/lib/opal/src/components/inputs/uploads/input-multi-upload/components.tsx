@@ -67,9 +67,6 @@ export default function InputMultiUpload({
     useUploadTarget({
       multiple: true,
       disabled: isNonEditable,
-      // The trigger is not a labelable element; a field label opens the
-      // picker through the file input instead.
-      inputId: id,
       name,
       accept,
       maxSizeKb,
@@ -106,6 +103,9 @@ export default function InputMultiUpload({
   return (
     <div
       {...getRootProps({ className: "opal-input-upload" })}
+      // On the root, not the file input: a field label wraps the field, so
+      // tying it to the file input made every click in it open the picker.
+      id={id}
       data-drag={drag ?? undefined}
       data-testid={rest["data-testid"]}
       // Focus moving to the picker is not the user leaving the field.

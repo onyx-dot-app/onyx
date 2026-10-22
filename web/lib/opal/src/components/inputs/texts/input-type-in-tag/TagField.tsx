@@ -99,6 +99,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputClick?: () => void;
 
+  /** A double click anywhere on the field but its buttons. */
   onInputDoubleClick?: () => void;
 
   /** Extra attributes on the text input (a select's combobox aria). */
@@ -310,6 +311,12 @@ function TagField({
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
+      // Anywhere on the field but its buttons (a tag's ×, the clear button).
+      onDoubleClick={(event) => {
+        if (disabled || !onInputDoubleClick) return;
+        if ((event.target as Element).closest("button")) return;
+        onInputDoubleClick();
+      }}
     >
       {Icon && (
         <div className="opal-input-type-in-tag-icon-container">
@@ -360,7 +367,6 @@ function TagField({
             aria-disabled={disabled || undefined}
             onFocus={disabled ? undefined : onInputFocus}
             onClick={disabled ? undefined : onInputClick}
-            onDoubleClick={disabled ? undefined : onInputDoubleClick}
             onKeyDown={disabled ? undefined : handleTriggerKeyDown}
           >
             {tags.length === 0 && placeholder && (
@@ -382,7 +388,6 @@ function TagField({
             onChange={(event) => onChange(event.target.value)}
             onFocus={onInputFocus}
             onClick={onInputClick}
-            onDoubleClick={onInputDoubleClick}
             onKeyDown={handleInputKeyDown}
             placeholder={placeholder}
             aria-label={placeholder}
