@@ -7753,6 +7753,14 @@
             "label": "전체 선택"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "Inworld Router 엔드포인트 URL(API 버전 포함)."
+          },
+          "apiKeyField": {
+            "description": "[Inworld Portal](https://platform.inworld.ai/)의 API 키를 붙여넣어 사용 가능한 모델을 불러오세요."
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "Nebius TokenFactory 엔드포인트 URL입니다(API 버전 포함)."

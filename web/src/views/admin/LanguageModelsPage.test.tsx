@@ -155,6 +155,13 @@ describe("LanguageModelsPage", () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
+  test("lists Inworld Router as a gateway provider", async () => {
+    render(<LanguageModelsPage />);
+    expect(
+      await screen.findByLabelText("Add Inworld Inworld Router")
+    ).toBeInTheDocument();
+  });
+
   test("TypeSafe does not prevent the first chat provider becoming default", async () => {
     currentProviders = [typesafeProvider];
     const user = setupUser();

@@ -149,6 +149,12 @@ and its hidden decision models. A Voice save keeps an existing link in sync but
 never creates one. Decision setup does not activate Voice or choose a decision
 model. Removing Zoom from Decision Models deletes only the decision provider.
 
+Inworld Router appears in the Gateways group with a dedicated setup modal and logo.
+`web/src/sections/modals/languageModels/InworldModal.tsx` uses the shared provider
+save and test flow. `web/src/lib/languageModels/svc.ts:fetchInworldModels` fetches
+chat models and preserves the `auto` entry's router flag. Refreshing a saved
+connection uses its stored key and keeps model selections and settings.
+
 `web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration, the
 default chat model, model routing, and the Reasoning Control, Temperature
 Control and Hide Provider Grouping switches. Model selection for naming and
@@ -363,6 +369,8 @@ Inworld Router uses the OpenAI chat completions surface. Its API key is a Base64
 and replaces the SDK's Bearer header, because the router reads Bearer as a JWT.
 Its model discovery reads `/llm/v1alpha/models` on the API host, because the
 public gateway does not route `/v1/models`. Discovery adds the `auto` router model.
+The LiteLLM request adds an `openai/` routing prefix. LiteLLM removes this prefix
+before sending the full Inworld model ID, including IDs that start with `openai/`.
 
 ### 4.5 Streaming contract
 

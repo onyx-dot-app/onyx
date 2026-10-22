@@ -76,6 +76,7 @@ export enum LLMProviderName {
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
+  INWORLD = "inworld",
   PORTKEY = "portkey",
   VERCEL_AI_GATEWAY = "vercel_ai_gateway",
   CUSTOM = "custom",
@@ -310,6 +311,22 @@ export interface NebiusTokenfactoryModelResponse {
   country_code: string | null;
   requests_per_minute: number | null;
   supported_features: string[];
+}
+
+export interface InworldFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface InworldModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+  is_router: boolean;
 }
 
 export interface PortkeyFetchParams {

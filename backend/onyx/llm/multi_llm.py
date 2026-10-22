@@ -949,6 +949,10 @@ class LitellmLLM(LLM):
         if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
             # Drives LiteLLM's completions -> responses bridge.
             model = f"responses/{model_bare}"
+        elif self._model_provider == LlmProviderNames.INWORLD:
+            # LiteLLM removes one OpenAI routing prefix. Preserve Inworld's
+            # full provider/model id, including its own openai/ namespace.
+            model = f"openai/{model_bare}"
         elif self._api_surface is not None:
             model = model_bare
         else:

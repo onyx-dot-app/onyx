@@ -7753,6 +7753,14 @@
             "label": "Selecionar todos"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "URL do endpoint do Inworld Router (incluindo a versão da API)."
+          },
+          "apiKeyField": {
+            "description": "Cole sua chave de API do [Inworld Portal](https://platform.inworld.ai/) para carregar os modelos disponíveis."
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "URL do endpoint do Nebius TokenFactory (incluindo a versão da API)."
