@@ -8600,7 +8600,7 @@
           },
           "title": "SSRF Protection",
           "validateAll": {
-            "description": "Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors.",
+            "description": "Most restrictive. Outbound requests, including web connectors, cannot reach private or internal IPs. Exception: custom tools can still reach private network addresses. Loopback, link-local and cloud metadata stay blocked.",
             "label": "Validate All Requests"
           },
           "validateLlm": {
@@ -12538,6 +12538,9 @@
         },
         "runningStatus": {
           "text": "{toolName} running..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} could not reach its server"
         },
         "waitingIndicator": {
           "text": "Waiting for response..."

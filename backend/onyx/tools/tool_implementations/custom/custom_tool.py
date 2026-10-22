@@ -5,6 +5,7 @@ import uuid
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
+import requests
 from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
@@ -54,7 +55,10 @@ CUSTOM_TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
 
 def custom_tool_ssrf_params() -> OutboundSSRFParams:
     """Cloud blocks every internal target. Self-hosted allows private hosts,
-    allows loopback only at DISABLED, and always blocks link-local/metadata."""
+    allows loopback only at DISABLED, and always blocks link-local/metadata.
+
+    Self-hosted allows private ranges at every level, VALIDATE_ALL included, so
+    admins can call internal APIs. This is an accepted risk (ENG-4421)."""
     if MULTI_TENANT:
         return OutboundSSRFParams(
             allow_private_network=False,
@@ -184,9 +188,15 @@ class CustomTool(Tool[None]):
         )
 
     def _failed_response(
-        self, placement: Placement, status_code: int | None, message: str
+        self,
+        placement: Placement,
+        status_code: int | None,
+        message: str,
+        is_unreachable: bool = False,
     ) -> ToolResponse:
-        error_info = CustomToolErrorInfo(status_code=status_code, message=message)
+        error_info = CustomToolErrorInfo(
+            status_code=status_code, message=message, is_unreachable=is_unreachable
+        )
         self.emitter.emit(
             Packet(
                 placement=placement,
@@ -274,6 +284,25 @@ class CustomTool(Tool[None]):
                     f"The {self._name} tool could not run because its destination "
                     "is not allowed."
                 ),
+            )
+        except requests.exceptions.Timeout:
+            logger.warning("%s request timed out", self._name, exc_info=True)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=f"The {self._name} tool could not reach its server (timed out).",
+                is_unreachable=True,
+            )
+        except requests.exceptions.ConnectionError:
+            logger.warning("%s request could not connect", self._name, exc_info=True)
+            return self._failed_response(
+                placement,
+                status_code=None,
+                message=(
+                    f"The {self._name} tool could not reach its server "
+                    "(connection failed)."
+                ),
+                is_unreachable=True,
             )
         if response.is_redirect:
             logger.warning(
