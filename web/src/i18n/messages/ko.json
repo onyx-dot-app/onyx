@@ -3161,6 +3161,7 @@
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
+          "indexingItems": "{count, plural, other {항목 #개 실패}}",
           "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
@@ -3182,9 +3183,9 @@
           "title": "활동을 불러올 수 없습니다."
         },
         "docs": {
-          "title": "실패한 문서",
+          "title": "실패한 항목",
           "search": {
-            "placeholder": "문서 검색…"
+            "placeholder": "항목 검색…"
           },
           "resolveAll": "모두 다시 시도",
           "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
@@ -3194,8 +3195,8 @@
           "more": "더 보기",
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
-          "empty": "미해결 문서 오류가 없습니다",
-          "loadError": "실패한 문서를 불러올 수 없습니다.",
+          "empty": "미해결 오류가 없습니다",
+          "loadError": "실패한 항목을 불러올 수 없습니다.",
           "open": "문서 열기"
         },
         "trace": {

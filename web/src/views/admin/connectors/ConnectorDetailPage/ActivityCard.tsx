@@ -194,7 +194,7 @@ export interface ActivityCardProps {
   popoverPlacement?: PopoverPlacement;
 }
 
-/** One run in an activity list: when, which kind, how it stands in its group, its trace and failed documents. */
+/** One run in an activity list: when, which kind, how it stands in its group, its trace and failed items. */
 export default function ActivityCard({
   ccPairId,
   run,
@@ -248,13 +248,14 @@ export default function ActivityCard({
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
   const trace = runTrace(run);
-  // The list holds open document errors, so only an index attempt with some lists its documents.
-  const openDocs =
-    run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
-  const listsDocs = openDocs > 0;
-  const resolvable = canResolve && listsDocs;
+  // The list holds every open error of an index attempt. Only its documents can be retried.
+  const indexing = run.kind === "indexing";
+  const openErrors = indexing ? run.attempt.open_error_count : 0;
+  const openDocs = indexing ? run.attempt.open_doc_error_count : 0;
+  const listsErrors = openErrors > 0;
+  const resolvable = canResolve && openDocs > 0;
   // The viewer could resolve, but the connector cannot re-fetch single documents. The button stays, disabled, to say so.
-  const resolveUnsupported = listsDocs && canResolveRuns && !canResolve;
+  const resolveUnsupported = openDocs > 0 && canResolveRuns && !canResolve;
   // A failed check run lists what failed instead of a stack trace.
   const listsChecks = run.kind === "checks" && warnings > 0;
   // A run still going can fail again, so it is resolved once it ends.
@@ -285,7 +286,11 @@ export default function ActivityCard({
   const docsLabel =
     resolved && run.kind !== "checks"
       ? t("tags.resolvedDocs", { count: warnings })
-      : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
+      : !listsErrors
+        ? t(`tags.${run.kind}`, { count: warnings })
+        : openErrors > openDocs
+          ? t("tags.indexingItems", { count: openErrors })
+          : t("tags.indexing", { count: openDocs });
 
   const pillIconColor = closed ? undefined : "orange";
 
@@ -436,7 +441,7 @@ export default function ActivityCard({
                     />
                   </Popover>
                 )}
-                {listsDocs ? (
+                {listsErrors ? (
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
                       <Popover.Trigger asChild>
