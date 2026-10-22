@@ -3859,7 +3859,6 @@
               "label": "Propriétaire du dépôt"
             },
             "github_mode": {
-              "label": "Contenu GitHub à indexer",
               "tabs": {
                 "repo": {
                   "label": "Dépôt précis"

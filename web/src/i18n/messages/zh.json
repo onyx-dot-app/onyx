@@ -3859,7 +3859,6 @@
               "label": "仓库所有者"
             },
             "github_mode": {
-              "label": "要索引的 GitHub 内容",
               "tabs": {
                 "repo": {
                   "label": "指定仓库"

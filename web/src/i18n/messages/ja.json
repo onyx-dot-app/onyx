@@ -3859,7 +3859,6 @@
               "label": "リポジトリのオーナー"
             },
             "github_mode": {
-              "label": "インデックスする GitHub コンテンツ",
               "tabs": {
                 "repo": {
                   "label": "特定のリポジトリ"

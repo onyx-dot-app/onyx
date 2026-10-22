@@ -3859,7 +3859,6 @@
               "label": "저장소 소유자"
             },
             "github_mode": {
-              "label": "인덱싱할 GitHub 콘텐츠",
               "tabs": {
                 "repo": {
                   "label": "특정 저장소"

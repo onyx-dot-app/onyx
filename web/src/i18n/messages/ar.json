@@ -3859,7 +3859,6 @@
               "label": "مالك المستودع"
             },
             "github_mode": {
-              "label": "محتوى GitHub المراد فهرسته",
               "tabs": {
                 "repo": {
                   "label": "مستودع محدد"

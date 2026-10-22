@@ -446,7 +446,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "github_mode",
-        label: "connectors.github.fields.github_mode.label",
         optional: true,
         tabs: [
           {

@@ -3859,7 +3859,6 @@
               "label": "Repository Owner"
             },
             "github_mode": {
-              "label": "GitHub content to index",
               "tabs": {
                 "repo": {
                   "label": "Specific Repository"
