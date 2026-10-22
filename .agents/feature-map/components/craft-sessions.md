@@ -193,6 +193,8 @@ reads it to decide whether a turn can run.
 `cleanup_checkpoint` records committed cleanup proof for one attempt, workspace storage instance, and heartbeat.
 The reaper can resume deletion after runtime loss. New provisioning and successful sleep clear this proof.
 Heartbeat updates clear it too. Uploads and file deletions commit that update before changing files.
+Upload and file deletion endpoints hold `session_creation_lock` during the mutation.
+The reaper holds the same lock during its final checkpoint commit and runtime termination.
 
 ### `Artifact` (`backend/onyx/db/models.py:Artifact`)
 

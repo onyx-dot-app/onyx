@@ -152,12 +152,13 @@ jobs:
           set -eo pipefail
           # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
           entries=""
-          for f in $(find backend/tests/integration/tests/craft/k8s backend/tests/integration/tests/craft/k8s/cleanup \
+          for f in $(find backend/tests/integration/tests/craft/k8s \
               -maxdepth 1 -name 'test_*.py' -type f | sort); do
             base=$(basename "$f" .py)
             shard="${base#test_}"
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
+          entries="${entries}{\"path\":\"backend/tests/integration/tests/craft/k8s/cleanup\",\"name\":\"cleanup-resources\"},"
           if [ -z "${entries}" ]; then
             echo "::error::no craft k8s test files discovered"
             exit 1
