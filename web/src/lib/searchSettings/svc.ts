@@ -256,8 +256,9 @@ export async function setNewSearchSettings({
 }
 
 /**
- * Switches the Contextual Retrieval LLM on the current index. Contextual
- * Retrieval must already be enabled; all other settings must stay unchanged.
+ * Changes Contextual Retrieval on the current index without a re-index: on
+ * with a model, a different model, or off. All other settings must stay
+ * unchanged.
  */
 export async function updateInferenceSettings(
   settings: SavedSearchSettings

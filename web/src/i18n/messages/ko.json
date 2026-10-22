@@ -6828,6 +6828,10 @@
           "description": "새 문서와 업데이트된 문서에 대한 컨텍스트 생성을 지금 중지하거나, 모든 문서를 다시 구축하여 이미 생성된 컨텍스트도 제거하세요.",
           "title": "컨텍스트 검색을 끄는 방식을 선택하세요"
         },
+        "contextualEnableOnly": {
+          "description": "지금부터 새 문서와 업데이트된 문서에 컨텍스트를 생성하거나, 모든 문서를 다시 구축하여 모든 문서에 컨텍스트를 적용하세요.",
+          "title": "컨텍스트 검색을 켜는 방식을 선택하세요"
+        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"
@@ -6958,6 +6962,10 @@
       "disableForwardModal": {
         "description": "지금부터 추가되거나 업데이트되는 문서에는 컨텍스트 검색이 적용되지 않습니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 이미 생성된 컨텍스트를 유지합니다.",
         "title": "이후 문서부터 컨텍스트 검색 끄기"
+      },
+      "enableForwardModal": {
+        "description": "지금부터 추가되거나 업데이트되는 문서에 컨텍스트 검색이 적용됩니다. 기존 문서는 업데이트되거나 다시 인덱싱할 때까지 그대로 유지되므로 문서마다 컨텍스트 보강이 다를 수 있습니다.",
+        "title": "이후 문서부터 컨텍스트 검색 켜기"
       },
       "header": {
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
@@ -7187,6 +7195,8 @@
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",
         "contextualRetrievalDisableFailed": "컨텍스트 검색을 끄지 못했습니다",
         "contextualRetrievalDisabled": "컨텍스트 검색을 껐습니다",
+        "contextualRetrievalEnableFailed": "컨텍스트 검색을 켜지 못했습니다",
+        "contextualRetrievalEnabled": "컨텍스트 검색을 켰습니다",
         "modelNotFound": "선택한 모델을 찾을 수 없습니다",
         "providerResolveFailed": "제공업체를 확인할 수 없습니다",
         "reindexCanceled": "재인덱싱을 취소했습니다",

@@ -6828,6 +6828,10 @@
           "description": "Pare agora de gerar contexto para documentos novos e atualizados ou reconstrua todos os documentos para remover também o contexto já gerado.",
           "title": "Escolha como desativar a recuperação contextual"
         },
+        "contextualEnableOnly": {
+          "description": "Gere contexto para documentos novos e atualizados a partir de agora ou reconstrua todos os documentos para que cada documento receba contexto.",
+          "title": "Escolha como ativar a recuperação contextual"
+        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"
@@ -6958,6 +6962,10 @@
       "disableForwardModal": {
         "description": "A recuperação contextual é interrompida para documentos adicionados ou atualizados a partir de agora. Os documentos existentes mantêm o contexto já gerado até serem atualizados ou até que você reindexe.",
         "title": "Desativar a recuperação contextual daqui em diante"
+      },
+      "enableForwardModal": {
+        "description": "A recuperação contextual começa para documentos adicionados ou atualizados a partir de agora. Os documentos existentes permanecem como estão até serem atualizados ou até que você reindexe, portanto o enriquecimento contextual pode variar entre documentos.",
+        "title": "Ativar a recuperação contextual daqui em diante"
       },
       "header": {
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
@@ -7187,6 +7195,8 @@
         "contextualModelUpdated": "LLM de recuperação contextual atualizado",
         "contextualRetrievalDisableFailed": "Falha ao desativar a recuperação contextual",
         "contextualRetrievalDisabled": "Recuperação contextual desativada",
+        "contextualRetrievalEnableFailed": "Falha ao ativar a recuperação contextual",
+        "contextualRetrievalEnabled": "Recuperação contextual ativada",
         "modelNotFound": "Não foi possível encontrar o modelo selecionado",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "reindexCanceled": "Reindexação cancelada",

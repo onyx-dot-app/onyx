@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { IndexSettingsPage } from "./IndexSettingsPage";
+import {
+  ENABLE_FORWARD_DIALOG_TITLE,
+  IndexSettingsPage,
+} from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
@@ -530,6 +533,78 @@ test.describe("Index Settings — contextual LLM updates @exclusive", () => {
     expect(body.contextual_rag_model_configuration_id).toBe(
       nextContextualModel.id
     );
+    expect(body.model_name).toBe(current.model_name);
+    expect(setNewRequestCount).toBe(0);
+  });
+
+  test("turns Contextual Retrieval on only for new and updated documents", async ({
+    page,
+  }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const models = getVisibleLlmModels(await getLlmProviderResponse(page));
+    test.skip(models.length === 0, "A visible LLM model is required");
+    const contextualModel = models[0]!;
+
+    let servedSettings: TestSearchSettings = {
+      ...current,
+      enable_contextual_rag: false,
+      contextual_rag_model_configuration_id: null,
+    };
+    let setNewRequestCount = 0;
+
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(SET_NEW_SETTINGS_API, async (route) => {
+      setNewRequestCount += 1;
+      await route.fulfill({ status: 200, body: JSON.stringify({ id: 1 }) });
+    });
+
+    const updateBodyPromise = new Promise<TestSearchSettings>((resolve) => {
+      void page.route(UPDATE_INFERENCE_SETTINGS_API, async (route) => {
+        const body = JSON.parse(
+          route.request().postData() ?? "{}"
+        ) as TestSearchSettings;
+        servedSettings = body;
+        resolve(body);
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify({
+            contextual_rag_model_configuration_id:
+              body.contextual_rag_model_configuration_id,
+          }),
+        });
+      });
+    });
+
+    const indexSettingsPage = new IndexSettingsPage(page);
+    await indexSettingsPage.goto();
+    await indexSettingsPage.enableContextualRetrieval();
+    await indexSettingsPage.stageContextualModel(
+      modelDisplayName(contextualModel)
+    );
+    await indexSettingsPage.expectBannerTitle(
+      "Choose how to turn on Contextual Retrieval"
+    );
+    await indexSettingsPage.expectContextualModelActions();
+    await indexSettingsPage.openForwardOnlyConfirmation(
+      ENABLE_FORWARD_DIALOG_TITLE
+    );
+    await indexSettingsPage.confirmForwardOnlyUpdate(
+      ENABLE_FORWARD_DIALOG_TITLE
+    );
+
+    const body = await updateBodyPromise;
+    expect(body.enable_contextual_rag).toBe(true);
+    expect(body.contextual_rag_model_configuration_id).toBe(contextualModel.id);
     expect(body.model_name).toBe(current.model_name);
     expect(setNewRequestCount).toBe(0);
   });

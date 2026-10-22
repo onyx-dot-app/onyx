@@ -6828,6 +6828,10 @@
           "description": "Stop generating context for new and updated documents now, or rebuild all documents to also remove the context already generated.",
           "title": "Choose how to turn off Contextual Retrieval"
         },
+        "contextualEnableOnly": {
+          "description": "Generate context for new and updated documents from now on, or rebuild all documents so every document gets context.",
+          "title": "Choose how to turn on Contextual Retrieval"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"
@@ -6958,6 +6962,10 @@
       "disableForwardModal": {
         "description": "Contextual Retrieval stops for documents added or updated from now on. Existing documents keep the context already generated until they are updated or you re-index.",
         "title": "Turn off Contextual Retrieval going forward"
+      },
+      "enableForwardModal": {
+        "description": "Contextual Retrieval starts for documents added or updated from now on. Existing documents stay as they are until they are updated or you re-index, so contextual enrichment can differ between documents.",
+        "title": "Turn on Contextual Retrieval going forward"
       },
       "header": {
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
@@ -7187,6 +7195,8 @@
         "contextualModelUpdated": "Contextual Retrieval LLM updated",
         "contextualRetrievalDisableFailed": "Failed to turn off Contextual Retrieval",
         "contextualRetrievalDisabled": "Contextual Retrieval turned off",
+        "contextualRetrievalEnableFailed": "Failed to turn on Contextual Retrieval",
+        "contextualRetrievalEnabled": "Contextual Retrieval turned on",
         "modelNotFound": "Could not find the selected model",
         "providerResolveFailed": "Could not resolve provider",
         "reindexCanceled": "Re-indexing canceled",
