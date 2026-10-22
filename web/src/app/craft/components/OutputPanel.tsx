@@ -650,6 +650,13 @@ function OutputResources({
                   }
                   accessRevoked={accessRevoked}
                   apps={apps}
+                  htmlFiles={Object.keys(session?.outputInventory ?? {})
+                    .filter(
+                      (path) =>
+                        path.startsWith("outputs/") && /\.html?$/i.test(path)
+                    )
+                    .sort()}
+                  onFileOpen={openFile}
                   appId={tab.appId}
                   discoveryState={discoveryState}
                   refreshKey={

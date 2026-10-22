@@ -324,6 +324,15 @@ Installation does not replace agent-managed skills or enter session snapshots.
 
 DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
 DOCX scroll restoration waits for rendered content on initial load and each replacement, preserving position during hidden updates. Spreadsheet parsing runs in a worker with a ten-second deadline.
+### Static HTML in Apps
+
+The Apps tab lists `.html` and `.htm` files from the session output inventory alongside registered webapps.
+Selecting an HTML file opens its file tab. It does not register a webapp or start a server.
+The existing authenticated file endpoint supplies the preview content.
+HTML renders in a sandboxed `srcdoc` iframe with scripts allowed and same-origin access disabled.
+Forms, popups, and top-level navigation remain blocked. Referrers are suppressed.
+This supports self-contained documents; sibling workspace assets are not served by this preview.
+File revision updates use the existing preview cache and viewed-revision handling.
 
 ## 5. Contracts and invariants
 

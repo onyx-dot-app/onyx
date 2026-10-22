@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Text, Tooltip } from "@opal/components";
 import { SvgGlobe, SvgLoader } from "@opal/icons";
+import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
 import type { RegisteredWebapp, AppDiscoveryState } from "@/lib/build/types";
@@ -13,6 +14,8 @@ interface BrowserTabProps {
   resourceId: string;
   onLoadingChange?: (id: string, loading: boolean) => void;
   apps: RegisteredWebapp[];
+  htmlFiles?: string[];
+  onFileOpen?: (path: string, name: string) => void;
   appId: string | null;
   discoveryState: AppDiscoveryState;
   refreshKey?: number;
@@ -24,6 +27,8 @@ export default function BrowserTab({
   resourceId,
   onLoadingChange,
   apps,
+  htmlFiles = [],
+  onFileOpen,
   appId,
   discoveryState,
   refreshKey = 0,
@@ -58,10 +63,16 @@ export default function BrowserTab({
     appId === null ? (
       <WorkspaceHome title={t("home.title")}>
         {discoveryState === "checking" && apps.length === 0 ? (
-          <div className="flex items-center gap-2" role="status">
+          <Section
+            flexDirection="row"
+            width="auto"
+            height="auto"
+            gap={2}
+            role="status"
+          >
             <SvgLoader size={20} className="motion-safe:animate-spin" />
             <Text font="main-ui-muted">{t("checking.label")}</Text>
-          </div>
+          </Section>
         ) : null}
         {discoveryState === "unavailable" || discoveryState === "failed" ? (
           <div role="status" className="max-w-sm">
@@ -74,15 +85,30 @@ export default function BrowserTab({
             </Text>
           </div>
         ) : null}
-        {discoveryState === "ready" && apps.length === 0 ? (
-          <div className="flex max-w-sm flex-col gap-2">
+        {discoveryState === "ready" &&
+        apps.length === 0 &&
+        htmlFiles.length === 0 ? (
+          <Section height="auto" gap={2} className="max-w-sm">
             <Text font="main-ui-body">{t("empty.title")}</Text>
             <Text font="main-ui-muted" color="text-03">
               {t("empty.description")}
             </Text>
-          </div>
+          </Section>
         ) : null}
-        <div className="flex w-full flex-col gap-1.5">
+        <Section height="auto" gap={1.5} alignItems="stretch">
+          {!accessRevoked &&
+            onFileOpen &&
+            htmlFiles.map((path) => (
+              <Button
+                key={path}
+                icon={SvgGlobe}
+                prominence="tertiary"
+                tooltip={path}
+                onClick={() => onFileOpen(path, path.split("/").pop() || path)}
+              >
+                {path.split("/").pop() || path}
+              </Button>
+            ))}
           {apps.map((candidate) => (
             <Tooltip key={candidate.id} tooltip={candidate.url} side="bottom">
               <SelectCard
@@ -95,13 +121,24 @@ export default function BrowserTab({
                 rounding={3}
                 onClick={() => onNavigate(candidate.id)}
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <Section
+                  flexDirection="row"
+                  height="auto"
+                  gap={3}
+                  justifyContent="start"
+                  className="min-w-0"
+                >
                   <SvgGlobe
                     size={20}
                     className="shrink-0 stroke-text-03"
                     aria-hidden
                   />
-                  <div className="flex min-w-0 flex-col">
+                  <Section
+                    height="auto"
+                    gap={0}
+                    alignItems="start"
+                    className="min-w-0"
+                  >
                     <Text
                       font="main-ui-muted"
                       color="text-04"
@@ -125,12 +162,12 @@ export default function BrowserTab({
                         )}
                       </Text>
                     )}
-                  </div>
-                </div>
+                  </Section>
+                </Section>
               </SelectCard>
             </Tooltip>
           ))}
-        </div>
+        </Section>
       </WorkspaceHome>
     ) : null;
 

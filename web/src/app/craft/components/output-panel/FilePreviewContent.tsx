@@ -173,6 +173,16 @@ function FetchedFilePreview({
   let viewer: ReactNode;
   if (data.isImage) {
     viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.html?$/i.test(filePath)) {
+    viewer = (
+      <iframe
+        title={fileName}
+        srcDoc={data.content}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        className="h-full w-full border-0 bg-background-neutral-01"
+      />
+    );
   } else if (/\.csv$/i.test(filePath)) {
     viewer = (
       <CsvPreview
