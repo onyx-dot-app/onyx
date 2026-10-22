@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -63,11 +64,30 @@ _CLONE_TIMEOUT_SECONDS = 30
 _PREFIX = "[agent-context-bootstrap]"
 
 
+# Set when the agent was started from inside a git command (a hook, say); they would
+# point every git call here at that repo instead of the one in `cwd`.
+_GIT_LOCATION_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_PREFIX",
+)
+
+
+def _git_env(**extra: str) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_VARS}
+    return {**env, **extra}
+
+
 def _git(cwd: Path, *args: str) -> str | None:
     try:
         result = subprocess.run(
             ["git", *args],
             cwd=cwd,
+            env=_git_env(),
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
@@ -188,12 +208,13 @@ def _clone_due(repo: Path) -> bool:
 
 
 def _clone(url: str, target: Path) -> bool:
-    env = {
-        **os.environ,
-        "GIT_TERMINAL_PROMPT": "0",
-        "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh")
+    """Clone `url` to `target`; on any failure, remove what the clone left behind so
+    the next attempt starts clean."""
+    env = _git_env(
+        GIT_TERMINAL_PROMPT="0",
+        GIT_SSH_COMMAND=os.environ.get("GIT_SSH_COMMAND", "ssh")
         + " -o BatchMode=yes -o ConnectTimeout=10",
-    }
+    )
     try:
         proc = subprocess.Popen(
             ["git", "clone", "--quiet", url, str(target)],
@@ -208,10 +229,16 @@ def _clone(url: str, target: Path) -> bool:
     try:
         ok = proc.wait(timeout=_CLONE_TIMEOUT_SECONDS) == 0
     except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         proc.wait()
         ok = False
-    return ok and (target / _ENTRY_FILE).is_file()
+    if ok and (target / _ENTRY_FILE).is_file():
+        return True
+    shutil.rmtree(target, ignore_errors=True)
+    return False
 
 
 def _offer(context: Path, how: str) -> str:

@@ -14,8 +14,10 @@ import sys
 from pathlib import Path
 
 _HOOK = Path(__file__).resolve().parents[4] / ".agents/hooks/bootstrap_agent_context.py"
+# Git location variables from an invoking git command would redirect the fixtures.
+_GIT_LOCATION_VARS = {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
 _GIT_ENV = {
-    **os.environ,
+    **{k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_VARS},
     "GIT_AUTHOR_NAME": "t",
     "GIT_AUTHOR_EMAIL": "t@example.com",
     "GIT_COMMITTER_NAME": "t",
@@ -189,3 +191,28 @@ def test_answers_cursor_with_json_and_reads_its_workspace_root(tmp_path: Path) -
     )
 
     assert f"`{context}`" in json.loads(result.stdout)["additional_context"]
+
+
+def test_a_failed_clone_leaves_nothing_behind(tmp_path: Path) -> None:
+    onyx, env = _setup(tmp_path)
+    # A remote without AGENTS.md: the clone succeeds but is not the context.
+    remote = Path(env["ONYX_AGENT_CONTEXT_URL"])
+    (remote / "AGENTS.md").unlink()
+    _git(remote, "commit", "-qam", "drop entry")
+
+    assert "Could not clone" in _run(onyx, env)
+    assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+
+
+def test_ignores_git_location_variables_from_the_caller(tmp_path: Path) -> None:
+    onyx, env = _setup(tmp_path, email="someone@example.com")
+    context = tmp_path / "ws" / "onyx-agent-context"
+    context.mkdir()
+    (context / "AGENTS.md").write_text("entry\n")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    _git(elsewhere, "init", "-q")
+
+    out = _run(onyx, {**env, "GIT_DIR": str(elsewhere / ".git")})
+
+    assert f"`{context}`" in out
