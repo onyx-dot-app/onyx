@@ -11,6 +11,7 @@ import {
 } from "@opal/icons";
 import {
   type CCPairRun,
+  type CCPairRunKind,
   type CheckRunStatus,
   ConnectorCredentialPairStatus,
   type IndexingConnectorStatus,
@@ -33,6 +34,8 @@ export interface StatusTag {
     | "canceled"
     | "interrupted"
     | "indexed"
+    | "backfilling"
+    | "backfilled"
     | "failed"
     | "syncing"
     | "synced"
@@ -58,6 +61,8 @@ const TAGS = {
   // Resumes on its own, so it reads neutral rather than as indexed.
   interrupted: { icon: SvgXCircle, color: "gray", labelKey: "interrupted" },
   indexed: { icon: SvgCheckCircle, color: "green", labelKey: "indexed" },
+  backfilling: { icon: IconLoader, color: "blue", labelKey: "backfilling" },
+  backfilled: { icon: SvgCheckCircle, color: "green", labelKey: "backfilled" },
   failed: { icon: SvgXOctagon, color: "red", labelKey: "failed" },
   syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
   synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
@@ -131,10 +136,13 @@ function checkRunStatusTag(status: CheckRunStatus): StatusTag {
 export function runStatusTag(run: CCPairRun): StatusTag {
   switch (run.kind) {
     case "indexing":
-      return attemptStatusTag(run.attempt.status, false);
+      return attemptStatusTag(
+        run.attempt.status,
+        run.attempt.is_backfill ? "backfill" : "indexing"
+      );
     case "doc_permission_sync":
     case "group_sync":
-      return attemptStatusTag(run.attempt.status, true);
+      return attemptStatusTag(run.attempt.status, "sync");
     case "pruning":
       return pruneStatusTag(run.attempt.status);
     case "checks":
@@ -171,21 +179,36 @@ export function connectorRowStatusTag(
   return bucketStatusTag(status);
 }
 
-/** One attempt's tag. A sync reads "Syncing" and "Synced" where indexing reads "Indexing" and "Indexed". */
+/** What an attempt does, which names its live and finished tags. */
+export type AttemptWork = "indexing" | "backfill" | "sync";
+
+const LIVE_TAGS = {
+  indexing: TAGS.indexing,
+  backfill: TAGS.backfilling,
+  sync: TAGS.syncing,
+} satisfies Record<AttemptWork, StatusTag>;
+
+const DONE_TAGS = {
+  indexing: TAGS.indexed,
+  backfill: TAGS.backfilled,
+  sync: TAGS.synced,
+} satisfies Record<AttemptWork, StatusTag>;
+
+/** One attempt's tag. A sync reads "Syncing" and "Synced" and a backfill "Backfilling" and "Backfilled" where indexing reads "Indexing" and "Indexed". */
 export function attemptStatusTag(
   status: ValidStatuses | null,
-  isSync: boolean
+  work: AttemptWork
 ): StatusTag {
   switch (status) {
     case null:
     case "not_started":
       return TAGS.scheduled;
     case "in_progress":
-      return isSync ? TAGS.syncing : TAGS.indexing;
+      return LIVE_TAGS[work];
     case "success":
     // Shares the success tag: the warning count beside it carries the document errors.
     case "completed_with_errors":
-      return isSync ? TAGS.synced : TAGS.indexed;
+      return DONE_TAGS[work];
     case "failed":
       return TAGS.failed;
     case "interrupted":
@@ -195,4 +218,11 @@ export function attemptStatusTag(
     case "invalid":
       return TAGS.invalid;
   }
+}
+
+/** Key under `admin.connector.runs.kinds`. A backfill reads apart from the pair's regular indexing. */
+export function runKindLabelKey(run: CCPairRun): CCPairRunKind | "backfill" {
+  return run.kind === "indexing" && run.attempt.is_backfill
+    ? "backfill"
+    : run.kind;
 }

@@ -129,7 +129,7 @@ function SyncStatBlock({
   function tag(): StatusTag {
     if (shownRun !== undefined) return runStatusTag(shownRun);
     if (pausedTag !== null) return pausedTag;
-    return attemptStatusTag(lastSynced === null ? null : "success", true);
+    return attemptStatusTag(lastSynced === null ? null : "success", "sync");
   }
   const liveRate = shownRun === undefined ? null : syncRateLabel(shownRun);
   const neverSynced = liveRate === null && lastSynced === null;

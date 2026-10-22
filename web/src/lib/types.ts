@@ -228,6 +228,8 @@ export interface IndexAttemptSnapshot {
   time_finished: string | null;
   /** Indexed under the FUTURE search settings of a running model switch. */
   is_new_model: boolean;
+  /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
+  is_backfill: boolean;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
