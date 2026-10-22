@@ -10768,9 +10768,6 @@
       "empty": {
         "label": "尚未运行任何检查。"
       },
-      "docsLink": {
-        "label": "文档"
-      },
       "foldButton": {
         "fold": "收起",
         "expand": "查看全部"
@@ -10816,6 +10813,9 @@
       "details": {
         "expand": "显示详情",
         "collapse": "隐藏详情"
+      },
+      "docsButton": {
+        "label": "文档"
       }
     },
     "connectorEdit": {

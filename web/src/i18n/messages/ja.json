@@ -10768,9 +10768,6 @@
       "empty": {
         "label": "まだチェックは実行されていません。"
       },
-      "docsLink": {
-        "label": "ドキュメント"
-      },
       "foldButton": {
         "fold": "折りたたむ",
         "expand": "すべて表示"
@@ -10816,6 +10813,9 @@
       "details": {
         "expand": "詳細を表示",
         "collapse": "詳細を非表示"
+      },
+      "docsButton": {
+        "label": "ドキュメント"
       }
     },
     "connectorEdit": {

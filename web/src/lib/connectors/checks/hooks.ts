@@ -292,6 +292,8 @@ export function useConnectorChecks({
     [accessType, formState]
   );
   const { data: plan } = useConnectorCheckPlan(source, accessType, formState);
+  // A row action's start in flight; see `skipCheck`.
+  const actionInFlight = useRef<boolean>(false);
 
   const runId: string | null = session?.runId ?? null;
   const { data: run } = useSWR<DraftCheckRunSnapshot>(
@@ -513,16 +515,19 @@ export function useConnectorChecks({
     begin: () => void start("none"),
     rerun: () => void start("all"),
     refresh: () => void start("none"),
-    // A row action waits for the start in flight: two starts racing could
-    // supersede each other.
+    // A row action waits for the one in flight: two starts racing could
+    // supersede each other. The ref is set at once, before any re-render.
     skipCheck: (checkId) => {
-      if (session?.requesting) return;
+      if (actionInFlight.current || session?.requesting) return;
       const skipped = session?.skippedCheckIds ?? [];
       if (skipped.includes(checkId)) return;
-      void start("none", { skip: [...skipped, checkId] });
+      actionInFlight.current = true;
+      void start("none", { skip: [...skipped, checkId] }).finally(() => {
+        actionInFlight.current = false;
+      });
     },
     runCheck: (checkId) => {
-      if (session?.requesting) return;
+      if (actionInFlight.current || session?.requesting) return;
       const skip = (session?.skippedCheckIds ?? []).filter(
         (id) => id !== checkId
       );
@@ -531,10 +536,13 @@ export function useConnectorChecks({
           check.check_id === checkId &&
           (check.state === "pending" || check.state === "waiting")
       );
+      actionInFlight.current = true;
       void start(
         "none",
         queued ? { skip, startNow: checkId } : { skip, run: checkId }
-      );
+      ).finally(() => {
+        actionInFlight.current = false;
+      });
     },
   };
 }

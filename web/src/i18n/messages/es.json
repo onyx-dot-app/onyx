@@ -10768,9 +10768,6 @@
       "empty": {
         "label": "Aún no se han ejecutado comprobaciones."
       },
-      "docsLink": {
-        "label": "Documentación"
-      },
       "foldButton": {
         "fold": "Contraer",
         "expand": "Ver todo"
@@ -10816,6 +10813,9 @@
       "details": {
         "expand": "Mostrar detalles",
         "collapse": "Ocultar detalles"
+      },
+      "docsButton": {
+        "label": "Docs"
       }
     },
     "connectorEdit": {

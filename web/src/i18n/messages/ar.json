@@ -10768,9 +10768,6 @@
       "empty": {
         "label": "لم يتم تشغيل أي فحوصات بعد."
       },
-      "docsLink": {
-        "label": "التوثيق"
-      },
       "foldButton": {
         "fold": "طي",
         "expand": "عرض الكل"
@@ -10816,6 +10813,9 @@
       "details": {
         "expand": "إظهار التفاصيل",
         "collapse": "إخفاء التفاصيل"
+      },
+      "docsButton": {
+        "label": "المستندات"
       }
     },
     "connectorEdit": {

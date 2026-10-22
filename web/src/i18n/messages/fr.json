@@ -10768,9 +10768,6 @@
       "empty": {
         "label": "Aucune vérification n'a encore été exécutée."
       },
-      "docsLink": {
-        "label": "Documentation"
-      },
       "foldButton": {
         "fold": "Réduire",
         "expand": "Tout voir"
@@ -10816,6 +10813,9 @@
       "details": {
         "expand": "Afficher les détails",
         "collapse": "Masquer les détails"
+      },
+      "docsButton": {
+        "label": "Docs"
       }
     },
     "connectorEdit": {

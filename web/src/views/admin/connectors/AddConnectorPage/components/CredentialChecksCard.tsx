@@ -11,6 +11,7 @@ import {
   Card,
   Divider,
   Fold,
+  LinkButton,
   Log,
   type LogVariant,
   OverflowText,
@@ -209,7 +210,10 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     (check.state === "running" || (expected && !check.required)) &&
     onSkipCheck !== undefined;
   const runnable: boolean =
-    (check.state === "skipped" || check.state === "stopped" || expected) &&
+    // A waiting check runs once its field is set, so it offers no Run.
+    (check.state === "skipped" ||
+      check.state === "stopped" ||
+      check.state === "pending") &&
     onRunCheck !== undefined;
   // A finished check, whatever its outcome, can run again.
   const rerunnable: boolean = finished && onRunCheck !== undefined;
@@ -291,10 +295,6 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     </Section>
   );
 
-  const docs: RichStr | undefined =
-    check.docs_link !== null
-      ? markdown(`[${escapeMarkdown(t("docsLink.label"))}](${check.docs_link})`)
-      : undefined;
   // The docs link sits under the title, the fix under the message.
   const details = (
     <Section
@@ -305,10 +305,10 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
       gap={4}
     >
       <Section width={10} height="fit" alignItems="start" className="shrink-0">
-        {docs !== undefined && (
-          <Text font="secondary-body" color="text-03">
-            {docs}
-          </Text>
+        {check.docs_link !== null && (
+          <LinkButton href={check.docs_link} target="_blank">
+            {t("docsButton.label")}
+          </LinkButton>
         )}
       </Section>
       {check.remediation !== null && (
@@ -534,7 +534,9 @@ export function CheckCardView({
   // A run that broke can still list checks: some finished first, or an
   // earlier run's results stay after a failed re-run.
   const hasRows: boolean = hasResults || openChecks.length > 0;
-  const total: number = results.length + inProgressCount + expectedCount;
+  // A stopped check is still open and holds Create, so it counts.
+  const total: number =
+    results.length + inProgressCount + expectedCount + stateCounts.stopped;
   const hasChecks: boolean = total > 0;
 
   // What the fold hides, as one comma-separated line in a fixed order, e.g.
