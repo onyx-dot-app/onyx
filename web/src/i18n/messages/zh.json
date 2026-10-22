@@ -14103,16 +14103,15 @@
     },
     "plans": {
       "free": {
-        "title": "免费版",
-        "tooltip": "所有版本均可用。"
+        "title": "免费版"
       },
       "business": {
         "title": "商业版",
-        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+        "tooltip": "此功能仅在 [Onyx 商业版或企业版](/admin/billing) 中提供。"
       },
       "enterprise": {
         "title": "企业版",
-        "tooltip": "需要[企业版](/admin/billing)。"
+        "tooltip": "此功能仅在 [Onyx 企业版](/admin/billing) 中提供。"
       },
       "upgrade": {
         "label": "升级方案"
@@ -16579,12 +16578,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "此功能仅在 [Onyx 商业版或企业版](/admin/billing) 中提供。"
-      },
-      "enterpriseOnly": {
-        "tooltip": "此功能仅在 [Onyx 企业版](/admin/billing) 中提供。"
-      },
       "exitAdminPanel": {
         "label": "退出管理面板"
       },

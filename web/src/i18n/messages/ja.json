@@ -14103,16 +14103,15 @@
     },
     "plans": {
       "free": {
-        "title": "無料プラン",
-        "tooltip": "すべてのプランで利用できます。"
+        "title": "無料プラン"
       },
       "business": {
         "title": "ビジネスプラン",
-        "tooltip": "[ビジネスプランまたはエンタープライズプラン](/admin/billing)が必要です。"
+        "tooltip": "この機能は [Onyx の Business 版または Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "enterprise": {
         "title": "エンタープライズプラン",
-        "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
+        "tooltip": "この機能は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "upgrade": {
         "label": "プランをアップグレード"
@@ -16579,12 +16578,6 @@
       }
     },
     "adminSidebar": {
-      "businessOrEnterpriseOnly": {
-        "tooltip": "この機能は [Onyx の Business 版または Enterprise 版](/admin/billing) でのみ利用できます。"
-      },
-      "enterpriseOnly": {
-        "tooltip": "この機能は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
-      },
       "exitAdminPanel": {
         "label": "管理パネルを終了"
       },

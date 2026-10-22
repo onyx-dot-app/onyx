@@ -57,7 +57,8 @@ export function usePlans(): Record<Tier, PlanMetadata> {
         icon,
         color,
         tag: { title, color, icon },
-        tooltip: markdown(t(`${copyKey}.tooltip`)),
+        tooltip:
+          copyKey === "free" ? undefined : markdown(t(`${copyKey}.tooltip`)),
       };
     };
     return {

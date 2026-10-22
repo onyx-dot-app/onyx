@@ -24,9 +24,9 @@ import {
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { Tier } from "@/lib/tiers/types";
+import { usePlans } from "@/lib/tiers/hooks";
 import useFilter from "@/hooks/useFilter";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { markdown } from "@opal/utils";
 import {
   BETA_SECTION_IDS,
   buildItems,
@@ -40,6 +40,7 @@ import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export default function AdminSidebar() {
   const t = useTranslations("sidebar");
+  const plans = usePlans();
   const { folded, setFolded } = useSidebarState();
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -182,11 +183,13 @@ export default function AdminSidebar() {
             disabled
             // One tooltip over a tall block: it stays level with the pointer.
             tooltipAlign="follow"
-            tooltip={markdown(
-              disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
-                ? t("adminSidebar.enterpriseOnly.tooltip")
-                : t("adminSidebar.businessOrEnterpriseOnly.tooltip")
-            )}
+            tooltip={
+              plans[
+                disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
+                  ? Tier.ENTERPRISE
+                  : Tier.BUSINESS
+              ].tooltip
+            }
           >
             {disabledGroups.map((group, groupIndex) => (
               <SidebarLayouts.Section
