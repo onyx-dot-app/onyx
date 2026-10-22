@@ -45,9 +45,10 @@ type LogBaseProps = {
   /** Trailing content, such as a tag or an action. Not padded. */
   rightChildren?: React.ReactNode;
   /**
-   * Makes the line interactive: it hovers and presses, and a click anywhere
-   * on it calls this. A button inside it (e.g. a chevron) is its keyboard
-   * target; that button's click reaches this too.
+   * Makes the log interactive: the line and its body hover and press as one,
+   * and a click anywhere on them, except on a link, calls this. A button
+   * inside (e.g. a chevron) is its keyboard target; that button's click
+   * reaches this too.
    */
   onClick?: () => void;
 };
@@ -89,7 +90,7 @@ const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
  * shows in full in a tooltip.
  *
  * With `onClick`, the line is interactive. With `expandable`, a body opens
- * below it while `expanded`; open, the line keeps its hover look.
+ * below it while `expanded`.
  */
 function Log({
   variant = "default",
@@ -152,6 +153,12 @@ function Log({
     </Section>
   );
 
+  const body = expandable && (
+    <Fold open={expanded}>
+      <div className="opal-log-body">{expandedContent}</div>
+    </Fold>
+  );
+
   return (
     <div
       className="opal-log"
@@ -159,23 +166,33 @@ function Log({
       data-opal-log-weight={weight}
     >
       {onClick ? (
+        // The whole log is one surface: the line and its body hover and
+        // press together, and a click anywhere toggles it. A link inside
+        // keeps its own click.
         <Interactive.Stateless
           variant="default"
-          prominence="internal"
-          interaction={expandable && expanded ? "hover" : "rest"}
-          onClick={onClick}
+          prominence="tertiary"
+          onClick={(event: React.MouseEvent) => {
+            if (event.target instanceof Element && event.target.closest("a")) {
+              return;
+            }
+            onClick();
+          }}
         >
           <Interactive.Container rounding={2} size="fit" width="full">
-            {line}
+            {/* The container centres a flex child; this one fills it and may
+                shrink, so the line truncates instead of overflowing. */}
+            <div className="w-full min-w-0">
+              {line}
+              {body}
+            </div>
           </Interactive.Container>
         </Interactive.Stateless>
       ) : (
-        line
-      )}
-      {expandable && (
-        <Fold open={expanded}>
-          <div className="opal-log-body">{expandedContent}</div>
-        </Fold>
+        <>
+          {line}
+          {body}
+        </>
       )}
     </div>
   );

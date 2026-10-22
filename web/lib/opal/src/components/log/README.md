@@ -17,7 +17,7 @@ body below it with `expandable`.
 | `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                 |
 | `centerChildren`  | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit |
 | `rightChildren`   | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                     |
-| `onClick`         | `() => void`            | —           | Makes the line interactive (`Interactive.Stateless`, `internal`)             |
+| `onClick`         | `() => void`            | —           | Makes the whole log interactive (`Interactive.Stateless`, `tertiary`)        |
 | `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                     |
 | `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state              |
 | `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the title                     |
@@ -50,12 +50,13 @@ can match it to the variant.
   the trailing content.
 - A title too long for its column is cut with an ellipsis and shows in full
   in a tooltip. `centerChildren` handles its own overflow.
-- With `onClick`, the line hovers and presses as an `internal` stateless
-  surface, and a click anywhere on it calls `onClick`. Put a button inside it
+- With `onClick`, the whole log, the line and its body, hovers and presses as
+  one `tertiary` stateless surface, and a click anywhere on it but a link calls
+  `onClick`. Put a button inside it
   (e.g. a chevron) as its keyboard target: that button's click reaches
   `onClick` too. A button with its own action stops its click from bubbling.
 - With `expandable`, the body opens below the line in a `Fold`, indented to
-  start under the title. While `expanded`, the line keeps its hover look. A
+  start under the title. A
   heavy variant tints the body too, so the line and its body read as one.
 
 ## Usage
