@@ -41,7 +41,7 @@ export default function ThemePage() {
   const enterpriseSettings = settings.enterpriseSettings;
 
   async function updateEnterpriseSettings(
-    newValues: EnterpriseSettings
+    newValues: Partial<EnterpriseSettings>
   ): Promise<boolean> {
     const response = await fetch("/api/admin/enterprise-settings", {
       method: "PUT",
@@ -205,15 +205,7 @@ export default function ThemePage() {
         formikHelpers.setSubmitting(false);
       }}
     >
-      {({
-        isSubmitting,
-        dirty,
-        values,
-        validateForm,
-        setErrors,
-        setTouched,
-        submitForm,
-      }) => {
+      {({ isSubmitting, dirty, validateForm, setErrors, submitForm }) => {
         const hasLogoChange = !!selectedLogo;
 
         return (

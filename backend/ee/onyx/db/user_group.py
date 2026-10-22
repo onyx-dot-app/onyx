@@ -17,6 +17,7 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import GrantSource
@@ -1020,6 +1021,13 @@ def fetch_user_group_by_lti_context_id(
     return db_session.scalar(
         select(UserGroup).where(UserGroup.lti_context_id == lti_context_id)
     )
+
+
+def fetch_lti_course_nrps_url(lti_context_id: str) -> str | None:
+    """Return the roster URL saved from this course's verified LTI launch."""
+    with get_session_with_current_tenant() as db_session:
+        group = fetch_user_group_by_lti_context_id(db_session, lti_context_id)
+        return group.lti_nrps_url if group else None
 
 
 def fetch_lti_managed_user_groups(db_session: Session) -> Sequence[UserGroup]:

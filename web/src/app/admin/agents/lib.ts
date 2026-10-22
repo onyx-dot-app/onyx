@@ -31,6 +31,7 @@ interface PersonaUpsertRequest {
   hierarchy_node_ids: number[];
   // Individual documents for scoped search
   document_ids: string[];
+  lti_context_id: string | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -59,6 +60,7 @@ export interface PersonaUpsertParameters {
   hierarchy_node_ids?: number[];
   // Individual documents for scoped search
   document_ids?: string[];
+  lti_context_id?: string | null;
 }
 
 function buildPersonaUpsertRequest({
@@ -85,6 +87,7 @@ function buildPersonaUpsertRequest({
   starter_messages,
   label_ids,
   replace_base_system_prompt,
+  lti_context_id,
 }: PersonaUpsertParameters): PersonaUpsertRequest {
   return {
     name,
@@ -111,6 +114,7 @@ function buildPersonaUpsertRequest({
     replace_base_system_prompt,
     hierarchy_node_ids: hierarchy_node_ids ?? [],
     document_ids: document_ids ?? [],
+    lti_context_id: lti_context_id ?? null,
   };
 }
 

@@ -463,6 +463,8 @@ class ConnectorFailure(BaseModel):
     failed_entity: EntityFailure | None = None
     failure_message: str
     exception: Exception | None = Field(default=None, exclude=True)
+    # Record expected recoverable errors without letting them abort a connector run.
+    counts_toward_failure_threshold: bool = True
 
     model_config = {"arbitrary_types_allowed": True}
 

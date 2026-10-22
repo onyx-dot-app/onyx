@@ -23,6 +23,7 @@ from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
+from onyx.db.persona import filter_orphaned_persona_hierarchy_node_ids
 from onyx.db.persona import get_assistant_labels
 from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import get_minimal_persona_snapshots_paginated
@@ -49,6 +50,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.lti.knowledge import validate_lti_course_knowledge_selection
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
@@ -305,12 +307,21 @@ def create_persona(
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
     _validate_vector_db_knowledge(persona_upsert_request)
+    if persona_upsert_request.lti_context_id is not None:
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=persona_upsert_request.lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=None,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
+        disable_search_if_unscoped=persona_upsert_request.lti_context_id is not None,
     )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
@@ -333,12 +344,33 @@ def update_persona(
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
+    lti_context_id = persona_upsert_request.lti_context_id
+    if lti_context_id is not None:
+        # Old folder selections can outlive their connector. Drop only saved,
+        # unowned references before applying the normal course access checks.
+        hierarchy_node_ids = filter_orphaned_persona_hierarchy_node_ids(
+            db_session=db_session,
+            persona_id=persona_id,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+        )
+        persona_upsert_request = persona_upsert_request.model_copy(
+            update={"hierarchy_node_ids": hierarchy_node_ids}
+        )
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=persona_id,
         create_persona_request=persona_upsert_request,
         user=user,
         db_session=db_session,
+        # Empty LTI knowledge means no course content, never unrestricted search.
+        disable_search_if_unscoped=lti_context_id is not None,
     )
     return persona_snapshot
 

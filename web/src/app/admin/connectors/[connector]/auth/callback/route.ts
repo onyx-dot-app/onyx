@@ -10,6 +10,7 @@ import { processCookies } from "@/lib/userSS";
 
 const GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id";
 const LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME = "lti_google_drive_oauth";
+const LTI_GOOGLE_DRIVE_STATE_PREFIX = "lti_google_drive_";
 
 function ltiGoogleDrivePopupResponse(
   request: NextRequest,
@@ -46,6 +47,26 @@ function ltiGoogleDrivePopupResponse(
 export const GET = async (request: NextRequest) => {
   const requestCookies = await cookies();
   const connector = request.url.includes("gmail") ? "gmail" : "google-drive";
+  const state = request.nextUrl.searchParams.get("state");
+  if (
+    connector === "google-drive" &&
+    state?.startsWith(LTI_GOOGLE_DRIVE_STATE_PREFIX)
+  ) {
+    const code = request.nextUrl.searchParams.get("code");
+    if (!code) {
+      return ltiGoogleDrivePopupResponse(request, "failed");
+    }
+    const ltiCallbackUrl = new URL(buildUrl("/auth/lti/google-drive/callback"));
+    const ltiResponse = await fetch(ltiCallbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, state }),
+    });
+    return ltiGoogleDrivePopupResponse(
+      request,
+      ltiResponse.ok ? "success" : "failed"
+    );
+  }
   const isLtiGoogleDriveOAuth =
     connector === "google-drive" &&
     requestCookies.get(LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME)?.value === "true";

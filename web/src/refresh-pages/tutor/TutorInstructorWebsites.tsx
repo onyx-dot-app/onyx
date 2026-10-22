@@ -88,6 +88,7 @@ export default function TutorInstructorWebsites({
   const [url, setUrl] = useState("");
   const [crawlType, setCrawlType] = useState("recursive");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [syncingCcPairId, setSyncingCcPairId] = useState<number | null>(null);
   const [deletingCcPairId, setDeletingCcPairId] = useState<number | null>(null);
 
   const sortedWebsites = useMemo(() => {
@@ -128,6 +129,34 @@ export default function TutorInstructorWebsites({
     }
   }, [crawlType, mutate, url, websitesKey]);
 
+  const handleSync = useCallback(
+    async (ccPairId: number) => {
+      setSyncingCcPairId(ccPairId);
+      try {
+        const response = await fetch(`${websitesKey}/${ccPairId}/sync`, {
+          method: "POST",
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(
+            getErrorDetail(payload, "Could not sync this website.")
+          );
+        }
+        toast.success(
+          "Website sync started. Reopen the tutor editor after indexing finishes."
+        );
+        await mutate();
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Could not sync this website."
+        );
+      } finally {
+        setSyncingCcPairId(null);
+      }
+    },
+    [mutate, websitesKey]
+  );
+
   const handleRemove = useCallback(
     async (ccPairId: number) => {
       setDeletingCcPairId(ccPairId);
@@ -161,7 +190,8 @@ export default function TutorInstructorWebsites({
       </Title>
       <Text as="p" secondaryBody text03 className="mb-4">
         Add public web pages for the tutor to use. They are only visible to
-        students in this course.
+        students in this course. After indexing finishes, select the website in
+        the tutor editor.
       </Text>
 
       <Card className="p-4">
@@ -239,14 +269,32 @@ export default function TutorInstructorWebsites({
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        prominence="tertiary"
-                        variant="danger"
-                        size="sm"
-                        icon={SvgTrash}
-                        disabled={deletingCcPairId === website.cc_pair_id}
-                        onClick={() => void handleRemove(website.cc_pair_id)}
-                      />
+                      <div className="flex items-center gap-1">
+                        <Button
+                          prominence="tertiary"
+                          size="sm"
+                          disabled={
+                            syncingCcPairId === website.cc_pair_id ||
+                            deletingCcPairId === website.cc_pair_id ||
+                            website.cc_pair_status ===
+                              ConnectorCredentialPairStatus.DELETING
+                          }
+                          onClick={() => void handleSync(website.cc_pair_id)}
+                        >
+                          Sync
+                        </Button>
+                        <Button
+                          prominence="tertiary"
+                          variant="danger"
+                          size="sm"
+                          icon={SvgTrash}
+                          disabled={
+                            deletingCcPairId === website.cc_pair_id ||
+                            syncingCcPairId === website.cc_pair_id
+                          }
+                          onClick={() => void handleRemove(website.cc_pair_id)}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -131,6 +131,8 @@ class PersonaUpsertRequest(BaseModel):
     hierarchy_node_ids: list[int] = Field(default_factory=list)
     # Individual documents attached for scoped search
     document_ids: list[str] = Field(default_factory=list)
+    # LTI course context used to validate tutor knowledge scope
+    lti_context_id: str | None = None
 
     # prompt fields
     system_prompt: str

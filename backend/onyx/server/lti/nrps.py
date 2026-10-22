@@ -152,16 +152,19 @@ def mint_lti_service_token(scope: str = NRPS_MEMBERSHIP_SCOPE) -> str:
 
 
 def _parse_members(payload: object) -> list[NrpsMember]:
-    if not isinstance(payload, dict):
-        return []
-    raw_members = payload.get("members")
-    if not isinstance(raw_members, list):
-        return []
+    if not isinstance(payload, dict) or not isinstance(payload.get("members"), list):
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY, "LTI NRPS response is missing its member list"
+        )
+    raw_members = payload["members"]
 
     members: list[NrpsMember] = []
     for raw_member in raw_members:
         if not isinstance(raw_member, dict):
-            continue
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "LTI NRPS response contains an invalid member",
+            )
         raw_roles = raw_member.get("roles")
         roles = [str(role) for role in raw_roles] if isinstance(raw_roles, list) else []
         members.append(
@@ -231,10 +234,9 @@ def fetch_nrps_roster(nrps_url: str) -> NrpsRoster:
         ) from e
 
     if next_url and pages_fetched >= _MAX_NRPS_PAGES:
-        logger.warning(
-            "NRPS roster for %s exceeded %d pages; truncating roster",
-            nrps_url,
-            _MAX_NRPS_PAGES,
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "LTI NRPS roster exceeded the page limit; refusing to use an incomplete roster",
         )
 
     return NrpsRoster(members=members, context_title=context_title)

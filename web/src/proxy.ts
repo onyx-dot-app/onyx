@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   AuthType,
+  INTERNAL_URL,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
@@ -20,6 +21,8 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 // be run before the config is defined e.g. if we try and do a .map it will complain
 export const config = {
   matcher: [
+    // Public branding URL used by Canvas and other external integrations.
+    "/logo.png",
     // Auth-protected routes (for middleware auth check)
     "/app/:path*",
     "/admin/:path*",
@@ -52,8 +55,59 @@ const EE_ROUTES = [
   "/agents/stats",
 ];
 
+async function servePublicLogo(request: NextRequest): Promise<NextResponse> {
+  const fallback = NextResponse.next();
+  // Recheck branding after uploads or when the custom logo is disabled.
+  fallback.headers.set("Cache-Control", "no-store");
+
+  const options: RequestInit = {
+    cache: "no-store",
+    headers: { cookie: request.headers.get("cookie") || "" },
+    signal: AbortSignal.timeout(5000),
+  };
+
+  try {
+    const settingsResponse = await fetch(
+      `${INTERNAL_URL}/enterprise-settings`,
+      options
+    );
+    if (!settingsResponse.ok) {
+      return fallback;
+    }
+
+    const settings: { use_custom_logo?: boolean } =
+      await settingsResponse.json();
+    if (settings?.use_custom_logo !== true) {
+      return fallback;
+    }
+
+    const logoResponse = await fetch(
+      `${INTERNAL_URL}/enterprise-settings/logo`,
+      options
+    );
+    const contentType = logoResponse.headers.get("Content-Type");
+    if (!logoResponse.ok || !contentType?.startsWith("image/")) {
+      return fallback;
+    }
+
+    return new NextResponse(logoResponse.body, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    console.warn("Could not load enterprise logo; using bundled logo", error);
+    return fallback;
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  if (pathname === "/logo.png") {
+    return servePublicLogo(request);
+  }
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)

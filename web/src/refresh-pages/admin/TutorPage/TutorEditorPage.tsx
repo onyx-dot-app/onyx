@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import useSWR from "swr";
@@ -18,6 +18,7 @@ import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -40,6 +41,9 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { deleteAgent } from "@/refresh-pages/admin/AgentsPage/svc";
 import { useFormikContext } from "formik";
+import type { LLMProviderDescriptor } from "@/interfaces/llm";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
 import {
   TEACHING_STYLES,
   TEACHING_STYLE_OPTIONS,
@@ -50,9 +54,103 @@ import {
   type TeachingStyle,
 } from "./constants";
 import {
+  getLtiTutorScopeError,
+  includeLtiCourseRoot,
+} from "@/refresh-pages/admin/TutorPage/utils";
+import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
 } from "@/lib/constants";
+
+// ---------------------------------------------------------------------------
+// Tutor Model Selector (inside Formik context)
+// ---------------------------------------------------------------------------
+
+interface TutorModelSelectorProps {
+  llmProviders: LLMProviderDescriptor[];
+}
+
+function TutorModelSelector({ llmProviders }: TutorModelSelectorProps) {
+  const { values, setFieldValue } = useFormikContext<{
+    llm_model_provider_override: string | null;
+    llm_model_version_override: string | null;
+  }>();
+
+  const currentLlm =
+    values.llm_model_provider_override && values.llm_model_version_override
+      ? structureValue(
+          values.llm_model_provider_override,
+          llmProviders.find(
+            (provider) => provider.name === values.llm_model_provider_override
+          )?.provider ?? "",
+          values.llm_model_version_override
+        )
+      : null;
+  const providersWithModels = llmProviders
+    .map((provider) => ({
+      provider,
+      models: provider.model_configurations.filter(
+        (model) =>
+          model.is_visible ||
+          (provider.name === values.llm_model_provider_override &&
+            model.name === values.llm_model_version_override)
+      ),
+    }))
+    .filter(({ models }) => models.length > 0);
+
+  function handleModelChange(value: string) {
+    if (value === "default") {
+      setFieldValue("llm_model_provider_override", null);
+      setFieldValue("llm_model_version_override", null);
+      return;
+    }
+
+    const { modelName, name } = parseLlmDescriptor(value);
+    if (modelName && name) {
+      setFieldValue("llm_model_provider_override", name);
+      setFieldValue("llm_model_version_override", modelName);
+    }
+  }
+
+  return (
+    <InputSelect
+      value={currentLlm ?? "default"}
+      onValueChange={handleModelChange}
+    >
+      <InputSelect.Trigger
+        id="llm_model"
+        name="llm_model"
+        placeholder="User Default"
+      />
+      <InputSelect.Content>
+        <InputSelect.Item value="default">User Default</InputSelect.Item>
+        {providersWithModels.map(({ provider, models }) => (
+          <InputSelect.Group key={provider.id}>
+            <InputSelect.Label>
+              {provider.provider_display_name || provider.name}
+            </InputSelect.Label>
+            {models.map((model) => (
+              <InputSelect.Item
+                key={structureValue(
+                  provider.name,
+                  provider.provider,
+                  model.name
+                )}
+                value={structureValue(
+                  provider.name,
+                  provider.provider,
+                  model.name
+                )}
+              >
+                {model.display_name || model.name}
+              </InputSelect.Item>
+            ))}
+          </InputSelect.Group>
+        ))}
+      </InputSelect.Content>
+    </InputSelect>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Teaching Style Selector (inside Formik context)
@@ -171,8 +269,13 @@ export default function TutorEditorPage({
   const launchCanvasCourseNodeIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID
   );
-  const launchCanvasCourseNodeId = launchCanvasCourseNodeIdRaw
-    ? parseInt(launchCanvasCourseNodeIdRaw)
+  const parsedLaunchCanvasCourseNodeId = launchCanvasCourseNodeIdRaw
+    ? Number(launchCanvasCourseNodeIdRaw)
+    : null;
+  const launchCanvasCourseNodeId = Number.isInteger(
+    parsedLaunchCanvasCourseNodeId
+  )
+    ? parsedLaunchCanvasCourseNodeId
     : null;
   // Live course connector status. Its `canvas_course_node_id` is the
   // authoritative scope for the Canvas knowledge picker: null means the
@@ -201,11 +304,16 @@ export default function TutorEditorPage({
   const embeddedRaw = searchParams?.get(SEARCH_PARAM_NAMES.EMBEDDED) ?? null;
   const isCreating = !existingTutor;
   const missingLtiContextOnCreate = isCreating && !ltiContextId;
+  const [isKnowledgeSelectionPending, setIsKnowledgeSelectionPending] =
+    useState(false);
 
   // Build the /tutor return URL, preserving the LTI launch context (course
   // node, project, embedded mode) so the picker and instructor tabs render
   // correctly without needing a refresh.
-  function buildCourseReturnUrl(courseLabelName: string): Route {
+  function buildCourseReturnUrl(
+    courseLabelName: string,
+    tab?: "knowledge"
+  ): Route {
     const params = new URLSearchParams({
       [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
     });
@@ -221,11 +329,15 @@ export default function TutorEditorPage({
     if (embeddedRaw) {
       params.set(SEARCH_PARAM_NAMES.EMBEDDED, embeddedRaw);
     }
+    if (tab) {
+      params.set(SEARCH_PARAM_NAMES.TUTOR_TAB, tab);
+    }
     return `/tutor?${params.toString()}` as Route;
   }
 
   const { tools: availableTools, isLoading: isToolsLoading } =
     useAvailableTools();
+  const { llmProviders } = useLLMProviders(existingTutor?.id);
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -261,6 +373,10 @@ export default function TutorEditorPage({
   const existingCourseLabel = existingTutor?.labels?.find(
     (l) => l.name !== VIRTUAL_TUTOR_LABEL_NAME
   );
+  const knowledgeUrl =
+    existingTutor && projectIdRaw && embeddedRaw === "true" && ltiContextId
+      ? buildCourseReturnUrl(ltiContextId, "knowledge")
+      : undefined;
 
   const detectedStyle = detectTeachingStyle(
     existingTutor?.system_prompt ?? null
@@ -269,6 +385,10 @@ export default function TutorEditorPage({
   const initialValues = {
     name: existingTutor?.name ?? "",
     description: existingTutor?.description ?? "",
+    llm_model_provider_override:
+      existingTutor?.llm_model_provider_override ?? null,
+    llm_model_version_override:
+      existingTutor?.llm_model_version_override ?? null,
 
     // Teaching style
     teaching_style: detectedStyle as TeachingStyle,
@@ -286,11 +406,12 @@ export default function TutorEditorPage({
         ""
     ),
 
-    // Tutor knowledge. The user picks which folders / documents / pages to
-    // scope the tutor to (none means "all available course knowledge").
+    // Only new tutors default to the full course. Existing tutors must keep
+    // their saved scope, including partial selections and empty knowledge.
     document_ids: existingTutor?.attached_documents?.map((doc) => doc.id) ?? [],
-    hierarchy_node_ids:
-      existingTutor?.hierarchy_nodes?.map((node) => node.id) ?? [],
+    hierarchy_node_ids: existingTutor
+      ? existingTutor.hierarchy_nodes?.map((node) => node.id) ?? []
+      : includeLtiCourseRoot([], ltiCanvasCourseNodeId),
   };
 
   const validationSchema = Yup.object().shape({
@@ -301,6 +422,8 @@ export default function TutorEditorPage({
         `Description must be ${MAX_CHARACTERS_AGENT_DESCRIPTION} characters or less`
       )
       .optional(),
+    llm_model_provider_override: Yup.string().nullable().optional(),
+    llm_model_version_override: Yup.string().nullable().optional(),
     system_prompt: Yup.string().optional(),
     starter_messages: Yup.array().of(
       Yup.string().max(
@@ -313,7 +436,17 @@ export default function TutorEditorPage({
   });
 
   async function handleSubmit(values: typeof initialValues) {
+    if (isKnowledgeSelectionPending) return;
     try {
+      const ltiTutorScopeError = getLtiTutorScopeError(
+        ltiContextId,
+        ltiCanvasCourseNodeId
+      );
+      if (ltiTutorScopeError) {
+        toast.error(ltiTutorScopeError);
+        return;
+      }
+
       const starterMessages = values.starter_messages
         .filter((message: string) => message.trim() !== "")
         .map((message: string) => ({ message, name: message }));
@@ -322,7 +455,9 @@ export default function TutorEditorPage({
         starterMessages.length > 0 ? starterMessages : null;
 
       const toolIds: number[] = [];
-      if (vectorDbEnabled && searchTool) {
+      const hasKnowledge =
+        values.hierarchy_node_ids.length > 0 || values.document_ids.length > 0;
+      if (vectorDbEnabled && searchTool && hasKnowledge) {
         toolIds.push(searchTool.id);
       }
 
@@ -363,8 +498,8 @@ export default function TutorEditorPage({
         datetime_aware: false,
         document_set_ids: [],
         is_public: true,
-        llm_model_provider_override: null,
-        llm_model_version_override: null,
+        llm_model_provider_override: values.llm_model_provider_override,
+        llm_model_version_override: values.llm_model_version_override,
         starter_messages: finalStarterMessages,
         groups: [],
         tool_ids: toolIds,
@@ -376,6 +511,7 @@ export default function TutorEditorPage({
         user_file_ids: [],
         hierarchy_node_ids: values.hierarchy_node_ids,
         document_ids: values.document_ids,
+        lti_context_id: ltiContextId,
       };
 
       let personaResponse;
@@ -508,25 +644,31 @@ export default function TutorEditorPage({
                             tooltip={
                               isSubmitting
                                 ? "Saving..."
-                                : missingLtiContextOnCreate
-                                  ? "Launch the Onyx tool from Canvas to bind this tutor to a course."
-                                  : !isValid
-                                    ? "Please fix the errors before saving."
-                                    : !dirty
-                                      ? "No changes have been made."
-                                      : undefined
+                                : isKnowledgeSelectionPending
+                                  ? "Updating knowledge selection..."
+                                  : missingLtiContextOnCreate
+                                    ? "Launch the Onyx tool from Canvas to bind this tutor to a course."
+                                    : !isValid
+                                      ? "Please fix the errors before saving."
+                                      : !dirty
+                                        ? "No changes have been made."
+                                        : undefined
                             }
                             side="bottom"
                           >
                             <Disabled
                               disabled={
                                 isSubmitting ||
+                                isKnowledgeSelectionPending ||
                                 !isValid ||
                                 !dirty ||
                                 missingLtiContextOnCreate
                               }
                             >
-                              <Button type="submit">
+                              <Button
+                                type="submit"
+                                disabled={isKnowledgeSelectionPending}
+                              >
                                 {existingTutor ? "Save" : "Deploy"}
                               </Button>
                             </Disabled>
@@ -588,8 +730,26 @@ export default function TutorEditorPage({
 
                       <Separator noPadding />
 
-                      {/* Section 3: Knowledge */}
+                      {/* Section 3: Model */}
+                      <GeneralLayouts.Section>
+                        <InputLayouts.Vertical
+                          name="llm_model"
+                          title="Tutor Model"
+                          description="Choose the model that responds to students, or use User Default to let each student use their configured model."
+                        >
+                          <TutorModelSelector
+                            llmProviders={llmProviders ?? []}
+                          />
+                        </InputLayouts.Vertical>
+                      </GeneralLayouts.Section>
+
+                      <Separator noPadding />
+
+                      {/* Section 4: Knowledge */}
                       <TutorKnowledgePane
+                        onSelectionPendingChange={
+                          setIsKnowledgeSelectionPending
+                        }
                         selectedDocumentIds={values.document_ids}
                         onDocumentIdsChange={(ids) =>
                           setFieldValue("document_ids", ids)
@@ -603,11 +763,13 @@ export default function TutorEditorPage({
                         }
                         initialHierarchyNodes={existingTutor?.hierarchy_nodes}
                         canvasCourseNodeId={ltiCanvasCourseNodeId}
+                        ltiContextId={ltiContextId}
+                        knowledgeUrl={knowledgeUrl}
                       />
 
                       <Separator noPadding />
 
-                      {/* Section 4: Starter Messages */}
+                      {/* Section 5: Starter Messages */}
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="starter_messages"
@@ -619,7 +781,7 @@ export default function TutorEditorPage({
                         </InputLayouts.Vertical>
                       </GeneralLayouts.Section>
 
-                      {/* Section 5: Advanced */}
+                      {/* Section 6: Advanced */}
                       <SimpleCollapsible defaultOpen={false}>
                         <SimpleCollapsible.Header
                           title="Advanced"

@@ -7,6 +7,8 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
+from httpx import PoolTimeout
+from litellm.exceptions import ContextWindowExceededError
 
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.connectors.models import Document
@@ -20,14 +22,21 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
+from onyx.indexing.indexing_pipeline import add_chunk_summaries
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
+from onyx.indexing.models import DocAwareChunk
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
+from onyx.llm.models import UserMessage
+from onyx.llm.multi_llm import LLMTimeoutError
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import MAX_CONTEXT_TOKENS
+from onyx.natural_language_processing.utils import BaseTokenizer
 
 
 def create_test_document(
@@ -229,6 +238,115 @@ def test_contextual_rag(
             count += 1
         assert chunk.doc_summary == doc_summary
         assert chunk.chunk_context == chunk_context
+
+
+class _CharacterTokenizer(BaseTokenizer):
+    def encode(self, string: str) -> list[int]:
+        return [ord(char) for char in string]
+
+    def tokenize(self, string: str) -> list[str]:
+        return list(string)
+
+    def decode(self, tokens: list[int]) -> str:
+        return "".join(chr(token) for token in tokens)
+
+
+def _summary_test_chunk(doc_id: str, content: str) -> DocAwareChunk:
+    chunk = MagicMock()
+    chunk.source_document.id = doc_id
+    chunk.source_document.get_text_content.return_value = content
+    chunk.contextual_rag_reserved_tokens = MAX_CONTEXT_TOKENS
+    chunk.doc_summary = ""
+    chunk.chunk_context = ""
+    return cast(DocAwareChunk, chunk)
+
+
+def _summary_response() -> ModelResponse:
+    return ModelResponse(
+        id="summary",
+        created="2024-01-01T00:00:00Z",
+        choice=Choice(message=Message(content="Summary")),
+    )
+
+
+@pytest.mark.parametrize("context_window", [1024, 262144])
+def test_document_summary_reserves_output_tokens_without_discarding_context(
+    context_window: int,
+) -> None:
+    chunk = _summary_test_chunk("large_doc", "x" * (context_window + 1024))
+    llm = Mock()
+    llm.config.max_input_tokens = context_window
+
+    def invoke(prompt: UserMessage, max_tokens: int) -> ModelResponse:
+        prompt_tokens = len(prompt.content)
+        assert prompt_tokens + max_tokens <= context_window
+        assert prompt_tokens >= context_window * (
+            0.8 if context_window == 1024 else 0.98
+        )
+        return _summary_response()
+
+    llm.invoke.side_effect = invoke
+    with patch("onyx.indexing.indexing_pipeline.USE_CHUNK_SUMMARY", False):
+        add_contextual_summaries(
+            chunks=[chunk],
+            llm=cast(LLM, llm),
+            tokenizer=_CharacterTokenizer(),
+            chunk_token_limit=100,
+        )
+
+    assert chunk.doc_summary == "Summary"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        LLMTimeoutError(Exception("timeout")),
+        PoolTimeout("pool exhausted"),
+        ContextWindowExceededError(
+            message="context window exceeded",
+            model="muse-glimmer-30b-instant",
+            llm_provider="openai",
+        ),
+    ],
+)
+def test_contextual_rag_keeps_other_documents_when_one_summary_fails(
+    failure: Exception,
+) -> None:
+    failed_chunk = _summary_test_chunk("failed", "x" * 2000)
+    successful_chunk = _summary_test_chunk("successful", "y" * 2000)
+    llm = Mock()
+    llm.config.max_input_tokens = 4096
+    llm.invoke.side_effect = [failure, _summary_response()]
+
+    with patch("onyx.indexing.indexing_pipeline.USE_CHUNK_SUMMARY", False):
+        add_contextual_summaries(
+            chunks=[failed_chunk, successful_chunk],
+            llm=cast(LLM, llm),
+            tokenizer=_CharacterTokenizer(),
+            chunk_token_limit=100,
+        )
+
+    assert failed_chunk.doc_summary == ""
+    assert successful_chunk.doc_summary == "Summary"
+
+
+def test_chunk_summaries_limit_parallel_model_requests() -> None:
+    chunks = [_summary_test_chunk("doc", "content") for _ in range(24)]
+    llm = Mock()
+    llm.config.max_input_tokens = 4096
+
+    with patch(
+        "onyx.indexing.indexing_pipeline.run_functions_tuples_in_parallel"
+    ) as run_parallel:
+        add_chunk_summaries(
+            chunks_by_doc=chunks,
+            llm=cast(LLM, llm),
+            tokenizer=_CharacterTokenizer(),
+            trunc_doc_chunk_tokens=100,
+            doc_tokens=None,
+        )
+
+    assert run_parallel.call_args.kwargs["max_workers"] <= 8
 
 
 # ---------------------------------------------------------------------------

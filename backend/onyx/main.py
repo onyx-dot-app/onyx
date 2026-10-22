@@ -643,6 +643,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # LTI 1.3 endpoints (Canvas / LMS integration) -- registered regardless
     # of AUTH_TYPE since LTI is an additional auth pathway, not a replacement.
     from onyx.configs.lti_configs import lti_is_configured
+    from onyx.server.lti.registration import router as lti_registration_router
+
+    # Canvas needs the public registration document before assigning LTI IDs.
+    include_auth_router_with_prefix(application, lti_registration_router)
 
     if lti_is_configured():
         include_auth_router_with_prefix(

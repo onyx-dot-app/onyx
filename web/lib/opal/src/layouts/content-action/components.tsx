@@ -10,6 +10,9 @@ import { cn } from "@opal/utils";
 // ---------------------------------------------------------------------------
 
 type ContentActionProps = ContentProps & {
+  /** Additional classes for the outer row, including responsive layout. */
+  className?: string;
+
   /** Content rendered on the right side, stretched to full height. */
   rightChildren?: React.ReactNode;
 
@@ -55,12 +58,13 @@ type ContentActionProps = ContentProps & {
 function ContentAction({
   rightChildren,
   paddingVariant = "lg",
+  className,
   ...contentProps
 }: ContentActionProps) {
   const { padding } = containerSizeVariants[paddingVariant];
 
   return (
-    <div className="flex flex-row items-stretch w-full">
+    <div className={cn("flex flex-row items-stretch w-full", className)}>
       <div className={cn("flex-1 min-w-0 self-center", padding)}>
         <Content {...contentProps} />
       </div>
