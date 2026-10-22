@@ -199,11 +199,16 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     check.state === "failed" ||
     check.state === "incomplete" ||
     check.state === "indeterminate";
-  // What happened and what is needed. Results from before descriptions give
-  // remediation.
-  const detailText: string | null = check.description ?? check.remediation;
+  // What happened and how to repair it: separate texts, unless they match.
+  const detailTexts: string[] = [
+    ...new Set(
+      [check.description, check.remediation].filter(
+        (text): text is string => text !== null
+      )
+    ),
+  ];
   const expandable: boolean =
-    finished && (detailText !== null || check.docs_link !== null);
+    finished && (detailTexts.length > 0 || check.docs_link !== null);
   // Expected: queued, or waiting on a field.
   const expected: boolean =
     check.state === "pending" || check.state === "waiting";
@@ -326,10 +331,14 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
           </LinkButton>
         )}
       </Section>
-      {detailText !== null && (
-        <Text font="secondary-body" color="text-03">
-          {detailText}
-        </Text>
+      {detailTexts.length > 0 && (
+        <Section alignItems="start" height="fit" gap={0.5}>
+          {detailTexts.map((text) => (
+            <Text key={text} font="secondary-body" color="text-03">
+              {text}
+            </Text>
+          ))}
+        </Section>
       )}
     </Section>
   );

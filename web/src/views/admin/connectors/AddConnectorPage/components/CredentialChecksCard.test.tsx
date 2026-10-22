@@ -1,8 +1,8 @@
 /**
  * Check rows read the result line the backend gives, with the guide's state
- * words as the fallback.
+ * words as the fallback, and open to show both guidance texts.
  */
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import {
   type CheckLine,
   CheckLineGroups,
@@ -58,4 +58,29 @@ test("reads incomplete and legacy indeterminate checks as Incomplete", () => {
 
   expect(screen.getByText("2 Incomplete")).toBeInTheDocument();
   expect(screen.getAllByText("Incomplete")).toHaveLength(2);
+});
+
+test("a failed row opens to show both the description and the repair step", async () => {
+  const user = setupUser();
+  render(
+    <CheckLineGroups
+      lines={[
+        line({
+          state: "failed",
+          summary: "Invalid channel pattern: [a",
+          description: "Indexing cannot filter channels with this pattern.",
+          remediation: "Fix the channel regex in the connector settings.",
+        }),
+      ]}
+    />
+  );
+
+  await user.click(screen.getByText("Invalid channel pattern: [a"));
+
+  expect(
+    screen.getByText("Indexing cannot filter channels with this pattern.")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Fix the channel regex in the connector settings.")
+  ).toBeInTheDocument();
 });
