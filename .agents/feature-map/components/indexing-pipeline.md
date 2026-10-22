@@ -553,8 +553,10 @@ abandons a prune (fence validation, the deletion beat's stop timeout, a pause), 
 calls `reset_prune_and_cancel_sync_record`: the `PRUNING` sync record ends
 `CANCELED` and the fence is reset. The generator checks the status and marks
 its start under the pair's row lock, and a pause drops a queued prune under the
-same lock. A generator whose fence now holds a different prune exits without a
-reset.
+same lock. A generator whose fence now holds a different prune, or whose fence
+names another Celery task, exits without a reset. A manual prune of a `PAUSED`
+pair is refused with `CONFLICT`, and `try_creating_prune_generator_task` does not
+dispatch one.
 
 **`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
 the actual removal path, shared by both pruning and connector deletion. It reads
