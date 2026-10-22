@@ -1,4 +1,4 @@
-/** The history panel scrolls into view as it opens only where it stacks above the list. */
+/** The history panel scrolls into view only where it stacks above the list. */
 import { revealHistory } from "@/views/admin/connectors/IndexingStatusPage";
 
 function mockWidth(sideBySide: boolean) {
@@ -12,6 +12,12 @@ function panel(): HTMLDivElement {
 }
 
 describe("revealHistory", () => {
+  it("asks for the lg breakpoint the layout stacks below", () => {
+    mockWidth(true);
+    revealHistory(panel());
+    expect(window.matchMedia).toHaveBeenCalledWith("(min-width: 1232px)");
+  });
+
   it("scrolls the panel into view on a narrow screen", () => {
     mockWidth(false);
     const element = panel();
