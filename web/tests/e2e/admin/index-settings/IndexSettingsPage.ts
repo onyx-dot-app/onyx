@@ -17,7 +17,7 @@ export class IndexSettingsPage {
   readonly viewAllModelsButton: Locator;
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
-  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, custom). */
+  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, Bifrost, custom). */
   readonly bringYourOwnToggle: Locator;
   readonly applyReindexButton: Locator;
   readonly applyWithoutReindexButton: Locator;
@@ -188,6 +188,15 @@ export class IndexSettingsPage {
       .fill(creds.deploymentName);
   }
 
+  /** Bifrost takes no dimension: the credential test reports it. */
+  async fillBifrostCredentials(creds: {
+    apiBaseUrl: string;
+    modelName: string;
+  }): Promise<void> {
+    await this.activeSetupModal.locator("#apiUrl").fill(creds.apiBaseUrl);
+    await this.activeSetupModal.locator("#modelName").fill(creds.modelName);
+  }
+
   async fillModelSpec(spec: {
     modelName: string;
     modelDim: number;
@@ -207,6 +216,34 @@ export class IndexSettingsPage {
     await connectButton.click();
     await expect(this.activeSetupModal).not.toBeVisible({ timeout: 15000 });
     this.currentSetupModal = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Model cards
+  // ---------------------------------------------------------------------------
+
+  private modelCard(providerType: string, modelName: string): Locator {
+    return this.page.getByTestId(
+      `embedding-model-card:${providerType}:${modelName}`
+    );
+  }
+
+  async expectBringYourOwnSectionOpen(): Promise<void> {
+    await expect(this.bringYourOwnToggle).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  }
+
+  /** The card is listed and its button carries the given state label. */
+  async expectModelCardState(
+    providerType: string,
+    modelName: string,
+    stateLabel: "Selected" | "Current Model"
+  ): Promise<void> {
+    const card = this.modelCard(providerType, modelName);
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByRole("button", { name: stateLabel })).toBeVisible();
   }
 
   // ---------------------------------------------------------------------------

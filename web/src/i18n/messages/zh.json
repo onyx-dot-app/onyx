@@ -1268,7 +1268,6 @@
         "title": "提供商",
         "description": "连接提供商或管理其决策模型。",
         "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
-        "edit": "配置",
         "connect": "连接"
       },
       "loadFailed": "无法加载决策模型。",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "在对话生成回复时自动滚动到新内容。用户可以在个人设置中覆盖此项。",
         "title": "对话自动滚动"
-      },
-      "betaTag": {
-        "label": "测试版"
       },
       "connectors": {
         "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
@@ -4950,9 +4946,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft 对所有人关闭。可在下方逐个用户切换。"
         },
@@ -6859,6 +6852,9 @@
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
+        },
+        "reindexModel": {
+          "title": "正在切换到 {provider} / {model}。将运行完整的重新索引。"
         }
       },
       "cloudDisabled": {
@@ -12039,6 +12035,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "无法开始新聊天。请重试。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
@@ -14111,7 +14110,10 @@
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用"
+      "availableFor": "{plan}可用",
+      "beta": {
+        "title": "测试版"
+      }
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -14142,6 +14144,9 @@
       "globalDefault": {
         "label": "全局默认"
       }
+    },
+    "appFooter": {
+      "slogan": "开源 AI 平台"
     }
   },
   "craft": {
@@ -15975,6 +15980,10 @@
     },
     "toast": {
       "moreCount": "还有 {count} 条"
+    },
+    "sidebar": {
+      "open": "打开侧边栏",
+      "close": "关闭侧边栏"
     }
   },
   "settings": {
@@ -16584,9 +16593,6 @@
       },
       "searchInput": {
         "placeholder": "搜索…"
-      },
-      "betaTag": {
-        "label": "测试版"
       }
     },
     "appSidebar": {
@@ -16598,8 +16604,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "商业版",
-        "betaTag": "测试版"
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"

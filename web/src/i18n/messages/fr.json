@@ -1268,7 +1268,6 @@
         "title": "Fournisseurs",
         "description": "Connectez un fournisseur ou gérez ses modèles de décision.",
         "clearBeforeRemoval": "Effacez le modèle de décision sélectionné avant de supprimer ce fournisseur.",
-        "edit": "Configurer",
         "connect": "Connecter"
       },
       "loadFailed": "Impossible de charger les modèles de décision.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "Faites défiler automatiquement vers le nouveau contenu pendant que le chat génère une réponse. Les utilisateurs peuvent modifier ce réglage dans leurs paramètres personnels.",
         "title": "Défilement automatique du chat"
-      },
-      "betaTag": {
-        "label": "bêta"
       },
       "connectors": {
         "description": "Sources utilisées par la recherche interne dans le chat. Ajoutez-les ou modifiez-les sur la page d'état de l'indexation.",
@@ -4950,9 +4946,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "bêta"
-        },
         "disabled": {
           "description": "Craft est désactivé pour tout le monde. Activez-le utilisateur par utilisateur ci-dessous."
         },
@@ -6859,6 +6852,9 @@
         "reindex": {
           "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Une réindexation complète va s’exécuter."
+        },
+        "reindexModel": {
+          "title": "Passage à {provider} / {model}. Une réindexation complète va s’exécuter."
         }
       },
       "cloudDisabled": {
@@ -12039,6 +12035,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Impossible de démarrer une nouvelle discussion. Réessayez."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {Un fichier a échoué et a été supprimé : {names}} other {Des fichiers ont échoué et ont été supprimés : {names}}}"
       },
@@ -14111,7 +14110,10 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}"
+      "availableFor": "Disponible avec l’{plan}",
+      "beta": {
+        "title": "bêta"
+      }
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14142,6 +14144,9 @@
       "globalDefault": {
         "label": "Valeur par défaut globale"
       }
+    },
+    "appFooter": {
+      "slogan": "Plateforme d'IA open source"
     }
   },
   "craft": {
@@ -15975,6 +15980,10 @@
     },
     "toast": {
       "moreCount": "+{count} de plus"
+    },
+    "sidebar": {
+      "open": "Ouvrir la barre latérale",
+      "close": "Fermer la barre latérale"
     }
   },
   "settings": {
@@ -16584,9 +16593,6 @@
       },
       "searchInput": {
         "placeholder": "Rechercher..."
-      },
-      "betaTag": {
-        "label": "Bêta"
       }
     },
     "appSidebar": {
@@ -16598,8 +16604,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Bêta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorer les agents"

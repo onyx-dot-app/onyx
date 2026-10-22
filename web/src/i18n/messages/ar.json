@@ -1268,7 +1268,6 @@
         "title": "الموفرون",
         "description": "اربط موفرًا أو أدر نماذج القرار الخاصة به.",
         "clearBeforeRemoval": "امسح نموذج القرار المحدد قبل إزالة هذا الموفر.",
-        "edit": "تكوين",
         "connect": "ربط"
       },
       "loadFailed": "تعذر تحميل نماذج القرار.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "تمرير تلقائي إلى المحتوى الجديد أثناء توليد الإجابة. يمكن للمستخدمين تجاوز هذا في إعداداتهم الشخصية.",
         "title": "التمرير التلقائي للمحادثة"
-      },
-      "betaTag": {
-        "label": "تجريبي"
       },
       "connectors": {
         "description": "المصادر التي يستخدمها البحث الداخلي في الدردشة. أضفها أو غيّرها في صفحة حالة الفهرسة.",
@@ -4950,9 +4946,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "تجريبي"
-        },
         "disabled": {
           "description": "Craft معطّل للجميع. بدّل مستخدمين أفرادًا أدناه."
         },
@@ -6859,6 +6852,9 @@
         "reindex": {
           "description": "قد تستغرق إعادة الفهرسة *ساعات أو أيامًا* حسب حجم المحتوى. [اعرف المزيد](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "ستُجرى إعادة فهرسة كاملة."
+        },
+        "reindexModel": {
+          "title": "التبديل إلى {provider} / {model}. ستُجرى إعادة فهرسة كاملة."
         }
       },
       "cloudDisabled": {
@@ -12039,6 +12035,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "تعذّر بدء محادثة جديدة. حاول مرة أخرى."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {فشل ملف وتمت إزالته: {names}} other {فشلت ملفات وتمت إزالتها: {names}}}"
       },
@@ -14111,7 +14110,10 @@
       "upgrade": {
         "label": "ترقية الخطة"
       },
-      "availableFor": "متاح في {plan}"
+      "availableFor": "متاح في {plan}",
+      "beta": {
+        "title": "تجريبي"
+      }
     },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
@@ -14142,6 +14144,9 @@
       "globalDefault": {
         "label": "الافتراضي العام"
       }
+    },
+    "appFooter": {
+      "slogan": "منصة ذكاء اصطناعي مفتوحة المصدر"
     }
   },
   "craft": {
@@ -15975,6 +15980,10 @@
     },
     "toast": {
       "moreCount": "+{count} أخرى"
+    },
+    "sidebar": {
+      "open": "فتح الشريط الجانبي",
+      "close": "إغلاق الشريط الجانبي"
     }
   },
   "settings": {
@@ -16584,9 +16593,6 @@
       },
       "searchInput": {
         "placeholder": "بحث..."
-      },
-      "betaTag": {
-        "label": "تجريبي"
       }
     },
     "appSidebar": {
@@ -16598,8 +16604,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "الأعمال",
-        "betaTag": "تجريبي"
+        "businessTag": "الأعمال"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

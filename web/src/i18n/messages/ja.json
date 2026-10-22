@@ -1268,7 +1268,6 @@
         "title": "プロバイダー",
         "description": "プロバイダーを接続するか、判断モデルを管理します。",
         "clearBeforeRemoval": "このプロバイダーを削除する前に、選択した判断モデルを解除してください。",
-        "edit": "設定",
         "connect": "接続"
       },
       "loadFailed": "判断モデルを読み込めませんでした。",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "チャットが応答を生成するときに、新しい内容へ自動的にスクロールします。ユーザーは個人設定でこれを変更できます。",
         "title": "チャットの自動スクロール"
-      },
-      "betaTag": {
-        "label": "ベータ"
       },
       "connectors": {
         "description": "チャットの内部検索で使用されるソースです。追加や変更はインデックス作成ステータスのページで行います。",
@@ -4950,9 +4946,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "ベータ"
-        },
         "disabled": {
           "description": "Craft は全員に対してオフです。下で個別のユーザーを切り替えられます。"
         },
@@ -6859,6 +6852,9 @@
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"
+        },
+        "reindexModel": {
+          "title": "{provider} / {model} に切り替えます。完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {
@@ -12039,6 +12035,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "新しいチャットを開始できませんでした。もう一度お試しください。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {ファイルの処理に失敗したため削除しました：{names}} other {ファイルの処理に失敗したため削除しました：{names}}}"
       },
@@ -14111,7 +14110,10 @@
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能"
+      "availableFor": "{plan}で利用可能",
+      "beta": {
+        "title": "ベータ"
+      }
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14142,6 +14144,9 @@
       "globalDefault": {
         "label": "グローバルデフォルト"
       }
+    },
+    "appFooter": {
+      "slogan": "オープンソース AI プラットフォーム"
     }
   },
   "craft": {
@@ -15975,6 +15980,10 @@
     },
     "toast": {
       "moreCount": "他 {count} 件"
+    },
+    "sidebar": {
+      "open": "サイドバーを開く",
+      "close": "サイドバーを閉じる"
     }
   },
   "settings": {
@@ -16584,9 +16593,6 @@
       },
       "searchInput": {
         "placeholder": "検索..."
-      },
-      "betaTag": {
-        "label": "ベータ"
       }
     },
     "appSidebar": {
@@ -16598,8 +16604,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "ベータ"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "エージェントを探す"

@@ -87,8 +87,8 @@ This component reads persona and project rows but does not own them
   the default persona is used inside a project
   (`chat_utils.py:get_custom_agent_prompt`).
 - `Memory` rows, surfaced through `db/memory.py:get_memories` into a
-  `UserMemoryContext`, feed the "User Information" section of the system prompt
-  (`prompt_utils.py:_build_user_information_section`).
+  `UserMemoryContext`, feed the per-user "User Information" message that follows
+  the system prompt (`prompt_utils.py:build_user_information_prompt`).
 - `ChatMessage.last_summarized_message_id` and a summary `ChatMessage` row
   (`parent_message_id` pointing at the branch tip) are how compression persists
   its result. See `COMPRESSION.md` and §4.9.
@@ -110,7 +110,11 @@ Per cycle, `llm_loop.py:construct_message_history` produces this order:
 
 ```
 [system]                     -- base prompt + dynamic sections, or persona's own
-                                 replacement prompt (§4.1)
+                                 replacement prompt (§4.1); identical for every
+                                 user with the same base prompt, tool set and
+                                 date, so its prompt-cache entry is shared
+[user information]           -- SYSTEM message with the per-user block (§4.1);
+                                 absent when the persona replaces the base prompt
 [history before last user]   -- truncated oldest-first, budget permitting (§4.6)
 [custom agent prompt]        -- USER message, moves here every cycle (§4.2)
 [context / project files]    -- JSON document block, moves here every cycle (§4.3-4.4)
@@ -137,10 +141,21 @@ once per turn. A turn that runs three tool cycles calls
    comes from `prompt_utils.py:get_default_base_system_prompt`, which reads the
    default persona's `system_prompt` from the DB, falling back to
    `prompts/chat_prompts.py:DEFAULT_SYSTEM_PROMPT`.
-2. `prompt_utils.py:_build_user_information_section`, itself ordered: Basic
-   Information, Organization Profile, Team/company context
-   (`prompts/prompt_utils.py:get_company_context`), Language, User Preferences,
-   Memories.
+2. The org-wide part of "User Information"
+   (`prompt_utils.py:_build_shared_user_information_section`): a framing
+   paragraph announcing the per-user message, then the Team/company context
+   (`prompts/prompt_utils.py:get_company_context`). The per-user part — Basic
+   Information, Organization Profile, Language, User Preferences, Memories
+   (`_build_user_specific_section`) — is **not** in the system message:
+   `run_llm_loop` emits it via `build_user_information_prompt` as a second
+   `MessageType.SYSTEM` message right after it (`user_info_prompt` in
+   `construct_message_history`). Keeping names, emails and memories out of the
+   system message makes it identical for every user with the same base
+   prompt, tool guidance (e.g. `enable_memory_tool` toggles the memory
+   section) and resolved date, so the head cache breakpoint
+   (`llm/prompt_cache`) is shared across those users instead of per user.
+   `include_user_info=True` (token estimation, tests) inlines the per-user part
+   into the returned string instead.
 3. Citation guidance (`prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE`, then
    `ANSWER_COVERAGE_GUIDANCE`), only appended if the placeholder wasn't already
    present in the base prompt.

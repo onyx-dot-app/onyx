@@ -1268,7 +1268,6 @@
         "title": "제공업체",
         "description": "제공업체를 연결하거나 판단 모델을 관리합니다.",
         "clearBeforeRemoval": "이 제공업체를 삭제하기 전에 선택한 판단 모델을 해제하세요.",
-        "edit": "구성",
         "connect": "연결"
       },
       "loadFailed": "판단 모델을 불러올 수 없습니다.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "채팅이 응답을 생성하는 동안 새 내용으로 자동 스크롤합니다. 사용자는 개인 설정에서 이 값을 변경할 수 있습니다.",
         "title": "채팅 자동 스크롤"
-      },
-      "betaTag": {
-        "label": "베타"
       },
       "connectors": {
         "description": "채팅의 내부 검색에서 사용하는 소스입니다. 인덱싱 상태 페이지에서 추가하거나 변경하세요.",
@@ -4950,9 +4946,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "베타"
-        },
         "disabled": {
           "description": "Craft가 모든 사용자에게 꺼져 있습니다. 아래에서 사용자별로 전환하세요."
         },
@@ -6859,6 +6852,9 @@
         "reindex": {
           "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "전체 재인덱싱이 실행됩니다."
+        },
+        "reindexModel": {
+          "title": "{provider} / {model}(으)로 전환합니다. 전체 재인덱싱이 실행됩니다."
         }
       },
       "cloudDisabled": {
@@ -12039,6 +12035,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "새 채팅을 시작할 수 없습니다. 다시 시도하세요."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
       },
@@ -14111,7 +14110,10 @@
       "upgrade": {
         "label": "플랜 업그레이드"
       },
-      "availableFor": "{plan}에서 사용 가능"
+      "availableFor": "{plan}에서 사용 가능",
+      "beta": {
+        "title": "베타"
+      }
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -14142,6 +14144,9 @@
       "globalDefault": {
         "label": "전역 기본값"
       }
+    },
+    "appFooter": {
+      "slogan": "오픈 소스 AI 플랫폼"
     }
   },
   "craft": {
@@ -15975,6 +15980,10 @@
     },
     "toast": {
       "moreCount": "+{count}개 더"
+    },
+    "sidebar": {
+      "open": "사이드바 열기",
+      "close": "사이드바 닫기"
     }
   },
   "settings": {
@@ -16584,9 +16593,6 @@
       },
       "searchInput": {
         "placeholder": "검색..."
-      },
-      "betaTag": {
-        "label": "베타"
       }
     },
     "appSidebar": {
@@ -16598,8 +16604,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "베타"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"
