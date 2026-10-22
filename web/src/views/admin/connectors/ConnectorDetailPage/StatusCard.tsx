@@ -7,15 +7,15 @@ import { Section } from "@opal/layouts";
 import { SvgListCheck, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
+import type { RichStr } from "@opal/types";
 import {
   ConnectorCredentialPairStatus,
   type CCPairFullInfo,
   type CCPairRun,
-  type CCPairRunKind,
-  type CCPairRunsResponse,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
 import { isPermSynced } from "@/lib/connectors/accessType";
+import { useLatestCCPairRun } from "@/lib/connectors/ccPair/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -67,32 +67,8 @@ function StatBlock({ children }: StatBlockProps) {
 // Matches the page's own poll of the pair.
 const POLL_MS = 5000;
 
-type SyncRunKind = Extract<CCPairRunKind, "doc_permission_sync" | "group_sync">;
-
-/** The pair's newest run of one kind. The response's `kinds` lists every kind the pair runs. */
-function useLatestRun(ccPairId: number, kind: SyncRunKind, enabled: boolean) {
-  return useSWR<CCPairRunsResponse>(
-    enabled
-      ? SWR_KEYS.ccPairRuns(ccPairId, {
-          pageNum: 0,
-          pageSize: 1,
-          since: null,
-          until: null,
-          kinds: [kind],
-          statusGroups: null,
-          q: "",
-          errors: null,
-          superseded: null,
-          resolved: null,
-        })
-      : null,
-    errorHandlingFetcher,
-    { refreshInterval: POLL_MS }
-  );
-}
-
 interface SyncStatBlockProps {
-  title: string;
+  title: string | RichStr;
   /** The sync's newest run, undefined before its first. */
   run: CCPairRun | undefined;
   /** The pair's last successful sync of this kind, null until one succeeds. */
@@ -175,8 +151,18 @@ export default function StatusCard({
     { refreshInterval: POLL_MS }
   );
   const permSynced = isPermSynced(ccPair.access_type);
-  const docSync = useLatestRun(ccPair.id, "doc_permission_sync", permSynced);
-  const groupSync = useLatestRun(ccPair.id, "group_sync", permSynced);
+  const docSync = useLatestCCPairRun(
+    ccPair.id,
+    "doc_permission_sync",
+    permSynced,
+    POLL_MS
+  );
+  const groupSync = useLatestCCPairRun(
+    ccPair.id,
+    "group_sync",
+    permSynced,
+    POLL_MS
+  );
   // Waits for the latest attempt, so a running pair never flashes as indexed, and for the sync runs, so the columns land together.
   if (
     (latestIndexAttempts === undefined && error === undefined) ||
