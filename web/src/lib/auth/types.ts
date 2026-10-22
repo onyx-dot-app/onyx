@@ -39,4 +39,6 @@ export interface AuthTypeMetadata {
   // Enabled DB-backed SSO providers, one login button each. Empty on cloud
   // and when no provider rows exist.
   ssoProviders?: SSOProviderOption[];
+  // Workspace UI language for pages before sign-in. Absent on cloud.
+  defaultLanguage?: string;
 }
