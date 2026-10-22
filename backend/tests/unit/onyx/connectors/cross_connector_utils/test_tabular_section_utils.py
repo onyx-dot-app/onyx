@@ -1,3 +1,4 @@
+import csv
 import io
 from collections.abc import Callable
 from typing import IO, cast
@@ -232,3 +233,17 @@ class TestCsvDelimiterNormalization:
         text = "\n".join(row.replace(";", "\t") for row in self.ROWS) + "\n"
 
         assert self._stage(text, file_name="table.tsv") == self.EXPECTED
+
+    def test_a_field_longer_than_the_default_limit_is_staged_comma_separated(
+        self,
+    ) -> None:
+        """The csv field size limit is process-global, so start from Python's own."""
+        long_field = "x" * 200_000
+        text = f"name;notes\na;{long_field}\n"
+        previous = csv.field_size_limit(131_072)
+        try:
+            staged = self._stage(text)
+        finally:
+            csv.field_size_limit(previous)
+
+        assert staged == f"name,notes\na,{long_field}"

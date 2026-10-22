@@ -40,7 +40,7 @@ def _consistent_column_count(sample: str, delimiter: str, truncated: bool) -> in
     rows: list[list[str]] = []
     try:
         for index, row in enumerate(
-            csv.reader(io.StringIO(sample, newline=""), delimiter=delimiter)
+            csv_reader(io.StringIO(sample, newline=""), delimiter=delimiter)
         ):
             if index >= _DELIMITER_SAMPLE_ROWS:
                 break
@@ -95,15 +95,22 @@ def detect_csv_delimiter(csv_text: str) -> str:
 _FORMULA_PREFIX_CHARS = ("=", "+", "-", "@", "\t", "\r")
 
 
-def csv_reader(source: Iterable[str], dialect: str = "excel") -> Iterator[list[str]]:
+def csv_reader(
+    source: Iterable[str], dialect: str = "excel", delimiter: str | None = None
+) -> Iterator[list[str]]:
     """Read a CSV with the field size limit this codebase needs.
 
     Read every CSV through here. The limit is process-global state, so setting
     it once at import makes correctness depend on which modules happened to be
     imported first; setting it at the point of use does not.
+
+    `delimiter` overrides the dialect's separator, for a file whose separator
+    was detected rather than known.
     """
     csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
-    return csv.reader(source, dialect=dialect)
+    if delimiter is None:
+        return csv.reader(source, dialect=dialect)
+    return csv.reader(source, dialect=dialect, delimiter=delimiter)
 
 
 def sanitize_csv_cell(value: str) -> str:
