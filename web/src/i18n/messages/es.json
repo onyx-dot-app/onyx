@@ -10770,16 +10770,14 @@
         "skipped": "Omitida",
         "running": "Probando…",
         "pending": "En cola",
-        "waiting": "Esperando la configuración"
+        "waiting": "Esperando la configuración",
+        "stopped": "Detenida por ti"
       },
       "required": {
         "label": "Obligatoria"
       },
       "empty": {
         "label": "Aún no se han ejecutado comprobaciones."
-      },
-      "docsLink": {
-        "label": "Documentación"
       },
       "foldButton": {
         "fold": "Contraer",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "Crear el conector de todos modos"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "Ejecutar comprobación"
+        },
+        "skip": {
+          "label": "Omitir comprobación"
+        },
+        "rerun": {
+          "label": "Volver a ejecutar comprobación"
+        }
+      },
+      "details": {
+        "expand": "Mostrar detalles",
+        "collapse": "Ocultar detalles"
+      },
+      "docsButton": {
+        "label": "Docs"
       }
     },
     "connectorEdit": {

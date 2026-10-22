@@ -10770,16 +10770,14 @@
         "skipped": "Skipped",
         "running": "Testing…",
         "pending": "Queued",
-        "waiting": "Waiting for settings"
+        "waiting": "Waiting for settings",
+        "stopped": "Stopped by you"
       },
       "required": {
         "label": "Required"
       },
       "empty": {
         "label": "No checks have run yet."
-      },
-      "docsLink": {
-        "label": "Documentation"
       },
       "foldButton": {
         "fold": "Fold",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "Create Connector Anyway"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "Run Check"
+        },
+        "skip": {
+          "label": "Skip Check"
+        },
+        "rerun": {
+          "label": "Re-run Check"
+        }
+      },
+      "details": {
+        "expand": "Show details",
+        "collapse": "Hide details"
+      },
+      "docsButton": {
+        "label": "Docs"
       }
     },
     "connectorEdit": {

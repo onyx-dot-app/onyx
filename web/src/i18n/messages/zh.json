@@ -10770,16 +10770,14 @@
         "skipped": "已跳过",
         "running": "正在测试…",
         "pending": "排队中",
-        "waiting": "正在等待设置"
+        "waiting": "正在等待设置",
+        "stopped": "已由你停止"
       },
       "required": {
         "label": "必需"
       },
       "empty": {
         "label": "尚未运行任何检查。"
-      },
-      "docsLink": {
-        "label": "文档"
       },
       "foldButton": {
         "fold": "收起",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "仍然创建连接器"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "运行检查"
+        },
+        "skip": {
+          "label": "跳过检查"
+        },
+        "rerun": {
+          "label": "重新运行检查"
+        }
+      },
+      "details": {
+        "expand": "显示详情",
+        "collapse": "隐藏详情"
+      },
+      "docsButton": {
+        "label": "文档"
       }
     },
     "connectorEdit": {

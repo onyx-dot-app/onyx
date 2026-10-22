@@ -10770,16 +10770,14 @@
         "skipped": "スキップ",
         "running": "テスト中…",
         "pending": "待機中",
-        "waiting": "設定を待っています"
+        "waiting": "設定を待っています",
+        "stopped": "ユーザーが停止"
       },
       "required": {
         "label": "必須"
       },
       "empty": {
         "label": "まだチェックは実行されていません。"
-      },
-      "docsLink": {
-        "label": "ドキュメント"
       },
       "foldButton": {
         "fold": "折りたたむ",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "それでもコネクタを作成"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "チェックを実行"
+        },
+        "skip": {
+          "label": "チェックをスキップ"
+        },
+        "rerun": {
+          "label": "チェックを再実行"
+        }
+      },
+      "details": {
+        "expand": "詳細を表示",
+        "collapse": "詳細を非表示"
+      },
+      "docsButton": {
+        "label": "ドキュメント"
       }
     },
     "connectorEdit": {

@@ -10770,16 +10770,14 @@
         "skipped": "건너뜀",
         "running": "테스트 중…",
         "pending": "대기 중",
-        "waiting": "설정을 기다리는 중"
+        "waiting": "설정을 기다리는 중",
+        "stopped": "사용자가 중지함"
       },
       "required": {
         "label": "필수"
       },
       "empty": {
         "label": "아직 실행된 검사가 없습니다."
-      },
-      "docsLink": {
-        "label": "문서"
       },
       "foldButton": {
         "fold": "접기",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "그래도 커넥터 만들기"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "검사 실행"
+        },
+        "skip": {
+          "label": "검사 건너뛰기"
+        },
+        "rerun": {
+          "label": "검사 다시 실행"
+        }
+      },
+      "details": {
+        "expand": "세부 정보 표시",
+        "collapse": "세부 정보 숨기기"
+      },
+      "docsButton": {
+        "label": "문서"
       }
     },
     "connectorEdit": {

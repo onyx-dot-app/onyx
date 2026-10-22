@@ -45,6 +45,7 @@ import type {
   CapabilityCheckStatus,
   CheckFindingKey,
   ConnectorChecksStatus,
+  DraftCheckActions,
   DraftCheckPlan,
   DraftCheckRunSnapshot,
   DraftCheckState,
@@ -80,6 +81,18 @@ interface ConnectorChecksSession {
   request: number;
   /** The next start runs every check again, cached results included. */
   rerunAll: boolean;
+  /** Checks the admin cancelled. Every run skips them until one is run. */
+  skippedCheckIds?: string[];
+}
+
+/** What a start asks of single checks, beyond the session's skips. */
+interface StartActions {
+  /** Runs only this check, ignoring its cached result. */
+  run?: string;
+  /** Runs this check next. */
+  startNow?: string;
+  /** Replaces the session's skipped checks. */
+  skip?: string[];
 }
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
@@ -104,6 +117,7 @@ function blocks(check: DraftCheckState): boolean {
     case "pending":
     case "running":
     case "waiting":
+    case "stopped":
       return true;
   }
 }
@@ -140,6 +154,7 @@ export const NO_CHECKS: Record<DraftCheckStateKind, number> = {
   indeterminate: 0,
   skipped: 0,
   waiting: 0,
+  stopped: 0,
   not_applicable: 0,
 };
 
@@ -227,6 +242,10 @@ export interface UseConnectorChecksResult {
   rerun: () => void;
   /** Starts a run for the current form, reusing cached results. */
   refresh: () => void;
+  /** Skips a check, running or expected; later runs skip it until it runs. */
+  skipCheck: (checkId: string) => void;
+  /** Runs one check: a skipped one again, or a queued one next. */
+  runCheck: (checkId: string) => void;
 }
 
 /**
@@ -273,6 +292,8 @@ export function useConnectorChecks({
     [accessType, formState]
   );
   const { data: plan } = useConnectorCheckPlan(source, accessType, formState);
+  // A row action's start in flight; see `skipCheck`.
+  const actionInFlight = useRef<boolean>(false);
 
   const runId: string | null = session?.runId ?? null;
   const { data: run } = useSWR<DraftCheckRunSnapshot>(
@@ -285,11 +306,22 @@ export function useConnectorChecks({
   );
 
   const start = useCallback(
-    async (rerun: DraftRerunMode) => {
+    async (rerun: DraftRerunMode, actions: StartActions = {}) => {
       if (credential === null) return;
       const draftKey: string = session?.draftKey ?? crypto.randomUUID();
       const request: number = (session?.request ?? 0) + 1;
       const mode: DraftRerunMode = session?.rerunAll ? "all" : rerun;
+      const skipped: string[] = actions.skip ?? session?.skippedCheckIds ?? [];
+      const checkActions: DraftCheckActions = {};
+      if (skipped.length > 0) checkActions.skip_check_ids = skipped;
+      // A run of every check takes no single-check run; it runs that check
+      // anyway.
+      if (actions.run !== undefined && mode === "none") {
+        checkActions.check_ids = [actions.run];
+      }
+      if (actions.startNow !== undefined) {
+        checkActions.start_check_id = actions.startNow;
+      }
       await mutate<ConnectorChecksSession>(
         sessionKey,
         {
@@ -302,6 +334,7 @@ export function useConnectorChecks({
           startFailed: false,
           request,
           rerunAll: false,
+          skippedCheckIds: skipped,
         },
         { revalidate: false }
       );
@@ -332,6 +365,7 @@ export function useConnectorChecks({
                 access_type: accessType,
                 credential_id: credential.credential_id,
                 rerun: mode,
+                ...checkActions,
               })
             : await startDraftCheckRun({
                 source,
@@ -340,6 +374,7 @@ export function useConnectorChecks({
                 draft_key: draftKey,
                 form_state: formState,
                 rerun: mode,
+                ...checkActions,
               });
         if ("credential_json" in credential) {
           await rememberDraft(
@@ -461,8 +496,9 @@ export function useConnectorChecks({
       isFinished(check) ? [toCheckResult(check)] : []
     ),
     // A run that broke will not finish its queued or running checks.
+    // A stopped check stays listed: it holds Create until it runs.
     openChecks: checks.filter((check) =>
-      check.state === "waiting"
+      check.state === "waiting" || check.state === "stopped"
         ? true
         : (check.state === "pending" || check.state === "running") &&
           status !== "failedToRun"
@@ -479,6 +515,35 @@ export function useConnectorChecks({
     begin: () => void start("none"),
     rerun: () => void start("all"),
     refresh: () => void start("none"),
+    // A row action waits for the one in flight: two starts racing could
+    // supersede each other. The ref is set at once, before any re-render.
+    skipCheck: (checkId) => {
+      if (actionInFlight.current || session?.requesting) return;
+      const skipped = session?.skippedCheckIds ?? [];
+      if (skipped.includes(checkId)) return;
+      actionInFlight.current = true;
+      void start("none", { skip: [...skipped, checkId] }).finally(() => {
+        actionInFlight.current = false;
+      });
+    },
+    runCheck: (checkId) => {
+      if (actionInFlight.current || session?.requesting) return;
+      const skip = (session?.skippedCheckIds ?? []).filter(
+        (id) => id !== checkId
+      );
+      const queued: boolean = checks.some(
+        (check) =>
+          check.check_id === checkId &&
+          (check.state === "pending" || check.state === "waiting")
+      );
+      actionInFlight.current = true;
+      void start(
+        "none",
+        queued ? { skip, startNow: checkId } : { skip, run: checkId }
+      ).finally(() => {
+        actionInFlight.current = false;
+      });
+    },
   };
 }
 

@@ -89,6 +89,8 @@ export type DraftCheckStateKind =
   | "running"
   /** A required form field is missing or invalid; it runs once it is valid. */
   | "waiting"
+  /** A required check the admin skipped: it holds Create until it runs. */
+  | "stopped"
   /** The access type or the check's own rule excludes it. */
   | "not_applicable";
 
@@ -169,11 +171,21 @@ export interface DraftCheckPlanRequest {
   form_state: Record<string, unknown>;
 }
 
+/** The per-check actions of a draft run or a pair dry run. */
+export interface DraftCheckActions {
+  /** Only these run, ignoring their cached results. Send with `rerun: "none"`. */
+  check_ids?: string[];
+  /** These do not run: an optional check is skipped, a required one stopped. */
+  skip_check_ids?: string[];
+  /** Runs next, with the checks it depends on. */
+  start_check_id?: string;
+}
+
 /**
  * Body of `POST /manage/admin/cc-pair/{id}/edit/checks`: a dry run of the
  * checks on a proposed edit of the pair.
  */
-export interface PairEditCheckRunRequest {
+export interface PairEditCheckRunRequest extends DraftCheckActions {
   connector_specific_config: Record<string, unknown>;
   access_type: AccessType;
   /** `null` keeps the pair's credential. */
@@ -185,11 +197,12 @@ export interface PairEditCheckRunRequest {
  * Body of `POST /manage/admin/connector-checks/runs`: a run on a saved
  * credential, or on a typed account, which the run saves as a draft.
  */
-export type DraftCheckRunRequest = CredentialRequest & {
-  source: ValidSources;
-  access_type: AccessType | null;
-  /** One form session. A new run for the same key supersedes the last. */
-  draft_key: string;
-  form_state: Record<string, unknown>;
-  rerun: DraftRerunMode;
-};
+export type DraftCheckRunRequest = CredentialRequest &
+  DraftCheckActions & {
+    source: ValidSources;
+    access_type: AccessType | null;
+    /** One form session. A new run for the same key supersedes the last. */
+    draft_key: string;
+    form_state: Record<string, unknown>;
+    rerun: DraftRerunMode;
+  };

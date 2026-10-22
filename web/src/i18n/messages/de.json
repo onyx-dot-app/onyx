@@ -10770,16 +10770,14 @@
         "skipped": "Übersprungen",
         "running": "Wird getestet…",
         "pending": "In der Warteschlange",
-        "waiting": "Wartet auf Einstellungen"
+        "waiting": "Wartet auf Einstellungen",
+        "stopped": "Von Ihnen angehalten"
       },
       "required": {
         "label": "Erforderlich"
       },
       "empty": {
         "label": "Es wurden noch keine Prüfungen ausgeführt."
-      },
-      "docsLink": {
-        "label": "Dokumentation"
       },
       "foldButton": {
         "fold": "Einklappen",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "Konnektor trotzdem erstellen"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "Prüfung ausführen"
+        },
+        "skip": {
+          "label": "Prüfung überspringen"
+        },
+        "rerun": {
+          "label": "Prüfung erneut ausführen"
+        }
+      },
+      "details": {
+        "expand": "Details anzeigen",
+        "collapse": "Details ausblenden"
+      },
+      "docsButton": {
+        "label": "Doku"
       }
     },
     "connectorEdit": {

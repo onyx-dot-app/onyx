@@ -42,6 +42,25 @@
 }
 
 /* Text group: no-op wrapper for the passive tag, flex row for editable. */
+/* `titleColor` sets --tag-title-color inline on the label, as Content's
+   `titleColor` does on its title; unset, the label takes the tag's colour. */
+.opal-auxiliary-tag-label {
+  color: var(--tag-title-color, inherit);
+}
+
+/* An inverted or disabled tag drops the override: open, an editable tag's
+   focus, or disabled. */
+.opal-auxiliary-tag[data-clickable]:is(
+    [data-state="open"],
+    [aria-expanded="true"]
+  )
+  .opal-auxiliary-tag-label,
+.opal-auxiliary-tag[data-type="editable"]:focus-within
+  .opal-auxiliary-tag-label,
+.opal-auxiliary-tag[data-disabled] .opal-auxiliary-tag-label {
+  color: inherit;
+}
+
 .opal-auxiliary-tag-text {
   display: contents;
 }

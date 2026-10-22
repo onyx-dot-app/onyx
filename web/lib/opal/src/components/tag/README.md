@@ -10,33 +10,34 @@ A small colored label used to annotate items with status, category, or metadata.
 
 The passive look comes in three variants:
 
-| Variant   | Background        | Icon                  | Label     | Use                                     |
-| --------- | ----------------- | --------------------- | --------- | --------------------------------------- |
-| `default` | the color's `-01` | the color's text      | the color's text | Category and metadata labels    |
-| `status`  | the color's `-01` | the color's text      | `text-04` | Status pills (Indexing, Paused, Failed) |
-| `count`   | none              | the color's text      | `text-04` | Warning and failure counts in rows      |
+| Variant   | Background        | Icon             | Label            | Use                                     |
+| --------- | ----------------- | ---------------- | ---------------- | --------------------------------------- |
+| `default` | the color's `-01` | the color's text | the color's text | Category and metadata labels            |
+| `status`  | the color's `-01` | the color's text | `text-04`        | Status pills (Indexing, Paused, Failed) |
+| `count`   | none              | the color's text | `text-04`        | Warning and failure counts in rows      |
 
 Status tags use `font="secondary-body"`; `sm` keeps `figure-small-value` by default.
 
 ## Props
 
-| Prop       | Type                    | Default        | Description                                                                                    |
-| ---------- | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| `title`    | `string \| RichStr`     | **(required)** | Tag label text                                                                                 |
-| `color`    | `TagColor`              | `"gray"`       | Color variant                                                                                  |
-| `variant`  | `"default" \| "status" \| "count"` | `"default"` | Passive look: colored label, `text-04` label on a tint, or `text-04` label with no background |
-| `iconColor` | `TagColor`             | `color`        | Icon color when it differs from `color` (a gray pill with an orange warning icon)              |
-| `onClick`  | `MouseEventHandler<HTMLButtonElement>` | —   | Renders the tag as a button; inverts while an attached popover or dropdown is open. Not allowed with `onRemove`. `ref` is then a `Ref<HTMLButtonElement>`; otherwise a `Ref<HTMLDivElement>` |
-| `icon`     | `IconFunctionComponent` | —              | Optional icon before the title                                                                 |
-| `size`     | `"sm" \| "md"`          | `"sm"`         | Size variant (Figma Small / Regular)                                                           |
-| `font` | `TextFont` | Size/type default | Override label and value typography to match the surrounding surface |
-| `removeInTabOrder` | `boolean` | `true` | Editable only: whether the remove button is a Tab stop. Chip fields set it off and walk chips with the arrows |
-| `onRemove` | `() => void`            | —              | Switches to the editable type and renders the remove button                                    |
-| `disabled` | `boolean`               | `false`        | Editable only: dims the tag, hides the remove button                                           |
-| `value`    | `string \| RichStr`     | —              | Secondary text after the title, in `text-03`                                                   |
-| `truncate` | `boolean`               | `false`        | Cap the title at 120px (`sm`) / 160px (`md`) with an ellipsis. Editable tags are always capped |
-| `tooltip`  | `string`                | —              | Hover tooltip. Defaults to string titles on editable or truncated tags                         |
-| `error`    | `boolean`               | `false`        | Warning indicator after the title (no Figma variant, exists for chip-field validation)         |
+| Prop               | Type                                   | Default           | Description                                                                                                                                                                                        |
+| ------------------ | -------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`            | `string \| RichStr`                    | **(required)**    | Tag label text                                                                                                                                                                                     |
+| `color`            | `TagColor`                             | `"gray"`          | Color variant                                                                                                                                                                                      |
+| `variant`          | `"default" \| "status" \| "count"`     | `"default"`       | Passive look: colored label, `text-04` label on a tint, or `text-04` label with no background                                                                                                      |
+| `iconColor`        | `TagColor`                             | `color`           | Icon color when it differs from `color` (a gray pill with an orange warning icon)                                                                                                                  |
+| `onClick`          | `MouseEventHandler<HTMLButtonElement>` | —                 | Renders the tag as a button; inverts while an attached popover or dropdown is open. Not allowed with `onRemove`. `ref` is then a `Ref<HTMLButtonElement>`; otherwise a `Ref<HTMLDivElement>`       |
+| `icon`             | `IconFunctionComponent`                | —                 | Optional icon before the title                                                                                                                                                                     |
+| `size`             | `"sm" \| "md"`                         | `"sm"`            | Size variant (Figma Small / Regular)                                                                                                                                                               |
+| `font`             | `TextFont`                             | Size/type default | Override label and value typography to match the surrounding surface                                                                                                                               |
+| `titleColor`       | `Exclude<TextColor, "inherit">`        | per `color`       | Overrides the title colour only, as `Content`'s `titleColor` does; `color` still picks the background, icon and value. Yields to an open clickable tag, an editable tag's focus and a disabled tag |
+| `removeInTabOrder` | `boolean`                              | `true`            | Editable only: whether the remove button is a Tab stop. Chip fields set it off and walk chips with the arrows                                                                                      |
+| `onRemove`         | `() => void`                           | —                 | Switches to the editable type and renders the remove button                                                                                                                                        |
+| `disabled`         | `boolean`                              | `false`           | Editable only: dims the tag, hides the remove button                                                                                                                                               |
+| `value`            | `string \| RichStr`                    | —                 | Secondary text after the title, in `text-03`                                                                                                                                                       |
+| `truncate`         | `boolean`                              | `false`           | Cap the title at 120px (`sm`) / 160px (`md`) with an ellipsis. Editable tags are always capped                                                                                                     |
+| `tooltip`          | `string`                               | —                 | Hover tooltip. Defaults to string titles on editable or truncated tags                                                                                                                             |
+| `error`            | `boolean`                              | `false`           | Warning indicator after the title (no Figma variant, exists for chip-field validation)                                                                                                             |
 
 ### `TagColor`
 

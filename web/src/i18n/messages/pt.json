@@ -10770,16 +10770,14 @@
         "skipped": "Ignorada",
         "running": "Testando…",
         "pending": "Na fila",
-        "waiting": "Aguardando configurações"
+        "waiting": "Aguardando configurações",
+        "stopped": "Interrompida por você"
       },
       "required": {
         "label": "Obrigatória"
       },
       "empty": {
         "label": "Nenhuma verificação foi executada ainda."
-      },
-      "docsLink": {
-        "label": "Documentação"
       },
       "foldButton": {
         "fold": "Recolher",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "Criar conector mesmo assim"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "Executar verificação"
+        },
+        "skip": {
+          "label": "Ignorar verificação"
+        },
+        "rerun": {
+          "label": "Executar verificação novamente"
+        }
+      },
+      "details": {
+        "expand": "Mostrar detalhes",
+        "collapse": "Ocultar detalhes"
+      },
+      "docsButton": {
+        "label": "Docs"
       }
     },
     "connectorEdit": {

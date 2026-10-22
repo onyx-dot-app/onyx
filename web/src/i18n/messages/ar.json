@@ -10770,16 +10770,14 @@
         "skipped": "تم التخطي",
         "running": "جارٍ الاختبار…",
         "pending": "في قائمة الانتظار",
-        "waiting": "في انتظار الإعدادات"
+        "waiting": "في انتظار الإعدادات",
+        "stopped": "أوقفته أنت"
       },
       "required": {
         "label": "مطلوب"
       },
       "empty": {
         "label": "لم يتم تشغيل أي فحوصات بعد."
-      },
-      "docsLink": {
-        "label": "التوثيق"
       },
       "foldButton": {
         "fold": "طي",
@@ -10811,6 +10809,24 @@
         "proceedButton": {
           "label": "إنشاء الموصل على أي حال"
         }
+      },
+      "actions": {
+        "run": {
+          "label": "تشغيل الفحص"
+        },
+        "skip": {
+          "label": "تخطي الفحص"
+        },
+        "rerun": {
+          "label": "إعادة تشغيل الفحص"
+        }
+      },
+      "details": {
+        "expand": "إظهار التفاصيل",
+        "collapse": "إخفاء التفاصيل"
+      },
+      "docsButton": {
+        "label": "المستندات"
       }
     },
     "connectorEdit": {
