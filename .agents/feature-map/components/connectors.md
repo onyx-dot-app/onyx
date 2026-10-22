@@ -698,7 +698,8 @@ compares `site_url_fields` by `connector_config.py:site_url_key` (scheme and
 host in lower case, no trailing slash), and Confluence Cloud also drops a
 trailing `/wiki`. A URL with no scheme does not match a URL with one, because
 the connector gets the value as entered. The stored config keeps the value as
-entered.
+entered. A site URL that does not parse fails binding validation, so it is a
+field error and matches no pair.
 
 The pairs are the record of the bound values; the credential stores none. The
 rule runs in `validate_ccpair_for_user` (its `user` is None only for system

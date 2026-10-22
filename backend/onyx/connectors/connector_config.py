@@ -1,7 +1,7 @@
 from typing import Annotated, Any, ClassVar, LiteralString
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
@@ -48,6 +48,17 @@ class CredentialBinding(BaseModel):
     # URL fields the use rule compares by ``site_url_key``, so spellings of
     # one site match.
     site_url_fields: ClassVar[frozenset[str]] = frozenset()
+
+    @field_validator("*")
+    @classmethod
+    def _site_url_parses(cls, value: Any, info: ValidationInfo) -> Any:
+        if info.field_name not in cls.site_url_fields:
+            return value
+        try:
+            site_url_key(value)
+        except ValueError as e:
+            raise field_format_error("Enter a valid URL.") from e
+        return value
 
     def comparison_values(self) -> dict[str, Any]:
         """The values the credential use rule compares with those of a pair
