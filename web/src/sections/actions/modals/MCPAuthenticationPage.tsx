@@ -535,43 +535,45 @@ export default function MCPAuthenticationPage({
                 </Section>
                 {connectionError && (
                   <div role="alert">
-                    <MessageCard
-                      variant="error"
-                      outerPadding={1}
-                      innerPadding={1}
-                      title={t("mcpAuthModal.errors.saveStage")}
-                      description={connectionError.message}
-                    />
-                    {connectionError.reason ===
-                      "client_registration_failed" && (
-                      <Button
-                        type="button"
-                        prominence="secondary"
-                        onClick={() => {
-                          setFieldValue("oauth_setup_mode", "own_client");
-                          setConnectionError(null);
-                        }}
-                      >
-                        {t("mcpAuthModal.discovery.useOwnClient")}
-                      </Button>
-                    )}
-                    {connectionError.reason === "discovery_failed" && (
-                      <Button
-                        type="button"
-                        prominence="secondary"
-                        onClick={() => {
-                          setValues({
-                            ...values,
-                            oauth_setup_mode: "own_client",
-                            oauth_provider_mode:
-                              MCPOAuthProviderMode.KNOWN_PROVIDER,
-                          });
-                          setConnectionError(null);
-                        }}
-                      >
-                        {t("mcpAuthModal.discovery.manual")}
-                      </Button>
-                    )}
+                    <Section alignItems="start" height="auto" gap={2}>
+                      <MessageCard
+                        variant="error"
+                        outerPadding={1}
+                        innerPadding={1}
+                        title={t("mcpAuthModal.errors.saveStage")}
+                        description={connectionError.message}
+                      />
+                      {connectionError.reason ===
+                        "client_registration_failed" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setFieldValue("oauth_setup_mode", "own_client");
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.discovery.useOwnClient")}
+                        </Button>
+                      )}
+                      {connectionError.reason === "discovery_failed" && (
+                        <Button
+                          type="button"
+                          prominence="secondary"
+                          onClick={() => {
+                            setValues({
+                              ...values,
+                              oauth_setup_mode: "own_client",
+                              oauth_provider_mode:
+                                MCPOAuthProviderMode.KNOWN_PROVIDER,
+                            });
+                            setConnectionError(null);
+                          }}
+                        >
+                          {t("mcpAuthModal.discovery.manual")}
+                        </Button>
+                      )}
+                    </Section>
                   </div>
                 )}
               </Section>

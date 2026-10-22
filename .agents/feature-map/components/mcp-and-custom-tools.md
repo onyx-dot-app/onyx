@@ -434,9 +434,9 @@ Creation does not register an unsaved-draft navigation guard. Existing edit page
 There is one production creation flow. The removed legacy wrapper is not kept
 for tests or stories. Authentication prepares and validates its payload before
 submitting the staged request. Its form owner retains explicit OAuth setup choices
-when method-specific fields unmount. Successful existing-server authentication and staged
-OAuth returns open Tools without repeating discovery. New setup without an OAuth
-redirect opens the saved server’s Configuration tab. Legacy OAuth returns that include
+when method-specific fields unmount. Completed setup, existing-server authentication,
+and staged OAuth returns open Tools without repeating discovery. This includes OAuth
+connections with an existing valid grant. Legacy OAuth returns that include
 `trigger_fetch=true` open Tools and repeat discovery.
 Existing-server authentication edits use the same staged flow:
 failed authentication or discovery preserves the saved configuration and credentials.

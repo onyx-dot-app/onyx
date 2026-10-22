@@ -409,7 +409,12 @@ export default function PluginsPage() {
             onCompleted={(server) => {
               setDialog(null);
               void mcp.refresh();
-              router.push(pluginDetailHref({ kind: "mcp", id: server.id }));
+              router.push(
+                withPluginSearchParams(
+                  pluginDetailHref({ kind: "mcp", id: server.id }),
+                  { tab: "tools" }
+                )
+              );
             }}
           />
         )}
