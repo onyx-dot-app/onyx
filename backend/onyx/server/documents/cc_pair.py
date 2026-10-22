@@ -813,21 +813,22 @@ def update_cc_pair_status(
         status=status_update_request.status,
     )
 
-    db_session.commit()
-
-    for task_id in task_ids_to_revoke:
-        client_app.control.revoke(task_id)
-
     # A started prune exits on the stop signal. A queued one is dropped here,
-    # and its generator also exits on PAUSED if the revoke comes too late.
+    # under the row lock its generator takes to mark the start. The drop
+    # commits the status with the canceled sync record.
     if (
         status_update_request.status == ConnectorCredentialPairStatus.PAUSED
         and (prune_payload := redis_connector.prune.payload)
         and prune_payload.started is None
     ):
         if prune_payload.celery_task_id:
-            client_app.control.revoke(prune_payload.celery_task_id)
+            task_ids_to_revoke.append(prune_payload.celery_task_id)
         reset_prune_and_cancel_sync_record(redis_connector, db_session)
+
+    db_session.commit()
+
+    for task_id in task_ids_to_revoke:
+        client_app.control.revoke(task_id)
 
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,

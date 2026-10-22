@@ -43,9 +43,9 @@ from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import (
-    get_connector_credential_pair,
     get_connector_credential_pair_from_id,
     get_connector_credential_pairs,
+    lock_connector_credential_pair_row,
 )
 from onyx.db.document import (
     backfill_docs_created_at__no_commit,
@@ -642,11 +642,18 @@ def connector_pruning_generator_task(
         all_indexed_document_ids: set[str] = set()
 
         with get_session_with_current_tenant() as db_session:
-            cc_pair = get_connector_credential_pair(
-                db_session=db_session,
-                connector_id=connector_id,
-                credential_id=credential_id,
-            )
+            # Held until the start is marked. A pause drops a queued prune under
+            # the same lock, so the two never interleave.
+            cc_pair = lock_connector_credential_pair_row(db_session, cc_pair_id)
+
+            # A newer prune's fence is not this run's to reset.
+            payload = redis_connector.prune.payload
+            if not payload or payload.id != payload_id:
+                task_logger.info(
+                    f"Pruning canceled, prune was dropped: cc_pair={cc_pair_id} "
+                    f"payload_id={payload_id}"
+                )
+                return
 
             if not cc_pair or cc_pair.status in CC_PAIR_STATUSES_BLOCKING_PRUNE:
                 task_logger.info(
@@ -656,10 +663,6 @@ def connector_pruning_generator_task(
                 reset_prune_and_cancel_sync_record(redis_connector, db_session)
                 return
 
-            payload = redis_connector.prune.payload
-            if not payload:
-                raise ValueError(f"No fence payload found: cc_pair={cc_pair_id}")
-
             new_payload = RedisConnectorPrunePayload(
                 id=payload.id,
                 submitted=payload.submitted,
@@ -668,6 +671,7 @@ def connector_pruning_generator_task(
                 prune_requested_at=payload.prune_requested_at,
             )
             redis_connector.prune.set_fence(new_payload)
+            db_session.commit()
 
             connector_source = cc_pair.connector.source
             connector_type = connector_source.value
