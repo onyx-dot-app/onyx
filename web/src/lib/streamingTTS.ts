@@ -326,6 +326,10 @@ export class HTTPStreamingTTSPlayer {
 
     // Stop and cleanup audio element
     if (this.audioElement) {
+      // Clearing src can queue an error after a new player has started.
+      this.audioElement.onerror = null;
+      this.audioElement.onplay = null;
+      this.audioElement.onended = null;
       this.audioElement.pause();
       this.audioElement.src = "";
       this.audioElement = null;

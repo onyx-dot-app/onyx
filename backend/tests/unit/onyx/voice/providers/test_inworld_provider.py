@@ -176,3 +176,20 @@ async def test_cancellation_closes_response_and_session() -> None:
             await task
     response.__aexit__.assert_awaited_once()
     session.__aexit__.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_prefetched_stream_can_finish_in_response_task() -> None:
+    session, response = mock_session(b"")
+    response.content.feed_data(b'{"result":{"audioContent":"YWJj"}}\n' * 2)
+    response.content.feed_eof()
+    with patch(
+        "onyx.voice.providers.inworld.aiohttp.ClientSession", return_value=session
+    ):
+        stream = InworldVoiceProvider("test-key").synthesize_stream("Hello")
+        assert await anext(stream) == b"abc"
+
+        async def consume_response() -> list[bytes]:
+            return [chunk async for chunk in stream]
+
+        assert await asyncio.create_task(consume_response()) == [b"abc"]

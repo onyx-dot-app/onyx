@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
@@ -65,6 +65,7 @@ def traced_llm_call(
     tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
     content_mode: TraceContentMode | None = None,
+    mark_as_current: bool = True,
 ) -> Iterator[Span[GenerationSpanData]]:
     """Open a generation span for call sites that don't go through ``LLM``.
 
@@ -79,14 +80,21 @@ def traced_llm_call(
     model_config: dict[str, str] = dict(extra_config) if extra_config else {}
     model_config["model_provider"] = provider
     model_config["flow"] = flow.value
-    with generation_span(
+    span = generation_span(
         model=model,
         model_config=model_config,
         image_count=image_count,
         tools=tools,
         parent=parent,
         content_mode=content_mode,
-    ) as span:
+    )
+    with ExitStack() as stack:
+        if mark_as_current:
+            stack.enter_context(span)
+        else:
+            # Streaming generators can resume in a different task after prefetch.
+            span.start()
+            stack.callback(span.finish)
         if input_messages is not None and span.content_mode == TraceContentMode.FULL:
             if isinstance(input_messages, Sequence) and not isinstance(
                 input_messages, (str, bytes)

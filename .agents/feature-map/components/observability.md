@@ -34,6 +34,11 @@ this document maps them to code and adds verification guidance.
 
 ## 1. What the user experiences
 
+`traced_llm_call(mark_as_current=False)` records a span without changing the
+current-span context variable. Streaming providers use this when an iterator
+can be prefetched in one task and completed in another. Other calls retain
+the default current-span behavior.
+
 An operator scrapes `GET /metrics` on the API server, the MCP server, and each
 Celery worker's standalone metrics port, and wires the results into Grafana.
 No dashboard ships in-product; `docs/METRICS.md` documents every metric and

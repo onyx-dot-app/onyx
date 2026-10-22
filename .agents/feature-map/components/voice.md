@@ -138,6 +138,8 @@ WebSocket capabilities remain disabled; existing chunked fallbacks are required.
 `/voice/status` includes `tts_max_speed`; Settings uses it to bound the speed
 control. Inworld rejects speeds outside 0.5–1.5 instead of silently capping them.
 Previously saved higher speeds remain visible and must be changed by the user.
+Inworld HTTP TTS records a detached tracing span because the REST route prefetches
+its first chunk before Starlette consumes the rest in another task.
 
 ### Audio format handling
 

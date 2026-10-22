@@ -138,7 +138,10 @@ class InworldVoiceProvider(VoiceProviderInterface):
                 "Inworld supports playback speed from 0.5 to 1.5. Update your voice settings.",
             )
         with traced_llm_call(
-            flow=LLMFlow.TTS, model=self.tts_model, provider="inworld"
+            flow=LLMFlow.TTS,
+            model=self.tts_model,
+            provider="inworld",
+            mark_as_current=False,
         ):
             async with self._session() as session:
                 for segment in split_inworld_text(text):
