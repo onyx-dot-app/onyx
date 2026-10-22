@@ -1252,7 +1252,7 @@
     "decisionModels": {
       "sharedModelSettings": "Manage chat settings in Language Models",
       "decisionModel": {
-        "title": "Decision model",
+        "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
         "clear": "Clear",
@@ -1268,7 +1268,6 @@
         "title": "Providers",
         "description": "Connect a provider or manage its decision models.",
         "clearBeforeRemoval": "Clear the selected decision model before removing this provider.",
-        "edit": "Configure",
         "connect": "Connect"
       },
       "loadFailed": "Could not load decision models.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "Automatically scroll to new content as chat generates response. Users can override this in their personal settings.",
         "title": "Chat Auto-Scroll"
-      },
-      "betaTag": {
-        "label": "beta"
       },
       "connectors": {
         "description": "Sources that Internal Search uses in chat. Add or change them on the indexing status page.",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft is off for everyone. Toggle individual users below."
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "Upgrade Plan"
       },
-      "availableFor": "Available for {plan}"
+      "availableFor": "Available for {plan}",
+      "beta": {
+        "title": "beta"
+      }
     },
     "placeholders": {
       "email": "email@yourcompany.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "Search..."
-      },
-      "betaTag": {
-        "label": "Beta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Beta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explore Agents"

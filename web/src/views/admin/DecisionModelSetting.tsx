@@ -11,6 +11,10 @@ import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import type { DefaultModel } from "@/lib/languageModels/types";
 
+// The row's label targets the select by id: the Clear button comes first,
+// so an implicit label would forward a title click to it.
+const SELECT_ID = "decision-model-select";
+
 export default function DecisionModelSetting() {
   const t = useTranslations("admin.decisionModels");
   const { model, providers, error, refetch } = useDecisionModel();
@@ -45,6 +49,7 @@ export default function DecisionModelSetting() {
       title={t("decisionModel.title")}
       description={t("decisionModel.description")}
       suffix="optional"
+      withLabel={SELECT_ID}
     >
       {error ? (
         <MessageCard
@@ -78,6 +83,7 @@ export default function DecisionModelSetting() {
             </Button>
           )}
           <SimpleModelSelector
+            id={SELECT_ID}
             includeDecisionOnly
             providers={providers}
             value={selectedId}

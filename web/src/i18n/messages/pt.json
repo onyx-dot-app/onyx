@@ -1268,7 +1268,6 @@
         "title": "Provedores",
         "description": "Conecte um provedor ou gerencie seus modelos de decisão.",
         "clearBeforeRemoval": "Limpe o modelo de decisão selecionado antes de remover este provedor.",
-        "edit": "Configurar",
         "connect": "Conectar"
       },
       "loadFailed": "Não foi possível carregar os modelos de decisão.",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "Rola automaticamente para o novo conteúdo enquanto o chat gera a resposta. Os usuários podem substituir isso nas configurações pessoais.",
         "title": "Rolagem automática do chat"
-      },
-      "betaTag": {
-        "label": "beta"
       },
       "connectors": {
         "description": "Fontes que a pesquisa interna usa no chat. Adicione ou altere-as na página de status de indexação.",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "O Craft está desativado para todos. Alterne usuários individuais abaixo."
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "Fazer upgrade do plano"
       },
-      "availableFor": "Disponível no {plan}"
+      "availableFor": "Disponível no {plan}",
+      "beta": {
+        "title": "beta"
+      }
     },
     "placeholders": {
       "email": "email@suaempresa.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "Pesquisar..."
-      },
-      "betaTag": {
-        "label": "Beta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Beta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorar agentes"

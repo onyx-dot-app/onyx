@@ -78,10 +78,10 @@ export const NAV_ITEM_IDS: Record<
   AdminNavItemId | null
 > = {
   LLM_MODELS: "languageModels",
+  DECISION_MODELS: "decisionModels",
   WEB_SEARCH: "webSearch",
   IMAGE_GENERATION: "imageGeneration",
   VOICE: "voice",
-  DECISION_MODELS: "decisionModels",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",
   LLM_GATEWAY: "llmGateway",

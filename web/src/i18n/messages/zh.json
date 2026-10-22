@@ -1268,7 +1268,6 @@
         "title": "提供商",
         "description": "连接提供商或管理其决策模型。",
         "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
-        "edit": "配置",
         "connect": "连接"
       },
       "loadFailed": "无法加载决策模型。",
@@ -2260,9 +2259,6 @@
       "autoScroll": {
         "description": "在对话生成回复时自动滚动到新内容。用户可以在个人设置中覆盖此项。",
         "title": "对话自动滚动"
-      },
-      "betaTag": {
-        "label": "测试版"
       },
       "connectors": {
         "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
@@ -4952,9 +4948,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft 对所有人关闭。可在下方逐个用户切换。"
         },
@@ -14116,7 +14109,10 @@
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用"
+      "availableFor": "{plan}可用",
+      "beta": {
+        "title": "测试版"
+      }
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -16589,9 +16585,6 @@
       },
       "searchInput": {
         "placeholder": "搜索…"
-      },
-      "betaTag": {
-        "label": "测试版"
       }
     },
     "appSidebar": {
@@ -16603,8 +16596,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "商业版",
-        "betaTag": "测试版"
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"
