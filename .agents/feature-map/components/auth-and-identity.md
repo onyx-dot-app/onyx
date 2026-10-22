@@ -100,7 +100,7 @@ the coding-agent sandbox).
 | POST | `/auth/logout` | same router | Writes a tombstone value instead of deleting the Redis key (`session_tokens.py:build_session_tombstone_value`). |
 | POST | `/auth/forgot-password`, `/auth/reset-password` | fastapi-users | Public, signed with `USER_AUTH_SECRET`. |
 | POST | `/auth/request-verify-token`, `/auth/verify` | fastapi-users | Public. |
-| GET | `/auth/type` | | Public. Tells the frontend which login flow to render before any session exists. |
+| GET | `/auth/type` | | Public. Tells the frontend which login flow to render before any session exists, and the workspace `default_language` (single-tenant) that `web/src/i18n/request.ts` falls back to when `GET /settings` is denied. |
 | POST | `/auth/mobile/login`, `/auth/mobile/refresh`, `/auth/mobile/logout` | `server/auth/mobile.py` | Bearer-token mirror of the cookie flow for native clients. Refresh authenticates only by the Bearer header, never the web cookie. |
 | POST | `/auth/mobile/sso/exchange` | `mobile_sso/sso_completion.py` via `server/auth/mobile.py` | Exchanges a one-time PKCE-bound code (minted after an OAuth/SAML callback) for the session token; declared public because the code itself is the credential. |
 | GET | `/auth/oauth/authorize`, `/auth/oauth/callback` | fastapi-users OAuth router (`create_onyx_oauth_router`, `auth/users.py`) | Legacy single-provider Google OAuth. Still active; multi-provider is the newer path (below). |
