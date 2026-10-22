@@ -32,6 +32,7 @@ from onyx.server.manage.models import (
 )
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -234,6 +235,11 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         oauth_enabled=OAUTH_ENABLED,
         password_auth_enabled=security.password_auth_enabled,
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
+        default_language=(
+            None
+            if MULTI_TENANT
+            else (await run_in_threadpool(load_settings)).default_language
+        ),
     )
 
 
