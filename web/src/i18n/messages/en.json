@@ -331,6 +331,7 @@
         "discoveryStage": "Could not load server tools",
         "loadStage": "Could not load connection settings",
         "clientRegistrationFailed": "Automatic client registration failed. Use your own OAuth client, or check the provider’s setup requirements.",
+        "clientMetadataRejected": "The provider could not use the client metadata document. If this instance is not reachable from the public internet, turn off “Use client metadata document” and connect again.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The server could not be reached. Check the server URL and try again.",
         "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
@@ -413,7 +414,8 @@
       },
       "cimd": {
         "label": "Use client metadata document",
-        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
+        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead.",
+        "turnOff": "Turn off client metadata document"
       },
       "discovery": {
         "checking": "Checking automatic setup…",
