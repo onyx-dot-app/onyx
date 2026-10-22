@@ -579,6 +579,7 @@ def test_validation_replaces_a_run_in_flight(
         connector_id=slack_pair.connector_id,
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()

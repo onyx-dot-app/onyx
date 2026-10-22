@@ -47,6 +47,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    capability_check_run_lease,
     dependency_not_run_result,
     generate_capability_report,
     merge_capability_results,
@@ -217,6 +218,7 @@ def _mark_running(
             connector_id=connector_id,
             source=source,
             trigger=trigger,
+            lease=capability_check_run_lease(source),
             active_within=timedelta(0),
         )
         db_session.commit()

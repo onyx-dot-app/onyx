@@ -579,8 +579,13 @@ checks instead and stores the full report. Only a required check that `FAILED`
 within the blocking budget blocks the pairing. A check whose dependency did not
 finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
-on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
-retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
+on the `capability_checks` queue. The RUNNING mark has a deadline
+(`run_deadline_at`): the task renews it before the checks and after every
+result (`runner.py:capability_check_run_lease`), and stops when a newer run took
+the row. A read past the deadline shows `failed_to_run`. A beat task,
+`CHECK_FOR_STALE_CAPABILITY_RUNS`, retires dead runs. A manual trigger is a
+no-op while a live run started less than five minutes ago; it replaces an older
+or dead run. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
 reuse their result at creation when the form is unchanged. A check the draft
 run is still running is not started again: the draft task marks its pending
 results in flight, creation waits for them within its blocking budget, and the
