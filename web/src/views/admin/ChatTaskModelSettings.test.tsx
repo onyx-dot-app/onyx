@@ -273,7 +273,7 @@ describe("ChatTaskModelSettings", () => {
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
     expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
     expect(taskSelector(0)).toHaveValue("Chat Default");
-    expect(taskSelector(1)).toHaveValue("Global Default");
+    expect(taskSelector(1)).toHaveValue("Chat Default");
     expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Reset" })

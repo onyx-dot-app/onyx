@@ -149,9 +149,9 @@ The search card holds Search Selection Model, Search Mode and Auto-Detect
 Search Filters. Temperature Control and Reasoning Control are on Language
 Models. `ChatTaskModelSettings` exports one row component for each task model.
 Each row owns its model-provider fetch. Each selector starts with a Global
-Default row above a divider: "Chat Default" for Chat Naming, and "Global
-Default" described as "Each chat's model" for Search Selection, which also
-runs in the Search UI.
+Default row above a divider: "Chat Default", since an unset task runs on the
+chat's own model (search selection in the Search UI uses the workspace
+default instead).
 Global Default clears the designation. Each row saves independently from the
 page's workspace settings.
 CHAT_NAMING controls naming; SEARCH_SELECTION controls document selection and

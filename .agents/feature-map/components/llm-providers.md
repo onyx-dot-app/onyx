@@ -157,8 +157,8 @@ search lives in Chat Preferences.
 row (chat card) and the Search Selection Model row (search card).
 Neither selector offers hidden models; a hidden current value stays listed.
 Each starts
-with a default row ("Chat Default" for naming; "Global Default", described as
-"Each chat's model", for search selection); picking it
+with a "Chat Default" row (in the Search UI, unset selection uses the workspace
+default); picking it
 deletes that designation. Each selector stays disabled during its own save,
 without blocking the other setting.
 CHAT_NAMING handles chat naming; SEARCH_SELECTION handles document selection
