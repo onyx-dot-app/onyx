@@ -96,6 +96,16 @@ describe("AuthenticationAccountCard unusable account", () => {
     await user.click(screen.getByText(reason));
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it("shows why a selected account can no longer be used", () => {
+    const reason = "Credential 7 is shared with you.";
+    renderCard(
+      { usable: false, refusal_reason: reason },
+      { selected: true, selectable: true }
+    );
+
+    expect(screen.getByText(reason)).toBeInTheDocument();
+  });
 });
 
 describe("AuthenticationAccountCard rename", () => {

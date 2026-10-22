@@ -7,7 +7,7 @@ import {
   DRAFT_RUN_CLIENT_DEADLINE_MS,
   useConnectorChecks,
 } from "@/lib/connectors/checks/hooks";
-import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { errorHandlingFetchWith, FetchError } from "@/lib/fetcher";
 import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
@@ -30,7 +30,7 @@ jest.mock("@/lib/connectors/checks/svc", () => ({
 // A run fetch returns what the latest start request returned.
 jest.mock("@/lib/fetcher", () => ({
   ...jest.requireActual("@/lib/fetcher"),
-  errorHandlingFetcher: jest.fn(async () => {
+  errorHandlingFetchWith: jest.fn(async () => {
     const { startDraftCheckRun, startPairEditCheckRun } = jest.requireMock(
       "@/lib/connectors/checks/svc"
     );
@@ -466,7 +466,7 @@ it("shows the server's reason when it refuses the start", async () => {
 
 it("fails to run, and stops polling, when polling the run fails", async () => {
   startMock.mockResolvedValue(run([BINDING, CONTENT], "running"));
-  const fetcher = jest.mocked(errorHandlingFetcher);
+  const fetcher = jest.mocked(errorHandlingFetchWith);
   fetcher.mockRejectedValueOnce(new FetchError("gone", 404, null));
   const { result } = renderChecks();
   act(() => result.current.checks.begin());
@@ -506,7 +506,7 @@ it("shows a run that finished while the tab slept past the client deadline", asy
   act(() => result.current.checks.begin());
   await waitFor(() => expect(result.current.checks.status).toBe("running"));
 
-  const fetcher = jest.mocked(errorHandlingFetcher);
+  const fetcher = jest.mocked(errorHandlingFetchWith);
   const replayLatestStart = fetcher.getMockImplementation();
   fetcher.mockResolvedValue(
     run([check({ ...BINDING, state: "passed" }), CONTENT])
@@ -533,7 +533,7 @@ it("fails to run when a poll does not settle in time", async () => {
   const timeoutSpy = jest
     .spyOn(AbortSignal, "timeout")
     .mockReturnValue(timeout.signal);
-  const fetcher = jest.mocked(errorHandlingFetcher);
+  const fetcher = jest.mocked(errorHandlingFetchWith);
   const replayLatestStart = fetcher.getMockImplementation();
   fetcher.mockClear();
   fetcher.mockImplementation(

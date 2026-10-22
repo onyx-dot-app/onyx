@@ -15,7 +15,7 @@ import { IconLoader } from "@opal/loaders";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
+import { errorHandlingFetchWith, fetchErrorDetail } from "@/lib/fetcher";
 import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
@@ -337,7 +337,7 @@ export function useConnectorChecks({
   const { data: run, error: runError } = useSWR<DraftCheckRunSnapshot>(
     runId ? SWR_KEYS.connectorCheckRun(runId) : null,
     async (url: string) => {
-      const latest = await errorHandlingFetcher<DraftCheckRunSnapshot>(url, {
+      const latest = await errorHandlingFetchWith<DraftCheckRunSnapshot>(url, {
         signal: AbortSignal.timeout(DRAFT_RUN_POLL_TIMEOUT_MS),
       });
       // Judged after the fetch, so a run that finished while the tab slept

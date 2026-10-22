@@ -527,7 +527,8 @@ export default function AuthenticationAccountCard({
                   />
                 )}
               </div>
-              {!selectable && credential.refusal_reason !== null && (
+              {/* Not `selectable`: a selected unusable account stays so. */}
+              {!credential.usable && credential.refusal_reason !== null && (
                 <div className="ps-5.5 pt-2">
                   <Text font="secondary-body" color="text-03">
                     {credential.refusal_reason}

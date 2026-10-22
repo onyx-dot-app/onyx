@@ -105,12 +105,7 @@ export const skipRetryOnAuthError: NonNullable<
   }, delay);
 };
 
-export const errorHandlingFetcher = async <T>(
-  url: string,
-  init?: RequestInit
-): Promise<T> => {
-  const res = await fetch(url, init);
-
+async function parseFetcherResponse<T>(res: Response): Promise<T> {
   if (res.status === 403) {
     const redirect = new RedirectError(
       DEFAULT_AUTH_ERROR_MSG,
@@ -130,4 +125,16 @@ export const errorHandlingFetcher = async <T>(
   }
 
   return res.json();
-};
+}
+
+// One argument only: SWR spreads an array key into its fetcher's arguments.
+export const errorHandlingFetcher = async <T>(url: string): Promise<T> =>
+  parseFetcherResponse<T>(await fetch(url));
+
+/** `errorHandlingFetcher` with request options, such as an abort signal. */
+export async function errorHandlingFetchWith<T>(
+  url: string,
+  init: RequestInit
+): Promise<T> {
+  return parseFetcherResponse<T>(await fetch(url, init));
+}
