@@ -16,20 +16,35 @@ export const noEmDashRule = defineRule({
     },
   },
   createOnce(context) {
-    const check = (node: ESTree.Node, text: string | null | undefined) => {
-      // A lone em dash is the empty-value placeholder in tables and stats, not prose.
-      if (!text?.includes(EM_DASH) || text.trim() === EM_DASH) return;
+    // A lone em dash is the empty-value placeholder in tables and stats, not prose.
+    // It is exempt only when it is the whole string or the only JSX child.
+    const check = (
+      node: ESTree.Node,
+      text: string | null | undefined,
+      isWholeText: boolean
+    ) => {
+      if (!text?.includes(EM_DASH)) return;
+      if (isWholeText && text.trim() === EM_DASH) return;
       context.report({ node, messageId: "emDash" });
     };
     return {
       Literal(node) {
-        if (typeof node.value === "string") check(node, node.value);
+        if (typeof node.value === "string") check(node, node.value, true);
       },
       TemplateElement(node) {
-        check(node, node.value.cooked);
+        const template = node.parent;
+        const isWholeText =
+          template.type === "TemplateLiteral" &&
+          template.expressions.length === 0;
+        check(node, node.value.cooked, isWholeText);
       },
       JSXText(node) {
-        check(node, node.value);
+        const isWholeText = node.parent.children.every(
+          (child) =>
+            child === node ||
+            (child.type === "JSXText" && child.value.trim() === "")
+        );
+        check(node, node.value, isWholeText);
       },
     };
   },
