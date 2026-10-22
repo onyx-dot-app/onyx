@@ -3609,7 +3609,7 @@
         }
       },
       "content": {
-        "title": "Contenu du connecteur",
+        "title": "Configurations d'indexation",
         "description": "Sélectionnez le contenu à indexer pour ce connecteur."
       },
       "selectInput": {

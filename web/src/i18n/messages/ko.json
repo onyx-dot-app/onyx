@@ -3609,7 +3609,7 @@
         }
       },
       "content": {
-        "title": "커넥터 콘텐츠",
+        "title": "색인 구성",
         "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
