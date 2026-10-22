@@ -119,11 +119,14 @@ class ConfluenceCredentialBinding(CredentialBinding):
     site_url_fields: ClassVar[frozenset[str]] = frozenset({"wiki_base"})
 
     def comparison_values(self) -> dict[str, Any]:
-        # Cloud document ids add "/wiki" when the base lacks it, so a cloud
-        # base with and without it is one site.
+        # The connector strips a trailing slash itself, and cloud document ids
+        # add "/wiki" when the base lacks it, so a cloud base with and without
+        # it is one site.
         values = super().comparison_values()
+        wiki_base = values["wiki_base"].rstrip("/")
         if self.is_cloud:
-            values["wiki_base"] = values["wiki_base"].removesuffix(_CLOUD_WIKI_PATH)
+            wiki_base = wiki_base.removesuffix(_CLOUD_WIKI_PATH)
+        values["wiki_base"] = wiki_base
         return values
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
