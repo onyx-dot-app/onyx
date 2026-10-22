@@ -3156,7 +3156,7 @@
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "resolved": "Behoben",
-          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
+          "resolvedDocs": "{count, plural, one {# Element behoben} other {# Elemente behoben}}",
           "superseded": "Abgelöst"
         },
         "more": "Mehr anzeigen",

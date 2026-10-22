@@ -281,7 +281,7 @@ export default function ActivityCard({
       minutes,
     });
   }
-  // A resolved card counts the documents it resolved. A superseded one keeps the pill it had when open, only faded.
+  // A resolved card counts the items it resolved, whole entities included. A superseded one keeps the pill it had when open, only faded.
   const docsLabel =
     resolved && run.kind !== "checks"
       ? t("tags.resolvedDocs", { count: warnings })

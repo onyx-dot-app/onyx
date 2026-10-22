@@ -229,7 +229,7 @@ def test_resolve_all_shown_clears_the_flag_and_alert(
 def test_the_beat_heals_a_flag_it_set_while_a_resolve_ran(
     db_session: Session, admin: User, make_pair: MakePair
 ) -> None:
-    # The beat raised the alert, then the resolve ran before the beat set the flag.
+    # The beat raised the alert, the resolve ran, then the beat set the flag and Cloud paused the pair.
     pair = make_pair(ConnectorCredentialPairStatus.ACTIVE, None, False)
     latest = _failed_attempt(db_session, pair, 0)
 
@@ -237,14 +237,16 @@ def test_the_beat_heals_a_flag_it_set_while_a_resolve_ran(
 
     assert _alerts(db_session, admin) == []
     pair.in_repeated_error_state = True
+    pair.status = ConnectorCredentialPairStatus.PAUSED
     db_session.commit()
 
     heal_resolved_repeated_error_states(
-        db_session, {pair.id: pair}, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        db_session, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     )
 
     db_session.refresh(pair)
     assert pair.in_repeated_error_state is False
+    assert pair.status == ConnectorCredentialPairStatus.PAUSED
 
 
 def test_retries_keep_backing_off_after_a_resolve(

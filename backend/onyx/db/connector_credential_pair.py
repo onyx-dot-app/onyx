@@ -761,6 +761,19 @@ def verify_user_can_edit_connector(
     )
 
 
+def get_cc_pairs_in_repeated_error_state(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """Every pair flagged in repeated error state, whatever its status."""
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .where(ConnectorCredentialPair.in_repeated_error_state.is_(True))
+            .options(selectinload(ConnectorCredentialPair.connector))
+        ).all()
+    )
+
+
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,

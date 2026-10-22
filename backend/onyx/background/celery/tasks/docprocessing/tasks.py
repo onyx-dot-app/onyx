@@ -81,6 +81,7 @@ from onyx.db.connector_alerts import (
 )
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_cc_pairs_in_repeated_error_state,
     get_connector_credential_pair_from_id,
     set_cc_pair_repeated_error_state,
     update_connector_credential_pair_from_id,
@@ -1101,12 +1102,13 @@ def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) 
         mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
 
 
-def heal_resolved_repeated_error_states(
-    db_session: Session,
-    flagged_pairs: dict[int, ConnectorCredentialPair],
-    tenant_id: str,
-) -> None:
-    """Clears the flag and alert of each flagged pair with a resolved latest failure."""
+def heal_resolved_repeated_error_states(db_session: Session, tenant_id: str) -> None:
+    """Clears the flag and alert of every flagged pair, paused ones included, whose
+    latest failure is resolved."""
+    flagged_pairs = {
+        cc_pair.id: cc_pair
+        for cc_pair in get_cc_pairs_in_repeated_error_state(db_session)
+    }
     for cc_pair_id in clear_resolved_repeated_error_states__no_commit(
         db_session, set(flagged_pairs)
     ):
@@ -1245,7 +1247,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
         # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
-            flagged_pairs: dict[int, ConnectorCredentialPair] = {}
             for cc_pair_id in primary_cc_pair_ids:
                 lock_beat.reacquire()
 
@@ -1253,8 +1254,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     db_session=db_session,
                     cc_pair_id=cc_pair_id,
                 )
-                if cc_pair and cc_pair.in_repeated_error_state:
-                    flagged_pairs[cc_pair.id] = cc_pair
 
                 # if already in repeated error state, don't do anything
                 # this is important so that we don't keep pausing the connector
@@ -1293,16 +1292,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
-                    error_connector_name = (
-                        cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
-                    )
-                    on_connector_error_state_change(
-                        tenant_id=tenant_id,
-                        source=cc_pair.connector.source.value,
-                        cc_pair_id=cc_pair_id,
-                        connector_name=error_connector_name,
-                        in_error=True,
-                    )
 
                     task_logger.error(
                         f"Connector entered repeated error state: "
@@ -1321,8 +1310,19 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             status=ConnectorCredentialPairStatus.PAUSED,
                         )
 
+                # A resolve in the API also clears the flag, so the gauge follows the row.
+                if cc_pair is not None:
+                    on_connector_error_state_change(
+                        tenant_id=tenant_id,
+                        source=cc_pair.connector.source.value,
+                        cc_pair_id=cc_pair.id,
+                        connector_name=cc_pair.connector.name
+                        or f"cc_pair_{cc_pair.id}",
+                        in_error=cc_pair.in_repeated_error_state,
+                    )
+
             # A resolve can land between the alert and the flag above, leaving it set.
-            heal_resolved_repeated_error_states(db_session, flagged_pairs, tenant_id)
+            heal_resolved_repeated_error_states(db_session, tenant_id)
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks

@@ -3156,7 +3156,7 @@
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
           "resolved": "已解决",
-          "resolvedDocs": "{count, plural, other {# 个文档已解决}}",
+          "resolvedDocs": "{count, plural, other {# 个项目已解决}}",
           "superseded": "已被取代"
         },
         "more": "显示更多",
