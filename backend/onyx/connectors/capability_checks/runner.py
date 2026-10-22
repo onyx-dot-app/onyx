@@ -81,7 +81,6 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
     "connector is configured."
 )
 _SKIP_FINDINGS_OFF_MESSAGE = "Findings are turned off for this workspace."
-_SKIP_VALIDATION_FAILED_MESSAGE = "Skipped: a required check failed."
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
@@ -367,25 +366,42 @@ def _findings_for_source(
 
 
 def _discovery_skip_outcome(
-    validation_results: Iterable[CapabilityCheckResult], keep_findings: bool
+    check: CapabilityCheck,
+    validation_results: Iterable[CapabilityCheckResult],
+    results_by_check_id: Mapping[str, CapabilityCheckResult],
+    keep_findings: bool,
 ) -> CheckOutcome | None:
-    """Why a discovery check does not run, or None when it runs."""
+    """Why a discovery check does not run, or None when it runs. A failed
+    required check stops it; its own dependency names the cause when one
+    stopped it, else the first failed required check does."""
     if not keep_findings:
         return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_FINDINGS_OFF_MESSAGE,
             applicable=False,
         )
-    if any(
-        result.required and result.status == CapabilityCheckStatus.FAILED
-        for result in validation_results
-    ):
-        return CheckOutcome(
-            status=CapabilityCheckStatus.SKIPPED,
-            message=_SKIP_VALIDATION_FAILED_MESSAGE,
-            applicable=False,
-        )
-    return None
+    failed = next(
+        (
+            result
+            for result in validation_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ),
+        None,
+    )
+    if failed is None:
+        return None
+    if dependency_outcome := _dependency_not_run_outcome(check, results_by_check_id):
+        return dependency_outcome
+    line = _NOT_RUN_LINE_BY_REASON[CheckNotRunReason.DEPENDENCY_FAILED].format(
+        name=failed.display_name
+    )
+    return CheckOutcome(
+        status=CapabilityCheckStatus.SKIPPED,
+        message=line,
+        summary=line,
+        not_run_reason=CheckNotRunReason.DEPENDENCY_FAILED,
+        blocked_by=failed.check_id,
+    )
 
 
 def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
@@ -843,7 +859,10 @@ class _CheckRun:
         usable: they exist to show what a working credential reaches."""
         if check.discovery and (
             discovery_outcome := _discovery_skip_outcome(
-                [*self._prior_results, *self._results], check_findings_enabled()
+                check,
+                [*self._prior_results, *self._results],
+                self._result_by_check_id,
+                check_findings_enabled(),
             )
         ):
             return discovery_outcome

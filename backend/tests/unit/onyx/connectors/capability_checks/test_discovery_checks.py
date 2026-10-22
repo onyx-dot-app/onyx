@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckNotRunReason,
     CheckOutput,
     CountFinding,
     DraftCheckState,
@@ -117,8 +118,14 @@ def test_discovery_does_not_run_after_a_required_failure() -> None:
     results: list[CapabilityCheckResult] = run_capability_checks(checks, _context())
 
     assert order == ["token"]
+    # Shown as "Not run" naming the failed check, not as a check that does
+    # not apply.
     assert results[1].status == CapabilityCheckStatus.SKIPPED
-    assert results[1].applicable is False
+    assert results[1].applicable is True
+    assert results[1].not_run_reason == CheckNotRunReason.DEPENDENCY_FAILED
+    assert results[1].blocked_by == "token"
+    assert results[1].summary == "Not run: token failed"
+    assert results[1].message == "Not run: token failed"
 
 
 def test_discovery_does_not_run_with_findings_off(

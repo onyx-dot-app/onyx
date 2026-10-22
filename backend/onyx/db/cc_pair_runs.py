@@ -519,16 +519,16 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         run_filter,
         CapabilityCheckRun.time_created,
         # A completed run keeps its check messages in the report, not in
-        # error_message. Only the check names and messages are searched: the
-        # findings may be hidden from the response, so they stay out of it.
+        # error_message. Only the names and messages of the checks that apply
+        # are searched: the response leaves out the rest and may hide findings.
         lambda query: or_(
             CapabilityCheckRun.error_message.icontains(query, autoescape=True),
-            _report_text("$.check_results[*].display_name").icontains(
-                query, autoescape=True
-            ),
-            _report_text("$.check_results[*].message").icontains(
-                query, autoescape=True
-            ),
+            _report_text(
+                "$.check_results[*] ? (@.applicable != false).display_name"
+            ).icontains(query, autoescape=True),
+            _report_text(
+                "$.check_results[*] ? (@.applicable != false).message"
+            ).icontains(query, autoescape=True),
         ),
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,

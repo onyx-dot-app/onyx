@@ -36,6 +36,7 @@ from onyx.db.connector_credential_pair import get_cc_pairs_with_check_schedule
 from onyx.db.credential_capability import (
     STALE_RUN_ERROR,
     delete_capability_check_runs_older_than,
+    get_capability_report_row,
     mark_capability_report_running,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
@@ -65,6 +66,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair as cc_pair_routes
 from onyx.server.documents.cc_pair import get_cc_pair_runs, release_indexing_hold
+from onyx.server.documents.credential_capabilities import CapabilityReportSnapshot
 from onyx.server.documents.models import (
     CCPairRunsResponse,
     ConnectorSnapshot,
@@ -316,6 +318,54 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     assert _order(by_finding) == []
     # Neither kind records document errors.
     assert _order(with_doc_errors) == []
+
+
+def test_checks_that_do_not_apply_are_left_out_of_the_responses(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "history_na_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session)
+    report = _report(cc_pair, required_failed=False)
+    # A required perm-sync check on a public pair.
+    report.check_results.append(
+        CapabilityCheckResult(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="perm_sync_scopes",
+            display_name="Read page permissions",
+            required=True,
+            status=CapabilityCheckStatus.SKIPPED,
+            message="Not applicable to a public connector",
+            applicable=False,
+        )
+    )
+    _check_run(db_session, cc_pair, 1, CapabilityCheckRunStatus.PASSED, report)
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=cc_pair.credential_id,
+        connector_id=cc_pair.connector_id,
+        source=_SOURCE,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=report,
+        connector_config_hash=compute_connector_config_hash(_CONFIG),
+    )
+    db_session.commit()
+
+    (listed,) = _runs(db_session, admin, cc_pair, kinds=[CCPairRunKind.CHECKS]).items
+    by_hidden_name = _runs(db_session, admin, cc_pair, q="page permissions")
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    snapshot = CapabilityReportSnapshot.from_row(row)
+
+    assert listed.kind == CCPairRunKind.CHECKS
+    assert [result.check_id for result in listed.attempt.check_results] == ["scopes"]
+    assert _order(by_hidden_name) == []
+    assert snapshot.report is not None
+    assert [result.check_id for result in snapshot.report.check_results] == ["scopes"]
+    # The stored report keeps every result.
+    assert row.report is not None
+    assert len(row.report["check_results"]) == 2
 
 
 def test_a_prune_with_failed_docs_lists_with_the_errors(db_session: Session) -> None:
