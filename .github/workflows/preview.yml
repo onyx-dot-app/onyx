@@ -172,24 +172,34 @@ jobs:
           preview upload frontend upload "$PREVIEW_SHA" \
             --repo onyx --server "$PREVIEW_URL" --oidc 2>&1 | tee out.txt
 
+          # Every call is bounded (connect, per attempt, and all retries), so a
+          # stalled server cannot hold the step past the 20-minute wait below
+          # and the report step still runs before the job timeout. Retries
+          # cover timeouts, 408/429/5xx and refused connections, not 4xx.
+          CURL_LIMITS=(--connect-timeout 10 --max-time 30 --retry 3 --retry-connrefused --retry-max-time 90)
           token() {
-            curl -fsS --retry 3 --retry-all-errors -G \
+            curl -fsS "${CURL_LIMITS[@]}" -G \
               -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
               -H "Accept: application/json; api-version=2.0" \
               --data-urlencode "audience=$PREVIEW_GITHUB_OIDC_AUDIENCE" \
               "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value
           }
-          # method path [body]. On an HTTP error the body (the server's reason)
-          # goes into out.txt for the PR comment.
+          # method path [body]. The body and curl's messages go to separate
+          # files: retry warnings must not end up in the JSON. On an HTTP error
+          # both (the server's reason) go into out.txt for the PR comment.
           api() {
-            local res
-            if ! res=$(curl -sS --fail-with-body --retry 3 --retry-all-errors -X "$1" \
-              -H "Authorization: Bearer $(token)" -H "Content-Type: application/json" \
-              ${3:+--data "$3"} "$PREVIEW_URL$2" 2>&1); then
-              echo "Error: $1 $2: $res" | tee -a out.txt >&2
+            local body err tok
+            body=$(mktemp) err=$(mktemp)
+            tok=$(token)
+            if ! curl -sS --fail-with-body "${CURL_LIMITS[@]}" -X "$1" \
+              -H "Authorization: Bearer $tok" -H "Content-Type: application/json" \
+              ${3:+--data "$3"} -o "$body" "$PREVIEW_URL$2" 2>"$err"; then
+              echo "Error: $1 $2: $(cat "$err") $(cat "$body")" | tee -a out.txt >&2
+              rm -f "$body" "$err"
               return 1
             fi
-            printf '%s' "$res"
+            cat "$body"
+            rm -f "$body" "$err"
           }
 
           DEPLOY=$(api POST /api/deploys "$(jq -nc --arg ref "$PREVIEW_SHA" '{repo: "onyx", ref: $ref, rebuild: false}')")
