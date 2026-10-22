@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -11,6 +12,7 @@ from fastapi_users.password import PasswordHelper
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.orm import Session
 
+import onyx.db.engine.async_sql_engine as async_sql_engine
 from onyx.auth.pat import hash_pat
 from onyx.auth.users import UserManager
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -31,6 +33,18 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
+
+
+@pytest.fixture()
+def null_pool_async_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    # Pooled asyncpg connections bind to the creating loop. A pooled connection
+    # left from this test's per-test loop breaks later async tests in the worker.
+    monkeypatch.setattr(async_sql_engine, "POSTGRES_USE_NULL_POOL", True)
+    async_sql_engine._ASYNC_ENGINES = {}
+    yield
+    async_sql_engine._ASYNC_ENGINES = {}
 
 
 @pytest.fixture()
@@ -364,6 +378,7 @@ async def test_password_change_gives_running_sandbox_new_pat(
     sandbox: Sandbox,
     stub_sandbox_manager: StubSandboxManager,
     tenant_context: None,  # noqa: ARG001
+    null_pool_async_engine: None,  # noqa: ARG001
 ) -> None:
     """A password change revokes the sandbox PAT; the next reservation of the
     still-RUNNING sandbox mints a new one for the proxy to inject."""
