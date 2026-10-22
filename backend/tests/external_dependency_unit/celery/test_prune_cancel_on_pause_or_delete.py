@@ -1,6 +1,7 @@
 """A prune that a pause or a deletion abandons ends with a CANCELED sync
 record and no prune fence, and the deletion beat leaves a paused pair's stop
-signal in place."""
+signal in place. A generator runs only under its own fence, and a paused pair
+refuses a manual prune."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
@@ -18,10 +19,12 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import ConnectorCredentialPairStatus, SyncStatus, SyncType
 from onyx.db.models import ConnectorCredentialPair, SyncRecord, User
 from onyx.db.sync_record import fetch_latest_sync_record, insert_sync_record
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.server.documents import cc_pair as cc_pair_api
-from onyx.server.documents.cc_pair import update_cc_pair_status
+from onyx.server.documents.cc_pair import prune_cc_pair, update_cc_pair_status
 from onyx.server.documents.models import CCStatusUpdateRequest
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
@@ -151,7 +154,8 @@ def test_prune_generator_cancels_for_a_paused_or_deleting_pair(
             "connector_id": cc_pair.connector_id,
             "credential_id": cc_pair.credential_id,
             "tenant_id": get_current_tenant_id(),
-        }
+        },
+        task_id=_PRUNE_TASK_ID,
     )
 
     assert result.successful(), result.traceback
@@ -235,10 +239,56 @@ def test_prune_generator_leaves_a_newer_prune_alone(
             "connector_id": cc_pair.connector_id,
             "credential_id": cc_pair.credential_id,
             "tenant_id": get_current_tenant_id(),
-        }
+        },
+        task_id=_PRUNE_TASK_ID,
     )
 
     assert result.successful(), result.traceback
     instantiate.assert_not_called()
     assert redis_connector.prune.payload == newer
     assert _prune_status(db_session, cc_pair) == SyncStatus.IN_PROGRESS
+
+
+def test_prune_generator_skips_a_fence_it_does_not_own(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.ACTIVE)
+    redis_connector = _queue_prune(db_session, cc_pair)
+    queued_payload = redis_connector.prune.payload
+    instantiate = MagicMock(side_effect=AssertionError("the prune enumerated"))
+    monkeypatch.setattr(pruning_tasks, "instantiate_connector", instantiate)
+
+    result = pruning_tasks.connector_pruning_generator_task.apply(
+        kwargs={
+            "cc_pair_id": cc_pair.id,
+            "connector_id": cc_pair.connector_id,
+            "credential_id": cc_pair.credential_id,
+            "tenant_id": get_current_tenant_id(),
+        },
+        task_id="prune-cancel-test-stale-task",
+    )
+
+    assert result.successful(), result.traceback
+    instantiate.assert_not_called()
+    assert redis_connector.prune.payload == queued_payload
+    assert _prune_status(db_session, cc_pair) == SyncStatus.IN_PROGRESS
+
+
+def test_manual_prune_of_a_paused_pair_is_refused(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    admin: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.PAUSED)
+    api_celery = MagicMock()
+    monkeypatch.setattr(cc_pair_api, "client_app", api_celery)
+
+    with pytest.raises(OnyxError) as exc_info:
+        prune_cc_pair(cc_pair.id, user=admin, db_session=db_session)
+
+    assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
+    api_celery.send_task.assert_not_called()
+    assert not RedisConnector(get_current_tenant_id(), cc_pair.id).prune.fenced

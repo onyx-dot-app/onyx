@@ -469,9 +469,11 @@ def try_creating_prune_generator_task(
             return None
 
         db_session.refresh(cc_pair)
-        if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        if cc_pair.status in CC_PAIR_STATUSES_BLOCKING_PRUNE:
             logger.info(
-                "try_creating_prune_generator_task: cc_pair=%s deleting", cc_pair.id
+                "try_creating_prune_generator_task: cc_pair=%s status=%s",
+                cc_pair.id,
+                cc_pair.status,
             )
             return None
 
@@ -605,6 +607,14 @@ def connector_pruning_generator_task(
             )
             time.sleep(1)
             continue
+
+        # A stale dispatch must not run under a newer prune's fence.
+        if payload.celery_task_id != self.request.id:
+            task_logger.info(
+                f"Pruning canceled, the fence belongs to another task: "
+                f"cc_pair={cc_pair_id} fence_task_id={payload.celery_task_id}"
+            )
+            return None
 
         payload_id = payload.id
 
