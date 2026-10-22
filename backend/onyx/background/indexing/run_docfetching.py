@@ -443,19 +443,12 @@ def mark_attempt_failed_unless_terminal(
     here. Best effort: the watchdog still fails the attempt if this write misses."""
     try:
         with get_session_with_current_tenant() as db_session:
-            attempt = get_index_attempt(db_session, index_attempt_id)
-            if attempt is None or attempt.status.is_terminal():
-                logger.debug(
-                    "Attempt %s is missing or already terminal, skipping marking as failed.",
-                    index_attempt_id,
-                )
-                return
-
             mark_attempt_failed(
                 index_attempt_id,
                 db_session,
                 failure_reason=str(error) or type(error).__name__,
                 full_exception_trace="".join(traceback.format_exception(error)),
+                unless_terminal=True,
             )
     except Exception:
         logger.exception("Failed to mark attempt %s as failed", index_attempt_id)

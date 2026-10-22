@@ -802,13 +802,12 @@ def docfetching_proxy_task(
         # The docprocessing monitor may have canceled the attempt already.
         try:
             with get_session_with_current_tenant() as db_session:
-                attempt = get_index_attempt(db_session, index_attempt_id)
-                if attempt and not attempt.status.is_terminal():
-                    mark_attempt_canceled(
-                        index_attempt_id,
-                        db_session,
-                        "Canceled before the run started: a cancel or stop was requested.",
-                    )
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session,
+                    "Canceled before the run started: a cancel or stop was requested.",
+                    unless_terminal=True,
+                )
         except Exception:
             task_logger.exception(
                 log_builder.build(

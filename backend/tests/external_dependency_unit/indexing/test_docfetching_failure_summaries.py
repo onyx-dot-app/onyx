@@ -8,12 +8,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.docfetching.tasks import docfetching_proxy_task
+from onyx.background.indexing.run_docfetching import mark_attempt_failed_unless_terminal
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.redis.redis_connector import RedisConnector
@@ -163,3 +166,24 @@ def test_stale_stop_fence_on_an_active_pair_fails_the_attempt(
 
     finished = _reload(db_session, attempt.id)
     assert finished.status == IndexingStatus.FAILED
+
+
+def test_a_terminal_status_is_kept_under_the_row_lock(
+    db_session: Session,
+    web_cc_pair: ConnectorCredentialPair,
+) -> None:
+    attempt = _add_attempt(db_session, web_cc_pair, cancellation_requested=False)
+    # The session already holds the row, as a caller that read it earlier would.
+    loaded = _reload(db_session, attempt.id)
+    db_session.execute(
+        update(IndexAttempt)
+        .where(IndexAttempt.id == attempt.id)
+        .values(status=IndexingStatus.INTERRUPTED)
+    )
+    db_session.commit()
+
+    mark_attempt_failed_unless_terminal(attempt.id, RuntimeError("late failure"))
+    mark_attempt_canceled(attempt.id, db_session, "late cancel", unless_terminal=True)
+
+    finished = _reload(db_session, loaded.id)
+    assert finished.status == IndexingStatus.INTERRUPTED
