@@ -323,7 +323,7 @@ PowerPoint conversion and PDF thumbnails use the managed converter bundle descri
 Installation does not replace agent-managed skills or enter session snapshots.
 
 DOCX previews render sanitized content and document styles inside a shadow root to isolate retained viewers.
-DOCX scroll restoration waits for rendered content. Spreadsheet parsing runs in a worker with a ten-second deadline.
+DOCX scroll restoration waits for rendered content on initial load and each replacement, preserving position during hidden updates. Spreadsheet parsing runs in a worker with a ten-second deadline.
 
 ## 5. Contracts and invariants
 

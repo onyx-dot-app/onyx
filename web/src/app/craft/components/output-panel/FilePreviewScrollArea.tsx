@@ -30,6 +30,7 @@ export function FilePreviewScrollArea({
   const position = useRef(initialScrollTop);
   const restored = useRef(false);
   useLayoutEffect(() => {
+    if (!contentReady) restored.current = false;
     if (isActive && contentReady && element.current && !restored.current) {
       element.current.scrollTop = position.current;
       restored.current = true;
