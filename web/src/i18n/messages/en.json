@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "Global Default"
       }
+    },
+    "appFooter": {
+      "slogan": "Open Source AI Platform"
     }
   },
   "craft": {
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "+{count} more"
+    },
+    "sidebar": {
+      "open": "Open Sidebar",
+      "close": "Close Sidebar"
     }
   },
   "settings": {

@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "グローバルデフォルト"
       }
+    },
+    "appFooter": {
+      "slogan": "オープンソース AI プラットフォーム"
     }
   },
   "craft": {
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "他 {count} 件"
+    },
+    "sidebar": {
+      "open": "サイドバーを開く",
+      "close": "サイドバーを閉じる"
     }
   },
   "settings": {

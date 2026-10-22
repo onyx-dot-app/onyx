@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "全局默认"
       }
+    },
+    "appFooter": {
+      "slogan": "开源 AI 平台"
     }
   },
   "craft": {
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "还有 {count} 条"
+    },
+    "sidebar": {
+      "open": "打开侧边栏",
+      "close": "关闭侧边栏"
     }
   },
   "settings": {

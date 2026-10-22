@@ -14147,6 +14147,9 @@
       "globalDefault": {
         "label": "전역 기본값"
       }
+    },
+    "appFooter": {
+      "slogan": "오픈 소스 AI 플랫폼"
     }
   },
   "craft": {
@@ -15980,6 +15983,10 @@
     },
     "toast": {
       "moreCount": "+{count}개 더"
+    },
+    "sidebar": {
+      "open": "사이드바 열기",
+      "close": "사이드바 닫기"
     }
   },
   "settings": {
