@@ -6790,6 +6790,9 @@ class Sandbox(Base):
     provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    cleanup_checkpoint: Mapped[dict[str, int | str | None] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
 
     # Relationships
     user: Mapped[User] = relationship("User")

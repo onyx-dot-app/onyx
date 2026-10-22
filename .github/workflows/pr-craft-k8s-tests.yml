@@ -41,6 +41,8 @@ env:
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
   SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_TEST_ISOLATED_DEPLOYMENT: "true"
+  SANDBOX_TEST_RUN_ID: ${{ github.run_id }}
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
@@ -513,12 +515,15 @@ jobs:
           set -eo pipefail
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace "${HELM_RELEASE_NAMESPACE}" \
+            "onyx.app/cleanup-test-run=${SANDBOX_TEST_RUN_ID}" --overwrite
           kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
 
           for attempt in 1 2 3; do
             if helm upgrade --install onyx deployment/helm/charts/onyx \
               -n "${HELM_RELEASE_NAMESPACE}" \
               -f deployment/helm/charts/onyx/values-ci.yaml \
+              --set "celery_worker_heavy.logLevel=DEBUG" \
               --set "api.image.repository=localhost:5001/onyx-backend" \
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \

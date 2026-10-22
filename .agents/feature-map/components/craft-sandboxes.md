@@ -421,9 +421,11 @@ symlink into it rather than copying (`session_workspace.py`).
    has had no heartbeat for `SANDBOX_IDLE_TIMEOUT_SECONDS` (default 1h), the
    sweep snapshots the sandbox-global opencode history, then every session's
    outputs/attachments, **before** terminating the pod. This path is
-   **fail-closed**: a session-output snapshot failure on a reachable pod aborts
-   the reap (sandbox stays `RUNNING`, retried next sweep); only an unreachable
-   pod is terminated anyway, because its workspace is already unrecoverable.
+   **fail-closed**: any checkpoint or workspace discovery failure aborts the
+   reap. The sandbox stays `RUNNING` for retry. An unhealthy endpoint does
+   not prove that pod-local files are lost.
+   Docker snapshot probes raise on execution failure or incomplete output.
+   Only a completed probe can report that no session files need an archive.
 2. **Periodic background snapshot** (same task, non-idle branch): the sweep
    skips a sandbox unless its user has a stale ACTIVE session
    (`db/sandbox.py:user_has_stale_active_session`). Otherwise, workspaces whose
@@ -508,6 +510,15 @@ then have its brand-new workspace deleted. The next request for that user
 re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 
 Both backends attempt resource removal independently and report incomplete cleanup.
+Confirmed missing workspace storage skips checkpoints, so partial deletion can finish on a later sweep.
+An existing Docker volume still requires preservation, even when its container is missing.
+Before deletion, cleanup commits `Sandbox.cleanup_checkpoint` with the provisioning attempt, storage identity, and observed heartbeat.
+A later worker can reuse this proof only when the runtime is absent and all values still match.
+A changed storage instance, new attempt, or existing runtime requires a fresh checkpoint.
+Successful fenced sleep and new provisioning clear the proof. Cache entries never authorize volume deletion.
+Heartbeat updates clear the proof. File uploads and deletions commit that invalidation before changing files.
+Uploads acquire the session quota lock after that commit and hold it through the file write.
+The proof update requires the observed heartbeat, so intervening activity prevents the save.
 Kubernetes checks each resource once even after the shared deletion wait budget expires.
 Kubernetes waits for Pod, Service, and Secret absence within one teardown budget.
 A deletion error or wait timeout aborts sleep. The row stays eligible for retry,
@@ -518,10 +529,10 @@ and session ports remain allocated until termination succeeds.
 ## 5. Contracts and invariants
 
 1. **A session's workspace must be recoverable or explicitly declared lost.**
-   The reap path is fail-closed for reachable pods (snapshot failure keeps the
-   sandbox `RUNNING` for retry); only an unreachable pod is terminated without
-   a fresh snapshot, and that is a deliberate, logged exception, not silent
-   data loss (`sandbox_lifecycle.py:sleep_sandbox`).
+   The reap path aborts after snapshot or workspace discovery failure,
+   including on unhealthy pods (`sandbox_lifecycle.py:sleep_sandbox`).
+   Workspace listing requires successful execution. Kubernetes also checks a
+   completion marker so truncated output cannot report an empty workspace.
 2. **A snapshot write must not corrupt the previous one.** New-blob-before-delete:
    the new blob is stored before any prior blob is deleted, but the DB commit is
    the last step (`create_session_snapshot_keep_latest`, §4.5). A commit failure

@@ -53,6 +53,7 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
     get_snapshots_for_session,
     has_active_craft_pat,
+    record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
@@ -60,6 +61,7 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     FileSet,
+    SandboxCleanupCheckpoint,
     SandboxProvisionContentionError,
     SnapshotResult,
 )
@@ -823,36 +825,45 @@ def sleep_sandbox(
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
 
-    Invariant: snapshot before terminate, fail-closed — a snapshot failure on
-    a reachable pod aborts the reap so the next sweep retries, while an
-    unreachable pod is terminated anyway (its workspace is unrecoverable;
-    never pin it RUNNING forever). Idleness is re-checked right before the
-    kill since snapshotting can take minutes.
+    Snapshot or workspace discovery failures abort the reap. An unhealthy
+    endpoint does not prove that workspace storage is lost. Re-check idleness
+    before termination because snapshots can take minutes.
     """
     sandbox_id = sandbox.id
+    initial_attempt = sandbox.provisioning_attempt_number
+    storage_exists = sandbox_manager.workspace_storage_exists(sandbox_id, tenant_id)
+    storage_identity = (
+        sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+        if storage_exists
+        else None
+    )
+    checkpoint = (
+        SandboxCleanupCheckpoint.model_validate(sandbox.cleanup_checkpoint)
+        if sandbox.cleanup_checkpoint is not None
+        else None
+    )
+    resume_deletion = (
+        checkpoint is not None
+        and checkpoint.provisioning_attempt_number == initial_attempt
+        and checkpoint.storage_identity == storage_identity
+        and checkpoint.last_heartbeat == sandbox.last_heartbeat
+        and not sandbox_manager.runtime_exists(sandbox_id, tenant_id)
+    )
+    needs_checkpoint = storage_exists and not resume_deletion
 
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
-    if sandbox_manager.supports_opencode_history_persistence:
+    if needs_checkpoint and sandbox_manager.supports_opencode_history_persistence:
         try:
             sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
         except Exception as e:
-            if sandbox_manager.health_check(
-                sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
-            ):
-                logger.error(
-                    "opencode history snapshot failed for sandbox "
-                    "%s; leaving it RUNNING: %s",
-                    sandbox_id,
-                    e,
-                )
-                return
-            logger.warning(
-                "Sandbox %s pod unreachable; sleeping "
-                "without a fresh opencode history snapshot: %s",
+            logger.error(
+                "opencode history snapshot failed for sandbox "
+                "%s; leaving it RUNNING: %s",
                 sandbox_id,
                 e,
             )
+            return
 
     if not session_creation_lock.acquire(blocking=False):
         logger.info(
@@ -861,11 +872,15 @@ def sleep_sandbox(
         )
         return
     try:
-        session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
+        session_ids = (
+            list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            if needs_checkpoint
+            else []
         )
     finally:
         if session_creation_lock.owned():
@@ -899,29 +914,12 @@ def sleep_sandbox(
 
     logger.info("Putting sandbox %s to sleep", sandbox_id)
 
-    # Fail-closed: terminating with an unsnapshotted workspace loses it
-    # (restore falls back to a fresh template). Keep the sandbox RUNNING to
-    # retry next cycle — unless the pod is unreachable, where snapshots can
-    # never succeed and the workspace is already gone, so don't pin it
-    # RUNNING forever.
-    pod_unreachable = False
     if snapshot_failed:
-        if sandbox_manager.health_check(
-            sandbox_id, timeout=HEALTH_PROBE_TIMEOUT_SECONDS
-        ):
-            logger.error(
-                "Snapshot failed for sandbox %s; "
-                "leaving it RUNNING to retry next cycle",
-                sandbox_id,
-            )
-            return
-        pod_unreachable = True
-        logger.warning(
-            "Sandbox %s pod is unreachable; "
-            "terminating despite snapshot failure (cannot recover "
-            "its workspace, won't pin it RUNNING forever)",
+        logger.error(
+            "Snapshot failed for sandbox %s; leaving it RUNNING to retry next cycle",
             sandbox_id,
         )
+        return
 
     # Do not block session creation during snapshots. Reacquire its lock before
     # the final check so a workspace cannot appear between the rescan and kill.
@@ -932,32 +930,58 @@ def sleep_sandbox(
         )
         return
     try:
-        if not pod_unreachable:
-            current_session_ids = list_snapshotable_session_workspaces(
+        current_session_ids = (
+            list_snapshotable_session_workspaces(
                 db_session,
                 sandbox_manager,
                 sandbox,
                 session_creation_lock,
             )
-            new_session_ids = set(current_session_ids) - set(session_ids)
-            if new_session_ids:
-                logger.info(
-                    "Sandbox %s gained %s session workspace(s) during snapshot; "
-                    "skipping reap",
-                    sandbox_id,
-                    len(new_session_ids),
-                )
-                return
+            if needs_checkpoint
+            else []
+        )
+        new_session_ids = set(current_session_ids) - set(session_ids)
+        if new_session_ids:
+            logger.info(
+                "Sandbox %s gained %s session workspace(s) during snapshot; skipping reap",
+                sandbox_id,
+                len(new_session_ids),
+            )
+            return
 
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
+        if (
+            sandbox.status != SandboxStatus.RUNNING
+            or sandbox.provisioning_attempt_number != initial_attempt
+            or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
+
+        if (
+            sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+            != storage_identity
+        ):
+            logger.info(
+                "Sandbox %s workspace storage changed during checkpoint", sandbox_id
+            )
+            return
+        if storage_identity is not None and not resume_deletion:
+            if not record_cleanup_checkpoint__no_commit(
+                db_session,
+                sandbox_id,
+                SandboxCleanupCheckpoint(
+                    provisioning_attempt_number=sleep_attempt_number,
+                    storage_identity=storage_identity,
+                    last_heartbeat=sandbox.last_heartbeat,
+                ),
+            ):
+                db_session.rollback()
+                return
+            db_session.commit()
 
         # Terminate the pod (but keep the sandbox record).
         sandbox_manager.terminate(sandbox_id)

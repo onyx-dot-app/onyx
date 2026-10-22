@@ -1255,15 +1255,51 @@ echo "Session cleanup complete"
             return False
         return "WORKSPACE_FOUND" in result.stdout_text
 
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        container = self._get_container(sandbox_id)
+        if container is not None:
+            labels = container.labels or {}
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != tenant_id
+            ):
+                raise RuntimeError("Workspace storage ownership mismatch")
+            return True
+        return False
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        try:
+            volume = self._docker.volumes.get(_sandbox_volume_name(sandbox_id))
+        except NotFound:
+            return None
+        labels = volume.attrs.get("Labels") or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        created_at = volume.attrs["CreatedAt"]
+        if not isinstance(created_at, str) or not created_at:
+            raise RuntimeError("Workspace storage identity missing")
+        return f"{volume.name}:{created_at}"
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id) or (
+            self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+        )
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         container = self._get_container(sandbox_id)
         if container is None:
-            return []
+            raise RuntimeError(
+                f"Cannot discover workspaces without sandbox {sandbox_id}"
+            )
         try:
             result = _run_in_container_as_sandbox_user(
                 container,
-                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
-                check=False,
+                ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/"],
             )
         except ExecError as e:
             logger.warning(
@@ -1271,7 +1307,9 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
         out: list[UUID] = []
         for line in result.stdout_text.strip().split("\n"):
             line = line.strip()
@@ -1291,8 +1329,7 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         container = self._get_container(sandbox_id)
         if container is None:
-            logger.info("create_snapshot: sandbox %s has no container.", sandbox_id)
-            return None
+            raise RuntimeError(f"Cannot snapshot missing sandbox {sandbox_id}")
 
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
@@ -1302,14 +1339,20 @@ echo "Session cleanup complete"
                 [
                     "/bin/sh",
                     "-c",
-                    f'[ -d "{session_path}/outputs" ] && echo OK || echo EMPTY',
+                    f'if [ -d "{session_path}/outputs" ] || [ -d "{session_path}/attachments" ]; '
+                    "then printf OK; else printf EMPTY; fi",
                 ],
-                check=False,
             )
-        except ExecError:
+        except ExecError as e:
+            raise RuntimeError(
+                f"Snapshot discovery failed for session {session_id}"
+            ) from e
+        if probe.stdout_text.strip() == "EMPTY":
             return None
-        if "OK" not in probe.stdout_text:
-            return None
+        if probe.stdout_text.strip() != "OK":
+            raise RuntimeError(
+                f"Incomplete snapshot discovery for session {session_id}"
+            )
 
         # Stream tar bytes out of the container through FileStore.
         tar_cmd = [

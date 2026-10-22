@@ -1716,6 +1716,33 @@ echo "Session cleanup complete"
             )
             return False
 
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=self._get_pod_name(sandbox_id), namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        labels = pod.metadata.labels or {}
+        if (
+            labels.get(LABEL_SANDBOX_ID) != str(sandbox_id)
+            or labels.get(LABEL_TENANT_ID) != tenant_id
+        ):
+            raise RuntimeError("Workspace storage ownership mismatch")
+        if not pod.metadata.uid:
+            raise RuntimeError("Workspace storage identity missing")
+        return pod.metadata.uid
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.workspace_storage_identity(sandbox_id, tenant_id) is not None
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        return self.runtime_exists(sandbox_id, tenant_id)
+
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         """List UUID session directories under /workspace/sessions/ in the pod.
 
@@ -1727,7 +1754,7 @@ echo "Session cleanup complete"
         exec_command = [
             "/bin/sh",
             "-c",
-            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+            "ls -1 /workspace/sessions/ && printf '\\nONYX_WORKSPACE_LIST_COMPLETE\\n'",
         ]
 
         try:
@@ -1741,6 +1768,7 @@ echo "Session cleanup complete"
                 stdin=False,
                 stdout=True,
                 tty=False,
+                _request_timeout=RPC_TIMEOUT_SECONDS,
             )
         except ApiException as e:
             logger.warning(
@@ -1748,10 +1776,18 @@ echo "Session cleanup complete"
                 sandbox_id,
                 e,
             )
-            return []
+            raise RuntimeError(
+                f"Workspace discovery failed for sandbox {sandbox_id}"
+            ) from e
+
+        lines = resp.strip().splitlines()
+        if not lines or lines[-1] != "ONYX_WORKSPACE_LIST_COMPLETE":
+            raise RuntimeError(
+                f"Incomplete workspace discovery for sandbox {sandbox_id}"
+            )
 
         result: list[UUID] = []
-        for raw_line in resp.strip().split("\n"):
+        for raw_line in lines[:-1]:
             line = raw_line.strip()
             if not line:
                 continue

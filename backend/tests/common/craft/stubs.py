@@ -180,6 +180,9 @@ class StubSandboxManager(SandboxManager):
 
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
+        self.workspace_storage_exists_returns: bool = True
+        self.runtime_exists_returns: bool = True
+        self.workspace_storage_identity_returns: str | None = "stub-workspace"
         self.setup_session_workspace_silent: bool = False
         self.cleanup_session_workspace_silent: bool = False
         self.dispose_opencode_instance_silent: bool = False
@@ -313,6 +316,19 @@ class StubSandboxManager(SandboxManager):
         self.terminated_sandbox_ids.append(sandbox_id)
         if not self.terminate_silent:
             raise _not_configured("terminate")
+
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:  # noqa: ARG002
+        return self.workspace_storage_exists_returns
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:  # noqa: ARG002
+        return self.runtime_exists_returns
+
+    def workspace_storage_identity(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> str | None:
+        return self.workspace_storage_identity_returns
 
     def setup_session_workspace(
         self,

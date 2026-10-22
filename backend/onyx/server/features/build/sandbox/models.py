@@ -70,6 +70,14 @@ class SnapshotResult(BaseModel):
     size_bytes: int
 
 
+class SandboxCleanupCheckpoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    provisioning_attempt_number: int
+    storage_identity: str
+    last_heartbeat: datetime | None
+
+
 class DirectoryListing(BaseModel):
     path: str  # Current directory path
     entries: list[FilesystemEntry]  # Contents

@@ -193,6 +193,20 @@ class SandboxManager(_ServeMixin, ABC):
 
     supports_opencode_history_persistence: bool = False
 
+    def workspace_storage_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        """Return False only after confirming that workspace storage is absent."""
+        raise NotImplementedError
+
+    def runtime_exists(self, sandbox_id: UUID, tenant_id: str) -> bool:
+        """Confirm runtime presence independently of surviving workspace storage."""
+        raise NotImplementedError
+
+    def workspace_storage_identity(
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> str | None:
+        """Identify the owned workspace instance, or confirm its absence."""
+        raise NotImplementedError
+
     def _ensure_document_preview_bundle(
         self, sandbox_id: UUID, run_command: Callable[[list[str]], str]
     ) -> None:
@@ -463,9 +477,11 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: The sandbox ID
 
         Returns:
-            List of session UUIDs found under sessions/. Returns an empty list
-            if the sandbox is not running, has no sessions, or the backend does
-            not support cleanup (e.g. local).
+            List of session UUIDs found under sessions/. An empty list means
+            discovery completed and found no session workspaces.
+
+        Raises:
+            RuntimeError: The runtime is missing or workspace discovery failed.
         """
         ...
 
