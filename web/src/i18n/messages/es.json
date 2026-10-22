@@ -2636,6 +2636,10 @@
         "description": "Este conector está en un estado no válido. Actualiza tus credenciales o crea un conector nuevo antes de reindexar.",
         "title": "Estado del conector no válido"
       },
+      "permSyncPending": {
+        "description": "Es posible que la búsqueda y las respuestas del chat omitan los documentos de este conector hasta que termine su primera sincronización de permisos. Onyx muestra un documento solo a quienes pueden abrirlo en la fuente.",
+        "title": "Los permisos aún no se han sincronizado"
+      },
       "loadError": {
         "title": "No se pudo obtener la información del conector con el ID {ccPairId}",
         "unknownMessage": "Error desconocido"

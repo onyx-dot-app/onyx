@@ -260,6 +260,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
+  // Null until every sync the source needs has finished once, so search may still hide documents.
+  const permissionsPending =
+    isPermSynced(ccPair.access_type) &&
+    ccPair.last_full_permission_sync === null &&
+    !isDeleting;
   const source = ccPair.connector.source;
   const canOperate = can(ccPair, "operate");
   const paused = statusIsNotCurrentlyActive(ccPair.status);
@@ -488,6 +493,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 variant="warning"
                 title={t("invalidState.title")}
                 description={t("invalidState.description")}
+              />
+            )}
+            {permissionsPending && (
+              <MessageCard
+                variant="warning"
+                title={t("permSyncPending.title")}
+                description={t("permSyncPending.description")}
               />
             )}
             {ccPair.pending_backfills.length > 0 && (

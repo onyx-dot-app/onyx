@@ -2636,6 +2636,10 @@
         "description": "This connector is in an invalid state. Please update your credentials or create a new connector before re-indexing.",
         "title": "Invalid Connector State"
       },
+      "permSyncPending": {
+        "description": "Search and chat answers may leave out this connector's documents until its first permission sync finishes. Onyx shows a document only to people who can open it in the source.",
+        "title": "Permissions haven't synced yet"
+      },
       "loadError": {
         "title": "Failed to fetch info on Connector with ID {ccPairId}",
         "unknownMessage": "Unknown error"

@@ -2636,6 +2636,10 @@
         "description": "此连接器处于无效状态。请先更新凭据或创建新连接器，然后再重新索引。",
         "title": "连接器状态无效"
       },
+      "permSyncPending": {
+        "description": "在此连接器的首次权限同步完成之前，搜索和聊天回答可能不包含其文档。Onyx 只向能在源中打开文档的人显示该文档。",
+        "title": "权限尚未同步"
+      },
       "loadError": {
         "title": "无法获取 ID 为 {ccPairId} 的连接器信息",
         "unknownMessage": "未知错误"
