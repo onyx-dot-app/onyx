@@ -305,6 +305,7 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     open_run = next(run for run in unresolved.items if run.kind == "indexing")
     assert open_run.attempt.error_count == 2
     assert open_run.attempt.open_doc_error_count == 1
+    assert open_run.attempt.open_error_count == 1
     resolved_run = next(run for run in resolved_only.items if run.kind == "indexing")
     assert resolved_run.attempt.open_doc_error_count == 0
     assert _order(not_failed) == _order(unresolved)
@@ -316,6 +317,32 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     assert clean.id not in {
         run.attempt.id for run in by_doc_error.items if run.kind == "indexing"
     }
+
+
+def test_an_entity_error_counts_as_open_but_not_as_a_document(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.SYNC)
+    attempt = _index_attempt(
+        db_session, cc_pair, 0, IndexingStatus.COMPLETED_WITH_ERRORS
+    )
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=attempt.id,
+            connector_credential_pair_id=cc_pair.id,
+            entity_id="drive:blocked@example.com",
+            failure_message="Graph 423 notAllowed",
+            is_resolved=False,
+        )
+    )
+    db_session.commit()
+
+    run = _runs(db_session, admin, cc_pair).items[0]
+
+    assert isinstance(run.attempt, IndexAttemptSnapshot)
+    assert run.attempt.open_error_count == 1
+    assert run.attempt.open_doc_error_count == 0
 
 
 def test_lists_a_model_switch_runs_and_marks_them(db_session: Session) -> None:

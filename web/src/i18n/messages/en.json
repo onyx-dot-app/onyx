@@ -3161,6 +3161,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
           "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
@@ -3182,9 +3183,9 @@
           "title": "Couldn't load the activity."
         },
         "docs": {
-          "title": "Failed documents",
+          "title": "Failed items",
           "search": {
-            "placeholder": "Search documents…"
+            "placeholder": "Search items…"
           },
           "resolveAll": "Retry all",
           "resolveAllTooltip": "Re-index every failed document of this run",
@@ -3194,8 +3195,8 @@
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
-          "empty": "No open document errors",
-          "loadError": "Couldn't load the failed documents.",
+          "empty": "No open errors",
+          "loadError": "Couldn't load the failed items.",
           "open": "Open the document"
         },
         "trace": {

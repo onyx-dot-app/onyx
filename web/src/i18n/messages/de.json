@@ -3161,6 +3161,7 @@
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
+          "indexingItems": "{count, plural, one {# Element fehlgeschlagen} other {# Elemente fehlgeschlagen}}",
           "doc_permission_sync": "{count, plural, one {Berechtigungen von # Dokument nicht synchronisiert} other {Berechtigungen von # Dokumenten nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
@@ -3182,9 +3183,9 @@
           "title": "Die Aktivität konnte nicht geladen werden."
         },
         "docs": {
-          "title": "Fehlgeschlagene Dokumente",
+          "title": "Fehlgeschlagene Elemente",
           "search": {
-            "placeholder": "Dokumente durchsuchen…"
+            "placeholder": "Elemente durchsuchen…"
           },
           "resolveAll": "Alle erneut versuchen",
           "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
@@ -3194,8 +3195,8 @@
           "more": "Mehr",
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",
-          "empty": "Keine offenen Dokumentfehler",
-          "loadError": "Die fehlgeschlagenen Dokumente konnten nicht geladen werden.",
+          "empty": "Keine offenen Fehler",
+          "loadError": "Die fehlgeschlagenen Elemente konnten nicht geladen werden.",
           "open": "Dokument öffnen"
         },
         "trace": {
