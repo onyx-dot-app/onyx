@@ -149,10 +149,9 @@ export class OneDriveConnectorSetupPage {
   async selectSpecificScope(user?: string) {
     await this.page.getByRole("tab", { name: "Specific" }).click();
     if (!user) return;
-    // The Excluded Paths list has its own add button outside the tab, so the
-    // users list is found inside the Specific tab's panel.
+    // The Excluded Paths list has its own rows outside the tab, so the users
+    // list is found inside the Specific tab's panel. Its last row is empty.
     const panel = this.page.getByRole("tabpanel", { name: "Specific" });
-    await panel.getByRole("button", { name: "Add New" }).click();
     await panel.getByRole("textbox").last().fill(user);
   }
 

@@ -141,7 +141,8 @@ it("reuses the saved Zoom credentials and preserves opt-in defaults", async () =
   const fetchSpy = mockApi();
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(<DecisionModelsPage />);
-  const card = await screen.findByTestId("decision-provider-zoom_ai-new");
+  // Cards are labelled by their provider's name; unconnected Zoom reads "Zoom".
+  const card = await screen.findByLabelText("Zoom");
   await user.click(within(card).getByRole("button", { name: "Connect" }));
   await user.click(await screen.findByRole("button", { name: "Update" }));
   await waitFor(() =>
@@ -179,7 +180,8 @@ it("creates the shared Zoom connection directly from Decision Models", async () 
   const fetchSpy = mockApi(false, false);
   const user = setupUser();
   render(<DecisionModelsPage />);
-  const card = await screen.findByTestId("decision-provider-zoom_ai-new");
+  // Cards are labelled by their provider's name; unconnected Zoom reads "Zoom".
+  const card = await screen.findByLabelText("Zoom");
   await user.click(within(card).getByRole("button", { name: "Connect" }));
   await user.type(await screen.findByLabelText("API Key"), "new-zoom-key");
   await user.type(screen.getByLabelText("API Secret"), "new-zoom-secret");
@@ -213,7 +215,11 @@ it("loads the complete saved provider before editing a decision connection", asy
   const fetchSpy = mockApi(true);
   const user = setupUser();
   render(<DecisionModelsPage />);
-  await user.click(await screen.findByRole("button", { name: "Configure" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit Zoom decisions connection",
+    })
+  );
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(fetchSpy).toHaveBeenCalledWith(SWR_KEYS.adminLlmProvider(8));
   expect(
@@ -225,7 +231,11 @@ it("rotates the shared Zoom key without resending the stored secret", async () =
   const fetchSpy = mockApi(true);
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
   render(<DecisionModelsPage />);
-  await user.click(await screen.findByRole("button", { name: "Configure" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit Zoom decisions connection",
+    })
+  );
   const key = await screen.findByLabelText("API Key");
   await user.clear(key);
   await user.type(key, "rotated-zoom-key");
@@ -255,7 +265,11 @@ it("removes only the Zoom decision provider and keeps Scribe", async () => {
   const fetchSpy = mockApi(true);
   const user = setupUser();
   render(<DecisionModelsPage />);
-  await user.click(await screen.findByRole("button", { name: "Delete" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Delete Zoom decisions connection",
+    })
+  );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })
   );
@@ -278,7 +292,11 @@ it("requires clearing the selected decision model before removing its provider",
   const fetchSpy = mockApi(true, true, true);
   const user = setupUser();
   render(<DecisionModelsPage />);
-  await user.click(await screen.findByRole("button", { name: "Delete" }));
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Delete Zoom decisions connection",
+    })
+  );
   const dialog = screen.getByRole("dialog");
   expect(
     within(dialog).getByText(
@@ -308,6 +326,6 @@ it("refetches a cached provider list that another page made stale", async () => 
     expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(5)
   );
   expect(
-    screen.queryByRole("button", { name: "Configure" })
+    screen.queryByRole("button", { name: /^Edit / })
   ).not.toBeInTheDocument();
 });

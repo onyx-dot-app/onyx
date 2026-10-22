@@ -93,10 +93,6 @@ export function useOutputCards(sessionId: string | null) {
     },
     [saveViewed]
   );
-  const markAllViewed = useCallback(
-    () => saveViewed(data ?? []),
-    [saveViewed, data]
-  );
 
   return {
     cards:
@@ -104,7 +100,7 @@ export function useOutputCards(sessionId: string | null) {
         ? EMPTY_OUTPUT_CARDS
         : (data ?? EMPTY_OUTPUT_CARDS),
     markViewed,
-    markAllViewed,
+    markAllViewed: saveViewed,
   };
 }
 

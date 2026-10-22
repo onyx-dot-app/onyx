@@ -197,6 +197,7 @@ function queryModelCard(
 
 const BRING_YOUR_OWN = "Advanced: bring your own model or proxy";
 const GRANITE = "ibm-granite/granite-embedding-97m-multilingual-r2";
+const BIFROST_MODEL = "openai/text-embedding-3-small";
 
 async function openModelPicker(user: ReturnType<typeof setupUser>) {
   await user.click(screen.getByRole("button", { name: "View All Models" }));
@@ -229,12 +230,14 @@ describe("IndexSettingsPage embedding model picker", () => {
             method: init?.method ?? "GET",
             body,
           });
-          if (
-            String(input).endsWith("/test-embedding") &&
-            body.model_name === failingTestModel
-          ) {
-            return new Response(JSON.stringify({ detail: "model retired" }), {
-              status: 400,
+          if (String(input).endsWith("/test-embedding")) {
+            if (body.model_name === failingTestModel) {
+              return new Response(JSON.stringify({ detail: "model retired" }), {
+                status: 400,
+              });
+            }
+            return new Response(JSON.stringify({ dimension: 1536 }), {
+              status: 200,
             });
           }
           return new Response("{}", { status: 200 });
@@ -333,6 +336,126 @@ describe("IndexSettingsPage embedding model picker", () => {
     expect(
       screen.getByRole("button", { name: "Add Custom Model" })
     ).toBeInTheDocument();
+  });
+
+  it("shows a connected Bifrost model as a selected card and names it in the banner", async () => {
+    setCurrentModel(
+      "text-embedding-3-small",
+      EmbeddingProviderName.OPENAI,
+      1536
+    );
+    configureProviders(EmbeddingProviderName.OPENAI);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+    await user.click(screen.getByRole("button", { name: BRING_YOUR_OWN }));
+    await user.click(
+      screen.getByText("Add configs for your Bifrost embedding providers.")
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /set up bifrost/i,
+    });
+    await user.type(
+      within(dialog).getByLabelText(/base url/i),
+      "http://bifrost:8080"
+    );
+    await user.type(
+      within(dialog).getByLabelText(/model name/i),
+      BIFROST_MODEL
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Connect" }));
+
+    const card = await screen.findByTestId(
+      `embedding-model-card:${EmbeddingProviderName.BIFROST}:${BIFROST_MODEL}`
+    );
+    expect(
+      within(card).getByRole("button", { name: "Selected" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Switching to Bifrost / ${BIFROST_MODEL}. A full re-index will run.`
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("opens the bring-your-own section on a current Bifrost model and shows its card", async () => {
+    setCurrentModel(BIFROST_MODEL, EmbeddingProviderName.BIFROST, 1536);
+    configureProviders(EmbeddingProviderName.BIFROST);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+
+    const toggle = screen.getByRole("button", { name: BRING_YOUR_OWN });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(modelCard(EmbeddingProviderName.BIFROST, BIFROST_MODEL)).getByRole(
+        "button",
+        { name: "Current Model" }
+      )
+    ).toBeInTheDocument();
+
+    // The admin can still fold it.
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      queryModelCard(EmbeddingProviderName.BIFROST, BIFROST_MODEL)
+    ).toBeNull();
+  });
+
+  it("finds a current bring-your-own model by its name", async () => {
+    setCurrentModel("acme/embed-v2", EmbeddingProviderName.LITELLM, 768);
+    configureProviders(EmbeddingProviderName.LITELLM);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+
+    await user.type(
+      screen.getByPlaceholderText("Search models..."),
+      "acme/embed"
+    );
+
+    expect(
+      within(
+        modelCard(EmbeddingProviderName.LITELLM, "acme/embed-v2")
+      ).getByRole("button", { name: "Current Model" })
+    ).toBeInTheDocument();
+  });
+
+  it("edits the staged spec when it has the current model's name", async () => {
+    const modelName = "acme/embed-v2";
+    setCurrentModel(modelName, EmbeddingProviderName.LITELLM, 768);
+    configureProviders(EmbeddingProviderName.LITELLM);
+    const user = setupUser();
+    render(<IndexSettingsPage />);
+    await openModelPicker(user);
+
+    await user.click(
+      screen.getByText("Add configs for your LiteLLM embedding providers.")
+    );
+    const createDialog = await screen.findByRole("dialog");
+    await user.type(
+      within(createDialog).getByLabelText(/api base url/i),
+      "https://litellm.example.com"
+    );
+    await user.type(within(createDialog).getByLabelText(/api key/i), "sk-new");
+    await user.type(
+      within(createDialog).getByLabelText(/model name/i),
+      modelName
+    );
+    const createDim = within(createDialog).getByLabelText(/model dimension/i);
+    await user.clear(createDim);
+    await user.type(createDim, "1024");
+    await user.click(
+      within(createDialog).getByRole("button", { name: "Connect" })
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Edit credentials" }));
+    const editDialog = await screen.findByRole("dialog");
+    expect(
+      within(editDialog).getByLabelText(/model dimension/i)
+    ).toHaveDisplayValue("1024");
   });
 
   it("keeps a current Azure deployment apart from the OpenAI model of the same name", async () => {

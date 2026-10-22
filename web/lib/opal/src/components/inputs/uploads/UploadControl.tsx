@@ -48,15 +48,17 @@ type UploadControlProps = UploadBaseProps & {
   onFiles: (files: File[]) => void;
   /** Clears the value: the ×, or Delete or Backspace on the control. */
   onClear: () => void;
-  /** A paste on the focused control, for an input that takes text. */
-  onPaste?: (event: React.ClipboardEvent<HTMLButtonElement>) => void;
+  /** Receives a paste without files on the focused control, for an input
+   * that takes text. */
+  onPasteText?: (text: string) => void;
 };
 
 /**
  * `InputSingleUpload`'s control: the input chrome with no caret, showing one
- * value's label. A click (or Enter or Space) opens the file picker, and a
- * file can be dropped on it (see `useUploadTarget`). With a value, the × at
- * the end, or Delete or Backspace, clears it.
+ * value's label. A click focuses it, so a copied file can be pasted; a double
+ * click (or Enter or Space) opens the file picker, and a file can be dropped
+ * on it (see `useUploadTarget`). With a value, the × at the end, or Delete or
+ * Backspace, clears it.
  */
 export default function UploadControl({
   variant = "primary",
@@ -72,7 +74,7 @@ export default function UploadControl({
   dropOverValue,
   onFiles,
   onClear,
-  onPaste,
+  onPasteText,
   ...rest
 }: UploadControlProps) {
   const strings = useOpalStrings();
@@ -88,6 +90,7 @@ export default function UploadControl({
       maxSizeKb,
       onFileSizeExceeded,
       onFiles,
+      onPasteText,
       focusTarget: () => triggerRef.current?.focus(),
     });
 
@@ -118,12 +121,19 @@ export default function UploadControl({
           disabled={isNonEditable}
           data-testid={rest["data-testid"]}
           className="opal-input-upload-trigger"
-          onClick={openFilePicker}
+          // A click only focuses, as some browsers do not focus a clicked
+          // button, so a copied file can be pasted next.
+          onClick={() => triggerRef.current?.focus()}
+          onDoubleClick={openFilePicker}
           ref={triggerRef}
-          onPaste={(e) => {
-            if (!isNonEditable) onPaste?.(e);
-          }}
           onKeyDown={(e) => {
+            // Enter and Space open the picker: the click they would send
+            // only focuses.
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openFilePicker();
+              return;
+            }
             // Delete or Backspace clears the value, as the × does.
             if (e.key !== "Delete" && e.key !== "Backspace") return;
             if (!hasValue) return;

@@ -1252,7 +1252,7 @@
     "decisionModels": {
       "sharedModelSettings": "Manage chat settings in Language Models",
       "decisionModel": {
-        "title": "Decision model",
+        "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
         "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
         "clear": "Clear",
@@ -1268,14 +1268,10 @@
         "title": "Providers",
         "description": "Connect a provider or manage its decision models.",
         "clearBeforeRemoval": "Clear the selected decision model before removing this provider.",
-        "edit": "Configure",
         "connect": "Connect"
       },
       "loadFailed": "Could not load decision models.",
       "retry": "Try again",
-      "saveFailed": "Could not save the connection.",
-      "cancel": "Cancel",
-      "save": "Save",
       "zoom": {
         "title": "Connect Zoom AI Services",
         "description": "Use one connection for Zoom Scribe and Zoom AI Decisions. Changes apply to both.",
@@ -2261,9 +2257,6 @@
         "description": "Automatically scroll to new content as chat generates response. Users can override this in their personal settings.",
         "title": "Chat Auto-Scroll"
       },
-      "betaTag": {
-        "label": "beta"
-      },
       "connectors": {
         "description": "Sources that Internal Search uses in chat. Add or change them on the indexing status page.",
         "empty": {
@@ -2857,7 +2850,10 @@
         "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
         "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
-        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing.",
+        "targetedReindexRunning": "Retrying {count, plural, one {# error} other {# errors}}…",
+        "targetedReindexDone": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved.",
+        "targetedReindexPartial": "Retry finished. {resolved, plural, one {# error} other {# errors}} resolved, {failing, plural, one {# document} other {# documents}} still failing.",
+        "targetedReindexIncomplete": "The retry did not finish. Unresolved errors stay in the list.",
         "checkFrequencyUpdated": "Connector check frequency updated successfully",
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
@@ -3165,6 +3161,7 @@
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
           "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
@@ -3186,9 +3183,9 @@
           "title": "Couldn't load the activity."
         },
         "docs": {
-          "title": "Failed documents",
+          "title": "Failed items",
           "search": {
-            "placeholder": "Search documents…"
+            "placeholder": "Search items…"
           },
           "resolveAll": "Retry all",
           "resolveAllTooltip": "Re-index every failed document of this run",
@@ -3198,8 +3195,8 @@
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
-          "empty": "No open document errors",
-          "loadError": "Couldn't load the failed documents.",
+          "empty": "No open errors",
+          "loadError": "Couldn't load the failed items.",
           "open": "Open the document"
         },
         "trace": {
@@ -3256,7 +3253,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "OneDrive files to index",
+          "label": "OneDrive Files to Index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -3275,7 +3272,7 @@
           "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
-          "label": "Treat organization links as public",
+          "label": "Treat Organization Links as Public",
           "description": "Treat files shared through an organization-wide link as visible to all Onyx users."
         },
         "authorityHost": {
@@ -3616,7 +3613,7 @@
         }
       },
       "content": {
-        "title": "Connector Content",
+        "title": "Index Configurations",
         "description": "Select content to index for this connector."
       },
       "selectInput": {
@@ -3670,7 +3667,8 @@
       "settings": {
         "description": "Connector information and access.",
         "displayName": {
-          "title": "Connector Display Name"
+          "title": "Display Name",
+          "placeholder": "Add a display name"
         },
         "documentAccess": {
           "description": "Control who can access documents indexed by this connector.",
@@ -3729,7 +3727,7 @@
               "label": "Include Attachments"
             },
             "scoped_token": {
-              "label": "This is an API token with scopes",
+              "label": "Scoped API Token",
               "description": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
             }
           }
@@ -3753,15 +3751,15 @@
               "description": "Index every session the members of one Zoom Group host, of the types ticked below. Zoom re-reads the member list on every run, so a joiner or leaver is picked up without editing this connector."
             },
             "include_meetings": {
-              "label": "Include meetings",
+              "label": "Include Meetings",
               "description": "Applies to Host Emails and Zoom Group. The ID lists above already say which type each ID is."
             },
             "include_webinars": {
-              "label": "Include webinars",
+              "label": "Include Webinars",
               "description": "Applies to Host Emails and Zoom Group. Webinars also need the Webinar add-on, enabled for the host."
             },
             "treat_link_access_as_public": {
-              "label": "Treat link access as public",
+              "label": "Treat Link Access as Public",
               "description": "Only matters with permission sync. When on, a recording whose Link access is \"Anyone with the link\" or a signed-in rule is visible to all Onyx users, and a domain rule to users of those domains. When off, every transcript is visible to the recording's owner alone, because Zoom cannot say who is in \"People with access\"."
             },
             "plan_tier": {
@@ -3796,7 +3794,7 @@
               }
             },
             "scroll_before_scraping": {
-              "label": "Scroll before scraping",
+              "label": "Scroll Before Scraping",
               "description": "Enable if the website requires scrolling for the desired content to load"
             },
             "url_rewrites": {
@@ -3813,7 +3811,7 @@
           "description": "Configure LumApps connector",
           "fields": {
             "base_url": {
-              "label": "API Base URL (cell host)",
+              "label": "API Base URL (Cell Host)",
               "description": "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com)."
             },
             "organization_id": {
@@ -3821,7 +3819,7 @@
               "description": "Your LumApps organization id (numeric)."
             },
             "instance_ids": {
-              "label": "Instance (site) IDs",
+              "label": "Instance (Site) IDs",
               "description": "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user."
             },
             "custom_content_types": {
@@ -3856,13 +3854,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "Repository Owner"
+              "label": "Repository Owner",
+              "placeholder": "Specify a repository owner"
             },
             "github_mode": {
-              "label": "GitHub content to index",
               "tabs": {
                 "repo": {
-                  "label": "Specific Repository"
+                  "label": "Specific Repositories"
                 },
                 "everything": {
                   "label": "Everything"
@@ -3870,15 +3868,15 @@
               }
             },
             "repositories": {
-              "label": "Repository Name(s)",
-              "description": "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)"
+              "label": "Repository Names",
+              "placeholder": "Add a repository name"
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all repositories the provided credentials have access to!"
+              "label": "Index Everything",
+              "description": "Onyx will index all repositories found for the owner {owner}."
             },
             "include_prs": {
-              "label": "Include pull requests",
+              "label": "Include Pull Requests",
               "description": "Index pull requests from repositories"
             },
             "include_issues": {
@@ -3891,7 +3889,8 @@
             },
             "branch": {
               "label": "Branch",
-              "description": "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately."
+              "description": "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+              "placeholder": "Add a branch name"
             }
           }
         },
@@ -3952,7 +3951,7 @@
               "description": "The Bitbucket workspace to index (e.g., \"atlassian\" from https://bitbucket.org/atlassian/workspace )."
             },
             "bitbucket_mode": {
-              "label": "Bitbucket content to index",
+              "label": "Bitbucket Content to Index",
               "tabs": {
                 "repo": {
                   "label": "Specific Repositories"
@@ -3974,8 +3973,8 @@
               "description": "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Workspace",
-              "description": "This connector will index all repositories in the workspace."
+              "label": "Indexes every repository in the workspace",
+              "description": "Onyx indexes all repositories in the workspace that the selected account can read. To index fewer, choose another tab."
             }
           }
         },
@@ -3992,7 +3991,7 @@
           "description": "Configure Google Drive connector",
           "fields": {
             "credential_kind": {
-              "label": "Credential kind"
+              "label": "Credential Kind"
             },
             "indexing_scope": {
               "tabs": {
@@ -4005,7 +4004,7 @@
               }
             },
             "include_shared_drives": {
-              "label": "Include shared drives",
+              "label": "Include Shared Drives",
               "description": {
                 "oauth": "This will allow Onyx to index everything in the shared drives you have access to.",
                 "serviceAccount": "This will allow Onyx to index everything in your Organization's shared drives."
@@ -4023,7 +4022,7 @@
             },
             "include_files_shared_with_me": {
               "description": "This will allow Onyx to index all files shared with you.",
-              "label": "Include All Files Shared With You"
+              "label": "Include All Files Shared with You"
             },
             "shared_drive_urls": {
               "description": {
@@ -4045,7 +4044,7 @@
               "label": "Specific User Emails"
             },
             "exclude_domain_link_only": {
-              "label": "Hide domain link-only files",
+              "label": "Hide Domain Link-Only Files",
               "description": "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access."
             }
           }
@@ -4099,8 +4098,8 @@
               }
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all pages the provided credentials have access to!"
+              "label": "Indexes every page the account can read",
+              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
             },
             "space": {
               "label": "Space Key",
@@ -4142,8 +4141,8 @@
               }
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all issues the provided credentials have access to!"
+              "label": "Indexes every issue the account can read",
+              "description": "Onyx indexes all issues in every project that the selected account can read. To index fewer, choose another tab."
             },
             "project_key": {
               "label": "Project Key",
@@ -4199,7 +4198,7 @@
               "description": "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified."
             },
             "treat_sharing_link_as_public": {
-              "label": "Treat sharing links as public",
+              "label": "Treat Sharing Links as Public",
               "description": "When enabled, documents with a sharing link (anonymous or organization-wide) are treated as public (visible to all Onyx users). When disabled, only users and groups with explicit role assignments can see the document."
             },
             "excluded_sites": {
@@ -4319,7 +4318,7 @@
               "description": "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )"
             },
             "indexing_scope": {
-              "label": "Drupal Wiki content to index",
+              "label": "Drupal Wiki Content to Index",
               "tabs": {
                 "everything": {
                   "label": "Everything"
@@ -4330,8 +4329,8 @@
               }
             },
             "everything_description": {
-              "label": "Everything",
-              "description": "This connector will index all spaces the provided credentials have access to!"
+              "label": "Indexes every space the account can read",
+              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
             },
             "spaces": {
               "label": "Space IDs",
@@ -4627,7 +4626,7 @@
               "description": "Input a valid Wikipedia language code (e.g. 'en', 'es')"
             },
             "categories": {
-              "label": "Categories to index",
+              "label": "Categories to Index",
               "description": "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
             },
             "pages": {
@@ -4677,7 +4676,7 @@
               "label": "MediaWiki Site URL"
             },
             "categories": {
-              "label": "Categories to index",
+              "label": "Categories to Index",
               "description": "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
             },
             "pages": {
@@ -4728,7 +4727,7 @@
               "description": "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization."
             },
             "experiment_row_lookback_days": {
-              "label": "Experiment Row Lookback (days)",
+              "label": "Experiment Row Lookback (Days)",
               "description": "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments."
             }
           }
@@ -4760,7 +4759,7 @@
           "description": "Configure Airtable connector",
           "fields": {
             "airtable_scope": {
-              "label": "Airtable content to index",
+              "label": "Airtable Content to Index",
               "tabs": {
                 "everything": {
                   "label": "Everything"
@@ -4771,8 +4770,8 @@
               }
             },
             "everything_description": {
-              "label": "Everything",
-              "description": "This connector will automatically discover and index all bases and tables accessible by your API token."
+              "label": "Indexes every base the token can read",
+              "description": "Onyx finds and indexes all bases and tables that the API token can read. To index fewer, choose another tab."
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4783,7 +4782,7 @@
               "description": "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83."
             },
             "treat_all_non_attachment_fields_as_metadata": {
-              "label": "Treat all fields except attachments as metadata",
+              "label": "Treat All Fields Except Attachments as Metadata",
               "description": "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments."
             }
           }
@@ -4796,7 +4795,7 @@
               "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
-              "label": "Highspot content to index",
+              "label": "Highspot Content to Index",
               "tabs": {
                 "spots": {
                   "label": "Specific Spots"
@@ -4811,8 +4810,8 @@
               "description": "For multiple spots, enter your spot one by one."
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all spots the provided credentials have access to!"
+              "label": "Indexes every spot the account can read",
+              "description": "Onyx indexes all spots that the selected account can read. To index fewer, choose another tab."
             }
           }
         },
@@ -4952,9 +4951,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft is off for everyone. Toggle individual users below."
         },
@@ -6835,6 +6831,10 @@
           "description": "Stop generating context for new and updated documents now, or rebuild all documents to also remove the context already generated.",
           "title": "Choose how to turn off Contextual Retrieval"
         },
+        "contextualEnableOnly": {
+          "description": "Generate context for new and updated documents from now on, or rebuild all documents so every document gets context.",
+          "title": "Choose how to turn on Contextual Retrieval"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"
@@ -6861,6 +6861,9 @@
         "reindex": {
           "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "A full re-index will run."
+        },
+        "reindexModel": {
+          "title": "Switching to {provider} / {model}. A full re-index will run."
         }
       },
       "cloudDisabled": {
@@ -6962,6 +6965,10 @@
       "disableForwardModal": {
         "description": "Contextual Retrieval stops for documents added or updated from now on. Existing documents keep the context already generated until they are updated or you re-index.",
         "title": "Turn off Contextual Retrieval going forward"
+      },
+      "enableForwardModal": {
+        "description": "Contextual Retrieval starts for documents added or updated from now on. Existing documents stay as they are until they are updated or you re-index, so contextual enrichment can differ between documents.",
+        "title": "Turn on Contextual Retrieval going forward"
       },
       "header": {
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
@@ -7191,6 +7198,8 @@
         "contextualModelUpdated": "Contextual Retrieval LLM updated",
         "contextualRetrievalDisableFailed": "Failed to turn off Contextual Retrieval",
         "contextualRetrievalDisabled": "Contextual Retrieval turned off",
+        "contextualRetrievalEnableFailed": "Failed to turn on Contextual Retrieval",
+        "contextualRetrievalEnabled": "Contextual Retrieval turned on",
         "modelNotFound": "Could not find the selected model",
         "providerResolveFailed": "Could not resolve provider",
         "reindexCanceled": "Re-indexing canceled",
@@ -8607,7 +8616,7 @@
           },
           "title": "SSRF Protection",
           "validateAll": {
-            "description": "Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors.",
+            "description": "Most restrictive. Outbound requests, including web connectors, cannot reach private or internal IPs. Exception: custom tools can still reach private network addresses. Loopback, link-local and cloud metadata stay blocked.",
             "label": "Validate All Requests"
           },
           "validateLlm": {
@@ -10315,7 +10324,7 @@
         "copyButton": {
           "label": "Copy password"
         },
-        "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately.",
+        "description": "This will generate a new random password for <strong>{email}</strong>. Their current password will stop working immediately. They will be signed out of all sessions, and their personal access tokens will be revoked.",
         "doneButton": {
           "label": "Done"
         },
@@ -12041,6 +12050,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Could not start a new chat. Try again."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
       },
@@ -12542,6 +12554,9 @@
         },
         "runningStatus": {
           "text": "{toolName} running..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} could not reach its server"
         },
         "waitingIndicator": {
           "text": "Waiting for response..."
@@ -13584,9 +13599,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "Add New"
-      },
       "removeButton": {
         "tooltip": "Remove"
       }
@@ -14116,7 +14128,10 @@
       "upgrade": {
         "label": "Upgrade Plan"
       },
-      "availableFor": "Available for {plan}"
+      "availableFor": "Available for {plan}",
+      "beta": {
+        "title": "beta"
+      }
     },
     "placeholders": {
       "email": "email@yourcompany.com",
@@ -14147,6 +14162,9 @@
       "globalDefault": {
         "label": "Global Default"
       }
+    },
+    "appFooter": {
+      "slogan": "Open Source AI Platform"
     }
   },
   "craft": {
@@ -14566,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Cannot preview file"
+        "title": "Preview for this file type is not currently supported"
       },
       "error": {
         "inline": "Error: {message}",
-        "title": "Error loading file"
+        "title": "Unable to load preview",
+        "description": "The preview could not be loaded. Try again or download the file to open it."
       },
       "loading": {
         "label": "Loading file..."
@@ -14583,10 +14602,25 @@
         "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
       },
       "imageTooLarge": {
-        "description": "This image is too large to preview. Download the original to open it."
+        "description": "Images up to 10 MB can be previewed. Download the file to open it.",
+        "title": "Image too large to preview"
       },
       "unsupported": {
-        "description": "Download the original to open it."
+        "description": "Download the file to view its contents."
+      },
+      "retry": {
+        "label": "Try again"
+      },
+      "download": {
+        "label": "Download file"
+      },
+      "tooLarge": {
+        "title": "File too large to preview",
+        "description": "Files up to {size, number} MB can be previewed here. Download the file to open it."
+      },
+      "playback": {
+        "title": "Playback not supported",
+        "description": "Your browser cannot play this file. Download the file to open it."
       }
     },
     "filesTab": {
@@ -15980,6 +16014,10 @@
     },
     "toast": {
       "moreCount": "+{count} more"
+    },
+    "sidebar": {
+      "open": "Open Sidebar",
+      "close": "Close Sidebar"
     }
   },
   "settings": {
@@ -16001,6 +16039,7 @@
         "currentPassword": {
           "title": "Current Password"
         },
+        "description": "Your other sessions will be signed out, and your personal access tokens will be revoked.",
         "newPassword": {
           "title": "New Password"
         },
@@ -16589,9 +16628,6 @@
       },
       "searchInput": {
         "placeholder": "Search..."
-      },
-      "betaTag": {
-        "label": "Beta"
       }
     },
     "appSidebar": {
@@ -16603,8 +16639,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "Business",
-        "betaTag": "Beta"
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explore Agents"

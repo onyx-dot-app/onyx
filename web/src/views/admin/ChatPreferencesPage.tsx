@@ -3,6 +3,7 @@
 import { parseErrorDetail } from "@/lib/fetcher";
 
 import {
+  useBetaTag,
   usePlans,
   useTierAtLeast,
   useTierLockedOptions,
@@ -613,6 +614,7 @@ function RetentionField({
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
   const plans = usePlans();
+  const betaTag = useBetaTag();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
@@ -807,11 +809,7 @@ export default function ChatPreferencesPage() {
               only its switch is locked. */}
               <InputHorizontal
                 title={t("searchMode.title")}
-                tag={
-                  !businessTier
-                    ? plans[Tier.BUSINESS].tag
-                    : { title: t("betaTag.label"), color: "blue" }
-                }
+                tag={!businessTier ? plans[Tier.BUSINESS].tag : betaTag}
                 description={t("searchMode.description")}
                 withLabel
               >

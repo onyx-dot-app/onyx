@@ -35,7 +35,7 @@ interface OutputsTabProps {
   searchQuery?: string;
   onFileOpen: (path: string, fileName: string) => void;
   outputCards?: readonly OutputCard[];
-  onMarkAllViewed?: () => Promise<void>;
+  onMarkAllViewed?: (cards: readonly OutputCard[]) => Promise<void>;
   turnIndex?: number | null;
   onTurnChange?: (turnIndex: number | null) => void;
   onAppOpen?: (output: OutputCard) => void;
@@ -220,6 +220,18 @@ function OutputsBrowser({
         turnT("appTitle").toLocaleLowerCase().includes(query))
   );
 
+  const visiblePaths = new Set(visibleFiles.map((file) => file.path));
+  for (const file of scoped) {
+    if (folders.some((name) => file.path.startsWith(`${prefix}${name}/`)))
+      visiblePaths.add(file.path);
+  }
+  const unreadInView = cards.filter(
+    (card) =>
+      !card.deleted &&
+      (card.viewed_revision ?? 0) < card.revision &&
+      (card.kind === "app" ? apps.includes(card) : visiblePaths.has(card.path))
+  );
+
   return (
     <WorkspaceHome title={t("home.description")} wide>
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
@@ -265,19 +277,13 @@ function OutputsBrowser({
             <Button
               prominence="tertiary"
               size="xs"
-              disabled={
-                markingViewed ||
-                !cards.some(
-                  (card) =>
-                    !card.deleted && (card.viewed_revision ?? 0) < card.revision
-                )
-              }
+              disabled={markingViewed || unreadInView.length === 0}
               aria-busy={markingViewed}
               onClick={async () => {
                 if (markingViewed) return;
                 setMarkingViewed(true);
                 try {
-                  await onMarkAllViewed();
+                  await onMarkAllViewed(unreadInView);
                 } catch {
                   toast.error(t("markAllViewed.error"));
                 } finally {

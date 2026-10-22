@@ -67,7 +67,12 @@ password change (`POST /password/change-password`) signs out the user's other
 sessions and keeps the current one (`UserManager.revoke_sessions`). Redis keeps
 a per-user set of session tokens for this; Postgres deletes `AccessToken` rows.
 A refresh never extends or replaces a revoked session. JWT sessions stay valid
-until expiry.
+until expiry. Every password reset or change (admin reset, self-service change,
+and the forgot-password token flow) also revokes all of the user's PATs, Craft
+sandbox PATs included, in the same commit as the new password hash
+(`UserManager._update`, `db/pat.py:revoke_all_pats_for_user__no_commit`). A
+running Craft sandbox gets a new PAT at its next reservation
+(`reserve_sandbox__no_commit`). API keys are not affected.
 Native mobile clients get the same session in a header instead of a cookie
 (`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public
@@ -346,6 +351,9 @@ Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
           MALFORMED, stashed in a ContextVar, turned into a reasoned
           OnyxError (SESSION_EXPIRED / SESSION_TERMINATED /
           SESSION_UNRECOGNIZED) only once auth has conclusively failed
+Web    → useSessionWatcher (web/src/lib/auth/hooks.ts) shows the session-ended
+         modal on a 403 from /api/me; chat create/send refetch /api/me when
+         they get a session 403 (isSessionEndedResponse, lib/auth/utils.ts)
 ```
 
 ### 4.7 Non-human auth: API key, PAT, SCIM
@@ -515,6 +523,12 @@ That route consumes the test attempt, exchanges the code, and discards the token
 It returns success and the PKCE setting used, without saving configuration or user tokens.
 Both test endpoints require action-management permission; the popup marker grants no access.
 Provider consent can still create a grant, even though Onyx discards the tokens.
+
+### Proxy request authority
+
+The deployment nginx templates forward the incoming Host header, including its port, to upstream services.
+They overwrite X-Forwarded-Host with that same value. This preserves public origins for generated URLs and preview policies.
+The CLI embeds generated copies of these templates. Run `ods generate-compose --write` after changing them.
 
 ## 5. Contracts and invariants
 

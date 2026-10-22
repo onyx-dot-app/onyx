@@ -83,6 +83,13 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - Keys are stable identifiers: `<namespace>.<section>.<element>.<role>` in camelCase, for example
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.
+- Use title case for English setting titles: field labels and the titles of settings sections and
+  cards (`Include Pull Requests`, `Categories to Index`). Keep articles, short conjunctions and
+  prepositions in lowercase, except as the first or last word. Do not change brand or acronym casing
+  (`GitHub`, `API`). Use sentence case for placeholders, descriptions, messages and errors. A
+  placeholder prompts the action and does not repeat the field's title (`Add a display name`, not
+  `Display name`). A change in letter case only needs no new translation; the `i18n-copy-changes`
+  hook ignores it.
 - Dates and numbers: `useFormatter` and `useLocale`, not hard-coded `"en-US"`.
 - New styles use logical properties (`ms-`, `pe-`, `start-`) instead of `ml-`, `pr-`, `left-`.
 

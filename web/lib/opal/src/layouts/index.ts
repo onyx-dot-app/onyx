@@ -44,6 +44,12 @@ export {
   type IllustrationContentProps,
 } from "@opal/layouts/illustration-content/components";
 
+/* CardGrid */
+export {
+  CardGrid,
+  type CardGridProps,
+} from "@opal/layouts/card-grid/components";
+
 /* Section (general layout primitive) */
 export {
   Section,

@@ -1268,14 +1268,10 @@
         "title": "提供商",
         "description": "连接提供商或管理其决策模型。",
         "clearBeforeRemoval": "移除此提供商前，请先清除已选的决策模型。",
-        "edit": "配置",
         "connect": "连接"
       },
       "loadFailed": "无法加载决策模型。",
       "retry": "重试",
-      "saveFailed": "无法保存连接。",
-      "cancel": "取消",
-      "save": "保存",
       "zoom": {
         "title": "连接 Zoom AI Services",
         "description": "Zoom Scribe 和 Zoom AI Decisions 共用一个连接。更改会同时应用于两者。",
@@ -2261,9 +2257,6 @@
         "description": "在对话生成回复时自动滚动到新内容。用户可以在个人设置中覆盖此项。",
         "title": "对话自动滚动"
       },
-      "betaTag": {
-        "label": "测试版"
-      },
       "connectors": {
         "description": "聊天中内部搜索使用的来源。请在索引状态页面添加或更改。",
         "empty": {
@@ -2857,7 +2850,10 @@
         "refreshFrequencyUpdateFailed": "更新连接器刷新频率失败",
         "refreshFrequencyUpdated": "已成功更新连接器刷新频率",
         "targetedReindexFailed": "定向重新索引失败：{message}",
-        "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。",
+        "targetedReindexRunning": "正在重试 {count, plural, one {# 个错误} other {# 个错误}}…",
+        "targetedReindexDone": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}。",
+        "targetedReindexPartial": "重试完成。已解决 {resolved, plural, one {# 个错误} other {# 个错误}}，仍有 {failing, plural, one {# 个文档} other {# 个文档}} 失败。",
+        "targetedReindexIncomplete": "重试未完成。未解决的错误仍保留在列表中。",
         "checkFrequencyUpdated": "连接器检查频率已更新",
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "已标记为已解决。",
@@ -3165,6 +3161,7 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
+          "indexingItems": "{count, plural, other {# 个项目失败}}",
           "doc_permission_sync": "{count, plural, other {# 个文档的权限同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
@@ -3186,9 +3183,9 @@
           "title": "无法加载活动。"
         },
         "docs": {
-          "title": "失败的文档",
+          "title": "失败的项目",
           "search": {
-            "placeholder": "搜索文档…"
+            "placeholder": "搜索项目…"
           },
           "resolveAll": "全部重试",
           "resolveAllTooltip": "重新索引此运行中所有失败的文档",
@@ -3198,8 +3195,8 @@
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",
-          "empty": "没有未解决的文档错误",
-          "loadError": "无法加载失败的文档。",
+          "empty": "没有未解决的错误",
+          "loadError": "无法加载失败的项目。",
           "open": "打开文档"
         },
         "trace": {
@@ -3616,7 +3613,7 @@
         }
       },
       "content": {
-        "title": "连接器内容",
+        "title": "索引配置",
         "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
@@ -3670,7 +3667,8 @@
       "settings": {
         "description": "连接器信息与访问权限。",
         "displayName": {
-          "title": "连接器显示名称"
+          "title": "显示名称",
+          "placeholder": "添加显示名称"
         },
         "documentAccess": {
           "description": "控制谁可以访问此连接器索引的文档。",
@@ -3729,7 +3727,7 @@
               "label": "包含附件"
             },
             "scoped_token": {
-              "label": "这是带作用域的 API 令牌",
+              "label": "带作用域的 API 令牌",
               "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。使用经典令牌时请保持关闭。"
             }
           }
@@ -3856,13 +3854,13 @@
               "placeholder": "https://github.example.com"
             },
             "repo_owner": {
-              "label": "仓库所有者"
+              "label": "仓库所有者",
+              "placeholder": "指定仓库所有者"
             },
             "github_mode": {
-              "label": "要索引的 GitHub 内容",
               "tabs": {
                 "repo": {
-                  "label": "指定仓库"
+                  "label": "指定的仓库"
                 },
                 "everything": {
                   "label": "全部"
@@ -3870,12 +3868,12 @@
               }
             },
             "repositories": {
-              "label": "仓库名称",
-              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+              "label": "仓库名称列表",
+              "placeholder": "添加仓库名称"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有仓库！"
+              "label": "索引全部",
+              "description": "Onyx 将索引为所有者 {owner} 找到的所有仓库。"
             },
             "include_prs": {
               "label": "包含拉取请求",
@@ -3891,7 +3889,8 @@
             },
             "branch": {
               "label": "分支",
-              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。"
+              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。",
+              "placeholder": "添加分支名称"
             }
           }
         },
@@ -3974,8 +3973,8 @@
               "description": "一个或多个 Bitbucket 项目键（以逗号分隔），用于索引这些项目中的所有仓库（例如 PROJ1,PROJ2）"
             },
             "workspace_tab": {
-              "label": "工作区",
-              "description": "此连接器将索引工作区中的所有仓库。"
+              "label": "索引工作区中的所有仓库",
+              "description": "Onyx 会索引工作区中所选账户可读取的全部仓库。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -4099,8 +4098,8 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有页面！"
+              "label": "索引该账户可读取的所有页面",
+              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
             },
             "space": {
               "label": "空间键",
@@ -4142,8 +4141,8 @@
               }
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有议题！"
+              "label": "索引该账户可读取的所有问题",
+              "description": "Onyx 会索引所选账户可读取的每个项目中的全部问题。如需缩小范围，请选择其他标签页。"
             },
             "project_key": {
               "label": "项目键",
@@ -4330,8 +4329,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有空间！"
+              "label": "索引该账户可读取的所有空间",
+              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
             },
             "spaces": {
               "label": "空间 ID",
@@ -4771,8 +4770,8 @@
               }
             },
             "everything_description": {
-              "label": "全部",
-              "description": "此连接器将自动发现并索引您的 API 令牌可访问的所有基础和数据表。"
+              "label": "索引该令牌可读取的所有 Base",
+              "description": "Onyx 会查找并索引 API 令牌可读取的全部 Base 和表。如需缩小范围，请选择其他标签页。"
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4811,8 +4810,8 @@
               "description": "如有多个 Spot，请逐个输入。"
             },
             "everything": {
-              "label": "全部",
-              "description": "此连接器将索引所提供凭据有权访问的所有 Spot！"
+              "label": "索引该账户可读取的所有 Spot",
+              "description": "Onyx 会索引所选账户可读取的全部 Spot。如需缩小范围，请选择其他标签页。"
             }
           }
         },
@@ -4952,9 +4951,6 @@
         }
       },
       "defaultToggle": {
-        "betaTag": {
-          "label": "beta"
-        },
         "disabled": {
           "description": "Craft 对所有人关闭。可在下方逐个用户切换。"
         },
@@ -6835,6 +6831,10 @@
           "description": "立即停止为新增和更新的文档生成上下文，或者重建所有文档以同时移除已生成的上下文。",
           "title": "选择关闭上下文检索的方式"
         },
+        "contextualEnableOnly": {
+          "description": "从现在起为新增和更新的文档生成上下文，或者重建所有文档，使每个文档都获得上下文。",
+          "title": "选择开启上下文检索的方式"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -6861,6 +6861,9 @@
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
+        },
+        "reindexModel": {
+          "title": "正在切换到 {provider} / {model}。将运行完整的重新索引。"
         }
       },
       "cloudDisabled": {
@@ -6962,6 +6965,10 @@
       "disableForwardModal": {
         "description": "此后新增或更新的文档将不再使用上下文检索。现有文档会保留已生成的上下文，直到它们被更新或您重新索引。",
         "title": "今后关闭上下文检索"
+      },
+      "enableForwardModal": {
+        "description": "此后新增或更新的文档将开始使用上下文检索。现有文档会保持原样，直到它们被更新或您重新索引，因此各文档的上下文增强可能不同。",
+        "title": "今后开启上下文检索"
       },
       "header": {
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
@@ -7191,6 +7198,8 @@
         "contextualModelUpdated": "已更新上下文检索 LLM",
         "contextualRetrievalDisableFailed": "关闭上下文检索失败",
         "contextualRetrievalDisabled": "已关闭上下文检索",
+        "contextualRetrievalEnableFailed": "开启上下文检索失败",
+        "contextualRetrievalEnabled": "已开启上下文检索",
         "modelNotFound": "找不到所选模型",
         "providerResolveFailed": "无法解析提供商",
         "reindexCanceled": "已取消重新索引",
@@ -8607,7 +8616,7 @@
           },
           "title": "SSRF 防护",
           "validateAll": {
-            "description": "限制最严格。所有出站请求（包括网页连接器）都不能访问私有或内部 IP。",
+            "description": "限制最严格。出站请求（包括网页连接器）不能访问私有或内部 IP。例外：自定义工具仍可访问私有网络地址。环回、链路本地和云元数据地址仍被阻止。",
             "label": "验证所有请求"
           },
           "validateLlm": {
@@ -10315,7 +10324,7 @@
         "copyButton": {
           "label": "复制密码"
         },
-        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。",
+        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。该用户将退出所有会话，其个人访问 token 将被吊销。",
         "doneButton": {
           "label": "完成"
         },
@@ -12041,6 +12050,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "无法开始新聊天。请重试。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
@@ -12542,6 +12554,9 @@
         },
         "runningStatus": {
           "text": "{toolName} 正在运行..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} 无法连接到其服务器"
         },
         "waitingIndicator": {
           "text": "正在等待响应..."
@@ -13584,9 +13599,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "新增"
-      },
       "removeButton": {
         "tooltip": "移除"
       }
@@ -14116,7 +14128,10 @@
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用"
+      "availableFor": "{plan}可用",
+      "beta": {
+        "title": "测试版"
+      }
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -14147,6 +14162,9 @@
       "globalDefault": {
         "label": "全局默认"
       }
+    },
+    "appFooter": {
+      "slogan": "开源 AI 平台"
     }
   },
   "craft": {
@@ -14566,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "无法预览文件"
+        "title": "暂不支持预览此文件类型"
       },
       "error": {
         "inline": "错误：{message}",
-        "title": "加载文件出错"
+        "title": "无法加载预览",
+        "description": "未能加载预览。请重试或下载文件后打开。"
       },
       "loading": {
         "label": "正在加载文件..."
@@ -14583,10 +14602,25 @@
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       },
       "imageTooLarge": {
-        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+        "description": "支持预览最大 10 MB 的图片。请下载文件后打开。",
+        "title": "图片过大，无法预览"
       },
       "unsupported": {
-        "description": "此文件无法预览。请下载原文件后打开。"
+        "description": "下载文件以查看其内容。"
+      },
+      "retry": {
+        "label": "重试"
+      },
+      "download": {
+        "label": "下载文件"
+      },
+      "tooLarge": {
+        "title": "文件过大，无法预览",
+        "description": "此处支持预览最大 {size, number} MB 的文件。请下载文件后打开。"
+      },
+      "playback": {
+        "title": "暂不支持播放",
+        "description": "您的浏览器无法播放此文件。请下载文件后打开。"
       }
     },
     "filesTab": {
@@ -15980,6 +16014,10 @@
     },
     "toast": {
       "moreCount": "还有 {count} 条"
+    },
+    "sidebar": {
+      "open": "打开侧边栏",
+      "close": "关闭侧边栏"
     }
   },
   "settings": {
@@ -16001,6 +16039,7 @@
         "currentPassword": {
           "title": "当前密码"
         },
+        "description": "您的其他会话将退出登录，您的个人访问 token 将被吊销。",
         "newPassword": {
           "title": "新密码"
         },
@@ -16589,9 +16628,6 @@
       },
       "searchInput": {
         "placeholder": "搜索…"
-      },
-      "betaTag": {
-        "label": "测试版"
       }
     },
     "appSidebar": {
@@ -16603,8 +16639,7 @@
       },
       "craft": {
         "label": "Craft",
-        "businessTag": "商业版",
-        "betaTag": "测试版"
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"

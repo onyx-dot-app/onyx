@@ -30,6 +30,7 @@ from onyx.server.features.build.scheduled_tasks.api import (
 )
 from onyx.server.features.build.session.api import router as sessions_router
 from onyx.server.features.build.session.messages import router as messages_router
+from onyx.server.features.build.static_preview import router as static_preview_router
 from onyx.server.features.build.user_library.api import router as user_library_router
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.utils.logger import setup_logger
@@ -74,6 +75,7 @@ def get_base_instructions(
 
 
 router.include_router(sessions_router, tags=["build"])
+router.include_router(static_preview_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
 router.include_router(turns_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
