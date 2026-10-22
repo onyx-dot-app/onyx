@@ -13582,9 +13582,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "Ajouter"
-      },
       "removeButton": {
         "tooltip": "Retirer"
       }

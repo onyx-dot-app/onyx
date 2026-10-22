@@ -13582,9 +13582,6 @@
   },
   "common": {
     "textListField": {
-      "addButton": {
-        "label": "새로 추가"
-      },
       "removeButton": {
         "tooltip": "제거"
       }
