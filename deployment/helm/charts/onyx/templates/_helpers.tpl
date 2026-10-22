@@ -805,3 +805,17 @@ spec:
   {{- $tmpVolume := dict "name" "tmp" "emptyDir" dict }}
   {{- include "onyx.renderVolumes" (dict "ctx" $ctx "volumes" (prepend ($ctx.Values.api.volumes | default list) $tmpVolume)) | nindent 2 }}
 {{- end }}
+
+{{/*
+The legacy-minio-copy Job's name, empty when the Job does not render. The name
+changes with the pod template or retry limit, since a Job's pod template is
+immutable.
+*/}}
+{{- define "onyx.objectStore.legacyCopyJobName" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- if and (eq (include "onyx.objectStore.enabled" .) "true") .Values.minio.enabled $objectStore.legacyCopy.enabled -}}
+{{- $copy := $objectStore.legacyCopy -}}
+{{- $podTemplate := include "onyx.objectStore.legacyCopyPod" (dict "ctx" . "copy" $copy) -}}
+{{- printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) -}}
+{{- end -}}
+{{- end }}
