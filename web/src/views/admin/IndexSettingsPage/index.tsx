@@ -2577,7 +2577,13 @@ export default function IndexSettingsPage() {
                       rarely changed, so it starts folded. Also outside the lock:
                       the mode saves by itself, not through the banner. */}
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
-                  <Collapsible defaultOpen={false} title={t("advanced.title")}>
+                  <Collapsible
+                    defaultOpen={false}
+                    title={t("advanced.title")}
+                    description={t("advanced.description", {
+                      appName: settings.appName,
+                    })}
+                  >
                     <CCPairIdsBackfillCard />
                   </Collapsible>
                 </>

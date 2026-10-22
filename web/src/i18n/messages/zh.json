@@ -6766,7 +6766,8 @@
     },
     "indexSettings": {
       "advanced": {
-        "title": "高级选项"
+        "title": "高级选项",
+        "description": "这些设置会改变 {appName} 在搜索中应用文档权限的效率，不会改变每个用户可以看到的文档。如无 Onyx 团队的明确指导，请勿更改。"
       },
       "actions": {
         "applyForward": {

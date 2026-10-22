@@ -6766,7 +6766,8 @@
     },
     "indexSettings": {
       "advanced": {
-        "title": "詳細オプション"
+        "title": "詳細オプション",
+        "description": "これらの設定は、{appName} が検索でドキュメントの権限を適用する効率を変更します。各ユーザーが閲覧できるドキュメントは変わりません。Onyx チームからの明示的な指示がない限り、変更しないでください。"
       },
       "actions": {
         "applyForward": {

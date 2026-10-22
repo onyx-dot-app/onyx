@@ -6766,7 +6766,8 @@
     },
     "indexSettings": {
       "advanced": {
-        "title": "Options avancées"
+        "title": "Options avancées",
+        "description": "Ces paramètres modifient l’efficacité avec laquelle {appName} applique les autorisations des documents dans la recherche. Ils ne modifient pas les documents que chaque utilisateur peut voir. Ne les modifiez pas sans instructions explicites de l’équipe Onyx."
       },
       "actions": {
         "applyForward": {
