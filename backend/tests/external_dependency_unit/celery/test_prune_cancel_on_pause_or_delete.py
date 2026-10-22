@@ -199,3 +199,46 @@ def test_pause_cancels_a_queued_prune(
     assert not redis_connector.prune.fenced
     assert redis_connector.stop.fenced
     assert _prune_status(db_session, cc_pair) == SyncStatus.CANCELED
+
+
+def test_prune_generator_leaves_a_newer_prune_alone(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.PAUSED)
+    redis_connector = _queue_prune(db_session, cc_pair)
+    newer = RedisConnectorPrunePayload(
+        id="prune-cancel-test-newer",
+        submitted=datetime.now(timezone.utc),
+        started=datetime.now(timezone.utc),
+        celery_task_id="prune-cancel-test-newer-task",
+    )
+    lock_row = pruning_tasks.lock_connector_credential_pair_row
+
+    # A pause drops this run and a newer prune starts before it takes the lock.
+    def _replace_then_lock(
+        session: Session, cc_pair_id: int
+    ) -> ConnectorCredentialPair | None:
+        redis_connector.prune.set_fence(newer)
+        return lock_row(session, cc_pair_id)
+
+    monkeypatch.setattr(
+        pruning_tasks, "lock_connector_credential_pair_row", _replace_then_lock
+    )
+    instantiate = MagicMock(side_effect=AssertionError("the prune enumerated"))
+    monkeypatch.setattr(pruning_tasks, "instantiate_connector", instantiate)
+
+    result = pruning_tasks.connector_pruning_generator_task.apply(
+        kwargs={
+            "cc_pair_id": cc_pair.id,
+            "connector_id": cc_pair.connector_id,
+            "credential_id": cc_pair.credential_id,
+            "tenant_id": get_current_tenant_id(),
+        }
+    )
+
+    assert result.successful(), result.traceback
+    instantiate.assert_not_called()
+    assert redis_connector.prune.payload == newer
+    assert _prune_status(db_session, cc_pair) == SyncStatus.IN_PROGRESS
