@@ -3,6 +3,7 @@ the permission sync compose these operations, so a capability check can probe
 the same call production makes. Operations return plain models, never SDK
 objects, and every call goes through the shared rate limiter."""
 
+import threading
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timezone
 from typing import Any, TypeVar
@@ -236,14 +237,24 @@ class HubSpotSourceOperations(SourceOperations):
             self._token = str(token)
         return self._token
 
+    def _build_lock(self) -> threading.Lock:
+        """Guards the lazy builds. Threads must share one rate limiter, or
+        each counts only its own calls. ``dict.setdefault`` is atomic under
+        the GIL, so no guard lock is needed."""
+        return vars(self).setdefault("_build_lock_instance", threading.Lock())
+
     def _api(self) -> HubSpot:
         if self._client is None:
-            self._client = HubSpot(access_token=self._access_token())
+            with self._build_lock():
+                if self._client is None:
+                    self._client = HubSpot(access_token=self._access_token())
         return self._client
 
     def _limiter(self) -> HubSpotRateLimiter:
         if self._rate_limiter is None:
-            self._rate_limiter = HubSpotRateLimiter()
+            with self._build_lock():
+                if self._rate_limiter is None:
+                    self._rate_limiter = HubSpotRateLimiter()
         return self._rate_limiter
 
     def _crm(self, variant: str) -> Any:

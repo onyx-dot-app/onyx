@@ -470,6 +470,22 @@ JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 Its `GitHubApiError` is a `SourceApiError` that carries the request and the
 response body, so a check's Error Details show them.
 
+A gateway instance must be safe to call from several threads at once: the
+capability check runner calls one instance from parallel checks. The
+implementer makes this hold, as the `SourceOperations` docstring states. A lazy
+build of a shared client, rate limiter or token takes a lock (Jira, Confluence,
+Slack, Google Drive auth, HubSpot). An SDK that is not thread safe gets one
+client per thread (`threading.local`): PyGithub in GitHub, the Drive clients in
+Google Drive, the office365 REST context in SharePoint. A token refresh takes a
+lock, so one thread redeems it (Linear, Google Drive). Confluence's
+`probe_site` probes on a new client, since the probe swaps the client's
+connection settings. `cross_connector_utils/rate_limit_wrapper.py:rate_limit_builder`
+locks its call history, so HubSpot's shared limiter holds across threads.
+Notion, YouTrack, OneDrive and Outlook keep no state that a race can break: a
+duplicate build of a stateless client is harmless. With a DB-backed provider,
+Confluence holds the credential's rotation lock for each call, so its parallel
+calls run one at a time.
+
 ### 4.8 Capabilities and capability checks
 
 `capabilities.py:CredentialCapability` (`INDEXING`, `DOC_PERMISSION_SYNC`,
@@ -766,7 +782,9 @@ family keep the source's shape and stay usable by that source only.
    first time anyone tries to run it, not when the enum value is added.
 8. **A `SourceOperations` subclass may not override `__init__`** and every
    public method on it must carry `@source_operation`; `__init_subclass__`
-   enforces both at import time.
+   enforces both at import time. A gateway instance must also be safe to
+   call from several threads at once (section 4.7). Nothing enforces this, so
+   check it in review.
 9. **`CredentialsConnector` and `load_credentials` are mutually exclusive in
    practice.** `factory.py:instantiate_connector` picks one path via
    `isinstance`. A connector that implements `CredentialsConnector` should make

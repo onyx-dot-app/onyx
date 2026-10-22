@@ -1590,8 +1590,10 @@ class ConfluenceSourceOperations(SourceOperations):
                 f"probe_site variant {variant.value!r} does not match "
                 f"scoped_token={scoped}."
             )
+        # A new client: the probe swaps the client's connection settings, and
+        # other threads may be calling the cached one.
         with self._client_build_lock():
-            client = self._cached_client or self._build_client(fast=False)
+            client = self._build_client(fast=False)
             client._probe_connection(**_PROBE_KWARGS)
             client._initialize_connection(**_FINAL_KWARGS)
             self._cached_client = client
