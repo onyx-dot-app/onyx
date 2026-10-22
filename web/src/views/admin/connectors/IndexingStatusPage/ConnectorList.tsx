@@ -45,16 +45,6 @@ const POLL_MS = 30_000;
 const LOADER_ROWS = 4;
 const ALL = "all";
 
-// The header counts, one per bucket that holds a pair, so they add up to the list.
-const COUNT_ORDER = [
-  "indexed",
-  "indexing",
-  "failed",
-  "paused",
-  "scheduled",
-  "deleting",
-] as const satisfies readonly IndexingConnectorStatus[];
-
 interface FederatedRowProps {
   connector: FederatedConnectorStatus;
 }
@@ -229,14 +219,14 @@ export default function ConnectorList({
             width="fit"
             height="fit"
           >
-            {COUNT_ORDER.map((counted) => ({
+            {/* A count per bucket that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
+            {INDEXING_CONNECTOR_STATUSES.map((counted) => ({
               counted,
               count: data?.status_counts[counted] ?? 0,
               tag: bucketStatusTag(counted),
             }))
               .filter(({ count }) => count > 0)
               .map(({ counted, count, tag }) => (
-                // A count filters the list to its bucket, and again clears the filter.
                 <Tag
                   key={counted}
                   icon={tag.icon}
@@ -245,6 +235,7 @@ export default function ConnectorList({
                   color={tag.color}
                   variant="status"
                   size="md"
+                  aria-label={t(`counts.${counted}`, { count })}
                   aria-pressed={status === counted}
                   onClick={() =>
                     pickStatus(status === counted ? null : counted)
