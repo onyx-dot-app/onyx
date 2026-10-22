@@ -27,6 +27,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   resolveAllErrorsForCCPair,
   resolveErrors,
+  waitForTargetedReindexJobs,
+} from "@/lib/targeted_reindex";
+import type {
+  ResolveAllSubmitted,
+  TargetedReindexOutcome,
 } from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -407,34 +412,94 @@ export function useResolvableRunsCount(
 // useResolveRunErrors
 // ---------------------------------------------------------------------------
 
+// Error ids with a retry in flight per run, or "all" for a run-wide retry.
+// Module-level, so a remounted panel still sees them.
+const retryingByRun = new Map<number, Set<number> | "all">();
+
+function isRetrying(runId: number, errorIds: number[] | null): boolean {
+  const held = retryingByRun.get(runId);
+  if (held === undefined) return false;
+  if (held === "all" || errorIds === null) return true;
+  return errorIds.some((id) => held.has(id));
+}
+
+function holdRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null) retryingByRun.set(runId, "all");
+  else if (held instanceof Set) errorIds.forEach((id) => held.add(id));
+  else retryingByRun.set(runId, new Set(errorIds));
+}
+
+function releaseRetry(runId: number, errorIds: number[] | null): void {
+  const held = retryingByRun.get(runId);
+  if (errorIds === null || !(held instanceof Set)) {
+    retryingByRun.delete(runId);
+    return;
+  }
+  errorIds.forEach((id) => held.delete(id));
+  if (held.size === 0) retryingByRun.delete(runId);
+}
+
 /** Resolves a run's document errors by a targeted reindex, or marks the run resolved, and refreshes every feed it appears in, one submit at a time. */
 export function useResolveRunErrors() {
   const tToasts = useTranslations("admin.connector.toasts");
   const [resolving, setResolving] = useState(false);
 
-  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  // Holds the buttons only for the submit. A progress toast follows the jobs
+  // and is replaced by their outcome, so other runs can be retried meanwhile.
   async function resolve(item: ActivityItem, errorIds: number[] | null) {
-    if (resolving) return;
+    const runId = item.run.attempt.id;
+    // Retrying errors already in flight would only resolve nothing.
+    if (resolving || isRetrying(runId, errorIds)) return;
     setResolving(true);
+    let submitted: ResolveAllSubmitted;
     try {
-      const result =
+      submitted =
         errorIds === null
           ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
           : await resolveErrors(errorIds);
-      if (result.total_error_ids === 0) {
-        toast.success(tToasts("noUnresolvedErrors"));
-      } else {
-        toast.success(
-          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
-        );
-      }
-      await refreshFeeds([item.ccPairId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(tToasts("targetedReindexFailed", { message }));
+      return;
     } finally {
       setResolving(false);
     }
+    void refreshFeeds([item.ccPairId]);
+    if (submitted.total_error_ids === 0) {
+      toast.success(tToasts("noUnresolvedErrors"));
+      return;
+    }
+
+    const toastId = `targeted-reindex-${submitted.job_ids[0]}`;
+    toast.info(
+      tToasts("targetedReindexRunning", { count: submitted.total_error_ids }),
+      { id: toastId, duration: Infinity }
+    );
+    holdRetry(runId, errorIds);
+    let outcome: TargetedReindexOutcome;
+    try {
+      outcome = await waitForTargetedReindexJobs(submitted.job_ids);
+    } finally {
+      releaseRetry(runId, errorIds);
+    }
+    if (!outcome.finished) {
+      toast.error(tToasts("targetedReindexIncomplete"), { id: toastId });
+    } else if (outcome.still_failing > 0) {
+      toast.warning(
+        tToasts("targetedReindexPartial", {
+          resolved: outcome.resolved,
+          failing: outcome.still_failing,
+        }),
+        { id: toastId }
+      );
+    } else {
+      toast.success(
+        tToasts("targetedReindexDone", { resolved: outcome.resolved }),
+        { id: toastId }
+      );
+    }
+    await refreshFeeds([item.ccPairId]);
   }
 
   // Marks the run resolved without a targeted reindex: it keeps its status.
