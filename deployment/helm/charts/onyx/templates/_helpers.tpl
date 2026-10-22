@@ -690,6 +690,39 @@ so the templates must not depend on values.yaml for these keys.
 {{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
 {{- end }}
 
+{{/*
+Holds a pod until the bundled object store's Service answers, so the api's
+startup bucket check and the legacy copy do not crash-loop while it starts.
+Uses the app image and the guarded container's resources and securityContext,
+so mirrors, admission and the pod's request stay the same. It renders into the
+legacy copy pod, so any edit here reruns the copy.
+*/}}
+{{- define "onyx.objectStore.waitInitContainer" -}}
+{{- $ctx := .ctx -}}
+- name: wait-for-object-store
+  image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"
+  imagePullPolicy: {{ $ctx.Values.global.pullPolicy }}
+  command:
+    - python
+    - -c
+    - |
+      import http.client
+      import time
+      import urllib.request
+      url = "{{ include "onyx.objectStore.endpoint" $ctx }}/healthz"
+      while True:
+          try:
+              urllib.request.urlopen(url, timeout=5).close()
+              break
+          except (OSError, http.client.HTTPException) as e:
+              print(f"Waiting for the object store at {url}: {e}", flush=True)
+              time.sleep(3)
+  resources:
+    {{- toYaml .resources | nindent 4 }}
+  securityContext:
+    {{- include "onyx.containerSecurityContext" .securityContext | nindent 4 }}
+{{- end }}
+
 {{/* The app's S3 key pair, which is also the object store's admin identity. */}}
 {{- define "onyx.objectStore.credentialEnv" -}}
 {{- $auth := .Values.auth.objectstorage -}}
@@ -739,6 +772,9 @@ spec:
   tolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- /* Waiting here keeps the copy's retries for real copy failures. */}}
+  initContainers:
+    {{- include "onyx.objectStore.waitInitContainer" (dict "ctx" $ctx "resources" $copy.resources "securityContext" $ctx.Values.api.securityContext) | nindent 4 }}
   containers:
     - name: legacy-minio-copy
       image: "{{ $ctx.Values.api.image.repository }}:{{ $ctx.Values.api.image.tag | default $ctx.Values.global.version }}"

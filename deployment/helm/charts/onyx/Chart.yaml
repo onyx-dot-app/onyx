@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.20
+version: 0.9.21
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,14 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Default Craft sandbox API callbacks to the chart's internal
-        API Service, while preserving explicit ONYX_SERVER_URL overrides.
+    - kind: fixed
+      description: The api server and the legacy MinIO copy Job wait for the
+        bundled object store to answer before they start, so they no longer
+        crash-loop while SeaweedFS starts.
+    - kind: fixed
+      description: Setting minio.enabled to false keeps the MinIO PVC and marks
+        it helm.sh/resource-policy keep, also after upgrades with
+        --reuse-values, so retiring MinIO needs no manual annotation.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
