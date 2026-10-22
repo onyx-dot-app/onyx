@@ -30,6 +30,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
 from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -454,7 +455,13 @@ def _provisioned_sandbox(
             except Exception:
                 pass
     finally:
-        cleanup_api_user_sandbox_rows(user_id)
+        try:
+            store = get_default_file_store()
+            prefix = f"sandbox-snapshots/{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/{sandbox_id}/"
+            for record in store.list_files_by_prefix(prefix):
+                store.delete_file(record.file_id)
+        finally:
+            cleanup_api_user_sandbox_rows(user_id)
 
 
 @dataclass(frozen=True)
