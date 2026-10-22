@@ -11984,6 +11984,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "Não foi possível iniciar um novo chat. Tente novamente."
+      },
       "failedFiles": {
         "toast": "{count, plural, one {Um arquivo falhou e foi removido: {names}} other {Alguns arquivos falharam e foram removidos: {names}}}"
       },

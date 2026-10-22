@@ -346,6 +346,9 @@ Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
           MALFORMED, stashed in a ContextVar, turned into a reasoned
           OnyxError (SESSION_EXPIRED / SESSION_TERMINATED /
           SESSION_UNRECOGNIZED) only once auth has conclusively failed
+Web    → useSessionWatcher (web/src/lib/auth/hooks.ts) shows the session-ended
+         modal on a 403 from /api/me; chat create/send refetch /api/me when
+         they get a session 403 (isSessionEndedResponse, lib/auth/utils.ts)
 ```
 
 ### 4.7 Non-human auth: API key, PAT, SCIM

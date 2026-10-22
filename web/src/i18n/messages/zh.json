@@ -11984,6 +11984,9 @@
       }
     },
     "app": {
+      "createSessionFailed": {
+        "toast": "无法开始新聊天。请重试。"
+      },
       "failedFiles": {
         "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
       },
