@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "在此连接器的首次权限同步完成之前，搜索和聊天回答可能不包含其文档。{appName} 只向能在源系统中打开文档的人显示该文档。",
-        "title": "权限尚未同步"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "重新启用"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "已索引文档"
-        },
         "indexingSpeed": "{speed} 文档/分钟",
         "indexingSpeedTooltip": "自创建连接器以来每分钟索引的文档数",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
-        "statusLine": "索引状态 - {detail}",
         "documents": {
-          "label": "最近 / 总计",
-          "total": "/ {total}",
-          "totalLabel": "总计"
+          "totalLabel": "已索引文档总数",
+          "recentLabel": "最近处理的文档"
         },
         "throughput": {
           "ariaLabel": "随时间索引的文档",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "无法开始索引",
           "viewChecks": "查看连接器检查"
         },
-        "title": "索引状态"
+        "title": "索引状态",
+        "sync": {
+          "permissionsTitle": "权限同步状态",
+          "groupsTitle": "组成员关系同步状态",
+          "last": "上次同步 {when}",
+          "never": "尚未同步",
+          "neverTooltip": "在此同步成功之前，搜索和聊天回答可能不包含此连接器的文档。"
+        }
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",

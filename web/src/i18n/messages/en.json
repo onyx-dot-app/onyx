@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "Search and chat answers may leave out this connector's documents until its first permission sync completes. {appName} shows a document only to people who can open it in the source.",
-        "title": "Permissions haven't synced yet"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Re-Enable"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Indexed documents"
-        },
         "indexingSpeed": "{speed} docs/min",
         "indexingSpeedTooltip": "Documents indexed per minute since the connector was created",
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
-        "statusLine": "Indexing Status - {detail}",
         "documents": {
-          "label": "Recent / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total documents indexed",
+          "recentLabel": "Recently processed documents"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "Couldn't start indexing",
           "viewChecks": "View connector checks"
         },
-        "title": "Indexing Status"
+        "title": "Indexing Status",
+        "sync": {
+          "permissionsTitle": "Permissions Sync Status",
+          "groupsTitle": "Group Membership Sync Status",
+          "last": "Last synced {when}",
+          "never": "Not synced yet",
+          "neverTooltip": "Search and chat answers may leave out this connector's documents until this sync succeeds."
+        }
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",

@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "Es posible que la búsqueda y las respuestas del chat omitan los documentos de este conector hasta que se complete su primera sincronización de permisos. {appName} muestra un documento solo a quienes pueden abrirlo en la fuente.",
-        "title": "Los permisos aún no se han sincronizado"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Volver a activar"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Documentos en el índice"
-        },
         "indexingSpeed": "{speed} documentos/min",
         "indexingSpeedTooltip": "Documentos indexados por minuto desde que se creó el conector",
         "lastIndexed": {
           "value": "Última indexación {when}"
         },
-        "statusLine": "Estado de indexación - {detail}",
         "documents": {
-          "label": "Recientes / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total de documentos en el índice",
+          "recentLabel": "Documentos procesados recientemente"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados a lo largo del tiempo",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "No se pudo iniciar la indexación",
           "viewChecks": "Ver comprobaciones del conector"
         },
-        "title": "Estado de indexación"
+        "title": "Estado de indexación",
+        "sync": {
+          "permissionsTitle": "Estado de sincronización de permisos",
+          "groupsTitle": "Estado de sincronización de membresías de grupos",
+          "last": "Última sincronización {when}",
+          "never": "Aún no sincronizado",
+          "neverTooltip": "Es posible que la búsqueda y las respuestas del chat omitan los documentos de este conector hasta que esta sincronización se complete correctamente."
+        }
       },
       "toasts": {
         "completeReindexStarted": "La reindexación completa se inició correctamente",

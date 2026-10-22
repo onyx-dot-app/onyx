@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "Suche und Chat-Antworten können die Dokumente dieses Konnektors auslassen, bis seine erste Berechtigungssynchronisierung erfolgreich abgeschlossen ist. {appName} zeigt ein Dokument nur Personen, die es in der Quelle öffnen können.",
-        "title": "Berechtigungen sind noch nicht synchronisiert"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Wieder aktivieren"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Indexierte Dokumente"
-        },
         "indexingSpeed": "{speed} Dok./Min.",
         "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Konnektors",
         "lastIndexed": {
           "value": "Zuletzt indexiert {when}"
         },
-        "statusLine": "Indexierungsstatus - {detail}",
         "documents": {
-          "label": "Aktuell / Gesamt",
-          "total": "/ {total}",
-          "totalLabel": "Gesamt"
+          "totalLabel": "Indexierte Dokumente gesamt",
+          "recentLabel": "Kürzlich verarbeitete Dokumente"
         },
         "throughput": {
           "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "Indexierung konnte nicht gestartet werden",
           "viewChecks": "Konnektor-Prüfungen anzeigen"
         },
-        "title": "Indexierungsstatus"
+        "title": "Indexierungsstatus",
+        "sync": {
+          "permissionsTitle": "Status der Berechtigungssynchronisierung",
+          "groupsTitle": "Status der Synchronisierung der Gruppenmitgliedschaften",
+          "last": "Zuletzt synchronisiert {when}",
+          "never": "Noch nicht synchronisiert",
+          "neverTooltip": "Suche und Chat-Antworten können die Dokumente dieses Konnektors auslassen, bis diese Synchronisierung erfolgreich abgeschlossen ist."
+        }
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindexierung erfolgreich gestartet",

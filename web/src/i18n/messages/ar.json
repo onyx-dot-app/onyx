@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "قد لا تتضمن نتائج البحث وإجابات الدردشة مستندات هذا الموصل حتى تكتمل أول مزامنة للأذونات. يعرض {appName} المستند فقط لمن يمكنه فتحه في المصدر.",
-        "title": "لم تتم مزامنة الأذونات بعد"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "إعادة التفعيل"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "مستندات مفهرسة"
-        },
         "indexingSpeed": "{speed} مستند/دقيقة",
         "indexingSpeedTooltip": "المستندات المفهرسة في الدقيقة منذ إنشاء الموصل",
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },
-        "statusLine": "حالة الفهرسة - {detail}",
         "documents": {
-          "label": "الأخيرة / الإجمالي",
-          "total": "/ {total}",
-          "totalLabel": "الإجمالي"
+          "totalLabel": "إجمالي المستندات المفهرسة",
+          "recentLabel": "المستندات المعالجة مؤخرًا"
         },
         "throughput": {
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "تعذر بدء الفهرسة",
           "viewChecks": "عرض فحوصات الموصل"
         },
-        "title": "حالة الفهرسة"
+        "title": "حالة الفهرسة",
+        "sync": {
+          "permissionsTitle": "حالة مزامنة الأذونات",
+          "groupsTitle": "حالة مزامنة عضوية المجموعات",
+          "last": "آخر مزامنة {when}",
+          "never": "لم تتم المزامنة بعد",
+          "neverTooltip": "قد لا تتضمن نتائج البحث وإجابات الدردشة مستندات هذا الموصل حتى تنجح هذه المزامنة."
+        }
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",

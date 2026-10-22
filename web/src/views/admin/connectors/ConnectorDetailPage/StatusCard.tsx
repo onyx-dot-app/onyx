@@ -1,6 +1,6 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -10,11 +10,24 @@ import { timeAgo } from "@opal/time";
 import {
   ConnectorCredentialPairStatus,
   type CCPairFullInfo,
+  type CCPairRun,
+  type CCPairRunKind,
+  type CCPairRunsResponse,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
+import { isPermSynced } from "@/lib/connectors/accessType";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  attemptStatusTag,
+  ccPairStatusTag,
+  runStatusTag,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  isActive,
+  RATE_FORMAT,
+  syncRate,
+} from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -34,7 +47,7 @@ const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
 interface StatBlockProps {
   children: React.ReactNode;
 }
-/** One column of the card: a figure or tag over its two-line label. */
+/** One column of a card: a status or a figure over its label. */
 function StatBlock({ children }: StatBlockProps) {
   return (
     // Columns share the row evenly and wrap below 12rem, so three fit at 640px.
@@ -55,6 +68,83 @@ function StatBlock({ children }: StatBlockProps) {
 // Matches the page's own poll of the pair.
 const POLL_MS = 5000;
 
+type SyncRunKind = Extract<CCPairRunKind, "doc_permission_sync" | "group_sync">;
+
+/** The pair's newest run of one kind, with the kinds the pair runs. */
+function useLatestRun(ccPairId: number, kind: SyncRunKind, enabled: boolean) {
+  return useSWR<CCPairRunsResponse>(
+    enabled
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          until: null,
+          kinds: [kind],
+          statusGroups: null,
+          q: "",
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: POLL_MS }
+  );
+}
+
+interface SyncStatBlockProps {
+  title: string;
+  /** The sync's newest run, undefined before its first. */
+  run: CCPairRun | undefined;
+  /** When the sync last succeeded, null until it first does. */
+  lastSynced: string | null;
+}
+/** A permission sync's column: its newest run's tag over its live rate or its last success. */
+function SyncStatBlock({ title, run, lastSynced }: SyncStatBlockProps) {
+  const t = useTranslations("admin.connector.statusCard.sync");
+  const tRuns = useTranslations("admin.connector.runs.detail");
+  const tBadges = useTranslations("admin.status.badges");
+  const format = useFormatter();
+  const locale = useLocale();
+  // A sync that succeeded before its runs were recorded has none, so its last success sets the tag.
+  const tag =
+    run !== undefined
+      ? runStatusTag(run)
+      : attemptStatusTag(lastSynced === null ? null : "success", true);
+  const rate =
+    run !== undefined && isActive(run) ? syncRate(run, Date.now()) : null;
+  const neverSynced = rate === null && lastSynced === null;
+  const detail =
+    rate !== null && run !== undefined
+      ? tRuns(run.kind === "group_sync" ? "membershipRate" : "rate", {
+          rate: format.number(rate, RATE_FORMAT),
+        })
+      : neverSynced
+        ? t("never")
+        : t("last", { when: timeAgo(lastSynced, locale) ?? "-" });
+  return (
+    <StatBlock>
+      <Text font="secondary-action" color="text-04">
+        {title}
+      </Text>
+      <Tag
+        icon={tag.icon}
+        title={tBadges(tag.labelKey)}
+        color={tag.color}
+        variant="status"
+        font="secondary-body"
+      />
+      <Tooltip tooltip={neverSynced ? t("neverTooltip") : undefined} side="top">
+        <Section width="fit" height="fit">
+          <Text font="secondary-body" color="text-03">
+            {detail}
+          </Text>
+        </Section>
+      </Tooltip>
+    </StatBlock>
+  );
+}
+
 export interface StatusCardProps {
   ccPair: CCPairFullInfo;
   /** Backs the Start Indexing button shown while failed checks hold the pair's first run; null hides it. */
@@ -70,7 +160,7 @@ export interface StatusCardProps {
   onRangeChange?: (range: SliceRange | null) => void;
 }
 
-/** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
+/** The pair at a glance: its indexing and permission sync statuses, then its documents and documents indexed over time. */
 export default function StatusCard({
   ccPair,
   onStartIndexing,
@@ -90,8 +180,17 @@ export default function StatusCard({
     errorHandlingFetcher,
     { refreshInterval: POLL_MS }
   );
+  const permSynced = isPermSynced(ccPair.access_type);
+  const docSync = useLatestRun(ccPair.id, "doc_permission_sync", permSynced);
+  const groupSync = useLatestRun(ccPair.id, "group_sync", permSynced);
   // Waits for the latest attempt, so a running pair never flashes as indexed.
-  if (latestIndexAttempts === undefined && error === undefined) {
+  if (
+    (latestIndexAttempts === undefined && error === undefined) ||
+    (permSynced &&
+      [docSync, groupSync].some(
+        (sync) => sync.data === undefined && sync.error === undefined
+      ))
+  ) {
     return <CardLoader descriptionLines={2} />;
   }
   const latestIndexAttempt = latestIndexAttempts?.items[0];
@@ -116,33 +215,35 @@ export default function StatusCard({
   });
   // The rate is the connector's average over every run, where a run row shows one run's live rate.
   const showsSpeed = !paused && hold === null && speed !== null;
-  // A paused pair names only its last run. Others lead with the card's title.
+  // A paused pair names only its last run.
   const statusLine = paused
     ? lastIndexed
-    : t("statusLine", {
-        detail:
-          hold !== null
-            ? t(`hold.${hold.reason}`)
-            : speed === null
-              ? lastIndexed
-              : t("indexingSpeed", { speed }),
-      });
+    : hold !== null
+      ? t(`hold.${hold.reason}`)
+      : speed === null
+        ? lastIndexed
+        : t("indexingSpeed", { speed });
 
   const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
   // Before the first run, or while it is held, there is no recent run to count.
   const totalOnly = !chart || hold !== null;
 
-  // The stage details popover spans the card, so the card is its anchor.
+  // Each sync kind the pair's source runs gets a column.
+  const showsDocSync =
+    docSync.data?.kinds.includes("doc_permission_sync") ?? false;
+  const showsGroupSync = groupSync.data?.kinds.includes("group_sync") ?? false;
+
   return (
-    <Popover>
-      <Popover.Anchor asChild>
-        <Card
-          border="solid"
-          rounding={4}
-          padding={2}
-          data-testid="connector-indexing-status"
-        >
-          <Section alignItems="stretch" gap={1} height="fit">
+    <Section
+      alignItems="stretch"
+      gap={2}
+      height="fit"
+      data-testid="connector-indexing-status"
+    >
+      {/* The stage details popover spans the card, so the card is its anchor. */}
+      <Popover>
+        <Popover.Anchor asChild>
+          <Card border="solid" rounding={4} padding={2}>
             <Section
               flexDirection="row"
               alignItems="start"
@@ -152,6 +253,9 @@ export default function StatusCard({
               wrap
             >
               <StatBlock>
+                <Text font="secondary-action" color="text-04">
+                  {t("title")}
+                </Text>
                 <Section
                   flexDirection="row"
                   justifyContent="start"
@@ -205,85 +309,98 @@ export default function StatusCard({
                     </Button>
                   )}
               </StatBlock>
-              <StatBlock>
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  alignItems="end"
-                  gap={1}
-                  width="fit"
-                  height="fit"
-                >
-                  <Text font="main-content-emphasis" color="text-04">
-                    {(totalOnly
-                      ? ccPair.num_docs_indexed
-                      : recent
-                    ).toLocaleString(locale)}
-                  </Text>
-                  {!totalOnly && (
-                    <Text font="main-content-body" color="text-04">
-                      {t("documents.total", {
-                        total: ccPair.num_docs_indexed.toLocaleString(locale),
-                      })}
-                    </Text>
-                  )}
-                </Section>
-                <Text font="secondary-body" color="text-03">
-                  {totalOnly ? t("documents.totalLabel") : t("documents.label")}
-                </Text>
-                {!totalOnly && (
-                  <Text font="secondary-body" color="text-03">
-                    {t("documentsIndexed.label")}
-                  </Text>
-                )}
-              </StatBlock>
-              {chart && (
-                <Section
-                  flexDirection="row"
-                  justifyContent="end"
-                  alignItems="center"
-                  gap={1}
-                  width="auto"
-                  height="fit"
-                  className="grow basis-0"
-                  wrap
-                >
-                  <ThroughputWindowPicker
-                    windows={PAIR_WINDOWS}
-                    value={timeWindow}
-                    onChange={onTimeWindowChange}
-                    selection={range}
-                    onClearSelection={
-                      onRangeChange === undefined
-                        ? undefined
-                        : () => onRangeChange(null)
-                    }
-                  />
-                </Section>
+              {showsDocSync && (
+                <SyncStatBlock
+                  title={t("sync.permissionsTitle")}
+                  run={docSync.data?.items[0]}
+                  lastSynced={ccPair.last_time_perm_sync}
+                />
+              )}
+              {showsGroupSync && (
+                <SyncStatBlock
+                  title={t("sync.groupsTitle")}
+                  run={groupSync.data?.items[0]}
+                  lastSynced={ccPair.last_time_external_group_sync}
+                />
               )}
             </Section>
+          </Card>
+        </Popover.Anchor>
+        {latestIndexAttempt !== undefined && (
+          <StageDetailsPopoverContent indexAttemptId={latestIndexAttempt.id} />
+        )}
+      </Popover>
+      <Card border="solid" rounding={4} padding={2}>
+        <Section alignItems="stretch" gap={1} height="fit">
+          <Section
+            flexDirection="row"
+            alignItems="start"
+            justifyContent="start"
+            gap={1}
+            height="fit"
+            wrap
+          >
+            <StatBlock>
+              <Text font="main-content-emphasis" color="text-04">
+                {ccPair.num_docs_indexed.toLocaleString(locale)}
+              </Text>
+              <Text font="secondary-body" color="text-03">
+                {t("documents.totalLabel")}
+              </Text>
+            </StatBlock>
+            {!totalOnly && (
+              <StatBlock>
+                <Text font="main-content-emphasis" color="text-04">
+                  {recent.toLocaleString(locale)}
+                </Text>
+                <Text font="secondary-body" color="text-03">
+                  {t("documents.recentLabel")}
+                </Text>
+              </StatBlock>
+            )}
             {chart && (
-              // The chart sits 12px in from the card's sides and 8px from the row above.
               <Section
-                padding={2}
-                alignItems="stretch"
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                gap={1}
+                width="auto"
                 height="fit"
-                className="mx-1"
+                className="grow basis-0"
+                wrap
               >
-                <ThroughputChart
-                  ccPairId={ccPair.id}
-                  range={timeWindow}
+                <ThroughputWindowPicker
+                  windows={PAIR_WINDOWS}
+                  value={timeWindow}
+                  onChange={onTimeWindowChange}
                   selection={range}
-                  onRangeSelect={onRangeChange}
+                  onClearSelection={
+                    onRangeChange === undefined
+                      ? undefined
+                      : () => onRangeChange(null)
+                  }
                 />
               </Section>
             )}
           </Section>
-        </Card>
-      </Popover.Anchor>
-      {latestIndexAttempt !== undefined && (
-        <StageDetailsPopoverContent indexAttemptId={latestIndexAttempt.id} />
-      )}
-    </Popover>
+          {chart && (
+            // The chart sits 12px in from the card's sides and 8px from the row above.
+            <Section
+              padding={2}
+              alignItems="stretch"
+              height="fit"
+              className="mx-1"
+            >
+              <ThroughputChart
+                ccPairId={ccPair.id}
+                range={timeWindow}
+                selection={range}
+                onRangeSelect={onRangeChange}
+              />
+            </Section>
+          )}
+        </Section>
+      </Card>
+    </Section>
   );
 }

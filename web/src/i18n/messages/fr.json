@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "La recherche et les réponses du chat peuvent omettre les documents de ce connecteur jusqu'à ce que sa première synchronisation des autorisations aboutisse. {appName} n'affiche un document qu'aux personnes qui peuvent l'ouvrir dans la source.",
-        "title": "Les autorisations ne sont pas encore synchronisées"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Réactiver"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Documents dans l'index"
-        },
         "indexingSpeed": "{speed} docs/min",
         "indexingSpeedTooltip": "Documents indexés par minute depuis la création du connecteur",
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
-        "statusLine": "État de l'indexation - {detail}",
         "documents": {
-          "label": "Récents / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total des documents dans l'index",
+          "recentLabel": "Documents traités récemment"
         },
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "Impossible de démarrer l'indexation",
           "viewChecks": "Voir les vérifications du connecteur"
         },
-        "title": "État de l'indexation"
+        "title": "État de l'indexation",
+        "sync": {
+          "permissionsTitle": "État de la synchronisation des autorisations",
+          "groupsTitle": "État de la synchronisation des adhésions aux groupes",
+          "last": "Dernière synchronisation {when}",
+          "never": "Pas encore synchronisé",
+          "neverTooltip": "La recherche et les réponses du chat peuvent omettre les documents de ce connecteur jusqu'à ce que cette synchronisation aboutisse."
+        }
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",

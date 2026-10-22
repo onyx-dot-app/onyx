@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "A pesquisa e as respostas do chat podem omitir os documentos deste conector até que a primeira sincronização de permissões seja concluída. O {appName} mostra um documento apenas para quem pode abri-lo na origem.",
-        "title": "As permissões ainda não foram sincronizadas"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Reativar"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Documentos no índice"
-        },
         "indexingSpeed": "{speed} documentos/min",
         "indexingSpeedTooltip": "Documentos indexados por minuto desde a criação do conector",
         "lastIndexed": {
           "value": "Última indexação {when}"
         },
-        "statusLine": "Status da indexação - {detail}",
         "documents": {
-          "label": "Recentes / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total de documentos no índice",
+          "recentLabel": "Documentos processados recentemente"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "Não foi possível iniciar a indexação",
           "viewChecks": "Ver verificações do conector"
         },
-        "title": "Status da indexação"
+        "title": "Status da indexação",
+        "sync": {
+          "permissionsTitle": "Status da sincronização de permissões",
+          "groupsTitle": "Status da sincronização de associações a grupos",
+          "last": "Última sincronização {when}",
+          "never": "Ainda não sincronizado",
+          "neverTooltip": "A pesquisa e as respostas do chat podem omitir os documentos deste conector até que esta sincronização seja concluída com êxito."
+        }
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",

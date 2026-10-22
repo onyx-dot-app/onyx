@@ -37,7 +37,6 @@ import {
 } from "@opal/icons";
 import { isPermSynced } from "@/lib/connectors/accessType";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
-import { useSettings } from "@/lib/settings/hooks";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -80,7 +79,6 @@ const CC_PAIR_POLL_MS = 5000;
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
   const router = useRouter();
-  const { appName } = useSettings();
 
   const {
     data: ccPair,
@@ -262,10 +260,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
-  // A deleting pair's sync is refused, so it gets no sync row or pending banner.
-  const permSynced = isPermSynced(ccPair.access_type) && !isDeleting;
-  const permSyncPending =
-    permSynced && ccPair.last_full_permission_sync === null;
   const source = ccPair.connector.source;
   const canOperate = can(ccPair, "operate");
   const paused = statusIsNotCurrentlyActive(ccPair.status);
@@ -330,9 +324,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
     ccPair.permission_syncing ||
     ccPair.last_permission_sync_attempt_status ===
       PermissionSyncStatusEnum.NOT_STARTED;
-  // Only a source with document permission sync gets the row.
+  // Only a source with document permission sync gets the row, and a deleting pair's sync is refused.
   const syncItems: DropdownMenuItem[] =
-    permSynced && ccPair.supports_doc_permission_sync
+    isPermSynced(ccPair.access_type) &&
+    ccPair.supports_doc_permission_sync &&
+    !isDeleting
       ? [
           {
             kind: "action",
@@ -492,13 +488,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 variant="warning"
                 title={t("invalidState.title")}
                 description={t("invalidState.description")}
-              />
-            )}
-            {permSyncPending && (
-              <MessageCard
-                variant="warning"
-                title={t("permSyncPending.title")}
-                description={t("permSyncPending.description", { appName })}
               />
             )}
             {ccPair.pending_backfills.length > 0 && (

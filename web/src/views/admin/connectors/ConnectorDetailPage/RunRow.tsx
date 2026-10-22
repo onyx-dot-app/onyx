@@ -183,7 +183,7 @@ function finishedIndexRate(run: CCPairRun): number | null {
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
-function syncRate(run: CCPairRun, now: number): number | null {
+export function syncRate(run: CCPairRun, now: number): number | null {
   if (run.kind !== "doc_permission_sync" && run.kind !== "group_sync") {
     return null;
   }
@@ -200,7 +200,7 @@ function syncRate(run: CCPairRun, now: number): number | null {
 }
 
 /** Rates print with two decimals, such as 24.23 docs/min. */
-const RATE_FORMAT = {
+export const RATE_FORMAT = {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 } as const;

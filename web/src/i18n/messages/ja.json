@@ -2687,10 +2687,6 @@
           }
         }
       },
-      "permSyncPending": {
-        "description": "このコネクターの最初の権限同期が完了するまで、検索やチャットの回答にこのコネクターのドキュメントが含まれない場合があります。{appName} は、ソースでドキュメントを開ける人にのみそのドキュメントを表示します。",
-        "title": "権限はまだ同期されていません"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "再有効化"
@@ -2812,19 +2808,14 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "インデックス済みドキュメント"
-        },
         "indexingSpeed": "{speed} 件/分",
         "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
-        "statusLine": "インデックス状況 - {detail}",
         "documents": {
-          "label": "直近 / 合計",
-          "total": "/ {total}",
-          "totalLabel": "合計"
+          "totalLabel": "インデックス済みドキュメント合計",
+          "recentLabel": "最近処理されたドキュメント"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
@@ -2841,7 +2832,14 @@
           "releaseFailed": "インデックス作成を開始できませんでした",
           "viewChecks": "コネクタのチェックを表示"
         },
-        "title": "インデックス状況"
+        "title": "インデックス状況",
+        "sync": {
+          "permissionsTitle": "権限同期の状況",
+          "groupsTitle": "グループメンバーシップ同期の状況",
+          "last": "最終同期 {when}",
+          "never": "まだ同期されていません",
+          "neverTooltip": "この同期が成功するまで、検索やチャットの回答にこのコネクターのドキュメントが含まれない場合があります。"
+        }
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
