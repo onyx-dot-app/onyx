@@ -718,7 +718,9 @@ The comparison uses `CredentialBinding.comparison_values`. It skips a binding's
 `validate_credential` pins to it, such as Google Drive's `credential_kind`. It
 compares `site_url_fields` by `connector_config.py:site_url_key` (scheme and
 host in lower case, no trailing slash), and Confluence Cloud also drops a
-trailing `/wiki`. The stored config keeps the value as entered.
+trailing `/wiki`. A URL with no scheme does not match a URL with one, because
+the connector gets the value as entered. The stored config keeps the value as
+entered.
 
 The pairs are the record of the bound values; the credential stores none. The
 rule runs in `validate_ccpair_for_user` (its `user` is None only for system
