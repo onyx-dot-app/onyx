@@ -141,10 +141,12 @@ function closeToast(id: string): void {
     timers.delete(id);
   }
   markLeaving(id);
+  // Toasts are replaced, never changed, so this entry identifies this close.
+  const leavingEntry = toasts.find((t) => t.id === id);
   setTimeout(() => {
-    // A toast fired with this id while it left replaced it: keep that one.
-    const latest = toasts.find((t) => t.id === id);
-    if (latest && !latest.leaving) return;
+    // A toast fired with this id while this one left replaced it, and may
+    // be leaving on its own timer: remove only the entry this close started.
+    if (toasts.find((t) => t.id === id) !== leavingEntry) return;
     removeToast(id);
   }, LEAVE_DURATION_MS);
 }
