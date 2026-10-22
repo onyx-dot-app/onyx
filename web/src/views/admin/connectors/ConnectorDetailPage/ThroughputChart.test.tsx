@@ -1,10 +1,28 @@
 /** The throughput chart labels its local-time ticks in the browser's zone, and a one-slice selection keeps a neighbor on each side so its bar draws. */
+import type { ReactElement } from "react";
 import { createFormatter } from "next-intl";
+import { render } from "@tests/setup/test-utils";
+import type { CCPairThroughputResponse } from "@/lib/connectors/types/ccPair";
 import {
+  ThroughputBars,
   chartSlices,
   formatSliceRange,
   formatTickLabel,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+
+// jsdom has no layout, so the responsive container gets a fixed size.
+jest.mock("recharts", () => {
+  const actual = jest.requireActual<typeof import("recharts")>("recharts");
+  const { cloneElement } = jest.requireActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    ResponsiveContainer: ({
+      children,
+    }: {
+      children: ReactElement<{ width?: number; height?: number }>;
+    }) => cloneElement(children, { width: 600, height: 120 }),
+  };
+});
 
 const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // next-intl formats in the server's zone. Any zone far from the local one shows a missing override.
@@ -82,5 +100,34 @@ describe("chartSlices", () => {
     expect(chartSlices([1], 1_000, SLICE_MS, 1_000, 61_000)).toEqual([
       { at: 31_000, docs: 1 },
     ]);
+  });
+});
+
+describe("a picked slice", () => {
+  it("draws its bar", () => {
+    const start = Date.UTC(2026, 9, 21, 0, 0);
+    const sliceMs = 3 * 60_000;
+    const data: CCPairThroughputResponse = {
+      window_start: new Date(start).toISOString(),
+      window_end: new Date(start + 20 * sliceMs).toISOString(),
+      docs_indexed: Array.from({ length: 20 }, () => 5),
+      runs: [],
+    };
+
+    const { container } = render(
+      <ThroughputBars
+        data={data}
+        range="1h"
+        selection={{
+          since: new Date(start + 7 * sliceMs).toISOString(),
+          until: new Date(start + 8 * sliceMs).toISOString(),
+        }}
+      />
+    );
+
+    // Recharts skips a zero-width rectangle, so a lone bar with no neighbors draws nothing.
+    expect(
+      container.querySelectorAll(".recharts-rectangle").length
+    ).toBeGreaterThan(0);
   });
 });
