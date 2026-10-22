@@ -590,9 +590,11 @@ only those checks, without their cached results. Every other check keeps its
 cached result or its result in the latest run of the draft key, and runs only
 when it has none, for example after a dependency that now runs. A discovery
 check skipped in the latest run runs again. A check that declares
-`config_fields` keys its cached result on those fields only, so a change to
-another field reuses it (`draft_runs.py:draft_result_cache_key`); GitHub's
-checks declare them. A kept or cached result whose
+`config_fields` keys its cached result on those fields and on the config
+fields that the source's gateway reads (`config_keys`). A change to another
+field reuses it, unless the gateway reads every key (`config_keys = None`)
+(`draft_runs.py:draft_result_cache_key`). GitHub's checks declare them. A
+kept or cached result whose
 dependency now stops it is "Not run" too, once all its dependencies have a
 result (`draft_runs.py:stop_blocked_draft_checks`).
 `skip_check_ids` do not run: an optional check is `SKIPPED`
