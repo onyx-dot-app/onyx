@@ -412,3 +412,35 @@ it("renders CSV content as a table through the file preview", async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
 });
+
+test.each(["report.html", "report.htm"])(
+  "renders %s in an isolated frame",
+  async (name) => {
+    const content = "<h1>Report</h1><script>document.title = 'Report'</script>";
+    jest.mocked(fetchFileContent).mockResolvedValue({
+      content,
+      mimeType: "text/html",
+      isImage: false,
+    });
+    const { rerender } = render(
+      <FilePreviewContent
+        sessionId="html-session"
+        filePath={`uploads/${name}`}
+      />
+    );
+    const frame = await screen.findByTitle(name);
+    expect(frame).toHaveAttribute("srcdoc", content);
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    rerender(
+      <FilePreviewContent
+        sessionId="html-session"
+        filePath={`uploads/${name}`}
+        refreshKey={1}
+      />
+    );
+    const reloaded = await screen.findByTitle(name);
+    expect(reloaded).not.toBe(frame);
+    expect(reloaded).toHaveAttribute("srcdoc", content);
+  }
+);

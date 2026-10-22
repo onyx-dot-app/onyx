@@ -20,6 +20,7 @@ import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
 import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
+import HtmlFilePreview from "@/app/craft/components/output-panel/HtmlFilePreview";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
 import {
@@ -68,7 +69,16 @@ export function FilePreviewContent({
       key={`${user.id}:${sessionId}:${filePath}`}
       value={{ provider: () => new Map() }}
     >
-      {/\.pptx?$/i.test(filePath) ? (
+      {filePath.startsWith("outputs/") && /\.html?$/i.test(filePath) ? (
+        <HtmlFilePreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          isActive={isActive}
+          onRefreshingChange={onRefreshingChange}
+        />
+      ) : /\.pptx?$/i.test(filePath) ? (
         <PptxPreview
           sessionId={sessionId}
           filePath={filePath}
@@ -173,6 +183,17 @@ function FetchedFilePreview({
   let viewer: ReactNode;
   if (data.isImage) {
     viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.html?$/i.test(filePath)) {
+    viewer = (
+      <iframe
+        key={refreshKey}
+        title={fileName}
+        srcDoc={data.content}
+        sandbox="allow-scripts"
+        referrerPolicy="no-referrer"
+        className="h-full w-full border-0 bg-background-neutral-01"
+      />
+    );
   } else if (/\.csv$/i.test(filePath)) {
     viewer = (
       <CsvPreview

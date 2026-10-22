@@ -18,6 +18,12 @@ here. Read the component that documents the setting in its env table.
 
 ---
 
+## Deployment proxy
+
+| Path | Component(s) |
+|---|---|
+| `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | auth-and-identity |
+
 ## Terraform: custom tools
 
 | Path | Component(s) |
@@ -172,6 +178,7 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/server/features/build/` | craft-sessions |
+| `backend/onyx/server/features/build/static_preview.py` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/sandbox_proxy/` | craft-external-apps |
