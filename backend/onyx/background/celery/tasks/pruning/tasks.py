@@ -70,6 +70,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
 from onyx.db.sync_record import (
+    cleanup_sync_records,
     fail_in_progress_sync_records,
     insert_sync_record,
     record_sync_record_error,
@@ -235,6 +236,26 @@ def _get_live_hierarchy_node_ids(
 
 
 """Jobs / utils for kicking off pruning tasks."""
+
+# A prune dispatched for a pair in one of these states exits without running.
+CC_PAIR_STATUSES_BLOCKING_PRUNE = {
+    ConnectorCredentialPairStatus.PAUSED,
+    ConnectorCredentialPairStatus.DELETING,
+}
+
+
+def reset_prune_and_cancel_sync_record(
+    redis_connector: RedisConnector, db_session: Session
+) -> None:
+    """Abandons the pair's prune: its open PRUNING sync record ends CANCELED and
+    the fence is reset. The pair's prune request stays, so a later prune
+    serves it. The record closes first, so a failed write keeps the fence up."""
+    cleanup_sync_records(
+        db_session=db_session,
+        entity_id=redis_connector.cc_pair_id,
+        sync_type=SyncType.PRUNING,
+    )
+    redis_connector.prune.reset()
 
 
 def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -647,10 +668,12 @@ def connector_pruning_generator_task(
                 credential_id=credential_id,
             )
 
-            if not cc_pair:
-                task_logger.warning(
-                    f"cc_pair not found for {connector_id} {credential_id}"
+            if not cc_pair or cc_pair.status in CC_PAIR_STATUSES_BLOCKING_PRUNE:
+                task_logger.info(
+                    f"Pruning canceled, cc_pair is gone, paused or deleting: "
+                    f"cc_pair={cc_pair_id} status={cc_pair.status if cc_pair else None}"
                 )
+                reset_prune_and_cancel_sync_record(redis_connector, db_session)
                 return
 
             payload = redis_connector.prune.payload
