@@ -2,6 +2,7 @@
 
 import "@opal/loaders/styles.css";
 import { SvgChevronDownSmall } from "@opal/icons";
+import { Section } from "@opal/layouts/general/components";
 import { useOpalStrings } from "@opal/strings";
 
 /**
@@ -12,23 +13,34 @@ import { useOpalStrings } from "@opal/strings";
 function DropdownLoader() {
   const strings = useOpalStrings();
   return (
-    <div
+    <Section
       role="status"
       aria-label={strings.loading}
-      className="flex w-full flex-row items-center rounded-08 border border-border-01 bg-background-neutral-00 p-1.5"
+      flexDirection="row"
+      justifyContent="start"
+      height="fit"
+      gap={0}
+      padding={1.5}
+      className="rounded-08 border border-border-01 bg-background-neutral-00"
     >
-      <div className="flex shrink-0 items-center justify-center ps-0.5 pe-1">
+      <Section width="fit" height="fit" gap={0} className="ms-0.5 me-1">
         <div className="opal-shimmer-block size-4 rounded-full" />
-      </div>
-      <div className="flex min-h-6 flex-1 items-center p-0.5">
+      </Section>
+      <Section
+        flexDirection="row"
+        height="fit"
+        gap={0}
+        padding={0.5}
+        className="min-h-6 flex-1"
+      >
         <div className="opal-shimmer-block h-3 w-full rounded-04" />
-      </div>
+      </Section>
       {/* The select's chevron as a plain icon, in its button's footprint:
           nothing here can be pressed yet. */}
-      <div className="flex size-6 shrink-0 items-center justify-center">
+      <Section width={1.5} height={1.5} gap={0}>
         <SvgChevronDownSmall className="size-4 text-text-03" />
-      </div>
-    </div>
+      </Section>
+    </Section>
   );
 }
 
