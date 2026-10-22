@@ -80,7 +80,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## What's Baked Into the Image
 
-- **Base**: `node:20-slim` (Debian-based)
+- **Base**: `node:22.23.4-bookworm-slim` (Debian-based)
 - **Demo data**: `/workspace/demo_data/` - sample files for demo sessions
 - **Skills**: `/workspace/skills/` - agent skills (image-generation, pptx, etc.)
 - **Templates**: `/workspace/templates/outputs/` - Next.js web app scaffold

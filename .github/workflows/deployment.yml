@@ -309,7 +309,7 @@ jobs:
       - name: setup node
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v6.3.0
         with:
-          node-version: 24
+          node-version: 24.22.1
           package-manager-cache: false
 
       - name: install Rust stable

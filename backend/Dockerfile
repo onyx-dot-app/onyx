@@ -1,3 +1,5 @@
+FROM node:22.23.4-bookworm-slim AS node_source
+
 FROM python:3.11.7-slim-bookworm
 
 LABEL com.danswer.maintainer="founders@onyx.app"
@@ -54,12 +56,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
-# Conditionally install Node.js 20 for Craft (required for Next.js)
+# Conditionally install Node.js 22 for Craft (required for Next.js)
 # Only installed when ENABLE_CRAFT=true
 RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing Node.js 20 for Craft support..." && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs && \
+        echo "Installing Node.js 22.23.4 for Craft support..." && \
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+        apt-get install -y nodejs=22.23.4-1nodesource1 && \
         rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -108,6 +110,9 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.cache/uv /tmp/*.txt && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
+
+# Playwright ships a separate Node binary; patch it as well as the Craft runtime.
+COPY --from=node_source /usr/local/bin/node /usr/local/lib/python3.11/site-packages/playwright/driver/node
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \

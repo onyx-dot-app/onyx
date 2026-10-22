@@ -10,7 +10,7 @@ opencv-python>=4.11.0.86
 openpyxl>=3.1.5
 pandas==2.2.2
 pdfplumber>=0.11.7
-Pillow>=10.0.0
+Pillow>=13.0.0
 pydantic>=2.11.9
 python-pptx>=1.0.2
 scikit-image>=0.25.2

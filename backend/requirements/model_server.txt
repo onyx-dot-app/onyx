@@ -264,8 +264,10 @@ packaging==24.2
     #   transformers
 parameterized==0.9.0
     # via cohere
-pillow==12.1.1
-    # via sentence-transformers
+pillow==13.0.0
+    # via
+    #   onyx
+    #   sentence-transformers
 prometheus-client==0.23.1
     # via
     #   onyx

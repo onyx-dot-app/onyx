@@ -18,7 +18,7 @@
 #           ├── AGENTS.md
 #           └── opencode.json
 
-FROM node:20-slim
+FROM node:22.23.4-bookworm-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
