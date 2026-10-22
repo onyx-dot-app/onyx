@@ -46,6 +46,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     CredentialBindingFieldError,
     credential_binding_field_errors,
+    credential_use_refusal,
     validate_connector_config,
     validate_credential_binding,
 )
@@ -420,7 +421,11 @@ class CredentialBindingCheckRequest(BaseModel):
 
 
 class CredentialBindingRejectionCode(str, Enum):
+    # The credential records a different site than the bound fields.
     BINDING_REJECTED = "binding_rejected"
+    # The credential is shared with the user, and the bound fields match no
+    # connector that uses it (``credential_use_refusal``).
+    SHARED_CREDENTIAL_SETTINGS = "shared_credential_settings"
 
 
 class CredentialBindingRejection(BaseModel):
@@ -467,7 +472,7 @@ def check_credential_binding(
         user=user,
         db_session=db_session,
     )
-    return _check_binding(request, credential)
+    return _check_binding(request, credential, user, db_session)
 
 
 class DraftCredentialBindingCheckRequest(CredentialBindingCheckRequest):
@@ -504,7 +509,7 @@ def check_draft_credential_binding(
         user=user,
         db_session=db_session,
     )
-    result = _check_binding(request, credential)
+    result = _check_binding(request, credential, user, db_session)
     return DraftCredentialBindingCheckResponse(
         field_errors=result.field_errors,
         rejection=result.rejection,
@@ -515,12 +520,34 @@ def check_draft_credential_binding(
 def _check_binding(
     request: CredentialBindingCheckRequest,
     credential: Credential,
+    user: User,
+    db_session: Session,
 ) -> CredentialBindingCheckResponse:
+    """Applies the checks a run or pairing applies to the bound fields, so a
+    form that passes here is not refused later for them."""
     field_errors = credential_binding_field_errors(
         request.source, request.connector_specific_config
     )
     if field_errors:
         return CredentialBindingCheckResponse(field_errors=field_errors, rejection=None)
+    # Before validate_credential_binding, which decrypts the credential.
+    refusal = credential_use_refusal(
+        db_session,
+        user=user,
+        credential=credential,
+        source=request.source,
+        connector_specific_config=request.connector_specific_config,
+    )
+    if refusal is not None:
+        if refusal.error_code is not OnyxErrorCode.INSUFFICIENT_PERMISSIONS:
+            raise refusal
+        return CredentialBindingCheckResponse(
+            field_errors={},
+            rejection=CredentialBindingRejection(
+                code=CredentialBindingRejectionCode.SHARED_CREDENTIAL_SETTINGS,
+                detail=refusal.detail,
+            ),
+        )
     try:
         validate_credential_binding(
             request.source, request.connector_specific_config, credential
