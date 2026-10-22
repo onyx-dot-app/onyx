@@ -3159,6 +3159,7 @@
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "indexingItems": "{count, plural, one {# item falhou} other {# itens falharam}}",
           "doc_permission_sync": "{count, plural, one {Permissões de # documento não sincronizadas} other {Permissões de # documentos não sincronizadas}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
           "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
@@ -3180,9 +3181,9 @@
           "title": "Não foi possível carregar a atividade."
         },
         "docs": {
-          "title": "Documentos com falha",
+          "title": "Itens com falha",
           "search": {
-            "placeholder": "Pesquisar documentos…"
+            "placeholder": "Pesquisar itens…"
           },
           "resolveAll": "Repetir todos",
           "resolveAllTooltip": "Reindexar todos os documentos com falha desta execução",
@@ -3192,8 +3193,8 @@
           "more": "Mais",
           "less": "Menos",
           "unknownDocument": "Documento desconhecido",
-          "empty": "Sem erros de documentos em aberto",
-          "loadError": "Não foi possível carregar os documentos com falha.",
+          "empty": "Sem erros em aberto",
+          "loadError": "Não foi possível carregar os itens com falha.",
           "open": "Abrir o documento"
         },
         "trace": {

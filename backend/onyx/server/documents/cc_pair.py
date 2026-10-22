@@ -65,6 +65,7 @@ from onyx.db.enums import (
     SyncType,
 )
 from onyx.db.index_attempt import (
+    OpenErrorCounts,
     cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
@@ -73,7 +74,7 @@ from onyx.db.index_attempt import (
     get_index_attempt_errors_with_document_names_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
-    get_open_doc_error_counts_for_index_attempts,
+    get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_waiting_index_attempt,
 )
@@ -200,15 +201,17 @@ def get_cc_pair_index_attempts(
     error_counts = get_error_counts_for_index_attempts(
         db_session=db_session, index_attempt_ids=attempt_ids
     )
-    open_counts = get_open_doc_error_counts_for_index_attempts(
+    open_counts = get_open_error_counts_for_index_attempts(
         db_session=db_session, index_attempt_ids=attempt_ids
     )
+    no_errors = OpenErrorCounts()
     return PaginatedReturn(
         items=[
             IndexAttemptSnapshot.from_index_attempt_db_model(
                 index_attempt,
                 error_count=error_counts.get(index_attempt.id, 0),
-                open_doc_error_count=open_counts.get(index_attempt.id, 0),
+                open_error_count=open_counts.get(index_attempt.id, no_errors).total,
+                open_doc_error_count=open_counts.get(index_attempt.id, no_errors).docs,
             )
             for index_attempt in index_attempts
         ],
