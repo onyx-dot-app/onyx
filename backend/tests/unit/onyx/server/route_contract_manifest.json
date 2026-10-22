@@ -483,6 +483,7 @@
   "POST /admin/llm/default-craft": "manage:llms",
   "POST /admin/llm/default-search-selection": "manage:llms",
   "POST /admin/llm/default-vision": "manage:llms",
+  "POST /admin/llm/inworld/available-models": "manage:llms",
   "POST /admin/llm/litellm/available-models": "manage:llms",
   "POST /admin/llm/lm-studio/available-models": "manage:llms",
   "POST /admin/llm/nebius-tokenfactory/available-models": "admin",
