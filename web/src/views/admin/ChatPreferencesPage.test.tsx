@@ -136,7 +136,8 @@ describe("ChatPreferencesPage", () => {
     expect(screen.queryByText("Reasoning Control")).not.toBeInTheDocument();
     expect(screen.queryByText("Temperature Control")).not.toBeInTheDocument();
     expect(mockUseAdminLanguageModels).toHaveBeenCalled();
-    expect(screen.getAllByDisplayValue("Global Default")).toHaveLength(2);
+    expect(screen.getByDisplayValue("Chat Default")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Global Default")).toBeInTheDocument();
     expect(screen.queryByText("Fast Model")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(SWR_KEYS.defaultAssistantConfig)

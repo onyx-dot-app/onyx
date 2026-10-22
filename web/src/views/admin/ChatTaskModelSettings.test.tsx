@@ -267,12 +267,12 @@ describe("ChatTaskModelSettings", () => {
     );
   });
 
-  test("shows Global Default for both unset task models", async () => {
+  test("shows the default row for both unset task models", async () => {
     await renderTaskModels();
 
     expect(await screen.findByText("Chat Naming Model")).toBeInTheDocument();
     expect(screen.getByText("Search Selection Model")).toBeInTheDocument();
-    expect(taskSelector(0)).toHaveValue("Global Default");
+    expect(taskSelector(0)).toHaveValue("Chat Default");
     expect(taskSelector(1)).toHaveValue("Global Default");
     expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
     expect(
@@ -375,23 +375,23 @@ describe("ChatTaskModelSettings", () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("Provider is unavailable");
     });
-    expect(selector).toHaveValue("Global Default");
+    expect(selector).toHaveValue("Chat Default");
     expect(selector).toBeEnabled();
     expect(
       screen.queryByRole("button", { name: "Reset" })
     ).not.toBeInTheDocument();
   });
 
-  test("picking Global Default clears the chat naming model", async () => {
+  test("picking Chat Default clears the chat naming model", async () => {
     defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
     const user = setupUser();
     await renderTaskModels();
     const selector = await screen.findByDisplayValue("GPT-4o Mini");
 
     await user.click(selector);
-    await user.click(screen.getByRole("option", { name: /Global Default/ }));
+    await user.click(screen.getByRole("option", { name: /Chat Default/ }));
 
-    await waitFor(() => expect(selector).toHaveValue("Global Default"));
+    await waitFor(() => expect(selector).toHaveValue("Chat Default"));
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/admin/llm/default-chat-naming",
       { method: "DELETE" }

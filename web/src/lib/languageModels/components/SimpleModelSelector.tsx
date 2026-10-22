@@ -41,6 +41,8 @@ function hasLoadedMatch(options: SelectOptions, query: string): boolean {
 }
 
 export interface GlobalDefaultRow {
+  /** The row's title, when "Global Default" is not the right name. */
+  label?: string;
   /** The model null resolves to, shown under the row's title. */
   description?: string | null;
 }
@@ -129,7 +131,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     return [
       {
         value: GLOBAL_DEFAULT_SELECT_VALUE,
-        title: t("globalDefault.label"),
+        title: globalDefault.label ?? t("globalDefault.label"),
         description: globalDefault.description ?? undefined,
         icon: getModelIcon("", ""),
       },
