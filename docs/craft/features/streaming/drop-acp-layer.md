@@ -1,6 +1,6 @@
 # Drop the ACP layer
 
-Follow-up to [`opencode-serve-migration.md`](./opencode-serve-migration.md). Two phases — Phase 1 (transport) and Phase 2 (vocabulary cleanup) shipped together. Phase 3 (inline the schema types + drop the PyPI dep) is deferred indefinitely behind a wrapper.
+Follow-up to the opencode-serve migration plan. Two phases — Phase 1 (transport) and Phase 2 (vocabulary cleanup) shipped together. Phase 3 (inline the schema types + drop the PyPI dep) is deferred indefinitely behind a wrapper.
 
 ## What shipped
 

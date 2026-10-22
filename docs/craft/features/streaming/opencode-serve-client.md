@@ -2,7 +2,7 @@
 
 ## Context
 
-Companion to [`docs/craft/opencode-serve-migration.md`](../opencode-serve-migration.md). The migration plan covers the *why* (transport-level fix for the ACP terminator-drop bug + four architectural wins), the pod-spec changes, persistence-model changes, and rollout phases. **This doc covers the implementation of the Phase-1 deliverable only: the in-process Python client (`OpencodeServeClient`) that replaces `ACPExecClient` / `DockerACPExecClient` behind `SandboxManager.send_message`.**
+Companion to the opencode-serve migration plan. The migration plan covers the *why* (transport-level fix for the ACP terminator-drop bug + four architectural wins), the pod-spec changes, persistence-model changes, and rollout phases. **This doc covers the implementation of the Phase-1 deliverable only: the in-process Python client (`OpencodeServeClient`) that replaces `ACPExecClient` / `DockerACPExecClient` behind `SandboxManager.send_message`.**
 
 The public contract (`Generator[ACPEvent, None, None]` returned by `send_message`) is unchanged from the existing ACP clients. Callers (`session/manager.py`, `scheduled_tasks/executor.py`, SSE encoding to the browser, packet logger) require no changes.
 
