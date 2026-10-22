@@ -390,7 +390,9 @@ _ENCODED_ARGUMENTS = TypeAdapter(dict[str, JsonValue] | str)
 _JSON_VALUE = TypeAdapter(JsonValue)
 
 
-def _schema_types(schema: dict[str, JsonValue]) -> set[str]:
+def json_schema_types(schema: dict[str, JsonValue]) -> set[str]:
+    """The JSON types a schema accepts: `type` (one or a list) and those of
+    its `anyOf` / `oneOf` options."""
     declared = schema.get("type")
     types: set[str] = set()
     if isinstance(declared, str):
@@ -402,7 +404,7 @@ def _schema_types(schema: dict[str, JsonValue]) -> set[str]:
         if isinstance(options, list):
             for option in options:
                 if isinstance(option, dict):
-                    types.update(_schema_types(option))
+                    types.update(json_schema_types(option))
     return types
 
 
@@ -419,7 +421,7 @@ def _normalize_arguments(
         schema = properties.get(name)
         if not isinstance(value, str) or not isinstance(schema, dict):
             continue
-        accepted_types = _schema_types(schema)
+        accepted_types = json_schema_types(schema)
         if "string" in accepted_types or not accepted_types.intersection(
             {"array", "object"}
         ):
