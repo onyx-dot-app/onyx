@@ -12,7 +12,6 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { InputTypeIn, SidebarTab, Tag, type TagProps } from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
@@ -22,7 +21,10 @@ import {
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  CUSTOM_ANALYTICS_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
 import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
 import useFilter from "@/hooks/useFilter";
@@ -53,7 +55,6 @@ export default function AdminSidebar() {
     }
   }, [focusSearch, folded]);
   const pathname = usePathname();
-  const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { adminCapabilities } = useUser();
   const settings = useSettings();
   const tier = settings?.tier;
@@ -75,7 +76,7 @@ export default function AdminSidebar() {
     vectorDbEnabled: settings?.vectorDbEnabled !== false,
     enableCloud: NEXT_PUBLIC_CLOUD_ENABLED,
     tier,
-    customAnalyticsEnabled,
+    customAnalyticsEnabled: CUSTOM_ANALYTICS_ENABLED,
     hasSubscription: hasSubscriptionOrLicense,
     hooksEnabled: settings?.hooks_enabled ?? false,
     queryHistoryEnabled:
