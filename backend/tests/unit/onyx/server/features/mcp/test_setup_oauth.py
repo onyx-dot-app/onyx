@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
@@ -10,7 +11,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
 )
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp import setup_oauth
+from onyx.server.features.mcp import oauth_flow, setup_oauth
 from onyx.server.features.mcp.models import MCPSetupRequest
 from tests.unit.fakes import FakeCache
 
@@ -203,6 +204,43 @@ async def test_auto_discovery_saves_prefixed_state_and_restorable_context(
         str(attempt.oauth_metadata.token_endpoint) == "https://auth.example.com/token"
     )
     assert storage.tokens is None
+    assert not cache.store
+
+
+@pytest.mark.asyncio
+async def test_rejected_client_metadata_document_stores_no_attempt(
+    cache: FakeCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request = _request().model_copy(
+        update={
+            "oauth_provider_mode": MCPOAuthProviderMode.AUTO_DISCOVERY,
+            "oauth_client_id": "https://onyx.example/api/mcp/oauth/client-metadata",
+            "oauth_client_secret": None,
+        }
+    )
+
+    def reject(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, request=request)
+
+    monkeypatch.setattr(
+        oauth_flow,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: httpx.AsyncClient(transport=httpx.MockTransport(reject)),
+    )
+
+    async def discover(
+        *, oauth_provider: setup_oauth.OnyxOAuthClientProvider, **_kwargs: object
+    ) -> None:
+        context = oauth_provider.context
+        context.client_info = await context.storage.get_client_info()
+        authorization = oauth_provider.build_resumable_authorization_request()
+        assert oauth_provider.authorization_request_handler is not None
+        await oauth_provider.authorization_request_handler(authorization, context)
+
+    with patch.object(setup_oauth, "run_oauth_discovery", side_effect=discover):
+        with pytest.raises(OnyxError) as exc_info:
+            await setup_oauth.start_setup_oauth(request, "owner", {})
+    assert exc_info.value.extra == {"oauth_error": "client_metadata_rejected"}
     assert not cache.store
 
 

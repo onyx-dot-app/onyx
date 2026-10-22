@@ -80,6 +80,9 @@ def oauth_setup_error(error: Exception) -> OnyxError:
             (item for item in errors if item.extra != {"oauth_error": "oauth_failed"}),
             errors[0],
         )
+    # Our own OnyxErrors carry no upstream text.
+    if isinstance(error, OnyxError):
+        return error
     if isinstance(error, OAuthRegistrationError):
         return OnyxError(
             OnyxErrorCode.INVALID_INPUT,

@@ -331,6 +331,7 @@
         "discoveryStage": "No se pudieron cargar las herramientas del servidor",
         "loadStage": "No se pudieron cargar los ajustes de conexión",
         "clientRegistrationFailed": "El registro automático del cliente falló. Usa tu propio cliente OAuth o revisa los requisitos de configuración del proveedor.",
+        "clientMetadataRejected": "El proveedor no pudo usar el documento de metadatos del cliente. Si esta instancia no es accesible desde internet, desactiva «Usar el documento de metadatos del cliente» y vuelve a conectar.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
         "connectionFailed": "No se pudo acceder al servidor. Comprueba la URL del servidor e inténtalo de nuevo.",
         "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo.",
@@ -413,7 +414,8 @@
       },
       "cimd": {
         "label": "Usar el documento de metadatos del cliente",
-        "description": "Si está activado, el proveedor obtiene el documento de metadatos del cliente de {appName} a través de la Internet pública. Desactívalo si esta instancia de {appName} es privada. {appName} usará entonces el registro automático de clientes."
+        "description": "Si está activado, el proveedor obtiene el documento de metadatos del cliente de {appName} a través de la Internet pública. Desactívalo si esta instancia de {appName} es privada. {appName} usará entonces el registro automático de clientes.",
+        "turnOff": "Desactivar el documento de metadatos del cliente"
       },
       "discovery": {
         "checking": "Comprobando la configuración automática…",
