@@ -426,6 +426,50 @@ def complete_doc_permission_sync_attempt(
         raise
 
 
+def is_doc_permission_sync_attempt_resumable(
+    db_session: Session,
+    cc_pair_id: int,
+    attempt_id: int,
+    current_attempt_id: int,
+) -> bool:
+    """Whether the checkpoint a failed attempt left may continue: the attempt
+    started after any requested full refresh (perm_sync_pending_since), and
+    only failures came after it. An attempt that dies before its first save
+    leaves the older checkpoint resumable."""
+    holder = db_session.execute(
+        select(DocPermissionSyncAttempt)
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.id
+            == DocPermissionSyncAttempt.connector_credential_pair_id,
+        )
+        .where(
+            DocPermissionSyncAttempt.id == attempt_id,
+            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
+            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
+            or_(
+                ConnectorCredentialPair.perm_sync_pending_since.is_(None),
+                DocPermissionSyncAttempt.time_created
+                >= ConnectorCredentialPair.perm_sync_pending_since,
+            ),
+        )
+    ).scalar_one_or_none()
+    if holder is None:
+        return False
+
+    later_non_failure = db_session.execute(
+        select(DocPermissionSyncAttempt.id)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
+            DocPermissionSyncAttempt.id != current_attempt_id,
+            DocPermissionSyncAttempt.time_created > holder.time_created,
+            DocPermissionSyncAttempt.status != PermissionSyncStatus.FAILED,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return later_non_failure is None
+
+
 # =============================================================================
 # EXTERNAL GROUP PERMISSION SYNC ATTEMPT CRUD
 # =============================================================================
