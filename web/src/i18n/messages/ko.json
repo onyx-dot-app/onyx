@@ -6765,6 +6765,9 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "고급 옵션"
+      },
       "actions": {
         "applyForward": {
           "label": "새 문서와 업데이트된 문서에 적용"

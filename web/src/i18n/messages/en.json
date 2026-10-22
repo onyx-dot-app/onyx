@@ -6765,6 +6765,9 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Advanced Options"
+      },
       "actions": {
         "applyForward": {
           "label": "Apply to new and updated documents"

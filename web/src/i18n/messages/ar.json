@@ -6765,6 +6765,9 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "خيارات متقدمة"
+      },
       "actions": {
         "applyForward": {
           "label": "التطبيق على المستندات الجديدة والمحدّثة"

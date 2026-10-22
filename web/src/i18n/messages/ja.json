@@ -6765,6 +6765,9 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "詳細オプション"
+      },
       "actions": {
         "applyForward": {
           "label": "新規および更新されたドキュメントに適用"

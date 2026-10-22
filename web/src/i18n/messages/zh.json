@@ -6765,6 +6765,9 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "高级选项"
+      },
       "actions": {
         "applyForward": {
           "label": "应用于新增和更新的文档"
