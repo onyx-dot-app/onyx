@@ -67,7 +67,7 @@ is already local.
 | `CHECK_FOR_CHECKPOINT_CLEANUP` / `CLEANUP_CHECKPOINT` | `celery` / `checkpoint_cleanup` | beat, 1h | Deletes checkpoint blobs older than `NUM_DAYS_TO_KEEP_CHECKPOINTS`. |
 | `CHECK_FOR_INDEX_ATTEMPT_CLEANUP` / `CLEANUP_INDEX_ATTEMPT` | `celery` / `index_attempt_cleanup` | beat, 30m | Deletes `IndexAttempt` rows older than `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS`, keeping the last `NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP` per cc-pair/search-settings pair. |
 | `CHECK_FOR_PRUNING` / `CONNECTOR_PRUNING_GENERATOR_TASK` (`pruning/tasks.py`) | `celery` / `connector_pruning` | beat, 20s | Diffs the source's live doc-ID list against Postgres and queues per-doc cleanup for the difference. |
-| `CHECK_FOR_CONNECTOR_DELETION` (`connector_deletion/tasks.py`) | `celery` / `connector_deletion` | beat, 20s | Fans out `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` for every document tied to a cc-pair marked `DELETING`. Blocks while indexing, pruning, or a port attempt is active on that cc-pair. |
+| `CHECK_FOR_CONNECTOR_DELETION` (`connector_deletion/tasks.py`) | `celery` / `connector_deletion` | beat, 20s | Fans out `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the documents tied to a cc-pair marked `DELETING`, one batch of `DOCUMENT_INDEX_SYNC_MAX_TASKS` at a time. The monitor queues the next batch when the taskset drains. Blocks while indexing, pruning, or a port attempt is active on that cc-pair. |
 | `CHECK_FOR_OLD_INDEX_RECLAIM` / `RUN_OLD_INDEX_RECLAIM` (`index_reclaim/tasks.py`) | `celery` | beat, 30m | Advances the `IndexReclaimStatus` state machine on PAST search-settings rows. Owned in detail by [[document-index]] §4.4; this component only writes the FUTURE-index docs the reclaim eventually deletes. |
 | `CHECK_FOR_PORT` / `RUN_PORT_ATTEMPT` (`port/tasks.py`) | `celery` / `port` | beat, 30s | Backfills a secondary index by re-embedding stored PRESENT chunks (`port_reembed.py`), without re-fetching the source. See §4.6. |
 
@@ -579,7 +579,11 @@ by leaving the cc-pair fenced for the next beat tick rather than racing with an
 in-flight write); an active port attempt is additionally asked to cancel
 (`request_port_cancel`) so it stops writing to the index it would otherwise
 resurrect documents into. Once clear, it fans out the same
-`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over every document tied to the cc-pair.
+`DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` over the cc-pair's documents in batches of
+`DOCUMENT_INDEX_SYNC_MAX_TASKS`, so the broker holds at most one batch per cc-pair.
+`monitor_connector_deletion_taskset` queues the next batch each time the taskset
+drains with documents still linked, and fails the deletion when a batch does not
+lower the linked count.
 
 ### 4.9 User files: the other adapter
 
