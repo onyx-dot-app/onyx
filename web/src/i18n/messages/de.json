@@ -3729,7 +3729,7 @@
               "label": "Anhänge einbeziehen"
             },
             "scoped_token": {
-              "label": "Dies ist ein API-Token mit Scopes",
+              "label": "Bereichsbezogenes API-Token",
               "description": "Token mit Scopes müssen über das API-Gateway von Atlassian geleitet werden. Für klassische Token deaktiviert lassen."
             }
           }
@@ -3873,8 +3873,7 @@
               "description": "Bei mehreren Repositories kommagetrennte Namen eingeben (z. B. repo1,repo2,repo3)"
             },
             "everything": {
-              "label": "Alles",
-              "description": "Dieser Connector indexiert alle Repositories, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "label": "Onyx wird alle Repositorys indexieren"
             },
             "include_prs": {
               "label": "Pull Requests einbeziehen",
@@ -3973,8 +3972,8 @@
               "description": "Ein oder mehrere Bitbucket-Projektschlüssel (kommagetrennt), um alle Repositories dieser Projekte zu indexieren (z. B. PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Workspace",
-              "description": "Dieser Connector indexiert alle Repositories im Workspace."
+              "label": "Indexiert jedes Repository im Workspace",
+              "description": "Onyx indexiert alle Repositorys im Workspace, die das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             }
           }
         },
@@ -4098,8 +4097,8 @@
               }
             },
             "everything": {
-              "label": "Alles",
-              "description": "Dieser Connector indexiert alle Seiten, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "label": "Indexiert jede Seite, die das Konto lesen kann",
+              "description": "Onyx indexiert alle Seiten in jedem Bereich, den das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             },
             "space": {
               "label": "Space-Schlüssel",
@@ -4141,8 +4140,8 @@
               }
             },
             "everything": {
-              "label": "Alles",
-              "description": "Dieser Connector indexiert alle Issues, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "label": "Indexiert jedes Ticket, das das Konto lesen kann",
+              "description": "Onyx indexiert alle Tickets in jedem Projekt, das das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             },
             "project_key": {
               "label": "Projektschlüssel",
@@ -4329,8 +4328,8 @@
               }
             },
             "everything_description": {
-              "label": "Alles",
-              "description": "Dieser Connector indexiert alle Spaces, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "label": "Indexiert jeden Bereich, den das Konto lesen kann",
+              "description": "Onyx indexiert alle Seiten in jedem Bereich, den das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             },
             "spaces": {
               "label": "Space-IDs",
@@ -4770,8 +4769,8 @@
               }
             },
             "everything_description": {
-              "label": "Alles",
-              "description": "Dieser Connector erkennt und indexiert automatisch alle Bases und Tabellen, auf die Ihr API-Token Zugriff hat."
+              "label": "Indexiert jede Base, die das Token lesen kann",
+              "description": "Onyx findet und indexiert alle Bases und Tabellen, die das API-Token lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             },
             "airtable_url": {
               "label": "Airtable-URL",
@@ -4810,8 +4809,8 @@
               "description": "Bei mehreren Spots geben Sie Ihre Spots einzeln ein."
             },
             "everything": {
-              "label": "Alles",
-              "description": "Dieser Connector indexiert alle Spots, auf die die angegebenen Zugangsdaten Zugriff haben!"
+              "label": "Indexiert jeden Spot, den das Konto lesen kann",
+              "description": "Onyx indexiert alle Spots, die das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
             }
           }
         },

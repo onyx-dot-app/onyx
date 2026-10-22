@@ -56,8 +56,11 @@ def main() -> int:
     base: str = args.base or os.environ.get("PRE_COMMIT_FROM_REF") or default_base()
     previous: dict[str, str] = read_catalog(CATALOG_PATH / "en.json", base)
     current: dict[str, str] = read_catalog(CATALOG_PATH / "en.json")
+    # A change in letter case only (e.g. title case) needs no new translation.
     changed: list[str] = [
-        key for key, text in current.items() if previous.get(key) != text
+        key
+        for key, text in current.items()
+        if key not in previous or previous[key].casefold() != text.casefold()
     ]
     if not changed:
         return 0

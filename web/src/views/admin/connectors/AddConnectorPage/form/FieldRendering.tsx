@@ -13,6 +13,7 @@ import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
   InputKeyValue,
   InputNumber,
+  MessageCard,
   Tabs,
   Text as OpalText,
 } from "@opal/components";
@@ -544,9 +545,12 @@ export const RenderField: FC<RenderFieldProps> = ({
           )}
         </InputVertical>
       ) : field.type === "string_tab" ? (
-        <OpalText font="secondary-body" color="text-03">
-          {richDescription ?? ""}
-        </OpalText>
+        // A tab with nothing to fill in says what it indexes.
+        <MessageCard
+        innerPadding={1}
+        title={label}
+        description={richDescription}
+        />
       ) : (
         <>
           {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- developer diagnostic, not copy */}

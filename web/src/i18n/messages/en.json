@@ -3256,7 +3256,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "OneDrive files to index",
+          "label": "OneDrive Files to Index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -3275,7 +3275,7 @@
           "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
-          "label": "Treat organization links as public",
+          "label": "Treat Organization Links as Public",
           "description": "Treat files shared through an organization-wide link as visible to all Onyx users."
         },
         "authorityHost": {
@@ -3729,7 +3729,7 @@
               "label": "Include Attachments"
             },
             "scoped_token": {
-              "label": "This is an API token with scopes",
+              "label": "Scoped API Token",
               "description": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
             }
           }
@@ -3753,15 +3753,15 @@
               "description": "Index every session the members of one Zoom Group host, of the types ticked below. Zoom re-reads the member list on every run, so a joiner or leaver is picked up without editing this connector."
             },
             "include_meetings": {
-              "label": "Include meetings",
+              "label": "Include Meetings",
               "description": "Applies to Host Emails and Zoom Group. The ID lists above already say which type each ID is."
             },
             "include_webinars": {
-              "label": "Include webinars",
+              "label": "Include Webinars",
               "description": "Applies to Host Emails and Zoom Group. Webinars also need the Webinar add-on, enabled for the host."
             },
             "treat_link_access_as_public": {
-              "label": "Treat link access as public",
+              "label": "Treat Link Access as Public",
               "description": "Only matters with permission sync. When on, a recording whose Link access is \"Anyone with the link\" or a signed-in rule is visible to all Onyx users, and a domain rule to users of those domains. When off, every transcript is visible to the recording's owner alone, because Zoom cannot say who is in \"People with access\"."
             },
             "plan_tier": {
@@ -3796,7 +3796,7 @@
               }
             },
             "scroll_before_scraping": {
-              "label": "Scroll before scraping",
+              "label": "Scroll Before Scraping",
               "description": "Enable if the website requires scrolling for the desired content to load"
             },
             "url_rewrites": {
@@ -3813,7 +3813,7 @@
           "description": "Configure LumApps connector",
           "fields": {
             "base_url": {
-              "label": "API Base URL (cell host)",
+              "label": "API Base URL (Cell Host)",
               "description": "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com)."
             },
             "organization_id": {
@@ -3821,7 +3821,7 @@
               "description": "Your LumApps organization id (numeric)."
             },
             "instance_ids": {
-              "label": "Instance (site) IDs",
+              "label": "Instance (Site) IDs",
               "description": "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user."
             },
             "custom_content_types": {
@@ -3873,11 +3873,10 @@
               "description": "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)"
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all repositories the provided credentials have access to!"
+              "label": "Onyx will index all repositories"
             },
             "include_prs": {
-              "label": "Include pull requests",
+              "label": "Include Pull Requests",
               "description": "Index pull requests from repositories"
             },
             "include_issues": {
@@ -3951,7 +3950,7 @@
               "description": "The Bitbucket workspace to index (e.g., \"atlassian\" from https://bitbucket.org/atlassian/workspace )."
             },
             "bitbucket_mode": {
-              "label": "Bitbucket content to index",
+              "label": "Bitbucket Content to Index",
               "tabs": {
                 "repo": {
                   "label": "Specific Repositories"
@@ -3973,8 +3972,8 @@
               "description": "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)"
             },
             "workspace_tab": {
-              "label": "Workspace",
-              "description": "This connector will index all repositories in the workspace."
+              "label": "Indexes every repository in the workspace",
+              "description": "Onyx indexes all repositories in the workspace that the selected account can read. To index fewer, choose another tab."
             }
           }
         },
@@ -3991,7 +3990,7 @@
           "description": "Configure Google Drive connector",
           "fields": {
             "credential_kind": {
-              "label": "Credential kind"
+              "label": "Credential Kind"
             },
             "indexing_scope": {
               "tabs": {
@@ -4004,7 +4003,7 @@
               }
             },
             "include_shared_drives": {
-              "label": "Include shared drives",
+              "label": "Include Shared Drives",
               "description": {
                 "oauth": "This will allow Onyx to index everything in the shared drives you have access to.",
                 "serviceAccount": "This will allow Onyx to index everything in your Organization's shared drives."
@@ -4022,7 +4021,7 @@
             },
             "include_files_shared_with_me": {
               "description": "This will allow Onyx to index all files shared with you.",
-              "label": "Include All Files Shared With You"
+              "label": "Include All Files Shared with You"
             },
             "shared_drive_urls": {
               "description": {
@@ -4044,7 +4043,7 @@
               "label": "Specific User Emails"
             },
             "exclude_domain_link_only": {
-              "label": "Hide domain link-only files",
+              "label": "Hide Domain Link-Only Files",
               "description": "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access."
             }
           }
@@ -4098,8 +4097,8 @@
               }
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all pages the provided credentials have access to!"
+              "label": "Indexes every page the account can read",
+              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
             },
             "space": {
               "label": "Space Key",
@@ -4141,8 +4140,8 @@
               }
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all issues the provided credentials have access to!"
+              "label": "Indexes every issue the account can read",
+              "description": "Onyx indexes all issues in every project that the selected account can read. To index fewer, choose another tab."
             },
             "project_key": {
               "label": "Project Key",
@@ -4198,7 +4197,7 @@
               "description": "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified."
             },
             "treat_sharing_link_as_public": {
-              "label": "Treat sharing links as public",
+              "label": "Treat Sharing Links as Public",
               "description": "When enabled, documents with a sharing link (anonymous or organization-wide) are treated as public (visible to all Onyx users). When disabled, only users and groups with explicit role assignments can see the document."
             },
             "excluded_sites": {
@@ -4318,7 +4317,7 @@
               "description": "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )"
             },
             "indexing_scope": {
-              "label": "Drupal Wiki content to index",
+              "label": "Drupal Wiki Content to Index",
               "tabs": {
                 "everything": {
                   "label": "Everything"
@@ -4329,8 +4328,8 @@
               }
             },
             "everything_description": {
-              "label": "Everything",
-              "description": "This connector will index all spaces the provided credentials have access to!"
+              "label": "Indexes every space the account can read",
+              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
             },
             "spaces": {
               "label": "Space IDs",
@@ -4626,7 +4625,7 @@
               "description": "Input a valid Wikipedia language code (e.g. 'en', 'es')"
             },
             "categories": {
-              "label": "Categories to index",
+              "label": "Categories to Index",
               "description": "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
             },
             "pages": {
@@ -4676,7 +4675,7 @@
               "label": "MediaWiki Site URL"
             },
             "categories": {
-              "label": "Categories to index",
+              "label": "Categories to Index",
               "description": "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
             },
             "pages": {
@@ -4727,7 +4726,7 @@
               "description": "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization."
             },
             "experiment_row_lookback_days": {
-              "label": "Experiment Row Lookback (days)",
+              "label": "Experiment Row Lookback (Days)",
               "description": "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments."
             }
           }
@@ -4759,7 +4758,7 @@
           "description": "Configure Airtable connector",
           "fields": {
             "airtable_scope": {
-              "label": "Airtable content to index",
+              "label": "Airtable Content to Index",
               "tabs": {
                 "everything": {
                   "label": "Everything"
@@ -4770,8 +4769,8 @@
               }
             },
             "everything_description": {
-              "label": "Everything",
-              "description": "This connector will automatically discover and index all bases and tables accessible by your API token."
+              "label": "Indexes every base the token can read",
+              "description": "Onyx finds and indexes all bases and tables that the API token can read. To index fewer, choose another tab."
             },
             "airtable_url": {
               "label": "Airtable URL",
@@ -4782,7 +4781,7 @@
               "description": "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83."
             },
             "treat_all_non_attachment_fields_as_metadata": {
-              "label": "Treat all fields except attachments as metadata",
+              "label": "Treat All Fields Except Attachments as Metadata",
               "description": "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments."
             }
           }
@@ -4795,7 +4794,7 @@
               "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
-              "label": "Highspot content to index",
+              "label": "Highspot Content to Index",
               "tabs": {
                 "spots": {
                   "label": "Specific Spots"
@@ -4810,8 +4809,8 @@
               "description": "For multiple spots, enter your spot one by one."
             },
             "everything": {
-              "label": "Everything",
-              "description": "This connector will index all spots the provided credentials have access to!"
+              "label": "Indexes every spot the account can read",
+              "description": "Onyx indexes all spots that the selected account can read. To index fewer, choose another tab."
             }
           }
         },

@@ -199,12 +199,9 @@ function CheckLog({ check }: CheckLogProps) {
             />
           )}
           {check.required && (
-            <Tag
-              title={t("required.label")}
-              color="white"
-              variant="status"
-              font="secondary-action"
-            />
+            <Text font="secondary-action" color="text-03">
+              {t("required.label")}
+            </Text>
           )}
         </Section>
       }

@@ -470,7 +470,6 @@ export const connectorConfigs: Record<
                 type: "string_tab",
                 label: "connectors.github.fields.everything.label",
                 name: "everything",
-                description: "connectors.github.fields.everything.description",
               },
             ],
           },
