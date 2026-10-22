@@ -45,7 +45,8 @@ export function checksProgress(
     error: counts.failed,
     warning: counts.incomplete + counts.indeterminate,
     neutral: counts.running,
-    rest: counts.pending + counts.waiting,
+    // A stopped check has not run.
+    rest: counts.pending + counts.waiting + counts.stopped,
   };
   const counted: number =
     ring.success + ring.error + ring.warning + ring.neutral + ring.rest;

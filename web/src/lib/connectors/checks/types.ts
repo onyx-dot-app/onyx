@@ -89,6 +89,8 @@ export type DraftCheckStateKind =
   | "running"
   /** A required form field is missing or invalid; it runs once it is valid. */
   | "waiting"
+  /** A required check the admin skipped: it holds Create until it runs. */
+  | "stopped"
   /** The access type or the check's own rule excludes it. */
   | "not_applicable";
 

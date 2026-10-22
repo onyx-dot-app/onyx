@@ -10759,7 +10759,8 @@
         "skipped": "Ignorada",
         "running": "Testando…",
         "pending": "Na fila",
-        "waiting": "Aguardando configurações"
+        "waiting": "Aguardando configurações",
+        "stopped": "Interrompida por você"
       },
       "required": {
         "label": "Obrigatória"

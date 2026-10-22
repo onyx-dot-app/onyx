@@ -10759,7 +10759,8 @@
         "skipped": "スキップ",
         "running": "テスト中…",
         "pending": "待機中",
-        "waiting": "設定を待っています"
+        "waiting": "設定を待っています",
+        "stopped": "ユーザーが停止"
       },
       "required": {
         "label": "必須"

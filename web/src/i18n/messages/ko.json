@@ -10759,7 +10759,8 @@
         "skipped": "건너뜀",
         "running": "테스트 중…",
         "pending": "대기 중",
-        "waiting": "설정을 기다리는 중"
+        "waiting": "설정을 기다리는 중",
+        "stopped": "사용자가 중지함"
       },
       "required": {
         "label": "필수"

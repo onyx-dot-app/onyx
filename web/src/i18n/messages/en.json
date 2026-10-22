@@ -10759,7 +10759,8 @@
         "skipped": "Skipped",
         "running": "Testing…",
         "pending": "Queued",
-        "waiting": "Waiting for settings"
+        "waiting": "Waiting for settings",
+        "stopped": "Stopped by you"
       },
       "required": {
         "label": "Required"

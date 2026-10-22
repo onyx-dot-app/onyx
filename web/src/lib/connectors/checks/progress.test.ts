@@ -13,6 +13,7 @@ function counts(
     indeterminate: 0,
     skipped: 0,
     waiting: 0,
+    stopped: 0,
     not_applicable: 0,
     ...overrides,
   };

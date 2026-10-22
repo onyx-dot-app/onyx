@@ -10759,7 +10759,8 @@
         "skipped": "Ignorée",
         "running": "Test en cours…",
         "pending": "En file d’attente",
-        "waiting": "En attente des paramètres"
+        "waiting": "En attente des paramètres",
+        "stopped": "Arrêtée par vous"
       },
       "required": {
         "label": "Obligatoire"

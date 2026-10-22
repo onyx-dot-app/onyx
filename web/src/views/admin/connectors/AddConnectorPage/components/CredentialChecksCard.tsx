@@ -106,6 +106,14 @@ const CHECK_LOGS = {
     detail: "status.skipped",
     ...MUTED,
   },
+  // A required check the admin skipped. It holds Create, so `CheckLog`
+  // shows it as blocking.
+  stopped: {
+    variant: "default",
+    icon: SvgXCircle,
+    detail: "status.stopped",
+    ...MUTED,
+  },
   running: {
     variant: "info-light",
     icon: IconLoader,
@@ -140,7 +148,7 @@ const GROUPS = [
   { label: "groups.failed", states: ["failed"] },
   { label: "groups.indeterminate", states: ["incomplete", "indeterminate"] },
   { label: "groups.passed", states: ["passed"] },
-  { label: "groups.skipped", states: ["skipped"] },
+  { label: "groups.skipped", states: ["skipped", "stopped"] },
   { label: "groups.running", states: ["running"] },
   { label: "groups.expected", states: ["pending", "waiting"] },
 ] as const satisfies ReadonlyArray<{
@@ -168,7 +176,8 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const [expanded, setExpanded] = useState(false);
   const { variant, icon, detail, font, color } = CHECK_LOGS[check.state];
   // A failed required check blocks the form or Create, so its line is heavy.
-  const blocking = check.state === "failed" && check.required;
+  const blocking =
+    (check.state === "failed" || check.state === "stopped") && check.required;
   // A finished check with a fix or docs opens to show them.
   const finished: boolean =
     check.state === "passed" ||
@@ -200,7 +209,8 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     (check.state === "running" || (expected && !check.required)) &&
     onSkipCheck !== undefined;
   const runnable: boolean =
-    (check.state === "skipped" || expected) && onRunCheck !== undefined;
+    (check.state === "skipped" || check.state === "stopped" || expected) &&
+    onRunCheck !== undefined;
   // A finished check, whatever its outcome, can run again.
   const rerunnable: boolean = finished && onRunCheck !== undefined;
   const skipButton = (
@@ -537,7 +547,10 @@ export function CheckCardView({
       [t("summary.unverified", { count: incompleteCount }), incompleteCount],
       [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
       [t("summary.expected", { count: expectedCount }), expectedCount],
-      [t("summary.skipped", { count: count("skipped") }), count("skipped")],
+      [
+        t("summary.skipped", { count: count("skipped") + count("stopped") }),
+        count("skipped") + count("stopped"),
+      ],
       [t("summary.successful", { count: count("passed") }), count("passed")],
     ];
     return format.list(

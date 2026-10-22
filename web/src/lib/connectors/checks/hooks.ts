@@ -117,6 +117,7 @@ function blocks(check: DraftCheckState): boolean {
     case "pending":
     case "running":
     case "waiting":
+    case "stopped":
       return true;
   }
 }
@@ -153,6 +154,7 @@ export const NO_CHECKS: Record<DraftCheckStateKind, number> = {
   indeterminate: 0,
   skipped: 0,
   waiting: 0,
+  stopped: 0,
   not_applicable: 0,
 };
 
@@ -492,8 +494,9 @@ export function useConnectorChecks({
       isFinished(check) ? [toCheckResult(check)] : []
     ),
     // A run that broke will not finish its queued or running checks.
+    // A stopped check stays listed: it holds Create until it runs.
     openChecks: checks.filter((check) =>
-      check.state === "waiting"
+      check.state === "waiting" || check.state === "stopped"
         ? true
         : (check.state === "pending" || check.state === "running") &&
           status !== "failedToRun"
@@ -510,12 +513,16 @@ export function useConnectorChecks({
     begin: () => void start("none"),
     rerun: () => void start("all"),
     refresh: () => void start("none"),
+    // A row action waits for the start in flight: two starts racing could
+    // supersede each other.
     skipCheck: (checkId) => {
+      if (session?.requesting) return;
       const skipped = session?.skippedCheckIds ?? [];
       if (skipped.includes(checkId)) return;
       void start("none", { skip: [...skipped, checkId] });
     },
     runCheck: (checkId) => {
+      if (session?.requesting) return;
       const skip = (session?.skippedCheckIds ?? []).filter(
         (id) => id !== checkId
       );

@@ -611,7 +611,9 @@ later run sends them as `skip_check_ids`. Run Check runs a skipped check
 (`check_ids`) or a queued one next (`start_check_id`) and drops its skip.
 Re-run Check runs a finished check again (`check_ids`), whatever its outcome. A
 finished check with a fix or a docs link opens to show them. A row's click
-does what its right-most button does.
+does what its right-most button does. A skipped required check is `stopped`: it stays
+listed among the skipped checks, blocks Create and offers Run Check. Row
+actions wait while a start request is in flight.
 A result of an older run does not replace a skip or stop of the latest run
 (`draft_runs.py:cache_run_result`). `start_check_id` runs that check and the
 checks it needs first, also through a dependency that keeps a cached result. An unknown check id, or a check to run and to skip, is

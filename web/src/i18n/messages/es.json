@@ -10759,7 +10759,8 @@
         "skipped": "Omitida",
         "running": "Probando…",
         "pending": "En cola",
-        "waiting": "Esperando la configuración"
+        "waiting": "Esperando la configuración",
+        "stopped": "Detenida por ti"
       },
       "required": {
         "label": "Obligatoria"

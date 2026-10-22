@@ -10759,7 +10759,8 @@
         "skipped": "已跳过",
         "running": "正在测试…",
         "pending": "排队中",
-        "waiting": "正在等待设置"
+        "waiting": "正在等待设置",
+        "stopped": "已由你停止"
       },
       "required": {
         "label": "必需"
