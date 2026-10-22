@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "مستودع محدد"
+                  "label": "مستودعات محددة"
                 },
                 "everything": {
                   "label": "كل شيء"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "اسم المستودع (أو أسماؤها)",
-              "description": "لعدة مستودعات، أدخل الأسماء مفصولة بفواصل (مثل repo1,repo2,repo3)"
+              "label": "أسماء المستودعات",
+              "description": "أدخل كل اسم دون المالك، مثل onyx."
             },
             "everything": {
               "label": "سيفهرس Onyx جميع المستودعات"

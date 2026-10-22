@@ -1,6 +1,9 @@
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { withoutFormOnlyFields } from "@/lib/connectors/utils";
+import {
+  toConfigValue,
+  withoutFormOnlyFields,
+} from "@/lib/connectors/utils";
 
 type ConfigField = ConnectionConfiguration["values"][number];
 type ConfigValueField = Exclude<ConfigField, { type: "tab" }>;
@@ -40,11 +43,15 @@ export function connectorFormState(
         const value: unknown = values[name];
         return [
           name,
-          Array.isArray(value)
-            ? value.filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              )
-            : value,
+          toConfigValue(
+            configuration,
+            name,
+            Array.isArray(value)
+              ? value.filter(
+                  (item) => typeof item !== "string" || item.trim() !== ""
+                )
+              : value
+          ),
         ];
       })
   );

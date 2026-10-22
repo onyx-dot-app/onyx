@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "指定仓库"
+                  "label": "指定的仓库"
                 },
                 "everything": {
                   "label": "全部"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "仓库名称",
-              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+              "label": "仓库名称列表",
+              "description": "输入每个名称时不要包含所有者，例如 onyx。"
             },
             "everything": {
               "label": "Onyx 将索引所有仓库"

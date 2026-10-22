@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "Bestimmtes Repository"
+                  "label": "Bestimmte Repositorys"
                 },
                 "everything": {
                   "label": "Alles"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "Repository-Name(n)",
-              "description": "Bei mehreren Repositories kommagetrennte Namen eingeben (z. B. repo1,repo2,repo3)"
+              "label": "Repository-Namen",
+              "description": "Geben Sie jeden Namen ohne den Inhaber ein, z. B. onyx."
             },
             "everything": {
               "label": "Onyx wird alle Repositorys indexieren"

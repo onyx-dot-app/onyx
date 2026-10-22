@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "특정 저장소"
+                  "label": "지정한 저장소"
                 },
                 "everything": {
                   "label": "전체"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "저장소 이름",
-              "description": "저장소가 여러 개이면 쉼표로 구분하여 이름을 입력하세요 (예: repo1,repo2,repo3)"
+              "label": "저장소 이름 목록",
+              "description": "각 이름은 소유자 없이 입력하세요 (예: onyx)."
             },
             "everything": {
               "label": "Onyx가 모든 저장소를 색인합니다"

@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "特定のリポジトリ"
+                  "label": "指定したリポジトリ"
                 },
                 "everything": {
                   "label": "すべて"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "リポジトリ名",
-              "description": "複数のリポジトリを指定する場合は、名前をカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+              "label": "リポジトリ名の一覧",
+              "description": "各名前はオーナーを付けずに入力してください（例: onyx）。"
             },
             "everything": {
               "label": "Onyx はすべてのリポジトリをインデックスします"

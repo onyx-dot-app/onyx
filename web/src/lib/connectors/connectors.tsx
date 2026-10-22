@@ -449,20 +449,6 @@ export const connectorConfigs: Record<
         optional: true,
         tabs: [
           {
-            value: "repo",
-            label: "connectors.github.fields.github_mode.tabs.repo.label",
-            fields: [
-              {
-                type: "text",
-                label: "connectors.github.fields.repositories.label",
-                name: "repositories",
-                optional: false,
-                description:
-                  "connectors.github.fields.repositories.description",
-              },
-            ],
-          },
-          {
             value: "everything",
             label: "connectors.github.fields.github_mode.tabs.everything.label",
             fields: [
@@ -470,6 +456,22 @@ export const connectorConfigs: Record<
                 type: "string_tab",
                 label: "connectors.github.fields.everything.label",
                 name: "everything",
+              },
+            ],
+          },
+          {
+            value: "repo",
+            label: "connectors.github.fields.github_mode.tabs.repo.label",
+            fields: [
+              {
+                type: "list",
+                label: "connectors.github.fields.repositories.label",
+                name: "repositories",
+                optional: false,
+                description:
+                  "connectors.github.fields.repositories.description",
+                // The config takes one comma-separated string.
+                transform: (names: string[]) => names.join(","),
               },
             ],
           },

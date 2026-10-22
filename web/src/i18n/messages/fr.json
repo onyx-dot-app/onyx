@@ -3861,7 +3861,7 @@
             "github_mode": {
               "tabs": {
                 "repo": {
-                  "label": "Dépôt précis"
+                  "label": "Dépôts précis"
                 },
                 "everything": {
                   "label": "Tout"
@@ -3869,8 +3869,8 @@
               }
             },
             "repositories": {
-              "label": "Nom(s) du dépôt",
-              "description": "Pour plusieurs dépôts, saisissez les noms séparés par des virgules (par ex. repo1,repo2,repo3)"
+              "label": "Noms des dépôts",
+              "description": "Saisissez chaque nom sans le propriétaire, par ex. onyx."
             },
             "everything": {
               "label": "Onyx indexera tous les dépôts"

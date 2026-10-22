@@ -93,6 +93,39 @@ export function withoutFormOnlyFields<V>(
   );
 }
 
+/** The config field named `name`, tab contents included. */
+export function findConfigField(
+  configuration: ConnectionConfiguration,
+  name: string
+): ConnectionConfiguration["values"][number] | undefined {
+  const find = (
+    fields: ConnectionConfiguration["values"]
+  ): ConnectionConfiguration["values"][number] | undefined => {
+    for (const field of fields) {
+      if (field.name === name) return field;
+      if (field.type === "tab") {
+        const nested = find(field.tabs.flatMap((tab) => tab.fields));
+        if (nested) return nested;
+      }
+    }
+    return undefined;
+  };
+  return find([...configuration.values, ...configuration.advanced_values]);
+}
+
+/** A form value as the config takes it: a list with the field's `transform`
+ * applied. */
+export function toConfigValue(
+  configuration: ConnectionConfiguration,
+  name: string,
+  value: unknown
+): unknown {
+  const field = findConfigField(configuration, name);
+  return field?.type === "list" && field.transform && Array.isArray(value)
+    ? field.transform(value)
+    : value;
+}
+
 function withoutBlankEntries(items: readonly unknown[]): unknown[] {
   return items.filter((item) => typeof item !== "string" || item.trim() !== "");
 }
@@ -128,11 +161,7 @@ export function connectorConfigFromForm(
   for (const [key, raw] of Object.entries(values)) {
     if (formControlFieldNames.has(key)) continue;
     const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
-    const field = configuration.values.find((field) => field.name === key);
-    config[key] =
-      field && "transform" in field && field.transform
-        ? field.transform(value as string[])
-        : value;
+    config[key] = toConfigValue(configuration, key, value);
   }
   return withoutFormOnlyFields(source, config);
 }

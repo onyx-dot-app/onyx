@@ -50,7 +50,9 @@ export interface MultiSelectOption extends Option {
 export interface ListOption extends Option {
   type: "list";
   default?: string[];
-  transform?: (values: string[]) => string[];
+  /** Runs on the entries before they are sent, e.g. to join them into the
+   * one string the config stores. */
+  transform?: (values: string[]) => string[] | string;
   /** Discovery finding whose options the field offers: stores the value, shows the label. Typed entries stay allowed. */
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */
