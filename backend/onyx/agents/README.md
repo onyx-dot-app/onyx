@@ -62,6 +62,8 @@ Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
 Cancellation preserves accepted partial output; `snapshot()` copies that state for independent inspection.
 Message events carry an explicit message ID. Updates reuse the LLM content delta types.
+Tool-call starts carry the call ID and name; argument updates carry only new raw text.
+The runtime retains incomplete arguments for snapshots. The tool-call end supplies parsed arguments or an argument error.
 Provider retries happen within this message lifecycle; they do not start another agent message.
 Chat converts these events into frontend packets for text, reasoning, tool activity, and response completion.
 For durable chat, the run ID is the reserved assistant chat message ID, represented as a string.
