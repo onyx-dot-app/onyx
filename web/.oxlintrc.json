@@ -53,6 +53,7 @@
     "anti-slop/no-unknown-parameters": "error",
     "anti-slop/no-unsafe-dictionary-type": "warn",
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
+    "anti-slop/require-suppression-reason": "error",
     "anti-slop/no-runtime-typeof": "off",
     "anti-slop/no-shape-in-symbol-names": "off",
     "i18n/no-raw-jsx-text": "off",
