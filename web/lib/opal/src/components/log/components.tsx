@@ -45,6 +45,11 @@ type LogBaseProps = {
   /** Trailing content, such as a tag or an action. Not padded. */
   rightChildren?: React.ReactNode;
   /**
+   * A button at the very end, such as a fold chevron. It sits outside the
+   * inner 0.25rem the rest of the line has, so it is nearer the edge.
+   */
+  endButton?: React.ReactNode;
+  /**
    * Makes the log interactive: the line and its body hover and press as one,
    * and a click anywhere on them, except on a link, calls this. A button
    * inside (e.g. a chevron) is its keyboard target; that button's click
@@ -98,6 +103,7 @@ function Log({
   title,
   centerChildren,
   rightChildren,
+  endButton,
   onClick,
   expandable,
   expanded,
@@ -110,46 +116,59 @@ function Log({
       flexDirection="row"
       justifyContent="start"
       height={2.25}
-      padding={2}
-      gap={1}
+      padding={1}
+      gap={0}
       className="opal-log-line"
     >
-      <Section width="fit" height="fit" padding={0.5}>
-        <Icon size={16} className="opal-log-icon" />
-      </Section>
-
-      {/* The title, the centre content and the trailing content sit 1rem
-          apart, wider than the line's gap, so the columns read apart. */}
+      {/* Everything but `endButton` takes another 0.25rem, so the button
+          sits nearer the edge with a larger hover area around it. */}
       <Section
         flexDirection="row"
         justifyContent="start"
         height="fit"
-        gap={4}
+        padding={1}
+        gap={1}
         className="min-w-0 flex-1"
       >
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          width={10}
-          height="fit"
-          className="shrink-0"
-        >
-          <OverflowText font="secondary-action" color="text-03">
-            {title}
-          </OverflowText>
+        <Section width="fit" height="fit" padding={0.5}>
+          <Icon size={16} className="opal-log-icon" />
         </Section>
 
+        {/* The title, the centre content and the trailing content sit 1rem
+            apart, wider than the line's gap, so the columns read apart. */}
         <Section
           flexDirection="row"
           justifyContent="start"
           height="fit"
+          gap={4}
           className="min-w-0 flex-1"
         >
-          {centerChildren}
-        </Section>
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            width={10}
+            height="fit"
+            className="shrink-0"
+          >
+            <OverflowText font="secondary-action" color="text-03">
+              {title}
+            </OverflowText>
+          </Section>
 
-        {rightChildren}
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            {centerChildren}
+          </Section>
+
+          {rightChildren}
+        </Section>
       </Section>
+
+      {endButton}
     </Section>
   );
 

@@ -10,17 +10,18 @@ body below it with `expandable`.
 
 ## Props
 
-| Prop              | Type                    | Default     | Description                                                                  |
-| ----------------- | ----------------------- | ----------- | ---------------------------------------------------------------------------- |
-| `variant`         | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also tints the line               |
-| `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                          |
-| `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                 |
-| `centerChildren`  | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit |
-| `rightChildren`   | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                     |
-| `onClick`         | `() => void`            | —           | Makes the whole log interactive (`Interactive.Stateless`, `tertiary`)        |
-| `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                     |
-| `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state              |
-| `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the title                     |
+| Prop              | Type                    | Default     | Description                                                                      |
+| ----------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `variant`         | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also tints the line                   |
+| `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                              |
+| `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                     |
+| `centerChildren`  | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit     |
+| `rightChildren`   | `ReactNode`             | —           | Trailing content, such as a tag or an action; not padded                         |
+| `endButton`       | `ReactNode`             | —           | A button at the very end (e.g. a fold chevron), outside the line's inner padding |
+| `onClick`         | `() => void`            | —           | Makes the whole log interactive (`Interactive.Stateless`, `tertiary`)            |
+| `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                         |
+| `expanded`        | `boolean`               | —           | Whether the body is open; controlled, the caller owns the state                  |
+| `expandedContent` | `ReactNode`             | —           | The body, opened in a `Fold` and aligned under the title                         |
 
 ## Variants
 
@@ -44,7 +45,8 @@ can match it to the variant.
 
 ## Layout
 
-- A row `Section`, 2.25rem tall with 0.5rem padding and a 0.25rem gap, so tall
+- A row `Section`, 2.25rem tall with 0.25rem padding. Everything but `endButton`
+  sits in an inner row with another 0.25rem and a 0.25rem gap, so tall
   trailing content cannot stretch the line. The title column is exactly 10rem,
   and 1rem separates it from the centre content, and the centre content from
   the trailing content.

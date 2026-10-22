@@ -229,7 +229,7 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
       <Button
         icon={SvgChevronRight}
         prominence="tertiary"
-        size="sm"
+        size="md"
         aria-expanded={expanded}
         tooltip={t(expanded ? "details.collapse" : "details.expand")}
         aria-label={t(expanded ? "details.collapse" : "details.expand")}
@@ -241,14 +241,14 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
       <Button
         icon={SvgPlay}
         prominence="internal"
-        size="sm"
+        size="md"
         tooltip={t("actions.run.label")}
         aria-label={t("actions.run.label")}
         onClick={noProp(() => onRunCheck(check.check_id))}
       />
     </Hoverable.Item>
   ) : (
-    <div aria-hidden className="w-(--height-line-label) shrink-0" />
+    <div aria-hidden className="w-(--height-line-h3-section) shrink-0" />
   );
 
   const docs: RichStr | undefined =
@@ -293,12 +293,8 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
         {check.message || t(detail)}
       </OverflowText>
     ),
-    rightChildren: (
-      <Section flexDirection="row" width="fit" height="fit" gap={1}>
-        {leftSlot}
-        {rightSlot}
-      </Section>
-    ),
+    rightChildren: leftSlot,
+    endButton: rightSlot,
   };
 
   return (
