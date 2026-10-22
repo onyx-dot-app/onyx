@@ -412,8 +412,6 @@ export interface LLMOptionGroup {
 
 export interface FilterModelConfigurationsOptions {
   includeDecisionOnly?: boolean;
-  /** Drop models an admin hid from users. Defaults to true. */
-  visibleOnly?: boolean;
   /** Keep only models that accept image input. */
   imageInput?: boolean;
   /** A configuration id kept regardless: the current value stays listed. */

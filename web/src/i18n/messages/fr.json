@@ -2224,43 +2224,33 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Modèle utilisé pour nommer les discussions. Utilise par défaut le modèle de chaque session.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "sessionModel": {
-          "label": "Utiliser le modèle par défaut"
-        },
-        "title": "Modèle pour nommer les discussions"
+        "description": "Génère les titres des sessions. Un modèle rapide et peu coûteux convient bien.",
+        "title": "Modèle de nommage des chats",
+        "chatDefault": {
+          "label": "Par défaut du chat"
+        }
       },
       "searchSelectionModel": {
-        "description": "Sélectionne et vérifie les documents récupérés. Un modèle moins coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "sessionModel": {
-          "label": "Utiliser le modèle par défaut"
-        },
-        "title": "Modèle de sélection pour la recherche"
+        "description": "Sélectionne et vérifie les documents récupérés. Un modèle rapide et peu coûteux peut réduire les coûts de recherche, mais peut affecter la qualité des réponses.",
+        "title": "Modèle de sélection de recherche"
       },
       "taskModels": {
-        "title": "Sélection des modèles",
         "loadFailed": "Impossible de charger les modèles de tâches",
         "retry": {
           "label": "Réessayer"
         },
-        "noProviders": {
-          "title": "Connectez un fournisseur de modèles de langage"
-        },
         "addProvider": {
           "label": "Ajouter un fournisseur"
+        },
+        "globalDefault": {
+          "description": "Le modèle de chaque chat"
         }
       },
       "advanced": {
         "title": "Options avancées"
       },
       "anonymousUsers": {
-        "description": "Autorisez tout le monde à démarrer des discussions sans se connecter. Ces personnes ne voient aucune autre discussion et ne peuvent ni créer des agents ni modifier les paramètres.",
+        "description": "Permettre à tous de démarrer des chats **sans se connecter**. Ils ne voient aucun autre chat et ne peuvent ni créer d'agents ni modifier les paramètres.",
         "title": "Autoriser les utilisateurs anonymes"
       },
       "autoDetectFilters": {
@@ -2289,12 +2279,12 @@
         "title": "Recherche approfondie"
       },
       "defaultLanguage": {
-        "description": "La langue de l'interface pour les utilisateurs qui n'en ont pas choisi une dans leurs paramètres.",
+        "description": "Langue de l'interface pour les utilisateurs qui n'en ont pas défini dans leurs propres paramètres.",
         "title": "Langue par défaut"
       },
       "disableDefaultChat": {
-        "description": "Cette option oblige les utilisateurs à toujours démarrer dans un agent. Les nouvelles discussions seront créées dans leur premier agent épinglé. Mettez des agents en avant pour aider les nouveaux utilisateurs à démarrer.",
-        "title": "Désactiver la discussion par défaut"
+        "description": "Cela supprime le chat par défaut. Les utilisateurs commenceront toujours dans un agent, et les nouveaux chats seront créés dans leur dernier agent actif. Définissez des [agents mis en avant](/admin/agents) pour aider les nouveaux utilisateurs à démarrer.",
+        "title": "Toujours commencer avec un agent"
       },
       "fileLimits": {
         "default": {
@@ -2352,10 +2342,6 @@
           "label": "Afficher avec les informations utilisateur"
         },
         "title": "Visibilité de l'historique des requêtes"
-      },
-      "reasoning": {
-        "description": "Permettez aux utilisateurs d'ajuster le niveau de raisonnement du modèle avant sa réponse, depuis le sélecteur de modèle dans la discussion.",
-        "title": "Contrôle du raisonnement"
       },
       "retention": {
         "custom": {
@@ -2427,26 +2413,13 @@
         "placeholder": "Saisissez le nom de l'équipe",
         "title": "Nom de l'équipe"
       },
-      "temperature": {
-        "description": "Permettez aux utilisateurs d'ajuster la température (créativité) des réponses du modèle depuis le sélecteur de modèle dans la discussion.",
-        "title": "Contrôle de la température"
-      },
       "toasts": {
-        "chatNamingUpdated": "Modèle de nommage des discussions mis à jour",
-        "chatNamingReset": "Modèle de nommage des discussions réinitialisé sur le modèle par défaut",
         "chatNamingUpdateFailed": "Échec de la mise à jour du modèle de nommage des discussions",
-        "chatNamingResetFailed": "Échec de la réinitialisation du modèle de nommage des discussions",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
-        "searchSelectionReset": "Modèle de sélection pour la recherche réinitialisé sur le modèle par défaut",
-        "searchSelectionResetFailed": "Échec de la réinitialisation du modèle de sélection pour la recherche",
         "searchSelectionUpdateFailed": "Échec de la mise à jour du modèle de sélection pour la recherche",
-        "searchSelectionUpdated": "Modèle de sélection pour la recherche mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour",
         "systemPromptUpdateFailed": "Échec de la mise à jour du prompt système",
-        "systemPromptUpdated": "Prompt système mis à jour",
         "toolsUpdateFailed": "Échec de la mise à jour des outils",
-        "toolsUpdated": "Outils mis à jour",
         "unknownError": "Une erreur inconnue est survenue"
       },
       "tools": {
@@ -4933,9 +4906,7 @@
       },
       "toasts": {
         "removeFailed": "Échec de la suppression du remplacement : {message}",
-        "removed": "Remplacement supprimé pour {model}.",
         "saveFailed": "Échec de l'enregistrement du remplacement : {message}",
-        "saved": "Tarif enregistré pour {model}.",
         "unknownError": "Erreur inconnue"
       }
     },
@@ -7475,7 +7446,7 @@
         "title": "La configuration de nouveaux LLM est temporairement indisponible."
       },
       "defaultModel": {
-        "description": "Ce modèle sera utilisé par défaut par {appName} dans vos discussions.",
+        "description": "Utilisé par défaut pour les nouvelles sessions.",
         "title": "Modèle par défaut"
       },
       "deleteModal": {
@@ -7987,24 +7958,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
-        "providerDeleted": "Fournisseur supprimé avec succès !",
         "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
         "providerResolveFailed": "Impossible de résoudre le fournisseur",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
-        "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
       },
       "modelRouting": {
         "autoMode": {
           "title": "Mode auto",
-          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message."
+          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message.",
+          "noRoutersTooltip": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
+          "noRoutersError": "Aucun modèle routeur trouvé : les utilisateurs ne peuvent pas sélectionner Auto. Activez un modèle routeur chez un fournisseur de passerelle."
         },
         "target": {
           "title": "Modèle de routage",
           "description": "Gère le routage des modèles pour le mode Auto.",
-          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
           "error": "Impossible de charger les modèles de routage.",
-          "retry": "Réessayer"
+          "retry": "Réessayer",
+          "missing": "Choisissez un modèle routeur pour permettre aux utilisateurs d'utiliser le mode de routage automatique."
         }
       },
       "providers": {
@@ -8016,6 +7987,14 @@
           "productName": "Modèles personnalisés",
           "companyName": "Points de terminaison compatibles OpenAI"
         }
+      },
+      "reasoning": {
+        "description": "Permettre aux utilisateurs de remplacer le niveau de raisonnement par défaut du modèle pour chaque session.",
+        "title": "Contrôle du raisonnement"
+      },
+      "temperature": {
+        "description": "Permettre aux utilisateurs de remplacer la température par défaut du modèle pour chaque session.",
+        "title": "Contrôle de la température"
       }
     },
     "mcpActions": {
@@ -14164,6 +14143,11 @@
         "projectId": "mon-projet-vertex",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Valeur par défaut globale"
+      }
     }
   },
   "craft": {
@@ -16025,8 +16009,7 @@
         "title": "Modifier le mot de passe",
         "toasts": {
           "networkError": "Une erreur s'est produite lors de la modification du mot de passe",
-          "updateFailed": "Échec de la modification du mot de passe",
-          "updated": "Mot de passe mis à jour avec succès"
+          "updateFailed": "Échec de la modification du mot de passe"
         },
         "validation": {
           "confirmRequired": "Veuillez confirmer votre nouveau mot de passe",
@@ -16098,10 +16081,8 @@
       "toasts": {
         "createFailed": "Échec de la création du jeton",
         "createNetworkError": "Erreur réseau lors de la création du jeton",
-        "created": "Jeton créé avec succès",
         "deleteFailed": "Échec de la suppression du jeton",
         "deleteNetworkError": "Erreur réseau lors de la suppression du jeton",
-        "deleted": "Jeton supprimé avec succès",
         "loadFailed": "Échec du chargement des jetons",
         "loadPermissionsFailed": "Échec du chargement des options d'autorisation",
         "nameRequired": "Le nom du jeton est requis"
@@ -16165,8 +16146,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Échec de l'enregistrement des préférences",
-        "saved": "Préférences enregistrées"
+        "saveFailed": "Échec de l'enregistrement des préférences"
       }
     },
     "connectors": {
@@ -16186,8 +16166,7 @@
       },
       "title": "Connecteurs",
       "toasts": {
-        "disconnectFailed": "Échec de la déconnexion",
-        "disconnected": "Déconnecté avec succès"
+        "disconnectFailed": "Échec de la déconnexion"
       }
     },
     "dangerZone": {
@@ -16203,8 +16182,7 @@
         "description": "Supprimez définitivement toutes vos sessions de chat.",
         "title": "Supprimer tous les chats",
         "toasts": {
-          "deleteFailed": "Échec de la suppression de toutes les sessions de chat",
-          "deleted": "Toutes vos sessions de chat ont été supprimées."
+          "deleteFailed": "Échec de la suppression de toutes les sessions de chat"
         }
       },
       "title": "Zone de danger"
@@ -16251,8 +16229,7 @@
       "title": "Langue",
       "toasts": {
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
-      },
-      "workspaceDefault": "Par défaut ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16339,8 +16316,7 @@
       },
       "title": "Profil",
       "toasts": {
-        "updateFailed": "Échec de la mise à jour de la personnalisation",
-        "updated": "Personnalisation mise à jour avec succès"
+        "updateFailed": "Échec de la mise à jour de la personnalisation"
       },
       "workRole": {
         "description": "Indiquez votre rôle pour mieux adapter les réponses.",
@@ -16358,12 +16334,9 @@
       "title": "Raccourcis d'invite",
       "toasts": {
         "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
-        "created": "Raccourci créé",
         "deleteFailed": "Échec de la suppression du raccourci",
-        "deleted": "Raccourci supprimé",
         "loadFailed": "Échec du chargement des raccourcis",
-        "saveFailed": "Échec de l'enregistrement du raccourci",
-        "updated": "Raccourci mis à jour"
+        "saveFailed": "Échec de l'enregistrement du raccourci"
       },
       "toggle": {
         "description": "Activez les raccourcis pour insérer rapidement des invites courantes.",

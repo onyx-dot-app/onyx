@@ -6,8 +6,15 @@
  * retention control.
  */
 
-import { type Page, type Locator, expect } from "@playwright/test";
+import {
+  type Page,
+  type Locator,
+  type Response,
+  expect,
+} from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+
+const SETTINGS_PATH = "/api/admin/settings";
 
 export class ChatPreferencesPage {
   readonly page: Page;
@@ -57,8 +64,9 @@ export class ChatPreferencesPage {
   }
 
   async saveSystemPrompt(): Promise<void> {
+    const saved = this.waitForPatch("/api/admin/default-assistant");
     await this.promptDialog.getByRole("button", { name: "Save" }).click();
-    await this.expectToast("System prompt updated");
+    expect((await saved).ok()).toBeTruthy();
     await expect(this.promptDialog).not.toBeVisible();
   }
 
@@ -156,8 +164,9 @@ export class ChatPreferencesPage {
 
   async confirmRetentionReduction(): Promise<void> {
     await expect(this.reduceRetentionModal).toBeVisible();
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.page.getByRole("button", { name: "Reduce retention" }).click();
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   async cancelRetentionReduction(): Promise<void> {
@@ -179,29 +188,41 @@ export class ChatPreferencesPage {
   }
 
   async restoreRetentionDefault(): Promise<void> {
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.retentionRestoreDefaultButton.click();
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   /** Best-effort reset so shared state is left at the safe "Forever" default. */
   async resetRetentionToForever(): Promise<void> {
     await this.gotoAdvancedOptions();
     if (await this.retentionCustomInput.isVisible().catch(() => false)) {
+      const saved = this.waitForPatch(SETTINGS_PATH);
       await this.retentionRestoreDefaultButton.click();
-      await this.expectToast("Settings updated").catch(() => {});
+      await saved.catch(() => {});
       return;
     }
     // The trigger is a read-only input: its text is its value.
     if ((await this.retentionTrigger.inputValue()).includes("Forever")) {
       return;
     }
+    const saved = this.waitForPatch(SETTINGS_PATH);
     await this.selectRetentionPreset("Forever");
-    await this.expectToast("Settings updated");
+    expect((await saved).ok()).toBeTruthy();
   }
 
   // ---------------------------------------------------------------------------
   // Misc
   // ---------------------------------------------------------------------------
+
+  /** Resolves with the next PATCH to `pathname`; start it before the action. */
+  waitForPatch(pathname: string): Promise<Response> {
+    return this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === pathname &&
+        response.request().method() === "PATCH"
+    );
+  }
 
   async expectToast(message: string | RegExp): Promise<void> {
     await expect(this.page.getByText(message).first()).toBeVisible();

@@ -2224,43 +2224,33 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "用于为对话会话命名的模型。默认使用各会话自身的模型。",
-        "resetButton": {
-          "label": "重置"
-        },
-        "sessionModel": {
-          "label": "使用默认模型"
-        },
-        "title": "会话命名模型"
+        "description": "生成会话标题。快速、低成本的模型即可胜任。",
+        "title": "聊天命名模型",
+        "chatDefault": {
+          "label": "聊天默认"
+        }
       },
       "searchSelectionModel": {
-        "description": "筛选并检查检索到的文档。低成本模型可以降低搜索费用，但可能影响回答质量。",
-        "resetButton": {
-          "label": "重置"
-        },
-        "sessionModel": {
-          "label": "使用默认模型"
-        },
-        "title": "搜索筛选模型"
+        "description": "选择并检查检索到的文档。快速、低成本的模型可以降低搜索成本，但可能影响回答质量。",
+        "title": "搜索选择模型"
       },
       "taskModels": {
-        "title": "模型选择",
         "loadFailed": "无法加载任务模型",
         "retry": {
           "label": "重试"
         },
-        "noProviders": {
-          "title": "连接语言模型提供商"
-        },
         "addProvider": {
           "label": "添加提供商"
+        },
+        "globalDefault": {
+          "description": "每个聊天的模型"
         }
       },
       "advanced": {
         "title": "高级选项"
       },
       "anonymousUsers": {
-        "description": "允许任何人无需登录即可发起对话。他们看不到其他任何对话，也无法创建智能体或修改设置。",
+        "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
         "title": "允许匿名用户"
       },
       "autoDetectFilters": {
@@ -2289,12 +2279,12 @@
         "title": "深度研究"
       },
       "defaultLanguage": {
-        "description": "未在个人设置中选择语言的用户所使用的界面语言。",
+        "description": "适用于未在个人设置中设定语言的用户的界面语言。",
         "title": "默认语言"
       },
       "disableDefaultChat": {
-        "description": "这会强制用户始终在智能体中开始对话。新对话将在其第一个已固定的智能体中创建。设置精选智能体可帮助新用户快速上手。",
-        "title": "禁用默认对话"
+        "description": "这会移除默认聊天。用户将始终在智能体中开始，新聊天将在其最近使用的智能体中创建。设置[精选智能体](/admin/agents)以帮助新用户快速上手。",
+        "title": "始终从智能体开始"
       },
       "fileLimits": {
         "default": {
@@ -2352,10 +2342,6 @@
           "label": "显示并附带用户信息"
         },
         "title": "查询历史可见性"
-      },
-      "reasoning": {
-        "description": "允许用户在对话的模型选择器中调整模型回答前的推理程度。",
-        "title": "推理控制"
       },
       "retention": {
         "custom": {
@@ -2427,26 +2413,13 @@
         "placeholder": "输入团队名称",
         "title": "团队名称"
       },
-      "temperature": {
-        "description": "允许用户在对话的模型选择器中调整模型回复的温度（创造性）。",
-        "title": "温度控制"
-      },
       "toasts": {
-        "chatNamingUpdated": "会话命名模型已更新",
-        "chatNamingReset": "会话命名模型已重置为默认模型",
         "chatNamingUpdateFailed": "更新会话命名模型失败",
-        "chatNamingResetFailed": "重置会话命名模型失败",
         "providerResolveFailed": "无法解析提供商",
-        "searchSelectionReset": "搜索筛选模型已重置为默认模型",
-        "searchSelectionResetFailed": "重置搜索筛选模型失败",
         "searchSelectionUpdateFailed": "更新搜索筛选模型失败",
-        "searchSelectionUpdated": "搜索筛选模型已更新",
         "settingsUpdateFailed": "更新设置失败",
-        "settingsUpdated": "设置已更新",
         "systemPromptUpdateFailed": "更新系统提示词失败",
-        "systemPromptUpdated": "系统提示词已更新",
         "toolsUpdateFailed": "更新工具失败",
-        "toolsUpdated": "工具已更新",
         "unknownError": "发生未知错误"
       },
       "tools": {
@@ -4933,9 +4906,7 @@
       },
       "toasts": {
         "removeFailed": "移除覆盖失败：{message}",
-        "removed": "已移除 {model} 的覆盖。",
         "saveFailed": "保存覆盖失败：{message}",
-        "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
       }
     },
@@ -7475,7 +7446,7 @@
         "title": "暂时无法新增 LLM 配置。"
       },
       "defaultModel": {
-        "description": "{appName} 将在您的对话中默认使用此模型。",
+        "description": "默认用于新会话。",
         "title": "默认模型"
       },
       "deleteModal": {
@@ -7987,24 +7958,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
-        "providerDeleted": "提供商已成功删除！",
         "providerLoadFailed": "无法加载提供商：{message}",
         "providerResolveFailed": "无法解析提供商",
         "settingsUpdateFailed": "更新设置失败",
-        "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
       },
       "modelRouting": {
         "autoMode": {
           "title": "自动模式",
-          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。",
+          "noRoutersTooltip": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "noRoutersError": "未找到路由模型，因此用户无法选择 Auto。请在网关提供商上启用路由模型。"
         },
         "target": {
           "title": "路由器模型",
           "description": "负责 Auto 模式的模型路由。",
-          "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
           "error": "无法加载路由器模型。",
-          "retry": "重试"
+          "retry": "重试",
+          "missing": "请选择路由模型，以便用户使用自动路由模式。"
         }
       },
       "providers": {
@@ -8016,6 +7987,14 @@
           "productName": "自定义模型",
           "companyName": "兼容 OpenAI 的端点"
         }
+      },
+      "reasoning": {
+        "description": "允许用户按会话覆盖模型的默认推理级别。",
+        "title": "推理控制"
+      },
+      "temperature": {
+        "description": "允许用户按会话覆盖模型的默认温度。",
+        "title": "温度控制"
       }
     },
     "mcpActions": {
@@ -14164,6 +14143,11 @@
         "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "全局默认"
+      }
     }
   },
   "craft": {
@@ -16025,8 +16009,7 @@
         "title": "修改密码",
         "toasts": {
           "networkError": "修改密码时发生错误",
-          "updateFailed": "修改密码失败",
-          "updated": "密码更新成功"
+          "updateFailed": "修改密码失败"
         },
         "validation": {
           "confirmRequired": "请确认您的新密码",
@@ -16098,10 +16081,8 @@
       "toasts": {
         "createFailed": "创建 token 失败",
         "createNetworkError": "创建 token 时发生网络错误",
-        "created": "Token 创建成功",
         "deleteFailed": "删除 token 失败",
         "deleteNetworkError": "删除 token 时发生网络错误",
-        "deleted": "Token 删除成功",
         "loadFailed": "加载 token 失败",
         "loadPermissionsFailed": "加载权限选项失败",
         "nameRequired": "必须填写 token 名称"
@@ -16165,8 +16146,7 @@
       },
       "title": "对话",
       "toasts": {
-        "saveFailed": "保存偏好设置失败",
-        "saved": "偏好设置已保存"
+        "saveFailed": "保存偏好设置失败"
       }
     },
     "connectors": {
@@ -16186,8 +16166,7 @@
       },
       "title": "连接器",
       "toasts": {
-        "disconnectFailed": "断开连接失败",
-        "disconnected": "已成功断开连接"
+        "disconnectFailed": "断开连接失败"
       }
     },
     "dangerZone": {
@@ -16203,8 +16182,7 @@
         "description": "永久删除您的所有对话会话。",
         "title": "删除全部对话",
         "toasts": {
-          "deleteFailed": "删除全部对话会话失败",
-          "deleted": "您的所有对话会话已删除。"
+          "deleteFailed": "删除全部对话会话失败"
         }
       },
       "title": "危险区域"
@@ -16251,8 +16229,7 @@
       "title": "语言",
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
-      },
-      "workspaceDefault": "工作区默认 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16339,8 +16316,7 @@
       },
       "title": "个人资料",
       "toasts": {
-        "updateFailed": "更新个性化设置失败",
-        "updated": "个性化设置更新成功"
+        "updateFailed": "更新个性化设置失败"
       },
       "workRole": {
         "description": "填写您的职位，以便更好地定制回复。",
@@ -16358,12 +16334,9 @@
       "title": "提示词快捷方式",
       "toasts": {
         "bothRequired": "快捷方式和展开内容都必须填写",
-        "created": "快捷方式已创建",
         "deleteFailed": "删除快捷方式失败",
-        "deleted": "快捷方式已删除",
         "loadFailed": "加载快捷方式失败",
-        "saveFailed": "保存快捷方式失败",
-        "updated": "快捷方式已更新"
+        "saveFailed": "保存快捷方式失败"
       },
       "toggle": {
         "description": "启用快捷方式以快速插入常用提示词。",

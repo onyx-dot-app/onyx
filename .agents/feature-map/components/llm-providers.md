@@ -149,15 +149,18 @@ and its hidden decision models. A Voice save keeps an existing link in sync but
 never creates one. Decision setup does not activate Voice or choose a decision
 model. Removing Zoom from Decision Models deletes only the decision provider.
 
-`web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration and the
-default chat model. Model selection for naming and search lives in Chat Preferences.
-`web/src/views/admin/ChatTaskModelSettings.tsx` renders Chat naming model and
-Search selection model inside the always-visible Model selection section.
-Its provider fetch starts on page load; the section has no disclosure control.
-Both selectors offer hidden models without changing visibility. Unset defaults
-show Use Default model inside each selector, without a separate status label.
-Each reset clears only its own designation. Each selector and reset stay
-disabled during their own save/reset, without blocking the other setting.
+`web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration, the
+default chat model, model routing, and the Reasoning Control, Temperature
+Control and Hide Provider Grouping switches. Model selection for naming and
+search lives in Chat Preferences.
+`web/src/views/admin/ChatTaskModelSettings.tsx` renders the Chat Naming Model
+row (chat card) and the Search Selection Model row (search card).
+Neither selector offers hidden models; a hidden current value stays listed.
+Each starts
+with a default row ("Chat Default" for naming; "Global Default", described as
+"Each chat's model", for search selection); picking it
+deletes that designation. Each selector stays disabled during its own save,
+without blocking the other setting.
 CHAT_NAMING handles chat naming; SEARCH_SELECTION handles document selection
 and relevance checks. Search rewrites and answers retain the primary model.
 An unset SEARCH_SELECTION falls directly back to the primary client, never
@@ -599,9 +602,9 @@ See `backend/AGENTS.md` for authoritative commands and required env
 
 ### What "working" looks like
 
-- Chat Preferences shows Chat naming model and Search selection model inside
-  Model selection. Selecting a hidden model saves only its task default without
-  changing CHAT or visibility. Each reset independently returns to Use Default model.
+- Chat Preferences shows Chat Naming Model in the chat card and Search
+  Selection Model in the search card. Neither offers hidden models. Selecting
+  a model saves only its task default without changing CHAT or visibility.
   Language Models has no task-model controls. Configuring CHAT_NAMING alone
   must not change query rewrites or selection; setting SEARCH_SELECTION must
   change only selection and relevance classification.

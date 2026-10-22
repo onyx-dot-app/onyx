@@ -2224,43 +2224,33 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "チャットセッションの名前を付けるモデルです。既定では各セッションのモデルを使用します。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "sessionModel": {
-          "label": "デフォルトモデルを使用"
-        },
-        "title": "チャット名の生成モデル"
+        "description": "セッションのタイトルを生成します。高速で低コストのモデルが適しています。",
+        "title": "チャット命名モデル",
+        "chatDefault": {
+          "label": "チャットのデフォルト"
+        }
       },
       "searchSelectionModel": {
-        "description": "取得したドキュメントを選択して確認します。低コストのモデルは検索コストを削減できますが、回答の品質に影響する可能性があります。",
-        "resetButton": {
-          "label": "リセット"
-        },
-        "sessionModel": {
-          "label": "デフォルトモデルを使用"
-        },
-        "title": "検索選択モデル"
+        "description": "取得したドキュメントを選択して確認します。高速で低コストのモデルは検索コストを削減できますが、回答の品質に影響する場合があります。",
+        "title": "検索ドキュメント選択モデル"
       },
       "taskModels": {
-        "title": "モデルの選択",
         "loadFailed": "タスクモデルを読み込めませんでした",
         "retry": {
           "label": "再試行"
         },
-        "noProviders": {
-          "title": "言語モデルのプロバイダーを接続"
-        },
         "addProvider": {
           "label": "プロバイダーを追加"
+        },
+        "globalDefault": {
+          "description": "各チャットのモデル"
         }
       },
       "advanced": {
         "title": "詳細オプション"
       },
       "anonymousUsers": {
-        "description": "ログインなしで誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
+        "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
         "title": "匿名ユーザーを許可"
       },
       "autoDetectFilters": {
@@ -2289,12 +2279,12 @@
         "title": "ディープリサーチ"
       },
       "defaultLanguage": {
-        "description": "自分の設定で言語を選択していないユーザーに適用される UI の言語です。",
+        "description": "個人設定で言語を設定していないユーザー向けの UI 言語。",
         "title": "既定の言語"
       },
       "disableDefaultChat": {
-        "description": "ユーザーは必ずエージェントからチャットを開始します。新しいチャットは、最初にピン留めされたエージェントで作成されます。新しいユーザーを支援するため、注目のエージェントを設定してください。",
-        "title": "既定のチャットを無効化"
+        "description": "既定のチャットを削除します。ユーザーは常にエージェントで開始し、新しいチャットは最後に使用したエージェントで作成されます。新しいユーザーが始めやすいように[おすすめのエージェント](/admin/agents)を設定してください。",
+        "title": "常にエージェントから開始"
       },
       "fileLimits": {
         "default": {
@@ -2352,10 +2342,6 @@
           "label": "ユーザー情報付きで表示"
         },
         "title": "クエリ履歴の表示設定"
-      },
-      "reasoning": {
-        "description": "チャットのモデル選択メニューから、回答前にモデルが行う推論の量をユーザーが調整できるようにします。",
-        "title": "推論の制御"
       },
       "retention": {
         "custom": {
@@ -2427,26 +2413,13 @@
         "placeholder": "チーム名を入力",
         "title": "チーム名"
       },
-      "temperature": {
-        "description": "チャットのモデル選択メニューから、モデル応答の Temperature（創造性）をユーザーが調整できるようにします。",
-        "title": "Temperature の制御"
-      },
       "toasts": {
-        "chatNamingUpdated": "チャット名の生成モデルを更新しました",
-        "chatNamingReset": "チャット名の生成モデルをデフォルトモデルにリセットしました",
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
-        "chatNamingResetFailed": "チャット名の生成モデルのリセットに失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchSelectionReset": "検索選択モデルをデフォルトモデルにリセットしました",
-        "searchSelectionResetFailed": "検索選択モデルのリセットに失敗しました",
         "searchSelectionUpdateFailed": "検索選択モデルの更新に失敗しました",
-        "searchSelectionUpdated": "検索選択モデルを更新しました",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
-        "systemPromptUpdated": "システムプロンプトを更新しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
-        "toolsUpdated": "ツールを更新しました",
         "unknownError": "不明なエラーが発生しました"
       },
       "tools": {
@@ -4933,9 +4906,7 @@
       },
       "toasts": {
         "removeFailed": "オーバーライドを削除できませんでした: {message}",
-        "removed": "{model} のオーバーライドを削除しました。",
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
-        "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
       }
     },
@@ -7475,7 +7446,7 @@
         "title": "新しい LLM の設定は一時的に利用できません。"
       },
       "defaultModel": {
-        "description": "このモデルは {appName} のチャットでデフォルトとして使用されます。",
+        "description": "新しいセッションで既定で使用されます。",
         "title": "デフォルトモデル"
       },
       "deleteModal": {
@@ -7987,24 +7958,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
-        "providerDeleted": "プロバイダーを削除しました。",
         "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
-        "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
       },
       "modelRouting": {
         "autoMode": {
           "title": "オートモード",
-          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。"
+          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。",
+          "noRoutersTooltip": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
+          "noRoutersError": "ルーターモデルが見つからないため、ユーザーは Auto を選べません。ゲートウェイプロバイダーでルーターモデルを有効にしてください。"
         },
         "target": {
           "title": "ルーターモデル",
           "description": "Auto モードのモデルルーティングを担当します。",
-          "empty": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
           "error": "ルーターモデルを読み込めませんでした。",
-          "retry": "再試行"
+          "retry": "再試行",
+          "missing": "ユーザーが自動ルーティングモードを使えるように、ルーターモデルを選択してください。"
         }
       },
       "providers": {
@@ -8016,6 +7987,14 @@
           "productName": "カスタムモデル",
           "companyName": "OpenAI 互換エンドポイント"
         }
+      },
+      "reasoning": {
+        "description": "ユーザーがセッションごとにモデルの既定の推論レベルを上書きできるようにします。",
+        "title": "推論の制御"
+      },
+      "temperature": {
+        "description": "ユーザーがセッションごとにモデルの既定の温度を上書きできるようにします。",
+        "title": "Temperature の制御"
       }
     },
     "mcpActions": {
@@ -14164,6 +14143,11 @@
         "projectId": "vertex-purojekuto",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "グローバルデフォルト"
+      }
     }
   },
   "craft": {
@@ -16025,8 +16009,7 @@
         "title": "パスワードを変更",
         "toasts": {
           "networkError": "パスワードの変更中にエラーが発生しました",
-          "updateFailed": "パスワードを変更できませんでした",
-          "updated": "パスワードを更新しました"
+          "updateFailed": "パスワードを変更できませんでした"
         },
         "validation": {
           "confirmRequired": "新しいパスワードを確認してください",
@@ -16098,10 +16081,8 @@
       "toasts": {
         "createFailed": "トークンを作成できませんでした",
         "createNetworkError": "トークンの作成中にネットワークエラーが発生しました",
-        "created": "トークンを作成しました",
         "deleteFailed": "トークンを削除できませんでした",
         "deleteNetworkError": "トークンの削除中にネットワークエラーが発生しました",
-        "deleted": "トークンを削除しました",
         "loadFailed": "トークンを読み込めませんでした",
         "loadPermissionsFailed": "権限オプションを読み込めませんでした",
         "nameRequired": "トークン名は必須です"
@@ -16165,8 +16146,7 @@
       },
       "title": "チャット",
       "toasts": {
-        "saveFailed": "設定を保存できませんでした",
-        "saved": "設定を保存しました"
+        "saveFailed": "設定を保存できませんでした"
       }
     },
     "connectors": {
@@ -16186,8 +16166,7 @@
       },
       "title": "コネクター",
       "toasts": {
-        "disconnectFailed": "切断できませんでした",
-        "disconnected": "切断しました"
+        "disconnectFailed": "切断できませんでした"
       }
     },
     "dangerZone": {
@@ -16203,8 +16182,7 @@
         "description": "すべてのチャットセッションを完全に削除します。",
         "title": "すべてのチャットを削除",
         "toasts": {
-          "deleteFailed": "すべてのチャットセッションを削除できませんでした",
-          "deleted": "すべてのチャットセッションを削除しました。"
+          "deleteFailed": "すべてのチャットセッションを削除できませんでした"
         }
       },
       "title": "危険な操作"
@@ -16251,8 +16229,7 @@
       "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
-      },
-      "workspaceDefault": "ワークスペースの既定 ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16339,8 +16316,7 @@
       },
       "title": "プロフィール",
       "toasts": {
-        "updateFailed": "パーソナライズ設定を更新できませんでした",
-        "updated": "パーソナライズ設定を更新しました"
+        "updateFailed": "パーソナライズ設定を更新できませんでした"
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
@@ -16358,12 +16334,9 @@
       "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
-        "created": "ショートカットを作成しました",
         "deleteFailed": "ショートカットを削除できませんでした",
-        "deleted": "ショートカットを削除しました",
         "loadFailed": "ショートカットを読み込めませんでした",
-        "saveFailed": "ショートカットを保存できませんでした",
-        "updated": "ショートカットを更新しました"
+        "saveFailed": "ショートカットを保存できませんでした"
       },
       "toggle": {
         "description": "ショートカットを有効にすると、よく使うプロンプトをすばやく挿入できます。",

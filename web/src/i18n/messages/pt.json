@@ -2224,43 +2224,33 @@
     },
     "chatPreferences": {
       "chatNaming": {
-        "description": "Modelo usado para nomear sessões de chat. Por padrão, usa o modelo de cada sessão.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
-        "title": "Modelo para nomear chats"
+        "description": "Gera os títulos das sessões. Um modelo rápido e de baixo custo funciona bem.",
+        "title": "Modelo de nomeação de chats",
+        "chatDefault": {
+          "label": "Padrão do chat"
+        }
       },
       "searchSelectionModel": {
-        "description": "Seleciona e verifica os documentos recuperados. Um modelo mais barato pode reduzir os custos de busca, mas pode afetar a qualidade das respostas.",
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "sessionModel": {
-          "label": "Usar modelo padrão"
-        },
-        "title": "Modelo de seleção da busca"
+        "description": "Seleciona e verifica os documentos recuperados. Um modelo rápido e de baixo custo pode reduzir os custos de pesquisa, mas pode afetar a qualidade das respostas.",
+        "title": "Modelo de seleção de pesquisa"
       },
       "taskModels": {
-        "title": "Seleção de modelos",
         "loadFailed": "Não foi possível carregar os modelos de tarefas",
         "retry": {
           "label": "Tentar novamente"
         },
-        "noProviders": {
-          "title": "Conecte um provedor de modelos de linguagem"
-        },
         "addProvider": {
           "label": "Adicionar provedor"
+        },
+        "globalDefault": {
+          "description": "O modelo de cada chat"
         }
       },
       "advanced": {
         "title": "Opções avançadas"
       },
       "anonymousUsers": {
-        "description": "Permita que qualquer pessoa inicie chats sem fazer login. Essas pessoas não veem outros chats e não podem criar agentes nem atualizar configurações.",
+        "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
         "title": "Permitir usuários anônimos"
       },
       "autoDetectFilters": {
@@ -2289,12 +2279,12 @@
         "title": "Pesquisa profunda"
       },
       "defaultLanguage": {
-        "description": "O idioma da interface para usuários que não escolheram um nas próprias configurações.",
+        "description": "Idioma da interface para usuários que não definiram um nas próprias configurações.",
         "title": "Idioma padrão"
       },
       "disableDefaultChat": {
-        "description": "Isso obriga os usuários a sempre começar em um agente. Os novos chats serão criados no primeiro agente fixado. Defina agentes em destaque para ajudar os novos usuários a começar.",
-        "title": "Desativar o chat padrão"
+        "description": "Isso remove o chat padrão. Os usuários sempre começarão em um agente, e novos chats serão criados no último agente ativo. Defina [agentes em destaque](/admin/agents) para ajudar novos usuários a começar.",
+        "title": "Sempre começar com um agente"
       },
       "fileLimits": {
         "default": {
@@ -2352,10 +2342,6 @@
           "label": "Mostrar com dados do usuário"
         },
         "title": "Visibilidade do histórico de consultas"
-      },
-      "reasoning": {
-        "description": "Permita que os usuários ajustem quanto raciocínio o modelo faz antes de responder, no seletor de modelos do chat.",
-        "title": "Controle de raciocínio"
       },
       "retention": {
         "custom": {
@@ -2427,26 +2413,13 @@
         "placeholder": "Insira o nome da equipe",
         "title": "Nome da equipe"
       },
-      "temperature": {
-        "description": "Permita que os usuários ajustem a temperatura (criatividade) das respostas do modelo no seletor de modelos do chat.",
-        "title": "Controle de temperatura"
-      },
       "toasts": {
-        "chatNamingUpdated": "Modelo para nomear chats atualizado",
-        "chatNamingReset": "Modelo para nomear chats redefinido para o modelo padrão",
         "chatNamingUpdateFailed": "Falha ao atualizar o modelo para nomear chats",
-        "chatNamingResetFailed": "Falha ao redefinir o modelo para nomear chats",
         "providerResolveFailed": "Não foi possível resolver o provedor",
-        "searchSelectionReset": "Modelo de seleção da busca redefinido para o modelo padrão",
-        "searchSelectionResetFailed": "Falha ao redefinir o modelo de seleção da busca",
         "searchSelectionUpdateFailed": "Falha ao atualizar o modelo de seleção da busca",
-        "searchSelectionUpdated": "Modelo de seleção da busca atualizado",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
-        "settingsUpdated": "Configurações atualizadas",
         "systemPromptUpdateFailed": "Falha ao atualizar o prompt de sistema",
-        "systemPromptUpdated": "Prompt de sistema atualizado",
         "toolsUpdateFailed": "Falha ao atualizar as ferramentas",
-        "toolsUpdated": "Ferramentas atualizadas",
         "unknownError": "Ocorreu um erro desconhecido"
       },
       "tools": {
@@ -4933,9 +4906,7 @@
       },
       "toasts": {
         "removeFailed": "Falha ao remover a substituição: {message}",
-        "removed": "Substituição removida para {model}.",
         "saveFailed": "Falha ao salvar a substituição: {message}",
-        "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
       }
     },
@@ -7475,7 +7446,7 @@
         "title": "Nova configuração de LLM temporariamente indisponível."
       },
       "defaultModel": {
-        "description": "Este modelo será usado pelo {appName} por padrão nos seus chats.",
+        "description": "Usado por padrão em novas sessões.",
         "title": "Modelo padrão"
       },
       "deleteModal": {
@@ -7987,24 +7958,24 @@
       },
       "toasts": {
         "providerDeleteFailed": "Falha ao excluir o provedor: {message}",
-        "providerDeleted": "Provedor excluído com sucesso!",
         "providerLoadFailed": "Não foi possível carregar o provedor: {message}",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
-        "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
       },
       "modelRouting": {
         "autoMode": {
           "title": "Modo automático",
-          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem."
+          "description": "Adiciona uma opção Auto ao seletor de modelos que escolhe o modelo mais adequado para cada mensagem.",
+          "noRoutersTooltip": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
+          "noRoutersError": "Nenhum modelo roteador encontrado, então os usuários não podem selecionar Auto. Ative um modelo roteador em um provedor de gateway."
         },
         "target": {
           "title": "Modelo de roteamento",
           "description": "Gerencia o roteamento de modelos para o modo Auto.",
-          "empty": "Nenhum modelo de roteador encontrado. Primeiro habilite um modelo de roteador em um provedor de gateway.",
           "error": "Falha ao carregar os modelos de roteamento.",
-          "retry": "Tentar novamente"
+          "retry": "Tentar novamente",
+          "missing": "Escolha um modelo roteador para que os usuários possam usar o modo de roteamento automático."
         }
       },
       "providers": {
@@ -8016,6 +7987,14 @@
           "productName": "Modelos personalizados",
           "companyName": "Endpoints compatíveis com OpenAI"
         }
+      },
+      "reasoning": {
+        "description": "Permitir que os usuários substituam o nível de raciocínio padrão do modelo em cada sessão.",
+        "title": "Controle de raciocínio"
+      },
+      "temperature": {
+        "description": "Permitir que os usuários substituam a temperatura padrão do modelo em cada sessão.",
+        "title": "Controle de temperatura"
       }
     },
     "mcpActions": {
@@ -14164,6 +14143,11 @@
         "projectId": "meu-projeto-vertex",
         "location": "global"
       }
+    },
+    "languageSelect": {
+      "globalDefault": {
+        "label": "Padrão global"
+      }
     }
   },
   "craft": {
@@ -16025,8 +16009,7 @@
         "title": "Alterar senha",
         "toasts": {
           "networkError": "Ocorreu um erro ao alterar a senha",
-          "updateFailed": "Falha ao alterar a senha",
-          "updated": "Senha atualizada com sucesso"
+          "updateFailed": "Falha ao alterar a senha"
         },
         "validation": {
           "confirmRequired": "Confirme sua nova senha",
@@ -16098,10 +16081,8 @@
       "toasts": {
         "createFailed": "Falha ao criar token",
         "createNetworkError": "Erro de rede ao criar token",
-        "created": "Token criado com sucesso",
         "deleteFailed": "Falha ao excluir token",
         "deleteNetworkError": "Erro de rede ao excluir token",
-        "deleted": "Token excluído com sucesso",
         "loadFailed": "Falha ao carregar tokens",
         "loadPermissionsFailed": "Falha ao carregar opções de permissão",
         "nameRequired": "O nome do token é obrigatório"
@@ -16165,8 +16146,7 @@
       },
       "title": "Chats",
       "toasts": {
-        "saveFailed": "Falha ao salvar preferências",
-        "saved": "Preferências salvas"
+        "saveFailed": "Falha ao salvar preferências"
       }
     },
     "connectors": {
@@ -16186,8 +16166,7 @@
       },
       "title": "Conectores",
       "toasts": {
-        "disconnectFailed": "Falha ao desconectar",
-        "disconnected": "Desconectado com sucesso"
+        "disconnectFailed": "Falha ao desconectar"
       }
     },
     "dangerZone": {
@@ -16203,8 +16182,7 @@
         "description": "Exclua permanentemente todas as suas sessões de chat.",
         "title": "Excluir todos os chats",
         "toasts": {
-          "deleteFailed": "Falha ao excluir todas as sessões de chat",
-          "deleted": "Todas as suas sessões de chat foram excluídas."
+          "deleteFailed": "Falha ao excluir todas as sessões de chat"
         }
       },
       "title": "Zona de perigo"
@@ -16251,8 +16229,7 @@
       "title": "Idioma",
       "toasts": {
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
-      },
-      "workspaceDefault": "Padrão ({language})"
+      }
     },
     "layout": {
       "header": {
@@ -16339,8 +16316,7 @@
       },
       "title": "Perfil",
       "toasts": {
-        "updateFailed": "Falha ao atualizar a personalização",
-        "updated": "Personalização atualizada com sucesso"
+        "updateFailed": "Falha ao atualizar a personalização"
       },
       "workRole": {
         "description": "Compartilhe seu cargo para personalizar melhor as respostas.",
@@ -16358,12 +16334,9 @@
       "title": "Atalhos de prompt",
       "toasts": {
         "bothRequired": "O atalho e a expansão são obrigatórios",
-        "created": "Atalho criado",
         "deleteFailed": "Falha ao excluir atalho",
-        "deleted": "Atalho excluído",
         "loadFailed": "Falha ao carregar atalhos",
-        "saveFailed": "Falha ao salvar atalho",
-        "updated": "Atalho atualizado"
+        "saveFailed": "Falha ao salvar atalho"
       },
       "toggle": {
         "description": "Ative os atalhos para inserir rapidamente prompts comuns.",

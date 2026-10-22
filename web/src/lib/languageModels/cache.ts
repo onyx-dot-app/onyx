@@ -31,7 +31,6 @@ export async function setDefaultLlmModelAndRefresh(
   try {
     await setDefaultLlmModel(providerId, modelName);
     await refreshLlmProviderCaches(mutate);
-    toast.success("Default model updated successfully!");
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     toast.error(`Failed to set default model: ${message}`);

@@ -7,7 +7,6 @@ import type {
   ModelOptionProvider,
   ModelPaging,
 } from "@/lib/languageModels/types";
-import { filterModelConfigurations } from "@/lib/languageModels/options";
 
 // The listbox renders through a portal; keep it inside the test container.
 jest.mock("react-dom", () => ({
@@ -95,33 +94,6 @@ describe("SimpleModelSelector", () => {
     expect(screen.getByRole("textbox", { name: "Search" })).toHaveFocus();
     await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
     expect(handleChange).toHaveBeenCalledWith(12);
-  });
-
-  test("lets an admin select a hidden utility model", async () => {
-    const hiddenProviders = providers.map((provider) => ({
-      ...provider,
-      model_configurations: provider.model_configurations.map((model) => ({
-        ...model,
-        is_visible: false,
-      })),
-    }));
-    const handleChange = jest.fn();
-    const user = setupUser();
-    render(
-      <SimpleModelSelector
-        providers={filterModelConfigurations(hiddenProviders, {
-          visibleOnly: false,
-        })}
-        value={null}
-        onChange={handleChange}
-      />
-    );
-
-    await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: /GPT-4\.1/ }));
-
-    expect(handleChange).toHaveBeenCalledWith(12);
-    expect(hiddenProviders[0]?.model_configurations[1]?.is_visible).toBe(false);
   });
 
   test("non-nullable: re-picking the chosen model changes nothing", async () => {

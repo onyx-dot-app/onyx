@@ -260,7 +260,7 @@ export function usePinChatAgent() {
  *    A user who has unpinned everything has nothing here and falls to step 4.
  * 4. anything eligible
  *
- * "Disable Default Chat" (`disable_default_assistant`) is a constraint,
+ * "Always Start with an Agent" (`disable_default_assistant`) is a constraint,
  * not a preference: with it on the Assistant is never a valid answer, so it
  * leaves the candidate set up front rather than being skipped at step 2. That
  * is what stops a stale `?agentId=0`, or a session created before the setting

@@ -185,9 +185,9 @@ describe("LanguageModelsPage", () => {
     await screen.findByDisplayValue("GPT-4o");
     expect(screen.queryByText("Task-specific models")).not.toBeInTheDocument();
     expect(screen.queryByText("Optional task models")).not.toBeInTheDocument();
-    expect(screen.queryByText("Chat naming model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Chat Naming Model")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Search selection model")
+      screen.queryByText("Search Selection Model")
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Fast background model")).not.toBeInTheDocument();
     await user.click(screen.getByDisplayValue("GPT-4o"));
