@@ -84,3 +84,24 @@ test("a failed row opens to show both the description and the repair step", asyn
     screen.getByText("Fix the channel regex in the connector settings.")
   ).toBeInTheDocument();
 });
+
+test("a successful row opens to show its description", async () => {
+  const user = setupUser();
+  render(
+    <CheckLineGroups
+      lines={[
+        line({
+          state: "passed",
+          summary: "Signed in",
+          description: "The app can read only the sites it was granted.",
+        }),
+      ]}
+    />
+  );
+
+  await user.click(screen.getByText("Signed in"));
+
+  expect(
+    screen.getByText("The app can read only the sites it was granted.")
+  ).toBeInTheDocument();
+});
