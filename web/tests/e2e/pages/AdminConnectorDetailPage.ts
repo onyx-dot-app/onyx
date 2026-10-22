@@ -34,6 +34,9 @@ export class AdminConnectorDetailPage {
   readonly editConnectorButton: Locator;
   /** Unfolds the section listing the connector's settings. */
   readonly indexConfigurationsToggle: Locator;
+  /** The pair's credential section, absent for a source without a credential. */
+  readonly authenticationAccountTitle: Locator;
+  readonly rerunChecksButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -66,6 +69,12 @@ export class AdminConnectorDetailPage {
       .first();
     this.indexConfigurationsToggle = page.getByRole("button", {
       name: "Expand Index Configurations",
+    });
+    this.authenticationAccountTitle = page.getByText("Authentication Account", {
+      exact: true,
+    });
+    this.rerunChecksButton = page.getByRole("button", {
+      name: "Re-run Checks",
     });
   }
 
