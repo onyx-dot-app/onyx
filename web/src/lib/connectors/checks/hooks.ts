@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  createElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createElement, useCallback, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useDebouncedValue } from "@opal/hooks";
 import { SvgProgressRing } from "@opal/icons";
@@ -80,6 +73,11 @@ interface ConnectorChecksSession {
   request: number;
   /** The next start runs every check again, cached results included. */
   rerunAll: boolean;
+  /**
+   * The form was unlocked when the latest run started. It stays so until
+   * that run finishes its binding checks, so a re-run never locks the form.
+   */
+  heldUnlock: boolean;
 }
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
@@ -207,10 +205,11 @@ export interface UseConnectorChecksResult {
    * required check applies.
    */
   createReady: boolean;
-  /** The form changed since checks started; a new run would cover it. */
+  /**
+   * The form changed since the latest run started. Create waits for a
+   * requested run of the current form; none starts on its own.
+   */
   needsRun: boolean;
-  /** Identifies the current form: what a new run would check. */
-  formKey: string;
   /** The finished checks of the latest run. */
   results: CapabilityCheckResult[];
   /** The latest run's checks still to finish: running, queued or waiting. */
@@ -235,9 +234,9 @@ export interface UseConnectorChecksResult {
  * and the Connect button all read the same run by calling this hook. Must be
  * called inside the form's Formik context.
  *
- * The first run starts on request. A change to the credential or its bound
- * fields resets the checks to that request. Any other form change leaves the
- * result out of date for Create until a new run (see `refresh`) covers it.
+ * Runs start only on request. A change to the credential or its bound
+ * fields resets the checks to the first request. Any other form change sets
+ * `needsRun` and holds Create until a requested run covers it.
  */
 export function useConnectorChecks({
   source,
@@ -284,6 +283,66 @@ export function useConnectorChecks({
     }
   );
 
+  // Results count only for the credential and bound fields they ran with.
+  const current: boolean = !!session && session.ranWith === bindingKey;
+  // A superseded snapshot belongs to an older run.
+  const snapshot: DraftCheckRunSnapshot | null =
+    current && run && run.run_id === runId && run.status !== "superseded"
+      ? run
+      : null;
+  const checks: DraftCheckState[] = snapshot?.checks ?? [];
+
+  const status: ConnectorChecksStatus = (() => {
+    if (credential === null || !session || !current) return "notStarted";
+    if (session.requesting) return "running";
+    if (session.startFailed) return "failedToRun";
+    if (!runId) return "notStarted";
+    // Another tab started a run that replaced this one (a pair's dry runs
+    // share one key per user): this run stopped, so it can start again.
+    if (run && run.run_id === runId && run.status === "superseded") {
+      return "notStarted";
+    }
+    if (!snapshot || snapshot.status === "running") return "running";
+    if (snapshot.status === "failed_to_run") return "failedToRun";
+    return checks.some(
+      (check) => check.required && check.state !== "waiting" && blocks(check)
+    )
+      ? "failed"
+      : "passed";
+  })();
+
+  const applicable: DraftCheckState[] = (plan?.checks ?? []).filter(
+    (check) => check.state !== "not_applicable"
+  );
+  // Which checks validate the binding can depend on the form (e.g. a scoped
+  // token picks its own sign-in check). A current run worked them out from
+  // the form it ran on, so it decides; before one, the plan does, and the
+  // form waits for a run while any apply.
+  const bindingChecks: DraftCheckState[] = checks.filter(
+    (check) => check.validates_binding && check.state !== "not_applicable"
+  );
+  // A run still on its binding checks keeps the unlock it started with, so
+  // the fields being edited stay enabled.
+  const formUnlocked: boolean = !snapshot
+    ? plan !== undefined && !applicable.some((check) => check.validates_binding)
+    : bindingChecks.every(isFinished)
+      ? !bindingChecks.some(blocks)
+      : (session?.heldUnlock ?? false);
+  // A current run of this form that started fine. It need not be finished:
+  // `createReady` waits only on required checks (see `blocks`), so a slow
+  // optional check such as discovery does not hold Create back.
+  const ranThisForm: boolean =
+    !!session &&
+    !session.requesting &&
+    session.ranWithForm === formKey &&
+    snapshot !== null &&
+    snapshot.status !== "failed_to_run";
+  const createReady: boolean =
+    formUnlocked &&
+    (!applicable.some((check) => check.required) ||
+      (ranThisForm &&
+        !checks.some((check) => check.required && blocks(check))));
+
   const start = useCallback(
     async (rerun: DraftRerunMode) => {
       if (credential === null) return;
@@ -302,6 +361,7 @@ export function useConnectorChecks({
           startFailed: false,
           request,
           rerunAll: false,
+          heldUnlock: formUnlocked,
         },
         { revalidate: false }
       );
@@ -379,6 +439,7 @@ export function useConnectorChecks({
       sessionKey,
       bindingKey,
       formKey,
+      formUnlocked,
       source,
       accessType,
       formState,
@@ -386,71 +447,11 @@ export function useConnectorChecks({
     ]
   );
 
-  // Results count only for the credential and bound fields they ran with.
-  const current: boolean = !!session && session.ranWith === bindingKey;
-  // A superseded snapshot belongs to an older run.
-  const snapshot: DraftCheckRunSnapshot | null =
-    current && run && run.run_id === runId && run.status !== "superseded"
-      ? run
-      : null;
-  const checks: DraftCheckState[] = snapshot?.checks ?? [];
-
-  const status: ConnectorChecksStatus = (() => {
-    if (credential === null || !session || !current) return "notStarted";
-    if (session.requesting) return "running";
-    if (session.startFailed) return "failedToRun";
-    if (!runId) return "notStarted";
-    // Another tab started a run that replaced this one (a pair's dry runs
-    // share one key per user): this run stopped, so it can start again.
-    if (run && run.run_id === runId && run.status === "superseded") {
-      return "notStarted";
-    }
-    if (!snapshot || snapshot.status === "running") return "running";
-    if (snapshot.status === "failed_to_run") return "failedToRun";
-    return checks.some(
-      (check) => check.required && check.state !== "waiting" && blocks(check)
-    )
-      ? "failed"
-      : "passed";
-  })();
-
-  const applicable: DraftCheckState[] = (plan?.checks ?? []).filter(
-    (check) => check.state !== "not_applicable"
-  );
-  // Which checks validate the binding can depend on the form (e.g. a scoped
-  // token picks its own sign-in check). A current run worked them out from
-  // the form it ran on, so it decides; before one, the plan does, and the
-  // form waits for a run while any apply.
-  const formUnlocked: boolean = snapshot
-    ? checks.every(
-        (check) =>
-          !check.validates_binding ||
-          check.state === "not_applicable" ||
-          !blocks(check)
-      )
-    : plan !== undefined &&
-      !applicable.some((check) => check.validates_binding);
-  // A current run of this form that started fine. It need not be finished:
-  // `createReady` waits only on required checks (see `blocks`), so a slow
-  // optional check such as discovery does not hold Create back.
-  const ranThisForm: boolean =
-    !!session &&
-    !session.requesting &&
-    session.ranWithForm === formKey &&
-    snapshot !== null &&
-    snapshot.status !== "failed_to_run";
-  const createReady: boolean =
-    formUnlocked &&
-    (!applicable.some((check) => check.required) ||
-      (ranThisForm &&
-        !checks.some((check) => check.required && blocks(check))));
-
   return {
     status,
     plan,
     formUnlocked,
     createReady,
-    formKey,
     needsRun:
       !!session &&
       current &&
@@ -519,6 +520,7 @@ export function useResetChecksOnCredentialChange({
         startFailed: false,
         request: (session?.request ?? 0) + 1,
         rerunAll: true,
+        heldUnlock: false,
       },
       { revalidate: false }
     );
@@ -639,43 +641,4 @@ export function useConnectorChecksProgress(
     suffix:
       counted > 0 ? t("titleCount", { complete, total: counted }) : undefined,
   };
-}
-
-function isTyping(): boolean {
-  const focused = document.activeElement;
-  return (
-    focused instanceof HTMLInputElement ||
-    focused instanceof HTMLTextAreaElement ||
-    (focused instanceof HTMLElement && focused.isContentEditable)
-  );
-}
-
-/**
- * Keeps the checks current as the form fills in: once checks have started, a
- * form change starts a run when the user leaves the field, or at once when no
- * text field has focus (a toggle or a select). Waiting checks run as their
- * fields are set; cached results keep unchanged checks from running again.
- *
- * Call it from one component only, so one change starts one run.
- */
-export function useConnectorChecksAutoRun({
-  needsRun,
-  formKey,
-  refresh,
-}: Pick<UseConnectorChecksResult, "needsRun" | "formKey" | "refresh">): void {
-  const startedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!needsRun) return;
-    const run = () => {
-      if (startedFor.current === formKey) return;
-      startedFor.current = formKey;
-      refresh();
-    };
-    if (!isTyping()) {
-      run();
-      return;
-    }
-    document.addEventListener("focusout", run, { once: true });
-    return () => document.removeEventListener("focusout", run);
-  }, [needsRun, formKey, refresh]);
 }

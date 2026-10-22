@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
       "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
+      "settingsChanged": {
+        "label": "Configuración cambiada",
+        "tooltip": "Vuelva a ejecutar las comprobaciones para probar la configuración cambiada."
+      },
       "state": {
         "inProgress": "Comprobaciones en curso...",
         "completed": "Comprobaciones completadas.",

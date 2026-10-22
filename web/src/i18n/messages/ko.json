@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
+      "settingsChanged": {
+        "label": "설정이 변경됨",
+        "tooltip": "변경된 설정을 테스트하려면 검사를 다시 실행하세요."
+      },
       "state": {
         "inProgress": "검사 진행 중...",
         "completed": "검사가 완료되었습니다.",

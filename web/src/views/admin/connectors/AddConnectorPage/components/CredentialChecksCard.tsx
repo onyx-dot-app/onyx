@@ -44,7 +44,6 @@ import { IconLoader } from "@opal/loaders";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
   useConnectorChecks,
-  useConnectorChecksAutoRun,
   useResetChecksOnCredentialChange,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
@@ -294,8 +293,10 @@ interface CheckCardViewProps {
   defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
-  /** Starts the draft run again after it failed to run. A stored report has no rerun here. */
+  /** Starts the draft run again. A stored report has no rerun here. */
   onRerun?: () => void;
+  /** The form changed since the run started: the results are out of date. */
+  needsRun?: boolean;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
 }
@@ -307,6 +308,7 @@ export function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  needsRun = false,
   defaultCollapsed = false,
   expandRequest = 0,
 }: CheckCardViewProps) {
@@ -345,6 +347,7 @@ export function CheckCardView({
   );
   const incompleteCount: number = count("incomplete") + count("indeterminate");
   const isRunning: boolean = status === "running";
+  const settingsChanged: boolean = needsRun && !isRunning;
   // A broken run outranks the counts.
   const notice: string | undefined =
     status === "failedToRun" ? t("failedToRun") : undefined;
@@ -398,9 +401,12 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {(notice !== undefined || stateCounts.failed > 0) &&
+          {(notice !== undefined ||
+            stateCounts.failed > 0 ||
+            settingsChanged) &&
             onRerun !== undefined && (
-              // A run that broke or failed a check can be tried again without editing settings.
+              // Runs start only on request, so a broken run, a failed check
+              // or changed settings each offer one.
               <Button
                 rightIcon={SvgRefreshCw}
                 prominence="tertiary"
@@ -410,6 +416,14 @@ export function CheckCardView({
                 {tAccount("rerunButton.label")}
               </Button>
             )}
+          {settingsChanged && (
+            <Tag
+              icon={SvgAlertCircle}
+              title={t("settingsChanged.label")}
+              tooltip={t("settingsChanged.tooltip")}
+              color="amber"
+            />
+          )}
           {collapsed && requiredFailed > 0 && (
             <Tag
               icon={SvgXOctagon}
@@ -523,7 +537,6 @@ export default function CredentialChecksCard({
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
   const checks = useConnectorChecks({ source, credential, ccPairId });
-  useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
     return null;
@@ -562,7 +575,9 @@ export default function CredentialChecksCard({
       inProgressCount={checks.inProgressCount}
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
-      onRerun={checks.rerun}
+      // Changed settings reuse the cached results of unchanged checks.
+      onRerun={checks.needsRun ? checks.refresh : checks.rerun}
+      needsRun={checks.needsRun}
       expandRequest={expandRequest}
     />
   );

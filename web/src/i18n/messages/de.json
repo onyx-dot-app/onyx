@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
+      "settingsChanged": {
+        "label": "Einstellungen geändert",
+        "tooltip": "Führen Sie die Prüfungen erneut aus, um die geänderten Einstellungen zu testen."
+      },
       "state": {
         "inProgress": "Prüfungen laufen...",
         "completed": "Prüfungen abgeschlossen.",

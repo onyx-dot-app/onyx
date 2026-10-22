@@ -634,7 +634,10 @@ run is in flight or fails to run, or while a required check has `FAILED`
 [[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
 The create form keeps its configuration locked until a run passes every check
 with `validates_binding` (`formUnlocked` in
-`web/src/lib/connectors/checks/hooks.ts`).
+`web/src/lib/connectors/checks/hooks.ts`). A run starts only from Start Checks or
+Re-run Checks. A later form change does not start one: the checks card shows
+"Settings changed" and Create waits for a run of the current form. A re-run keeps
+the form unlocked until it finishes its binding checks.
 Each source with named checks sets it on its sign-in check, and some sources also
 on a listing that runs after it (e.g. Jira's "List projects").
 When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory

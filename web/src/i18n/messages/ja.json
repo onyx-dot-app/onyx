@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
       "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
+      "settingsChanged": {
+        "label": "設定が変更されました",
+        "tooltip": "変更した設定をテストするには、チェックを再実行してください。"
+      },
       "state": {
         "inProgress": "チェックを実行中...",
         "completed": "チェックが完了しました。",

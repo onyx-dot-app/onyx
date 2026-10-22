@@ -293,6 +293,38 @@ it("needs a run of the current form before Create", async () => {
   expect(startMock.mock.calls[1]?.[0].form_state).toEqual({ space: "ENG" });
 });
 
+it("starts no run when a field changes, and only flags the change", async () => {
+  startMock.mockResolvedValue(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.status).toBe("passed"));
+
+  await act(() => result.current.form.setFieldValue("include_comments", true));
+  expect(result.current.checks.needsRun).toBe(true);
+  expect(result.current.checks.formUnlocked).toBe(true);
+  expect(startMock).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the form unlocked while a re-run checks the binding again", async () => {
+  startMock.mockResolvedValueOnce(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(result.current.checks.formUnlocked).toBe(true));
+
+  startMock.mockResolvedValueOnce({
+    ...run([BINDING, CONTENT], "running"),
+    run_id: "run-2",
+  });
+  act(() => result.current.checks.rerun());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(result.current.checks.status).toBe("running"));
+  expect(result.current.checks.formUnlocked).toBe(true);
+});
+
 it("reports failedToRun when the start request or the run fails", async () => {
   startMock.mockRejectedValueOnce(new Error("boom"));
   const { result } = renderChecks();

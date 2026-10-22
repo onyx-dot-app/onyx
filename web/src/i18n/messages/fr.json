@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
+      "settingsChanged": {
+        "label": "Paramètres modifiés",
+        "tooltip": "Relancez les vérifications pour tester les paramètres modifiés."
+      },
       "state": {
         "inProgress": "Vérifications en cours...",
         "completed": "Vérifications terminées.",

@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
+      "settingsChanged": {
+        "label": "Configurações alteradas",
+        "tooltip": "Execute as verificações novamente para testar as configurações alteradas."
+      },
       "state": {
         "inProgress": "Verificações em andamento...",
         "completed": "Verificações concluídas.",

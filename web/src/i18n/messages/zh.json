@@ -10793,6 +10793,10 @@
       },
       "failedToRun": "检查未能运行。请重试。",
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
+      "settingsChanged": {
+        "label": "设置已更改",
+        "tooltip": "重新运行检查以测试更改后的设置。"
+      },
       "state": {
         "inProgress": "检查进行中...",
         "completed": "检查已完成。",
