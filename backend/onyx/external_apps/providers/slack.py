@@ -26,6 +26,7 @@ from onyx.external_apps.providers.base import (
 class SlackAction(ExternalAppAction):
     """Strongly-typed catalog ids for the Slack provider."""
 
+    AUTH_TEST = "slack.auth.test"
     CHANNELS_READ = "slack.channels.read"
     MESSAGES_READ = "slack.messages.read"
     USERS_READ = "slack.users.read"
@@ -38,6 +39,13 @@ class SlackAction(ExternalAppAction):
 # Slack Web API calls are POST to https://slack.com/api/<method>; the action is
 # the method segment of the path.
 _ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id=SlackAction.AUTH_TEST,
+        normalised_name="Check connection",
+        description="Check authentication and identify the connected Slack account.",
+        matches=(RestRoute(method="POST", path="/api/auth.test"),),
+        default_policy=ActionPolicy.ALWAYS,
+    ),
     EndpointSpec(
         id=SlackAction.CHANNELS_READ,
         normalised_name="View channels & conversations",
