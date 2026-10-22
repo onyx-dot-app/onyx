@@ -69,6 +69,25 @@ export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 export type Rounding = 0.5 | 1 | 2 | 3 | 4 | 5 | "full";
 
 /**
+ * A line height on the {@link Spacing} scale, one of the `--height-line-*`
+ * tokens in size.json: `N` is `N / 4` rem.
+ *
+ * | Step | px | Token                     |
+ * |------|----|---------------------------|
+ * | `3`  | 12 | `height-line-small`       |
+ * | `4`  | 16 | `height-line-secondary`   |
+ * | `5`  | 20 | `height-line-main`        |
+ * | `6`  | 24 | `height-line-label`       |
+ * | `7`  | 28 | `height-line-h3-section`  |
+ * | `8`  | 32 | `height-line-h2-sub-headline` |
+ * | `9`  | 36 | `height-line-h1-headline` |
+ * | `12` | 48 | `height-line-h1-hero`     |
+ *
+ * Closed, like {@link Rounding}: only the app's line heights are valid.
+ */
+export type LineHeight = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
+
+/**
  * Extreme size variants ("fit" and "full" only).
  *
  * Used for width and height properties that only support extremal values.

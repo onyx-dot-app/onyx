@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/layouts/toast/styles.css";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
 import { Button, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -17,8 +17,6 @@ import {
 import SvgChevronRight from "@opal/icons/chevron-right";
 import { Section } from "@opal/layouts/general/components";
 
-// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
-const LEAVE_DURATION = 400;
 // How long a toast lingers after the user expands it. Long enough to read a
 // multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
@@ -90,6 +88,7 @@ function ToastCard({
   }, []);
   const truncated = useOverflow(title);
   const close = t.dismissible ? () => onClose(t.id) : undefined;
+  const action = t.action;
   const shared = {
     innerPadding: 1,
     variant: t.level ?? "info",
@@ -104,19 +103,31 @@ function ToastCard({
     <div ref={ref} className="opal-toast" data-leaving={t.leaving || undefined}>
       <div className="opal-toast-body">
         <div className="opal-toast-spacer">
-          {truncated ? (
+          {truncated || action ? (
             <MessageCard
               {...shared}
               rightChildren={
                 <Section flexDirection="row" gap={0}>
-                  <Button
-                    icon={ToastChevronIcon}
-                    prominence="internal"
-                    size="md"
-                    onClick={() => onToggle(t)}
-                    aria-label={strings.showFullMessage}
-                    aria-expanded={expanded}
-                  />
+                  {action && (
+                    <Button
+                      icon={action.icon}
+                      prominence="internal"
+                      size="md"
+                      tooltip={action.label}
+                      aria-label={action.label}
+                      onClick={action.onClick}
+                    />
+                  )}
+                  {truncated && (
+                    <Button
+                      icon={ToastChevronIcon}
+                      prominence="internal"
+                      size="md"
+                      onClick={() => onToggle(t)}
+                      aria-label={strings.showFullMessage}
+                      aria-expanded={expanded}
+                    />
+                  )}
                   {close && (
                     <Button
                       icon={SvgX}
@@ -129,7 +140,9 @@ function ToastCard({
                 </Section>
               }
               bottomChildren={
-                expanded ? <ExpandedDetails message={t.message} /> : undefined
+                truncated && expanded ? (
+                  <ExpandedDetails message={t.message} />
+                ) : undefined
               }
             />
           ) : (
@@ -164,17 +177,17 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   );
   const visible = allToasts.filter((t) => t.leaving || shownIds.has(t.id));
 
+  // A gone toast leaves no expanded state behind for a later one with its id.
+  useEffect(() => {
+    setExpandedIds((prev) => {
+      const live = new Set(allToasts.map((t) => t.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [allToasts]);
+
   const handleClose = useCallback((id: string) => {
-    toast._markLeaving(id);
-    setTimeout(() => {
-      toast.dismiss(id);
-      setExpandedIds((prev) => {
-        if (!prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }, LEAVE_DURATION);
+    toast.dismiss(id);
   }, []);
 
   const handleToggle = useCallback((t: Toast) => {

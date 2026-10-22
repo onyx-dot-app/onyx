@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { SvgRefreshCw } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -8,7 +10,21 @@ import { useEffect, useSyncExternalStore } from "react";
 
 export type ToastLevel = "success" | "error" | "warning" | "info" | "default";
 
+/**
+ * An icon button left of the close button. A click runs it and the toast
+ * stays: a retry that fails again replaces it in place. An action that should
+ * close the toast dismisses it in `onClick`.
+ */
+export interface ToastAction {
+  icon: IconFunctionComponent;
+  /** The button's tooltip and accessible name. */
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastOptions {
+  /** Firing a toast with the id of a live one replaces it in place. */
+  id?: string;
   message: string;
   /** @default "info" */
   level?: ToastLevel;
@@ -17,6 +33,7 @@ export interface ToastOptions {
   duration?: number;
   /** Shows the close button. @default true */
   dismissible?: boolean;
+  action?: ToastAction;
 }
 
 export interface Toast extends ToastOptions {
@@ -31,6 +48,8 @@ export interface Toast extends ToastOptions {
 // ---------------------------------------------------------------------------
 
 export const MAX_VISIBLE_TOASTS = 3;
+// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
+const LEAVE_DURATION_MS = 400;
 const DEFAULT_DURATION = 4000;
 const TOAST_CONSOLE_METHOD: Record<
   ToastLevel,
@@ -58,7 +77,7 @@ function notify() {
 }
 
 function addToast(options: ToastOptions): string {
-  const id = `toast-${++nextId}-${Date.now()}`;
+  const id = options.id ?? `toast-${++nextId}-${Date.now()}`;
   const duration = options.duration ?? DEFAULT_DURATION;
 
   const level = options.level ?? "info";
@@ -78,12 +97,19 @@ function addToast(options: ToastOptions): string {
     console[method](`[Toast] ${entry.message}`);
   }
 
-  toasts = [...toasts, entry];
+  const existing = timers.get(id);
+  if (existing) {
+    clearTimeout(existing);
+    timers.delete(id);
+  }
+  toasts = toasts.some((t) => t.id === id)
+    ? toasts.map((t) => (t.id === id ? entry : t))
+    : [...toasts, entry];
   notify();
 
   if (duration !== Infinity) {
     const timer = setTimeout(() => {
-      removeToast(id);
+      closeToast(id);
     }, duration);
     timers.set(id, timer);
   }
@@ -101,6 +127,30 @@ function removeToast(id: string): void {
   notify();
 }
 
+/**
+ * Animates a toast out, then removes it. Every close goes through here: the
+ * close button, a timeout, `toast.dismiss`, and `useErrorToast` when its
+ * error clears.
+ */
+function closeToast(id: string): void {
+  const current = toasts.find((t) => t.id === id);
+  if (!current || current.leaving) return;
+  const timer = timers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    timers.delete(id);
+  }
+  markLeaving(id);
+  // Toasts are replaced, never changed, so this entry identifies this close.
+  const leavingEntry = toasts.find((t) => t.id === id);
+  setTimeout(() => {
+    // A toast fired with this id while this one left replaced it, and may
+    // be leaving on its own timer: remove only the entry this close started.
+    if (toasts.find((t) => t.id === id) !== leavingEntry) return;
+    removeToast(id);
+  }, LEAVE_DURATION_MS);
+}
+
 function setAutoDismiss(id: string, duration: number): void {
   const existing = timers.get(id);
   if (existing) {
@@ -111,7 +161,7 @@ function setAutoDismiss(id: string, duration: number): void {
     return;
   }
   const timer = setTimeout(() => {
-    removeToast(id);
+    closeToast(id);
   }, duration);
   timers.set(id, timer);
 }
@@ -161,15 +211,15 @@ interface ToastFn {
     message: string,
     opts?: Omit<ToastOptions, "message" | "level">
   ) => string;
+  /** Animates the toast out, then removes it. */
   dismiss: (id: string) => void;
+  /** Removes every toast at once, without animating. */
   clearAll: () => void;
   /**
    * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make
    * the toast persistent.
    */
   setAutoDismiss: (id: string, duration: number) => void;
-  /** @internal Flags the toast as leaving so the exit animation plays. Caller dismisses after the animation. */
-  _markLeaving: (id: string) => void;
 }
 
 function toastBase(options: ToastOptions): string {
@@ -185,15 +235,65 @@ export const toast: ToastFn = Object.assign(toastBase, {
     addToast({ ...opts, message, level: "warning" }),
   info: (message: string, opts?: Omit<ToastOptions, "message" | "level">) =>
     addToast({ ...opts, message, level: "info" }),
-  dismiss: removeToast,
+  dismiss: closeToast,
   clearAll,
   setAutoDismiss,
-  _markLeaving: markLeaving,
 });
 
 // ---------------------------------------------------------------------------
 // React hooks
 // ---------------------------------------------------------------------------
+
+export interface UseErrorToastOptions {
+  /** The toast's id: callers sharing an id share one toast. */
+  id: string;
+  message: string;
+  /** Adds a retry button, with `label` as its tooltip. */
+  retry?: { label: string; onRetry: () => void };
+}
+
+/**
+ * Shows a persistent error toast while `error` is set, for a fetch that
+ * failed. A new error replaces it; it goes when the error clears or the
+ * caller unmounts.
+ */
+export function useErrorToast(
+  error: unknown,
+  { id, message, retry }: UseErrorToastOptions
+) {
+  // Read at click time, so an unstable callback does not re-raise the toast.
+  const onRetryRef = useRef(retry?.onRetry);
+  useEffect(() => {
+    onRetryRef.current = retry?.onRetry;
+  });
+  const retryLabel = retry?.label;
+  const hasError = error != null && error !== false;
+  // Each error raises the toast. One already shown is replaced in place, so
+  // a retry that fails again leaves it standing rather than replaying it.
+  useEffect(() => {
+    if (!hasError) return;
+    addToast({
+      id,
+      message,
+      level: "error",
+      duration: Infinity,
+      action:
+        retryLabel === undefined
+          ? undefined
+          : {
+              icon: SvgRefreshCw,
+              label: retryLabel,
+              onClick: () => onRetryRef.current?.(),
+            },
+    });
+  }, [error, hasError, id, message, retryLabel]);
+  // Removed only when the error clears or the caller unmounts, never
+  // between two errors.
+  useEffect(() => {
+    if (!hasError) return;
+    return () => closeToast(id);
+  }, [hasError, id]);
+}
 
 export function useToast() {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
