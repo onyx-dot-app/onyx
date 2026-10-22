@@ -6,7 +6,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
-from onyx.chat.response import message_thinking
+from onyx.chat.response import message_thinking, tool_arguments_for_display
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
@@ -56,6 +56,8 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from onyx.utils.logger import setup_logger
+from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 HIDDEN_TOOLS = frozenset(
     {
@@ -68,6 +70,7 @@ HIDDEN_TOOLS = frozenset(
 
 _STRING = TypeAdapter(str)
 _STRINGS = TypeAdapter(list[str])
+logger = setup_logger()
 
 
 class ResponseLayout:
@@ -113,6 +116,7 @@ class MessageRenderer:
         self._raw_thinking = ""
         self._finished = False
         self.tool_placements: dict[str, Placement] = {}
+        self._argument_streams: dict[int, ToolCall] = {}
         self.citation_processor = (
             DynamicCitationProcessor(citation_mode=settings.citation_mode)
             if settings.citation_mode is not None
@@ -242,32 +246,55 @@ class MessageRenderer:
         if isinstance(event, ThinkingDeltaEvent):
             self._raw_thinking += event.text
             return self._append(event.text, thinking=True)
-        if (
-            isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent))
-            and event.tool_call.name == self.settings.think_tool
-        ):
-            text = event.argument_deltas.get("reasoning", "")
+        if isinstance(event, ToolCallStartEvent):
+            if event.tool_name in (PythonTool.NAME, self.settings.think_tool):
+                self._argument_streams[event.content_index] = ToolCall(
+                    id=event.tool_call_id,
+                    name=event.tool_name,
+                    arguments={},
+                    raw_arguments="",
+                    arguments_complete=False,
+                )
+            if (
+                event.tool_name == self.settings.think_tool
+                or event.tool_name in HIDDEN_TOOLS
+            ):
+                return []
+            result = self._close_reasoning()
+            self.tool_placement(event.tool_call_id)
+            return result
+        call = self._argument_streams.get(event.content_index)
+        if call is None:
+            return []
+        if isinstance(event, ToolCallDeltaEvent):
+            call.raw_arguments = (call.raw_arguments or "") + event.arguments_delta
+            try:
+                arguments = parse_partial_object(call.raw_arguments)
+            except ValueError:
+                logger.debug(
+                    "Tool arguments cannot be parsed incrementally", exc_info=True
+                )
+                del self._argument_streams[event.content_index]
+                return []
+        else:
+            del self._argument_streams[event.content_index]
+            arguments = event.tool_call.arguments
+        deltas = appended_text(call.arguments, arguments)
+        call.arguments = arguments
+        if call.name == self.settings.think_tool:
+            text = deltas.get("reasoning", "")
             self._raw_thinking += text
             return self._append(text, thinking=True)
-        if (
-            isinstance(event, (ToolCallStartEvent, ToolCallDeltaEvent))
-            and event.tool_call.name
-            and event.tool_call.name not in HIDDEN_TOOLS
-        ):
-            result = self._close_reasoning()
-            placement = self.tool_placement(event.tool_call.id)
-            if event.tool_call.name == PythonTool.NAME:
-                result.append(
-                    packets.Packet(
-                        placement=placement,
-                        obj=packets.ToolCallArgumentDelta(
-                            tool_type=PythonTool.NAME,
-                            argument_deltas=event.argument_deltas,
-                        ),
-                    )
-                )
-            return result
-        return []
+        if not deltas:
+            return []
+        return [
+            packets.Packet(
+                placement=self.tool_placement(call.id),
+                obj=packets.ToolCallArgumentDelta(
+                    tool_type=PythonTool.NAME, argument_deltas=deltas
+                ),
+            )
+        ]
 
     def complete(self, message: AssistantMessage) -> list[packets.Packet]:
         if self._finished:
@@ -347,7 +374,7 @@ class ToolRenderer:
 
     def start(self) -> list[packets.Packet]:
         name = self.call.name
-        args = self.call.arguments
+        args = tool_arguments_for_display(self.call)
         objects: list[packets.PacketObj]
         if name in {SearchTool.NAME, WebSearchTool.NAME}:
             objects = [
