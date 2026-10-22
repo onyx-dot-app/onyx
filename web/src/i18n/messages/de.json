@@ -3885,7 +3885,8 @@
             },
             "branch": {
               "label": "Branch",
-              "description": "Branch, aus dem Dokumente indexiert werden (z. B. gh-pages). Leer lassen, um den Standard-Branch jedes Repositorys zu verwenden. Gilt nur, wenn \"Dokumente einbeziehen\" aktiviert ist. Nach einer Änderung bei einem bestehenden Konnektor eine Neuindexierung auslösen, damit der neue Branch sofort übernommen wird."
+              "description": "Branch, aus dem Dokumente indexiert werden (z. B. gh-pages). Leer lassen, um den Standard-Branch jedes Repositorys zu verwenden. Gilt nur, wenn \"Dokumente einbeziehen\" aktiviert ist. Nach einer Änderung bei einem bestehenden Konnektor eine Neuindexierung auslösen, damit der neue Branch sofort übernommen wird.",
+              "placeholder": "Branch-Name..."
             }
           }
         },

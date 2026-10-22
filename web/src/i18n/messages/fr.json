@@ -3885,7 +3885,8 @@
             },
             "branch": {
               "label": "Branche",
-              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement."
+              "description": "Branche dont indexer les documents (par ex. gh-pages). Laissez vide pour utiliser la branche par défaut de chaque dépôt. S'applique uniquement si « Inclure les documents ? » est activé. Après avoir modifié ce champ sur un connecteur existant, lancez une réindexation pour prendre en compte la nouvelle branche immédiatement.",
+              "placeholder": "Nom de la branche..."
             }
           }
         },

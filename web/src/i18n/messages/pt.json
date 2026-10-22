@@ -3885,7 +3885,8 @@
             },
             "branch": {
               "label": "Branch",
-              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente."
+              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente.",
+              "placeholder": "Nome da branch..."
             }
           }
         },

@@ -3885,7 +3885,8 @@
             },
             "branch": {
               "label": "Rama",
-              "description": "Rama de la que indexar documentos (p. ej. gh-pages). Déjalo en blanco para usar la rama predeterminada de cada repositorio. Solo se aplica cuando \"Incluir documentos\" está habilitado. Tras cambiarlo en un conector existente, activa una reindexación para aplicar la nueva rama de inmediato."
+              "description": "Rama de la que indexar documentos (p. ej. gh-pages). Déjalo en blanco para usar la rama predeterminada de cada repositorio. Solo se aplica cuando \"Incluir documentos\" está habilitado. Tras cambiarlo en un conector existente, activa una reindexación para aplicar la nueva rama de inmediato.",
+              "placeholder": "Nombre de la rama..."
             }
           }
         },

@@ -509,6 +509,7 @@ export const connectorConfigs: Record<
         name: "branch",
         optional: true,
         description: "connectors.github.fields.branch.description",
+        placeholder: "connectors.github.fields.branch.placeholder",
       },
     ],
   },
