@@ -4,8 +4,10 @@ Real Postgres + Redis; UserManager is called directly.
 """
 
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
+from fastapi_users.jwt import generate_jwt
 from fastapi_users.password import PasswordHelper
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import select
@@ -17,7 +19,12 @@ from onyx.configs.app_configs import REDIS_USER_SESSIONS_KEY_PREFIX
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import PatType
 from onyx.db.models import OAuthAccount, PersonalAccessToken, User
-from onyx.db.pat import create_pat, resolve_pat, revoke_all_pats_for_user, revoke_pat
+from onyx.db.pat import (
+    create_pat,
+    resolve_pat,
+    revoke_all_pats_for_user__no_commit,
+    revoke_pat,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_raw_redis_client
 from tests.external_dependency_unit.conftest import create_test_user
@@ -110,8 +117,18 @@ async def test_forgot_password_reset_revokes_pats(
     async with get_async_session_context_manager() as async_session:
         user_db = SQLAlchemyUserDatabase(async_session, User, OAuthAccount)
         manager = UserManager(user_db)
+        manager.reset_password_token_secret = "pat-revocation-test-secret"
         db_user = await manager.get(user.id)
-        await manager.on_after_reset_password(db_user)
+        reset_token = generate_jwt(
+            {
+                "sub": str(db_user.id),
+                "password_fgpt": manager.password_helper.hash(db_user.hashed_password),
+                "aud": manager.reset_password_token_audience,
+            },
+            manager.reset_password_token_secret,
+            manager.reset_password_token_lifetime_seconds,
+        )
+        await manager.reset_password(reset_token, _NEW_PASSWORD)
 
     assert not await _pat_is_valid(token)
 
@@ -147,4 +164,38 @@ async def test_revoke_all_skips_already_revoked_pats(
     _mint_pat(db_session, user, PatType.USER)
 
     async with get_async_session_context_manager() as async_session:
-        assert await revoke_all_pats_for_user(async_session, user.id) == 1
+        assert await revoke_all_pats_for_user__no_commit(async_session, user.id) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_failed_pat_revocation_keeps_old_password(
+    db_session: Session, users: tuple[User, User]
+) -> None:
+    """The new password and the PAT revocation commit together."""
+    user, _ = users
+    token = _mint_pat(db_session, user, PatType.USER)
+
+    async with get_async_session_context_manager() as async_session:
+        user_db = SQLAlchemyUserDatabase(async_session, User, OAuthAccount)
+        manager = UserManager(user_db)
+        db_user = await manager.get(user.id)
+        with (
+            patch(
+                "onyx.auth.users.revoke_all_pats_for_user__no_commit",
+                side_effect=RuntimeError("revocation failed"),
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            await manager.change_password_if_old_matches(
+                db_user, _OLD_PASSWORD, _NEW_PASSWORD
+            )
+
+    db_session.expire_all()
+    stored = db_session.get(User, user.id)
+    assert stored is not None
+    verified, _ = PasswordHelper().verify_and_update(
+        _OLD_PASSWORD, stored.hashed_password
+    )
+    assert verified
+    assert await _pat_is_valid(token)

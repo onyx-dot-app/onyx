@@ -52,6 +52,7 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     get_sandbox_user_map,
     get_snapshots_for_session,
+    has_active_craft_pat,
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     sleep_running_sandbox__no_commit,
@@ -415,6 +416,11 @@ def reserve_sandbox__no_commit(
     if requires_provisioning:
         with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
             onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+    elif not has_active_craft_pat(db_session, user.id):
+        # A password reset revokes every PAT. The proxy reads the stored PAT
+        # per request, so a new one restores a running sandbox's API access.
+        with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
+            ensure_sandbox_pat(db_session, sandbox, user)
 
     return SandboxReservation(
         sandbox_id=sandbox.id,

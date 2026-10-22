@@ -1,9 +1,9 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import { ResetPasswordModal } from "./UserActionModals";
-import { resetPassword } from "./svc";
+import { ResetPasswordModal } from "@/views/admin/UsersPage/UserActionModals";
+import { resetPassword } from "@/views/admin/UsersPage/svc";
 
-jest.mock("./svc", () => ({
-  ...jest.requireActual("./svc"),
+jest.mock("@/views/admin/UsersPage/svc", () => ({
+  ...jest.requireActual("@/views/admin/UsersPage/svc"),
   resetPassword: jest.fn(),
 }));
 

@@ -114,7 +114,7 @@ async def test_on_after_reset_password_emits_event(
     manager = UserManager(MagicMock())
 
     with (
-        patch.object(manager, "revoke_credentials", new=AsyncMock()) as revoke,
+        patch.object(manager, "revoke_sessions", new=AsyncMock()) as revoke,
         caplog.at_level(logging.INFO, logger="onyx.audit"),
     ):
         await manager.on_after_reset_password(user, request=None)
