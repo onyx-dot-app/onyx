@@ -57,7 +57,7 @@
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-visually-hidden": "^1.2.11",
-    "@sentry/nextjs": "^10.54.0",
+    "@sentry/nextjs": "10.75.2",
     "@tanstack/react-table": "^8.21.3",
     "@zip.js/zip.js": "^2.8.26",
     "class-variance-authority": "^0.7.0",
