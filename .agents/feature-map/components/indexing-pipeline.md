@@ -208,7 +208,9 @@ That function computes the poll window (`window_start`/`window_end`), decides
 whether to resume from a checkpoint or start clean
 (`get_latest_valid_checkpoint`, §4.6), and drives the connector's generator
 (`ConnectorRunner.run(checkpoint)`, [[connectors]]) inside `_timed_connector_runs`,
-which records one `CONNECTOR_FETCH` timing event per yielded batch. For every
+which records one `CONNECTOR_FETCH` timing event per document or hierarchy
+batch. Failure and checkpoint-only yields do not count as batches: their wait
+time goes into the next batch of the same checkpoint step. For every
 yielded `(document_batch, hierarchy_node_batch, failure, next_checkpoint)`:
 
 - a connector-level `failure` becomes an `IndexAttemptError`
