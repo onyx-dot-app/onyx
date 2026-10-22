@@ -327,7 +327,8 @@ def assert_user_can_use_credential(
     - The user owns the credential, or it has no owner and the user holds
       MANAGE_CONNECTORS globally (an admin).
     - The user can see the credential (it is shared with them) and its source
-      has no credential-bound fields, so no setting can send it elsewhere.
+      has no credential-bound fields other than ``credential_derived_fields``,
+      so no setting can send it elsewhere.
     - The user can see the credential and the bound values equal those of a
       pair that uses it. The pairs record the values the credential is used
       with; a shared credential of a bound source with no pair is for its

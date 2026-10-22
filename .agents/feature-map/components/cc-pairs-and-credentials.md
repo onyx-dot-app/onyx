@@ -425,7 +425,8 @@ the same split: CE refuses groups, EE checks they exist. Both create paths and
 
 USE access lets a user see a shared credential. To pair it, swap to it, edit
 its bound fields or run checks with it, a non-owner must also keep the bound
-values of a pair that uses it, when its source has bound fields: see [[connectors]] §4.9
+values of a pair that uses it, when its source has bound fields that the
+credential does not derive: see [[connectors]] §4.9
 (`factory.py:assert_user_can_use_credential`).
 
 ---
