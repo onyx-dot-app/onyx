@@ -103,9 +103,6 @@ export default function InputMultiUpload({
   return (
     <div
       {...getRootProps({ className: "opal-input-upload" })}
-      // On the root, not the file input: a field label wraps the field, so
-      // tying it to the file input made every click in it open the picker.
-      id={id}
       data-drag={drag ?? undefined}
       data-testid={rest["data-testid"]}
       // Focus moving to the picker is not the user leaving the field.
@@ -116,6 +113,17 @@ export default function InputMultiUpload({
       }}
     >
       {fileInput}
+      {/* A field label points here, not at the file input: a click on the
+      label focuses the field, and never opens the picker. */}
+      <button
+        id={id}
+        type="button"
+        tabIndex={-1}
+        aria-hidden
+        className="hidden"
+        disabled={isNonEditable}
+        onClick={() => triggerRef.current?.focus()}
+      />
       <TagField
         tags={tags}
         onRemoveTag={(tagId) =>

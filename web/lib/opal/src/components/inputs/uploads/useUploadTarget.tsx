@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import useWindowFileDrag from "@opal/hooks/useWindowFileDrag";
 
@@ -101,8 +101,9 @@ export default function useUploadTarget({
   // selection, not to a focused button or read-only field, so the event's
   // target can be any element; the control takes it while focus is inside.
   const pasteRef = useRef<(event: ClipboardEvent) => void>(() => {});
-  // Kept current after each commit, as `focusTargetRef` is.
-  useEffect(() => {
+  // Kept current in a layout effect, so a paste right after a commit never
+  // sees the previous files.
+  useLayoutEffect(() => {
     pasteRef.current = (event) => {
       const root = rootRef.current;
       if (disabled || !root || !root.contains(document.activeElement)) return;
