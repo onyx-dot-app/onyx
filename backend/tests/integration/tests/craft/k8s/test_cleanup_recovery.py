@@ -22,6 +22,7 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
 from tests.common.craft.cleanup_worker import (
     APP_NAMESPACE,
@@ -181,6 +182,11 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
         sandbox.status = SandboxStatus.FAILED
         sandbox.provisioning_attempt_number += 1
         db_session.commit()
+        core.patch_namespaced_secret(
+            f"{owned.pod_name}-opencode-auth",
+            SANDBOX_NAMESPACE,
+            {"metadata": {"labels": {LABEL_TENANT_ID: None}}},
+        )
         lease.release()
         try:
             run_cleanup(core)
@@ -224,6 +230,7 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
             == sandbox.provisioning_attempt_number
         )
         assert cluster.absent("pod", owned.pod_name)
+        assert cluster.absent("secret", f"{owned.pod_name}-opencode-auth")
         assert (
             core.read_namespaced_service(
                 owned.pod_name, SANDBOX_NAMESPACE
