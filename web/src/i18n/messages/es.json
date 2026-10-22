@@ -14571,11 +14571,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "No se puede previsualizar el archivo"
+        "title": "La vista previa de este tipo de archivo no está disponible actualmente"
       },
       "error": {
         "inline": "Error: {message}",
-        "title": "Error al cargar el archivo"
+        "title": "No se pudo cargar la vista previa",
+        "description": "No se pudo cargar la vista previa. Inténtalo de nuevo o descarga el archivo para abrirlo."
       },
       "loading": {
         "label": "Cargando archivo..."
@@ -14588,10 +14589,25 @@
         "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
       },
       "imageTooLarge": {
-        "description": "Esta imagen es demasiado grande para la vista previa. Descarga el original para abrirla."
+        "description": "Se pueden previsualizar imágenes de hasta 10 MB. Descarga el archivo para abrirlo.",
+        "title": "Imagen demasiado grande para la vista previa"
       },
       "unsupported": {
-        "description": "Este archivo no se puede previsualizar. Descarga el original para abrirlo."
+        "description": "Descarga el archivo para ver su contenido."
+      },
+      "retry": {
+        "label": "Reintentar"
+      },
+      "download": {
+        "label": "Descargar archivo"
+      },
+      "tooLarge": {
+        "title": "Archivo demasiado grande para la vista previa",
+        "description": "Aquí se pueden previsualizar archivos de hasta {size, number} MB. Descarga el archivo para abrirlo."
+      },
+      "playback": {
+        "title": "Reproducción no compatible",
+        "description": "Tu navegador no puede reproducir este archivo. Descárgalo para abrirlo."
       }
     },
     "filesTab": {

@@ -3,17 +3,16 @@
 import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { renderAsync } from "docx-preview";
+import { renderDocx } from "@/lib/docx/renderDocx";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CopyButton } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
-import { sanitizeDocxHtml } from "@/sections/modals/PreviewModal/variants/sanitizeDocxHtml";
-import "@/sections/modals/PreviewModal/variants/docx-preview.css";
+import "@/lib/docx/styles.css";
 
 const DOCX_MIMES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -48,6 +47,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   }, [onLoad]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadDocument() {
       setIsLoading(true);
       setError(null);
@@ -58,38 +58,10 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
         }
         const buffer = await response.arrayBuffer();
 
-        // Render the DOCX with full layout fidelity
-        if (bodyRef.current && styleRef.current) {
-          bodyRef.current.innerHTML = "";
-          styleRef.current.innerHTML = "";
-
-          await renderAsync(buffer, bodyRef.current, styleRef.current, {
-            className: "docx",
-            inWrapper: false,
-            ignoreWidth: false,
-            ignoreHeight: false,
-            ignoreFonts: false,
-            breakPages: true,
-            useBase64URL: true,
-            renderHeaders: true,
-            renderFooters: true,
-            renderFootnotes: true,
-            renderEndnotes: true,
-          });
-
-          // Sanitize docx-preview's output (it has HTML/href sinks). Runs before
-          // the innerText read below so copied text matches what's displayed.
-          bodyRef.current.innerHTML = sanitizeDocxHtml(
-            bodyRef.current.innerHTML
-          );
-
-          // styleRef should only hold library-generated <style> elements.
-          for (const child of Array.from(styleRef.current.children)) {
-            if (child.tagName !== "STYLE") {
-              child.remove();
-            }
-          }
-        }
+        const rendered = await renderDocx(buffer);
+        if (cancelled) return;
+        bodyRef.current?.replaceChildren(...rendered.body.childNodes);
+        styleRef.current?.replaceChildren(...rendered.styles.childNodes);
 
         // Extract plain text from the rendered DOM
         const text = bodyRef.current?.innerText ?? "";
@@ -99,18 +71,21 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
         onLoadRef.current({ plainText: text, wordCount: words });
       } catch {
-        setError(t("docx.loadError.message"));
+        if (!cancelled) setError(t("docx.loadError.message"));
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
-    loadDocument();
+    void loadDocument();
+    return () => {
+      cancelled = true;
+    };
   }, [fileUrl, t]);
 
   if (error) {
     return (
       <Section justifyContent="center" alignItems="center" padding={6}>
-        <Text text03 mainUiBody>
+        <Text color="text-03" font="main-ui-body">
           {error}
         </Text>
       </Section>
@@ -162,7 +137,7 @@ export const docxVariant: PreviewVariant = {
       lastDocxResult = null;
       return (
         <Section justifyContent="center" alignItems="center" padding={6}>
-          <Text text03 mainUiBody>
+          <Text color="text-03" font="main-ui-body">
             {ctx.t("docx.legacyDocMessage")}
           </Text>
         </Section>

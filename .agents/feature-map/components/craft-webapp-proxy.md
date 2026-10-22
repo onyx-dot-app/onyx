@@ -34,8 +34,12 @@ User actions open Browser tabs. During a task, a newly discovered app can also o
 The task selection lock prevents automatic selection after the user navigates or dismisses the panel. Passive inventory reads do not select resources.
 When no tabs are open, a heading and three compact, stacked Outputs, All Files, and Apps tiles offer the plus menu actions.
 Folders in Outputs show an unread marker while any descendant output has an unseen revision.
-Mark all viewed acknowledges the currently loaded session-wide revisions, independent of the folder or type filter.
-The action stays disabled while saving or when no loaded outputs are unread. Failed saves retain markers and show an error.
+Craft chat attachment Expand actions use the same file-tab navigation as file links.
+An active file in an open panel acknowledges new output-card revisions automatically while its sandbox is running.
+Inactive file tabs and closed panels do not acknowledge updates.
+Mark all viewed acknowledges unread revisions in the current folder view, including descendants of its visible folders.
+The root view includes all Outputs; folder, search, type, and turn filters constrain the acknowledged set.
+The action stays disabled while saving or when no outputs in the current view are unread. Failed saves retain markers and show an error.
 The Outputs page has no turn picker. Chat overflow links can scope it to one turn.
 A removable turn filter leaves folder, search, and file-type filters unchanged.
 Each Browser tab keeps its own selected app and stable resource identity.
@@ -248,7 +252,21 @@ Document keyboard navigation only handles events in the active viewer toolbar.
 `web/tools/prepare-pdf-assets.cjs` copies versioned PDF.js support files before development and production builds, including Docker.
 These assets use the same origin. Downloads remain in the address row.
 Images use a neutral contrast background without changing downloaded bytes.
-Unsupported or oversized previews offer Download beside the explanation.
+Output tiles without thumbnails use shared spreadsheet, audio, or video icons by file extension.
+Uncategorized files keep the generic document icon; Craft file trees, search results, and chat output cards use the same mapping.
+DOCX previews use the shared sanitized renderer in `web/src/lib/docx/renderDocx.ts`.
+Text and binary file previews use a centered Onyx loading mark after 300 ms, without visible loading text.
+Rendered DOCX content is cached by blob identity and restored before paint when reopened; new bytes trigger a fresh render.
+XLSX, XLS, and ODS previews show saved cell values in a single frame with larger worksheet selectors below the table.
+CSV and spreadsheet previews share `web/src/app/craft/components/output-panel/SpreadsheetTable.tsx`, with sticky headers, cell borders, and row hover highlighting.
+Both use `SPREADSHEET_PREVIEW_LIMITS` from `web/src/lib/csv.ts` for truncation and limit notices.
+They do not calculate formulas or reproduce charts.
+Each worksheet displays at most 1,000 rows, 100 columns, 5,000 cells, and 2 million characters.
+Audio and video use native browser controls. Playback depends on browser codec support and pauses when the viewer is hidden.
+Media previews download at most 100 MiB; DOCX and spreadsheet previews download at most 20 MiB.
+Media uses local blob URLs for seeking because the artifact endpoint returns whole files. Eviction releases those URLs.
+Unsupported or oversized previews show a centered file-category icon, larger explanation, and full-size Download action.
+Loading failures use the same layout and also offer Try again.
 Unknown files up to 10 MiB can preview as text when strict UTF-8 decoding finds no binary control characters.
 
 ### Workspace files

@@ -14571,11 +14571,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Cannot preview file"
+        "title": "Preview for this file type is not currently supported"
       },
       "error": {
         "inline": "Error: {message}",
-        "title": "Error loading file"
+        "title": "Unable to load preview",
+        "description": "The preview could not be loaded. Try again or download the file to open it."
       },
       "loading": {
         "label": "Loading file..."
@@ -14588,10 +14589,25 @@
         "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
       },
       "imageTooLarge": {
-        "description": "This image is too large to preview. Download the original to open it."
+        "description": "Images up to 10 MB can be previewed. Download the file to open it.",
+        "title": "Image too large to preview"
       },
       "unsupported": {
-        "description": "Download the original to open it."
+        "description": "Download the file to view its contents."
+      },
+      "retry": {
+        "label": "Try again"
+      },
+      "download": {
+        "label": "Download file"
+      },
+      "tooLarge": {
+        "title": "File too large to preview",
+        "description": "Files up to {size, number} MB can be previewed here. Download the file to open it."
+      },
+      "playback": {
+        "title": "Playback not supported",
+        "description": "Your browser cannot play this file. Download the file to open it."
       }
     },
     "filesTab": {

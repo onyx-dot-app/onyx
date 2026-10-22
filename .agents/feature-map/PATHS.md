@@ -194,6 +194,8 @@ so verify the callers rather than a single component.
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
+| `web/src/lib/docx/` | chat-frontend, craft-webapp-proxy |
+| `web/src/lib/spreadsheetPreview.ts`, `web/src/app/craft/services/filePreview.ts` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
 | `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts` | craft-webapp-proxy |
@@ -238,6 +240,7 @@ so verify the callers rather than a single component.
 | `deployment/fleet-telemetry.md` | observability |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
+| `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
 
 ---

@@ -14571,11 +14571,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Impossible de prévisualiser le fichier"
+        "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement"
       },
       "error": {
         "inline": "Erreur : {message}",
-        "title": "Erreur de chargement du fichier"
+        "title": "Impossible de charger l’aperçu",
+        "description": "L’aperçu n’a pas pu être chargé. Réessayez ou téléchargez le fichier pour l’ouvrir."
       },
       "loading": {
         "label": "Chargement du fichier..."
@@ -14588,10 +14589,25 @@
         "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
       },
       "imageTooLarge": {
-        "description": "Cette image est trop volumineuse pour un aperçu. Téléchargez l’original pour l’ouvrir."
+        "description": "Les images jusqu’à 10 Mo peuvent être prévisualisées. Téléchargez le fichier pour l’ouvrir.",
+        "title": "Image trop volumineuse pour l’aperçu"
       },
       "unsupported": {
-        "description": "Ce fichier ne peut pas être prévisualisé. Téléchargez l’original pour l’ouvrir."
+        "description": "Téléchargez le fichier pour consulter son contenu."
+      },
+      "retry": {
+        "label": "Réessayer"
+      },
+      "download": {
+        "label": "Télécharger le fichier"
+      },
+      "tooLarge": {
+        "title": "Fichier trop volumineux pour l’aperçu",
+        "description": "Les fichiers jusqu’à {size, number} Mo peuvent être prévisualisés ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "playback": {
+        "title": "Lecture non prise en charge",
+        "description": "Votre navigateur ne peut pas lire ce fichier. Téléchargez-le pour l’ouvrir."
       }
     },
     "filesTab": {

@@ -456,6 +456,7 @@ export default function BuildMessageList({
                       sessionId={sessionId}
                       attachments={message.attachments}
                       refreshKey={attachmentRefreshKey}
+                      onFileOpen={onFileOpen}
                     />
                   )}
                   <HumanMessage content={message.content} nodeId={idx} />

@@ -149,7 +149,7 @@ it("marks the loaded revisions in one request without clearing a newer output", 
   await waitFor(() => expect(result.current.cards).toEqual(loaded));
   let pending: Promise<void> | undefined;
   act(() => {
-    pending = result.current.markAllViewed();
+    pending = result.current.markAllViewed(loaded);
   });
   expect(markOutputsViewed).toHaveBeenCalledWith("bulk", [first, second]);
   const newer = { ...first, revision: 2, turn_index: 1 };
