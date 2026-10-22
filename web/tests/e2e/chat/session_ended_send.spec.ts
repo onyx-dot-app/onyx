@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
-import { test, expect } from "@tests/e2e/chat/fixtures";
+import { test } from "@tests/e2e/chat/fixtures";
+import { SessionEndedModal } from "@tests/e2e/pages/SessionEndedModal";
 import {
   buildMockStream,
   mockChatEndpoint,
@@ -24,13 +25,6 @@ async function revokeSession(page: Page, endpoint: string): Promise<void> {
   }
 }
 
-async function expectSessionEndedModal(page: Page): Promise<void> {
-  await expect(page.getByText("You Have Been Logged Out")).toBeVisible();
-  await expect(
-    page.getByText("This session was signed out. Please log in again")
-  ).toBeVisible();
-}
-
 test.describe("Chat send after the session ends", () => {
   test.beforeEach(async ({ chatPage }) => {
     resetTurnCounter();
@@ -45,7 +39,7 @@ test.describe("Chat send after the session ends", () => {
     await chatPage.inputBar.fill("message after revoke");
     await chatPage.inputBar.send();
 
-    await expectSessionEndedModal(chatPage.page);
+    await new SessionEndedModal(chatPage.page).expectVisible();
     await chatPage.inputBar.expectText("message after revoke");
   });
 
@@ -60,6 +54,6 @@ test.describe("Chat send after the session ends", () => {
     await chatPage.inputBar.fill("second message");
     await chatPage.inputBar.send();
 
-    await expectSessionEndedModal(chatPage.page);
+    await new SessionEndedModal(chatPage.page).expectVisible();
   });
 });

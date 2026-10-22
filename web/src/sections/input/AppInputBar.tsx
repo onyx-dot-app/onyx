@@ -79,8 +79,8 @@ import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
-  /** Puts back a message that failed to send. */
-  restore: (message: string) => void;
+  /** Puts back a message and files that failed to send, unless a newer draft exists. */
+  restore: (message: string, files: ProjectFile[]) => void;
   focus: () => void;
 }
 
@@ -313,6 +313,9 @@ const AppInputBar = React.memo(
       [handleSubmit, clearChatDraft]
     );
 
+    const { currentMessageFiles, setCurrentMessageFiles } =
+      useProjectsContext();
+
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
@@ -321,8 +324,11 @@ const AppInputBar = React.memo(
           clearChatDraft();
         }
       },
-      restore: (text: string) => {
+      restore: (text: string, files: ProjectFile[]) => {
+        // Keep a draft the user started while the failed send was pending.
+        if (message.trim() || currentMessageFiles.length > 0) return;
         setMessage(text);
+        setCurrentMessageFiles(files);
         setCursorToEnd();
       },
       focus: () => {
@@ -356,8 +362,6 @@ const AppInputBar = React.memo(
       agent: activeAgent,
       plugins: memberPlugins ?? [],
     });
-    const { currentMessageFiles, setCurrentMessageFiles } =
-      useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 

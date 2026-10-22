@@ -351,10 +351,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const restoreInputBar = useCallback(
     (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message);
-      setCurrentMessageFiles(files);
+      chatInputBarRef.current?.restore(message, files);
     },
-    [setCurrentMessageFiles]
+    []
   );
 
   // Add refs needed by useChatSessionController

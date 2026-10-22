@@ -591,6 +591,13 @@ export default function useChatController({
         } catch (error) {
           console.error("Failed to create chat session:", error);
           toast.error(t("createSessionFailed.toast"));
+          // Put the project back in the URL so a retry stays in the project.
+          if (projectId) {
+            // SAFETY: built from the current pathname, which is a route of this app.
+            router.replace(`${pathname}?${searchParams.toString()}` as Route, {
+              scroll: false,
+            });
+          }
           restoreInputBar(message, currentMessageFiles);
           return;
         }

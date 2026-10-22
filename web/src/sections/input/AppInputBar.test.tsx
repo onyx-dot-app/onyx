@@ -1,5 +1,9 @@
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import AppInputBar from "@/sections/input/AppInputBar";
+import { act, createRef } from "react";
+import AppInputBar, {
+  type AppInputBarHandle,
+} from "@/sections/input/AppInputBar";
+import type { ProjectFile } from "@/lib/projects/types";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -40,8 +44,12 @@ jest.mock("@/lib/position/hooks", () => ({
   }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({ useActiveAgent: () => undefined }));
+const mockProjectsContext: {
+  currentMessageFiles: ProjectFile[];
+  setCurrentMessageFiles: jest.Mock;
+} = { currentMessageFiles: [], setCurrentMessageFiles: jest.fn() };
 jest.mock("@/lib/projects/providers", () => ({
-  useProjectsContext: () => ({ currentMessageFiles: [] }),
+  useProjectsContext: () => mockProjectsContext,
 }));
 jest.mock("@/lib/projects/hooks", () => ({
   useProjects: () => ({ isLoading: false }),
@@ -87,9 +95,11 @@ const plugin: MemberPlugin = {
 function Composer({
   plugins,
   agentId = 0,
+  inputBarRef,
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
+  inputBarRef?: React.Ref<AppInputBarHandle>;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
@@ -106,6 +116,7 @@ function Composer({
         {configuration.forcedToolId}
       </output>
       <AppInputBar
+        ref={inputBarRef}
         activeAgent={{ ...agent, id: agentId }}
         memberPlugins={plugins}
         toolConfiguration={configuration}
@@ -122,7 +133,11 @@ function Composer({
   );
 }
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  mockProjectsContext.currentMessageFiles = [];
+  mockProjectsContext.setCurrentMessageFiles.mockClear();
+});
 
 test("default Chat hides the forced plugin pill until metadata confirms availability without clearing the selection", async () => {
   const { rerender } = render(<Composer plugins={[]} />);
@@ -165,4 +180,39 @@ test("custom agents retain the forced plugin pill without member metadata", asyn
   expect(
     screen.getByRole("button", { name: storedMcpTool.display_name })
   ).toBeVisible();
+});
+
+describe("restore after a failed send", () => {
+  const failedFiles = [{ id: "failed-file" }] as ProjectFile[];
+
+  test("puts the message and files back into an empty composer", () => {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.restore("failed message", failedFiles));
+    expect(screen.getByRole("textbox")).toHaveTextContent("failed message");
+    expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith(
+      failedFiles
+    );
+  });
+
+  test("keeps text typed while the send was pending", async () => {
+    const inputBarRef = createRef<AppInputBarHandle>();
+    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    await setupUser().type(screen.getByRole("textbox"), "newer draft");
+    act(() => inputBarRef.current?.restore("failed message", failedFiles));
+    expect(screen.getByRole("textbox")).toHaveTextContent("newer draft");
+    expect(screen.getByRole("textbox")).not.toHaveTextContent("failed message");
+    expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
+  });
+
+  test("keeps files attached while the send was pending", () => {
+    mockProjectsContext.currentMessageFiles = [
+      { id: "newer-file" },
+    ] as ProjectFile[];
+    const inputBarRef = createRef<AppInputBarHandle>();
+    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    act(() => inputBarRef.current?.restore("failed message", failedFiles));
+    expect(screen.getByRole("textbox")).not.toHaveTextContent("failed message");
+    expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
+  });
 });

@@ -286,10 +286,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   const restoreInputBar = useCallback(
     (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message);
-      setCurrentMessageFiles(files);
+      chatInputBarRef.current?.restore(message, files);
     },
-    [setCurrentMessageFiles]
+    []
   );
 
   // Chat controller for submitting messages
