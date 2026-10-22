@@ -96,10 +96,11 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   const currentState = await imageGenSwitch.getAttribute("aria-checked");
 
   if (currentState !== "true") {
-    // Toggle it on; it auto-saves immediately via PATCH /api/admin/default-assistant
+    // Toggle it on; it auto-saves immediately via PATCH /api/admin/default-assistant/tools
     const saved = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/admin/default-assistant" &&
+        new URL(response.url()).pathname ===
+          "/api/admin/default-assistant/tools" &&
         response.request().method() === "PATCH"
     );
     await imageGenSwitch.click();
