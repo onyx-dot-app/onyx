@@ -36,8 +36,7 @@ def isolated_cleanup_deployment(k8s_client: client.CoreV1Api) -> None:
     ) == run_id, "The target namespace does not belong to this cleanup test run"
 
 
-def run_cleanup(core: client.CoreV1Api) -> None:
-    require_isolated_cleanup_deployment()
+def _send_cleanup() -> str:
     task_id = str(uuid4())
     celery_app.send_task(
         OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
@@ -46,6 +45,12 @@ def run_cleanup(core: client.CoreV1Api) -> None:
         queue=OnyxCeleryQueues.SANDBOX,
         expires=120,
     )
+    return task_id
+
+
+def run_cleanup(core: client.CoreV1Api) -> None:
+    require_isolated_cleanup_deployment()
+    task_id = _send_cleanup()
     marker = f"(ID: {task_id}) completed with state:"
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
@@ -59,10 +64,19 @@ def run_cleanup(core: client.CoreV1Api) -> None:
                 tail_lines=10000,
                 _request_timeout=10,
             )
-            for line in logs.splitlines():
-                if marker in line:
-                    assert f"{marker} SUCCESS" in line, line
-                    return
+            lines = logs.splitlines()
+            completed = next((line for line in lines if marker in line), None)
+            if completed is None:
+                continue
+            if any(
+                task_id in line and "lock not acquired, skipping" in line
+                for line in lines
+            ):
+                task_id = _send_cleanup()
+                marker = f"(ID: {task_id}) completed with state:"
+                break
+            assert f"{marker} SUCCESS" in completed, completed
+            return
         time.sleep(0.5)
     pytest.fail(
         f"Cleanup task {task_id} did not complete. "
