@@ -1,6 +1,7 @@
 """A user may use a credential only when they own it (or it has no owner and
-they are an admin), or when they can see it and the config keeps the
-credential-bound values of a pair that already uses it. Covers the rule and
+they are an admin), or when they can see it and either its source has no
+credential-bound fields or the config keeps the credential-bound values of a
+pair that already uses it. Covers the rule and
 each entry point: pairing, draft runs, capability-check overrides, cc-pair
 dry runs and edits."""
 
@@ -219,7 +220,7 @@ def test_visible_user_cannot_change_the_bound_values(
     )
 
 
-def test_visible_credential_without_a_pair_is_for_its_owner(
+def test_bound_credential_without_a_pair_is_for_its_owner(
     env: _Env, db_session: Session
 ) -> None:
     unpaired = _credential(db_session, env.owner)
@@ -235,6 +236,39 @@ def test_visible_credential_without_a_pair_is_for_its_owner(
             unpaired,
             config,
         )
+
+
+def test_unbound_credential_without_a_pair_is_usable_by_a_visible_user(
+    env: _Env, db_session: Session
+) -> None:
+    # Linear has no bound fields, so no setting can send the secret elsewhere.
+    linear = Credential(
+        name=f"use-{uuid4().hex[:8]}",
+        source=DocumentSource.LINEAR,
+        credential_json={"linear_api_key": "secret"},
+        user_id=env.owner.id,
+        admin_public=True,
+    )
+    db_session.add(linear)
+    db_session.commit()
+
+    for config in ({}, None):
+        assert_user_can_use_credential(
+            db_session,
+            user=env.admin,
+            credential=linear,
+            source=DocumentSource.LINEAR,
+            connector_specific_config=config,
+        )
+    _refused(
+        OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+        assert_user_can_use_credential,
+        db_session,
+        user=env.member,
+        credential=linear,
+        source=DocumentSource.LINEAR,
+        connector_specific_config={},
+    )
 
 
 def test_ownerless_credential_is_usable_by_an_admin(
