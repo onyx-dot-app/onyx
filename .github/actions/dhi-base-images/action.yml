@@ -3,7 +3,8 @@ description: >-
   Logs in to dhi.io and exports the build args that point web/Dockerfile and
   backend/Dockerfile.model_server at the pinned Docker Hardened Images (DHI).
   Both Dockerfiles default to public Docker Hub images, so without DHI credentials
-  (fork pull requests) this action exports nothing and the defaults apply.
+  (fork pull requests) this action exports nothing and the defaults apply. The
+  same applies when the login fails and the `required` input is "false".
 inputs:
   docker-username:
     description: "Docker Hub username (the account must have DHI catalog access)"
@@ -13,6 +14,13 @@ inputs:
     description: "Docker Hub token"
     required: false
     default: ""
+  required:
+    description: >-
+      "true" fails the step when the dhi.io login fails. "false" falls back to the
+      public base images with a warning. Use "false" only for builds that do not
+      ship, such as PR test images.
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -30,18 +38,47 @@ runs:
           echo "No DHI credentials; the images build on their public base defaults."
         fi
 
+    # dhi.io has outages (503 on /v2/). Retry with backoff, and let callers
+    # that do not ship the image fall back to the public bases.
     - name: Login to Docker Hardened Images (dhi.io)
+      id: login
       if: steps.creds.outputs.available == 'true'
-      uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
-      with:
-        registry: dhi.io
-        username: ${{ inputs.docker-username }}
-        password: ${{ inputs.docker-token }}
+      shell: bash
+      env:
+        DOCKER_USERNAME: ${{ inputs.docker-username }}
+        DOCKER_TOKEN: ${{ inputs.docker-token }}
+        DHI_REQUIRED: ${{ inputs.required }}
+      run: |
+        set -uo pipefail
+        if [ "${DHI_REQUIRED}" != "true" ] && [ "${DHI_REQUIRED}" != "false" ]; then
+          echo "::error::input 'required' must be \"true\" or \"false\", got \"${DHI_REQUIRED}\""
+          exit 1
+        fi
+        attempts=4
+        for attempt in $(seq "${attempts}"); do
+          if printf '%s' "${DOCKER_TOKEN}" \
+            | docker login dhi.io --username "${DOCKER_USERNAME}" --password-stdin; then
+            echo "logged-in=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${attempt}" -lt "${attempts}" ]; then
+            delay=$((attempt * 15))
+            echo "dhi.io login attempt ${attempt}/${attempts} failed; retrying in ${delay}s"
+            sleep "${delay}"
+          fi
+        done
+        echo "logged-in=false" >> "$GITHUB_OUTPUT"
+        if [ "${DHI_REQUIRED}" = "false" ]; then
+          echo "::warning::dhi.io login failed after ${attempts} attempts; building on the public base images instead of the hardened ones"
+          exit 0
+        fi
+        echo "::error::dhi.io login failed after ${attempts} attempts"
+        exit 1
 
     # Single source of truth for the DHI digests. Refresh one with:
     # docker buildx imagetools inspect <image reference>
     - name: Export DHI build args
-      if: steps.creds.outputs.available == 'true'
+      if: steps.login.outputs.logged-in == 'true'
       shell: bash
       run: |
         {
