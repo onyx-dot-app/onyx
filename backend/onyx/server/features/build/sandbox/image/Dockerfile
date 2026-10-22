@@ -70,6 +70,8 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-core \
     libreoffice-common \
+    libreoffice-writer \
+    libreoffice-calc \
     libreoffice-impress \
     libreoffice-draw \
     poppler-utils \
@@ -179,11 +181,19 @@ RUN mkdir -p /home/sandbox/.config/gh \
     && chown -R sandbox:sandbox /home/sandbox/.config
 
 USER sandbox
-RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export CURL_CA_BUNDLE=/run/secrets/build_ca_bundle; \
+    fi && \
+    curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
     bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
     rm /tmp/opencode-install.sh
 # OpenCode installs this SDK in each config directory during cold initialization.
-RUN npm install --prefix /workspace/templates/opencode --ignore-scripts --no-audit --no-fund \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; \
+    fi && \
+    npm install --prefix /workspace/templates/opencode --ignore-scripts --no-audit --no-fund \
     --save-exact "@opencode-ai/plugin@${OPENCODE_VERSION}" && \
     for config_dir in /home/sandbox/.config/opencode /home/sandbox/.opencode; do \
         mkdir -p "$config_dir" && \
@@ -192,7 +202,11 @@ RUN npm install --prefix /workspace/templates/opencode --ignore-scripts --no-aud
             /workspace/templates/opencode/package-lock.json "$config_dir/" || exit 1; \
     done
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
-RUN cd /workspace/templates/outputs/web && \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; \
+    fi && \
+    cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
     rm -rf node_modules
 USER root

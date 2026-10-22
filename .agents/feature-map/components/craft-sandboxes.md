@@ -810,3 +810,18 @@ Startup forwards `SANDBOX_IMAGE` overrides to Helm, and doctor detects template 
 Image refresh updates init and main containers together and does not recycle live pods.
 Cleanup previews checkout-labeled dangling images and never deletes volumes.
 See `docs/craft/dev/local-kubernetes.md` for command scope and cache retention.
+
+### Zed local startup
+
+`.zed/run-all-k8s.sh` prepares the API intercept through the shared Craft command, including targeted stale-agent recovery.
+`.zed/process-compose.k8s.yaml` starts the API and workers through `deployment/helm/dev/launch.py`.
+Deployed secrets stay in process memory; the local environment file supplies personal overrides.
+A one-shot readiness process checks the API through the frontend. Failed readiness stops the local stack.
+
+Local image checks treat missing Docker image labels as an unknown source and rebuild on refresh.
+With `ENABLE_SKILLS=true`, the sandbox image includes LibreOffice Writer, Calc, Impress, and Draw.
+Writer and Calc provide document and spreadsheet conversions, including DOCX, XLSX, and ODS to PDF.
+With a custom build certificate bundle, backend tokenizer downloads use standard HTTPS without the optional Xet client.
+Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend tokenizer and sandbox OpenCode downloads behind a trusted TLS inspection proxy.
+The certificate bundle is a BuildKit secret and does not enter the image.
+Without this bundle, downloads retain their default certificate and transport settings.

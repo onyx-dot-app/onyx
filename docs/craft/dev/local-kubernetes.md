@@ -240,3 +240,15 @@ Kind's kubelet collects unused runtime images independently.
 Readiness tests use a temporary local HTTP server. Helm callback and pod-spec tests live in
 `backend/tests/external_dependency_unit/craft_helm`. Real Craft tests live in
 `backend/tests/integration/tests/craft/k8s` and need a licensed development stack.
+
+### Build behind a TLS inspection proxy
+
+Set `CRAFT_BUILD_CA_BUNDLE` to a PEM bundle containing public roots and your organization's trusted proxy CA.
+Image refresh commands pass it as the optional `build_ca_bundle` BuildKit secret.
+Without this bundle, downloads retain their default certificate and transport settings.
+With this bundle, Hugging Face downloads use HTTPS without the optional Xet client.
+Backend tokenizer and sandbox OpenCode downloads use this bundle without disabling certificate verification or storing it in the image.
+
+```bash
+CRAFT_BUILD_CA_BUNDLE=/path/to/trusted-ca-bundle.pem make craft-backend-image
+```

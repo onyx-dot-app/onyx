@@ -141,17 +141,29 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install --only-shell chromium
 
 # Pre-downloading models for setups with limited egress
-RUN python -c "from tokenizers import Tokenizer; \
+RUN --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export SSL_CERT_FILE=/run/secrets/build_ca_bundle HF_HUB_DISABLE_XET=1; \
+    fi && \
+    python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
 # Tokenizer of the default self-hosted embedding model (nomic above stays the
 # default tokenizer). The API server loads it at hf_revision from
 # shared_configs/embedding_models.py, so the revision must match.
-RUN python -c "from tokenizers import Tokenizer; \
+RUN --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export SSL_CERT_FILE=/run/secrets/build_ca_bundle HF_HUB_DISABLE_XET=1; \
+    fi && \
+    python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('ibm-granite/granite-embedding-97m-multilingual-r2', revision='835ad14087e140460703cf0fae09f97d469d65c2')"
 
 # Pre-downloading tiktoken for setups with limited egress
-RUN python -c "import tiktoken; \
+RUN --mount=type=secret,id=build_ca_bundle \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        export REQUESTS_CA_BUNDLE=/run/secrets/build_ca_bundle; \
+    fi && \
+    python -c "import tiktoken; \
 tiktoken.get_encoding('cl100k_base')"
 
 # Set up application files
