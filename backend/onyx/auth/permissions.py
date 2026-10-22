@@ -111,6 +111,7 @@ DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
 CE_UNGATED_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.ADD_AGENTS,
+        Permission.CREATE_USER_API_KEYS,
     }
 )
 
