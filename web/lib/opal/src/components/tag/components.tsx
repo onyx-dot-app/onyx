@@ -6,6 +6,7 @@ import type {
   RichStr,
   WithoutStyles,
 } from "@opal/types";
+import type { TextColor } from "@onyx-ai/shared/contracts";
 import { Text, Tooltip, type TextFont } from "@opal/components";
 import { SvgAlertTriangle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
@@ -49,6 +50,13 @@ type TagBaseProps = Omit<
 
   /** Optional typography override for the surrounding surface. */
   font?: TextFont;
+
+  /**
+   * Overrides the title colour only; `color` still picks the background, the
+   * icon and the value. Holds at rest and yields to an open clickable tag's
+   * inverted colours and an editable tag's focus.
+   */
+  titleColor?: Exclude<TextColor, "inherit">;
 
   /**
    * Switches to the editable tag (Figma Tag `Type=Editable`): remove button,
@@ -126,6 +134,7 @@ function Tag(props: TagProps) {
     iconColor,
     size = "sm",
     font: fontOverride,
+    titleColor,
     onRemove,
     removeInTabOrder = true,
     disabled = false,
@@ -188,6 +197,13 @@ function Tag(props: TagProps) {
             "opal-auxiliary-tag-label",
             capped && "opal-auxiliary-tag-capped"
           )}
+          style={
+            titleColor
+              ? ({
+                  "--tag-title-color": `var(--${titleColor})`,
+                } as React.CSSProperties)
+              : undefined
+          }
         >
           <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
             {title}

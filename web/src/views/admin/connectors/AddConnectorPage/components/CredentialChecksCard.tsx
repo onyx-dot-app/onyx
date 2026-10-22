@@ -21,8 +21,7 @@ import {
 import {
   SvgAlertCircle,
   SvgCheckCircle,
-  SvgChevronDown,
-  SvgChevronUp,
+  SvgChevronRight,
   SvgClock,
   SvgExpand,
   SvgFold,
@@ -33,7 +32,7 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { escapeMarkdown, markdown, noProp } from "@opal/utils";
+import { cn, escapeMarkdown, markdown, noProp } from "@opal/utils";
 import { Hoverable } from "@opal/core";
 import type {
   CapabilityCheckResult,
@@ -185,9 +184,13 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Text font="secondary-action" color="text-03">
-      {t("required.label")}
-    </Text>
+    <Tag
+      title={t("required.label")}
+      color="white"
+      variant="status"
+      font="secondary-action"
+      titleColor="text-03"
+    />
   ) : undefined;
 
   // Left slot: "Required", or on hover a running or queued check's Cancel.
@@ -215,15 +218,23 @@ function CheckLog({ check, onCancelCheck, onRunCheck }: CheckLogProps) {
   // check's Run. Otherwise an empty slot of the same width keeps the rows
   // aligned.
   const rightSlot = expandable ? (
+    // Points right closed and turns down open, as a Divider's chevron does.
     // Its click reaches the line's, which toggles the details.
-    <Button
-      icon={expanded ? SvgChevronUp : SvgChevronDown}
-      prominence="internal"
-      size="sm"
-      aria-expanded={expanded}
-      tooltip={t(expanded ? "details.collapse" : "details.expand")}
-      aria-label={t(expanded ? "details.collapse" : "details.expand")}
-    />
+    <div
+      className={cn(
+        "transition-transform duration-200 ease-in-out",
+        expanded && "rotate-90"
+      )}
+    >
+      <Button
+        icon={SvgChevronRight}
+        prominence="tertiary"
+        size="sm"
+        aria-expanded={expanded}
+        tooltip={t(expanded ? "details.collapse" : "details.expand")}
+        aria-label={t(expanded ? "details.collapse" : "details.expand")}
+      />
+    </div>
   ) : (check.state === "skipped" || check.state === "pending") && onRunCheck ? (
     // Hidden at rest, but its width stays.
     <Hoverable.Item group={ROW_HOVER_GROUP} variant="appear-on-hover">
