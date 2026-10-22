@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ClipboardEvent } from "react";
+import { useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import useWindowFileDrag from "@opal/hooks/useWindowFileDrag";
 
@@ -41,8 +41,8 @@ interface UseUploadTargetOptions {
 }
 
 /**
- * What the upload inputs share: the file picker, dropping, pasting files,
- * and the drag state. While files are dragged anywhere over the page, `drag` is
+ * What the upload inputs share: the file picker, dropping and pasting
+ * files, and the drag state. While files are dragged anywhere over the page, `drag` is
  * `"page"`; over the control's root, `"over"`.
  *
  * The picker takes focus from the control. That blur is not the user leaving
@@ -85,7 +85,8 @@ export default function useUploadTarget({
     if (allowed.length > 0) onFiles(multiple ? allowed : allowed.slice(0, 1));
   }
 
-  // Drag and drop only: a click focuses the control, so a copied file can
+  // Drop and paste: a paste of files on the root or a focused child takes
+  // them as a drop does. A click focuses the control, so a copied file can
   // be pasted; a double click opens the picker.
   const { getRootProps, isDragActive } = useDropzone({
     onDrop: takeFiles,
@@ -124,17 +125,6 @@ export default function useUploadTarget({
     });
   }
 
-  /** Takes the files of a paste on the control, as a drop does. Returns
-   * whether the paste held any, so a text paste can run otherwise. */
-  function pasteFiles(event: ClipboardEvent<HTMLElement>): boolean {
-    if (disabled) return false;
-    const files = Array.from(event.clipboardData.files);
-    if (files.length === 0) return false;
-    event.preventDefault();
-    takeFiles(files);
-    return true;
-  }
-
   function openFilePicker() {
     if (disabled) return;
     fileInputRef.current?.click();
@@ -167,7 +157,6 @@ export default function useUploadTarget({
     drag,
     fileInput,
     openFilePicker,
-    pasteFiles,
     pickerOpenRef,
   };
 }

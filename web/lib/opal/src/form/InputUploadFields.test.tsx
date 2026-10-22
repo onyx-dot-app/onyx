@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik, type FormikProps } from "formik";
 import { InputSingleUploadField } from "@opal/form/InputSingleUploadField";
+import { InputMultiUploadField } from "@opal/form/InputMultiUploadField";
 
 interface KeyForm {
   key: string;
@@ -11,6 +12,22 @@ interface KeyForm {
 
 interface CertificateForm {
   certificate: File | null;
+}
+
+interface FilesForm {
+  files: File[];
+}
+
+/** Pastes `files` on `target`, as a copied file does. */
+function pasteFiles(target: Element, files: File[]): void {
+  fireEvent.paste(target, {
+    clipboardData: {
+      types: ["Files"],
+      items: files.map((file) => ({ kind: "file", getAsFile: () => file })),
+      files,
+      getData: () => "",
+    },
+  });
 }
 
 function picker(container: HTMLElement): HTMLInputElement {
@@ -191,6 +208,91 @@ describe("InputSingleUploadField", () => {
     expect(screen.getByText("app.pfx")).toBeInTheDocument();
   });
 
+  test("Enter and Space open the picker; a click only focuses", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { container } = render(
+      <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
+        {() => <InputSingleUploadField name="key" placeholder="Upload a key" />}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", { name: "Upload a key" });
+    const open = jest.spyOn(picker(container), "click");
+
+    await user.click(trigger);
+    expect(trigger).toHaveFocus();
+    expect(open).not.toHaveBeenCalled();
+
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  test("file mode: a pasted file replaces the value", async () => {
+    let form: FormikProps<CertificateForm> | null = null;
+    render(
+      <Formik<CertificateForm>
+        initialValues={{ certificate: null }}
+        onSubmit={() => {}}
+      >
+        {(formik) => {
+          form = formik;
+          return (
+            <InputSingleUploadField
+              name="certificate"
+              mode="file"
+              placeholder="Upload a certificate"
+            />
+          );
+        }}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Upload a certificate",
+    });
+    const first = new File(["one"], "one.pfx");
+    const second = new File(["two"], "two.pfx");
+
+    pasteFiles(trigger, [first]);
+    await waitFor(() => expect(form?.values.certificate).toBe(first));
+    pasteFiles(trigger, [second]);
+    await waitFor(() => expect(form?.values.certificate).toBe(second));
+  });
+
+  test("a pasted file outside `accept` or the size limit is rejected", async () => {
+    let form: FormikProps<CertificateForm> | null = null;
+    const onFileSizeExceeded = jest.fn();
+    render(
+      <Formik<CertificateForm>
+        initialValues={{ certificate: null }}
+        onSubmit={() => {}}
+      >
+        {(formik) => {
+          form = formik;
+          return (
+            <InputSingleUploadField
+              name="certificate"
+              mode="file"
+              placeholder="Upload a certificate"
+              accept=".pfx"
+              maxSizeKb={1}
+              onFileSizeExceeded={onFileSizeExceeded}
+            />
+          );
+        }}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Upload a certificate",
+    });
+
+    pasteFiles(trigger, [new File(["x"], "notes.txt")]);
+    pasteFiles(trigger, [new File(["x".repeat(2048)], "big.pfx")]);
+
+    // A paste is read asynchronously, as a drop is.
+    await waitFor(() => expect(onFileSizeExceeded).toHaveBeenCalledTimes(1));
+    expect(form?.values.certificate).toBeNull();
+  });
+
   test("a touched field with an error shows the error variant", () => {
     const { container } = render(
       <Formik<KeyForm>
@@ -207,5 +309,28 @@ describe("InputSingleUploadField", () => {
       "data-variant",
       "error"
     );
+  });
+});
+
+describe("InputMultiUploadField", () => {
+  test("pasted files are added, without repeats", async () => {
+    let form: FormikProps<FilesForm> | null = null;
+    const { container } = render(
+      <Formik<FilesForm> initialValues={{ files: [] }} onSubmit={() => {}}>
+        {(formik) => {
+          form = formik;
+          return <InputMultiUploadField name="files" />;
+        }}
+      </Formik>
+    );
+    const trigger = container.querySelector(".opal-input-type-in-tag-trigger");
+    if (!trigger) throw new Error("no trigger");
+    const one = new File(["one"], "one.txt");
+    const two = new File(["two"], "two.txt");
+
+    pasteFiles(trigger, [one, two]);
+    await waitFor(() => expect(form?.values.files).toEqual([one, two]));
+    pasteFiles(trigger, [two]);
+    await waitFor(() => expect(form?.values.files).toEqual([one, two]));
   });
 });

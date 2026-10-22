@@ -80,23 +80,17 @@ export default function UploadControl({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const isNonEditable = variant === "disabled" || variant === "readOnly";
   const hasValue: boolean = label !== null;
-  const {
-    getRootProps,
-    drag,
-    fileInput,
-    openFilePicker,
-    pasteFiles,
-    pickerOpenRef,
-  } = useUploadTarget({
-    multiple: false,
-    disabled: isNonEditable,
-    name,
-    accept,
-    maxSizeKb,
-    onFileSizeExceeded,
-    onFiles,
-    focusTarget: () => triggerRef.current?.focus(),
-  });
+  const { getRootProps, drag, fileInput, openFilePicker, pickerOpenRef } =
+    useUploadTarget({
+      multiple: false,
+      disabled: isNonEditable,
+      name,
+      accept,
+      maxSizeKb,
+      onFileSizeExceeded,
+      onFiles,
+      focusTarget: () => triggerRef.current?.focus(),
+    });
 
   // Over the page, a held value keeps its label; over the control, the copy
   // says what a drop does to it.
@@ -131,10 +125,21 @@ export default function UploadControl({
           onDoubleClick={openFilePicker}
           ref={triggerRef}
           onPaste={(e) => {
-            if (isNonEditable || pasteFiles(e)) return;
+            // A paste with files goes on to the root, which takes them as a
+            // drop.
+            if (isNonEditable || e.clipboardData.types.includes("Files")) {
+              return;
+            }
             onPaste?.(e);
           }}
           onKeyDown={(e) => {
+            // Enter and Space open the picker: the click they would send
+            // only focuses.
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openFilePicker();
+              return;
+            }
             // Delete or Backspace clears the value, as the × does.
             if (e.key !== "Delete" && e.key !== "Backspace") return;
             if (!hasValue) return;
