@@ -6765,6 +6765,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Advanced Options",
+        "description": "These settings change how efficiently {appName} applies document permissions in search. They do not change which documents each user can see. Do not change them without explicit guidance from the Onyx team."
+      },
       "actions": {
         "applyForward": {
           "label": "Apply to new and updated documents"

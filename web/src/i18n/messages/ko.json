@@ -6765,6 +6765,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "고급 옵션",
+        "description": "이 설정은 {appName}이(가) 검색에서 문서 권한을 적용하는 효율을 바꿉니다. 각 사용자가 볼 수 있는 문서는 바뀌지 않습니다. Onyx 팀의 명시적인 안내 없이 변경하지 마세요."
+      },
       "actions": {
         "applyForward": {
           "label": "새 문서와 업데이트된 문서에 적용"

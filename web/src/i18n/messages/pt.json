@@ -6765,6 +6765,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Opções avançadas",
+        "description": "Estas configurações alteram a eficiência com que o {appName} aplica as permissões de documentos na pesquisa. Elas não alteram quais documentos cada usuário pode ver. Não as altere sem orientação explícita da equipe Onyx."
+      },
       "actions": {
         "applyForward": {
           "label": "Aplicar a documentos novos e atualizados"

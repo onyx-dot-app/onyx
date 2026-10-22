@@ -21,6 +21,7 @@ import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
   Card,
+  Collapsible,
   Divider,
   InputTypeIn,
   LinkButton,
@@ -1845,8 +1846,6 @@ export default function IndexSettingsPage() {
                     </ConfirmationModalLayout>
                   </wontPortConsentModal.Provider>
 
-                  <CCPairIdsBackfillCard />
-
                   {isReindexing ? (
                     secondarySearchSettings?.use_port_flow ||
                     isPortBackfilling ? (
@@ -2602,6 +2601,20 @@ export default function IndexSettingsPage() {
                   {/* Outside the re-index lock: the limit matters most during a re-index. */}
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                   <EmbeddingRateLimitCard />
+
+                  {/* The connector access update runs on its own and its mode is
+                      rarely changed, so it starts folded. Also outside the lock:
+                      the mode saves by itself, not through the banner. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <Collapsible
+                    defaultOpen={false}
+                    title={t("advanced.title")}
+                    description={t("advanced.description", {
+                      appName: settings.appName,
+                    })}
+                  >
+                    <CCPairIdsBackfillCard />
+                  </Collapsible>
                 </>
               );
             }}
