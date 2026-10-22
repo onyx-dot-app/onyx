@@ -547,7 +547,11 @@ connector's listing filters by the same date as indexing
 starts at `indexing_start`. The prune then also removes documents that still
 exist at the source but were last updated before the start. A dated listing
 omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
-keeps the hierarchy nodes above each kept document.
+keeps the hierarchy nodes above each kept document. A generator that starts for a
+pair that is gone, `PAUSED` or `DELETING` does not enumerate. Like every path that
+abandons a prune (fence validation, the deletion beat's stop timeout, a pause), it
+calls `reset_prune_and_cancel_sync_record`: the `PRUNING` sync record ends
+`CANCELED` and the fence is reset.
 
 **`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
 the actual removal path, shared by both pruning and connector deletion. It reads
