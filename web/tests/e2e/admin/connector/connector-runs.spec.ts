@@ -76,6 +76,7 @@ function syncCCPairFixture() {
     latest_checkpoint_description: null,
     last_permission_sync_attempt_status: null,
     permission_syncing: false,
+    supports_doc_permission_sync: false,
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
     pending_backfills: [],

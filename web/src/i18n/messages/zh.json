@@ -2673,10 +2673,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "删除",
-          "tooltip": {
-            "active": "删除前请先暂停连接器"
-          }
+          "label": "删除"
         },
         "reIndex": {
           "tooltip": {
@@ -2712,6 +2709,13 @@
         "startIndexing": {
           "label": "开始索引",
           "description": "跳过连接器检查并立即索引。"
+        },
+        "syncPermissions": {
+          "label": "同步权限",
+          "description": "立即从来源拉取每个文档的可读用户。",
+          "tooltip": {
+            "syncing": "权限同步已在排队或运行"
+          }
         }
       },
       "reEnableModal": {
@@ -2885,7 +2889,9 @@
         "checkFrequencyUpdateFailed": "无法更新连接器检查频率",
         "runResolved": "已标记为已解决。",
         "runResolveFailed": "无法解决：{message}",
-        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。"
+        "runsResolved": "已将 {count, plural, other {# 次运行}}标记为已解决。",
+        "permissionSyncStarted": "已开始同步权限",
+        "permissionSyncFailed": "无法开始同步权限"
       },
       "backButton": {
         "label": "所有连接器"
@@ -3028,8 +3034,8 @@
           "checks": "项检查已运行"
         },
         "counts": {
-          "newDocs": "{count, plural, other {# 个新文档}}",
-          "updatedDocs": "已更新的文档",
+          "newDocs": "{count, plural, other {本次运行新加入索引的文档 # 个}}",
+          "updatedDocs": "{count, plural, other {已在索引中、本次运行处理过的文档 # 个，无论是否有变化}}",
           "removedDocs": "{count, plural, other {已移除 # 个文档}}",
           "users": "{count, plural, other {# 个用户}}",
           "groups": "{count, plural, other {# 个群组}}",
@@ -3043,7 +3049,7 @@
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
         "search": {
-          "placeholder": "搜索索引运行…"
+          "placeholder": "搜索运行错误…"
         },
         "window": {
           "label": "时间范围",
@@ -7380,13 +7386,19 @@
           "label": "连接器"
         },
         "documents": {
-          "caption": "最近索引 / 总计",
-          "label": "文档"
+          "caption": "索引中",
+          "label": "文档",
+          "tooltip": "将每个连接器的文档数相加，因此两个连接器都包含的文档会计两次。"
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "无法加载概览。"
+        "loadError": "无法加载概览。",
+        "processed": {
+          "caption": "时间范围内已处理",
+          "label": "文档",
+          "tooltip": "这是估算值，因为每次运行的数量会平均分摊到其运行时间内。运行每处理一次文档就计一次，包括失败的文档，因此可能超过索引中的文档数。"
+        }
       },
       "activities": {
         "title": "活动",
@@ -7410,7 +7422,9 @@
           "indexed": "{count, plural, other {# 个连接器已索引}}",
           "indexing": "{count, plural, other {# 个连接器正在索引}}",
           "failed": "{count, plural, other {# 个连接器失败}}",
-          "paused": "{count, plural, other {# 个连接器已暂停}}"
+          "paused": "{count, plural, other {# 个连接器已暂停}}",
+          "scheduled": "{count, plural, other {# 个连接器已计划}}",
+          "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
           "public": "公开",
@@ -7425,7 +7439,11 @@
         },
         "docs": {
           "label": "文档",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "已处理 {count, number} 个",
+          "processedTooltip": {
+            "running": "当前运行到目前为止处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，因此可能超过该连接器的文档数。",
+            "finished": "上次运行处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，之后删除的文档不再计入该连接器，因此可能超过该连接器的文档数。"
+          }
         },
         "actions": {
           "manage": "管理",

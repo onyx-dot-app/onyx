@@ -156,6 +156,7 @@ export interface ActivityPanelProps {
   /** Keeps the card in view under the page header while the column beside it scrolls. */
   sticky?: boolean;
   className?: string;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 /** The scope's failed runs and runs with document errors, newest first, with each level's resolved runs a toggle away in their place, and every other run too for the fleet. */
@@ -166,6 +167,7 @@ export default function ActivityPanel({
   range = null,
   sticky = false,
   className,
+  ref,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
   const tPanel = useTranslations("admin.indexing.activities.panel");
@@ -300,6 +302,7 @@ export default function ActivityPanel({
   // containment, so a long list scrolls inside the card and a short one stays short.
   return (
     <Section
+      ref={ref}
       justifyContent="start"
       alignItems="stretch"
       width="full"

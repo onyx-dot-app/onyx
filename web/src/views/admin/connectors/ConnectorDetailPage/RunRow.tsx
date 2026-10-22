@@ -295,6 +295,10 @@ export interface DocCountsProps {
 /** An index attempt's new, updated and removed documents. */
 export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
+  const updated = Math.max(
+    0,
+    attempt.total_docs_indexed - attempt.new_docs_indexed
+  );
   return (
     <CountsRow>
       <Count
@@ -308,11 +312,8 @@ export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
       <Count
         icon={SvgFileRefresh}
         look={look}
-        value={Math.max(
-          0,
-          attempt.total_docs_indexed - attempt.new_docs_indexed
-        )}
-        tooltip={t("counts.updatedDocs")}
+        value={updated}
+        tooltip={t("counts.updatedDocs", { count: updated })}
       />
       {attempt.docs_removed_from_index > 0 && (
         <Count

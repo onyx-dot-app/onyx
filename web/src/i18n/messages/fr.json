@@ -2673,10 +2673,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Supprimer",
-          "tooltip": {
-            "active": "Mettez le connecteur en pause avant de le supprimer"
-          }
+          "label": "Supprimer"
         },
         "reIndex": {
           "tooltip": {
@@ -2712,6 +2709,13 @@
         "startIndexing": {
           "label": "Démarrer l'indexation",
           "description": "Ignorer les vérifications du connecteur et indexer maintenant."
+        },
+        "syncPermissions": {
+          "label": "Synchroniser les autorisations",
+          "description": "Récupérer maintenant depuis la source qui peut lire chaque document.",
+          "tooltip": {
+            "syncing": "Une synchronisation des autorisations est déjà en file d'attente ou en cours"
+          }
         }
       },
       "reEnableModal": {
@@ -2885,7 +2889,9 @@
         "checkFrequencyUpdateFailed": "Échec de la mise à jour de la fréquence de vérification du connecteur",
         "runResolved": "Marqué comme résolu.",
         "runResolveFailed": "Impossible de résoudre : {message}",
-        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}."
+        "runsResolved": "{count, plural, one {# exécution marquée comme résolue} other {# exécutions marquées comme résolues}}.",
+        "permissionSyncStarted": "Synchronisation des autorisations lancée",
+        "permissionSyncFailed": "Impossible de lancer la synchronisation des autorisations"
       },
       "backButton": {
         "label": "Tous les connecteurs"
@@ -3028,8 +3034,8 @@
           "checks": "vérifications exécutées"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# nouveau document} other {# nouveaux documents}}",
-          "updatedDocs": "Documents mis à jour",
+          "newDocs": "{count, plural, one {# document nouveau dans l'index lors de cette exécution} other {# documents nouveaux dans l'index lors de cette exécution}}",
+          "updatedDocs": "{count, plural, one {# document déjà dans l'index, traité lors de cette exécution, modifié ou non} other {# documents déjà dans l'index, traités lors de cette exécution, modifiés ou non}}",
           "removedDocs": "{count, plural, one {# document supprimé} other {# documents supprimés}}",
           "users": "{count, plural, one {# utilisateur} other {# utilisateurs}}",
           "groups": "{count, plural, one {# groupe} other {# groupes}}",
@@ -3043,7 +3049,7 @@
           "syncedDocs": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}"
         },
         "search": {
-          "placeholder": "Rechercher des exécutions d'indexation…"
+          "placeholder": "Rechercher dans les erreurs d'exécution…"
         },
         "window": {
           "label": "Période",
@@ -7380,13 +7386,19 @@
           "label": "Connecteurs"
         },
         "documents": {
-          "caption": "Indexés récemment / total",
-          "label": "Documents"
+          "caption": "Dans l'index",
+          "label": "Documents",
+          "tooltip": "Additionne les documents de chaque connecteur : un document présent dans deux connecteurs compte deux fois."
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "Impossible de charger la vue d'ensemble."
+        "loadError": "Impossible de charger la vue d'ensemble.",
+        "processed": {
+          "caption": "Traités sur la période",
+          "label": "Documents",
+          "tooltip": "Une estimation, car le total de chaque exécution est réparti uniformément sur sa durée. Un document compte à chaque fois qu'une exécution le traite, échecs compris, ce chiffre peut donc dépasser le nombre de documents de l'index."
+        }
       },
       "activities": {
         "title": "Activités",
@@ -7410,7 +7422,9 @@
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
           "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
           "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
-          "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}"
+          "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}",
+          "scheduled": "{count, plural, one {# connecteur planifié} other {# connecteurs planifiés}}",
+          "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
           "public": "Public",
@@ -7425,7 +7439,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} traités",
+          "processedTooltip": {
+            "running": "Documents traités jusqu'ici par l'exécution en cours, échecs compris. Un document traité deux fois par l'exécution compte deux fois, ce chiffre peut donc dépasser le nombre de documents du connecteur.",
+            "finished": "Documents traités par la dernière exécution, échecs compris. Un document traité deux fois compte deux fois, et les documents supprimés depuis ne comptent plus pour le connecteur, ce chiffre peut donc dépasser le nombre de documents du connecteur."
+          }
         },
         "actions": {
           "manage": "Gérer",

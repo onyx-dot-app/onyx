@@ -2673,10 +2673,7 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Delete",
-          "tooltip": {
-            "active": "Pause the connector before deleting"
-          }
+          "label": "Delete"
         },
         "reIndex": {
           "tooltip": {
@@ -2712,6 +2709,13 @@
         "startIndexing": {
           "label": "Start Indexing",
           "description": "Skip connector checks and index now."
+        },
+        "syncPermissions": {
+          "label": "Sync Permissions",
+          "description": "Pull who can read each doc from the source now.",
+          "tooltip": {
+            "syncing": "A permission sync is already queued or running"
+          }
         }
       },
       "reEnableModal": {
@@ -2885,7 +2889,9 @@
         "checkFrequencyUpdateFailed": "Failed to update connector check frequency",
         "runResolved": "Marked resolved.",
         "runResolveFailed": "Could not resolve: {message}",
-        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved."
+        "runsResolved": "Marked {count, plural, one {# run} other {# runs}} resolved.",
+        "permissionSyncStarted": "Permission sync started",
+        "permissionSyncFailed": "Failed to start the permission sync"
       },
       "backButton": {
         "label": "All Connectors"
@@ -3028,8 +3034,8 @@
           "checks": "checks run"
         },
         "counts": {
-          "newDocs": "{count, plural, one {# new document} other {# new documents}}",
-          "updatedDocs": "Updated documents",
+          "newDocs": "{count, plural, one {# document new to the index in this run} other {# documents new to the index in this run}}",
+          "updatedDocs": "{count, plural, one {# document already in the index, processed by this run whether or not it changed} other {# documents already in the index, processed by this run whether or not they changed}}",
           "removedDocs": "{count, plural, one {# document removed} other {# documents removed}}",
           "users": "{count, plural, one {# user} other {# users}}",
           "groups": "{count, plural, one {# group} other {# groups}}",
@@ -3043,7 +3049,7 @@
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
         "search": {
-          "placeholder": "Search indexing runs…"
+          "placeholder": "Search run errors…"
         },
         "window": {
           "label": "Time range",
@@ -7380,13 +7386,19 @@
           "label": "Connectors"
         },
         "documents": {
-          "caption": "Recently indexed / total",
-          "label": "Documents"
+          "caption": "In the index",
+          "label": "Documents",
+          "tooltip": "Adds up each connector's documents, so a document that two connectors hold counts twice."
         },
         "ratio": {
           "whole": "/ {whole}"
         },
-        "loadError": "The overview could not load."
+        "loadError": "The overview could not load.",
+        "processed": {
+          "caption": "Processed in time range",
+          "label": "Documents",
+          "tooltip": "An estimate, since each run's count is spread evenly over the time it ran. A document counts each time a run processes it, failed ones included, so this can be more than the documents in the index."
+        }
       },
       "activities": {
         "title": "Activities",
@@ -7410,7 +7422,9 @@
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
           "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
-          "paused": "{count, plural, one {# connector paused} other {# connectors paused}}"
+          "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
+          "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",
+          "deleting": "{count, plural, one {# connector deleting} other {# connectors deleting}}"
         },
         "access": {
           "public": "Public",
@@ -7425,7 +7439,11 @@
         },
         "docs": {
           "label": "docs",
-          "recentOfTotal": "{recent} / {total}"
+          "processed": "{count, number} processed",
+          "processedTooltip": {
+            "running": "Documents the current run has processed so far, failed ones included. A document the run processes twice counts twice, so this can be more than the connector's documents.",
+            "finished": "Documents the last run processed, failed ones included. A document the run processed twice counts twice, and documents removed since then no longer count for the connector, so this can be more than the connector's documents."
+          }
         },
         "actions": {
           "manage": "Manage",
