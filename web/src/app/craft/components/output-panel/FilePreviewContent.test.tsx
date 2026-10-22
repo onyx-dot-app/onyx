@@ -425,7 +425,7 @@ test.each(["report.html", "report.htm"])(
     render(
       <FilePreviewContent
         sessionId="html-session"
-        filePath={`outputs/${name}`}
+        filePath={`uploads/${name}`}
       />
     );
     const frame = await screen.findByTitle(name);

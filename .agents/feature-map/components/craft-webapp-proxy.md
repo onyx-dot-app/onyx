@@ -328,10 +328,21 @@ DOCX scroll restoration waits for rendered content on initial load and each repl
 
 The Apps tab lists `.html` and `.htm` files from the session output inventory alongside registered webapps.
 Selecting an HTML file opens its file tab. It does not register a webapp or start a server.
-The existing authenticated file endpoint supplies the preview content.
-HTML renders in a sandboxed `srcdoc` iframe with scripts allowed and same-origin access disabled.
-Forms, popups, and top-level navigation remain blocked. Referrers are suppressed.
-This supports self-contained documents; sibling workspace assets are not served by this preview.
+`POST /build/sessions/{session_id}/static-preview/{path}` issues a read-only capability after checking session ownership.
+`GET /build/static-preview/{token}/{path}` serves listed static assets without browser login credentials.
+The shared cache stores the issuing tenant, owner, folder, and allowed file paths for one hour.
+The capability selects its issuing tenant; each read checks the active owner's permissions and session ownership.
+First reads check the current output inventory, then cache immutable bytes under that capability.
+Page navigation reuses those bytes without sandbox reads. Reload creates a new capability and discards the old preview.
+The folder scope includes descendants. Hidden files, other folders, and non-static file types are excluded.
+Previews allow at most 1,000 files, 20 MiB per asset, and 50 MiB per folder.
+Missing uncached files and expired capabilities fail closed. Cached bytes remain until expiry or reload.
+HTML uses a real document URL, so relative CSS, images, fonts, script imports, and local JSON reads work normally.
+The iframe and response CSP both allow scripts without same-origin access.
+Forms, popups, frames, and top-level navigation remain blocked. Referrers and HTTP caching are disabled.
+CORS permits credential-free asset reads. CSP limits fetch requests to capability URLs; HTTPS CDN assets can load.
+Active viewers renew before expiry. Uploaded HTML outside Outputs keeps its self-contained `srcdoc` preview.
+Root-relative workspace asset URLs are not rewritten; use relative paths.
 File revision updates use the existing preview cache and viewed-revision handling.
 
 ## 5. Contracts and invariants
@@ -342,6 +353,7 @@ The live resolver checks the current user's saved MCP preference before injectin
 credentials, including no-auth servers. Disabling a personal default keeps credentials.
 
 1. **A preview must only be reachable by someone entitled to that session.**
+   Static previews instead require a valid folder capability and recheck its owner's access on each file read.
    `_check_webapp_access` must run before every proxied HTTP request and
    before the HMR websocket is accepted. A new route added to this router
    without that check is a direct information leak into a user's sandbox.
