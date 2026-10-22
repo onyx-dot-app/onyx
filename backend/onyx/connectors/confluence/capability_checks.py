@@ -47,6 +47,7 @@ from onyx.connectors.confluence.config import (
     ConfluenceConnectorConfig,
     ConfluenceIndexingMode,
     get_indexing_mode,
+    parse_scope_keys,
 )
 from onyx.connectors.confluence.connector import (
     ATTACHMENT_EXPANSION_FIELDS,
@@ -682,47 +683,56 @@ class _ConfiguredSpaceCheck(_ConfluenceCheck):
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:
-        return _mode(form_state.config) == ConfluenceIndexingMode.SPACE
+        # Spaces count in PAGE mode too: the scope is their union with pages.
+        return _mode(form_state.config) in (
+            ConfluenceIndexingMode.SPACE,
+            ConfluenceIndexingMode.PAGE,
+        ) and bool(parse_scope_keys(form_state.config.space))
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        space_key = config.space.strip()
-        try:
-            space = _gateway(context).get_space(space_key=space_key)
-        except ConfluenceSpaceNotFoundError as e:
-            raise ConnectorValidationError(
-                f"No space with the key `{space_key}` is visible to this "
-                "credential. Check the key (keys are case sensitive), or give the "
-                "token's user view permission on the space.",
-                summary="No selected space found",
-                description=(
-                    f"{space_key} is not visible to this account. (HTTP 404)\n"
-                    "Requires view access to the space. Keys are case sensitive."
-                ),
-            ) from e
-        except HTTPError as e:
-            _raise_for_http_error(
-                e,
-                denied=f"The credential cannot read the space `{space_key}`",
-                denied_row=CheckRowText(
-                    summary=f"No permission to read {space_key}",
+        names: list[str] = []
+        # A config-less run has no keys and looks up the blank one, as before.
+        for space_key in parse_scope_keys(config.space) or (config.space.strip(),):
+            try:
+                space = _gateway(context).get_space(space_key=space_key)
+            except ConfluenceSpaceNotFoundError as e:
+                raise ConnectorValidationError(
+                    f"No space with the key `{space_key}` is visible to this "
+                    "credential. Check the key (keys are case sensitive), or give the "
+                    "token's user view permission on the space.",
+                    summary="No selected space found",
                     description=(
-                        "The account cannot read the selected space. (HTTP 403)\n"
-                        "Give the account view permission on the space."
+                        f"{space_key} is not visible to this account. (HTTP 404)\n"
+                        "Requires view access to the space. Keys are case sensitive."
                     ),
-                ),
-            )
-        except ConfluenceRetriesExhaustedError as e:
-            raise InconclusiveValidationError(
-                f"Confluence did not return the space `{space_key}`: it refused "
-                "or rate limited every try. Run the checks again.",
-                summary=_REFUSED_ROW.summary,
-                description=(
-                    f"{_REFUSED_ROW.description}\n"
-                    "Repeated refusals can mean no access to the space."
-                ),
-            ) from e
-        return CheckOutput(summary=f"Found space {space.get('name') or space_key}")
+                ) from e
+            except HTTPError as e:
+                _raise_for_http_error(
+                    e,
+                    denied=f"The credential cannot read the space `{space_key}`",
+                    denied_row=CheckRowText(
+                        summary=f"No permission to read {space_key}",
+                        description=(
+                            "The account cannot read the selected space. (HTTP 403)\n"
+                            "Give the account view permission on the space."
+                        ),
+                    ),
+                )
+            except ConfluenceRetriesExhaustedError as e:
+                raise InconclusiveValidationError(
+                    f"Confluence did not return the space `{space_key}`: it refused "
+                    "or rate limited every try. Run the checks again.",
+                    summary=_REFUSED_ROW.summary,
+                    description=(
+                        f"{_REFUSED_ROW.description}\n"
+                        "Repeated refusals can mean no access to the space."
+                    ),
+                ) from e
+            names.append(str(space.get("name") or space_key))
+        if len(names) == 1:
+            return CheckOutput(summary=f"Found space {names[0]}")
+        return CheckOutput(summary=f"Found {len(names)} spaces")
 
 
 class _ConfiguredPageCheck(_ConfluenceCheck):
@@ -741,7 +751,14 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config = self.config(context)
-        page_id = config.page_id.strip()
+        keys = parse_scope_keys(config.page_id) or (config.page_id.strip(),)
+        titles = [self._find_page(context, page_id) for page_id in keys]
+        if len(titles) == 1:
+            return CheckOutput(summary=f"Found page {titles[0]}")
+        return CheckOutput(summary=f"Found {len(titles)} pages")
+
+    def _find_page(self, context: CapabilityCheckContext, page_id: str) -> str:
+        """The page's title. Raises when the account cannot see it."""
         try:
             page = next(
                 _gateway(context).search_pages(
@@ -785,7 +802,7 @@ class _ConfiguredPageCheck(_ConfluenceCheck):
                     "Use the number after /pages/ in the page URL."
                 ),
             )
-        return CheckOutput(summary=f"Found page {page.get('title') or page_id}")
+        return str(page.get("title") or page_id)
 
 
 class _CqlQueryCheck(_ConfluenceCheck):
@@ -1306,8 +1323,12 @@ def _probe_space_key(
 ) -> str:
     """The configured space for a space scope, else the first visible space.
     Permission sync reads the permissions of every visible space."""
-    if _mode(config) == ConfluenceIndexingMode.SPACE:
-        return config.space.strip()
+    spaces = parse_scope_keys(config.space)
+    if spaces and _mode(config) in (
+        ConfluenceIndexingMode.SPACE,
+        ConfluenceIndexingMode.PAGE,
+    ):
+        return spaces[0]
     try:
         space = next(_gateway(context).list_spaces(limit=1), None)
     except HTTPError as e:

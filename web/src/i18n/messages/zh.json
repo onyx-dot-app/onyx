@@ -4105,12 +4105,14 @@
               "description": "Onyx 将索引所选账户有权访问的所有空间和页面。"
             },
             "space": {
-              "label": "空间键",
-              "description": "要索引的 Confluence 空间键（例如 `KB`）。"
+              "label": "空间",
+              "description": "此连接器要索引的空间键（例如 ENG）。",
+              "placeholder": "添加空间键或 URL"
             },
             "page_id": {
-              "label": "页面 ID",
-              "description": "要索引的特定页面 ID（例如 `131368`）"
+              "label": "页面",
+              "description": "此连接器要索引的页面 ID（例如 123456）。",
+              "placeholder": "添加页面 ID 或 URL"
             },
             "index_recursively": {
               "label": "包含子页面",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "测试查询"
               }
+            },
+            "include_attachments": {
+              "description": "索引附加到页面的文件和图片。请参阅[图片索引/处理设置]({indexSettingsPath})。"
             }
           }
         },

@@ -4105,12 +4105,14 @@
               "description": "Onyx indexiert alle Bereiche und Seiten, auf die das ausgewählte Konto Zugriff hat."
             },
             "space": {
-              "label": "Space-Schlüssel",
-              "description": "Der zu indexierende Confluence-Space-Schlüssel (z. B. `KB`)."
+              "label": "Bereiche",
+              "description": "Bereichsschlüssel, die dieser Konnektor indexiert (z. B. ENG).",
+              "placeholder": "Bereichsschlüssel oder URL hinzufügen"
             },
             "page_id": {
-              "label": "Seiten-ID",
-              "description": "ID der zu indexierenden Seite (z. B. `131368`)"
+              "label": "Seiten",
+              "description": "Seiten-IDs, die dieser Konnektor indexiert (z. B. 123456).",
+              "placeholder": "Seiten-ID oder URL hinzufügen"
             },
             "index_recursively": {
               "label": "Unterseiten einbeziehen",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "Abfrage testen"
               }
+            },
+            "include_attachments": {
+              "description": "Indexiert an Seiten angehängte Dateien und Bilder. Siehe [Einstellungen zur Bildindexierung/-verarbeitung]({indexSettingsPath})."
             }
           }
         },

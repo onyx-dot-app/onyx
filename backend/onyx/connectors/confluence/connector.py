@@ -24,6 +24,7 @@ from onyx.connectors.confluence.config import (
     ConfluenceIndexingMode,
     extract_page_id_from_url,
     get_indexing_mode,
+    parse_scope_keys,
 )
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
@@ -149,6 +150,33 @@ def _http_status(e: HTTPError) -> int | None:
     return e.response.status_code if e.response is not None else None
 
 
+def _cql_list(values: tuple[str, ...]) -> str:
+    return ",".join(f"'{value}'" for value in values)
+
+
+def _spaces_clause(spaces: tuple[str, ...]) -> list[str]:
+    if not spaces:
+        return []
+    keys = tuple(quote(space) for space in spaces)
+    if len(keys) == 1:
+        return [f"space='{keys[0]}'"]
+    return [f"space in ({_cql_list(keys)})"]
+
+
+def _pages_clause(page_ids: tuple[str, ...], index_recursively: bool) -> list[str]:
+    if not page_ids:
+        return []
+    if len(page_ids) == 1:
+        page_id = page_ids[0]
+        if index_recursively:
+            return [f"(ancestor='{page_id}' or id='{page_id}')"]
+        return [f"id='{page_id}'"]
+    ids = _cql_list(page_ids)
+    if index_recursively:
+        return [f"(ancestor in ({ids}) or id in ({ids}))"]
+    return [f"id in ({ids})"]
+
+
 def build_base_page_cql(
     *, space: str, page_id: str, index_recursively: bool, cql_query: str | None
 ) -> str:
@@ -156,13 +184,16 @@ def build_base_page_cql(
     match get_indexing_mode(space=space, page_id=page_id, cql_query=cql_query):
         case ConfluenceIndexingMode.CQL:
             return (cql_query or "").strip()
-        case ConfluenceIndexingMode.PAGE:
-            page_id = page_id.strip()
-            if index_recursively:
-                return f"type=page and (ancestor='{page_id}' or id='{page_id}')"
-            return f"type=page and id='{page_id}'"
-        case ConfluenceIndexingMode.SPACE:
-            return f"type=page and space='{quote(space.strip())}'"
+        case ConfluenceIndexingMode.PAGE | ConfluenceIndexingMode.SPACE:
+            # The union of the spaces and the pages. One space or one page
+            # keeps the query it had before lists were allowed.
+            clauses = [
+                *_spaces_clause(parse_scope_keys(space)),
+                *_pages_clause(parse_scope_keys(page_id), index_recursively),
+            ]
+            if len(clauses) == 1:
+                return f"type=page and {clauses[0]}"
+            return f"type=page and ({' or '.join(clauses)})"
         case ConfluenceIndexingMode.EVERYTHING:
             return "type=page"
 

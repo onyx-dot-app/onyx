@@ -4105,12 +4105,14 @@
               "description": "Onyx は、選択したアカウントがアクセスできるすべてのスペースとページをインデックスします。"
             },
             "space": {
-              "label": "スペースキー",
-              "description": "インデックスする Confluence のスペースキー(例: `KB`)。"
+              "label": "スペース",
+              "description": "このコネクタでインデックスするスペースキー（例: ENG）。",
+              "placeholder": "スペースキーまたは URL を入力"
             },
             "page_id": {
-              "label": "ページ ID",
-              "description": "インデックスする特定のページ ID(例: `131368`)"
+              "label": "ページ",
+              "description": "このコネクタでインデックスするページ ID（例: 123456）。",
+              "placeholder": "ページ ID または URL を入力"
             },
             "index_recursively": {
               "label": "子ページを含める",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "クエリをテスト"
               }
+            },
+            "include_attachments": {
+              "description": "ページに添付されたファイルと画像をインデックスします。[画像のインデックス/処理設定]({indexSettingsPath})を参照してください。"
             }
           }
         },

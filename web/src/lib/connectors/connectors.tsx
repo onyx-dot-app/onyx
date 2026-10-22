@@ -1,5 +1,6 @@
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type {
@@ -194,6 +195,7 @@ export function useConnectorConfiguration(
         // against en.json.
         t(key as Parameters<typeof t>[0], {
           docsAdminsPath: DOCS_ADMINS_PATH,
+          indexSettingsPath: ADMIN_ROUTES.INDEX_SETTINGS.path,
         })
       ),
     [connector, t]
@@ -316,6 +318,26 @@ const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   default: false,
   asCheckbox: true,
 };
+
+/**
+ * A Confluence space key from a typed key or a pasted space URL
+ * (`…/wiki/spaces/ENG/…`, or `…/display/ENG/…` on Data Center).
+ */
+function confluenceSpaceKey(entry: string): string {
+  const trimmed = entry.trim();
+  const match = /\/(?:spaces|display)\/([^/?#]+)/.exec(trimmed);
+  return match?.[1] ? decodeURIComponent(match[1]) : trimmed;
+}
+
+/**
+ * A Confluence page ID from a typed ID or a pasted page URL
+ * (`…/pages/131368/…`, or `?pageId=131368` on Data Center).
+ */
+function confluencePageId(entry: string): string {
+  const trimmed = entry.trim();
+  const match = /\/pages\/(\d+)|[?&]pageId=(\d+)/.exec(trimmed);
+  return match?.[1] ?? match?.[2] ?? trimmed;
+}
 
 export const connectorConfigs: Record<
   ConfigurableSources,
@@ -934,18 +956,26 @@ export const connectorConfigs: Record<
               "connectors.confluence.fields.indexing_scope.tabs.select.label",
             fields: [
               {
-                type: "text",
+                type: "list",
                 label: "connectors.confluence.fields.space.label",
                 name: "space",
-                default: "",
                 description: "connectors.confluence.fields.space.description",
+                placeholder: "connectors.confluence.fields.space.placeholder",
+                optional: true,
+                // The config takes one comma-separated string of keys.
+                transform: (entries: string[]) =>
+                  entries.map(confluenceSpaceKey).join(","),
               },
               {
-                type: "text",
+                type: "list",
                 label: "connectors.confluence.fields.page_id.label",
                 name: "page_id",
-                default: "",
                 description: "connectors.confluence.fields.page_id.description",
+                placeholder: "connectors.confluence.fields.page_id.placeholder",
+                optional: true,
+                // The config takes one comma-separated string of page IDs.
+                transform: (entries: string[]) =>
+                  entries.map(confluencePageId).join(","),
               },
               {
                 type: "checkbox",
@@ -982,7 +1012,10 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "select",
       },
-      buildIncludeAttachmentsOption(true),
+      buildIncludeAttachmentsOption(
+        true,
+        "connectors.confluence.fields.include_attachments.description"
+      ),
     ],
     advanced_values: [],
   },

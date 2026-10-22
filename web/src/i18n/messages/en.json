@@ -4105,12 +4105,14 @@
               "description": "Onyx will index all spaces and pages that the selected account has access to."
             },
             "space": {
-              "label": "Space Key",
-              "description": "The Confluence space key to index (e.g. `KB`)."
+              "label": "Spaces",
+              "description": "List space keys to index for this connector (e.g. ENG).",
+              "placeholder": "Add space key or URL"
             },
             "page_id": {
-              "label": "Page ID",
-              "description": "Specific page ID to index (e.g. `131368`)"
+              "label": "Pages",
+              "description": "List page IDs to index for this connector (e.g. 123456).",
+              "placeholder": "Add page ID or URL"
             },
             "index_recursively": {
               "label": "Include Child Pages",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "Test Query"
               }
+            },
+            "include_attachments": {
+              "description": "Index files and images attached to pages. See [Image indexing/processing settings]({indexSettingsPath})."
             }
           }
         },

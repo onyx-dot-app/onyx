@@ -4105,12 +4105,14 @@
               "description": "O Onyx indexará todos os espaços e páginas aos quais a conta selecionada tem acesso."
             },
             "space": {
-              "label": "Chave do space",
-              "description": "A chave do space do Confluence a indexar (por exemplo, `KB`)."
+              "label": "Espaços",
+              "description": "Chaves de espaço que este conector indexa (por exemplo, ENG).",
+              "placeholder": "Adicione uma chave de espaço ou URL"
             },
             "page_id": {
-              "label": "ID da página",
-              "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
+              "label": "Páginas",
+              "description": "IDs de página que este conector indexa (por exemplo, 123456).",
+              "placeholder": "Adicione um ID de página ou URL"
             },
             "index_recursively": {
               "label": "Incluir páginas filhas",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "Testar consulta"
               }
+            },
+            "include_attachments": {
+              "description": "Indexa arquivos e imagens anexados às páginas. Veja [Configurações de indexação/processamento de imagens]({indexSettingsPath})."
             }
           }
         },

@@ -66,6 +66,16 @@ def extract_page_id_from_url(doc_id: str) -> str | None:
     return None
 
 
+def parse_scope_keys(value: str) -> tuple[str, ...]:
+    """The keys of a comma-separated space or page setting, in order, without
+    blanks or repeats. A setting saved before lists were allowed holds one."""
+    keys: list[str] = []
+    for key in (part.strip() for part in value.split(",")):
+        if key and key not in keys:
+            keys.append(key)
+    return tuple(keys)
+
+
 class ConfluenceIndexingMode(str, Enum):
     CQL = "cql"
     PAGE = "page"
@@ -78,7 +88,8 @@ def get_indexing_mode(
 ) -> ConfluenceIndexingMode:
     """The scope the connector indexes. The config can hold values for several
     modes (the form sends every tab's fields); the first set one wins, in this
-    order: CQL query, page id, space, everything. Blank values are not set."""
+    order: CQL query, page ids, spaces, everything. Blank values are not set.
+    In PAGE mode the spaces count too: the scope is their union."""
     if cql_query and cql_query.strip():
         return ConfluenceIndexingMode.CQL
     if page_id.strip():
@@ -162,10 +173,10 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
     @field_validator(_PAGE_ID)
     @classmethod
     def _page_id_is_a_number(cls, value: str) -> str:
-        page_id = value.strip()
         # isdigit alone accepts digits such as "²".
-        if page_id and not (page_id.isascii() and page_id.isdigit()):
-            raise field_format_error(PAGE_ID_FORMAT_ERROR)
+        for page_id in parse_scope_keys(value):
+            if not (page_id.isascii() and page_id.isdigit()):
+                raise field_format_error(PAGE_ID_FORMAT_ERROR)
         return value
 
     # Each sync adds a lastModified filter and ORDER BY to the query, and a
@@ -187,15 +198,19 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
         )
 
     def hierarchy_breakdown_sections(self) -> list[HierarchyBreakdownSection]:
-        """Every space, plus the configured page. Only the field of the
-        indexing mode in use names a node: the form also sends the other tabs'
+        """Every space, plus the configured pages. Only the fields of the
+        indexing mode in use name nodes: the form also sends the other tabs'
         fields."""
         mode = self.indexing_mode()
         configured_space = (
-            (self.space.strip(),) if mode == ConfluenceIndexingMode.SPACE else ()
+            parse_scope_keys(self.space)
+            if mode in (ConfluenceIndexingMode.SPACE, ConfluenceIndexingMode.PAGE)
+            else ()
         )
         configured_page = (
-            (self.page_id.strip(),) if mode == ConfluenceIndexingMode.PAGE else ()
+            parse_scope_keys(self.page_id)
+            if mode == ConfluenceIndexingMode.PAGE
+            else ()
         )
         return [
             # Two spaces cannot have keys that differ only in case
@@ -228,6 +243,28 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
         return raw_node_id
 
 
+def _keys_direction(old: str, new: str) -> ScopeDirection:
+    """How a list of space keys or page ids changed: only added keys widen
+    the scope, only removed keys narrow it."""
+    old_keys = set(parse_scope_keys(old))
+    new_keys = set(parse_scope_keys(new))
+    if old_keys == new_keys:
+        return ScopeDirection.NONE
+    if old_keys < new_keys:
+        return ScopeDirection.WIDEN
+    if new_keys < old_keys:
+        return ScopeDirection.NARROW
+    return ScopeDirection.BOTH
+
+
+def _combine_directions(a: ScopeDirection, b: ScopeDirection) -> ScopeDirection:
+    if a == ScopeDirection.NONE:
+        return b
+    if b == ScopeDirection.NONE or a == b:
+        return a
+    return ScopeDirection.BOTH
+
+
 def _indexing_scope_direction(
     old: ConfluenceConnectorConfig, new: ConfluenceConnectorConfig
 ) -> ScopeDirection:
@@ -246,16 +283,19 @@ def _indexing_scope_direction(
         case ConfluenceIndexingMode.EVERYTHING:
             return ScopeDirection.NONE
         case ConfluenceIndexingMode.SPACE:
-            if old.space.strip() == new.space.strip():
-                return ScopeDirection.NONE
-            return ScopeDirection.BOTH
+            return _keys_direction(old.space, new.space)
         case ConfluenceIndexingMode.PAGE:
-            if old.page_id.strip() != new.page_id.strip():
-                return ScopeDirection.BOTH
+            keys = _combine_directions(
+                _keys_direction(old.space, new.space),
+                _keys_direction(old.page_id, new.page_id),
+            )
             if old.index_recursively == new.index_recursively:
-                return ScopeDirection.NONE
-            return (
-                ScopeDirection.WIDEN if new.index_recursively else ScopeDirection.NARROW
+                return keys
+            return _combine_directions(
+                keys,
+                ScopeDirection.WIDEN
+                if new.index_recursively
+                else ScopeDirection.NARROW,
             )
         case ConfluenceIndexingMode.CQL:
             if (old.cql_query or "").strip() == (new.cql_query or "").strip():

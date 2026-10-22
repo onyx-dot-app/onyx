@@ -4105,12 +4105,14 @@
               "description": "Onyx가 선택한 계정이 액세스할 수 있는 모든 스페이스와 페이지를 색인합니다."
             },
             "space": {
-              "label": "스페이스 키",
-              "description": "인덱싱할 Confluence 스페이스 키입니다 (예: `KB`)."
+              "label": "스페이스",
+              "description": "이 커넥터가 색인할 스페이스 키 (예: ENG).",
+              "placeholder": "스페이스 키 또는 URL 추가"
             },
             "page_id": {
-              "label": "페이지 ID",
-              "description": "인덱싱할 특정 페이지 ID입니다 (예: `131368`)"
+              "label": "페이지",
+              "description": "이 커넥터가 색인할 페이지 ID (예: 123456).",
+              "placeholder": "페이지 ID 또는 URL 추가"
             },
             "index_recursively": {
               "label": "하위 페이지 포함",
@@ -4122,6 +4124,9 @@
               "testButton": {
                 "label": "쿼리 테스트"
               }
+            },
+            "include_attachments": {
+              "description": "페이지에 첨부된 파일과 이미지를 색인합니다. [이미지 색인/처리 설정]({indexSettingsPath})을 참조하세요."
             }
           }
         },
