@@ -12504,6 +12504,9 @@
         "runningStatus": {
           "text": "{toolName} 실행 중..."
         },
+        "unreachableStatus": {
+          "text": "{toolName}이(가) 서버에 연결할 수 없습니다"
+        },
         "waitingIndicator": {
           "text": "응답 대기 중..."
         }

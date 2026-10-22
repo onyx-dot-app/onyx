@@ -745,12 +745,15 @@ def _run_ping(server_url: str) -> ToolResponse:
     return response
 
 
-def _assert_failed(response: ToolResponse, status_code: int | None) -> None:
+def _assert_failed(
+    response: ToolResponse, status_code: int | None, is_unreachable: bool = False
+) -> None:
     assert isinstance(response.rich_response, CustomToolCallSummary)
     error = response.rich_response.error
     assert error is not None
     assert not error.is_auth_error
     assert error.status_code == status_code
+    assert error.is_unreachable == is_unreachable
     assert response.llm_facing_response == error.message
 
 
@@ -863,7 +866,7 @@ def test_call_network_error_returns_clean_message(
 ) -> None:
     with patch("onyx.utils.url._pinned_request", side_effect=error):
         response = _run_ping("http://10.255.255.1")
-    _assert_failed(response, status_code=None)
+    _assert_failed(response, status_code=None, is_unreachable=True)
     assert response.llm_facing_response == (
         f"The ping tool could not reach its server {expected_reason}."
     )

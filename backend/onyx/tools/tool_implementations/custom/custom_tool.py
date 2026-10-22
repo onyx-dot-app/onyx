@@ -188,9 +188,15 @@ class CustomTool(Tool[None]):
         )
 
     def _failed_response(
-        self, placement: Placement, status_code: int | None, message: str
+        self,
+        placement: Placement,
+        status_code: int | None,
+        message: str,
+        is_unreachable: bool = False,
     ) -> ToolResponse:
-        error_info = CustomToolErrorInfo(status_code=status_code, message=message)
+        error_info = CustomToolErrorInfo(
+            status_code=status_code, message=message, is_unreachable=is_unreachable
+        )
         self.emitter.emit(
             Packet(
                 placement=placement,
@@ -285,6 +291,7 @@ class CustomTool(Tool[None]):
                 placement,
                 status_code=None,
                 message=f"The {self._name} tool could not reach its server (timed out).",
+                is_unreachable=True,
             )
         except requests.exceptions.ConnectionError:
             logger.warning("%s request could not connect", self._name, exc_info=True)
@@ -295,6 +302,7 @@ class CustomTool(Tool[None]):
                     f"The {self._name} tool could not reach its server "
                     "(connection failed)."
                 ),
+                is_unreachable=True,
             )
         if response.is_redirect:
             logger.warning(

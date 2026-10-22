@@ -12504,6 +12504,9 @@
         "runningStatus": {
           "text": "{toolName} を実行中..."
         },
+        "unreachableStatus": {
+          "text": "{toolName} はサーバーに接続できませんでした"
+        },
         "waitingIndicator": {
           "text": "レスポンスを待っています..."
         }

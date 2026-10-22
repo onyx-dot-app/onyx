@@ -12504,6 +12504,9 @@
         "runningStatus": {
           "text": "{toolName} en ejecución..."
         },
+        "unreachableStatus": {
+          "text": "{toolName} no pudo conectar con su servidor"
+        },
         "waitingIndicator": {
           "text": "Esperando respuesta..."
         }

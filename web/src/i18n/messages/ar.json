@@ -12504,6 +12504,9 @@
         "runningStatus": {
           "text": "{toolName} قيد التشغيل..."
         },
+        "unreachableStatus": {
+          "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"
+        },
         "waitingIndicator": {
           "text": "في انتظار الاستجابة..."
         }
