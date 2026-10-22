@@ -626,7 +626,8 @@ def connector_permission_sync_generator_task(
             )
         else:
             doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-            assert doc_sync_func is not None  # DocSyncConfig sets exactly one
+            if doc_sync_func is None:
+                raise ValueError(f"No doc sync func registered for {source_type}")
             document_external_accesses = doc_sync_func(
                 cc_pair,
                 fetch_all_existing_docs_fn,
