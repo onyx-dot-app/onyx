@@ -316,7 +316,7 @@ it("offers a download for unsupported content", async () => {
       filePath="outputs/archive.zip"
     />
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Download" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Download file" }));
   expect(downloadArtifactFile).toHaveBeenCalledWith(
     "session-download",
     "outputs/archive.zip"

@@ -14584,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "无法预览文件"
+        "title": "暂不支持预览此文件类型"
       },
       "error": {
         "inline": "错误：{message}",
-        "title": "加载文件出错"
+        "title": "无法加载预览",
+        "description": "未能加载预览。请重试或下载文件后打开。"
       },
       "loading": {
         "label": "正在加载文件..."
@@ -14601,10 +14602,25 @@
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       },
       "imageTooLarge": {
-        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+        "description": "支持预览最大 10 MB 的图片。请下载文件后打开。",
+        "title": "图片过大，无法预览"
       },
       "unsupported": {
-        "description": "此文件无法预览。请下载原文件后打开。"
+        "description": "下载文件以查看其内容。"
+      },
+      "retry": {
+        "label": "重试"
+      },
+      "download": {
+        "label": "下载文件"
+      },
+      "tooLarge": {
+        "title": "文件过大，无法预览",
+        "description": "此处支持预览最大 {size, number} MB 的文件。请下载文件后打开。"
+      },
+      "playback": {
+        "title": "暂不支持播放",
+        "description": "您的浏览器无法播放此文件。请下载文件后打开。"
       }
     },
     "filesTab": {

@@ -14584,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Não é possível visualizar o arquivo"
+        "title": "A prévia deste tipo de arquivo não é compatível no momento"
       },
       "error": {
         "inline": "Erro: {message}",
-        "title": "Erro ao carregar o arquivo"
+        "title": "Não foi possível carregar a prévia",
+        "description": "Não foi possível carregar a prévia. Tente novamente ou baixe o arquivo para abri-lo."
       },
       "loading": {
         "label": "Carregando arquivo..."
@@ -14601,10 +14602,25 @@
         "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
       },
       "imageTooLarge": {
-        "description": "Esta imagem é muito grande para a prévia. Baixe o original para abri-la."
+        "description": "Imagens de até 10 MB podem ser visualizadas. Baixe o arquivo para abri-lo.",
+        "title": "Imagem muito grande para prévia"
       },
       "unsupported": {
-        "description": "Não é possível visualizar este arquivo. Baixe o original para abri-lo."
+        "description": "Baixe o arquivo para visualizar seu conteúdo."
+      },
+      "retry": {
+        "label": "Tentar novamente"
+      },
+      "download": {
+        "label": "Baixar arquivo"
+      },
+      "tooLarge": {
+        "title": "Arquivo muito grande para prévia",
+        "description": "Arquivos de até {size, number} MB podem ser visualizados aqui. Baixe o arquivo para abri-lo."
+      },
+      "playback": {
+        "title": "Reprodução não suportada",
+        "description": "Seu navegador não pode reproduzir este arquivo. Baixe o arquivo para abri-lo."
       }
     },
     "filesTab": {

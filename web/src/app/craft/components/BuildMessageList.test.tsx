@@ -398,3 +398,37 @@ test("keeps one assistant cursor during finalization and removes it when finaliz
   expect(screen.getByText("Final answer")).toBeInTheDocument();
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
+
+it.each(["report.docx", "table.xlsx", "archive.zip"])(
+  "opens uploaded %s through the output-panel file action",
+  (name) => {
+    const onFileOpen = jest.fn();
+    render(
+      <BuildMessageList
+        sessionId="session-1"
+        messages={[
+          {
+            id: "upload",
+            type: "user",
+            timestamp: new Date(),
+            content: "Review this document",
+            attachments: [
+              {
+                path: `uploads/${name}`,
+                name,
+                mimeType: "application/octet-stream",
+              },
+            ],
+          },
+        ]}
+        streamItems={[]}
+        isStreaming={false}
+        autoScrollEnabled={false}
+        scrollContainerRef={scrollRef()}
+        onFileOpen={onFileOpen}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expand document" }));
+    expect(onFileOpen).toHaveBeenCalledWith(`uploads/${name}`, name);
+  }
+);

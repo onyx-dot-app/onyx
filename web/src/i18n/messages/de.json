@@ -14584,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "Datei kann nicht in der Vorschau angezeigt werden"
+        "title": "Die Vorschau für diesen Dateityp wird derzeit nicht unterstützt"
       },
       "error": {
         "inline": "Fehler: {message}",
-        "title": "Fehler beim Laden der Datei"
+        "title": "Vorschau konnte nicht geladen werden",
+        "description": "Die Vorschau konnte nicht geladen werden. Versuchen Sie es erneut oder laden Sie die Datei herunter."
       },
       "loading": {
         "label": "Datei wird geladen..."
@@ -14601,10 +14602,25 @@
         "malformed": "Diese CSV-Datei enthält ein ungültiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter."
       },
       "imageTooLarge": {
-        "description": "Dieses Bild ist zu groß für die Vorschau. Laden Sie das Original herunter, um es zu öffnen."
+        "description": "Bilder bis 10 MB können angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen.",
+        "title": "Bild zu groß für die Vorschau"
       },
       "unsupported": {
-        "description": "Diese Datei kann nicht angezeigt werden. Laden Sie das Original herunter, um es zu öffnen."
+        "description": "Laden Sie die Datei herunter, um ihren Inhalt anzuzeigen."
+      },
+      "retry": {
+        "label": "Erneut versuchen"
+      },
+      "download": {
+        "label": "Datei herunterladen"
+      },
+      "tooLarge": {
+        "title": "Datei zu groß für die Vorschau",
+        "description": "Dateien bis {size, number} MB können hier angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "playback": {
+        "title": "Wiedergabe nicht unterstützt",
+        "description": "Ihr Browser kann diese Datei nicht abspielen. Laden Sie die Datei herunter, um sie zu öffnen."
       }
     },
     "filesTab": {

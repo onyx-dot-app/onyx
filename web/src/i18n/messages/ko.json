@@ -14584,11 +14584,12 @@
     },
     "filePreview": {
       "cannotPreview": {
-        "title": "파일을 미리 볼 수 없습니다"
+        "title": "이 파일 형식의 미리보기는 현재 지원되지 않습니다"
       },
       "error": {
         "inline": "오류: {message}",
-        "title": "파일 불러오기 오류"
+        "title": "미리보기를 불러올 수 없음",
+        "description": "미리보기를 불러오지 못했습니다. 다시 시도하거나 파일을 다운로드하여 여세요."
       },
       "loading": {
         "label": "파일을 불러오는 중..."
@@ -14601,10 +14602,25 @@
         "malformed": "이 CSV에는 따옴표로 묶인 잘못된 필드가 있습니다. 확인하려면 원본을 다운로드하세요."
       },
       "imageTooLarge": {
-        "description": "이미지가 너무 커서 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
+        "description": "최대 10 MB의 이미지를 미리볼 수 있습니다. 파일을 다운로드하여 여세요.",
+        "title": "이미지가 너무 커서 미리볼 수 없음"
       },
       "unsupported": {
-        "description": "이 파일은 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
+        "description": "파일을 다운로드하여 내용을 확인하세요."
+      },
+      "retry": {
+        "label": "다시 시도"
+      },
+      "download": {
+        "label": "파일 다운로드"
+      },
+      "tooLarge": {
+        "title": "파일이 너무 커서 미리볼 수 없음",
+        "description": "여기서는 최대 {size, number} MB의 파일을 미리볼 수 있습니다. 파일을 다운로드하여 여세요."
+      },
+      "playback": {
+        "title": "재생이 지원되지 않음",
+        "description": "브라우저에서 이 파일을 재생할 수 없습니다. 파일을 다운로드하여 여세요."
       }
     },
     "filesTab": {

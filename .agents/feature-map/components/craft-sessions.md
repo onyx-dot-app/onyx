@@ -197,6 +197,8 @@ One mutable row per `(session_id, path)`, upserted at turn end
 (`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
 Changes advance `version` and invalidate `archive_file_id`.
 Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner's last viewed version.
+Chat file links and uploaded attachment Expand actions open the file in the output panel.
+The panel provides Download for unsupported attachments. The output panel owns file-view acknowledgements, including updates while a file stays active.
 `deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
