@@ -72,6 +72,8 @@ export type OpalStrings = {
   collapsibleExpand: string;
   collapsibleFoldSection: (title: string) => string;
   collapsibleExpandSection: (title: string) => string;
+  sidebarOpen: string;
+  sidebarClose: string;
   dividerViewAll: string;
   contentOptional: string;
   previousPage: string;
@@ -195,6 +197,8 @@ export const defaultOpalStrings: OpalStrings = {
   collapsibleExpand: "Expand",
   collapsibleFoldSection: (title) => `Fold ${title}`,
   collapsibleExpandSection: (title) => `Expand ${title}`,
+  sidebarOpen: "Open Sidebar",
+  sidebarClose: "Close Sidebar",
   dividerViewAll: "View All",
   contentOptional: "(Optional)",
   previousPage: "Previous page",

@@ -14149,6 +14149,9 @@
       "globalDefault": {
         "label": "Predeterminado global"
       }
+    },
+    "appFooter": {
+      "slogan": "Plataforma de IA de código abierto"
     }
   },
   "craft": {
@@ -15982,6 +15985,10 @@
     },
     "toast": {
       "moreCount": "+{count} más"
+    },
+    "sidebar": {
+      "open": "Abrir barra lateral",
+      "close": "Cerrar la barra lateral"
     }
   },
   "settings": {
