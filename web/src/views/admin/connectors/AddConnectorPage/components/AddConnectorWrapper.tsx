@@ -820,37 +820,43 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                       >
                         {t("header.cancelButton.label")}
                       </Button>,
-                      // Always present.
-                      <Button
+                      // Always present. A disabled native button gets no
+                      // hover, so the wrapper holds the tooltip.
+                      <Disabled
                         key="connect"
                         disabled={createDisabled}
                         tooltip={createLockReason}
-                        icon={busy ? IconLoader : undefined}
-                        onClick={async () => {
-                          const errors = await formikProps.validateForm();
-                          if (blockingErrorsEmpty(errors)) {
-                            // Edit mode's plan lists failed checks itself.
-                            if (!edit && checks.optionalFailedCount > 0) {
-                              setAdvisoryOpen(true);
-                              return;
-                            }
-                            // Formik's own submit stops at any error.
-                            await submitForm(formikProps.values);
-                          } else {
-                            // The failing field can sit in a folded section, so name it.
-                            const message = firstFormikError(
-                              blockingErrors(errors)
-                            );
-                            if (message !== null) toast.error(message);
-                            // Marks every field touched, so its error shows.
-                            formikProps.handleSubmit();
-                          }
-                        }}
+                        tooltipSide="top"
                       >
-                        {edit
-                          ? editT("header.reviewButton.label")
-                          : t("header.connectButton.label")}
-                      </Button>,
+                        <Button
+                          disabled={createDisabled}
+                          icon={busy ? IconLoader : undefined}
+                          onClick={async () => {
+                            const errors = await formikProps.validateForm();
+                            if (blockingErrorsEmpty(errors)) {
+                              // Edit mode's plan lists failed checks itself.
+                              if (!edit && checks.optionalFailedCount > 0) {
+                                setAdvisoryOpen(true);
+                                return;
+                              }
+                              // Formik's own submit stops at any error.
+                              await submitForm(formikProps.values);
+                            } else {
+                              // The failing field can sit in a folded section, so name it.
+                              const message = firstFormikError(
+                                blockingErrors(errors)
+                              );
+                              if (message !== null) toast.error(message);
+                              // Marks every field touched, so its error shows.
+                              formikProps.handleSubmit();
+                            }
+                          }}
+                        >
+                          {edit
+                            ? editT("header.reviewButton.label")
+                            : t("header.connectButton.label")}
+                        </Button>
+                      </Disabled>,
                     ]}
                   >
                     {hasFederatedOption && !edit && (
