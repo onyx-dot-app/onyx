@@ -9,6 +9,7 @@ from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
 from ee.onyx.external_permissions.perm_sync_types import (
+    DocSyncCheckpointer,
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
 )
@@ -69,18 +70,40 @@ def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     google_drive_connector: GoogleDriveConnector,
     callback: IndexingHeartbeatInterface | None = None,
+    checkpointer: DocSyncCheckpointer | None = None,
 ) -> GenerateSlimDocumentOutput:
-    current_time = datetime.now(timezone.utc)
-    start_time = (
-        cc_pair.last_time_perm_sync.replace(tzinfo=timezone.utc).timestamp()
-        if cc_pair.last_time_perm_sync
-        else 0.0
-    )
+    resume = checkpointer.resume if checkpointer else None
+    if resume is not None:
+        # Keep the stopped attempt's window so its checkpoint stays valid
+        range_start = resume.poll_range_start
+        range_end = resume.poll_range_end
+        checkpoint = google_drive_connector.validate_checkpoint_json(
+            resume.checkpoint_json
+        )
+    else:
+        range_start = (
+            cc_pair.last_time_perm_sync.replace(tzinfo=timezone.utc)
+            if cc_pair.last_time_perm_sync
+            else None
+        )
+        range_end = datetime.now(timezone.utc)
+        checkpoint = None
 
+    on_checkpoint = (
+        (
+            lambda drive_checkpoint: checkpointer.save(
+                drive_checkpoint, range_start, range_end
+            )
+        )
+        if checkpointer
+        else None
+    )
     return google_drive_connector.retrieve_all_slim_docs_perm_sync(
-        start=start_time,
-        end=current_time.timestamp(),
+        start=range_start.timestamp() if range_start else 0.0,
+        end=range_end.timestamp(),
         callback=callback,
+        checkpoint=checkpoint,
+        on_checkpoint=on_checkpoint,
     )
 
 
@@ -376,12 +399,14 @@ def gdrive_doc_sync(
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
+    checkpointer: DocSyncCheckpointer | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:
     """
     Adds the external permissions to the documents and hierarchy nodes in postgres.
     If the document doesn't already exist in postgres, we create
     it in postgres so that when it gets created later, the permissions are
-    already populated.
+    already populated. With a ``checkpointer`` the crawl resumes where a stopped
+    attempt left off.
     """
     google_drive_connector = GoogleDriveConnector(
         **build_connector_kwargs(
@@ -390,7 +415,9 @@ def gdrive_doc_sync(
     )
     google_drive_connector.load_credentials(credential_json(cc_pair))
 
-    slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
+    slim_doc_generator = _get_slim_doc_generator(
+        cc_pair, google_drive_connector, checkpointer=checkpointer
+    )
 
     total_processed = 0
     for slim_doc_batch in slim_doc_generator:

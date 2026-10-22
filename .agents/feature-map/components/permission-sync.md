@@ -243,6 +243,8 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       LeaseHeartbeat renews heartbeat_at          tasks/shared/lease_heartbeat.py, see §5.9
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
+        (checkpointed_doc_sync_func with a FileStoreDocSyncCheckpointer instead,
+         when the source sets one; see §5.9)
       for each element:
         update_element_permissions_batch           doc_permission_syncing/tasks.py
           -> element_update_permissions
@@ -605,6 +607,15 @@ document to the wrong person.
    `JOB_TIMEOUT`); the attempt's `error_message` names the real stop cause
    (timeout, stop signal, or lost lease), because connectors raise a generic
    "Stop signal detected" for all of them.
+   A source whose crawl can outlast that timeout (Google Drive) sets
+   `DocSyncConfig.checkpointed_doc_sync_func`. The task passes it a
+   `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
+   which saves the crawl checkpoint to the file store at most every
+   `CHECKPOINT_SAVE_INTERVAL_SECONDS`, with the crawl's `poll_range_start`/
+   `poll_range_end`, on the attempt row. The next attempt resumes the newest
+   checkpoint of a failed attempt younger than `NUM_DAYS_TO_KEEP_CHECKPOINTS`
+   when only failures followed it, keeps that window, and on success sets
+   `last_time_perm_sync` to the window end and deletes the chain's checkpoints.
    The open attempt is also the per-cc_pair lock, for doc sync and group sync.
    The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
    and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`

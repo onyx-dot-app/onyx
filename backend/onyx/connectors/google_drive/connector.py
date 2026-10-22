@@ -2,7 +2,7 @@ import copy
 import json
 import os
 import sys
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -2352,9 +2352,16 @@ class GoogleDriveConnector(
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
         fail_on_unreachable_targets: bool = False,
+        checkpoint: GoogleDriveCheckpoint | None = None,
+        on_checkpoint: Callable[[GoogleDriveCheckpoint], None] | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
-            checkpoint = self.build_dummy_checkpoint()
+            if checkpoint is None:
+                checkpoint = self.build_dummy_checkpoint()
+            # Shared by reference so folder progress lands in the checkpoint
+            self._retrieved_folder_and_drive_ids = (
+                checkpoint.retrieved_folder_and_drive_ids
+            )
             while checkpoint.completion_stage != DriveRetrievalStage.DONE:
                 yield from self._extract_slim_docs_from_google_drive(
                     checkpoint=checkpoint,
@@ -2363,6 +2370,12 @@ class GoogleDriveConnector(
                     callback=callback,
                     include_permissions=include_permissions,
                 )
+                # The caller consumed every batch yielded so far before this resumed
+                if (
+                    on_checkpoint
+                    and checkpoint.completion_stage != DriveRetrievalStage.DONE
+                ):
+                    on_checkpoint(checkpoint)
             if fail_on_unreachable_targets and checkpoint.unreachable_target_ids:
                 # Pruning deletes whatever this listing lacks, which for an
                 # unreachable target is every document indexed from it.
@@ -2397,9 +2410,18 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        checkpoint: GoogleDriveCheckpoint | None = None,
+        on_checkpoint: Callable[[GoogleDriveCheckpoint], None] | None = None,
     ) -> GenerateSlimDocumentOutput:
+        """``checkpoint`` resumes a stopped crawl. ``on_checkpoint`` receives the
+        crawl state at each point where it can resume without skipping files."""
         return self._retrieve_all_slim_docs_impl(
-            start=start, end=end, callback=callback, include_permissions=True
+            start=start,
+            end=end,
+            callback=callback,
+            include_permissions=True,
+            checkpoint=checkpoint,
+            on_checkpoint=on_checkpoint,
         )
 
     def validate_connector_settings(self) -> None:

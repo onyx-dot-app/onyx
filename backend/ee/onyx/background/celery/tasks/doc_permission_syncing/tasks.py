@@ -16,6 +16,9 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from ee.onyx.background.celery.tasks.doc_permission_syncing.checkpointer import (
+    FileStoreDocSyncCheckpointer,
+)
 from ee.onyx.db.connector_credential_pair import (
     clear_perm_sync_pending__no_commit,
     get_all_auto_sync_cc_pairs,
@@ -465,6 +468,7 @@ def connector_permission_sync_generator_task(
     tasks_generated = 0
     docs_with_errors = 0
     progress = DocPermissionSyncProgress()
+    checkpointer: FileStoreDocSyncCheckpointer | None = None
     heartbeat = LeaseHeartbeat(
         f"doc_permission_sync_attempt={attempt_id}",
         renew=partial(_renew_doc_permission_sync_lease, attempt_id, progress),
@@ -573,13 +577,25 @@ def connector_permission_sync_generator_task(
 
         # cc_pair is detached: connectors may read eager-loaded connector/credential
         # columns off it, never a lazy relationship.
-        doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-        document_external_accesses = doc_sync_func(
-            cc_pair,
-            fetch_all_existing_docs_fn,
-            fetch_all_existing_docs_ids_fn,
-            callback,
+        checkpointed_doc_sync_func = (
+            sync_config.doc_sync_config.checkpointed_doc_sync_func
         )
+        if checkpointed_doc_sync_func is not None:
+            checkpointer = FileStoreDocSyncCheckpointer(cc_pair_id, attempt_id)
+            document_external_accesses = checkpointed_doc_sync_func(
+                cc_pair,
+                fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn,
+                callback,
+                checkpointer,
+            )
+        else:
+            document_external_accesses = sync_config.doc_sync_config.doc_sync_func(
+                cc_pair,
+                fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn,
+                callback,
+            )
 
         task_logger.info(f"Permission sync crawl starting. cc_pair={cc_pair_id}")
 
@@ -622,7 +638,18 @@ def connector_permission_sync_generator_task(
                 total_docs_synced=tasks_generated,
                 docs_with_permission_errors=docs_with_errors,
             )
-            mark_cc_pair_as_permissions_synced(db_session, cc_pair_id, sync_started_at)
+            # A resumed crawl only covered changes up to the window its chain began with
+            mark_cc_pair_as_permissions_synced(
+                db_session,
+                cc_pair_id,
+                (
+                    checkpointer.resume.poll_range_end
+                    if checkpointer and checkpointer.resume
+                    else sync_started_at
+                ),
+            )
+        if checkpointer:
+            checkpointer.discard()
         task_logger.info(
             f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
         )

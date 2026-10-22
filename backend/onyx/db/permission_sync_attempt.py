@@ -5,9 +5,10 @@ and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
+from pydantic import BaseModel
 from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
@@ -424,6 +425,83 @@ def complete_doc_permission_sync_attempt(
         db_session.rollback()
         logger.exception("complete_doc_permission_sync_attempt exceptioned.")
         raise
+
+
+class DocPermissionSyncCheckpointRef(BaseModel):
+    attempt_id: int
+    checkpoint_pointer: str
+    poll_range_start: datetime | None
+    poll_range_end: datetime
+
+
+def get_resumable_doc_permission_sync_checkpoint(
+    db_session: Session,
+    cc_pair_id: int,
+    current_attempt_id: int,
+    max_age: timedelta,
+) -> DocPermissionSyncCheckpointRef | None:
+    """The newest recent checkpoint of a failed attempt, when every attempt
+    after it also failed. An attempt that dies before its first save leaves the
+    older checkpoint resumable; any other outcome since means a fresh crawl."""
+    holder = db_session.execute(
+        select(DocPermissionSyncAttempt)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
+            DocPermissionSyncAttempt.id != current_attempt_id,
+            DocPermissionSyncAttempt.status == PermissionSyncStatus.FAILED,
+            DocPermissionSyncAttempt.checkpoint_pointer.is_not(None),
+            DocPermissionSyncAttempt.poll_range_end.is_not(None),
+            DocPermissionSyncAttempt.time_created
+            >= datetime.now(timezone.utc) - max_age,
+        )
+        .order_by(DocPermissionSyncAttempt.time_created.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if (
+        holder is None
+        or holder.checkpoint_pointer is None
+        or holder.poll_range_end is None
+    ):
+        return None
+
+    later_non_failure = db_session.execute(
+        select(DocPermissionSyncAttempt.id)
+        .where(
+            DocPermissionSyncAttempt.connector_credential_pair_id == cc_pair_id,
+            DocPermissionSyncAttempt.id != current_attempt_id,
+            DocPermissionSyncAttempt.time_created > holder.time_created,
+            DocPermissionSyncAttempt.status != PermissionSyncStatus.FAILED,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if later_non_failure is not None:
+        return None
+
+    return DocPermissionSyncCheckpointRef(
+        attempt_id=holder.id,
+        checkpoint_pointer=holder.checkpoint_pointer,
+        poll_range_start=holder.poll_range_start,
+        poll_range_end=holder.poll_range_end,
+    )
+
+
+def set_doc_permission_sync_attempt_checkpoint(
+    db_session: Session,
+    attempt_id: int,
+    checkpoint_pointer: str | None,
+    poll_range_start: datetime | None = None,
+    poll_range_end: datetime | None = None,
+) -> None:
+    db_session.execute(
+        update(DocPermissionSyncAttempt)
+        .where(DocPermissionSyncAttempt.id == attempt_id)
+        .values(
+            checkpoint_pointer=checkpoint_pointer,
+            poll_range_start=poll_range_start,
+            poll_range_end=poll_range_end,
+        )
+    )
+    db_session.commit()
 
 
 # =============================================================================

@@ -34,6 +34,8 @@ from ee.onyx.configs.app_configs import (
 )
 from ee.onyx.external_permissions.perm_sync_types import (
     CensoringFuncType,
+    CheckpointedDocSyncFuncType,
+    DocSyncCheckpointer,
     DocSyncFuncType,
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
@@ -60,6 +62,23 @@ def _lazy_doc_sync(load: Callable[[], DocSyncFuncType]) -> DocSyncFuncType:
         callback: Optional["IndexingHeartbeatInterface"],
     ) -> Generator["ElementExternalAccess", None, None]:
         return load()(cc_pair, fetch_all_docs_fn, fetch_all_docs_ids_fn, callback)
+
+    return run
+
+
+def _lazy_checkpointed_doc_sync(
+    load: Callable[[], CheckpointedDocSyncFuncType],
+) -> CheckpointedDocSyncFuncType:
+    def run(
+        cc_pair: "ConnectorCredentialPair",
+        fetch_all_docs_fn: FetchAllDocumentsFunction,
+        fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,
+        callback: Optional["IndexingHeartbeatInterface"],
+        checkpointer: DocSyncCheckpointer,
+    ) -> Generator["ElementExternalAccess", None, None]:
+        return load()(
+            cc_pair, fetch_all_docs_fn, fetch_all_docs_ids_fn, callback, checkpointer
+        )
 
     return run
 
@@ -141,6 +160,12 @@ def _load_hubspot_doc_sync() -> DocSyncFuncType:
 
 
 def _load_gdrive_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
+
+    return gdrive_doc_sync
+
+
+def _load_gdrive_checkpointed_doc_sync() -> CheckpointedDocSyncFuncType:
     from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 
     return gdrive_doc_sync
@@ -260,6 +285,9 @@ class DocSyncConfig(BaseModel):
     doc_sync_frequency: int
     doc_sync_func: DocSyncFuncType
     initial_index_should_sync: bool
+    # Set for sources whose crawl can outlast PERMISSION_SYNC_TIMEOUT. The task
+    # prefers it, so an attempt stopped by the timeout continues where it stopped.
+    checkpointed_doc_sync_func: CheckpointedDocSyncFuncType | None = None
 
 
 class GroupSyncConfig(BaseModel):
@@ -302,6 +330,9 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=_lazy_doc_sync(_load_gdrive_doc_sync),
             initial_index_should_sync=True,
+            checkpointed_doc_sync_func=_lazy_checkpointed_doc_sync(
+                _load_gdrive_checkpointed_doc_sync
+            ),
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
