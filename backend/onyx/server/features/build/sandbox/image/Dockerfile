@@ -44,7 +44,7 @@ RUN set -eux; \
 # Every OS package the sandbox ships, in its own stage: the audit gate builds
 # this stage alone and scans it, so an apt install belongs here, never in the
 # runtime stage below.
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS os
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39 AS os
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
