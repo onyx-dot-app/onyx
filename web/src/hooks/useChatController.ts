@@ -68,6 +68,10 @@ import {
   selectedSourcesFrom,
 } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
+import {
+  isStillOnLocation,
+  locationKey,
+} from "@/app/app/services/submitLocation";
 import { useTranslations } from "next-intl";
 import {
   ReadonlyURLSearchParams,
@@ -445,16 +449,13 @@ export default function useChatController({
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      {
-        const params = new URLSearchParams(searchParams?.toString() || "");
-        if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-          params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          const newUrl = params.toString()
-            ? `${pathname}?${params.toString()}`
-            : pathname;
-          // SAFETY: built from the current pathname, which is a route of this app.
-          router.replace(newUrl as Route, { scroll: false });
-        }
+      const paramsWithoutProject = new URLSearchParams(searchParams.toString());
+      paramsWithoutProject.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const startUrl = locationKey(pathname, searchParams.toString());
+      const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
+      if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
+        // SAFETY: built from the current pathname, which is a route of this app.
+        router.replace(urlWithoutProject as Route, { scroll: false });
       }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
@@ -591,12 +592,17 @@ export default function useChatController({
         } catch (error) {
           console.error("Failed to create chat session:", error);
           toast.error(t("createSessionFailed.toast"));
+          // The user moved to a different page while the request was pending.
+          // Do not take them back or put the message into that page.
+          if (
+            !isStillOnLocation([startUrl, urlWithoutProject], window.location)
+          ) {
+            return;
+          }
           // Put the project back in the URL so a retry stays in the project.
           if (projectId) {
             // SAFETY: built from the current pathname, which is a route of this app.
-            router.replace(`${pathname}?${searchParams.toString()}` as Route, {
-              scroll: false,
-            });
+            router.replace(startUrl as Route, { scroll: false });
           }
           restoreInputBar(message, currentMessageFiles);
           return;

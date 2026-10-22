@@ -3,7 +3,8 @@ import { act, createRef } from "react";
 import AppInputBar, {
   type AppInputBarHandle,
 } from "@/sections/input/AppInputBar";
-import type { ProjectFile } from "@/lib/projects/types";
+import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ChatFileType } from "@/app/app/interfaces";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -183,7 +184,23 @@ test("custom agents retain the forced plugin pill without member metadata", asyn
 });
 
 describe("restore after a failed send", () => {
-  const failedFiles = [{ id: "failed-file" }] as ProjectFile[];
+  function projectFile(id: string): ProjectFile {
+    return {
+      id,
+      name: `${id}.txt`,
+      project_id: null,
+      user_id: null,
+      file_id: `${id}-file-id`,
+      created_at: "2026-01-01T00:00:00Z",
+      status: UserFileStatus.COMPLETED,
+      file_type: "text/plain",
+      last_accessed_at: "2026-01-01T00:00:00Z",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+      token_count: null,
+      chunk_count: null,
+    };
+  }
+  const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 
   test("puts the message and files back into an empty composer", () => {
     const inputBarRef = createRef<AppInputBarHandle>();
@@ -207,8 +224,8 @@ describe("restore after a failed send", () => {
 
   test("keeps files attached while the send was pending", () => {
     mockProjectsContext.currentMessageFiles = [
-      { id: "newer-file" },
-    ] as ProjectFile[];
+      projectFile("newer-file"),
+    ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
     act(() => inputBarRef.current?.restore("failed message", failedFiles));
