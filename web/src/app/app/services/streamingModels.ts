@@ -200,6 +200,7 @@ export interface FetchToolDocuments extends BaseObj {
 // Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
+  is_unreachable: boolean;
   status_code: number | null;
   message: string;
 }

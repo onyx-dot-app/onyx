@@ -8556,7 +8556,7 @@
           },
           "title": "Proteção contra SSRF",
           "validateAll": {
-            "description": "Mais restritivo. Todas as solicitações de saída se recusam a alcançar IPs privados ou internos, incluindo os conectores da web.",
+            "description": "Mais restritivo. As solicitações de saída, incluindo os conectores da web, não podem alcançar IPs privados ou internos. Exceção: as ferramentas personalizadas ainda podem alcançar endereços da rede privada. Loopback, link-local e metadados da nuvem continuam bloqueados.",
             "label": "Validar todas as solicitações"
           },
           "validateLlm": {
@@ -12491,6 +12491,9 @@
         },
         "runningStatus": {
           "text": "{toolName} em execução..."
+        },
+        "unreachableStatus": {
+          "text": "{toolName} não conseguiu alcançar o servidor"
         },
         "waitingIndicator": {
           "text": "Aguardando resposta..."
