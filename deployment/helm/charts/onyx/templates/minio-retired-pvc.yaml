@@ -1,0 +1,42 @@
+{{- /*
+Once minio.enabled is false, the MinIO subchart no longer renders its PVC, and
+Helm deletes a dropped resource unless the live object carries
+helm.sh/resource-policy: keep. An install upgraded with --reuse-values from 0.8
+never got that annotation, so this renders the claim instead: the upgrade that
+retires MinIO then adds keep and leaves the data, and the claim stays until the
+admin deletes it. The spec is the one the subchart renders from the same
+minio.persistence values, so neither this upgrade nor a rollback to a release
+with MinIO changes a bound claim's immutable spec. lookup only checks that the
+claim exists. It is empty under helm template and ArgoCD, which do not delete
+the claim on their own.
+*/}}
+{{- $persistence := .Values.minio.persistence | default dict }}
+{{- if and (not .Values.minio.enabled) (eq (.Values.minio.mode | default "standalone") "standalone") $persistence.enabled (not $persistence.existingClaim) }}
+{{- $name := printf "%s-minio" .Release.Name }}
+{{- if lookup "v1" "PersistentVolumeClaim" .Release.Namespace $name }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ $persistence.accessMode | default "ReadWriteOnce" | quote }}
+  resources:
+    requests:
+      storage: {{ $persistence.size | quote }}
+  {{- if $persistence.storageClass }}
+  {{- if eq "-" $persistence.storageClass }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ $persistence.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if $persistence.volumeName }}
+  volumeName: {{ $persistence.volumeName | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
