@@ -179,7 +179,10 @@ It does not check application login or license status. The disk check covers the
 Docker storage can use another filesystem.
 
 API intercept creation is shared between terminal and VS Code commands.
-It reuses an existing intercept. A known stale agent identity failure allows one targeted restart and retry.
+It reuses an existing intercept only when it forwards container port 8080 to local port 8080. A known stale agent identity failure allows one targeted restart and retry.
+Zed records only intercepts it creates and preserves reused intercepts on exit.
+A failed rollout check releases an intercept created by that command.
+
 Other intercept failures stop the command. A connection alone does not create an intercept or start the API.
 
 Pin the context when inspecting resources:

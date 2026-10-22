@@ -50,7 +50,7 @@ craft-connect:
 	$(DEV) connect
 
 craft-intercept:
-	$(DEV) intercept
+	$(DEV) intercept $(INTERCEPT_ARGS)
 
 craft-ready-infra:
 	$(DEV) ready --stage infrastructure

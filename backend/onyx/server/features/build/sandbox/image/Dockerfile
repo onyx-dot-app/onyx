@@ -19,7 +19,9 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 # Node/npm/npx for MCP commands and skill-runtime packages.
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS node_source
 ARG NPM_VERSION=11.17.0
-RUN npm install -g "npm@${NPM_VERSION}" && \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \
+    npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
     rm -rf /root/.npm
 
@@ -30,7 +32,9 @@ ARG GH_CLI_VERSION=2.94.0
 ARG TARGETARCH
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-RUN set -eux; \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export CURL_CA_BUNDLE=/run/secrets/build_ca_bundle; fi && \
+    set -eux; \
     arch="${TARGETARCH:-amd64}"; \
     tarball="gh_${GH_CLI_VERSION}_linux_${arch}.tar.gz"; \
     base="https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}"; \
@@ -116,7 +120,9 @@ RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
 # Chrome-for-Testing (no arm64 build); we use system chromium via
 # AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets the npm postinstall run on
 # npm 11+.
-RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \
+    if [ "$ENABLE_BROWSER" = "true" ]; then \
     npm install -g --allow-scripts=agent-browser "agent-browser@${AGENT_BROWSER_VERSION}" && \
     agent-browser --version && \
     npm cache clean --force && \
@@ -147,7 +153,9 @@ COPY --exclude=.DS_Store templates/pptx /workspace/templates/pptx
 RUN chown -R sandbox:sandbox /workspace/templates
 
 COPY initial-requirements.txt /tmp/initial-requirements.txt
-RUN python3 -m venv /workspace/.venv && \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export PIP_CERT=/run/secrets/build_ca_bundle; fi && \
+    python3 -m venv /workspace/.venv && \
     /workspace/.venv/bin/pip install --no-cache-dir --upgrade pip && \
     /workspace/.venv/bin/pip install --no-cache-dir --only-binary=:all: -r /tmp/initial-requirements.txt && \
     rm -rf /tmp/initial-requirements.txt /root/.cache/pip && \
@@ -162,7 +170,9 @@ ENV PYTHONPATH="/workspace"
 # (@img/sharp-linux-x64 / @img/sharp-linux-arm64, no install scripts); the
 # smoke test fails the build if the native binary didn't resolve for the
 # target arch, and verifies one known SVG exists from each icon package.
-RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
+RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
+    if [ -f /run/secrets/build_ca_bundle ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; fi && \
+    if [ "$ENABLE_SKILLS" = "true" ]; then \
     npm install -g pptxgenjs@4.0.1 lucide-static@1.24.0 @tabler/icons@3.44.0 sharp@0.35.3 && \
     NODE_PATH=/usr/local/lib/node_modules node -e "require('pptxgenjs'); require('sharp'); const fs = require('fs'); fs.accessSync('/usr/local/lib/node_modules/lucide-static/icons/circle-check.svg'); fs.accessSync('/usr/local/lib/node_modules/@tabler/icons/icons/outline/shield-check.svg')" && \
     npm cache clean --force && \
@@ -203,11 +213,12 @@ RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
     done
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
-    if [ -f /run/secrets/build_ca_bundle ]; then \
-        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_bundle; \
-    fi && \
     cd /workspace/templates/outputs/web && \
-    bun install --frozen-lockfile && \
+    if [ -f /run/secrets/build_ca_bundle ]; then \
+        bun install --frozen-lockfile --cafile /run/secrets/build_ca_bundle; \
+    else \
+        bun install --frozen-lockfile; \
+    fi && \
     rm -rf node_modules
 USER root
 

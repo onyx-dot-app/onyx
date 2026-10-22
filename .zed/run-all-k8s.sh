@@ -11,7 +11,7 @@ readonly ONYX_ZED_API_PORT=8080
 readonly ONYX_ZED_WEB_PORT=3000
 
 ONYX_ZED_STACK_STARTED=false
-ONYX_ZED_INTERCEPT_CREATED=false
+ONYX_ZED_INTERCEPT_FILE=""
 ONYX_ZED_CLEANING_UP=false
 ONYX_ZED_PROCESS_TREE_PIDS=()
 
@@ -182,8 +182,11 @@ cleanup() {
   if [[ "$ONYX_ZED_STACK_STARTED" == true ]]; then
     stop_managed_stack || true
   fi
-  if [[ "$ONYX_ZED_INTERCEPT_CREATED" == true ]]; then
-    run_bounded 10 telepresence leave onyx-api-server || true
+  if [[ -n "$ONYX_ZED_INTERCEPT_FILE" ]]; then
+    if [[ -s "$ONYX_ZED_INTERCEPT_FILE" ]]; then
+      run_bounded 10 telepresence leave "$(cat "$ONYX_ZED_INTERCEPT_FILE")" || true
+    fi
+    rm -f "$ONYX_ZED_INTERCEPT_FILE"
   fi
 }
 
@@ -223,13 +226,14 @@ mkdir -p "${ONYX_ZED_ROOT}/.zed/logs"
 stop_managed_stack
 assert_port_available "$ONYX_ZED_WEB_PORT" "Onyx web server"
 
-echo "==> preparing the API intercept (with stale-agent recovery)"
-make -C "$ONYX_ZED_ROOT" craft-intercept CLUSTER_NAME=onyx-dev NAMESPACE=onyx
-ONYX_ZED_INTERCEPT_CREATED=true
-
+ONYX_ZED_INTERCEPT_FILE="$(mktemp)"
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+echo "==> preparing the API intercept (with stale-agent recovery)"
+make -C "$ONYX_ZED_ROOT" craft-intercept CLUSTER_NAME=onyx-dev NAMESPACE=onyx \
+  INTERCEPT_ARGS="--ownership-file '$ONYX_ZED_INTERCEPT_FILE'"
 
 process_compose_args=(
   --port "$ONYX_ZED_CONTROL_PORT"

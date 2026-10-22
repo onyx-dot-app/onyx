@@ -748,7 +748,8 @@ def main() -> int:
     commands.add_parser("disk")
     commands.add_parser("doctor")
     commands.add_parser("connect")
-    commands.add_parser("intercept")
+    intercept = commands.add_parser("intercept")
+    intercept.add_argument("--ownership-file", type=Path)
     ready = commands.add_parser("ready")
     ready.add_argument(
         "--stage", choices=("infrastructure", "application"), default="application"
@@ -775,7 +776,7 @@ def main() -> int:
         if args.command == "connect":
             cluster_runtime(args).connect()
         elif args.command == "intercept":
-            cluster_runtime(args).intercept()
+            cluster_runtime(args).intercept(args.ownership_file)
         elif args.command == "ready":
             readiness(args)
         elif args.command == "disk":
