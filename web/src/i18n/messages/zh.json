@@ -1273,9 +1273,6 @@
       },
       "loadFailed": "无法加载决策模型。",
       "retry": "重试",
-      "saveFailed": "无法保存连接。",
-      "cancel": "取消",
-      "save": "保存",
       "zoom": {
         "title": "连接 Zoom AI Services",
         "description": "Zoom Scribe 和 Zoom AI Decisions 共用一个连接。更改会同时应用于两者。",

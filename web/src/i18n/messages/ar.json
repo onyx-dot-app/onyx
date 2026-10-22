@@ -1273,9 +1273,6 @@
       },
       "loadFailed": "تعذر تحميل نماذج القرار.",
       "retry": "إعادة المحاولة",
-      "saveFailed": "تعذر حفظ الاتصال.",
-      "cancel": "إلغاء",
-      "save": "حفظ",
       "zoom": {
         "title": "ربط خدمات Zoom AI",
         "description": "استخدم اتصالاً واحداً لـ Zoom Scribe وZoom AI Decisions. تسري التغييرات على كليهما.",

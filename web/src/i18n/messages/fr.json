@@ -1273,9 +1273,6 @@
       },
       "loadFailed": "Impossible de charger les modèles de décision.",
       "retry": "Réessayer",
-      "saveFailed": "Impossible d’enregistrer la connexion.",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
       "zoom": {
         "title": "Connecter Zoom AI Services",
         "description": "Utilisez une connexion pour Zoom Scribe et Zoom AI Decisions. Les modifications s’appliquent aux deux.",

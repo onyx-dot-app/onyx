@@ -1273,9 +1273,6 @@
       },
       "loadFailed": "判断モデルを読み込めませんでした。",
       "retry": "再試行",
-      "saveFailed": "接続を保存できませんでした。",
-      "cancel": "キャンセル",
-      "save": "保存",
       "zoom": {
         "title": "Zoom AI Services に接続",
         "description": "Zoom Scribe と Zoom AI Decisions に同じ接続を使用します。変更は両方に適用されます。",
