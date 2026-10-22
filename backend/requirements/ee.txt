@@ -181,6 +181,8 @@ packaging==24.2
     # via huggingface-hub
 parameterized==0.9.0
     # via cohere
+pillow==13.0.0
+    # via onyx
 posthog==3.7.4
 prometheus-client==0.23.1
     # via

@@ -5,7 +5,7 @@ A containerized development environment for working on Onyx.
 ## What's included
 
 - Ubuntu 26.04 base image
-- Node.js 20, uv, Claude Code
+- Node.js 22.23.4, uv, Claude Code
 - Docker CLI, GitHub CLI (`gh`)
 - Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
 - Zsh as default shell (sources host `~/.zshrc` if available)

@@ -280,8 +280,10 @@ pathspec==0.12.1
     #   hatchling
 pexpect==4.9.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'
     # via ipython
-pillow==12.1.1
-    # via matplotlib
+pillow==13.0.0
+    # via
+    #   matplotlib
+    #   onyx
 platformdirs==4.5.0
     # via
     #   black
