@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "إضافة موفر"
+        },
+        "globalDefault": {
+          "description": "نموذج كل محادثة"
         }
       },
       "advanced": {

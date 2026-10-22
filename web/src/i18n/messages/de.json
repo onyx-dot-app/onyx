@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "Anbieter hinzufügen"
+        },
+        "globalDefault": {
+          "description": "Modell des jeweiligen Chats"
         }
       },
       "advanced": {

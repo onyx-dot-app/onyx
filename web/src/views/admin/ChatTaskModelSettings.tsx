@@ -6,10 +6,7 @@ import { Button, OnyxLoader, Text } from "@opal/components";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
-import {
-  filterModelConfigurations,
-  findDefaultModelDisplayName,
-} from "@/lib/languageModels/options";
+import { filterModelConfigurations } from "@/lib/languageModels/options";
 import { findProviderOwningModelConfig } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import type { DefaultModel } from "@/lib/languageModels/types";
@@ -56,7 +53,6 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
   const [isPending, setIsPending] = useState(false);
   const {
     llmProviders,
-    defaultText,
     defaultChatNaming,
     defaultSearchSelection,
     modelPaging,
@@ -122,7 +118,9 @@ function TaskModelSetting({ task }: TaskModelSettingProps) {
       <SimpleModelSelector
         nullable
         globalDefault={{
-          description: findDefaultModelDisplayName(llmProviders, defaultText),
+          // Unset, a task runs on each chat's own model, not the workspace
+          // default, so no single model is named.
+          description: t("taskModels.globalDefault.description"),
         }}
         providers={filterModelConfigurations(llmProviders, {
           keep: modelConfigId,

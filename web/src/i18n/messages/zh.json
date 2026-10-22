@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "添加提供商"
+        },
+        "globalDefault": {
+          "description": "每个聊天的模型"
         }
       },
       "advanced": {

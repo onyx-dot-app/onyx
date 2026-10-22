@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "제공자 추가"
+        },
+        "globalDefault": {
+          "description": "각 채팅의 모델"
         }
       },
       "advanced": {

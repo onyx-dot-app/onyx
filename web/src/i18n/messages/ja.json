@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "プロバイダーを追加"
+        },
+        "globalDefault": {
+          "description": "各チャットのモデル"
         }
       },
       "advanced": {

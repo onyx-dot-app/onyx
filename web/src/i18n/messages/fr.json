@@ -2238,6 +2238,9 @@
         },
         "addProvider": {
           "label": "Ajouter un fournisseur"
+        },
+        "globalDefault": {
+          "description": "Le modèle de chaque chat"
         }
       },
       "advanced": {
