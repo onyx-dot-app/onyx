@@ -265,6 +265,10 @@ on the pair, so Salesforce gets none), hidden while the pair is paused or deleti
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
 
+Both element writers skip a document or hierarchy node that is linked only to
+other cc_pairs. A document with no row yet becomes a placeholder linked to the
+syncing cc_pair.
+
 Most doc-sync implementations funnel through
 `ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
 

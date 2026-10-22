@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.db.document import document_linked_to_cc_pair_clause
 from onyx.db.enums import AccessType
 from onyx.db.models import (
     Connector,
@@ -42,15 +43,25 @@ def upsert_document_external_perms(
     doc_id: str,
     external_access: ExternalAccess,
     source_type: DocumentSource,
+    connector_id: int,
+    credential_id: int,
 ) -> bool:
     """
     This sets the permissions for a document in postgres. Returns True if the
     a new document was created, False otherwise.
     NOTE: this will replace any existing external access, it will not do a union
+    An existing document is only updated when it is linked to the syncing
+    cc_pair or to no cc_pair at all.
     """
-    document = db_session.scalar(
-        select(DbDocument).where(DbDocument.id == doc_id).with_for_update()
-    )
+    row = db_session.execute(
+        select(
+            DbDocument,
+            document_linked_to_cc_pair_clause(connector_id, credential_id),
+            exists().where(DocumentByConnectorCredentialPair.id == DbDocument.id),
+        )
+        .where(DbDocument.id == doc_id)
+        .with_for_update(of=DbDocument)
+    ).one_or_none()
 
     prefixed_external_groups: set[str] = {
         build_ext_group_name_for_onyx(
@@ -60,7 +71,7 @@ def upsert_document_external_perms(
         for group_id in external_access.external_user_group_ids
     }
 
-    if not document:
+    if row is None:
         # If the document does not exist, still store the external access
         # So that if the document is added later, the external access is already stored
         # The upsert function in the indexing pipeline does not overwrite the permissions fields
@@ -74,6 +85,10 @@ def upsert_document_external_perms(
         db_session.add(document)
         db_session.commit()
         return True
+
+    document, linked_to_syncing_pair, linked_to_any_pair = row
+    if linked_to_any_pair and not linked_to_syncing_pair:
+        return False
 
     if (
         source_type == DocumentSource.SHAREPOINT
