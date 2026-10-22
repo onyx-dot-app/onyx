@@ -78,8 +78,8 @@ jobs:
       # run still waiting in the queue stands for all of them: it scans after
       # this failure. A run already in progress has scanned, so a new one is
       # queued behind it.
-      # CVE Alerts' own fix PRs fail on the other open criticals, and a
-      # dispatch from them re-pushes their branches, which loops.
+      # CVE Alerts' own fix PRs still fail on the other open criticals, and
+      # the main run they dispatch force-pushes them again, which loops.
       - name: Dispatch CVE Alerts on main
         if: failure() && steps.gate.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.head_ref, 'cve-alerts/')
         env:
