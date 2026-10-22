@@ -27,9 +27,10 @@ function fileKey(file: File): string {
 
 /**
  * An upload control for many files: each file is a removable tag inside the
- * input chrome, as on `InputMultiSelect`. A click on the field (or Enter or
- * Space) opens the file picker, and files can be dropped on it; each pick or
- * drop adds files, skipping ones it already holds. Backspace arms the last
+ * input chrome, as on `InputMultiSelect`. A click focuses the field, so
+ * copied files can be pasted; a double click (or Enter or Space) opens the
+ * file picker, and files can be dropped on it. Each pick, paste or drop adds
+ * files, skipping ones it already holds. Backspace arms the last
  * tag and Backspace or Delete removes an armed one; the clear button removes
  * them all. The drop states and copy follow `InputSingleUpload`'s.
  *
@@ -66,9 +67,6 @@ export default function InputMultiUpload({
     useUploadTarget({
       multiple: true,
       disabled: isNonEditable,
-      // The trigger is not a labelable element; a field label opens the
-      // picker through the file input instead.
-      inputId: id,
       name,
       accept,
       maxSizeKb,
@@ -115,6 +113,17 @@ export default function InputMultiUpload({
       }}
     >
       {fileInput}
+      {/* A field label points here, not at the file input: a click on the
+      label focuses the field, and never opens the picker. */}
+      <button
+        id={id}
+        type="button"
+        tabIndex={-1}
+        aria-hidden
+        className="hidden"
+        disabled={isNonEditable}
+        onClick={() => triggerRef.current?.focus()}
+      />
       <TagField
         tags={tags}
         onRemoveTag={(tagId) =>
@@ -133,7 +142,9 @@ export default function InputMultiUpload({
         }
         readOnly
         triggerRef={triggerRef}
-        onInputClick={openFilePicker}
+        // A click focuses the field, so a copied file can be pasted; a
+        // double click opens the picker.
+        onInputDoubleClick={openFilePicker}
         // Enter and Space open the picker, as on a button.
         onInputKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;

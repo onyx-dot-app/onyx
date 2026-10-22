@@ -3,8 +3,9 @@
 **Import:** `import { InputSingleUpload, type InputSingleUploadProps } from "@opal/components";`
 **Formik:** `import { InputSingleUploadField } from "@opal/form";`
 
-An upload control in the input chrome, for one file in a form row. Nothing is typed: a click, Enter
-or Space opens the file picker, and a file can be dropped on it. With a value, Delete or Backspace
+An upload control in the input chrome, for one file in a form row. Nothing is typed: a click focuses
+it, so a copied file can be pasted; a double click, Enter or Space opens the file picker; and a file
+can be dropped on it. With a value, Delete or Backspace
 clears it, as the × does; clearing with the × returns focus to the control. It leads with an import icon, shows
 the placeholder until a file is in, then the file's name, with a × at the end that clears it.
 
@@ -13,9 +14,9 @@ shows itself as a drop target: a dashed `action-selection-05` border, `action-se
 blue icon and text. Over the control itself the fill deepens to `action-selection-02`. The × hides
 during a drag. The copy says what a drop does:
 
-| Drag            | Empty                   | Holding a file              |
-| --------------- | ----------------------- | --------------------------- |
-| Over the page   | "Drop file here to add" | the file's name             |
+| Drag             | Empty                   | Holding a file              |
+| ---------------- | ----------------------- | --------------------------- |
+| Over the page    | "Drop file here to add" | the file's name             |
 | Over the control | "Drop file here to add" | "Drop here to replace file" |
 
 A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picked one is.
@@ -30,19 +31,19 @@ A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picke
 
 ## Props
 
-| Prop                 | Mode | Type                            | Description                                                                 |
-| -------------------- | ---- | ------------------------------- | --------------------------------------------------------------------------- |
-| `mode`               | both | `"text" \| "file"`              | Default `"text"`                                                            |
-| `value`              | text | `string`                        | The value, when the caller owns it. Set from outside, it shows "File attached" |
-| `setValue`           | text | `(value: string) => void`       | Receives the file's text or the pasted text; `""` once cleared              |
-| `value`              | file | `File \| null`                  | The file, when the caller owns it                                           |
-| `onFileChange`       | file | `(file: File \| null) => void`  | Receives the file, or `null` once cleared                                   |
-| `variant`            | both | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"` (no picking, dropping or pasting), `"readOnly"` |
-| `placeholder`        | both | `string \| RichStr`              | Shown while empty. Default: "Add a file…"                                  |
-| `accept`             | both | `string`                        | The picker's filter, as the HTML `accept` attribute; a drop must match it   |
-| `maxSizeKb`          | both | `number`                        | Rejects a file larger than this                                             |
-| `onFileSizeExceeded` | both | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                 |
-| `id`, `name`, `onBlur`, `data-testid` | both | —              | Passed to the control (`name` to the hidden file input)                     |
+| Prop                                  | Mode | Type                            | Description                                                                                    |
+| ------------------------------------- | ---- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `mode`                                | both | `"text" \| "file"`              | Default `"text"`                                                                               |
+| `value`                               | text | `string`                        | The value, when the caller owns it. Set from outside, it shows "File attached"                 |
+| `setValue`                            | text | `(value: string) => void`       | Receives the file's text or the pasted text; `""` once cleared                                 |
+| `value`                               | file | `File \| null`                  | The file, when the caller owns it                                                              |
+| `onFileChange`                        | file | `(file: File \| null) => void`  | Receives the file, or `null` once cleared                                                      |
+| `variant`                             | both | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"` (no picking, dropping or pasting), `"readOnly"` |
+| `placeholder`                         | both | `string \| RichStr`             | Shown while empty. Default: "Add a file…"                                                      |
+| `accept`                              | both | `string`                        | The picker's filter, as the HTML `accept` attribute; a drop must match it                      |
+| `maxSizeKb`                           | both | `number`                        | Rejects a file larger than this                                                                |
+| `onFileSizeExceeded`                  | both | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                                    |
+| `id`, `name`, `onBlur`, `data-testid` | both | —                               | Passed to the control (`name` to the hidden file input)                                        |
 
 Without `value`, the control keeps its own. `InputSingleUploadField` binds it to Formik: a `string` field in
 text mode, a `File | null` field in file mode. An upload, paste or clear marks the field touched; a

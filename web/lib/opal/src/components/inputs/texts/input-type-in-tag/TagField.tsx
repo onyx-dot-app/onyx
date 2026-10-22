@@ -99,6 +99,9 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputClick?: () => void;
 
+  /** A double click anywhere on the field but its buttons. */
+  onInputDoubleClick?: () => void;
+
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
@@ -147,6 +150,7 @@ function TagField({
   onEnter,
   onInputFocus,
   onInputClick,
+  onInputDoubleClick,
   inputAriaProps,
   children,
   readOnly = false,
@@ -307,6 +311,12 @@ function TagField({
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
+      // Anywhere on the field but its buttons (a tag's ×, the clear button).
+      onDoubleClick={(event) => {
+        if (disabled || !onInputDoubleClick) return;
+        if ((event.target as Element).closest("button")) return;
+        onInputDoubleClick();
+      }}
     >
       {Icon && (
         <div className="opal-input-type-in-tag-icon-container">
