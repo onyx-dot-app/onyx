@@ -3612,7 +3612,7 @@
         }
       },
       "content": {
-        "title": "Connector Content",
+        "title": "Index Configurations",
         "description": "Select content to index for this connector."
       },
       "selectInput": {

@@ -3612,7 +3612,7 @@
         }
       },
       "content": {
-        "title": "Konnektor-Inhalte",
+        "title": "Indexkonfigurationen",
         "description": "Wählen Sie die Inhalte aus, die für diesen Konnektor indexiert werden sollen."
       },
       "selectInput": {

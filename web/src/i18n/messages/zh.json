@@ -3612,7 +3612,7 @@
         }
       },
       "content": {
-        "title": "连接器内容",
+        "title": "索引配置",
         "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {

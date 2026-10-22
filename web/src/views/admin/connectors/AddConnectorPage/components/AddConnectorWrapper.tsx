@@ -762,6 +762,16 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 : createReady
                   ? undefined
                   : checksT("lockReason");
+              const hasContentFields: boolean =
+                visibleConnectorFields(
+                  contentConfiguration,
+                  formikProps.values,
+                  formCredential
+                ).length > 0 ||
+                contentConfiguration.subtext !== undefined ||
+                editsFileList;
+              // The file source has no start date.
+              const indexesFromStart: boolean = connector !== "file";
               // Disabled while the credentials load or after they fail, since
               // nothing can be connected then.
               const createDisabled: boolean =
@@ -966,15 +976,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
-                              {/* A source with nothing to configure (Gmail) skips the
-                              section. */}
-                              {(visibleConnectorFields(
-                                contentConfiguration,
-                                formikProps.values,
-                                formCredential
-                              ).length > 0 ||
-                                contentConfiguration.subtext !== undefined ||
-                                editsFileList) && (
+                              {/* A source with no fields (Gmail) shows only the
+                              start date; the file source shows neither. */}
+                              {(hasContentFields || indexesFromStart) && (
                                 <>
                                   <ConnectorContentSection
                                     config={contentConfiguration}
@@ -991,6 +995,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                           }
                                     }
                                     disabled={!formUnlocked}
+                                    hasFields={hasContentFields}
+                                    indexingStart={indexesFromStart}
                                   >
                                     {edit && editsFileList && (
                                       <EditFileLocations
