@@ -616,9 +616,11 @@ document to the wrong person.
    saving attempt failed, only failures followed, the file is younger than
    `NUM_DAYS_TO_KEEP_CHECKPOINTS`, the config hash matches, and no full refresh
    was requested since. It keeps that window, and on success sets
-   `last_time_perm_sync` to the window end and deletes the file. Saving stops
-   after a failed element write, so the resume retries that element. Connector
-   deletion removes the file.
+   `last_time_perm_sync` to the window end and deletes the file. The task
+   writes elements in batches of `PERMISSION_WRITE_BATCH_SIZE`, in parallel,
+   and the checkpointer flushes the pending batch before every save. Saving
+   stops after a failed element write, so the resume retries that element.
+   Connector deletion removes the file.
    The open attempt is also the per-cc_pair lock, for doc sync and group sync.
    The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
    and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`

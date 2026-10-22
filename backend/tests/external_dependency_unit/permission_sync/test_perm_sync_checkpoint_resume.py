@@ -97,9 +97,12 @@ def _run(
         new_permissions: list[ElementExternalAccess], **_: object
     ) -> perm_tasks.PermissionSyncResult:
         # The fake crawl yields only documents
-        failed = cast(DocExternalAccess, new_permissions[0]).doc_id in failing_doc_ids
+        failed = sum(
+            cast(DocExternalAccess, element).doc_id in failing_doc_ids
+            for element in new_permissions
+        )
         return perm_tasks.PermissionSyncResult(
-            num_updated=0 if failed else 1, num_errors=1 if failed else 0
+            num_updated=len(new_permissions) - failed, num_errors=failed
         )
 
     sync_config = SyncConfig(

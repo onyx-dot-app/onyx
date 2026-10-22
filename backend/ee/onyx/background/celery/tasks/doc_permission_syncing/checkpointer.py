@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
@@ -39,10 +40,17 @@ def _checkpoint_pointer(cc_pair_id: int) -> str:
     return f"perm_sync_checkpoint_cc_pair_{cc_pair_id}.json"
 
 
+def _delete_checkpoint_file(pointer: str) -> None:
+    """Never raises: callers have already committed the state that made the
+    checkpoint stale, and the resume check refuses a leftover one anyway."""
+    try:
+        get_default_file_store().delete_file(pointer, error_on_missing=False)
+    except Exception:
+        logger.exception("Could not delete the permission sync checkpoint %s", pointer)
+
+
 def delete_doc_sync_checkpoint(cc_pair_id: int) -> None:
-    get_default_file_store().delete_file(
-        _checkpoint_pointer(cc_pair_id), error_on_missing=False
-    )
+    _delete_checkpoint_file(_checkpoint_pointer(cc_pair_id))
 
 
 def _load_saved_checkpoint(pointer: str) -> _SavedDocSyncCheckpoint | None:
@@ -66,11 +74,18 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
     attempt, which is why only a failed attempt's save may be resumed."""
 
     def __init__(
-        self, cc_pair_id: int, attempt_id: int, connector_config_hash: str | None
+        self,
+        cc_pair_id: int,
+        attempt_id: int,
+        connector_config_hash: str | None,
+        flush_pending_writes: Callable[[], None],
     ) -> None:
+        """``flush_pending_writes`` runs before every save: the task writes
+        elements in batches, and a checkpoint may only cover written ones."""
         self._pointer = _checkpoint_pointer(cc_pair_id)
         self._attempt_id = attempt_id
         self._connector_config_hash = connector_config_hash
+        self._flush_pending_writes = flush_pending_writes
         self._frozen = False
         self._last_save_monotonic = time.monotonic()
         self._resume = self._find_resume(cc_pair_id)
@@ -123,6 +138,11 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
             return
         self._last_save_monotonic = now
 
+        # A failed write in the flush freezes this checkpointer
+        self._flush_pending_writes()
+        if self._frozen:
+            return
+
         check_checkpoint_size(checkpoint)
         saved = _SavedDocSyncCheckpoint(
             attempt_id=self._attempt_id,
@@ -146,12 +166,5 @@ class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
         self._frozen = True
 
     def discard(self) -> None:
-        """Drop the pair's checkpoint once the crawl has finished. Never raises:
-        the attempt already succeeded, and the resume check refuses a leftover
-        checkpoint once a non-failed attempt follows it."""
-        try:
-            get_default_file_store().delete_file(self._pointer, error_on_missing=False)
-        except Exception:
-            logger.exception(
-                "Could not delete the permission sync checkpoint %s", self._pointer
-            )
+        """Drop the pair's checkpoint once the crawl has finished."""
+        _delete_checkpoint_file(self._pointer)

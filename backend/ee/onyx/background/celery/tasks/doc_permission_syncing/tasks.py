@@ -2,7 +2,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import NamedTuple
+from typing import NamedTuple, cast
 from uuid import uuid4
 
 from celery import Celery, Task, shared_task
@@ -105,6 +105,7 @@ from onyx.utils.logger import (
     format_error_for_logging,
     setup_logger,
 )
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -112,6 +113,9 @@ logger = setup_logger()
 DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
 DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
 DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
+# Elements are written in parallel batches. Checkpoints only cover flushed batches.
+PERMISSION_WRITE_BATCH_SIZE = 64
+PERMISSION_WRITE_WORKERS = 8
 
 
 DOC_PERMISSION_SYNC_TASK_ID_PREFIX = "docpermissionsync"
@@ -581,6 +585,29 @@ def connector_permission_sync_generator_task(
         checkpointed_doc_sync_func = (
             sync_config.doc_sync_config.checkpointed_doc_sync_func
         )
+        pending_writes: list[ElementExternalAccess] = []
+
+        def flush_pending_writes() -> None:
+            nonlocal tasks_generated, docs_with_errors
+            if not pending_writes:
+                return
+            result = update_element_permissions_batch(
+                tenant_id=tenant_id,
+                attempt_id=attempt_id,
+                new_permissions=pending_writes,
+                source_string=connector_type,
+                connector_id=connector_id,
+                credential_id=credential_id,
+            )
+            pending_writes.clear()
+            tasks_generated += result.num_updated
+            docs_with_errors += result.num_errors
+            if result.num_errors and checkpointer:
+                checkpointer.freeze()
+            progress.total_docs_synced = tasks_generated
+            progress.docs_with_permission_errors = docs_with_errors
+            progress.last_progress_at = datetime.now(timezone.utc)
+
         if checkpointed_doc_sync_func is not None:
             checkpointer = FileStoreDocSyncCheckpointer(
                 cc_pair_id,
@@ -588,6 +615,7 @@ def connector_permission_sync_generator_task(
                 compute_connector_config_hash(
                     cc_pair.connector.connector_specific_config
                 ),
+                flush_pending_writes,
             )
             document_external_accesses = checkpointed_doc_sync_func(
                 cc_pair,
@@ -606,30 +634,23 @@ def connector_permission_sync_generator_task(
 
         task_logger.info(f"Permission sync crawl starting. cc_pair={cc_pair_id}")
 
-        for doc_external_access in document_external_accesses:
-            stop_reason = callback.stop_reason()
-            if stop_reason is not None:
-                raise RuntimeError(
-                    f"Permission sync stopped: {stop_reason}: "
-                    f"cc_pair={cc_pair_id} "
-                    f"tasks_generated={tasks_generated}"
-                )
+        # A crawl that dies still writes what it yielded, so the failed attempt
+        # reports those documents
+        try:
+            for doc_external_access in document_external_accesses:
+                stop_reason = callback.stop_reason()
+                if stop_reason is not None:
+                    raise RuntimeError(
+                        f"Permission sync stopped: {stop_reason}: "
+                        f"cc_pair={cc_pair_id} "
+                        f"tasks_generated={tasks_generated}"
+                    )
 
-            result = update_element_permissions_batch(
-                tenant_id=tenant_id,
-                attempt_id=attempt_id,
-                new_permissions=[doc_external_access],
-                source_string=connector_type,
-                connector_id=connector_id,
-                credential_id=credential_id,
-            )
-            tasks_generated += result.num_updated
-            docs_with_errors += result.num_errors
-            if result.num_errors and checkpointer:
-                checkpointer.freeze()
-            progress.total_docs_synced = tasks_generated
-            progress.docs_with_permission_errors = docs_with_errors
-            progress.last_progress_at = datetime.now(timezone.utc)
+                pending_writes.append(doc_external_access)
+                if len(pending_writes) >= PERMISSION_WRITE_BATCH_SIZE:
+                    flush_pending_writes()
+        finally:
+            flush_pending_writes()
 
         task_logger.info(
             f"Permission sync crawl finished. "
@@ -707,6 +728,55 @@ class PermissionSyncResult(NamedTuple):
     num_errors: int
 
 
+def _write_element_permissions(
+    tenant_id: str,
+    attempt_id: int,
+    permissions: ElementExternalAccess,
+    source_string: str,
+    connector_id: int,
+    credential_id: int,
+) -> bool:
+    """One element's write within a parallel batch. An ordinary failure is
+    logged and returns False, so the batch continues. A lost attempt raises."""
+    element_id = (
+        permissions.doc_id
+        if isinstance(permissions, DocExternalAccess)
+        else permissions.raw_node_id
+    )
+    if (
+        permissions.external_access.num_entries
+        > permissions.external_access.MAX_NUM_ENTRIES
+    ):
+        task_logger.warning(
+            "Permissions length exceeded, skipping...: "
+            "%s "
+            "num_users=%s num_groups=%s "
+            "permissions.external_access.MAX_NUM_ENTRIES=%s",
+            element_id,
+            len(permissions.external_access.external_user_emails),
+            len(permissions.external_access.external_user_group_ids),
+            permissions.external_access.MAX_NUM_ENTRIES,
+        )
+        return False
+
+    # Written here rather than through a task: permissions can be too large for the wire
+    try:
+        element_update_permissions(
+            tenant_id,
+            attempt_id,
+            permissions,
+            source_string,
+            connector_id,
+            credential_id,
+        )
+    except PermissionSyncAttemptLostError:
+        raise
+    except Exception:
+        task_logger.exception("Failed to update permissions for element %s", element_id)
+        return False
+    return True
+
+
 def update_element_permissions_batch(
     tenant_id: str,
     attempt_id: int,
@@ -715,7 +785,7 @@ def update_element_permissions_batch(
     connector_id: int,
     credential_id: int,
 ) -> PermissionSyncResult:
-    """Update permissions for documents and hierarchy nodes, while
+    """Update permissions for documents and hierarchy nodes in parallel, while
     `attempt_id` is still IN_PROGRESS.
 
     Raises PermissionSyncAttemptLostError when the attempt was closed: a
@@ -724,63 +794,32 @@ def update_element_permissions_batch(
     Returns:
         PermissionSyncResult containing counts of successful updates and errors
     """
-    num_permissions = 0
-    num_errors = 0
-    cumulative_db_update_time = 0.0
-    for permissions in new_permissions:
-        element_id = (
-            permissions.doc_id
-            if isinstance(permissions, DocExternalAccess)
-            else permissions.raw_node_id
-        )
-        if (
-            permissions.external_access.num_entries
-            > permissions.external_access.MAX_NUM_ENTRIES
-        ):
-            num_errors += 1
-            task_logger.warning(
-                "Permissions length exceeded, skipping...: "
-                "%s "
-                "num_users=%s num_groups=%s "
-                "permissions.external_access.MAX_NUM_ENTRIES=%s",
-                element_id,
-                len(permissions.external_access.external_user_emails),
-                len(permissions.external_access.external_user_group_ids),
-                permissions.external_access.MAX_NUM_ENTRIES,
-            )
-            continue
-
-        # NOTE(rkuo): this used to fire a task instead of directly writing to the DB,
-        # but the permissions can be excessively large if sent over the wire.
-        # On the other hand, the downside of doing db updates here is that we can
-        # block and fail if we can't make the calls to the DB ... but that's probably
-        # a rare enough case to be acceptable.
-
-        # This can internally exception due to db issues but still continue
-        # Catch exceptions per-element to avoid breaking the entire sync
-        db_start = time.monotonic()
-        try:
-            element_update_permissions(
-                tenant_id,
-                attempt_id,
-                permissions,
-                source_string,
-                connector_id,
-                credential_id,
-            )
-            num_permissions += 1
-        except PermissionSyncAttemptLostError:
-            raise
-        except Exception:
-            num_errors += 1
-            task_logger.exception(
-                "Failed to update permissions for element %s", element_id
-            )
-        finally:
-            cumulative_db_update_time += time.monotonic() - db_start
-
-    observe_doc_perm_sync_db_update_duration(cumulative_db_update_time, source_string)
-    return PermissionSyncResult(num_updated=num_permissions, num_errors=num_errors)
+    db_start = time.monotonic()
+    outcomes = cast(
+        list[bool],
+        run_functions_tuples_in_parallel(
+            [
+                (
+                    _write_element_permissions,
+                    (
+                        tenant_id,
+                        attempt_id,
+                        permissions,
+                        source_string,
+                        connector_id,
+                        credential_id,
+                    ),
+                )
+                for permissions in new_permissions
+            ],
+            max_workers=PERMISSION_WRITE_WORKERS,
+        ),
+    )
+    observe_doc_perm_sync_db_update_duration(time.monotonic() - db_start, source_string)
+    num_permissions = sum(outcomes)
+    return PermissionSyncResult(
+        num_updated=num_permissions, num_errors=len(outcomes) - num_permissions
+    )
 
 
 # NOTE(rkuo): this should probably move to the db layer

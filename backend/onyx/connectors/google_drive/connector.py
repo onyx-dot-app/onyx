@@ -118,6 +118,8 @@ BATCHES_PER_CHECKPOINT = 1
 # Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
 # (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
 DRIVE_CONVERSION_BATCH_SIZE = 50
+# Per-file Drive calls (download, permissions.list) run this wide per batch
+DRIVE_CONVERSION_WORKERS = 8
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -2072,7 +2074,9 @@ class GoogleDriveConnector(
             ]
             raw_results = cast(
                 list[Document | ConnectorFailure | None],
-                run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+                run_functions_tuples_in_parallel(
+                    func_with_args, max_workers=DRIVE_CONVERSION_WORKERS
+                ),
             )
             results: list[Document | ConnectorFailure] = [
                 r for r in raw_results if r is not None
@@ -2258,7 +2262,9 @@ class GoogleDriveConnector(
         ]
         results = cast(
             list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+            run_functions_tuples_in_parallel(
+                func_with_args, max_workers=DRIVE_CONVERSION_WORKERS
+            ),
         )
         for result in results:
             if result is not None:
@@ -2296,18 +2302,28 @@ class GoogleDriveConnector(
                 permission_sync_context=permission_sync_context,
             )
 
-            # Build slim documents
+            # Build slim documents. With permissions, each may call permissions.list
             slim_batch.extend(
                 doc
-                for file in files_batch
-                if (
-                    doc := build_slim_document(
-                        self.ops,
-                        file.drive_file,
-                        permission_sync_context,
-                        retriever_email=file.user_email,
-                    )
+                for doc in cast(
+                    list[SlimDocument | None],
+                    run_functions_tuples_in_parallel(
+                        [
+                            (
+                                build_slim_document,
+                                (
+                                    self.ops,
+                                    file.drive_file,
+                                    permission_sync_context,
+                                    file.user_email,
+                                ),
+                            )
+                            for file in files_batch
+                        ],
+                        max_workers=DRIVE_CONVERSION_WORKERS,
+                    ),
                 )
+                if doc
             )
 
             # Combine: hierarchy nodes first, then slim docs
