@@ -10264,7 +10264,7 @@
         "copyButton": {
           "label": "复制密码"
         },
-        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。",
+        "description": "这将为 <strong>{email}</strong> 生成一个新的随机密码。该用户当前的密码将立即失效。该用户将退出所有会话，其个人访问 token 将被吊销。",
         "doneButton": {
           "label": "完成"
         },
@@ -15949,6 +15949,7 @@
         "currentPassword": {
           "title": "当前密码"
         },
+        "description": "您的其他会话将退出登录，您的个人访问 token 将被吊销。",
         "newPassword": {
           "title": "新密码"
         },

@@ -10264,7 +10264,7 @@
         "copyButton": {
           "label": "Copiar senha"
         },
-        "description": "Isto vai gerar uma nova senha aleatória para <strong>{email}</strong>. A senha atual vai parar de funcionar imediatamente.",
+        "description": "Isto vai gerar uma nova senha aleatória para <strong>{email}</strong>. A senha atual vai parar de funcionar imediatamente. A pessoa será desconectada de todas as sessões e os tokens de acesso pessoal dela serão revogados.",
         "doneButton": {
           "label": "Concluído"
         },
@@ -15949,6 +15949,7 @@
         "currentPassword": {
           "title": "Senha atual"
         },
+        "description": "Suas outras sessões serão encerradas e seus tokens de acesso pessoal serão revogados.",
         "newPassword": {
           "title": "Nova senha"
         },

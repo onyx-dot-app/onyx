@@ -67,7 +67,12 @@ password change (`POST /password/change-password`) signs out the user's other
 sessions and keeps the current one (`UserManager.revoke_sessions`). Redis keeps
 a per-user set of session tokens for this; Postgres deletes `AccessToken` rows.
 A refresh never extends or replaces a revoked session. JWT sessions stay valid
-until expiry.
+until expiry. Every password reset or change (admin reset, self-service change,
+and the forgot-password token flow) also revokes all of the user's PATs, Craft
+sandbox PATs included, in the same commit as the new password hash
+(`UserManager._update`, `db/pat.py:revoke_all_pats_for_user__no_commit`). A
+running Craft sandbox gets a new PAT at its next reservation
+(`reserve_sandbox__no_commit`). API keys are not affected.
 Native mobile clients get the same session in a header instead of a cookie
 (`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public
