@@ -41,6 +41,7 @@ from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
     get_latest_index_attempts,
     get_open_doc_error_counts_for_index_attempts,
+    get_open_error_counts_for_index_attempts,
     get_queued_index_attempts,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
@@ -308,6 +309,9 @@ def get_indexing_connectors(
     attempt_ids = [latest[cc_pair.id].id for cc_pair in page if cc_pair.id in latest]
     error_counts = get_error_counts_for_index_attempts(db_session, attempt_ids)
     open_counts = get_open_doc_error_counts_for_index_attempts(db_session, attempt_ids)
+    open_error_counts = get_open_error_counts_for_index_attempts(
+        db_session, attempt_ids
+    )
     docs_indexed = _docs_indexed_by_pair(
         db_session, {cc_pair.id: cc_pair for cc_pair in page}
     )
@@ -335,6 +339,9 @@ def get_indexing_connectors(
                     open_doc_error_count=open_counts.get(attempt.id, 0),
                 )
             ),
+            open_error_count=0
+            if attempt is None
+            else open_error_counts.get(attempt.id, 0),
             queue_position=queue_positions.get(cc_pair.id),
             permissions=cc_pair_permissions(
                 can_operate=cc_pair.id in operate_ids,

@@ -540,12 +540,16 @@ def get_connector_credential_pairs_for_user_parallel(
 
 
 def get_connector_credential_pairs(
-    db_session: Session, ids: list[int] | None = None
+    db_session: Session,
+    ids: list[int] | None = None,
+    eager_load_connector: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+    if eager_load_connector:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
 
     return list(db_session.scalars(stmt).all())
 
@@ -758,6 +762,19 @@ def verify_user_can_edit_connector(
         db_session,
         user,
         CCPairAccessLevel.EDIT,
+    )
+
+
+def get_cc_pairs_in_repeated_error_state(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """Every pair flagged in repeated error state, whatever its status."""
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .where(ConnectorCredentialPair.in_repeated_error_state.is_(True))
+            .options(selectinload(ConnectorCredentialPair.connector))
+        ).all()
     )
 
 
