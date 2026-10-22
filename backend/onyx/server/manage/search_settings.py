@@ -858,9 +858,9 @@ def _validate_forward_only_update(
     current: SearchSettings,
     requested: SavedSearchSettings,
 ) -> None:
-    """Rejects anything but the one change PRESENT takes without a re-index: a
-    new Contextual Retrieval model, or Contextual Retrieval turned off with
-    its model left as it is."""
+    """Rejects anything but a Contextual Retrieval change, the only change
+    PRESENT takes without a re-index: on with a model, a new model while on,
+    or off with the model left as it is."""
     if requested.enable_contextual_rag:
         if requested.contextual_rag_model_configuration_id is None:
             raise OnyxError(
@@ -868,6 +868,11 @@ def _validate_forward_only_update(
                 "Select a Contextual Retrieval model.",
             )
         model_configuration_id = requested.contextual_rag_model_configuration_id
+    elif not current.enable_contextual_rag:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval is already off.",
+        )
     else:
         model_configuration_id = current.contextual_rag_model_configuration_id
 
@@ -880,8 +885,8 @@ def _validate_forward_only_update(
     if requested != expected:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Only the Contextual Retrieval model can be changed, or Contextual "
-            "Retrieval turned off, without re-indexing.",
+            "Only Contextual Retrieval and its model can be changed without "
+            "re-indexing.",
         )
 
 
@@ -891,9 +896,10 @@ def update_saved_search_settings(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ContextualRagModelUpdateResponse:
-    """Applies a Contextual Retrieval change to PRESENT without a re-index: a
-    new model, or off. Documents already indexed keep their generated context
-    until they are updated or re-indexed."""
+    """Applies a Contextual Retrieval change to PRESENT without a re-index: on
+    with a model, a new model, or off. Only documents indexed from now on take
+    the change; the rest keep the context they have until they are updated or
+    re-indexed."""
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
         raise OnyxError(
@@ -914,13 +920,6 @@ def update_saved_search_settings(
             "Contextual Retrieval.",
         )
 
-    if not current.enable_contextual_rag:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before it can be changed "
-            "without re-indexing.",
-        )
-
     _validate_forward_only_update(current, search_settings)
     if search_settings.enable_contextual_rag:
         validate_contextual_rag_model(
@@ -935,12 +934,14 @@ def update_saved_search_settings(
             "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
         )
 
+    # Read before the commit expires the row.
+    previous_enable_contextual_rag = current.enable_contextual_rag
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
         search_settings=search_settings,
         db_session=db_session,
-        # The flag is normally fixed for the life of an index. Turning it off
-        # is the one change this endpoint applies to it.
+        # The flag is normally fixed for the life of an index. This endpoint
+        # is the one writer that changes it on PRESENT.
         preserved_fields=[
             field
             for field in PRESERVED_SEARCH_FIELDS
@@ -965,9 +966,10 @@ def update_saved_search_settings(
             "previous_model_configuration_id": previous_model_configuration_id,
             "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
             **(
-                {}
+                {"enable_contextual_rag": search_settings.enable_contextual_rag}
                 if search_settings.enable_contextual_rag
-                else {"enable_contextual_rag": False}
+                != previous_enable_contextual_rag
+                else {}
             ),
         },
     )

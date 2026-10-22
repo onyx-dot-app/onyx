@@ -664,6 +664,8 @@ interface IndexSettingsChanges {
   contextualToggleChanged: boolean;
   /** Contextual Retrieval goes from on to off. */
   contextualDisabled: boolean;
+  /** Contextual Retrieval goes from off to on with a model picked. */
+  contextualEnabled: boolean;
   /** Contextual Retrieval stays on and points at a different model. */
   contextualModelChanged: boolean;
   /** Part of the index mapping, so it always needs a re-index. */
@@ -693,6 +695,10 @@ function classifyChanges(
     values.enable_contextual_rag !== initialValues.enable_contextual_rag;
   const contextualDisabled: boolean =
     initialValues.enable_contextual_rag && !values.enable_contextual_rag;
+  const contextualEnabled: boolean =
+    !initialValues.enable_contextual_rag &&
+    values.enable_contextual_rag &&
+    values.contextual_rag_model_configuration_id !== null;
   const contextualModelChanged =
     values.enable_contextual_rag &&
     initialValues.enable_contextual_rag &&
@@ -705,6 +711,7 @@ function classifyChanges(
     embeddingChanged,
     contextualToggleChanged,
     contextualDisabled,
+    contextualEnabled,
     contextualModelChanged,
     quantizationChanged,
     imageChanged,
@@ -718,21 +725,41 @@ function classifyChanges(
 }
 
 /**
- * Which banner the staged changes get. Contextual Retrieval switched off, or
- * given a different model, can apply forward only. Image processing may skip
- * the re-index. Everything else needs one.
+ * Which banner the staged changes get. Contextual Retrieval switched off or
+ * on, or given a different model, can apply forward only. Image processing
+ * may skip the re-index. Everything else needs one.
  */
-type BannerMode =
-  | "reindex"
+type ContextualForwardMode =
   | "contextualDisableOnly"
-  | "contextualModelOnly"
-  | "imageOnly";
+  | "contextualEnableOnly"
+  | "contextualModelOnly";
+type BannerMode = "reindex" | ContextualForwardMode | "imageOnly";
+
+type ForwardModalKey =
+  | "disableForwardModal"
+  | "enableForwardModal"
+  | "forwardOnlyModal";
+
+/** The confirmation each forward-only mode opens. */
+const FORWARD_MODAL_KEYS: Record<ContextualForwardMode, ForwardModalKey> = {
+  contextualDisableOnly: "disableForwardModal",
+  contextualEnableOnly: "enableForwardModal",
+  contextualModelOnly: "forwardOnlyModal",
+};
+
+function isContextualForwardMode(
+  mode: BannerMode
+): mode is ContextualForwardMode {
+  return mode in FORWARD_MODAL_KEYS;
+}
 
 function bannerModeFor(changes: IndexSettingsChanges): BannerMode {
   if (changes.embeddingChanged || changes.quantizationChanged) {
     return "reindex";
   }
   if (changes.contextualDisabled) return "contextualDisableOnly";
+  if (changes.contextualEnabled) return "contextualEnableOnly";
+  // Switched on with no model yet: the banner asks for one.
   if (changes.contextualToggleChanged) return "reindex";
   if (changes.contextualModelChanged) return "contextualModelOnly";
   if (changes.imageChanged) return "imageOnly";
@@ -756,8 +783,7 @@ function resolveApplyStrategy(
 
 type BannerCopy =
   | "contextualModelMissing"
-  | "contextualDisableOnly"
-  | "contextualModelOnly"
+  | ContextualForwardMode
   | "doNotReindex"
   | "quantizationOnly"
   | "reindex"
@@ -771,9 +797,7 @@ function bannerCopyFor(
   quantizationOnly: boolean
 ): BannerCopy {
   if (contextualRagModelMissing) return "contextualModelMissing";
-  if (mode === "contextualDisableOnly" || mode === "contextualModelOnly") {
-    return mode;
-  }
+  if (isContextualForwardMode(mode)) return mode;
   // A quantization-only change copies the stored vectors instead of
   // re-embedding, so it gets its own, faster wording.
   if (strategyCopy === "reindex" && quantizationOnly) {
@@ -1076,19 +1100,25 @@ export default function IndexSettingsPage() {
       const modelConfigurationId = values.contextual_rag_model_configuration_id;
       if (!searchSettings) return false;
       if (!disabling && modelConfigurationId === null) return false;
+      const enabling: boolean =
+        !disabling && !searchSettings.enable_contextual_rag;
       // Image settings first: a failed save aborts before anything else moves.
       const image = await persistImageProcessing(values);
       if (image === "failed") return false;
 
       const failedToast = disabling
         ? t("toasts.contextualRetrievalDisableFailed")
-        : t("toasts.contextualModelUpdateFailed");
+        : enabling
+          ? t("toasts.contextualRetrievalEnableFailed")
+          : t("toasts.contextualModelUpdateFailed");
       try {
+        // Off keeps the stored model so turning it back on can reuse it.
         const response = await updateInferenceSettings(
           disabling
             ? { ...searchSettings, enable_contextual_rag: false }
             : {
                 ...searchSettings,
+                enable_contextual_rag: true,
                 contextual_rag_model_configuration_id: modelConfigurationId,
               }
         );
@@ -1103,7 +1133,9 @@ export default function IndexSettingsPage() {
         toast.success(
           disabling
             ? t("toasts.contextualRetrievalDisabled")
-            : t("toasts.contextualModelUpdated")
+            : enabling
+              ? t("toasts.contextualRetrievalEnabled")
+              : t("toasts.contextualModelUpdated")
         );
         return true;
       } catch (error) {
@@ -1328,12 +1360,9 @@ export default function IndexSettingsPage() {
               // A change undone by hand leaves Formik dirty but stages nothing.
               const hasChanges = dirty && changes.any;
               const bannerMode = bannerModeFor(changes);
-              const contextualDisableOnlyChange =
-                bannerMode === "contextualDisableOnly";
-              // Both offer the forward-only apply beside the rebuild.
+              // Forward-only modes offer the in-place apply beside the rebuild.
               const contextualForwardChange =
-                contextualDisableOnlyChange ||
-                bannerMode === "contextualModelOnly";
+                isContextualForwardMode(bannerMode);
               const imageOnlyChange = bannerMode === "imageOnly";
               const effectiveStrategy = resolveApplyStrategy(
                 applyStrategy,
@@ -1375,8 +1404,8 @@ export default function IndexSettingsPage() {
                       model: stagedModelName,
                     })
                   : t(`changesBanner.${bannerCopy}.title`);
-              const forwardModalKey = contextualDisableOnlyChange
-                ? "disableForwardModal"
+              const forwardModalKey = isContextualForwardMode(bannerMode)
+                ? FORWARD_MODAL_KEYS[bannerMode]
                 : "forwardOnlyModal";
               // The banner is reserved for indexing prompts: staged changes
               // and the contextual model a re-index needs. A captioning
