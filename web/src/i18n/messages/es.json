@@ -10264,7 +10264,7 @@
         "copyButton": {
           "label": "Copiar contraseña"
         },
-        "description": "Esto generará una nueva contraseña aleatoria para <strong>{email}</strong>. Su contraseña actual dejará de funcionar de inmediato.",
+        "description": "Esto generará una nueva contraseña aleatoria para <strong>{email}</strong>. Su contraseña actual dejará de funcionar de inmediato. Se cerrarán todas sus sesiones y se revocarán sus tokens de acceso personal.",
         "doneButton": {
           "label": "Listo"
         },
@@ -15946,6 +15946,7 @@
         "currentPassword": {
           "title": "Contraseña actual"
         },
+        "description": "Se cerrarán tus otras sesiones y se revocarán tus tokens de acceso personal.",
         "newPassword": {
           "title": "Nueva contraseña"
         },

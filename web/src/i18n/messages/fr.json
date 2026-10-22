@@ -10264,7 +10264,7 @@
         "copyButton": {
           "label": "Copier le mot de passe"
         },
-        "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement.",
+        "description": "Cette action générera un nouveau mot de passe aléatoire pour <strong>{email}</strong>. Son mot de passe actuel cessera de fonctionner immédiatement. Toutes ses sessions seront déconnectées et ses jetons d'accès personnels seront révoqués.",
         "doneButton": {
           "label": "Terminé"
         },
@@ -15946,6 +15946,7 @@
         "currentPassword": {
           "title": "Mot de passe actuel"
         },
+        "description": "Vos autres sessions seront déconnectées et vos jetons d'accès personnels seront révoqués.",
         "newPassword": {
           "title": "Nouveau mot de passe"
         },
