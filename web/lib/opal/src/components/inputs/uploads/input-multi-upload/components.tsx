@@ -70,28 +70,28 @@ export default function InputMultiUpload({
     pasteFiles,
     pickerOpenRef,
   } = useUploadTarget({
-      multiple: true,
-      disabled: isNonEditable,
-      // The trigger is not a labelable element; a field label opens the
-      // picker through the file input instead.
-      inputId: id,
-      name,
-      accept,
-      maxSizeKb,
-      onFileSizeExceeded,
-      onFiles: (added) => {
-        // Also skips a repeat within one pick or drop.
-        const held = new Set(files.map(fileKey));
-        const unique = added.filter((file) => {
-          const key = fileKey(file);
-          if (held.has(key)) return false;
-          held.add(key);
-          return true;
-        });
-        report([...files, ...unique]);
-      },
-      focusTarget: () => triggerRef.current?.focus(),
-    });
+    multiple: true,
+    disabled: isNonEditable,
+    // The trigger is not a labelable element; a field label opens the
+    // picker through the file input instead.
+    inputId: id,
+    name,
+    accept,
+    maxSizeKb,
+    onFileSizeExceeded,
+    onFiles: (added) => {
+      // Also skips a repeat within one pick or drop.
+      const held = new Set(files.map(fileKey));
+      const unique = added.filter((file) => {
+        const key = fileKey(file);
+        if (held.has(key)) return false;
+        held.add(key);
+        return true;
+      });
+      report([...files, ...unique]);
+    },
+    focusTarget: () => triggerRef.current?.focus(),
+  });
 
   // Over the page the tags stay; over the control, or with none, the field
   // says what a drop does.

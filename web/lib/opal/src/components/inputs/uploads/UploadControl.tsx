@@ -88,15 +88,15 @@ export default function UploadControl({
     pasteFiles,
     pickerOpenRef,
   } = useUploadTarget({
-      multiple: false,
-      disabled: isNonEditable,
-      name,
-      accept,
-      maxSizeKb,
-      onFileSizeExceeded,
-      onFiles,
-      focusTarget: () => triggerRef.current?.focus(),
-    });
+    multiple: false,
+    disabled: isNonEditable,
+    name,
+    accept,
+    maxSizeKb,
+    onFileSizeExceeded,
+    onFiles,
+    focusTarget: () => triggerRef.current?.focus(),
+  });
 
   // Over the page, a held value keeps its label; over the control, the copy
   // says what a drop does to it.
