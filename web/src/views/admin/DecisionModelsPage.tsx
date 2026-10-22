@@ -67,7 +67,6 @@ function DecisionProviderCard({
       await deleteLlmProvider(provider.id);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success(tLlm("toasts.providerDeleted"));
     } catch (error) {
       toast.error(
         tLlm("toasts.providerDeleteFailed", {
