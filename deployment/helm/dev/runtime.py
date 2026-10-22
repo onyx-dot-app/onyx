@@ -355,12 +355,24 @@ class Cluster:
             )
         )
         # Telepresence's InterceptDispositionType.ACTIVE is protobuf enum value 1.
-        return any(
-            info.get("disposition") == 1 and info.get("spec", {}).get("name") == name
-            for workload in workloads
-            if workload.get("name") == name
-            for info in workload.get("intercept_info", [])
-        )
+        for workload in workloads:
+            if workload.get("name") != name:
+                continue
+            for info in workload.get("intercept_info", []):
+                spec = info.get("spec", {})
+                if spec.get("name") != name or info.get("disposition") != 1:
+                    continue
+                if (
+                    spec.get("target_host") not in ("127.0.0.1", "localhost", "::1")
+                    or spec.get("target_port") != 8080
+                    or spec.get("container_port") != 8080
+                ):
+                    raise ValueError(
+                        f"API intercept {name} must forward to localhost:8080 from container port 8080; "
+                        f"leave the incompatible intercept with 'telepresence leave {name}' first"
+                    )
+                return True
+        return False
 
     def application_ready(self, frontend_url: str, timeout: float = 180) -> None:
         name = self.api_workload()["metadata"]["name"]
@@ -370,11 +382,12 @@ class Cluster:
             )
         application_ready(frontend_url, timeout)
 
-    def intercept(self) -> None:
+    def intercept(self, ownership_file: Path | None = None) -> None:
         """Reuse or create the API intercept, recovering a known stale agent once."""
         self.connect()
         name = self.api_workload()["metadata"]["name"]
-        if self.intercept_active(name):
+        reused = self.intercept_active(name)
+        if reused:
             print(f"Reusing API intercept {name}", flush=True)
         else:
             try:
@@ -431,14 +444,31 @@ class Cluster:
                     capture=False,
                     timeout=150,
                 )
-        self.kube(
-            "rollout",
-            "status",
-            f"deployment/{name}",
-            "--timeout=120s",
-            "--request-timeout=130s",
-            timeout=135,
-        )
+        try:
+            if not reused and ownership_file is not None:
+                ownership_file.write_text(name + "\n")
+            self.kube(
+                "rollout",
+                "status",
+                f"deployment/{name}",
+                "--timeout=120s",
+                "--request-timeout=130s",
+                timeout=135,
+            )
+        except BaseException:
+            if not reused:
+                try:
+                    self.command(
+                        "telepresence", "leave", name, capture=False, timeout=10
+                    )
+                    if ownership_file is not None:
+                        ownership_file.write_text("")
+                except (OSError, subprocess.SubprocessError):
+                    print(
+                        f"Could not release API intercept {name}; leave it manually",
+                        file=sys.stderr,
+                    )
+            raise
         print(
             "API intercept ready. Start the local API, then run make craft-ready after starting the frontend.",
             flush=True,

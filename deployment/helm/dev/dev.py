@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 from runtime import Cluster
 
@@ -31,7 +31,7 @@ IMAGES = {
 
 
 class ImageConfig(TypedDict):
-    Labels: dict[str, str] | None
+    Labels: NotRequired[dict[str, str] | None]
 
 
 class ImageInfo(TypedDict):
@@ -132,7 +132,7 @@ def inspect_image(image: str) -> ImageInfo | None:
 
 def labels(info: ImageInfo) -> dict[str, str]:
     """Read image labels, including images with no labels."""
-    return info["Config"]["Labels"] or {}
+    return info["Config"].get("Labels") or {}
 
 
 def images(args: argparse.Namespace) -> int:
@@ -154,9 +154,14 @@ def images(args: argparse.Namespace) -> int:
         if args.reuse and info is None:
             raise ValueError(f"{image} is missing; omit --reuse to build it")
         if args.force or (info is None or (not args.reuse and not matches)):
+            build_options: list[str] = []
+            if ca_bundle := os.environ.get("CRAFT_BUILD_CA_BUNDLE"):
+                bundle_path = Path(ca_bundle).expanduser().resolve(strict=True)
+                build_options = ["--secret", f"id=build_ca_bundle,src={bundle_path}"]
             run(
                 "docker",
                 "build",
+                *build_options,
                 "--label",
                 f"{LABEL}=true",
                 "--label",
@@ -743,7 +748,8 @@ def main() -> int:
     commands.add_parser("disk")
     commands.add_parser("doctor")
     commands.add_parser("connect")
-    commands.add_parser("intercept")
+    intercept = commands.add_parser("intercept")
+    intercept.add_argument("--ownership-file", type=Path)
     ready = commands.add_parser("ready")
     ready.add_argument(
         "--stage", choices=("infrastructure", "application"), default="application"
@@ -770,7 +776,7 @@ def main() -> int:
         if args.command == "connect":
             cluster_runtime(args).connect()
         elif args.command == "intercept":
-            cluster_runtime(args).intercept()
+            cluster_runtime(args).intercept(args.ownership_file)
         elif args.command == "ready":
             readiness(args)
         elif args.command == "disk":
