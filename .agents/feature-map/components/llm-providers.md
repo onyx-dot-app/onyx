@@ -217,6 +217,21 @@ designation and endpoints have been removed.
 
 ## 4. How it works
 
+### Shared messages and execution records
+
+`backend/onyx/llm/models.py:MessageRole` gives shared messages enum-based roles.
+System, user, assistant, and tool-result messages accept and serialize the existing role strings.
+Provider request conversion keeps its existing wire format.
+
+`backend/onyx/agents/execution_records.py` defines run outcomes, operation outcomes,
+structured failures, and compaction checkpoints for the shared runtime.
+Its `messages_for_model` function creates model context from recorded messages.
+It retains partial text and thinking, but omits tool calls without adjacent results.
+It also removes orphaned or duplicate tool results and copies messages by default.
+This helper prepares history without deleting the recorded output.
+Production chat does not call this module yet.
+
+
 ### 4.1 Resolving which model answers a turn: `get_llm_for_persona`
 
 `factory.py:get_llm_for_persona(persona, user, llm_override, additional_headers, policy_fn)`

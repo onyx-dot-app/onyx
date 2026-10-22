@@ -202,8 +202,16 @@ class BaseMessage(BaseModel):
     cacheable: bool = Field(default=False, exclude=True)
 
 
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_RESULT = "tool_result"
+    TOOL = "tool"
+
+
 class SystemMessage(BaseMessage):
-    role: Literal["system"] = "system"
+    role: Literal[MessageRole.SYSTEM] = MessageRole.SYSTEM
     content: str
 
     @property
@@ -212,7 +220,7 @@ class SystemMessage(BaseMessage):
 
 
 class UserMessage(BaseMessage):
-    role: Literal["user"] = "user"
+    role: Literal[MessageRole.USER] = MessageRole.USER
     content: str | list[ContentPart]
 
     @property
@@ -221,7 +229,7 @@ class UserMessage(BaseMessage):
 
 
 class AssistantMessage(BaseMessage):
-    role: Literal["assistant"] = "assistant"
+    role: Literal[MessageRole.ASSISTANT] = MessageRole.ASSISTANT
     content: list[AssistantContent] = Field(default_factory=list)
     stop_reason: str | None = None
     error_message: str | None = None
@@ -265,7 +273,7 @@ class ToolResult(BaseMessage):
 
 
 class ToolResultMessage(ToolResult):
-    role: Literal["tool_result"] = "tool_result"
+    role: Literal[MessageRole.TOOL_RESULT] = MessageRole.TOOL_RESULT
     tool_call_id: str
     tool_name: str
 
