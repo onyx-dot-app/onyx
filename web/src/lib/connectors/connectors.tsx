@@ -229,7 +229,10 @@ export function translateConfiguration(
         name: translate(option.name),
       }));
     }
-    if (out.type === "text" && out.placeholder !== undefined) {
+    if (
+      (out.type === "text" || out.type === "list") &&
+      out.placeholder !== undefined
+    ) {
       out.placeholder = translate(out.placeholder);
     }
     if (out.type === "string_pair_list") {
@@ -468,8 +471,8 @@ export const connectorConfigs: Record<
                 label: "connectors.github.fields.repositories.label",
                 name: "repositories",
                 optional: false,
-                description:
-                  "connectors.github.fields.repositories.description",
+                placeholder:
+                  "connectors.github.fields.repositories.placeholder",
                 // The config takes one comma-separated string.
                 transform: (names: string[]) => names.join(","),
               },

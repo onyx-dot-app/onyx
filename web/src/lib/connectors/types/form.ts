@@ -53,6 +53,8 @@ export interface ListOption extends Option {
   /** Runs on the entries before they are sent, e.g. to join them into the
    * one string the config stores. */
   transform?: (values: string[]) => string[] | string;
+  /** Example entry shown in each empty input. */
+  placeholder?: string;
   /** Discovery finding whose options the field offers: stores the value, shows the label. Typed entries stay allowed. */
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */

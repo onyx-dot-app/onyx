@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "Repository Names",
-              "description": "Enter each name without the owner, e.g. onyx."
+              "placeholder": "Repository Name..."
             },
             "everything": {
               "label": "Onyx will index all repositories"

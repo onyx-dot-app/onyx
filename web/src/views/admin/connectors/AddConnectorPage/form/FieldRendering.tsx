@@ -385,9 +385,10 @@ export const RenderField: FC<RenderFieldProps> = ({
           ) : (
             <TextListField
               name={field.name}
-              placeholder={t("listInput.placeholder", {
-                label: label.toLowerCase(),
-              })}
+              placeholder={
+                field.placeholder ??
+                t("listInput.placeholder", { label: label.toLowerCase() })
+              }
               disabled={disabled}
             />
           )}

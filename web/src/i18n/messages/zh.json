@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "仓库名称列表",
-              "description": "输入每个名称时不要包含所有者，例如 onyx。"
+              "placeholder": "仓库名称..."
             },
             "everything": {
               "label": "Onyx 将索引所有仓库"

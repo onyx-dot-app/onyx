@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "أسماء المستودعات",
-              "description": "أدخل كل اسم دون المالك، مثل onyx."
+              "placeholder": "اسم المستودع..."
             },
             "everything": {
               "label": "سيفهرس Onyx جميع المستودعات"

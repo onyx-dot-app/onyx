@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "リポジトリ名の一覧",
-              "description": "各名前はオーナーを付けずに入力してください（例: onyx）。"
+              "placeholder": "リポジトリ名..."
             },
             "everything": {
               "label": "Onyx はすべてのリポジトリをインデックスします"

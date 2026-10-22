@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "Noms des dépôts",
-              "description": "Saisissez chaque nom sans le propriétaire, par ex. onyx."
+              "placeholder": "Nom du dépôt..."
             },
             "everything": {
               "label": "Onyx indexera tous les dépôts"

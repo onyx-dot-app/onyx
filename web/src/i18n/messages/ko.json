@@ -3870,7 +3870,7 @@
             },
             "repositories": {
               "label": "저장소 이름 목록",
-              "description": "각 이름은 소유자 없이 입력하세요 (예: onyx)."
+              "placeholder": "저장소 이름..."
             },
             "everything": {
               "label": "Onyx가 모든 저장소를 색인합니다"
