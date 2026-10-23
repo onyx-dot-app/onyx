@@ -1197,11 +1197,6 @@ class DockerSandboxManager(SandboxManager):
                     )
                     volume_matches = kind == SandboxResourceKind.VOLUME and (
                         verified_volumes.get(item.name) == labels.get(LABEL_SANDBOX_ID)
-                        or (
-                            sandbox_id is not None
-                            and item.name == _sandbox_volume_name(sandbox_id)
-                            and labels.get(LABEL_SANDBOX_ID) == str(sandbox_id)
-                        )
                     )
                     if not (project_matches or network_matches or volume_matches):
                         logger.warning(

@@ -560,6 +560,8 @@ Secrets. New auth Secrets carry tenant and attempt labels. Docker scopes contain
 and volumes by sandbox network, with a Compose project fallback for older resources.
 Host-run legacy containers can prove ownership through their network attachment.
 Their mounted volumes must have matching full sandbox and tenant labels.
+Detached legacy volumes require a matching network or Compose project label.
+The sandbox ID and volume name alone do not prove deployment ownership.
 Idle cleanup refuses to report sleep when existing storage has no owned inventory.
 Resources without enough ownership metadata require operator inspection.
 `delete_resource` checks the observed identity again. Kubernetes also requires

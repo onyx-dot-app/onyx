@@ -10,6 +10,7 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_volume_name,
 )
 from onyx.server.features.build.sandbox.labels import (
+    LABEL_DOCKER_NETWORK,
     LABEL_K8S_MANAGED_BY,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
@@ -76,7 +77,7 @@ def test_volume_delete_never_forces_in_use_storage_removal(
     volume.remove.assert_called_once_with(force=False)
 
 
-def test_specific_sandbox_can_inventory_a_detached_owned_legacy_volume(
+def test_specific_sandbox_retains_a_detached_legacy_volume_without_deployment_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager, _container, volume, sandbox_id = _legacy_manager()
@@ -87,4 +88,33 @@ def test_specific_sandbox_can_inventory_a_detached_owned_legacy_volume(
     resources = list(
         manager.iter_resources("tenant-a", time.monotonic() + 30, sandbox_id)
     )
-    assert [r.kind for r in resources] == [SandboxResourceKind.VOLUME]
+    assert resources == []
+
+
+@pytest.mark.parametrize(
+    "deployment_label", [LABEL_DOCKER_NETWORK, "com.docker.compose.project"]
+)
+def test_detached_legacy_volume_requires_matching_deployment_label(
+    deployment_label: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, _container, volume, sandbox_id = _legacy_manager()
+    manager._compose_project = "craft-project"
+    monkeypatch.setattr(
+        manager._cleanup_docker.containers, "list", MagicMock(return_value=[])
+    )
+    volume.name = _sandbox_volume_name(sandbox_id)
+    for deployment, expected in [
+        ("other-deployment", []),
+        (
+            "craft-network"
+            if deployment_label == LABEL_DOCKER_NETWORK
+            else "craft-project",
+            [SandboxResourceKind.VOLUME],
+        ),
+    ]:
+        volume.attrs["Labels"][deployment_label] = deployment
+        resources = list(
+            manager.iter_resources("tenant-a", time.monotonic() + 30, sandbox_id)
+        )
+        assert [resource.kind for resource in resources] == expected
