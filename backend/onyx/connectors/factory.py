@@ -307,20 +307,20 @@ def _bound_values(
     binding_class: type[CredentialBinding] | None,
     connector_specific_config: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """The config's credential-bound values as the binding model validates
-    them, so equal settings compare equal, without the fields derived from the
-    credential. None when they do not validate."""
+    """The config's credential-bound values as the binding model compares them
+    (``CredentialBinding.comparison_values``). None when they do not
+    validate."""
     if binding_class is None:
         return {}
     try:
-        return binding_class.model_validate(connector_specific_config).model_dump(
-            exclude=set(binding_class.credential_derived_fields)
-        )
+        return binding_class.model_validate(
+            connector_specific_config
+        ).comparison_values()
     except pydantic.ValidationError:
         return None
 
 
-def assert_user_can_use_credential(
+def credential_use_refusal(
     db_session: Session,
     *,
     user: User,
@@ -328,10 +328,12 @@ def assert_user_can_use_credential(
     source: DocumentSource,
     connector_specific_config: dict[str, Any] | None,
     current_pair: ConnectorCredentialPair | None = None,
-) -> None:
+) -> OnyxError | None:
     """The rule for every use of a credential with a ``source`` config: a
-    pairing, a credential swap, an edit and every check run. Call it before
-    anything builds a connector with the credential.
+    pairing, a credential swap, an edit and every check run. Returns the error
+    that refuses the use, or None when the use is allowed. Uses go through
+    ``assert_user_can_use_credential``; the binding check and the account list
+    report the refusal instead.
 
     The use is allowed when one of these is true:
 
@@ -353,10 +355,9 @@ def assert_user_can_use_credential(
     ``validate_credential_binding`` is a different check: it compares the
     values with what the credential itself records.
 
-    Raises:
-        OnyxError: CREDENTIAL_NOT_FOUND when the user cannot see the
-            credential. INSUFFICIENT_PERMISSIONS when the bound values match
-            no pair.
+    The refusal is CREDENTIAL_NOT_FOUND when the user cannot see the
+    credential and INSUFFICIENT_PERMISSIONS when the bound values match no
+    pair.
     """
     binding_class = _credential_binding_class(source)
 
@@ -374,7 +375,7 @@ def assert_user_can_use_credential(
         and current_pair.connector.source == source
         and _matches(current_pair)
     ):
-        return
+        return None
 
     if (
         fetch_credential_by_id_for_user(
@@ -382,7 +383,7 @@ def assert_user_can_use_credential(
         )
         is None
     ):
-        raise OnyxError(
+        return OnyxError(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
             f"Credential {credential.id} does not exist or is not accessible.",
         )
@@ -390,9 +391,9 @@ def assert_user_can_use_credential(
         credential.user_id is None
         and has_global_permission(user, Permission.MANAGE_CONNECTORS)
     ):
-        return
+        return None
     if credential.source in CREDENTIAL_PERMISSIONS_TO_IGNORE:
-        return
+        return None
     bound_fields = (
         sorted(
             set(binding_class.model_fields) - binding_class.credential_derived_fields
@@ -401,19 +402,42 @@ def assert_user_can_use_credential(
         else []
     )
     if not bound_fields:
-        return
+        return None
     if any(
         _matches(pair)
         for pair in get_cc_pairs_using_credential(db_session, credential.id, source)
     ):
-        return
+        return None
 
-    raise OnyxError(
+    return OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
         f"Credential {credential.id} is shared with you. You can use it only "
         "with the settings of a connector that already uses it "
         f"({', '.join(bound_fields)}).",
     )
+
+
+def assert_user_can_use_credential(
+    db_session: Session,
+    *,
+    user: User,
+    credential: Credential,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any] | None,
+    current_pair: ConnectorCredentialPair | None = None,
+) -> None:
+    """Raises the refusal of ``credential_use_refusal``. Call it before
+    anything builds a connector with the credential."""
+    refusal = credential_use_refusal(
+        db_session,
+        user=user,
+        credential=credential,
+        source=source,
+        connector_specific_config=connector_specific_config,
+        current_pair=current_pair,
+    )
+    if refusal is not None:
+        raise refusal
 
 
 class CredentialBindingFieldErrorKind(str, Enum):

@@ -713,9 +713,18 @@ applies it before it builds a connector. A user may use the credential when:
 - the credential is visible and its source has no real secret
   (`CREDENTIAL_PERMISSIONS_TO_IGNORE`).
 
-The comparison skips a binding's `credential_derived_fields`: values the form
-takes from the credential and `validate_credential` pins to it, such as Google
-Drive's `credential_kind`.
+The comparison uses `CredentialBinding.comparison_values`. It skips a binding's
+`credential_derived_fields`: values the form takes from the credential and
+`validate_credential` pins to it, such as Google Drive's `credential_kind`. It
+compares `site_url_fields` by `connector_config.py:site_url_key` (scheme and
+host in lower case, and a bare host's trailing slash ignored). A slash after a
+path stays significant, because `urljoin` resolves against `/foo/` and `/foo`
+differently; another path on the same host is another site. Confluence ignores
+the trailing slash, because its connector strips it, and Confluence Cloud also
+drops a trailing `/wiki`. A URL with no scheme does not match a URL with one, because
+the connector gets the value as entered. The stored config keeps the value as
+entered. A site URL that does not parse fails binding validation, so it is a
+field error and matches no pair.
 
 The pairs are the record of the bound values; the credential stores none. The
 rule runs in `validate_ccpair_for_user` (its `user` is None only for system
@@ -725,6 +734,11 @@ work), `validate_connector_credential_bindings`,
 runs), and `edit_plan/state.py:fetch_proposed_credential` (edit plan and
 apply). A refusal is `CREDENTIAL_NOT_FOUND` when the credential is not visible
 and `INSUFFICIENT_PERMISSIONS` when the bound values match no pair.
+`factory.py:credential_use_refusal` returns the refusal without raising. The
+binding-check endpoints report an `INSUFFICIENT_PERMISSIONS` refusal as a
+`shared_credential_settings` rejection with the same detail, and
+`/manage/admin/similar-credentials/{source}` sets each credential's `usable`
+and `refusal_reason` from the rule with no config.
 
 A realm (where an account works: its site, host or subdomain) lives in the
 credential only, and the connector reads it from there. The connector config does

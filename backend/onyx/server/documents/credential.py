@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.connectors.factory import parse_credential_binding, validate_ccpair_for_user
+from onyx.connectors.factory import (
+    credential_use_refusal,
+    parse_credential_binding,
+    validate_ccpair_for_user,
+)
 from onyx.db.connector_credential_pair import (
     get_manageable_cc_pairs_for_credentials,
     verify_user_can_edit_connector,
@@ -149,7 +153,8 @@ def get_cc_source_full_info(
 ) -> list[SimilarCredentialSnapshot]:
     """The credentials a ``source_type`` connector can use, shown in that
     source's keys. Each lists the connectors using it that the user can manage,
-    with their credential-bound config values, to help pick one."""
+    with their credential-bound config values, and says whether the user may
+    use it, to help pick one."""
     credentials = fetch_credentials_usable_by_source_for_user(
         db_session=db_session,
         user=user,
@@ -178,21 +183,32 @@ def get_cc_source_full_info(
         db_session, [credential.id for credential in credentials]
     )
     masked_ids = credential_ids_to_mask(credentials, user, db_session)
-    return [
-        SimilarCredentialSnapshot(
-            **dict(
-                CredentialSnapshot.from_credential_db_model(
-                    credential,
-                    mask_credential_prefix=credential.id in masked_ids,
-                    view_source=source_type,
-                    viewer_id=user.id,
-                    group_ids=group_ids.get(credential.id),
-                )
-            ),
-            usages=usages[credential.id],
+    snapshots: list[SimilarCredentialSnapshot] = []
+    for credential in credentials:
+        refusal = credential_use_refusal(
+            db_session,
+            user=user,
+            credential=credential,
+            source=source_type,
+            connector_specific_config=None,
         )
-        for credential in credentials
-    ]
+        snapshots.append(
+            SimilarCredentialSnapshot(
+                **dict(
+                    CredentialSnapshot.from_credential_db_model(
+                        credential,
+                        mask_credential_prefix=credential.id in masked_ids,
+                        view_source=source_type,
+                        viewer_id=user.id,
+                        group_ids=group_ids.get(credential.id),
+                    )
+                ),
+                usages=usages[credential.id],
+                usable=refusal is None,
+                refusal_reason=refusal.detail if refusal else None,
+            )
+        )
+    return snapshots
 
 
 @router.delete("/admin/credential/{credential_id}")

@@ -85,7 +85,7 @@ deletion units.
 | DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | Global `MANAGE_CONNECTORS` only. Same as the owner delete, so an admin also deletes a credential with no owner here. |
 | DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
-| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`. |
+| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`; a similar-credentials snapshot also carries `usages`, `usable` and `refusal_reason` ([[connectors]] §4.9). |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
 | PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
