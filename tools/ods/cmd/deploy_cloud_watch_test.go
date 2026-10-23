@@ -10,7 +10,7 @@ const (
 	deployCloudTag   = "v4.7.0-cloud.3"
 	deployCloudRunID = 900
 	deployRunURL     = "https://github.com/onyx-dot-app/onyx/actions/runs/900"
-	deployPRURL      = "https://github.com/onyx-dot-app/onyx-infra/pull/12"
+	deployPRURL      = "https://github.com/example-org/infra-repo/pull/12"
 )
 
 func deployPRs(prs string) deployGHReply {
@@ -54,7 +54,7 @@ func TestWatchCloudRelease(t *testing.T) {
 				"run-view": {deployRun(t, succeeded)},
 				"pr-list":  {noPR},
 			},
-			wantErr:           "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
+			wantErr:           "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/example-org/infra-repo/actions/workflows/bump-cloud-version.yml",
 			wantStdout:        deployRunURL + "\n",
 			pollsUntilTimeout: true,
 		},
@@ -167,7 +167,7 @@ func TestWatchCloudRelease(t *testing.T) {
 // requires at least one poll.
 func deployAssertBumpPRPolls(t *testing.T, calls []string, wantPolls int, untilTimeout bool) {
 	t.Helper()
-	want := "pr list -R onyx-dot-app/onyx-infra --head bump-version/" + deployCloudTag + " --state all --json number,state,url"
+	want := "pr list -R example-org/infra-repo --head bump-version/" + deployCloudTag + " --state all --json number,state,url"
 	var got int
 	for _, call := range calls {
 		if strings.HasPrefix(call, "pr list") {
