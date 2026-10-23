@@ -1,13 +1,14 @@
 import time
 
 from onyx.db.enums import Permission
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
 
-_GATEWAY_MODEL = "gpt-6-luna"
+_GATEWAY_MODEL = CI_OPENAI_MODEL
 # Drain thread flushes on a ~2s interval; give it generous headroom.
 _POLL_TIMEOUT_SECONDS = 45
 

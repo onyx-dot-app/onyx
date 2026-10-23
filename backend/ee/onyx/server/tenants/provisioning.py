@@ -37,6 +37,7 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_CREDENTIALS,
     VERTEXAI_DEFAULT_LOCATION,
 )
+from onyx.configs.model_configs import DEFAULT_OPENAI_MODEL
 from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
     get_session_with_shared_schema,
@@ -415,7 +416,9 @@ def configure_default_api_keys(db_session: Session) -> None:
             logger.error(
                 "No default model found for %s in recommendations", OPENAI_PROVIDER_NAME
             )
-        default_model_name = default_model.name if default_model else "gpt-6-luna"
+        default_model_name = (
+            default_model.name if default_model else DEFAULT_OPENAI_MODEL
+        )
 
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",

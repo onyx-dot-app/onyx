@@ -101,11 +101,6 @@ def decide_search_scope(
         if previous_cycles
         else "N/A This is the first search"
     )
-    searched_sources = ", ".join(
-        dict.fromkeys(
-            src for cycle in previous_cycles for src in cycle.searched_sources
-        )
-    )
     current_cycle_queries = "\n".join(current_queries) or "N/A"
     valid_sources = "\n".join(source.value for source in connected_sources)
 
@@ -115,7 +110,6 @@ def decide_search_scope(
         previous_cycles=previous_cycles_str,
         valid_sources=valid_sources,
         last_user_query=last_user_query,
-        searched_sources=searched_sources or "none",
     )
     messages: list[Message] = [UserMessage(content=prompt)]
 

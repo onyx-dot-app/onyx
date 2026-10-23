@@ -24,6 +24,7 @@ import pytest
 
 from onyx.db.enums import Permission
 from onyx.llm.constants import LlmProviderNames
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -46,7 +47,7 @@ from tests.utils.secret_names import TestSecret
 
 CLI_TIMEOUT_SECONDS = 120
 ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
-OPENAI_MODEL_NAME = "gpt-6-luna"
+OPENAI_MODEL_NAME = CI_OPENAI_MODEL
 CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code@2.1.221"
 CODEX_PACKAGE = "@openai/codex@0.146.0"
 

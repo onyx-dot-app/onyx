@@ -24,6 +24,7 @@ from onyx.llm.model_request import (
 from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from tests.common.models import CI_OPENAI_MODEL
 
 VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
 VERTEX_LOCATION_ENV = "VERTEX_LOCATION"
@@ -179,7 +180,7 @@ def test_openai_prompt_caching_reduces_costs(
         llm = LitellmLLM(
             api_key=os.environ["OPENAI_API_KEY"],
             model_provider="openai",
-            model_name="gpt-6-luna",
+            model_name=CI_OPENAI_MODEL,
             max_input_tokens=128000,
         )
         import random
@@ -614,7 +615,7 @@ def test_prompt_caching_with_conversation_history(
     llm = LitellmLLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-6-luna",
+        model_name=CI_OPENAI_MODEL,
         max_input_tokens=128000,
     )
 
@@ -720,7 +721,7 @@ def test_no_caching_without_process_with_prompt_cache(
     llm = LitellmLLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-6-luna",
+        model_name=CI_OPENAI_MODEL,
         max_input_tokens=128000,
     )
 

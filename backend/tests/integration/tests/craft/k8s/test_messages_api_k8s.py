@@ -18,6 +18,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.session.models import MessageResponse
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
@@ -74,7 +75,7 @@ def test_send_message_api_runs_real_celery_turn(
             api_user,
             headless=True,
             llm_provider_type="openai",
-            llm_model_name="gpt-6-luna",
+            llm_model_name=CI_OPENAI_MODEL,
         )
         session_id = UUID(session.id)
         sandbox = session.sandbox

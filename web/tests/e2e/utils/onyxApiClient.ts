@@ -1,4 +1,5 @@
 import { APIRequestContext, expect, APIResponse } from "@playwright/test";
+import { CI_OPENAI_MODEL } from "@tests/e2e/constants";
 import {
   MOCK_LLM_API_KEY,
   MOCK_LLM_DEFAULT_MODEL,
@@ -586,7 +587,7 @@ export class OnyxApiClient {
           name: providerName,
           provider: "openai",
           api_key: E2E_LLM_PROVIDER_API_KEY,
-          default_model_name: "gpt-6-luna",
+          default_model_name: CI_OPENAI_MODEL,
           is_public: false,
           groups: [groupId],
           personas: [],
@@ -621,7 +622,7 @@ export class OnyxApiClient {
           personas: agentIds,
           model_configurations: [
             {
-              name: "gpt-6-luna",
+              name: CI_OPENAI_MODEL,
               custom_display_name: providerName,
               is_visible: true,
             },
@@ -657,7 +658,7 @@ export class OnyxApiClient {
           is_public: true,
           groups: [],
           personas: [],
-          model_configurations: [{ name: "gpt-6-luna", is_visible: true }],
+          model_configurations: [{ name: CI_OPENAI_MODEL, is_visible: true }],
         },
       }
     );

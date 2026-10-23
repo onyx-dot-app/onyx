@@ -16,6 +16,7 @@ from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.users import create_or_login_admin
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.http_client import (
     RetryingTransport,
@@ -106,7 +107,7 @@ def _module_reset_and_seed(  # noqa: ARG001
         user_performing_action=admin,
         name=f"craft-k8s-openai-{uuid4().hex[:8]}",
         api_key=os.environ.get("OPENAI_API_KEY", "test-api-key"),
-        default_model_name="gpt-6-luna",
+        default_model_name=CI_OPENAI_MODEL,
         set_as_default=False,
     )
     try:

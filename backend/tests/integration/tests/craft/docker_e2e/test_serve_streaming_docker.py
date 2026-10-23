@@ -19,6 +19,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SandboxBackend,
 )
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -43,7 +44,7 @@ class DockerLiveSession(NamedTuple):
     session_id: UUID
 
 
-_LIVE_MODEL = "gpt-6-luna"
+_LIVE_MODEL = CI_OPENAI_MODEL
 
 _SKIP_NO_LLM_KEY = pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
