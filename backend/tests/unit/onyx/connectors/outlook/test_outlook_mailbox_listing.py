@@ -1,26 +1,20 @@
-"""The on-disk mailbox listing: rows round-trip through sqlite, conversations
-come back in first-listed order with their rows in listing order, a read
-returns only the rows plan_documents keeps, reads are sliced, and closing
-releases the file. A listing of 300k rows across 100k conversations reads
-back whole in slices."""
+"""A mailbox listing groups rows by conversation in first-listed order, and a
+read returns only the rows plan_documents keeps: the root and the newest
+MAX_MESSAGES_PER_CONVERSATION messages, each message once."""
 
-import sqlite3
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from onyx.connectors.outlook import connector as connector_module
-from onyx.connectors.outlook.connector import _MailboxListing
+from onyx.connectors.cross_connector_utils.grouped_row_store import GroupedRowStore
+from onyx.connectors.outlook.connector import _mailbox_listing
 from onyx.connectors.outlook.models import OutlookMailbox, ThreadListing
 from onyx.connectors.outlook.threads import (
     MAX_MESSAGES_PER_CONVERSATION,
     newest_rows,
     thread_root,
 )
-
-LARGE_LISTING_ROWS = 300_000
-LARGE_LISTING_CONVERSATIONS = 100_000
 
 
 def _row(
@@ -41,50 +35,28 @@ def _row(
 
 
 @pytest.fixture
-def listing() -> Iterator[_MailboxListing]:
-    listing = _MailboxListing()
-    yield listing
-    listing.close()
+def listing() -> Iterator[GroupedRowStore[ThreadListing]]:
+    with _mailbox_listing() as listing:
+        yield listing
 
 
-def test_conversations_come_back_in_first_listed_order_with_rows_intact(
-    listing: _MailboxListing,
+def test_conversations_come_back_in_first_listed_order(
+    listing: GroupedRowStore[ThreadListing],
 ) -> None:
     listing.add([_row("conv-b", "m1", is_root=True), _row("conv-a", "m2")])
     listing.add([_row("conv-b", "m3"), _row("conv-c", "m4")])
 
     listing.group()
 
-    assert listing.conversation_count == 3
-    conversations = listing.conversations(0, 10)
-    assert [[row.message_id for row in rows] for rows in conversations] == [
+    assert [[row.message_id for row in rows] for rows in listing.groups(0, 10)] == [
         ["m1", "m3"],
         ["m2"],
         ["m4"],
     ]
-    assert conversations[0][0] == _row("conv-b", "m1", is_root=True)
-
-
-def test_reads_are_sliced_and_cover_every_conversation_once(
-    listing: _MailboxListing, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(connector_module, "LISTING_READ_SIZE", 3)
-    listing.add([_row(f"conv-{i}", f"m{i}") for i in range(7)])
-    listing.group()
-
-    slices = [listing.conversations(start, 3) for start in (0, 3, 6, 9)]
-
-    assert [len(s) for s in slices] == [3, 3, 1, 0]
-    assert [rows[0].conversation_id for s in slices for rows in s] == [
-        f"conv-{i}" for i in range(7)
-    ]
-    assert [rows[0].conversation_id for rows in listing.all_conversations()] == [
-        f"conv-{i}" for i in range(7)
-    ]
 
 
 def test_a_read_keeps_the_root_and_the_newest_messages_once_each(
-    listing: _MailboxListing,
+    listing: GroupedRowStore[ThreadListing],
 ) -> None:
     first = datetime(2026, 1, 1, tzinfo=timezone.utc)
     rows = [_row("conv", "root", is_root=True, received_at=first)] + [
@@ -97,7 +69,7 @@ def test_a_read_keeps_the_root_and_the_newest_messages_once_each(
     listing.add(rows[:1] + rows[-20:])
     listing.group()
 
-    (kept,) = listing.conversations(0, 1)
+    (kept,) = listing.groups(0, 1)
 
     assert [r.message_id for r in kept if r.is_root] == ["root"]
     assert newest_rows(kept, MAX_MESSAGES_PER_CONVERSATION) == newest_rows(
@@ -106,30 +78,3 @@ def test_a_read_keeps_the_root_and_the_newest_messages_once_each(
     assert thread_root(kept) == thread_root(rows)
     assert "undated" not in {r.message_id for r in kept}
     assert len(kept) == MAX_MESSAGES_PER_CONVERSATION + 1
-
-
-def test_close_releases_the_database() -> None:
-    listing = _MailboxListing()
-
-    listing.close()
-
-    with pytest.raises(sqlite3.ProgrammingError):
-        listing.conversations(0, 1)
-
-
-def test_a_listing_the_size_of_a_large_mailbox_reads_back_in_slices(
-    listing: _MailboxListing,
-) -> None:
-    listing.add(
-        _row(f"conv-{i % LARGE_LISTING_CONVERSATIONS}", f"m{i}")
-        for i in range(LARGE_LISTING_ROWS)
-    )
-    listing.group()
-
-    assert listing.conversation_count == LARGE_LISTING_CONVERSATIONS
-    rows_per_conversation = LARGE_LISTING_ROWS // LARGE_LISTING_CONVERSATIONS
-    seen = 0
-    for rows in listing.all_conversations():
-        assert len(rows) == rows_per_conversation
-        seen += 1
-    assert seen == LARGE_LISTING_CONVERSATIONS

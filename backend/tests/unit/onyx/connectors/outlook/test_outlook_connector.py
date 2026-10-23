@@ -299,7 +299,7 @@ def _step(
     # A parked cursor is driven as the process that listed its mailbox would.
     for cursor in checkpoint.active:
         if cursor.mailbox.id not in connector._listings:
-            connector._listings[cursor.mailbox.id] = connector_module._MailboxListing()
+            connector._listings[cursor.mailbox.id] = connector_module._mailbox_listing()
     generator = load(start, END, checkpoint)
     while True:
         try:

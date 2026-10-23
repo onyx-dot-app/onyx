@@ -340,8 +340,9 @@ shape the table above does not cover:
 - **Decided per mailbox, from headers.** Each mailbox is walked on its own,
   eight side by side. Its folders are read through delta pages of metadata
   with the sender and recipients (`CHANGE_SELECT`), one page per checkpoint
-  step, and the rows are kept by the connector process in an anonymous
-  SQLite temp file (`_MailboxListing`) until the mailbox is built. The
+  step, and the rows are kept by the connector process in a
+  `GroupedRowStore` (`cross_connector_utils/grouped_row_store.py`, an
+  anonymous SQLite temp file) until the mailbox is built. The
   checkpoint (`OutlookCheckpoint`) holds cursors only; a process that resumes
   an attempt has no listing for the mailboxes in flight and walks them again
   from the start (`_resumable`). Nothing shared is written: no file store, no
@@ -364,13 +365,14 @@ shape the table above does not cover:
   holders assume a message naming the builder is the builder's to write. A
   thread whose builder mailbox no longer holds its first message is not
   built at all; the other holders keep only their own documents of the
-  replies that left the builder out. The
-  builder's first message sits in its Sent Items, so excluding that folder
-  has the same effect on every thread the mailbox started. Each listing
-  lives in an anonymous SQLite temp file (`_MailboxListing`), one mailbox
-  per worker, eight at once, and a read returns each conversation's root and
-  newest `MAX_MESSAGES_PER_CONVERSATION` messages, so memory holds one read
-  slice however large the mailbox or a conversation. A checkpoint from the earlier table-based walk starts the
+  replies that left the builder out. The builder's first message sits in
+  its Sent Items, so excluding that folder has the same effect on every
+  thread the mailbox started. Each listing lives in its own
+  `GroupedRowStore`, one mailbox per worker, eight at once. A read trims
+  each conversation with `threads.py:rows_to_plan` to its root and newest
+  `MAX_MESSAGES_PER_CONVERSATION` messages before the next one loads, so
+  memory holds one conversation and a slice of trimmed ones, however large
+  the mailbox. A checkpoint from the earlier table-based walk starts the
   attempt over.
 - **Polls.** Only messages in the window are listed, so each conversation
   with new mail is read whole through its outline (`_conversation_outline`),
