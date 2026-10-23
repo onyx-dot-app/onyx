@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "デフォルト"
+        "defaultSuffix": {
+          "label": "（デフォルト）"
         },
         "toasts": {
           "renameFailed": "グループの名前を変更できませんでした",

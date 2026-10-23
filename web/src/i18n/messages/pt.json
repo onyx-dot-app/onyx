@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "Padrão"
+        "defaultSuffix": {
+          "label": "(Padrão)"
         },
         "toasts": {
           "renameFailed": "Falha ao renomear o grupo",

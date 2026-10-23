@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "Standard"
+        "defaultSuffix": {
+          "label": "(Standard)"
         },
         "toasts": {
           "renameFailed": "Die Gruppe konnte nicht umbenannt werden",

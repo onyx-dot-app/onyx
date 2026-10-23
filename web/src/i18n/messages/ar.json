@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "افتراضية"
+        "defaultSuffix": {
+          "label": "(افتراضية)"
         },
         "toasts": {
           "renameFailed": "فشلت إعادة تسمية المجموعة",

@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "默认"
+        "defaultSuffix": {
+          "label": "（默认）"
         },
         "toasts": {
           "renameFailed": "重命名用户组失败",

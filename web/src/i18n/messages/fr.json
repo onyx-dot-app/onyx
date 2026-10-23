@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "Par défaut"
+        "defaultSuffix": {
+          "label": "(Par défaut)"
         },
         "toasts": {
           "renameFailed": "Échec du renommage du groupe",

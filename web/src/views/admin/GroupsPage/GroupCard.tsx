@@ -66,11 +66,7 @@ function GroupCard({ group }: GroupCardProps) {
         sizePreset="main-content"
         variant="section"
         padding={1}
-        tag={
-          builtIn && !isAdmin
-            ? { title: t("card.defaultTag.label") }
-            : undefined
-        }
+        suffix={isBasic ? t("card.defaultSuffix.label") : undefined}
         editable={!isSyncing && canManage}
         onTitleChange={!isSyncing && canManage ? handleRename : undefined}
         rightChildren={

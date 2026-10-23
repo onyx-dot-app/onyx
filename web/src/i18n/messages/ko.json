@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "기본"
+        "defaultSuffix": {
+          "label": "(기본)"
         },
         "toasts": {
           "renameFailed": "그룹 이름 변경에 실패했습니다",
