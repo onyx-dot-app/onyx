@@ -565,6 +565,7 @@ class ToolRenderer:
                     file_ids=files.file_ids if files else None,
                     error=packets.CustomToolErrorInfo(
                         is_auth_error=error.is_auth_error,
+                        is_unreachable=error.is_unreachable,
                         status_code=error.status_code,
                         message=error.message,
                     )

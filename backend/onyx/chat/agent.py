@@ -277,6 +277,7 @@ class ChatAgent(Agent, RestorableFeature):
             assemble_messages=partial(
                 prepare_prompt,
                 system_prompt=prompt.system_prompt,
+                user_info_prompt=prompt.user_info_prompt,
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
                 context_files=self.context_files.model_copy(deep=True),

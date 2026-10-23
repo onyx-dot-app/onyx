@@ -174,6 +174,7 @@ def build_chat_prompt(
         )
 
     custom = render(custom_prompt)
+    user_info = None
     if persona and persona.replace_base_system_prompt:
         system = render(persona_system, True)
     elif base_prompt:
@@ -183,9 +184,10 @@ def build_chat_prompt(
         system = build_system_prompt(
             base_system_prompt=base_prompt,
             datetime_aware=datetime_aware,
-            user_memory_context=memory,
             tools=tools,
+            include_user_info=False,
         )
+        user_info = build_user_information_prompt(memory).strip()
     else:
         system = render(custom_prompt, True)
         custom = None
@@ -203,6 +205,7 @@ def build_chat_prompt(
     )
     return ChatPrompt(
         system_prompt=SystemMessage(content=system) if system else None,
+        user_info_prompt=SystemMessage(content=user_info) if user_info else None,
         custom_prompt=UserMessage(content=custom) if custom else None,
         reminder=UserMessage(
             content=reminder, metadata=PromptMetadata(is_reminder=True)
@@ -604,6 +607,7 @@ def prepare_prompt(
     reminder_message: Message | None,
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
+    user_info_prompt: Message | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
@@ -636,6 +640,8 @@ def prepare_prompt(
         metadata.should_cache = True
         system_prompt.metadata = metadata
         result.append(system_prompt)
+    if user_info_prompt is not None:
+        result.append(user_info_prompt.model_copy(deep=True))
     result.extend(history[:insertion])
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy(deep=True))
