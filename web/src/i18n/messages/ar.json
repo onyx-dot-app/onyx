@@ -3456,6 +3456,12 @@
           },
           "viewDetails": {
             "tooltip": "عرض التفاصيل"
+          },
+          "failedToRun": {
+            "title": "تعذر تشغيل عمليات الفحص"
+          },
+          "unavailable": {
+            "label": "غير متاح"
           }
         },
         "accountUnavailable": {
@@ -10897,6 +10903,13 @@
       },
       "docsButton": {
         "label": "المستندات"
+      },
+      "runLost": "توقفت عمليات الفحص عن الاستجابة. حاول مرة أخرى.",
+      "cancelButton": {
+        "label": "إلغاء"
+      },
+      "cancelFailed": {
+        "toast": "تعذر إلغاء عمليات الفحص. حاول مرة أخرى."
       }
     },
     "connectorEdit": {

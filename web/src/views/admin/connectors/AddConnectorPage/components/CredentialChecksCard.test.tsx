@@ -1,12 +1,16 @@
 /**
  * Check rows read the result line the backend gives, with the guide's state
- * words as the fallback, and open to show both guidance texts.
+ * words as the fallback, and open to show both guidance texts. The card names
+ * why a run failed and can stop one.
  */
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import {
   type CheckLine,
+  CheckCardView,
   CheckLineGroups,
 } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
+import { NO_CHECKS } from "@/lib/connectors/checks/hooks";
+import type { ConnectorChecksStatus } from "@/lib/connectors/checks/types";
 
 function line(
   overrides: Partial<CheckLine> & Pick<CheckLine, "state">
@@ -104,4 +108,47 @@ test("a successful row opens to show its description", async () => {
   expect(
     screen.getByText("The app can read only the sites it was granted.")
   ).toBeInTheDocument();
+});
+
+function renderCardView(
+  status: ConnectorChecksStatus,
+  props: { failureReason?: string; onCancel?: () => void } = {}
+) {
+  render(
+    <CheckCardView
+      status={status}
+      results={[]}
+      openChecks={[]}
+      inProgressCount={0}
+      expectedCount={0}
+      stateCounts={NO_CHECKS}
+      onRerun={jest.fn()}
+      {...props}
+    />
+  );
+}
+
+test("names the server's reason when the run failed to run", () => {
+  const reason = "Credential 26 is shared with you.";
+  renderCardView("failedToRun", { failureReason: reason });
+
+  expect(screen.getAllByText(reason).length).toBeGreaterThan(0);
+  expect(
+    screen.queryByText("Checks failed to run. Try again.")
+  ).not.toBeInTheDocument();
+});
+
+test("offers Cancel only while the checks run", async () => {
+  const user = setupUser();
+  const onCancel = jest.fn();
+  renderCardView("running", { onCancel });
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(onCancel).toHaveBeenCalledTimes(1);
+});
+
+test("offers no Cancel once the checks finished", () => {
+  renderCardView("passed", { onCancel: jest.fn() });
+
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 });

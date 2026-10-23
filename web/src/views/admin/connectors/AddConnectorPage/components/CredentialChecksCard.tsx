@@ -9,6 +9,7 @@ import {
   Section,
   StickyBox,
   type StickyBoxItemHandle,
+  toast,
 } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
@@ -471,6 +472,10 @@ interface CheckCardViewProps {
   onSkipCheck?: (checkId: string) => void;
   /** Runs a skipped check again, or an expected one next. */
   onRunCheck?: (checkId: string) => void;
+  /** Stops the running run; shown only while the checks run. */
+  onCancel?: () => void;
+  /** Why the run failed to run, in place of the generic notice. */
+  failureReason?: string;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
   /** Folded, pins under the page header while the page scrolls. */
@@ -486,6 +491,8 @@ export function CheckCardView({
   onRerun,
   onSkipCheck,
   onRunCheck,
+  onCancel,
+  failureReason,
   defaultCollapsed = false,
   expandRequest = 0,
   stickyWhenFolded = false,
@@ -549,7 +556,7 @@ export function CheckCardView({
   const isRunning: boolean = status === "running";
   // A broken run outranks the counts.
   const notice: string | undefined =
-    status === "failedToRun" ? t("failedToRun") : undefined;
+    status === "failedToRun" ? (failureReason ?? t("failedToRun")) : undefined;
   const hasResults: boolean = results.length > 0;
   // A run that broke can still list checks: some finished first, or an
   // earlier run's results stay after a failed re-run.
@@ -614,6 +621,11 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
+          {isRunning && onCancel !== undefined && (
+            <Button prominence="tertiary" onClick={onCancel}>
+              {t("cancelButton.label")}
+            </Button>
+          )}
           {onRerun !== undefined &&
             (notice ? (
               // The way to try again, so it says what it does.
@@ -767,11 +779,19 @@ export default function CredentialChecksCard({
   ccPairId = null,
   expandRequest = 0,
 }: CredentialChecksCardProps) {
+  const t = useTranslations("admin.connectorChecks");
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
   const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
+  const cancel = checks.cancel;
+  const failureReason: string | undefined =
+    checks.failure === null
+      ? undefined
+      : checks.failure.kind === "refused"
+        ? checks.failure.detail
+        : t("runLost");
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
     return null;
@@ -817,6 +837,13 @@ export default function CredentialChecksCard({
       onRerun={checks.rerun}
       onSkipCheck={checks.skipCheck}
       onRunCheck={checks.runCheck}
+      onCancel={
+        cancel === null
+          ? undefined
+          : () =>
+              void cancel().catch(() => toast.error(t("cancelFailed.toast")))
+      }
+      failureReason={failureReason}
       expandRequest={expandRequest}
       stickyWhenFolded
     />

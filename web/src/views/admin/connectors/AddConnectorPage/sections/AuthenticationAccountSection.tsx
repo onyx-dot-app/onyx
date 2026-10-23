@@ -351,14 +351,17 @@ export default function AuthenticationAccountSection({
   }
 
   function renderSavedCard(credential: SimilarCredential) {
+    const selected: boolean = credential.id === selectedSavedId;
     return (
       <AuthenticationAccountCard
         key={credential.id}
         credential={credential}
         source={connector}
         sourceName={displayName}
-        selected={credential.id === selectedSavedId}
-        selectable={isSelectable(credential)}
+        selected={selected}
+        // A shared account the server would refuse here cannot be picked; an
+        // existing pick stays, so it can still be dropped.
+        selectable={isSelectable(credential) && (credential.usable || selected)}
         // Folded, the pick is the only card shown: it keeps a light look,
         // and a click opens the section rather than dropping the pick.
         quietSelection={!sectionExpanded}

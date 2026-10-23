@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
+import { fetchErrorDetail } from "@/lib/fetcher";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { useCredentialCheckReports } from "@/lib/credentials/hooks";
 import type { CredentialCheckRunStatus } from "@/lib/credentials/types";
@@ -67,8 +68,8 @@ export default function PairChecksCard({
       stateCounts={stateCounts}
       defaultCollapsed={!running}
       onRerun={() => {
-        rerun(credentialId, connectorId).catch(() =>
-          toast.error(tAccount("rerunFailed.toast"))
+        rerun(credentialId, connectorId).catch((error: unknown) =>
+          toast.error(fetchErrorDetail(error) ?? tAccount("rerunFailed.toast"))
         );
       }}
       expandRequest={expandRequest}
