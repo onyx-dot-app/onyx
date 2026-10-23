@@ -57,7 +57,6 @@ def stubbed_cleanup(
     monkeypatch.setattr(
         tasks_module, "get_sandbox_manager", lambda: stub_sandbox_manager
     )
-    monkeypatch.setattr(stub_sandbox_manager, "iter_resources", lambda *_args: iter(()))
     return stub_sandbox_manager
 
 
@@ -104,10 +103,12 @@ def _isolated_redis_lock() -> Generator[None, None, None]:
     """
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+    redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
     try:
         yield
     finally:
         redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+        redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
 
 
 def _backdate_heartbeat(
@@ -633,20 +634,14 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     assert not session_runtime_stale(refreshed_b, sandbox)
 
 
-def test_idle_reaped_before_non_idle_background_snapshot(
+def test_sweep_preserves_query_order_for_idle_and_non_idle_sandboxes(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A single sweep reaps the idle sandbox (snapshot + terminate) before it
-    background-snapshots a non-idle-but-stale one.
-
-    ``get_running_sandboxes`` is forced to return the non-idle sandbox first,
-    so a regression to interleaved processing would background-snapshot it
-    before the idle one is reaped; idle-first partitioning must override that.
-    """
+    """Process both sandbox states in UUID order so the cursor records progress."""
     nonidle_user = make_user(db_session)
     nonidle_sandbox = make_sandbox(db_session, nonidle_user)
     nonidle_session = BuildSession(
@@ -685,18 +680,6 @@ def test_idle_reaped_before_non_idle_background_snapshot(
 
     monkeypatch.setattr(stubbed_cleanup, "list_session_workspaces", _list_workspaces)
 
-    # The sweep query has no ORDER BY, so force the adversarial order rather
-    # than relying on physical row order matching commit order.
-    real_get_running_sandboxes = tasks_module.get_running_sandboxes
-
-    def _nonidle_first(session: Session) -> list[Sandbox]:
-        return sorted(
-            real_get_running_sandboxes(session),
-            key=lambda s: s.id != nonidle_sandbox.id,
-        )
-
-    monkeypatch.setattr(tasks_module, "get_running_sandboxes", _nonidle_first)
-
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path="s3://snapshots/ordering.tar.gz",
         size_bytes=1234,
@@ -733,9 +716,10 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     idle_terminate_idx = call_log.index(("terminate", idle_sandbox.id))
     nonidle_snapshot_idx = call_log.index(("create_snapshot", nonidle_sandbox.id))
 
-    # The idle sandbox is fully reaped (snapshot, then terminate) before the
-    # non-idle sandbox is background-snapshotted.
-    assert idle_snapshot_idx < idle_terminate_idx < nonidle_snapshot_idx
+    if idle_sandbox.id < nonidle_sandbox.id:
+        assert idle_snapshot_idx < idle_terminate_idx < nonidle_snapshot_idx
+    else:
+        assert nonidle_snapshot_idx < idle_snapshot_idx < idle_terminate_idx
 
     # The non-idle sandbox is never terminated.
     assert ("terminate", nonidle_sandbox.id) not in call_log

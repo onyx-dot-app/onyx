@@ -6,6 +6,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
+from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.server.features.build.db.sandbox import (
     fail_stale_provisioning__no_commit,
     get_sandbox_by_id,
@@ -23,7 +24,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 RESOURCE_GRACE_SECONDS = 15 * 60
 MAX_CLEANUP_RESOURCES = 100
-RESOURCE_RETRY_SECONDS = 60
+RESOURCE_RETRY_SECONDS = max(60, SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 16)
 
 
 def reconcile_sandbox_resources(

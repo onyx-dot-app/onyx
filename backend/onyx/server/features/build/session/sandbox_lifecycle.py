@@ -22,6 +22,7 @@ external I/O:
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -30,6 +31,7 @@ from uuid import UUID
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session as DBSession
 
+from onyx.cache.interface import CacheLock
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
@@ -59,10 +61,13 @@ from onyx.server.features.build.db.sandbox import (
     sleep_running_sandbox__no_commit,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     FileSet,
     SandboxCleanupCheckpoint,
     SandboxProvisionContentionError,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -84,6 +89,8 @@ from onyx.server.features.build.timeouts import (
     POLL_INTERVAL_SECONDS,
     PROVISION_WAIT_SECONDS,
     RECOVERY_HISTORY_SNAPSHOT_SECONDS,
+    RUNTIME_TEARDOWN_SECONDS,
+    SANDBOX_CLEANUP_DEADLINE_SECONDS,
 )
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
@@ -819,12 +826,75 @@ def list_snapshotable_session_workspaces(
     return existing_session_ids
 
 
+def _require_owned_storage_inventory(
+    sandbox_id: UUID,
+    storage_exists: bool,
+    resources: list[SandboxResource],
+) -> None:
+    if storage_exists and not any(
+        resource.kind
+        in {
+            SandboxResourceKind.POD,
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
+        }
+        for resource in resources
+    ):
+        raise RuntimeError(
+            f"Cannot verify workspace storage inventory for sandbox {sandbox_id}"
+        )
+
+
+def _require_cleanup_ownership(
+    claim: CacheLock, session_creation_lock: RedisLock
+) -> None:
+    if not claim.owned() or not session_creation_lock.owned():
+        raise RuntimeError("Sandbox cleanup ownership lost")
+
+
+def _record_verified_cleanup_checkpoint(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    tenant_id: str,
+    attempt_number: int,
+    storage_identity: str | None,
+    resume_deletion: bool,
+    last_heartbeat: datetime | None,
+) -> bool:
+    if (
+        sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
+        != storage_identity
+    ):
+        logger.info(
+            "Sandbox %s workspace storage changed during checkpoint", sandbox_id
+        )
+        return False
+    if storage_identity is None or resume_deletion:
+        return True
+    if not record_cleanup_checkpoint__no_commit(
+        db_session,
+        sandbox_id,
+        SandboxCleanupCheckpoint(
+            provisioning_attempt_number=attempt_number,
+            storage_identity=storage_identity,
+            last_heartbeat=last_heartbeat,
+        ),
+    ):
+        db_session.rollback()
+        return False
+    db_session.commit()
+    return True
+
+
 def sleep_sandbox(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     tenant_id: str,
     session_creation_lock: RedisLock,
+    check_cleanup_ownership: Callable[[], None] | None = None,
+    cleanup_deadline: float | None = None,
 ) -> None:
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
@@ -835,6 +905,12 @@ def sleep_sandbox(
     """
     sandbox_id = sandbox.id
     initial_attempt = sandbox.provisioning_attempt_number
+    deadline = (
+        cleanup_deadline
+        if cleanup_deadline is not None
+        else time.monotonic() + SANDBOX_CLEANUP_DEADLINE_SECONDS
+    )
+    resources = list(sandbox_manager.iter_resources(tenant_id, deadline, sandbox_id))
     storage_exists = sandbox_manager.workspace_storage_exists(sandbox_id, tenant_id)
     storage_identity = (
         sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
@@ -853,6 +929,7 @@ def sleep_sandbox(
         and checkpoint.last_heartbeat == sandbox.last_heartbeat
         and not sandbox_manager.runtime_exists(sandbox_id, tenant_id)
     )
+    _require_owned_storage_inventory(sandbox_id, storage_exists, resources)
     needs_checkpoint = storage_exists and not resume_deletion
 
     # Chat history lives outside session workspaces; capture it before the
@@ -892,6 +969,8 @@ def sleep_sandbox(
 
     snapshot_failed = False
     for session_id in session_ids:
+        if check_cleanup_ownership is not None:
+            check_cleanup_ownership()
         try:
             snapshot_start = time.monotonic()
             snapshot_result = create_session_snapshot_keep_latest(
@@ -965,30 +1044,46 @@ def sleep_sandbox(
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
 
-        if (
-            sandbox_manager.workspace_storage_identity(sandbox_id, tenant_id)
-            != storage_identity
-        ):
-            logger.info(
-                "Sandbox %s workspace storage changed during checkpoint", sandbox_id
-            )
-            return
-        if storage_identity is not None and not resume_deletion:
-            if not record_cleanup_checkpoint__no_commit(
-                db_session,
-                sandbox_id,
-                SandboxCleanupCheckpoint(
-                    provisioning_attempt_number=sleep_attempt_number,
-                    storage_identity=storage_identity,
-                    last_heartbeat=sandbox.last_heartbeat,
-                ),
-            ):
-                db_session.rollback()
-                return
-            db_session.commit()
-
         # Terminate the pod (but keep the sandbox record).
-        sandbox_manager.terminate(sandbox_id)
+        with sandbox_provision_lock(sandbox_id, tenant_id) as claim:
+            if check_cleanup_ownership is not None:
+                check_cleanup_ownership()
+            db_session.refresh(sandbox)
+            if (
+                sandbox.status != SandboxStatus.RUNNING
+                or sandbox.provisioning_attempt_number != initial_attempt
+                or not is_sandbox_idle(sandbox, datetime.now(timezone.utc))
+            ):
+                return
+            current_resources = list(
+                sandbox_manager.iter_resources(tenant_id, deadline, sandbox_id)
+            )
+            if {(r.kind, r.name, r.instance_id) for r in current_resources} != {
+                (r.kind, r.name, r.instance_id) for r in resources
+            }:
+                logger.info(
+                    "Sandbox %s resource identity changed during checkpoint; skipping reap",
+                    sandbox_id,
+                )
+                return
+            _require_cleanup_ownership(claim, session_creation_lock)
+            if not _record_verified_cleanup_checkpoint(
+                db_session,
+                sandbox_manager,
+                sandbox_id,
+                tenant_id,
+                sleep_attempt_number,
+                storage_identity,
+                resume_deletion,
+                sandbox.last_heartbeat,
+            ):
+                return
+            _require_cleanup_ownership(claim, session_creation_lock)
+            sandbox_manager.terminate_observed_resources(
+                sandbox_id,
+                resources,
+                min(deadline, time.monotonic() + RUNTIME_TEARDOWN_SECONDS),
+            )
 
         # A recovery/create that started a newer attempt mid-terminate owns
         # the sandbox now; only claim ports/sessions if the sleep write

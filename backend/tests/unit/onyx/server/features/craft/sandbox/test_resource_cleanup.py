@@ -157,7 +157,7 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     from onyx.background.celery.tasks.build import tasks
     from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
 
-    manager, _cache = collector
+    manager, cache = collector
     manager.supports_opencode_history_persistence = False
     sandbox = Sandbox(id=uuid4(), user_id=uuid4(), status=SandboxStatus.RUNNING)
     session_id = uuid4()
@@ -169,11 +169,16 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     manager.iter_resources.side_effect = broken_inventory
     redis = MagicMock()
     redis.lock.return_value.owned.return_value = lease_owned
+    cache.lock.return_value.owned.return_value = lease_owned
+    cache.get.return_value = None
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
     monkeypatch.setattr(tasks, "get_redis_client", lambda **_kwargs: redis)
+    monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
-    monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args: [sandbox])
+    monkeypatch.setattr(
+        tasks, "get_running_sandboxes", MagicMock(side_effect=[[sandbox], []])
+    )
     monkeypatch.setattr(tasks, "maybe_mark_tenant_active", MagicMock())
     monkeypatch.setattr(tasks, "user_has_stale_active_session", lambda *_args: True)
     monkeypatch.setattr(tasks, "get_latest_snapshot_for_session", lambda *_args: None)

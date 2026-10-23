@@ -73,7 +73,6 @@ def stubbed_sweep(
     monkeypatch.setattr(
         tasks_module, "get_sandbox_manager", lambda: stub_sandbox_manager
     )
-    monkeypatch.setattr(stub_sandbox_manager, "iter_resources", lambda *_args: iter(()))
     return stub_sandbox_manager
 
 
@@ -97,10 +96,12 @@ def _isolated_redis_lock() -> Generator[None, None, None]:
     """Make sure the sweep beat lock is free before + after."""
     redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+    redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
     try:
         yield
     finally:
         redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
+        redis_client.delete(tasks_module.RUNNING_SANDBOX_CURSOR_KEY)
 
 
 def _make_session(db_session: Session, user: User) -> BuildSession:

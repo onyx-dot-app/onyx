@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from docker.errors import NotFound
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession, Sandbox
@@ -10,7 +11,11 @@ from onyx.server.features.build.db import build_session as session_db
 from onyx.server.features.build.db import sandbox as sandbox_db
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker import docker_sandbox_manager as dsm
-from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
+from onyx.server.features.build.sandbox.models import (
+    SandboxCleanupCheckpoint,
+    SandboxResource,
+    SandboxResourceKind,
+)
 from onyx.server.features.build.session import manager as session_manager
 from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
 
@@ -31,10 +36,12 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
     sandbox = _sandbox()
     docker = object.__new__(dsm.DockerSandboxManager)
     docker._docker = MagicMock()
+    docker._cleanup_docker = docker._docker
     container = MagicMock()
     container.labels = {
         dsm.LABEL_SANDBOX_ID: str(sandbox.id),
         dsm.LABEL_TENANT_ID: "tenant-a",
+        dsm.LABEL_K8S_MANAGED_BY: "onyx",
     }
     volume = docker._docker.volumes.get.return_value
     volume.name = "workspace"
@@ -44,6 +51,13 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
     }
     volume.remove.side_effect = [RuntimeError("volume busy"), None]
     current_container = [container]
+
+    def get_container(_container_id: str) -> MagicMock:
+        if not current_container:
+            raise NotFound("missing container")
+        return container
+
+    docker._cleanup_docker.containers.get.side_effect = get_container
     monkeypatch.setattr(
         docker,
         "_get_container",
@@ -90,6 +104,36 @@ def test_new_worker_retries_volume_removal_after_checkpoint_commit(
         )
         worker.runtime_exists.side_effect = docker.runtime_exists
         worker.terminate.side_effect = docker.terminate
+
+        def inventory(*_args: object) -> list[SandboxResource]:
+            resources = [
+                SandboxResource(
+                    kind=SandboxResourceKind.VOLUME,
+                    name=volume.name,
+                    instance_id=volume.attrs["CreatedAt"],
+                    sandbox_id=sandbox.id,
+                    tenant_id="tenant-a",
+                    created_at=datetime.now(timezone.utc),
+                )
+            ]
+            if current_container:
+                resources.insert(
+                    0,
+                    SandboxResource(
+                        kind=SandboxResourceKind.CONTAINER,
+                        name="sandbox",
+                        instance_id="container-1",
+                        sandbox_id=sandbox.id,
+                        tenant_id="tenant-a",
+                        created_at=datetime.now(timezone.utc),
+                    ),
+                )
+            return resources
+
+        worker.iter_resources.side_effect = inventory
+        worker.terminate_observed_resources.side_effect = (
+            docker.terminate_observed_resources
+        )
         worker.list_session_workspaces.return_value = []
         return worker
 
@@ -130,6 +174,16 @@ def test_retry_requires_matching_attempt_storage_and_absent_runtime(
     manager.workspace_storage_exists.return_value = True
     manager.workspace_storage_identity.return_value = "volume-v1"
     manager.runtime_exists.return_value = mismatch == "runtime"
+    manager.iter_resources.return_value = [
+        SandboxResource(
+            kind=SandboxResourceKind.VOLUME,
+            name="volume",
+            instance_id="volume-v1",
+            sandbox_id=sandbox.id,
+            tenant_id="tenant-a",
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
     manager.supports_opencode_history_persistence = True
     manager.create_opencode_history_snapshot.side_effect = RuntimeError(
         "checkpoint failed"
@@ -147,6 +201,17 @@ def test_checkpoint_commit_failure_aborts_deletion(
     manager.workspace_storage_identity.return_value = "volume-v1"
     manager.supports_opencode_history_persistence = False
     manager.list_session_workspaces.return_value = []
+    sandbox = _sandbox()
+    manager.iter_resources.return_value = [
+        SandboxResource(
+            kind=SandboxResourceKind.VOLUME,
+            name="volume",
+            instance_id="volume-v1",
+            sandbox_id=sandbox.id,
+            tenant_id="tenant-a",
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
     monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
     monkeypatch.setattr(
         lifecycle, "record_cleanup_checkpoint__no_commit", lambda *_args: True
@@ -154,9 +219,7 @@ def test_checkpoint_commit_failure_aborts_deletion(
     db_session = MagicMock()
     db_session.commit.side_effect = RuntimeError("commit failed")
     with pytest.raises(RuntimeError, match="commit failed"):
-        lifecycle.sleep_sandbox(
-            db_session, manager, _sandbox(), "tenant-a", MagicMock()
-        )
+        lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", MagicMock())
     manager.terminate.assert_not_called()
 
 
@@ -170,7 +233,19 @@ def test_activity_invalidates_failed_cleanup_before_filesystem_write(
     backend.workspace_storage_identity.return_value = "volume-v1"
     backend.supports_opencode_history_persistence = False
     backend.list_session_workspaces.return_value = []
-    backend.terminate.side_effect = RuntimeError("container removal failed")
+    backend.iter_resources.return_value = [
+        SandboxResource(
+            kind=SandboxResourceKind.VOLUME,
+            name="volume",
+            instance_id="volume-v1",
+            sandbox_id=sandbox.id,
+            tenant_id="tenant-a",
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
+    backend.terminate_observed_resources.side_effect = RuntimeError(
+        "container removal failed"
+    )
     monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
 
     def record(
@@ -218,7 +293,7 @@ def test_activity_invalidates_failed_cleanup_before_filesystem_write(
     backend.list_session_workspaces.side_effect = RuntimeError("runtime missing")
     with pytest.raises(RuntimeError, match="runtime missing"):
         lifecycle.sleep_sandbox(db_session, backend, sandbox, "tenant-a", MagicMock())
-    backend.terminate.assert_called_once()
+    backend.terminate_observed_resources.assert_called_once()
 
 
 @pytest.mark.parametrize("legacy", [False, True])
@@ -250,7 +325,18 @@ def test_failed_heartbeat_fence_prevents_deletion(
     backend.supports_opencode_history_persistence = False
     backend.list_session_workspaces.return_value = []
     db_session.execute.return_value.rowcount = 0
+    sandbox = _sandbox()
+    backend.iter_resources.return_value = [
+        SandboxResource(
+            kind=SandboxResourceKind.VOLUME,
+            name="volume",
+            instance_id="volume-v1",
+            sandbox_id=sandbox.id,
+            tenant_id="tenant-a",
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
     monkeypatch.setattr(lifecycle, "get_orphan_build_session_ids", lambda *_args: set())
-    lifecycle.sleep_sandbox(db_session, backend, _sandbox(), "tenant-a", MagicMock())
-    backend.terminate.assert_not_called()
+    lifecycle.sleep_sandbox(db_session, backend, sandbox, "tenant-a", MagicMock())
+    backend.terminate_observed_resources.assert_not_called()
     db_session.commit.assert_not_called()
