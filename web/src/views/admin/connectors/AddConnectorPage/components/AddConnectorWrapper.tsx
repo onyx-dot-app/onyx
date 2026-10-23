@@ -46,7 +46,11 @@ import {
   createConnectorWithCredential,
   credentialPairMetadata,
 } from "@/lib/credentials/svc";
-import { submitFiles, submitGoogleSite } from "@/lib/connectors/svc";
+import {
+  readCreatedCCPairId,
+  submitFiles,
+  submitGoogleSite,
+} from "@/lib/connectors/svc";
 import {
   useBindingGateMessage,
   type UseBoundFieldsGateResult,
@@ -199,6 +203,8 @@ async function submitConnector<T>(
   errorDetail?: string;
   isSuccess: boolean;
   response?: Connector<T>;
+  /** The pair the mock-credential create made, when it reports one. */
+  ccPairId?: number | null;
 }> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
@@ -218,8 +224,11 @@ async function submitConnector<T>(
         }
       );
       if (response.ok) {
-        const responseJson = await response.json();
-        return { isSuccess: true, response: responseJson };
+        // The mock-credential create answers with the new pair's id.
+        return {
+          isSuccess: true,
+          ccPairId: await readCreatedCCPairId(response),
+        };
       } else {
         const errorData = await response.json();
         return { errorDetail: String(errorData.detail), isSuccess: false };
@@ -263,6 +272,7 @@ export interface AddConnectorFormProps {
 export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const t = useTranslations("admin.connectorsList");
   const editT = useTranslations("admin.connectorEdit");
+  const indexingT = useTranslations("admin.indexing");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   // The string-pair editor (InputKeyValue) shows these same messages.
   const keyValueT = useTranslations("opal.keyValue");
@@ -478,8 +488,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     : headerSentence;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
-  const onSuccess = () => {
-    router.push("/admin/indexing-status?message=connector-created");
+  // A new connector opens on its own page, as a saved edit does. Without
+  // the pair's id, the status page lists it.
+  const onSuccess = (ccPairId: number | null) => {
+    toast.success(indexingT("connectorCreated.toast"));
+    router.push(
+      ccPairId === null
+        ? "/admin/indexing-status"
+        : `/admin/connector/${ccPairId}`
+    );
   };
 
   const credentialsFailed = credentialLoadError !== undefined;
@@ -575,7 +592,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         manageAccess
       );
       if (response) {
-        onSuccess();
+        onSuccess(response.ccPairId);
       }
       return;
     }
@@ -592,7 +609,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           manageAccess
         );
         if (response) {
-          onSuccess();
+          onSuccess(response.ccPairId);
         }
       } catch (error) {
         toast.error(t("add.fileUploadFailed.toast"));
@@ -632,7 +649,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       const connectorCreationPromise = (async () => {
         const credential = noCredentials ? null : accountFor(values);
         if (!credential) {
-          const { errorDetail, isSuccess, response } =
+          const { errorDetail, isSuccess, response, ccPairId } =
             await submitConnector<any>(connectorData, undefined, true);
 
           // Store the connector id immediately for potential timeout
@@ -640,7 +657,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             connectorIdRef.current = response.id;
           }
           if (isSuccess) {
-            onSuccess();
+            onSuccess(ccPairId ?? null);
           } else {
             toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
           }
@@ -671,7 +688,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
               : undefined,
           });
           if (createResponse.ok) {
-            onSuccess();
+            onSuccess(await readCreatedCCPairId(createResponse));
           } else if (!timeoutErrorHappenedRef.current) {
             // Only show error if timeout didn't happen
             const errorData = await createResponse.json();

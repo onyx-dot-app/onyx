@@ -59,8 +59,12 @@ test.describe("Web connector setup", () => {
     expect(ccPairId).not.toBeNull();
     await apiClient.pauseConnector(ccPairId!);
 
+    // Create opens the new connector's own page.
+    await expect(page).toHaveURL(new RegExp(`/admin/connector/${ccPairId}$`));
+
     // The new connector is listed on the status page.
     const statusPage = new IndexingStatusPage(page);
+    await statusPage.goto();
     await statusPage.waitForConnector(connectorName);
 
     // Its manage link opens the detail page for the same cc-pair. Its
