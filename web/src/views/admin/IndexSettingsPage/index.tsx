@@ -1905,7 +1905,7 @@ export default function IndexSettingsPage() {
                       // Active (staged or blocked), the banner pins 8px below
                       // the top so its actions stay in reach while the page
                       // scrolls, and casts a shadow while pinned.
-                      <StickyBox
+                      <StickyBox.Item
                         stick="top"
                         inset={2}
                         active={bannerActive}
@@ -1984,7 +1984,7 @@ export default function IndexSettingsPage() {
                             ) : undefined
                           }
                         />
-                      </StickyBox>
+                      </StickyBox.Item>
                     )
                   )}
 

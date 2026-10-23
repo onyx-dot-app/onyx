@@ -34,7 +34,9 @@ export {
 /* StickyBox */
 export {
   StickyBox,
-  type StickyBoxProps,
+  type StickyBoxItemHandle,
+  type StickyBoxItemProps,
+  type StickyBoxRootProps,
   type StickyEdge,
 } from "@opal/layouts/sticky-box/components";
 

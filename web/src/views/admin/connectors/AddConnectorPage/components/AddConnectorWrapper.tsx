@@ -29,6 +29,7 @@ import {
   PageCenter,
   Section,
   SettingsLayouts,
+  StickyBox,
   toast,
   useToastFromQuery,
 } from "@opal/layouts";
@@ -907,137 +908,146 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           visibleBoundFields={visibleBoundFields}
                           onChange={onGateChange}
                         />
-                        <Section gap={6} alignItems="stretch" width="full">
-                          {hasVisibleBoundFields && (
-                            <>
-                              <CredentialBoundFields
-                                fields={credentialBoundFields.values}
-                                advancedFields={
-                                  credentialBoundFields.advancedValues
-                                }
-                                showAdvancedFields={showAdvancedBoundFields}
-                                values={formikProps.values}
-                                connector={connector}
-                                currentCredential={formCredential}
-                                fieldErrors={gate?.fieldErrors}
-                                onFieldBlur={gate?.requestCheck}
-                              />
-                              {!noCredentials && (
-                                <Divider
-                                  paddingParallel={0}
-                                  paddingPerpendicular={0}
+                        <StickyBox.Root>
+                          <Section gap={6} alignItems="stretch" width="full">
+                            {hasVisibleBoundFields && (
+                              <>
+                                <CredentialBoundFields
+                                  fields={credentialBoundFields.values}
+                                  advancedFields={
+                                    credentialBoundFields.advancedValues
+                                  }
+                                  showAdvancedFields={showAdvancedBoundFields}
+                                  values={formikProps.values}
+                                  connector={connector}
+                                  currentCredential={formCredential}
+                                  fieldErrors={gate?.fieldErrors}
+                                  onFieldBlur={gate?.requestCheck}
                                 />
-                              )}
-                            </>
-                          )}
-
-                          {!noCredentials && (
-                            <AuthenticationAccountSection
-                              connector={connector}
-                              accessType={formikProps.values.access_type}
-                              currentCredential={currentCredential}
-                              onCredentialChange={setCurrentCredential}
-                              newAccountReady={newAccountReady}
-                              checkedCredential={checkedCredential}
-                              // A typed account's binding waits for a run,
-                              // so the checks stay open for it.
-                              checksLocked={
-                                !configUnlocked &&
-                                gate?.reason?.kind !== "runChecks"
-                              }
-                              editCCPairId={edit?.ccPair.id ?? null}
-                              expandChecksRequest={expandChecksRequest}
-                            />
-                          )}
-
-                          {credentialSwapped && (
-                            <MessageCard
-                              variant="info"
-                              title={editT("credentialSwap.title")}
-                              description={editT("credentialSwap.description")}
-                            />
-                          )}
-
-                          {(!noCredentials || hasVisibleBoundFields) && (
-                            <Divider
-                              paddingParallel={0}
-                              paddingPerpendicular={0}
-                            />
-                          )}
-
-                          {/* Locked, under one Disabled that blocks pointer
-                      and keyboard, until an account is selected. */}
-                          <Disabled
-                            disabled={!formUnlocked}
-                            tooltip={formLockReason}
-                            // The locked form is page-tall: the tooltip stays
-                            // level with the pointer, not the form's middle.
-                            tooltipAlign="follow"
-                            data-testid="connector-form"
-                          >
-                            <Section gap={6} alignItems="stretch" width="full">
-                              {/* A source with no fields (Gmail) shows only the
-                              start date; the file source shows neither. */}
-                              {(hasContentFields || indexesFromStart) && (
-                                <>
-                                  <ConnectorContentSection
-                                    config={contentConfiguration}
-                                    values={formikProps.values}
-                                    connector={connector}
-                                    currentCredential={formCredential}
-                                    reportScope={
-                                      formCredentialId === null
-                                        ? null
-                                        : {
-                                            credentialId: formCredentialId,
-                                            connectorId:
-                                              edit?.ccPair.connector.id ?? null,
-                                          }
-                                    }
-                                    disabled={!formUnlocked}
-                                    hasFields={hasContentFields}
-                                    indexingStart={indexesFromStart}
-                                  >
-                                    {edit && editsFileList && (
-                                      <EditFileLocations
-                                        ccPairId={edit.ccPair.id}
-                                        // Review waits for the upload: a plan
-                                        // made earlier would miss its files.
-                                        onUploadingChange={setUploading}
-                                      />
-                                    )}
-                                  </ConnectorContentSection>
-
+                                {!noCredentials && (
                                   <Divider
                                     paddingParallel={0}
                                     paddingPerpendicular={0}
                                   />
-                                </>
-                              )}
-                              <ConnectorSettingsSection
+                                )}
+                              </>
+                            )}
+
+                            {!noCredentials && (
+                              <AuthenticationAccountSection
                                 connector={connector}
-                                currentCredential={formCredential}
-                                disabled={!formUnlocked}
-                                editing={edit !== undefined}
+                                accessType={formikProps.values.access_type}
+                                currentCredential={currentCredential}
+                                onCredentialChange={setCurrentCredential}
+                                newAccountReady={newAccountReady}
+                                checkedCredential={checkedCredential}
+                                // A typed account's binding waits for a run,
+                                // so the checks stay open for it.
+                                checksLocked={
+                                  !configUnlocked &&
+                                  gate?.reason?.kind !== "runChecks"
+                                }
+                                editCCPairId={edit?.ccPair.id ?? null}
+                                expandChecksRequest={expandChecksRequest}
                               />
+                            )}
 
-                              {connector !== "file" && (
-                                <>
-                                  <Divider
-                                    paddingParallel={0}
-                                    paddingPerpendicular={0}
-                                  />
-                                  <ScheduleSection
-                                    defaultPruneFreqHours={
-                                      defaultPruneFreqHours
-                                    }
-                                    disabled={!formUnlocked}
-                                  />
-                                </>
-                              )}
-                            </Section>
-                          </Disabled>
-                        </Section>
+                            {credentialSwapped && (
+                              <MessageCard
+                                variant="info"
+                                title={editT("credentialSwap.title")}
+                                description={editT(
+                                  "credentialSwap.description"
+                                )}
+                              />
+                            )}
+
+                            {(!noCredentials || hasVisibleBoundFields) && (
+                              <Divider
+                                paddingParallel={0}
+                                paddingPerpendicular={0}
+                              />
+                            )}
+
+                            {/* Locked, under one Disabled that blocks pointer
+                        and keyboard, until an account is selected. */}
+                            <Disabled
+                              disabled={!formUnlocked}
+                              tooltip={formLockReason}
+                              // The locked form is page-tall: the tooltip stays
+                              // level with the pointer, not the form's middle.
+                              tooltipAlign="follow"
+                              data-testid="connector-form"
+                            >
+                              <Section
+                                gap={6}
+                                alignItems="stretch"
+                                width="full"
+                              >
+                                {/* A source with no fields (Gmail) shows only the
+                                start date; the file source shows neither. */}
+                                {(hasContentFields || indexesFromStart) && (
+                                  <>
+                                    <ConnectorContentSection
+                                      config={contentConfiguration}
+                                      values={formikProps.values}
+                                      connector={connector}
+                                      currentCredential={formCredential}
+                                      reportScope={
+                                        formCredentialId === null
+                                          ? null
+                                          : {
+                                              credentialId: formCredentialId,
+                                              connectorId:
+                                                edit?.ccPair.connector.id ??
+                                                null,
+                                            }
+                                      }
+                                      disabled={!formUnlocked}
+                                      hasFields={hasContentFields}
+                                      indexingStart={indexesFromStart}
+                                    >
+                                      {edit && editsFileList && (
+                                        <EditFileLocations
+                                          ccPairId={edit.ccPair.id}
+                                          // Review waits for the upload: a plan
+                                          // made earlier would miss its files.
+                                          onUploadingChange={setUploading}
+                                        />
+                                      )}
+                                    </ConnectorContentSection>
+
+                                    <Divider
+                                      paddingParallel={0}
+                                      paddingPerpendicular={0}
+                                    />
+                                  </>
+                                )}
+                                <ConnectorSettingsSection
+                                  connector={connector}
+                                  currentCredential={formCredential}
+                                  disabled={!formUnlocked}
+                                  editing={edit !== undefined}
+                                />
+
+                                {connector !== "file" && (
+                                  <>
+                                    <Divider
+                                      paddingParallel={0}
+                                      paddingPerpendicular={0}
+                                    />
+                                    <ScheduleSection
+                                      defaultPruneFreqHours={
+                                        defaultPruneFreqHours
+                                      }
+                                      disabled={!formUnlocked}
+                                    />
+                                  </>
+                                )}
+                              </Section>
+                            </Disabled>
+                          </Section>
+                        </StickyBox.Root>
                       </>
                     )}
                     {!edit && advisoryOpen && (
