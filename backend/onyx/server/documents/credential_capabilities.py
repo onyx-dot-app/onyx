@@ -25,7 +25,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     read_draft_run_for_user,
 )
 from onyx.connectors.capability_checks.findings_setting import (
-    hide_findings_if_disabled,
+    shown_check_results,
 )
 from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
@@ -123,7 +123,7 @@ class CapabilityReportSnapshot(BaseModel):
             else None
         )
         if report is not None:
-            hide_findings_if_disabled(report.check_results)
+            report.check_results = shown_check_results(report.check_results)
         progress: StoredRunProgress | None = (
             load_stored_run_progress(row.run_id)
             if run_status == CapabilityReportRunStatus.RUNNING
@@ -131,7 +131,7 @@ class CapabilityReportSnapshot(BaseModel):
             else None
         )
         if progress is not None:
-            hide_findings_if_disabled(progress.check_results)
+            progress.check_results = shown_check_results(progress.check_results)
         return cls(
             credential_id=row.credential_id,
             connector_id=row.connector_id,

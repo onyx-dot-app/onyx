@@ -647,8 +647,12 @@ edit-plan responses hide findings stored earlier.
 A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
 much longer than validation, such as a listing of every space. It is never
 required and never counts toward a verdict. The runner runs it after the
-required validation checks of the same run, and skips it (`applicable=False`) when a
-required check failed or findings are off. Creation does not run it: a cached
+required validation checks of the same run. When findings are off, it skips it
+(`applicable=False`). When a required check failed, it does not run it and
+shows "Not run" (`dependency_failed`), naming its own stopped dependency or else
+the first failed required check. A discovery check that does not apply to the
+scope or access type is `applicable=False` first, so a failed check does not
+show it as "Not run". Creation does not run it: a cached
 draft result is reused, else it is recorded as not run, so neither creation nor
 the first index attempt waits on it. `findings.py:bounded_options` and
 `bounded_count` read a listing lazily up to a cap.
@@ -694,7 +698,9 @@ trigger `SCHEDULED` once that long has passed since its last run. The connector
 page's run feed (`GET /admin/cc-pair/{id}/runs`, `db/cc_pair_runs.py`) lists
 these runs as kind `checks`, with a popover of the results, and the pair's
 prunes as kind `pruning` from its `sync_record` rows, which now carry the
-`error_message` a failed prune generator recorded.
+`error_message` a failed prune generator recorded. The run feed and the report
+reads leave out results that do not apply to the pair
+(`findings_setting.py:shown_check_results`); the stored report keeps them.
 
 ### 4.9 Typed configs and credential families
 
