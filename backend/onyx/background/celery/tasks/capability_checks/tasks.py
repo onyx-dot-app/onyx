@@ -6,12 +6,14 @@ manual trigger endpoint and credential creation), and from cc-pair creation and
 credential swap for the checks that did not finish in the blocking budget. It
 writes through the unconditional upsert: a granular run is the freshest truth and replaces whatever is stored (see the accessors'
 writer model). A run that fails gracefully records FAILED_TO_RUN itself; only
-hard kills and expired tasks leave their row RUNNING for the beat sweep to
-retire once the mark outlives its source's run ceiling.
+hard kills and expired tasks leave their row RUNNING until its deadline, which
+the task renews as checks finish; reads past it show FAILED_TO_RUN, and the beat
+sweep retires it.
 """
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any
 from uuid import UUID
 
@@ -57,7 +59,8 @@ from onyx.connectors.capability_checks.registry import (
 )
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
-    capability_check_run_stale_after,
+    CapabilityCheckProgressCallback,
+    capability_check_run_lease,
     effective_check_timeout_seconds,
     generate_capability_report,
     merge_capability_results,
@@ -79,6 +82,7 @@ from onyx.db.credential_capability import (
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
+    renew_capability_run_deadline,
     upsert_completed_capability_report,
 )
 from onyx.db.credentials import (
@@ -142,6 +146,44 @@ def _await_draft_results(
     return awaited, to_run
 
 
+class _StoredRunSupersededError(Exception):
+    """A newer run took the scope's report row; this run stops."""
+
+
+def _renew_stored_run(
+    *, credential_id: int, connector_id: int | None, run_id: UUID, lease: timedelta
+) -> None:
+    with get_session_with_current_tenant() as db_session:
+        renewed = renew_capability_run_deadline(
+            db_session,
+            credential_id=credential_id,
+            connector_id=connector_id,
+            run_id=run_id,
+            lease=lease,
+        )
+        db_session.commit()
+    if not renewed:
+        raise _StoredRunSupersededError()
+
+
+def _on_stored_run_result(
+    progress: StoredRunProgressRecorder,
+    results: Sequence[CapabilityCheckResult],
+    *,
+    credential_id: int,
+    connector_id: int | None,
+    run_id: UUID,
+    lease: timedelta,
+) -> None:
+    _renew_stored_run(
+        credential_id=credential_id,
+        connector_id=connector_id,
+        run_id=run_id,
+        lease=lease,
+    )
+    progress.on_result(results)
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
     bind=True,
@@ -170,7 +212,9 @@ def run_capability_checks_task(
 
     Terminal writes are fenced on ``run_id``: if this attempt was retired and
     the scope re-triggered, both the completion and the failure write no-op
-    instead of mislabeling the successor's row.
+    instead of mislabeling the successor's row. The run renews its mark's
+    deadline before the checks start and after every result, and stops once a
+    newer run took the row.
     """
     parsed_run_id = UUID(run_id) if run_id is not None else None
     parsed_trigger = CapabilityCheckTrigger(trigger)
@@ -239,8 +283,15 @@ def run_capability_checks_task(
         run_check_id_set = (
             frozenset(run_check_ids) if run_check_ids is not None else None
         )
-        progress: StoredRunProgressRecorder | None = None
+        on_result: CapabilityCheckProgressCallback | None = None
         if parsed_run_id is not None:
+            lease = capability_check_run_lease(source)
+            _renew_stored_run(
+                credential_id=credential_id,
+                connector_id=connector_id,
+                run_id=parsed_run_id,
+                lease=lease,
+            )
             progress = StoredRunProgressRecorder(
                 parsed_run_id,
                 [
@@ -249,9 +300,17 @@ def run_capability_checks_task(
                     if run_check_id_set is None or check.check_id in run_check_id_set
                 ],
                 merged_prior,
-                capability_check_run_stale_after(source),
+                lease,
             )
             progress.start()
+            on_result = partial(
+                _on_stored_run_result,
+                progress,
+                credential_id=credential_id,
+                connector_id=connector_id,
+                run_id=parsed_run_id,
+                lease=lease,
+            )
         report = generate_capability_report(
             credential,
             source=source,
@@ -260,7 +319,7 @@ def run_capability_checks_task(
             input_type=input_type,
             trigger=parsed_trigger,
             access_type=parsed_access_type,
-            on_result=progress.on_result if progress is not None else None,
+            on_result=on_result,
             check_ids=run_check_id_set,
             prior_results=merged_prior,
         )
@@ -289,10 +348,16 @@ def run_capability_checks_task(
                 f"credential {credential_id}, connector {connector_id} "
                 f"(run {run_id}, tenant {tenant_id})."
             )
+    except _StoredRunSupersededError:
+        task_logger.info(
+            f"Capability run {run_id} for credential {credential_id}, connector "
+            f"{connector_id} stopped: a newer run took its scope (tenant "
+            f"{tenant_id})."
+        )
     except Exception as e:
         # The worker is alive, so record the failure now: without this the scope
-        # would read RUNNING until the sweep's staleness window expires. Hard
-        # kills still rely on the sweep.
+        # would read RUNNING until its deadline passes. Hard kills still rely
+        # on the deadline.
         with get_session_with_current_tenant() as db_session:
             mark_capability_run_failed(
                 db_session,
@@ -506,21 +571,17 @@ def check_for_stale_capability_runs(
     *,
     tenant_id: str,
 ) -> None:
-    """Retires RUNNING marks that outlived their source's run ceiling.
+    """Retires RUNNING marks past their deadline.
 
-    A sweep rather than lazy recovery at trigger time: a re-trigger immediately
-    re-marks the scope RUNNING, so only a sweep can surface FAILED_TO_RUN to a
-    polling client without user action. A run that is merely slow and completes
-    after being retired overwrites FAILED_TO_RUN with its report (the completion
-    write is unconditional), so mislabeling self-heals.
+    Reads already show a mark past its deadline as FAILED_TO_RUN; the sweep
+    makes it stored truth and closes the run's history row. A run that is
+    merely slow and completes after being retired overwrites FAILED_TO_RUN with
+    its report (the fenced completion keeps its ``run_id``), so mislabeling
+    self-heals.
     """
     with get_session_with_current_tenant() as db_session:
         for source in get_sources_with_running_capability_runs(db_session):
-            retired = mark_stale_capability_runs_failed(
-                db_session,
-                source=source,
-                stale_after=capability_check_run_stale_after(source),
-            )
+            retired = mark_stale_capability_runs_failed(db_session, source=source)
             if retired:
                 task_logger.info(
                     f"Retired {retired} stale capability run(s) for source "

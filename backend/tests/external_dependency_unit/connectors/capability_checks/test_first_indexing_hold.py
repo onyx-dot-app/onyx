@@ -216,6 +216,7 @@ def _mark_running(db_session: Session, cc_pair: ConnectorCredentialPair) -> None
         connector_id=cc_pair.connector_id,
         source=cc_pair.connector.source,
         trigger=_TRIGGER,
+        lease=timedelta(hours=1),
         active_within=timedelta(0),
     )
     assert row is not None
@@ -236,6 +237,7 @@ def _complete(
         connector_id=cc_pair.connector_id,
         source=cc_pair.connector.source,
         trigger=_TRIGGER,
+        lease=timedelta(hours=1),
         active_within=timedelta(0),
     )
     assert row is not None
@@ -459,19 +461,17 @@ def test_a_dead_run_counts_as_failed_to_run(
             CredentialCapabilityReportRow.credential_id == slack_pair.credential_id,
             CredentialCapabilityReportRow.connector_id == slack_pair.connector_id,
         )
-        .values(run_started_at=datetime.now(timezone.utc) - timedelta(days=7))
+        .values(run_deadline_at=datetime.now(timezone.utc) - timedelta(minutes=1))
     )
     db_session.commit()
 
-    # Stale before the sweep, and FAILED_TO_RUN after it: both hold.
+    # Past its deadline before the sweep, and FAILED_TO_RUN after it: both hold.
     beat.run()
     beat.assert_waiting()
     assert (
         _hold_reason(db_session, slack_pair) == IndexingHoldReason.CHECKS_FAILED_TO_RUN
     )
-    mark_stale_capability_runs_failed(
-        db_session, source=DocumentSource.SLACK, stale_after=timedelta(days=1)
-    )
+    mark_stale_capability_runs_failed(db_session, source=DocumentSource.SLACK)
     db_session.commit()
     beat.run()
     beat.assert_waiting()
