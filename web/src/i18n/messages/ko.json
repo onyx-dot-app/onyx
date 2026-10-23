@@ -7877,6 +7877,15 @@
             "tooltip": "기본값 복원"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "TrueFoundry 게이트웨이 엔드포인트를 사용하거나 자체 호스팅 게이트웨이의 기본 URL을 붙여넣으세요.",
+            "placeholder": "TrueFoundry 게이트웨이 기본 URL"
+          },
+          "apiKeyField": {
+            "description": "[TrueFoundry](https://www.truefoundry.com/)의 Personal Access Token 또는 Virtual Account Token을 붙여넣으면 토큰으로 접근할 수 있는 모델을 불러옵니다."
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "Vercel AI Gateway 엔드포인트를 사용하거나 사용자 지정 기본 URL을 붙여넣으세요.",

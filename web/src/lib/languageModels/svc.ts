@@ -230,6 +230,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "bifrost",
   "openai_compatible",
   "vercel_ai_gateway",
+  "truefoundry",
   "vertex_ai",
 ]);
 
@@ -565,11 +566,31 @@ export const fetchBifrostModels = async (
   }
 };
 
-/**
- * Fetches models from a generic OpenAI-compatible server.
- * Uses snake_case params to match API structure.
- */
-export const fetchOpenAICompatibleModels = async (
+/** Fetches models from a generic OpenAI-compatible server. */
+export const fetchOpenAICompatibleModels = (
+  params: OpenAICompatibleFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchOpenAIShapedModels(
+    "/api/admin/llm/openai-compatible/available-models",
+    "OpenAI-compatible",
+    params
+  );
+
+/** Fetches the models a TrueFoundry token can reach from the gateway's
+ * OpenAI-shaped /models listing. */
+export const fetchTrueFoundryModels = (
+  params: OpenAICompatibleFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> =>
+  fetchOpenAIShapedModels(
+    "/api/admin/llm/truefoundry/available-models",
+    "TrueFoundry",
+    params
+  );
+
+/** Shared fetch for backend endpoints that return OpenAI-compatible model rows. */
+const fetchOpenAIShapedModels = async (
+  endpoint: string,
+  sourceName: string,
   params: OpenAICompatibleFetchParams
 ): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   const apiBase = params.api_base;
@@ -578,29 +599,29 @@ export const fetchOpenAICompatibleModels = async (
   }
 
   try {
-    const response = await fetch(
-      "/api/admin/llm/openai-compatible/available-models",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_base: apiBase,
-          api_key: params.api_key,
-          provider_id: params.provider_id,
-        }),
-        signal: params.signal,
-      }
-    );
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: params.api_key,
+        provider_id: params.provider_id,
+      }),
+      signal: params.signal,
+    });
 
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
         const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
-      } catch {
-        // ignore JSON parsing errors
+      } catch (jsonError) {
+        console.warn(
+          `Failed to parse ${sourceName} model fetch error response`,
+          jsonError
+        );
       }
       return { models: [], error: errorMessage };
     }
@@ -770,6 +791,13 @@ export const fetchModels = async (
       });
     case LLMProviderName.VERCEL_AI_GATEWAY:
       return fetchVercelAIGatewayModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_id: formValues.id,
+        signal,
+      });
+    case LLMProviderName.TRUEFOUNDRY:
+      return fetchTrueFoundryModels({
         api_base: formValues.api_base,
         api_key: formValues.api_key,
         provider_id: formValues.id,

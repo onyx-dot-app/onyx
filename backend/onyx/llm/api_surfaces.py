@@ -37,7 +37,12 @@ OPENAI_COMPATIBLE_SURFACES = frozenset(
 _STATIC_SURFACES: dict[str, LlmApiSurface] = {
     LlmProviderNames.OPENAI_COMPATIBLE: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.NEBIUS_TOKENFACTORY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
+    LlmProviderNames.TRUEFOUNDRY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
 }
+
+# Gateways that mount the OpenAI routes on the bare base URL, so the `/v1`
+# coercion for OpenAI-compatible surfaces is skipped for them.
+UNVERSIONED_BASE_PROVIDERS: frozenset[str] = frozenset({LlmProviderNames.TRUEFOUNDRY})
 
 # Admin-selected surfaces: {provider: (config_key, {stored value: surface}, default)}
 _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {

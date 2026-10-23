@@ -7877,6 +7877,15 @@
             "tooltip": "Restore Default"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "Use the TrueFoundry gateway endpoint, or paste your self-hosted gateway base URL.",
+            "placeholder": "Your TrueFoundry gateway base URL"
+          },
+          "apiKeyField": {
+            "description": "Paste a Personal Access Token or Virtual Account Token from [TrueFoundry](https://www.truefoundry.com/) to load the models your token can access."
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "Use the Vercel AI Gateway endpoint, or paste a custom base URL.",

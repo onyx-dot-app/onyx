@@ -27,6 +27,8 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 # Public, unauthenticated catalog; also litellm's default base for this provider.
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
+TRUEFOUNDRY_PROVIDER_NAME = "truefoundry"
+
 PORTKEY_PROVIDER_NAME = "portkey"
 # Which API surface a Portkey provider targets; stored in custom_config.
 PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"

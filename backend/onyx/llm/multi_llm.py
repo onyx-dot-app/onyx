@@ -24,6 +24,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.llm.api_surfaces import (
     OPENAI_COMPATIBLE_SURFACES,
+    UNVERSIONED_BASE_PROVIDERS,
     LlmApiSurface,
     resolve_api_surface,
 )
@@ -733,7 +734,12 @@ class LitellmLLM(LLM):
                 model_kwargs.setdefault("api_key", "not-needed")
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
-                self._api_base = base if base.endswith("/v1") else f"{base}/v1"
+                if (
+                    not base.endswith("/v1")
+                    and model_provider not in UNVERSIONED_BASE_PROVIDERS
+                ):
+                    base = f"{base}/v1"
+                self._api_base = base
                 model_kwargs["api_base"] = self._api_base
         elif self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES:
             # Base stays bare; LiteLLM appends /v1/messages itself.

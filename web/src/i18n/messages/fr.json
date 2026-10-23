@@ -7877,6 +7877,15 @@
             "tooltip": "Restaurer la valeur par défaut"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "Utilisez le point de terminaison de la passerelle TrueFoundry ou collez l'URL de base de votre passerelle auto-hébergée.",
+            "placeholder": "Votre URL de base de la passerelle TrueFoundry"
+          },
+          "apiKeyField": {
+            "description": "Collez un Personal Access Token ou un Virtual Account Token depuis [TrueFoundry](https://www.truefoundry.com/) pour charger les modèles accessibles avec votre jeton."
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "Utilisez le point de terminaison Vercel AI Gateway ou collez une URL de base personnalisée.",
