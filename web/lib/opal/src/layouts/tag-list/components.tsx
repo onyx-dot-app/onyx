@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import { Tag, type TagItem, type TagProps } from "@opal/components";
+import { Chip, type TagItem } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -8,9 +8,6 @@ import { Tag, type TagItem, type TagProps } from "@opal/components";
 interface TagListProps {
   /** Tags to render, in order. */
   items: TagItem[];
-
-  /** Size of each tag, including the overflow tag. */
-  size?: TagProps["size"];
 
   /** Renders a remove button on every item tag. Omit for passive tags. */
   onRemove?: (id: string) => void;
@@ -30,25 +27,18 @@ interface TagListProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Wrap-flowing row of Tags outside an input, for any labelled list. All
- * items show by default. `maxVisible` collapses the rest into a "+N" tag.
+ * Wrap-flowing row of Chips outside an input, for any labelled list. All
+ * items show by default. `maxVisible` collapses the rest into a "+N" chip.
  */
-function TagList({
-  items,
-  size = "md",
-  onRemove,
-  maxVisible,
-  overflowIcon,
-}: TagListProps) {
+function TagList({ items, onRemove, maxVisible, overflowIcon }: TagListProps) {
   const visible = maxVisible === undefined ? items : items.slice(0, maxVisible);
   const hidden = maxVisible === undefined ? [] : items.slice(maxVisible);
 
   return (
     <div className="flex w-full flex-wrap items-center gap-1">
       {visible.map((item) => (
-        <Tag
+        <Chip
           key={item.id}
-          size={size}
           title={item.label}
           error={item.error}
           truncate
@@ -56,9 +46,8 @@ function TagList({
         />
       ))}
       {hidden.length > 0 && (
-        <Tag
+        <Chip
           icon={overflowIcon}
-          size={size}
           title={`+${hidden.length}`}
           tooltip={hidden.map((item) => item.label).join(", ")}
         />
