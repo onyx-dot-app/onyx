@@ -18,11 +18,12 @@ import {
   Tabs,
   Text as OpalText,
 } from "@opal/components";
-import { useField, useFormikContext } from "formik";
+import { getIn, useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   Content,
   InputHorizontal,
+  InputErrorText,
   InputVertical,
   Label,
   Section,
@@ -43,7 +44,10 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
-import { useOptionsFinding } from "@/lib/connectors/checks/hooks";
+import {
+  useFieldCheckError,
+  useOptionsFinding,
+} from "@/lib/connectors/checks/hooks";
 import type { ListOption } from "@/lib/connectors/types/form";
 import { escapeMarkdown, markdown } from "@opal/utils";
 
@@ -343,7 +347,26 @@ export const RenderField: FC<RenderFieldProps> = ({
   reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
-  const { setFieldValue, setFieldTouched } = useFormikContext<FormValues>(); // Get Formik's context functions
+  const { setFieldValue, setFieldTouched, errors, touched } =
+    useFormikContext<FormValues>(); // Get Formik's context functions
+  // A failed check that judges this field shows as its error, unless the
+  // form's own validation already has one for it.
+  const checkError: string | null = useFieldCheckError(
+    connector,
+    field.name,
+    reportScope
+  );
+  const fieldError: string | undefined =
+    getIn(errors, field.name) === undefined
+      ? (checkError ?? undefined)
+      : undefined;
+  // The error a field shows itself, under its input: its Formik error once
+  // touched, else a check's.
+  const formikError: unknown = getIn(errors, field.name);
+  const shownError: string | undefined =
+    getIn(touched, field.name) && typeof formikError === "string"
+      ? formikError
+      : fieldError;
 
   const label =
     typeof field.label === "function"
@@ -620,10 +643,12 @@ export const RenderField: FC<RenderFieldProps> = ({
         />
       ) : field.type === "text" ? (
         // The field name ties the label to the input's id and shows the
-        // field's Formik error under it.
+        // field's Formik error under it. A field with a test check shows its
+        // error itself, between the input and its help row.
         <InputVertical
-          withLabel={field.name}
+          withLabel={testCheck ? false : field.name}
           title={label}
+          error={testCheck ? undefined : fieldError}
           subDescription={
             testCheck
               ? undefined
@@ -644,7 +669,10 @@ export const RenderField: FC<RenderFieldProps> = ({
                 // Tests find a config text field by its config name.
                 data-testid={field.name}
                 placeholder={textPlaceholder}
-                variant={disabled ? "disabled" : undefined}
+                // A check's error turns it red as a Formik error does.
+                variant={
+                  disabled ? "disabled" : fieldError ? "error" : undefined
+                }
                 rows={1}
                 mono={field.mono}
               />
@@ -653,8 +681,13 @@ export const RenderField: FC<RenderFieldProps> = ({
                 name={field.name}
                 data-testid={field.name}
                 placeholder={textPlaceholder}
-                variant={disabled ? "disabled" : undefined}
+                variant={
+                  disabled ? "disabled" : fieldError ? "error" : undefined
+                }
               />
+            )}
+            {testCheck && shownError && (
+              <InputErrorText type="error">{shownError}</InputErrorText>
             )}
             {testCheck && (
               <Section

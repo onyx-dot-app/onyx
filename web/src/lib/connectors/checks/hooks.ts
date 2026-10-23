@@ -625,6 +625,34 @@ export function useOptionsFinding(
   }, [run, accountId, key, scope, reportFor]);
 }
 
+/**
+ * The error a failed check reports on `fieldName` (its `reports_field`), from
+ * the form's latest run of the current account; else null.
+ */
+export function useFieldCheckError(
+  source: ConfigurableSources,
+  fieldName: string,
+  scope: StoredReportScope | null
+): string | null {
+  const { data: session } = useSWR<ConnectorChecksSession>(
+    SWR_KEYS.connectorCheckSession(source),
+    null
+  );
+  const runId: string | null = session?.runId ?? null;
+  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    null
+  );
+  const { savedDraft } = useSavedDraftCredential(source);
+  const accountId: number | null =
+    scope?.credentialId ?? savedDraft?.credential_id ?? null;
+  if (!run || run.credential_id !== accountId) return null;
+  const failed = run.checks.find(
+    (check) => check.reports_field === fieldName && check.state === "failed"
+  );
+  return failed ? failed.summary || failed.message : null;
+}
+
 /** Options a discovery check listed under `key`; see `useOptionsFinding`. */
 export function useFindingOptions(
   source: ConfigurableSources,

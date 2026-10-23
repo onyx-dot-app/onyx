@@ -108,6 +108,7 @@ _SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Confluence")
 _SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
 _SPACE_FIELD = "space"
 _PAGE_ID_FIELD = "page_id"
+_CQL_QUERY_FIELD = "cql_query"
 
 # Pages sampled when a probe needs a page with attachments.
 _SAMPLE_PAGES = 5
@@ -387,6 +388,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         row_id: str | None = None,
         step: CheckStep | None = None,
         timeout_text: CheckRowText = _TIMEOUT_TEXT,
+        reports_field: str | None = None,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -404,6 +406,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             depends_on=_DEPENDS_ON.get(check_id, ()),
             step=step,
             timeout_text=timeout_text,
+            reports_field=reports_field,
         )
 
 
@@ -858,6 +861,7 @@ class _CqlQueryCheck(_ConfluenceCheck):
                 "AND. Use no lastModified filter and no ORDER BY. Test the query "
                 "in Confluence search."
             ),
+            reports_field=_CQL_QUERY_FIELD,
         )
 
     def applies(self, form_state: FormState[ConfluenceConnectorConfig]) -> bool:

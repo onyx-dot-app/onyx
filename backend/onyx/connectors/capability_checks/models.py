@@ -549,6 +549,10 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
     create form: every source's sign-in check, and a check that proves the
     credential works with the credential-bound fields (e.g. it lists the
     site's spaces). Such a check may require only bound fields.
+
+    ``reports_field`` names the one config field the check judges (e.g.
+    Confluence's CQL query check judges ``cql_query``). The form shows the
+    check's failure as that field's error.
     """
 
     # The source's config model. None for checks that never read the config.
@@ -578,6 +582,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         row_id: str | None = None,
         step: CheckStep | None = None,
         timeout_text: CheckRowText | None = None,
+        reports_field: str | None = None,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -621,6 +626,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.remediation = remediation
         self.docs_link = docs_link
         self.validates_binding = validates_binding
+        self.reports_field = reports_field
         # A sign-in check: on a form run, a timeout or an unreachable source
         # FAILS it, because Onyx cannot use the account. Other runs keep it
         # INCOMPLETE, so a slow source never holds indexing.
@@ -1041,6 +1047,8 @@ class DraftCheckState(BaseModel):
     docs_link: str | None = None
     duration_ms: int | None = None
     from_cache: bool = False
+    # The config field whose error the check's failure is.
+    reports_field: str | None = None
     # The check proves the credential works with the credential-bound fields.
     validates_binding: bool = False
     # A discovery check: it finds what the credential reaches and never
