@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from onyx.cache.factory import get_cache_backend
 from onyx.configs import app_configs as _cfg
 from onyx.configs.constants import (
+    KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY,
     KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
     KV_PASSWORD_AUTH_ENABLED_KEY,
     OnyxRedisLocks,
@@ -97,8 +98,9 @@ def _build_env_defaults() -> SecuritySettings:
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
-        # No env knob on purpose: the relink window is off until an admin opens it.
+        # No env knob on purpose: both claim windows are off until an admin opens them.
         allow_same_provider_subject_relink=False,
+        allow_renamed_account_claim=False,
         # No env knob on purpose: incognito is off until an admin enables it.
         incognito_availability=IncognitoAvailability.OFF,
         incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
@@ -160,6 +162,7 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
 KV_BACKED_OVERRIDE_KEYS: dict[str, str] = {
     "password_auth_enabled": KV_PASSWORD_AUTH_ENABLED_KEY,
     "allow_same_provider_subject_relink": KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
+    "allow_renamed_account_claim": KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY,
 }
 
 

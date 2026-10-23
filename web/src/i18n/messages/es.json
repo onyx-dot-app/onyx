@@ -8602,6 +8602,10 @@
           "description": "Todos inician sesión y se registran solo mediante SSO. Requiere al menos un proveedor de SSO activado.",
           "title": "Desactivar el inicio de sesión y el registro con contraseña"
         },
+        "renamedClaim": {
+          "description": "Permite que los usuarios cuyo correo electrónico fue renombrado inicien sesión con otro proveedor en la cuenta que tiene su correo actual, cuando esa cuenta ya no tiene ningún vínculo con un proveedor. Active esto solo mientras migra usuarios desde un proveedor SSO eliminado.",
+          "title": "Reclamar cuentas renombradas tras eliminar un proveedor"
+        },
         "section": {
           "title": "Autenticación"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "URI de redirección copiada",
         "errorToast": "No se pudo copiar"
       },
+      "deleteProvider": {
+        "tooltip": "Eliminar"
+      },
       "editProvider": {
         "tooltip": "Editar"
       },
@@ -9323,6 +9330,17 @@
         "title": "No se pudieron cargar los proveedores de SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Eliminar {name}",
+          "description": "Los usuarios que iniciaron sesión con {name} conservan sus cuentas. Su próximo inicio de sesión con otro proveedor y el mismo correo electrónico abre la misma cuenta. Añada el proveedor de reemplazo antes de eliminar este.",
+          "countsError": "No pudimos cargar quién inició sesión con este proveedor. Cierre e inténtelo de nuevo.",
+          "countsLoading": "Cargando quién inició sesión con este proveedor…",
+          "linkedUsers": "{count, plural, =0 {Ningún usuario ha iniciado sesión con {name}.} one {# usuario inició sesión con {name}.} other {# usuarios iniciaron sesión con {name}.}}",
+          "renamedUsers": "{count, plural, one {# de ellos fue renombrado y necesita la ventana de reclamación de cuentas renombradas en Refuerzo de seguridad para iniciar sesión con otro proveedor.} other {# de ellos fueron renombrados y necesitan la ventana de reclamación de cuentas renombradas en Refuerzo de seguridad para iniciar sesión con otro proveedor.}}",
+          "submit": {
+            "label": "Eliminar"
+          }
+        },
         "domainVerification": {
           "description": "Un dominio inicia la sesión de los usuarios de tu espacio de trabajo automáticamente solo después de que verifiques que te pertenece. Añade el registro DNS de abajo y luego verifícalo.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "Permite que los usuarios inicien sesión con tu proveedor de identidad."
       },
       "toasts": {
+        "providerDeleted": "{name} eliminado",
         "unexpectedError": "Ocurrió un error inesperado."
       },
       "providerTypes": {

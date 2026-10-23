@@ -134,6 +134,10 @@ class SecuritySettingsOverrides(BaseModel):
     allow_same_provider_subject_relink: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    # Claim window for renamed accounts after an SSO provider delete. KV-backed.
+    allow_renamed_account_claim: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
     incognito_availability: IncognitoAvailability | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
@@ -249,6 +253,7 @@ class SecuritySettings(BaseModel):
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
     allow_same_provider_subject_relink: bool
+    allow_renamed_account_claim: bool
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
     allow_connector_group_restrictions: bool

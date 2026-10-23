@@ -8602,6 +8602,10 @@
           "description": "Alle melden sich ausschließlich über SSO an und registrieren sich darüber. Erfordert mindestens einen aktivierten SSO-Anbieter.",
           "title": "Anmeldung und Registrierung mit Passwort deaktivieren"
         },
+        "renamedClaim": {
+          "description": "Lässt Benutzer, deren E-Mail-Adresse umbenannt wurde, sich über einen anderen Anbieter beim Konto mit ihrer aktuellen E-Mail-Adresse anmelden, wenn dieses Konto keine Anbieterverknüpfung mehr hat. Nur während des Umzugs von einem gelöschten SSO-Anbieter einschalten.",
+          "title": "Umbenannte Konten nach dem Löschen eines Anbieters übernehmen"
+        },
         "section": {
           "title": "Authentifizierung"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "Weiterleitungs-URI kopiert",
         "errorToast": "Kopieren nicht möglich"
       },
+      "deleteProvider": {
+        "tooltip": "Löschen"
+      },
       "editProvider": {
         "tooltip": "Bearbeiten"
       },
@@ -9323,6 +9330,17 @@
         "title": "SSO-Anbieter konnten nicht geladen werden"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "{name} löschen",
+          "description": "Benutzer, die sich mit {name} angemeldet haben, behalten ihre Konten. Bei der nächsten Anmeldung über einen anderen Anbieter mit derselben E-Mail-Adresse öffnet sich dasselbe Konto. Fügen Sie den neuen Anbieter hinzu, bevor Sie diesen löschen.",
+          "countsError": "Wir konnten nicht laden, wer sich mit diesem Anbieter angemeldet hat. Schließen Sie das Fenster und versuchen Sie es erneut.",
+          "countsLoading": "Lädt, wer sich mit diesem Anbieter angemeldet hat…",
+          "linkedUsers": "{count, plural, =0 {Kein Benutzer hat sich mit {name} angemeldet.} one {# Benutzer hat sich mit {name} angemeldet.} other {# Benutzer haben sich mit {name} angemeldet.}}",
+          "renamedUsers": "{count, plural, one {# davon wurde umbenannt und braucht das Übernahmefenster für umbenannte Konten in der Sicherheitshärtung, um sich über einen anderen Anbieter anzumelden.} other {# davon wurden umbenannt und brauchen das Übernahmefenster für umbenannte Konten in der Sicherheitshärtung, um sich über einen anderen Anbieter anzumelden.}}",
+          "submit": {
+            "label": "Löschen"
+          }
+        },
         "domainVerification": {
           "description": "Eine Domain meldet die Benutzer Ihres Arbeitsbereichs erst dann automatisch an, wenn Sie nachweisen, dass sie Ihnen gehört. Fügen Sie den folgenden DNS-Eintrag hinzu und verifizieren Sie ihn dann.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "Lassen Sie Benutzer sich über Ihren Identitätsanbieter anmelden."
       },
       "toasts": {
+        "providerDeleted": "{name} gelöscht",
         "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
       },
       "providerTypes": {

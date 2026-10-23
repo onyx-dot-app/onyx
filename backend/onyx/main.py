@@ -423,7 +423,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
             # Import a legacy single-config SAML_CONF_DIR into a provider row. The
             # api_server has the mount the migration job lacks, so this is where it
-            # runs. No-op unless AUTH_TYPE=saml with no SAML row yet.
+            # runs once, so deleting the imported row is final.
             seed_saml_provider_from_conf_dir(db_session)
             # No-op when env is unset or the row already matches.
             seed_jwt_settings_from_env()

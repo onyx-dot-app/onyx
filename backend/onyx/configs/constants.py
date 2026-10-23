@@ -105,6 +105,8 @@ KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
     "allow_same_provider_subject_relink_override"
 )
+KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY = "allow_renamed_account_claim_override"
+KV_LEGACY_SAML_IMPORTED_KEY = "legacy_saml_conf_imported"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
