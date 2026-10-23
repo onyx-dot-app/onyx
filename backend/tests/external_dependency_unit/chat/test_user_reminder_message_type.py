@@ -37,7 +37,7 @@ def mock_llm_config() -> LLMConfig:
     """Create a minimal LLMConfig for testing."""
     return LLMConfig(
         model_provider="openai",
-        model_name="gpt-6-luna",
+        model_name="gpt-4o-mini",
         temperature=0.7,
         api_key="test-key",
         api_base=None,
@@ -197,7 +197,7 @@ def _create_llm_config(model_name: str) -> LLMConfig:
 class TestCodeBlockMarkdownFormatting:
     """Tests for CODE_BLOCK_MARKDOWN prefix handling in translate_history_to_llm_format.
 
-    OpenAI reasoning models (o1, o3, gpt-6-sol) need a "Formatting re-enabled. " prefix
+    OpenAI reasoning models (o1, o3, gpt-5) need a "Formatting re-enabled. " prefix
     in their system messages for correct markdown generation.
     """
 
@@ -242,8 +242,8 @@ class TestCodeBlockMarkdownFormatting:
         assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
 
     def test_gpt5_model_prepends_markdown(self) -> None:
-        """Test that gpt-6-sol model prepends CODE_BLOCK_MARKDOWN to system message."""
-        llm_config = _create_llm_config("gpt-6-sol")
+        """Test that gpt-5 model prepends CODE_BLOCK_MARKDOWN to system message."""
+        llm_config = _create_llm_config("gpt-5")
         history = [
             ChatMessageSimple(
                 message="System prompt here.",
@@ -262,8 +262,8 @@ class TestCodeBlockMarkdownFormatting:
         assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
 
     def test_gpt4o_does_not_prepend(self) -> None:
-        """Test that gpt-6-astra model does NOT prepend CODE_BLOCK_MARKDOWN."""
-        llm_config = _create_llm_config("gpt-6-astra")
+        """Test that gpt-4o model does NOT prepend CODE_BLOCK_MARKDOWN."""
+        llm_config = _create_llm_config("gpt-4o")
         history = [
             ChatMessageSimple(
                 message="You are a helpful assistant.",
