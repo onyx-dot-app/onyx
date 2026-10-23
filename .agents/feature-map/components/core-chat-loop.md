@@ -166,6 +166,8 @@ Child agents and parallel tools use additional workers when needed.
 All responses share one `ChatDelivery`. Its event dispatcher renders SDK events,
 publishes browser packets, and writes the replay buffer. `Emitter` stamps each
 response's model index. Closing the browser reader does not stop execution.
+Pending replay lines flush at 32 KiB or on the periodic flush. Their backlog limit
+is 4 MiB of UTF-8 data. Exceeding it disables replay without failing live delivery.
 
 Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
 Search keeps the answer client for rewrites and filters, resolving the separate
@@ -262,9 +264,8 @@ whenever you touch this component.
    progress. The presenter and renderer consume that state to produce packets.
    Text, thinking-text, and argument deltas without mutable attachments are shared
    with observers. Other events are copied before publication returns and remain
-   isolated between observers. Payload accounting
-   includes both queued events and events still being delivered. Payload size is an
-   estimate, not an exact Python heap limit.
+   isolated between observers. The event queue is unbounded. Pending-event tracking
+   includes both queued events and events still being delivered.
    The live reader queue is unbounded: unread packets drain before completion.
    Disconnecting clears its backlog without stopping execution or replay storage.
 5. **Root finalization uses `ChatResponsePersistence`.** It reports one final

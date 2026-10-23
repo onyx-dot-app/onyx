@@ -1679,7 +1679,7 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
         overflowed.set()
 
     with (
-        patch("onyx.chat.stream_buffer._BUFFER_WORK_CAPACITY", 1),
+        patch("onyx.chat.stream_buffer._REPLAY_BACKLOG_MAX_BYTES", 512),
         patch("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02),
         mock_model_execution(side_effect=execute),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
