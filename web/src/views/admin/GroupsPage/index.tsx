@@ -1,8 +1,8 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useMemo, useRef, useState } from "react";
-import { useGridNavigation, useHotkey } from "@opal/hooks";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -54,7 +54,17 @@ function GroupsPage() {
     [groups]
   );
 
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // The field mounts once the groups load, so it takes focus then, as the
+  // connectors catalog's does on arrival.
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const setSearchInput = useCallback(
+    (input: HTMLInputElement | null) => {
+      searchInputRef.current = input;
+      focusOnMount(input);
+    },
+    [focusOnMount]
+  );
 
   /**
    * Moves focus to the search field, with the caret at the end. A query
@@ -144,7 +154,7 @@ function GroupsPage() {
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}
-          inputRef={searchInputRef}
+          inputRef={setSearchInput}
           onSearchKeyDown={handleSearchKeyDown}
         />
 
