@@ -6758,6 +6758,10 @@
           "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
         }
       },
+      "retiredModelWarning": {
+        "description": "Verbinden Sie ein anderes Modell, legen Sie es als Standard fest und trennen Sie dann {title}.",
+        "title": "{title} ist nicht mehr verfügbar"
+      },
       "setDefaultError": {
         "message": "Der Standard konnte nicht festgelegt werden"
       },

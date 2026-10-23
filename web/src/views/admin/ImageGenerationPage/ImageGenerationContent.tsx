@@ -67,6 +67,12 @@ export default function ImageGenerationContent() {
     })).filter((g) => g.providers.length > 0);
   }, [connectedProviderIds]);
 
+  const connectedDeprecatedProviders = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.flatMap((group) => group.providers).filter(
+      (p) => p.deprecated && connectedProviderIds.has(p.image_provider_id)
+    );
+  }, [connectedProviderIds]);
+
   const defaultConfig = useMemo(() => {
     return configs.find((c) => c.is_default);
   }, [configs]);
@@ -209,6 +215,17 @@ export default function ImageGenerationContent() {
         {connectedProviderIds.size === 0 && (
           <MessageCard variant="info" title={t("emptyState.title")} />
         )}
+
+        {connectedDeprecatedProviders.map((provider) => (
+          <MessageCard
+            key={provider.image_provider_id}
+            variant="warning"
+            title={t("retiredModelWarning.title", { title: provider.title })}
+            description={t("retiredModelWarning.description", {
+              title: provider.title,
+            })}
+          />
+        ))}
 
         {/* Provider Groups */}
         {visibleGroups.map((group) => (
