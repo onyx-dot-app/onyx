@@ -278,8 +278,8 @@ def _load_zoom_group_sync() -> GroupSyncFuncType:
 class DocSyncConfig(BaseModel):
     doc_sync_frequency: int
     initial_index_should_sync: bool
-    # Exactly one sync func. The checkpointed one is for sources whose crawl can
-    # outlast PERMISSION_SYNC_TIMEOUT, so a stopped attempt continues where it stopped.
+    # Exactly one sync func. The checkpointed one is for crawls long enough that a
+    # stopped attempt (stall, stop signal, lost lease) must continue where it stopped.
     doc_sync_func: DocSyncFuncType | None = None
     checkpointed_doc_sync_func: CheckpointedDocSyncFuncType | None = None
 
