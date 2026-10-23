@@ -42,6 +42,7 @@ export default function FailedChecksAdvisoryModal({
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAlertTriangle}
+          color="warning"
           title={t("title")}
           onClose={onClose}
         />
