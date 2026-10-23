@@ -46,7 +46,13 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   return (
-    <SelectCard state="empty" border="solid" padding={2} data-card rounding={4}>
+    <SelectCard
+      state="filled"
+      border="solid"
+      padding={2}
+      data-card
+      rounding={4}
+    >
       <ContentAction
         icon={isAdmin ? SvgUserManage : SvgUsers}
         title={displayGroupName(group, t)}
