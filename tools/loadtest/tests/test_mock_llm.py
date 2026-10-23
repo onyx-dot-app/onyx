@@ -9,11 +9,17 @@ Run:  uv run pytest tests/ -q
 
 from __future__ import annotations
 
+import ast
 import json
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from mock_llm.app import app
+from mock_llm.search_workload import load_calibration, search_helper_answer
 
 client = TestClient(app)
 
@@ -460,3 +466,198 @@ def test_maxctx_rejects_oversized_prompt_with_context_error() -> None:
 def test_maxctx_allows_small_prompt() -> None:
     choice = complete(model="mock-maxctx1000-ttft0-itl0-len10")
     assert choice["finish_reason"] == "stop"
+
+
+def _production_prompt(name: str, filename: str = "search_prompts.py") -> str:
+    """Read prompt constants without importing Onyx or its runtime dependencies."""
+    path = Path(__file__).resolve().parents[3] / "backend/onyx/prompts" / filename
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in node.targets
+        ):
+            value = node.value
+            if (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "strip"
+            ):
+                return str(ast.literal_eval(value.func.value)).strip()
+            return str(ast.literal_eval(value))
+    raise AssertionError(f"Prompt not found: {name}")
+
+
+def _selection_prompt(maximum: int = 10, count: int = 50) -> str:
+    return _production_prompt("DOCUMENT_SELECTION_PROMPT").format(
+        max_sections=maximum,
+        extra_instructions="",
+        formatted_doc_sections=json.dumps(
+            [
+                {"section_id": index, "content": f"Section {index}"}
+                for index in range(count)
+            ]
+        ),
+        user_query="Which launch decisions changed?",
+    )
+
+
+def _classification_prompt() -> str:
+    return _production_prompt("DOCUMENT_CONTEXT_SELECTION_PROMPT").format(
+        document_title="Example",
+        section_above="Before",
+        main_section="Main",
+        section_below="After",
+        user_query="Which launch decisions changed?",
+    )
+
+
+def test_search_helper_responses_match_across_transports() -> None:
+    prompts = [
+        _selection_prompt(),
+        _classification_prompt(),
+        _production_prompt(
+            "SOURCE_SCOPE_DECISION_PROMPT", "filter_extration.py"
+        ).format(
+            conversation_history="",
+            current_cycle_queries="launch decisions",
+            previous_cycles="",
+            valid_sources="file\nslack",
+            last_user_query="Which launch decisions changed?",
+        ),
+        _production_prompt("TIME_SCOPE_DECISION_PROMPT", "filter_extration.py").format(
+            conversation_history="",
+            current_day_time_str="2026-10-22",
+            last_user_query="Which launch decisions changed?",
+        ),
+    ]
+    expected_shapes = [
+        lambda value: isinstance(json.loads(value), list),
+        lambda value: value in "0123",
+        lambda value: value == "[]",
+        lambda value: value == "updated (None, None)",
+    ]
+    for prompt, valid in zip(prompts, expected_shapes, strict=True):
+        messages = [{"role": "user", "content": prompt}]
+        plain = complete(messages=messages)["message"]["content"]
+        streamed = "".join(
+            chunk["choices"][0]["delta"].get("content") or ""
+            for chunk in stream_chunks(messages=messages)
+        )
+        assert plain == streamed
+        assert valid(plain)
+
+
+def test_selection_respects_candidates_and_maximum() -> None:
+    for maximum, candidates in [(3, 50), (10, 2), (10, 0)]:
+        result = complete(
+            model="mock-sections10-ttft0-itl0",
+            messages=[
+                {"role": "user", "content": _selection_prompt(maximum, candidates)}
+            ],
+        )
+        indices = json.loads(result["message"]["content"])
+        assert len(indices) == min(maximum, candidates)
+        assert len(indices) == len(set(indices))
+        assert all(0 <= index < candidates for index in indices)
+
+
+def test_classification_override_exercises_each_expansion_path() -> None:
+    for value in range(4):
+        result = complete(
+            model=f"mock-class{value}-ttft0-itl0",
+            messages=[{"role": "user", "content": _classification_prompt()}],
+        )
+        assert result["message"]["content"] == str(value)
+    response = client.post(
+        "/v1/chat/completions", json={"model": "mock-class4", "messages": []}
+    )
+    assert response.status_code == 400
+
+
+def test_calibrated_selection_varies_without_invalid_ids() -> None:
+    counts = []
+    non_prefix = 0
+    for index in range(500):
+        prompt = _selection_prompt().replace(
+            "Which launch decisions changed?", f"Question {index}"
+        )
+        answer = search_helper_answer(prompt)
+        assert answer is not None
+        ids = json.loads(answer)
+        counts.append(len(ids))
+        non_prefix += ids != list(range(len(ids)))
+    assert set(counts) == set(range(1, 11))
+    assert 3 <= sorted(counts)[250] <= 5
+    assert non_prefix > 250
+
+
+def test_keyword_output_preserves_terms_and_ignores_prompt_scaffolding() -> None:
+    messages = [
+        {
+            "role": "system",
+            "content": _production_prompt("KEYWORD_REPHRASE_SYSTEM_PROMPT").format(
+                current_date="2026-10-22"
+            ),
+        },
+        {
+            "role": "user",
+            "content": _production_prompt("KEYWORD_REPHRASE_USER_PROMPT").format(
+                additional_context="User memory scaffolding",
+                user_query="What are the ACME-42 launch decisions?",
+            ),
+        },
+    ]
+    answer = complete(messages=messages)["message"]["content"]
+    assert answer == "ACME-42 launch decisions"
+    streamed = "".join(
+        chunk["choices"][0]["delta"].get("content") or ""
+        for chunk in stream_chunks(messages=messages)
+    )
+    assert streamed == answer
+
+
+def test_calibration_import_does_not_read_fixture() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; from unittest.mock import patch; "
+            "guard = patch.object(Path, 'read_text', side_effect=AssertionError('import read')); "
+            "guard.start(); import mock_llm.search_workload; guard.stop()",
+        ],
+        check=True,
+    )
+
+
+def test_calibration_loader_reuses_fixture() -> None:
+    fixture = (
+        Path(__file__).parents[1] / "mock_llm/search_calibration.json"
+    ).read_text()
+    load_calibration.cache_clear()
+    try:
+        with patch.object(Path, "read_text", return_value=fixture) as read:
+            first = load_calibration()
+            assert load_calibration() is first
+            assert read.call_count == 1
+    finally:
+        load_calibration.cache_clear()
+
+
+def test_helper_output_limits_match_text_usage_and_finish_reason() -> None:
+    messages = [{"role": "user", "content": _selection_prompt()}]
+    for field in ("max_tokens", "max_completion_tokens"):
+        body = {"model": "mock-sections10-ttft0-itl0", "messages": messages, field: 1}
+        response = client.post("/v1/chat/completions", json=body).json()
+        choice = response["choices"][0]
+        assert len(choice["message"]["content"].split()) == 1
+        assert choice["finish_reason"] == "length"
+        assert response["usage"]["completion_tokens"] == 1
+        chunks = stream_chunks(
+            model="mock-sections10-ttft0-itl0", messages=messages, **{field: 1}
+        )
+        text = "".join(
+            chunk["choices"][0]["delta"].get("content") or "" for chunk in chunks
+        )
+        assert text == choice["message"]["content"]
+        assert chunks[-1]["choices"][0]["finish_reason"] == "length"

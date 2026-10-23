@@ -251,6 +251,7 @@ so verify the callers rather than a single component.
 | `deployment/helm/dev/` | craft-sandboxes (local Kubernetes configuration, launch, and readiness) |
 | `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
+| `tools/loadtest/mock_llm/` | internal-search (synthetic load-test helper responses) |
 
 ---
 
