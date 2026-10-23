@@ -96,7 +96,7 @@ def test_resolved_value_round_tripped_by_the_ui_is_not_persisted(
     db_session: Session, provider_name: str
 ) -> None:
     """The admin UI echoes back the value it was served; that must not become an override."""
-    model = "gpt-4o-mini"
+    model = "gpt-6-luna"
     resolved = get_max_input_tokens(
         model_name=model, model_provider=LlmProviderNames.OPENAI
     )
@@ -110,7 +110,7 @@ def test_admin_supplied_override_is_persisted(
     db_session: Session, provider_name: str
 ) -> None:
     """A value the admin actually chose differs from the lookup and must survive."""
-    model = "gpt-4o-mini"
+    model = "gpt-6-luna"
     resolved = get_max_input_tokens(
         model_name=model, model_provider=LlmProviderNames.OPENAI
     )
@@ -174,7 +174,7 @@ def test_stored_override_is_not_nulled_by_a_save_matching_the_lookup(
     still non-null: without the guard, a save whose value matches the live lookup
     nulls it, and the model silently follows LiteLLM from then on.
     """
-    model = "gpt-4o-mini"
+    model = "gpt-6-luna"
     resolved = get_max_input_tokens(
         model_name=model, model_provider=LlmProviderNames.OPENAI
     )
@@ -209,7 +209,7 @@ def test_ui_echo_of_a_stored_override_preserves_it(
     The API serves `stored or resolved`, so for a pinned model the UI is served
     the pin and echoes the pin. It must come back unchanged.
     """
-    model = "gpt-4o-mini"
+    model = "gpt-6-luna"
     resolved = get_max_input_tokens(
         model_name=model, model_provider=LlmProviderNames.OPENAI
     )

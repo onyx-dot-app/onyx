@@ -109,7 +109,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-5-mini", is_visible=True
+                                name="gpt-6-luna", is_visible=True
                             )
                         ],
                     ),
@@ -117,7 +117,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                 )
                 update_default_model(
                     provider_id=provider.id,
-                    model="gpt-5-mini",
+                    model="gpt-6-luna",
                     db_session=session,
                     flow_type=LLMModelFlowType.CHAT,
                 )

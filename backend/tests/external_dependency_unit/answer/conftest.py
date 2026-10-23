@@ -29,7 +29,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             is_public=True,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini",
+                    name="gpt-6-luna",
                     is_visible=True,
                 )
             ],
@@ -41,7 +41,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
         )
         update_default_model(
             provider_id=provider.id,
-            model="gpt-4o-mini",
+            model="gpt-6-luna",
             db_session=db_session,
             flow_type=LLMModelFlowType.CHAT,
         )

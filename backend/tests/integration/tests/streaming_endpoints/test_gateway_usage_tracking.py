@@ -7,7 +7,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
 
-_GATEWAY_MODEL = "gpt-5-mini"
+_GATEWAY_MODEL = "gpt-6-luna"
 # Drain thread flushes on a ~2s interval; give it generous headroom.
 _POLL_TIMEOUT_SECONDS = 45
 

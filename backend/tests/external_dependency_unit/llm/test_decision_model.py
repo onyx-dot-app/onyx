@@ -121,7 +121,7 @@ def test_chat_model_cannot_replace_selected_decision_model(
             name="Chat",
             provider="openai",
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-5-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name="gpt-6-luna", is_visible=True)
             ],
         ),
         db_session,
@@ -131,7 +131,7 @@ def test_chat_model_cannot_replace_selected_decision_model(
     )
     with pytest.raises(ValueError, match="is not a valid model"):
         update_default_model(
-            db_session, chat_provider.id, "gpt-5-mini", LLMModelFlowType.DECISION
+            db_session, chat_provider.id, "gpt-6-luna", LLMModelFlowType.DECISION
         )
     db_session.rollback()
     selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)

@@ -89,7 +89,7 @@ class DeepResearchScriptLLM(LitellmLLM):
         super().__init__(
             model_provider="openai",
             api_key=None,
-            model_name="gpt-5-mini",
+            model_name="gpt-6-luna",
             max_input_tokens=1_000_000_000,
         )
         self._lock = threading.Lock()

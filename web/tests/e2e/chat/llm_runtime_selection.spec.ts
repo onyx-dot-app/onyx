@@ -277,9 +277,7 @@ test.describe("LLM Runtime Selection", () => {
 
     // Keep this aligned with the existing stable regenerate flow test.
     const initialModelDisplay = await selectModelFromInputPopover(page, [
-      "GPT-4.1",
-      "GPT-4o Mini",
-      "GPT-4o",
+      "GPT-6 Luna",
     ]);
     await verifyCurrentModel(page, initialModelDisplay);
 

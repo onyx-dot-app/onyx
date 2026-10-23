@@ -106,7 +106,7 @@ def _module_reset_and_seed(  # noqa: ARG001
         user_performing_action=admin,
         name=f"craft-k8s-openai-{uuid4().hex[:8]}",
         api_key=os.environ.get("OPENAI_API_KEY", "test-api-key"),
-        default_model_name="gpt-5-mini",
+        default_model_name="gpt-6-luna",
         set_as_default=False,
     )
     try:

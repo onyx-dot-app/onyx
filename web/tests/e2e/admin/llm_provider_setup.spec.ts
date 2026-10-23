@@ -111,7 +111,7 @@ async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
 async function createPublicProvider(
   page: Page,
   providerName: string,
-  modelName: string = "gpt-4o"
+  modelName: string = "gpt-6-luna"
 ): Promise<number> {
   return createPublicProviderWithModels(page, providerName, [
     { name: modelName, is_visible: true },

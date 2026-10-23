@@ -41,7 +41,7 @@ _PACKAGE_DIR = Path(__file__).parent
 # Provider auto-provisioned (from OPENAI_API_KEY) when the database has none,
 # so the eval can run against a fresh CI database. Cheap tier per repo policy.
 _FALLBACK_PROVIDER_NAME = "connector-filter-eval"
-_FALLBACK_MODEL = "gpt-5-mini"
+_FALLBACK_MODEL = "gpt-6-luna"
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

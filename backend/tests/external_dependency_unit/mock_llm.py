@@ -221,7 +221,7 @@ class MockLLM(LitellmLLM, MockLLMController):
         super().__init__(
             model_provider="openai",
             api_key=None,
-            model_name="gpt-5-mini",
+            model_name="gpt-6-luna",
             max_input_tokens=1000000000,
         )
         self.stream_controller = SyncStreamController[StreamItem]()

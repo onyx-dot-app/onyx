@@ -74,7 +74,7 @@ def test_send_message_api_runs_real_celery_turn(
             api_user,
             headless=True,
             llm_provider_type="openai",
-            llm_model_name="gpt-5-mini",
+            llm_model_name="gpt-6-luna",
         )
         session_id = UUID(session.id)
         sandbox = session.sandbox

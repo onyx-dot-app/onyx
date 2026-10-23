@@ -586,7 +586,7 @@ export class OnyxApiClient {
           name: providerName,
           provider: "openai",
           api_key: E2E_LLM_PROVIDER_API_KEY,
-          default_model_name: "gpt-4o",
+          default_model_name: "gpt-6-luna",
           is_public: false,
           groups: [groupId],
           personas: [],
@@ -621,7 +621,7 @@ export class OnyxApiClient {
           personas: agentIds,
           model_configurations: [
             {
-              name: "gpt-4o",
+              name: "gpt-6-luna",
               custom_display_name: providerName,
               is_visible: true,
             },
@@ -657,7 +657,7 @@ export class OnyxApiClient {
           is_public: true,
           groups: [],
           personas: [],
-          model_configurations: [{ name: "gpt-4o", is_visible: true }],
+          model_configurations: [{ name: "gpt-6-luna", is_visible: true }],
         },
       }
     );

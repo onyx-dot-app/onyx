@@ -43,7 +43,7 @@ class DockerLiveSession(NamedTuple):
     session_id: UUID
 
 
-_LIVE_MODEL = "gpt-5-mini"
+_LIVE_MODEL = "gpt-6-luna"
 
 _SKIP_NO_LLM_KEY = pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
@@ -154,7 +154,7 @@ def live_openai_provider(admin_user: DATestUser) -> Generator[None, None, None]:
     # The base craft conftest seeds a fake-keyed openai provider, and both the
     # session-config and sandbox-proxy key resolvers pick the *first* openai
     # provider. Delete any existing openai provider so the real key is the only
-    # one in play, then seed it (with gpt-5-mini visible).
+    # one in play, then seed it (with gpt-6-luna visible).
     for provider in LLMProviderManager.get_all(admin_user):
         if provider.provider == LlmProviderNames.OPENAI:
             LLMProviderManager.delete(provider, admin_user, force=True)

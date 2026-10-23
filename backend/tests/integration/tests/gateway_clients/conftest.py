@@ -46,7 +46,7 @@ from tests.utils.secret_names import TestSecret
 
 CLI_TIMEOUT_SECONDS = 120
 ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
-OPENAI_MODEL_NAME = "gpt-5-mini"
+OPENAI_MODEL_NAME = "gpt-6-luna"
 CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code@2.1.221"
 CODEX_PACKAGE = "@openai/codex@0.146.0"
 

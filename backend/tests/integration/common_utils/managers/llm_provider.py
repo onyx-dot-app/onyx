@@ -54,7 +54,7 @@ class LLMProviderManager:
                         supports_image_input=True,
                     )
                     for model_name in [
-                        default_model_name or "gpt-4o-mini",
+                        default_model_name or "gpt-6-luna",
                         *(model_names or []),
                     ]
                 ),
@@ -86,7 +86,7 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=default_model_name or "gpt-4o-mini",
+            default_model_name=default_model_name or "gpt-6-luna",
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
@@ -102,7 +102,7 @@ class LLMProviderManager:
 
         if set_as_default:
             if default_model_name is None:
-                default_model_name = "gpt-4o-mini"
+                default_model_name = "gpt-6-luna"
             set_default_response = client.post(
                 f"{API_SERVER_URL}/admin/llm/default",
                 json={
