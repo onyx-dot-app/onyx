@@ -63,6 +63,24 @@ const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
   credentialBoundFields;
 
 /**
+ * Source to the connector config fields its draft credential form shows,
+ * because they describe the account (e.g. whether its API token is scoped).
+ * The connector config still stores them. Each must be credential-bound.
+ */
+const ACCOUNT_CONFIG_FIELDS: Partial<Record<ValidSources, readonly string[]>> =
+  {
+    confluence: ["scoped_token"],
+    jira: ["scoped_token"],
+  };
+
+/** The source's connector config fields that show with the account. */
+export function accountConfigFieldNames(
+  source: ValidSources
+): ReadonlySet<string> {
+  return new Set(ACCOUNT_CONFIG_FIELDS[source] ?? []);
+}
+
+/**
  * The source's form-only fields: the account's realm (its site, host or
  * subdomain), one per realm field of the credential spec, under the same key.
  * The realm lives in the credential only. The form uses it to filter the saved
