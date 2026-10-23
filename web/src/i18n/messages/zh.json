@@ -2981,7 +2981,8 @@
           "rate": "{rate} 文档/分钟",
           "finished": "{time}（{duration}）",
           "rateFinished": "{rate} 文档/分钟（{duration}）",
-          "membershipRate": "{rate} 成员关系/分钟"
+          "membershipRate": "{rate} 成员关系/分钟",
+          "membershipRateFinished": "{rate} 成员关系/分钟（{duration}）"
         },
         "actions": {
           "stages": "查看阶段指标",

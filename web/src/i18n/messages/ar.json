@@ -2981,7 +2981,8 @@
           "rate": "{rate} مستند/دقيقة",
           "finished": "{time} ({duration})",
           "rateFinished": "{rate} مستند/دقيقة ({duration})",
-          "membershipRate": "{rate} عضوية/دقيقة"
+          "membershipRate": "{rate} عضوية/دقيقة",
+          "membershipRateFinished": "{rate} عضوية/دقيقة ({duration})"
         },
         "actions": {
           "stages": "عرض مقاييس المراحل",

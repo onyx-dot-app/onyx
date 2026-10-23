@@ -2981,7 +2981,8 @@
           "rate": "{rate} Dok./Min.",
           "finished": "{time} ({duration})",
           "rateFinished": "{rate} Dok./Min. ({duration})",
-          "membershipRate": "{rate} Mitgliedschaften/Min."
+          "membershipRate": "{rate} Mitgliedschaften/Min.",
+          "membershipRateFinished": "{rate} Mitgliedschaften/Min. ({duration})"
         },
         "actions": {
           "stages": "Phasenmetriken anzeigen",
