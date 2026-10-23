@@ -19,6 +19,9 @@ class _Request:
         return self._execute_fn()
 
 
+# tries of retry_transient_connection_errors
+_PROBE_CONNECTION_TRIES = 5
+
 _TRANSIENT_ERRORS = [
     BrokenPipeError(32, "Broken pipe"),
     ConnectionResetError("connection reset by peer"),
@@ -103,25 +106,15 @@ def test_access_probe_reraises_when_retries_exhausted(
     transient_error: Exception,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def instant_retries(fn: Callable[[], dict]) -> Callable[[], dict]:
-        def wrapper() -> dict:
-            error: Exception | None = None
-            for _ in range(3):
-                try:
-                    return fn()
-                except Exception as exc:
-                    error = exc
-            assert error is not None
-            raise error
-
-        return wrapper
-
-    monkeypatch.setattr(
-        google_utils, "retry_transient_connection_errors", instant_retries
-    )
+    """The real retry wrapper, with only its sleep removed: the probe gives up
+    after the configured tries and the original error escapes."""
+    monkeypatch.setattr("tenacity.nap.time.sleep", lambda _seconds: None)
+    attempts = {"count": 0}
 
     def execute() -> dict:
+        attempts["count"] += 1
         raise transient_error
 
     with pytest.raises(type(transient_error)):
         google_utils.execute_access_probe(_Request(execute))
+    assert attempts["count"] == _PROBE_CONNECTION_TRIES
