@@ -6758,6 +6758,10 @@
           "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
       },
+      "retiredModelWarning": {
+        "description": "Connectez un autre modèle, définissez-le par défaut, puis déconnectez {title}.",
+        "title": "{title} n'est plus disponible"
+      },
       "setDefaultError": {
         "message": "Échec de la définition du modèle par défaut"
       },

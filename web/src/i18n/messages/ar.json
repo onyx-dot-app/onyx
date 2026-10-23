@@ -6758,6 +6758,10 @@
           "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
         }
       },
+      "retiredModelWarning": {
+        "description": "اربط نموذجًا آخر واجعله الافتراضي، ثم افصل {title}.",
+        "title": "لم يعد {title} متاحًا"
+      },
       "setDefaultError": {
         "message": "فشل تعيين الافتراضي"
       },
