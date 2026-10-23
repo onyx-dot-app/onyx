@@ -312,7 +312,10 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         from_beginning: bool,
         user_performing_action: DATestUser,
-    ) -> None:
+    ) -> int:
+        """Returns the number of cc_pairs marked with an indexing trigger.
+        Run-once skips a cc_pair with an unfinished attempt and still
+        returns success, so 0 means nothing will run."""
         body = {
             "connector_id": cc_pair.connector_id,
             "credential_ids": [cc_pair.credential_id],
@@ -324,6 +327,8 @@ class CCPairManager:
             headers=user_performing_action.headers,
         )
         result.raise_for_status()
+        num_triggers: int = result.json()["data"]
+        return num_triggers
 
     @staticmethod
     def wait_for_indexing_inactive(
