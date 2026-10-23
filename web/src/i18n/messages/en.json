@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "New Document Set"
         },
+        "noResults": {
+          "description": "No document sets matching \"{query}\"",
+          "title": "No document sets found"
+        },
         "notFound": {
           "message": "Document set with id {id} not found",
           "title": "Document set not found"
+        },
+        "search": {
+          "placeholder": "Search document sets..."
         },
         "status": {
           "deleting": {

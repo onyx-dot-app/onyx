@@ -5710,9 +5710,16 @@
         "newButton": {
           "label": "Nouvel ensemble de documents"
         },
+        "noResults": {
+          "description": "Aucun ensemble de documents ne correspond à « {query} »",
+          "title": "Aucun ensemble de documents trouvé"
+        },
         "notFound": {
           "message": "Ensemble de documents avec l'id {id} introuvable",
           "title": "Ensemble de documents introuvable"
+        },
+        "search": {
+          "placeholder": "Rechercher des ensembles de documents..."
         },
         "status": {
           "deleting": {
