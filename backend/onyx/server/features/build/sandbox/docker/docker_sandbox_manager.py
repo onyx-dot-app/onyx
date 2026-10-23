@@ -69,7 +69,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 from uuid import UUID
@@ -123,6 +123,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
+    LABEL_DOCKER_NETWORK,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
     LABEL_PROVISIONING_ATTEMPT,
@@ -136,11 +137,17 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     RetriableWriteError,
     SandboxInfo,
+    SandboxResource,
+    SandboxResourceKind,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
     build_webapp_restore_script,
+)
+from onyx.server.features.build.sandbox.resources import (
+    remaining_request_timeout,
+    sandbox_resource_from_labels,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -413,6 +420,7 @@ def build_sandbox_labels(
     volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
+        LABEL_DOCKER_NETWORK: SANDBOX_DOCKER_NETWORK,
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
         LABEL_SANDBOX_ID: str(sandbox_id),
         LABEL_TENANT_ID: tenant_id,
@@ -718,6 +726,9 @@ class DockerSandboxManager(SandboxManager):
             )
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
+        self._cleanup_docker = DockerClient(
+            base_url=f"unix://{SANDBOX_DOCKER_SOCKET}", timeout=15
+        )
         self._image = SANDBOX_CONTAINER_IMAGE
         self._image_checked = False
         self._image_check_lock = threading.Lock()
@@ -1121,6 +1132,89 @@ class DockerSandboxManager(SandboxManager):
             return False
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
+
+    def iter_resources(
+        self, tenant_id: str, deadline: float
+    ) -> Iterator[SandboxResource]:
+        filters: dict[str, str | list[str] | bool] = {
+            "label": [
+                f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}",
+                f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
+                f"{LABEL_TENANT_ID}={tenant_id}",
+            ]
+        }
+        for kind in (
+            SandboxResourceKind.CONTAINER,
+            SandboxResourceKind.VOLUME,
+        ):
+            remaining_request_timeout(deadline)
+            items = (
+                self._cleanup_docker.containers.list(all=True, filters=filters)
+                if kind == SandboxResourceKind.CONTAINER
+                else self._cleanup_docker.volumes.list(filters=filters)
+            )
+            remaining_request_timeout(deadline)
+            for item in items:
+                remaining_request_timeout(deadline)
+                labels = (
+                    item.attrs.get("Labels")
+                    if kind == SandboxResourceKind.VOLUME
+                    else item.labels
+                )
+                labels = labels or {}
+                resource_network = labels.get(LABEL_DOCKER_NETWORK)
+                if resource_network is not None:
+                    if resource_network != self._network_name:
+                        continue
+                elif (
+                    not self._compose_project
+                    or labels.get("com.docker.compose.project") != self._compose_project
+                ):
+                    continue
+                resource = sandbox_resource_from_labels(
+                    kind=kind,
+                    name=item.name,
+                    instance_id=item.id
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    created_at=item.attrs["Created"]
+                    if kind == SandboxResourceKind.CONTAINER
+                    else item.attrs["CreatedAt"],
+                    labels=labels,
+                    tenant_id=tenant_id,
+                )
+                if resource is not None:
+                    yield resource
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:
+        remaining_request_timeout(deadline)
+        container = None
+        volume = None
+        try:
+            if resource.kind == SandboxResourceKind.CONTAINER:
+                container = self._cleanup_docker.containers.get(resource.instance_id)
+                labels = container.labels or {}
+            elif resource.kind == SandboxResourceKind.VOLUME:
+                volume = self._cleanup_docker.volumes.get(resource.name)
+                if volume.attrs["CreatedAt"] != resource.instance_id:
+                    raise RuntimeError(f"Volume identity changed: {resource.name}")
+                labels = volume.attrs.get("Labels") or {}
+            else:
+                raise ValueError(f"Unsupported Docker resource: {resource.kind}")
+            if (
+                labels.get(LABEL_SANDBOX_ID) != str(resource.sandbox_id)
+                or labels.get(LABEL_TENANT_ID) != resource.tenant_id
+                or labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX
+            ):
+                raise RuntimeError(f"Resource ownership changed: {resource.name}")
+            remaining_request_timeout(deadline)
+            if container is not None:
+                container.remove(force=True, v=False)
+            elif volume is not None:
+                # Docker rejects removal while any container still uses the volume.
+                volume.remove(force=False)
+        except NotFound:
+            return
 
     def _build_agents_md(
         self,
