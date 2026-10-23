@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Card, Collapsible, InputDatePicker } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -74,6 +75,10 @@ export default function ScheduleSection({
   disabled,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connectorsList.scheduled");
+  // A cleared field shows the backend's default, which a new form starts at.
+  const settings = useSettings();
+  const placeholderOf = (seconds: number | undefined, unit: number) =>
+    seconds === undefined ? undefined : String(seconds / unit);
 
   return (
     <Collapsible
@@ -95,6 +100,7 @@ export default function ScheduleSection({
               name="refreshFreq"
               min={MIN_REFRESH_FREQ_MINUTES}
               max={MAX_REFRESH_FREQ_MINUTES}
+              placeholder={placeholderOf(settings.default_refresh_freq, 60)}
               suffix={t("units.minutes")}
               disabled={disabled}
             />
@@ -112,6 +118,7 @@ export default function ScheduleSection({
               name="pruneFreq"
               min={MIN_SCHEDULE_HOURS}
               max={MAX_PRUNE_FREQ_HOURS}
+              placeholder={placeholderOf(settings.default_pruning_freq, 3600)}
               decimalPlaces={3}
               suffix={t("units.hours")}
               disabled={disabled}

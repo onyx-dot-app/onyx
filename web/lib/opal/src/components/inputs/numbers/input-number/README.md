@@ -12,7 +12,7 @@ With a negative `min`, the value can be typed with a leading minus sign.
 | --------------- | --------------------------------- | ----------- | ---------------------------------------------------------------------------- |
 | `value`         | `number \| null`                  | —           | Controlled value                                                             |
 | `onChange`      | `(value: number \| null) => void` | —           | Fires on commit                                                              |
-| `min` / `max`   | `number`                          | —           | The stepper bounds, and the range `InputNumberField` checks                  |
+| `min` / `max`   | `number`                          | —           | Bounds: the steppers and blur clamp to them                                  |
 | `step`          | `number`                          | `1`         | Stepper increment                                                            |
 | `decimalPlaces` | `number`                          | `0`         | Allowed precision                                                            |
 | `defaultValue`  | `number`                          | —           | Target of the reset action                                                   |

@@ -5,6 +5,7 @@ import "@opal/components/inputs/shared.css";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components";
+import { Interactive } from "@opal/core";
 import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
 
 type InputNumberVariant =
@@ -14,10 +15,11 @@ type InputNumberVariant =
   | "disabled"
   | "readOnly";
 
-// Inner text styling per variant; the wrapper chrome is the shared .opal-input.
+// Inner text colour per variant; the wrapper chrome is the shared .opal-input.
+// The font and the placeholder style are the same in every variant, so the
+// field keeps its height when it turns to the error state.
 const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
-  primary:
-    "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
+  primary: "text-text-04",
   internal: "text-text-04",
   error: "text-text-04",
   disabled: "text-text-01",
@@ -219,8 +221,8 @@ export default function InputNumber({
         onChange={handleInputChange}
         onBlur={handleBlur}
         className={cn(
-          "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
-          plain && "font-main-ui-mono",
+          "w-full h-6 bg-transparent p-0.5 focus:outline-hidden disabled:cursor-not-allowed placeholder:!font-main-ui-muted placeholder:text-text-02",
+          plain ? "font-main-ui-mono" : "font-main-ui-body",
           INNER_CLASSES[variant]
         )}
       />
@@ -242,24 +244,37 @@ export default function InputNumber({
         )}
         {!plain && (
           // The two steppers share the text line's height (1.5rem), so the
-          // field stays as tall as the other inputs.
+          // field stays as tall as the other inputs. Each arrow moves 0.5px
+          // toward the other, so the chevrons sit 8px apart.
           <div className="flex flex-col h-6">
-            <button
-              type="button"
-              onClick={handleIncrement}
-              disabled={!canIncrement || isDisabled}
-              className="flex flex-1 items-end justify-center px-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
-            >
-              <SvgChevronUp size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={handleDecrement}
-              disabled={!canDecrement || isDisabled}
-              className="flex flex-1 items-start justify-center px-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
-            >
-              <SvgChevronDown size={12} />
-            </button>
+            <div className="flex flex-1 items-end justify-center translate-y-[0.5px]">
+              <Interactive.Stateless
+                prominence="tertiary"
+                disabled={!canIncrement || isDisabled}
+                onClick={handleIncrement}
+              >
+                <Interactive.Container type="button" size="fit" rounding={1}>
+                  <SvgChevronUp
+                    size={12}
+                    className="interactive-foreground-icon"
+                  />
+                </Interactive.Container>
+              </Interactive.Stateless>
+            </div>
+            <div className="flex flex-1 items-start justify-center -translate-y-[0.5px]">
+              <Interactive.Stateless
+                prominence="tertiary"
+                disabled={!canDecrement || isDisabled}
+                onClick={handleDecrement}
+              >
+                <Interactive.Container type="button" size="fit" rounding={1}>
+                  <SvgChevronDown
+                    size={12}
+                    className="interactive-foreground-icon"
+                  />
+                </Interactive.Container>
+              </Interactive.Stateless>
+            </div>
           </div>
         )}
       </div>
