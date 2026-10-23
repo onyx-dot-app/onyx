@@ -358,10 +358,17 @@ that order would let files claim space the prompt still needs.
 See [[file-store-and-user-files]] §4.4 for metadata capture and content-loading
 session boundaries.
 
-Inside `run_llm_loop`, `available_tokens` is further reduced per cycle by
-`compute_all_tool_tokens(final_tools, token_counter)` before
-`construct_message_history` is called, since tool definitions themselves
-consume input tokens.
+The SDK counts the assembled request, including tool definitions, before each
+model call. It reuses that count for the output allowance. Each run caches token
+counts by exact text, so unchanged content avoids repeated tokenization. Changed
+prompts, tool definitions, and results get new counts. After counting a request,
+the cache retains only text used by that request. It clears during execution cleanup.
+
+Provider-specific counters from `get_llm_token_counter` also cache counts locally,
+with a 1,024-entry limit. These counters support prompt preparation across the
+feature agents. Neither cache shares conversation content across tenants. SDK
+context fitting retains its own counting rules; it does not use the display and
+tracing estimates attached to prepared messages.
 
 ### 4.9 Compression
 
