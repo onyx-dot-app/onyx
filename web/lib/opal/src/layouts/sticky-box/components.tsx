@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { cn } from "@opal/utils";
+import { cn, findScrollParent, smoothScroll } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 import type { Spacing } from "@opal/types";
 
@@ -45,39 +45,6 @@ interface StickyBoxItemProps {
   ref?: React.Ref<HTMLDivElement>;
   /** Actions on the box, such as `scrollToPlace`. */
   handleRef?: React.Ref<StickyBoxItemHandle>;
-}
-
-/** The nearest ancestor that scrolls, which is what a sticky box pins to. */
-function findScrollParent(element: HTMLElement): Element | null {
-  let node: HTMLElement | null = element.parentElement;
-  while (node) {
-    const { overflowY } = getComputedStyle(node);
-    if (overflowY === "auto" || overflowY === "scroll") return node;
-    node = node.parentElement;
-  }
-  return null;
-}
-
-// Covers browsers without `scrollend`.
-const SCROLL_END_FALLBACK_MS = 600;
-
-/** Smooth-scrolls the container (or the page) by `delta`; resolves at the end. */
-function scrollBy(root: Element | null, delta: number): Promise<void> {
-  return new Promise((resolve) => {
-    const target: Element | Window = root ?? window;
-    const reduce = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    let timer = 0;
-    function done() {
-      window.clearTimeout(timer);
-      target.removeEventListener("scrollend", done);
-      resolve();
-    }
-    target.addEventListener("scrollend", done);
-    timer = window.setTimeout(done, SCROLL_END_FALLBACK_MS);
-    target.scrollBy({ top: delta, behavior: reduce ? "auto" : "smooth" });
-  });
 }
 
 /**
@@ -134,7 +101,7 @@ function StickyBoxItem({
             : place.bottom - pinned.bottom;
         // Under 1px apart, the box is already in its place.
         if (Math.abs(delta) < 1) return;
-        await scrollBy(findScrollParent(element), delta);
+        await smoothScroll(findScrollParent(element), { by: delta });
       },
     }),
     [active, stick]

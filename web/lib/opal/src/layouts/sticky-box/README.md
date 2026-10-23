@@ -30,7 +30,7 @@ A block that pins to the top or bottom of its scroll container as the page scrol
 - **The gap is transparent.** Nothing is painted outside the content. A painted band would show square corners around a rounded card over whatever scrolls beneath.
 - **Constraint.** `position: sticky` needs the scroll container to be an ancestor with no `overflow: hidden` between the two. `SettingsLayouts.Root` qualifies; the box cannot fix a layout that does not.
 
-- **Leaving the pin.** Turning `active` off while pinned drops the box back into its place at once. To move there smoothly first, `await handleRef.current.scrollToPlace()` and then turn `active` off. It resolves at once when the box is not pinned, and it jumps instead of animating under reduced motion.
+- **Leaving the pin.** Turning `active` off while pinned drops the box back into its place at once. To move there smoothly first, `await handleRef.current.scrollToPlace()` and then turn `active` off. It resolves at once when the box is not pinned, and it jumps instead of animating under reduced motion. The scroll is `smoothScroll` from `@opal/utils`, which any other scroll-to can use with `findScrollParent`.
 
 ## StickyBox.Root
 
