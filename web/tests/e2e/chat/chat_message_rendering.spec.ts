@@ -37,10 +37,10 @@ const LONG_AI_RESPONSE = `Onyx is an open-source Gen-AI and Enterprise Search pl
 
 Onyx uses a **connector-based architecture** where each data source has a dedicated connector. These connectors run as background workers and can index simultaneously without interfering with each other. The supported connectors include:
 
-- **Confluence** — Full page and space indexing with attachment support
-- **Google Drive** — File and folder indexing with shared drive support
-- **Slack** — Channel message indexing with thread support
-- **GitHub** — Repository, issue, and pull request indexing
+- **Confluence**: Full page and space indexing with attachment support
+- **Google Drive**: File and folder indexing with shared drive support
+- **Slack**: Channel message indexing with thread support
+- **GitHub**: Repository, issue, and pull request indexing
 
 Each connector runs on its own schedule and can be configured independently for polling frequency.
 
@@ -498,9 +498,9 @@ Key advantages include:
 
 The Q3 2025 priorities focus on three main areas [[D1]](https://company.atlassian.net/wiki/spaces/ENG/pages/123):
 
-1. **Platform stability** — Improving error handling and retry mechanisms across all connectors
-2. **New integrations** — Adding support for ServiceNow and Zendesk connectors
-3. **Performance** — Optimizing vector search latency and reducing indexing time
+1. **Platform stability**: Improving error handling and retry mechanisms across all connectors
+2. **New integrations**: Adding support for ServiceNow and Zendesk connectors
+3. **Performance**: Optimizing vector search latency and reducing indexing time
 
 The platform architecture document provides additional context on how these improvements fit into the overall system design [[D2]](https://drive.google.com/file/d/abc123). The microservices architecture allows each component to be scaled independently.`;
 

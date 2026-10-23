@@ -6772,6 +6772,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "고급 옵션",
+        "description": "이 설정은 {appName}이(가) 검색에서 문서 권한을 적용하는 효율을 바꿉니다. 각 사용자가 볼 수 있는 문서는 바뀌지 않습니다. Onyx 팀의 명시적인 안내 없이 변경하지 마세요."
+      },
       "actions": {
         "applyForward": {
           "label": "새 문서와 업데이트된 문서에 적용"
@@ -14301,7 +14305,7 @@
         "title": "연결된 스킬",
         "unavailable": {
           "duplicateName": "\"{name}\" 이름의 스킬이 이미 연결되어 있습니다.",
-          "invalid": "유효하지 않은 스킬입니다. 연결하기 전에 수정하세요.",
+          "invalid": "유효하지 않은 스킬. 연결하기 전에 수정하세요.",
           "otherApp": "이미 앱 \"{name}\"에 연결되어 있습니다."
         },
         "unlink": {

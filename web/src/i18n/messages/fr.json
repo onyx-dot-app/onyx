@@ -6772,6 +6772,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Options avancées",
+        "description": "Ces paramètres modifient l’efficacité avec laquelle {appName} applique les autorisations des documents dans la recherche. Ils ne modifient pas les documents que chaque utilisateur peut voir. Ne les modifiez pas sans instructions explicites de l’équipe Onyx."
+      },
       "actions": {
         "applyForward": {
           "label": "Appliquer aux documents nouveaux et mis à jour"
@@ -14301,7 +14305,7 @@
         "title": "Compétences associées",
         "unavailable": {
           "duplicateName": "Une compétence nommée « {name} » est déjà associée.",
-          "invalid": "Compétence non valide : corrigez-la avant de l'associer.",
+          "invalid": "Compétence non valide. Corrigez-la avant de l'associer.",
           "otherApp": "Déjà associée à l'app « {name} »."
         },
         "unlink": {

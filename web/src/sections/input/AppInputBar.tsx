@@ -344,7 +344,7 @@ const AppInputBar = React.memo(
       if (initialMessage) {
         setMessage(initialMessage);
       }
-    }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [initialMessage]);
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
@@ -354,7 +354,7 @@ const AppInputBar = React.memo(
       if (isNewSession && !initialMessage) {
         clearMessage();
       }
-    }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [isNewSession, initialMessage]);
 
     const { clearForcedTool } = toolConfiguration;
     const forcedToolId = effectiveChatForcedToolId({

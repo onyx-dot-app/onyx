@@ -153,7 +153,6 @@ function SingleSelectFieldInner({
       setInputValue(selectedLabel);
     }
     // Only react to value prop changes while open, not inputValue changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // A committed free-form value (open mode, outside the set) appears in the

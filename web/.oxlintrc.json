@@ -1,13 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "unicorn",
-    "oxc",
-    "react",
-    "nextjs",
-    "jsx-a11y"
-  ],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
   "jsPlugins": [
     {
       "name": "react-doctor",
@@ -26,6 +19,9 @@
       "specifier": "./tools/oxlint/opal/index.ts"
     }
   ],
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
   "categories": {
     "correctness": "error"
   },
@@ -53,10 +49,13 @@
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-em-dash": "error",
+    "anti-slop/no-hookless-use-function": "error",
     "anti-slop/no-known-value-widening": "warn",
     "anti-slop/no-unknown-parameters": "error",
     "anti-slop/no-unsafe-dictionary-type": "warn",
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
+    "anti-slop/require-suppression-reason": "error",
     "anti-slop/no-runtime-typeof": "off",
     "anti-slop/no-shape-in-symbol-names": "off",
     "i18n/no-raw-jsx-text": "off",
@@ -88,15 +87,33 @@
       "error",
       {
         "forbid": [
-          { "element": "button", "message": "Use `Button` from `@opal/components`." },
-          { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
-          { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
-          { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+          {
+            "element": "button",
+            "message": "Use `Button` from `@opal/components`."
+          },
+          {
+            "element": "input",
+            "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`."
+          },
+          {
+            "element": "select",
+            "message": "Use `InputSingleSelect` from `@opal/components`."
+          },
+          {
+            "element": "textarea",
+            "message": "Use `InputTextArea` from `@opal/components`."
+          }
         ]
       }
     ]
   },
   "overrides": [
+    {
+      "files": [".storybook/mocks/**"],
+      "rules": {
+        "anti-slop/no-hookless-use-function": "off"
+      }
+    },
     {
       "files": [
         "**/*.test.ts",
@@ -303,10 +320,22 @@
           "warn",
           {
             "forbid": [
-              { "element": "button", "message": "Use `Button` from `@opal/components`." },
-              { "element": "input", "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`." },
-              { "element": "select", "message": "Use `InputSingleSelect` from `@opal/components`." },
-              { "element": "textarea", "message": "Use `InputTextArea` from `@opal/components`." }
+              {
+                "element": "button",
+                "message": "Use `Button` from `@opal/components`."
+              },
+              {
+                "element": "input",
+                "message": "Use an Opal input such as `InputTypeIn` or `InputCheckbox` from `@opal/components`."
+              },
+              {
+                "element": "select",
+                "message": "Use `InputSingleSelect` from `@opal/components`."
+              },
+              {
+                "element": "textarea",
+                "message": "Use `InputTextArea` from `@opal/components`."
+              }
             ]
           }
         ]

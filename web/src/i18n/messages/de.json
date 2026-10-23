@@ -6772,6 +6772,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Erweiterte Optionen",
+        "description": "Diese Einstellungen bestimmen, wie effizient {appName} Dokumentberechtigungen bei der Suche anwendet. Sie ändern nicht, welche Dokumente jeder Benutzer sehen kann. Ändern Sie sie nicht ohne ausdrückliche Anweisung des Onyx-Teams."
+      },
       "actions": {
         "applyForward": {
           "label": "Auf neue und aktualisierte Dokumente anwenden"
@@ -14301,7 +14305,7 @@
         "title": "Verknüpfte Skills",
         "unavailable": {
           "duplicateName": "Ein Skill namens „{name}“ ist bereits verknüpft.",
-          "invalid": "Ungültiger Skill: Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
+          "invalid": "Ungültiger Skill. Beheben Sie das Problem, bevor Sie ihn verknüpfen.",
           "otherApp": "Bereits mit der App „{name}“ verknüpft."
         },
         "unlink": {

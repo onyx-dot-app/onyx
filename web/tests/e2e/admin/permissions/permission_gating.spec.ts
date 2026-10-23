@@ -18,7 +18,7 @@ async function cleanup(fn: () => Promise<void>): Promise<void> {
   }
 }
 
-test.describe("Permission gating — ADD_AGENTS", () => {
+test.describe("Permission gating: ADD_AGENTS", () => {
   test("New Agent button is disabled without ADD_AGENTS and enabled after granting it", async ({
     page,
     adminClient,
@@ -89,7 +89,7 @@ test.describe("Permission gating — ADD_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_AGENTS", () => {
+test.describe("Permission gating: MANAGE_AGENTS", () => {
   test("Admin panel and /admin/agents are gated behind MANAGE_AGENTS", async ({
     page,
     adminClient,
@@ -166,7 +166,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_LLMS", () => {
+test.describe("Permission gating: MANAGE_LLMS", () => {
   test("Admin panel and /admin/language-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
@@ -249,7 +249,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_CONNECTORS", () => {
+test.describe("Permission gating: MANAGE_CONNECTORS", () => {
   test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
@@ -368,7 +368,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
+test.describe("Permission gating: MANAGE_DOCUMENT_SETS", () => {
   test("Admin panel and /admin/documents/sets are gated behind MANAGE_DOCUMENT_SETS, with implied READ_CONNECTORS", async ({
     page,
     adminClient,
@@ -519,7 +519,7 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_ACTIONS", () => {
+test.describe("Permission gating: MANAGE_ACTIONS", () => {
   test("Admin panel /admin/plugins is gated behind MANAGE_ACTIONS", async ({
     page,
     adminClient,
@@ -587,7 +587,7 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
+test.describe("Permission gating: MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   test("Admin panel /admin/service-accounts is gated behind MANAGE_SERVICE_ACCOUNT_API_KEYS, with implied READ_USER_GROUPS", async ({
     page,
     adminClient,
@@ -688,7 +688,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_BOTS", () => {
+test.describe("Permission gating: MANAGE_BOTS", () => {
   test("Admin panel /admin/bots and /admin/discord-bot are gated behind MANAGE_BOTS", async ({
     page,
     adminClient,
@@ -775,7 +775,7 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
   });
 });
 
-test.describe("Permission gating — READ_QUERY_HISTORY", () => {
+test.describe("Permission gating: READ_QUERY_HISTORY", () => {
   test("Admin panel /admin/performance/query-history is gated behind READ_QUERY_HISTORY", async ({
     page,
     adminClient,
@@ -845,7 +845,7 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
   });
 });
 
-test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
+test.describe("Permission gating: CREATE_USER_API_KEYS", () => {
   test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
     browser,
@@ -957,7 +957,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
   });
 });
 
-test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
+test.describe("Permission gating: MANAGE_USER_GROUPS", () => {
   test("Admin panel /admin/groups and /admin/groups/create are gated behind MANAGE_USER_GROUPS, with implied READ_CONNECTORS, READ_DOCUMENT_SETS, and READ_AGENTS", async ({
     page,
     adminClient,

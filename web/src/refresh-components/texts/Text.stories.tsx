@@ -20,19 +20,19 @@ export const Colors: Story = {
   render: () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <Text text01 mainUiBody>
-        text01 — Primary text color
+        text01: Primary text color
       </Text>
       <Text text02 mainUiBody>
-        text02 — Secondary text color
+        text02: Secondary text color
       </Text>
       <Text text03 mainUiBody>
-        text03 — Tertiary text color
+        text03: Tertiary text color
       </Text>
       <Text text04 mainUiBody>
-        text04 — Quaternary text color
+        text04: Quaternary text color
       </Text>
       <Text text05 mainUiBody>
-        text05 — Quinary text color
+        text05: Quinary text color
       </Text>
     </div>
   ),

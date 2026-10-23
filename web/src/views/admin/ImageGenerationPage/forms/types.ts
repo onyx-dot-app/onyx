@@ -16,7 +16,6 @@ export interface ImageGenFormBaseProps {
 }
 
 // Base type for form values - allows any object structure
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FormValues = Record<string, any>;
 
 // Props for the generic wrapper component

@@ -136,7 +136,6 @@ function OutputImageThumbnail({
   if (failed) return fallback;
   return (
     // Sandbox images are authenticated data URLs, not public Next.js assets.
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt=""

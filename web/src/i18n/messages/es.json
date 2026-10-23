@@ -6772,6 +6772,10 @@
       }
     },
     "indexSettings": {
+      "advanced": {
+        "title": "Opciones avanzadas",
+        "description": "Estos ajustes cambian la eficiencia con la que {appName} aplica los permisos de los documentos en la búsqueda. No cambian qué documentos puede ver cada usuario. No los cambies sin indicaciones explícitas del equipo de Onyx."
+      },
       "actions": {
         "applyForward": {
           "label": "Aplicar a los documentos nuevos y actualizados"
@@ -14301,7 +14305,7 @@
         "title": "Habilidades asociadas",
         "unavailable": {
           "duplicateName": "Ya hay asociada una habilidad llamada «{name}».",
-          "invalid": "Habilidad no válida: corrígela antes de asociarla.",
+          "invalid": "Habilidad no válida. Corrígela antes de asociarla.",
           "otherApp": "Ya está asociada con la app «{name}»."
         },
         "unlink": {

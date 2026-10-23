@@ -186,7 +186,6 @@ export default function MCPOAuthCallbackPage() {
 
     handleOAuthCallback();
     // Run once; the single-use callback must not re-fire (see hasProcessedRef).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

@@ -50,7 +50,6 @@ export function Logo({ size, className, style, onyxBranded }: LogoProps) {
       )}
       style={{ height: resolvedSize, ...style }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         alt={t("logo.image.alt")}
         src={logoUrl}

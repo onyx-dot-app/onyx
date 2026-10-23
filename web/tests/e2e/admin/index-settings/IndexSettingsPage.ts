@@ -129,7 +129,7 @@ export class IndexSettingsPage {
   private get activeSetupModal(): Locator {
     if (!this.currentSetupModal) {
       throw new Error(
-        "No provider setup modal is open — call openProviderSetup() first."
+        "No provider setup modal is open. Call openProviderSetup() first."
       );
     }
     return this.currentSetupModal;

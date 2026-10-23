@@ -389,7 +389,6 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
       }
     }
     // Fires once on mount by design, the query param is consumed and removed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 

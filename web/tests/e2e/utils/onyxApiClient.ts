@@ -1111,7 +1111,7 @@ export class OnyxApiClient {
       (u) => u.email.toLowerCase() === email.toLowerCase()
     );
     if (!target) {
-      throw new Error(`User ${email} not found — cannot add to Admin group`);
+      throw new Error(`User ${email} not found. Cannot add to Admin group`);
     }
 
     const response = await this.request.post(
