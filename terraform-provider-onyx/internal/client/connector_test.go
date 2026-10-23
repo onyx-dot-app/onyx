@@ -87,8 +87,8 @@ func TestUpdateConnector(t *testing.T) {
 	if captured.Method != http.MethodPatch || captured.Path != "/manage/admin/connector/5" {
 		t.Errorf("got %s %s, want PATCH /manage/admin/connector/5", captured.Method, captured.Path)
 	}
-	// The server rewrites an unset prune_freq to its default, so the response
-	// is the source of truth.
+	// An unset prune_freq is not sent; the server defaults or keeps it, so
+	// the response is the source of truth.
 	if remote.PruneFreq == nil || *remote.PruneFreq != 604800 {
 		t.Errorf("update must return the stored prune_freq, got %+v", remote.PruneFreq)
 	}
