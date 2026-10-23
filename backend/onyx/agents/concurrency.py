@@ -1,4 +1,4 @@
-"""Thread ownership and finite event delivery for an execution tree."""
+"""Thread ownership and event delivery for an execution tree."""
 
 import threading
 import time
@@ -6,14 +6,10 @@ from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
-from sys import getsizeof
-
-from pydantic_core import to_json
 
 from onyx.agents.events import (
     AgentEvent,
-    MessageUpdateEvent,
-    shareable_delta_text,
+    is_shareable_delta,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils.logger import setup_logger
@@ -25,11 +21,7 @@ from onyx.utils.threadpool_concurrency import (
 logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
 CLEANUP_SECONDS = 2.0
-EVENT_QUEUE_CAPACITY = 1024
-AGENT_EVENT_BUFFER_MAX_BYTES = 4 * 1024 * 1024
 EVENT_FLUSH_INTERVAL_SECONDS = 0.05
-# Queue accounting estimates payload size, not the complete Python object graph.
-DELTA_EVENT_OVERHEAD_BYTES = 256
 
 
 class WorkTracker:
@@ -138,8 +130,8 @@ class EventDispatcher:
         self._flush = flush
         self._context = copy_context()
         self._condition = threading.Condition()
-        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent, int]] = deque()
-        self._bytes = 0
+        self._queue: deque[tuple[tuple[EventDelivery, ...], AgentEvent]] = deque()
+        self._pending_event_count = 0
         self._closed = False
         self._release_when_idle = False
         self._worker: threading.Thread | None = None
@@ -159,38 +151,14 @@ class EventDispatcher:
                         current = current._parent
                 if not has_listeners:
                     return
-                delta_text = shareable_delta_text(event)
-                if isinstance(event, MessageUpdateEvent) and delta_text is not None:
-                    size = DELTA_EVENT_OVERHEAD_BYTES + sum(
-                        getsizeof(value)
-                        for value in (
-                            event.agent_id,
-                            event.run_id,
-                            event.parent_run_id,
-                            event.parent_tool_call_id,
-                            event.parent_message_id,
-                            event.message_id,
-                            delta_text,
-                        )
-                        if value is not None
-                    )
-                else:
-                    size = len(
-                        to_json(event.model_dump(mode="python"), bytes_mode="base64")
-                    )
                 if self._closed:
                     raise RuntimeError("Agent event dispatcher is closed")
-                if (
-                    len(self._queue) >= EVENT_QUEUE_CAPACITY
-                    or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
-                ):
-                    raise RuntimeError("Agent observer backlog exceeded its bound")
                 owned_event = (
-                    event if delta_text is not None else event.model_copy(deep=True)
+                    event if is_shareable_delta(event) else event.model_copy(deep=True)
                 )
                 self.start()
-                self._bytes += size
-                self._queue.append((tuple(channels), owned_event, size))
+                self._pending_event_count += 1
+                self._queue.append((tuple(channels), owned_event))
                 self._condition.notify()
                 channels = []
         except Exception:
@@ -224,7 +192,7 @@ class EventDispatcher:
                 )
                 final_flush = exiting and self._closed
             if item is not None:
-                channels, event, size = item
+                channels, event = item
                 try:
                     for index, channel in enumerate(channels):
                         channel._context.run(
@@ -234,7 +202,7 @@ class EventDispatcher:
                         )
                 finally:
                     with self._condition:
-                        self._bytes -= size
+                        self._pending_event_count -= 1
                     for channel in channels:
                         channel._context.run(channel.tracker.finished)
             if self._flush is not None and (
@@ -258,7 +226,7 @@ class EventDispatcher:
     def has_pending_events(self) -> bool:
         """Whether accepted events are queued or still being delivered."""
         with self._condition:
-            return self._bytes > 0
+            return self._pending_event_count > 0
 
     @property
     def is_dispatch_thread(self) -> bool:
@@ -334,7 +302,7 @@ class EventDelivery:
         return self.dispatcher.is_dispatch_thread
 
     def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
-        shareable = shareable_delta_text(event) is not None
+        shareable = is_shareable_delta(event)
         with self._lock:
             listeners = tuple(self._listeners)
         for index, listener in enumerate(listeners):

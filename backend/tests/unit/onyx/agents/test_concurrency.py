@@ -500,10 +500,7 @@ def test_shared_dispatcher_keeps_channel_context_and_independent_completion() ->
         dispatcher.close()
 
 
-def test_shared_dispatcher_bounds_combined_backlog(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(concurrency, "EVENT_QUEUE_CAPACITY", 1)
+def test_shared_dispatcher_drains_combined_burst_in_order() -> None:
     dispatcher = concurrency.EventDispatcher()
     first = concurrency.EventDelivery(dispatcher)
     second = concurrency.EventDelivery(dispatcher)
@@ -522,14 +519,20 @@ def test_shared_dispatcher_bounds_combined_backlog(
     try:
         first.publish(AgentStartEvent(run_id="blocked"))
         assert entered.wait(2)
-        second.publish(AgentStartEvent(run_id="accepted"))
-        first.publish(AgentStartEvent(run_id="overflow"))
-        assert first.failed.is_set()
+        expected = [str(index) for index in range(4096)]
+        for index, run_id in enumerate(expected):
+            channel = first if index % 2 == 0 else second
+            channel.publish(AgentStartEvent(run_id=run_id))
+        assert dispatcher.has_pending_events
+        assert not first.failed.is_set()
         assert not second.failed.is_set()
         release.set()
         first.close()
         second.close()
-        assert received == ["blocked", "accepted"]
+        assert received == ["blocked", *expected]
+        assert not first.failed.is_set()
+        assert not second.failed.is_set()
+        assert not dispatcher.has_pending_events
         assert first.tracker.wait_idle(timeout=0)
         assert second.tracker.wait_idle(timeout=0)
     finally:
@@ -676,7 +679,6 @@ def test_deltas_are_shared_across_listeners_and_ancestors(
     parent.subscribe(received.append)
     try:
         with (
-            patch("onyx.agents.concurrency.to_json") as serialize,
             patch.object(
                 BaseModel, "model_dump", side_effect=AssertionError("Unexpected dump")
             ) as dump,
@@ -691,7 +693,6 @@ def test_deltas_are_shared_across_listeners_and_ancestors(
             assert not parent.failed.is_set()
             assert len(received) == 3
             assert all(item is event for item in received)
-            serialize.assert_not_called()
             dump.assert_not_called()
             copy.assert_not_called()
     finally:
@@ -866,8 +867,7 @@ def test_empty_event_remains_pending_until_ancestor_delivery_finishes() -> None:
         dispatcher.close()
 
 
-@pytest.mark.parametrize("character,rejected", [("a", False), ("🙂", True)])
-def test_delta_budget_accounts_for_unicode(character: str, rejected: bool) -> None:
+def test_large_event_is_delivered_without_serialization() -> None:
     dispatcher = concurrency.EventDispatcher()
     delivery = concurrency.EventDelivery(dispatcher)
     received: list[AgentEvent] = []
@@ -876,15 +876,21 @@ def test_delta_budget_accounts_for_unicode(character: str, rejected: bool) -> No
         run_id="run",
         message_id="message",
         step_index=0,
-        generation_event=TextDeltaEvent(
-            content_index=0, text=character * (1024 * 1024)
+        generation_event=ToolCallEndEvent(
+            content_index=0,
+            tool_call=ToolCall(
+                id="call", name="search", arguments={"query": "a" * (5 * 1024 * 1024)}
+            ),
         ),
     )
     try:
-        delivery.publish(event)
+        with patch.object(
+            BaseModel, "model_dump", side_effect=AssertionError("Unexpected dump")
+        ):
+            delivery.publish(event)
         assert delivery.tracker.wait_idle(2)
-        assert delivery.failed.is_set() == rejected
-        assert received == ([] if rejected else [event])
+        assert not delivery.failed.is_set()
+        assert received == [event]
         assert not dispatcher.has_pending_events
     finally:
         delivery.close()
