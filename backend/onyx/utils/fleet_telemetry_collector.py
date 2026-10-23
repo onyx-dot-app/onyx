@@ -190,7 +190,15 @@ def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
         "last_heartbeat_at": _iso(row["last_heartbeat_at"]),
     }
     if row["status"].is_terminal():
-        data["ended_at"] = _iso(row["time_updated"])
+        # Not the update time: checkpoint cleanup updates finished attempts days
+        # later. Attempts with no finish time (from before the column, or ended in
+        # bulk) fall back as the connector page's attempt list does.
+        data["ended_at"] = _iso(
+            row["time_finished"]
+            or row["last_heartbeat_at"]
+            or row["started_at"]
+            or row["time_created"]
+        )
     if row["error_sample"] is not None or row["error_count"]:
         category: str = classify_local_error(
             row["item_error_type"], row["error_sample"], row["item_error_sample"]
