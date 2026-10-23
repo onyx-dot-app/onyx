@@ -1,3 +1,5 @@
+import time
+
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
@@ -10,7 +12,7 @@ class RedisConnectorStop:
     FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
 
     # if this timeout is exceeded, the caller may decide to take more
-    # drastic measures
+    # drastic measures. The key holds the deadline (epoch seconds).
     TIMEOUT_PREFIX = f"{PREFIX}_timeout"
     TIMEOUT_TTL = 300
 
@@ -34,13 +36,32 @@ class RedisConnectorStop:
         self.redis.set(self.fence_key, 0, ex=self.FENCE_TTL)
 
     @property
+    def timeout_set(self) -> bool:
+        """Whether a caller started waiting on the stop signal (see
+        ``set_timeout``). A pause sets the fence alone, so the fence cannot
+        tell this."""
+        return bool(self.redis.exists(self.timeout_key))
+
+    @property
     def timed_out(self) -> bool:
-        return not bool(self.redis.exists(self.timeout_key))
+        """Whether the wait started by ``set_timeout`` passed its deadline. A
+        key without a deadline (written before deadlines were stored) never
+        times out; it expires instead."""
+        raw = self.redis.get(self.timeout_key)
+        if raw is None:
+            return False
+        deadline = float(raw)
+        return deadline > 0 and time.time() > deadline
 
     def set_timeout(self) -> None:
-        """After calling this, call timed_out to determine if the timeout has been
-        exceeded."""
-        self.redis.set(f"{self.timeout_key}", 0, ex=self.TIMEOUT_TTL)
+        """Starts the wait: ``timed_out`` turns true ``TIMEOUT_TTL`` seconds
+        from now."""
+        self.redis.set(
+            self.timeout_key, time.time() + self.TIMEOUT_TTL, ex=self.FENCE_TTL
+        )
+
+    def clear_timeout(self) -> None:
+        self.redis.delete(self.timeout_key)
 
     @staticmethod
     def reset_all(r: TenantRedisClient) -> None:
