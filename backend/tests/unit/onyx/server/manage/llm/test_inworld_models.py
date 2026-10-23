@@ -8,10 +8,12 @@ from that catalog to Onyx model configs.
 from typing import Any, cast
 from unittest.mock import patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.api import (
     _get_inworld_models_response,
@@ -265,6 +267,19 @@ def test_models_request_uses_basic_auth() -> None:
     assert mock_get.call_args.args[0] == "https://api.inworld.ai/llm/v1alpha/models"
     headers = mock_get.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Basic aW53b3JsZA=="
+
+
+def test_rejected_key_reports_authentication_failure() -> None:
+    """Inworld answers an invalid key with 403, not 401."""
+    request = httpx.Request("GET", "https://api.inworld.ai/llm/v1alpha/models")
+    with patch(
+        "onyx.server.manage.llm.api.httpx.get",
+        return_value=httpx.Response(403, request=request),
+    ):
+        with pytest.raises(OnyxError, match="Authentication failed") as exc_info:
+            _get_inworld_models_response("https://api.inworld.ai/v1", "bad-key")
+
+    assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
 
 
 def test_models_request_without_key_sends_no_authorization() -> None:

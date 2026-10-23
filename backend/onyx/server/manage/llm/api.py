@@ -2702,7 +2702,8 @@ def _get_openai_compatible_models_response(
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
+        # Some gateways, Inworld among them, reject a bad key with 403.
+        if e.response.status_code in (401, 403):
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 f"Authentication failed: invalid or missing API key for {source_name}.",
