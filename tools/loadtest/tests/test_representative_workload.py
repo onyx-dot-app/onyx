@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from capacity_report import assess
@@ -394,3 +396,28 @@ assert not result["passed"]
         cwd=Path(__file__).resolve().parents[1],
         check=True,
     )
+
+
+@pytest.mark.parametrize("context_limit", ["", "-maxctx50000"])
+def test_prompt_tokenization_runs_off_loop_once(context_limit: str) -> None:
+    prompt_counts = []
+
+    def count(text: str) -> int:
+        # A worker thread has no running event loop.
+        with pytest.raises(RuntimeError, match="no running event loop"):
+            asyncio.get_running_loop()
+        if text.startswith('{"messages":'):
+            prompt_counts.append(text)
+        return token_count(text)
+
+    with patch("mock_llm.response_plan.token_count", side_effect=count):
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": MODEL + context_limit,
+                "messages": [{"role": "user", "content": "Explain the architecture"}],
+            },
+        )
+    assert response.status_code == 200
+    assert len(prompt_counts) == 1
+    assert response.json()["usage"]["prompt_tokens"] == token_count(prompt_counts[0])

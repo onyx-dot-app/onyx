@@ -56,11 +56,8 @@ def truncate_tokens(text: str, maximum: int | None) -> tuple[str, bool]:
     return data.decode("utf-8", errors="ignore"), True
 
 
-def usage_for(
-    request: ChatCompletionRequest, answer: str, reasoning: str, calls: list[ToolCall]
-) -> Usage:
-    # Explicit simulation convention, not provider billing: tokenize serialized
-    # messages/tools and generated content with one fixed encoding.
+def prompt_token_count(request: ChatCompletionRequest) -> int:
+    """Tokenize the serialized prompt once for validation and simulated usage."""
     prompt = json.dumps(
         {
             "messages": [m.model_dump(exclude_none=True) for m in request.messages],
@@ -69,12 +66,26 @@ def usage_for(
         ensure_ascii=False,
         sort_keys=True,
     )
+    return token_count(prompt)
+
+
+def usage_for(
+    request: ChatCompletionRequest,
+    answer: str,
+    reasoning: str,
+    calls: list[ToolCall],
+    *,
+    prompt_tokens: int | None = None,
+) -> Usage:
+    # Simulation convention, not provider billing.
+    if prompt_tokens is None:
+        prompt_tokens = prompt_token_count(request)
     generated = (
         answer
         + reasoning
         + "".join(c.function.name + c.function.arguments for c in calls)
     )
-    prompt_tokens, completion_tokens = token_count(prompt), token_count(generated)
+    completion_tokens = token_count(generated)
     return Usage(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
@@ -478,7 +489,9 @@ def response_deltas(
     return deltas
 
 
-def prepare_response(request: ChatCompletionRequest, knobs: Knobs) -> ResponsePlan:
+def prepare_response(
+    request: ChatCompletionRequest, knobs: Knobs, *, prompt_tokens: int | None = None
+) -> ResponsePlan:
     kind = profile_kind(request.model)
     user_text = _last_user_text(request.messages)
     question = current_question(user_text)
@@ -579,7 +592,7 @@ def prepare_response(request: ChatCompletionRequest, knobs: Knobs) -> ResponsePl
         reasoning=reasoning,
         calls=calls,
         finish=finish,
-        usage=usage_for(request, answer, reasoning, calls),
+        usage=usage_for(request, answer, reasoning, calls, prompt_tokens=prompt_tokens),
         deltas=deltas,
         first_s=first_s,
         end_s=max(first_s, end_s),

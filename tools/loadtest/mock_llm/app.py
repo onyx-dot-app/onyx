@@ -26,7 +26,7 @@ from mock_llm.models import (
     ChunkChoice,
     ChunkDelta,
 )
-from mock_llm.response_plan import Knobs, prepare_response, schedule, usage_for
+from mock_llm.response_plan import Knobs, prepare_response, prompt_token_count, schedule
 
 app = FastAPI()
 
@@ -117,8 +117,9 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
         knobs = Knobs(request.model)
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
+    prompt_tokens = None
     if knobs.max_ctx_tokens:
-        prompt_tokens = usage_for(request, "", "", []).prompt_tokens
+        prompt_tokens = await asyncio.to_thread(prompt_token_count, request)
         if prompt_tokens > knobs.max_ctx_tokens:
             return _context_window_error(knobs.max_ctx_tokens, prompt_tokens)
     if "-fault429" in request.model:
@@ -134,7 +135,9 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
             headers={"Retry-After": "1"},
         )
     try:
-        plan = prepare_response(request, knobs)
+        plan = await asyncio.to_thread(
+            prepare_response, request, knobs, prompt_tokens=prompt_tokens
+        )
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
     REQUESTS.labels(
