@@ -8602,6 +8602,10 @@
           "description": "所有人只能通过 SSO 登录和注册。需要至少启用一个 SSO 提供商。",
           "title": "禁用密码登录和注册"
         },
+        "renamedClaim": {
+          "description": "允许电子邮件被改名的用户通过其他提供商登录当前电子邮件对应的账户，前提是该账户不再有任何提供商关联。仅在从已删除的 SSO 提供商迁移用户期间开启。",
+          "title": "提供商删除后接管已改名的账户"
+        },
         "section": {
           "title": "身份验证"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "已复制重定向 URI",
         "errorToast": "无法复制"
       },
+      "deleteProvider": {
+        "tooltip": "删除"
+      },
       "editProvider": {
         "tooltip": "编辑"
       },
@@ -9323,6 +9330,17 @@
         "title": "加载 SSO 提供商失败"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "删除 {name}",
+          "description": "通过 {name} 登录的用户会保留其帐户。他们下次使用相同电子邮件通过其他提供商登录时，会进入同一个帐户。请先添加替代提供商，再删除此提供商。",
+          "countsError": "无法加载通过此提供商登录的用户。请关闭后重试。",
+          "countsLoading": "正在加载通过此提供商登录的用户…",
+          "linkedUsers": "{count, plural, =0 {没有用户通过 {name} 登录过。} other {# 位用户通过 {name} 登录过。}}",
+          "renamedUsers": "{count, plural, other {其中 # 位用户已改名，需要在安全加固中开启已改名账户接管，才能通过其他提供商登录。}}",
+          "submit": {
+            "label": "删除"
+          }
+        },
         "domainVerification": {
           "description": "只有在您验证域名归属之后，该域名才会自动为您工作区的用户登录。请添加下面的 DNS 记录，然后进行验证。",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "让用户通过您的身份提供商登录。"
       },
       "toasts": {
+        "providerDeleted": "已删除 {name}",
         "unexpectedError": "发生意外错误。"
       },
       "providerTypes": {

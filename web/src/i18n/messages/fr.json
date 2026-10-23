@@ -8602,6 +8602,10 @@
           "description": "Tout le monde se connecte et s'inscrit uniquement via SSO. Nécessite au moins un fournisseur SSO activé.",
           "title": "Désactiver la connexion et l'inscription par mot de passe"
         },
+        "renamedClaim": {
+          "description": "Permet aux utilisateurs dont l'adresse e-mail a été renommée de se connecter via un autre fournisseur au compte qui porte leur adresse actuelle, lorsque ce compte n'a plus de lien avec un fournisseur. Activez uniquement pendant la migration depuis un fournisseur SSO supprimé.",
+          "title": "Réclamer les comptes renommés après la suppression d'un fournisseur"
+        },
         "section": {
           "title": "Authentification"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "URI de redirection copiée",
         "errorToast": "Copie impossible"
       },
+      "deleteProvider": {
+        "tooltip": "Supprimer"
+      },
       "editProvider": {
         "tooltip": "Modifier"
       },
@@ -9323,6 +9330,17 @@
         "title": "Échec du chargement des fournisseurs SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Supprimer {name}",
+          "description": "Les utilisateurs qui se sont connectés avec {name} conservent leur compte. Leur prochaine connexion via un autre fournisseur avec la même adresse e-mail ouvre le même compte. Ajoutez le fournisseur de remplacement avant de supprimer celui-ci.",
+          "countsError": "Impossible de charger les utilisateurs connectés avec ce fournisseur. Fermez et réessayez.",
+          "countsLoading": "Chargement des utilisateurs connectés avec ce fournisseur…",
+          "linkedUsers": "{count, plural, =0 {Aucun utilisateur ne s'est connecté avec {name}.} one {# utilisateur s'est connecté avec {name}.} other {# utilisateurs se sont connectés avec {name}.}}",
+          "renamedUsers": "{count, plural, one {# d'entre eux a été renommé et a besoin de la fenêtre de réclamation des comptes renommés dans le Renforcement de la sécurité pour se connecter via un autre fournisseur.} other {# d'entre eux ont été renommés et ont besoin de la fenêtre de réclamation des comptes renommés dans le Renforcement de la sécurité pour se connecter via un autre fournisseur.}}",
+          "submit": {
+            "label": "Supprimer"
+          }
+        },
         "domainVerification": {
           "description": "Un domaine connecte automatiquement les utilisateurs de votre espace de travail seulement après que vous avez prouvé qu'il vous appartient. Ajoutez l'enregistrement DNS ci-dessous, puis vérifiez.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "Permettez aux utilisateurs de se connecter via votre fournisseur d'identité."
       },
       "toasts": {
+        "providerDeleted": "{name} supprimé",
         "unexpectedError": "Une erreur inattendue est survenue."
       },
       "providerTypes": {

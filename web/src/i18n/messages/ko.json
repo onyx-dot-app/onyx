@@ -8602,6 +8602,10 @@
           "description": "모든 사용자가 SSO로만 로그인하고 가입합니다. 활성화된 SSO 제공자가 하나 이상 필요합니다.",
           "title": "비밀번호 로그인 및 가입 비활성화"
         },
+        "renamedClaim": {
+          "description": "이메일이 변경된 사용자가 공급자 연결이 남아 있지 않은 현재 이메일의 계정에 다른 공급자를 통해 로그인할 수 있게 합니다. 삭제된 SSO 공급자에서 사용자를 옮기는 동안에만 켜세요.",
+          "title": "공급자 삭제 후 이름이 변경된 계정 인계"
+        },
         "section": {
           "title": "인증"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "리디렉션 URI를 복사했습니다",
         "errorToast": "복사할 수 없습니다"
       },
+      "deleteProvider": {
+        "tooltip": "삭제"
+      },
       "editProvider": {
         "tooltip": "편집"
       },
@@ -9323,6 +9330,17 @@
         "title": "SSO 공급자를 불러오지 못했습니다"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "{name} 삭제",
+          "description": "{name}(으)로 로그인한 사용자는 계정을 그대로 유지합니다. 같은 이메일로 다른 공급자를 통해 로그인하면 같은 계정이 열립니다. 이 공급자를 삭제하기 전에 대체 공급자를 추가하세요.",
+          "countsError": "이 공급자로 로그인한 사용자를 불러오지 못했습니다. 닫고 다시 시도하세요.",
+          "countsLoading": "이 공급자로 로그인한 사용자를 불러오는 중…",
+          "linkedUsers": "{count, plural, =0 {{name}(으)로 로그인한 사용자가 없습니다.} other {#명의 사용자가 {name}(으)로 로그인했습니다.}}",
+          "renamedUsers": "{count, plural, other {그중 #명은 이름이 변경되어 다른 공급자를 통해 로그인하려면 보안 강화의 이름 변경 계정 인계 기간이 필요합니다.}}",
+          "submit": {
+            "label": "삭제"
+          }
+        },
         "domainVerification": {
           "description": "도메인 소유권을 확인한 후에만 해당 도메인의 사용자가 워크스페이스에 자동으로 로그인합니다. 아래 DNS 레코드를 추가한 다음 확인하세요.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "사용자가 조직의 ID 공급자를 통해 로그인하도록 합니다."
       },
       "toasts": {
+        "providerDeleted": "{name} 삭제됨",
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
       },
       "providerTypes": {

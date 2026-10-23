@@ -8602,6 +8602,10 @@
           "description": "Todos entram e se cadastram somente por SSO. Requer pelo menos um provedor de SSO ativado.",
           "title": "Desativar login e cadastro por senha"
         },
+        "renamedClaim": {
+          "description": "Permite que usuários cujo e-mail foi renomeado entrem por outro provedor na conta que tem seu e-mail atual, quando essa conta não tem mais vínculo com um provedor. Ative apenas enquanto migra usuários de um provedor SSO excluído.",
+          "title": "Reivindicar contas renomeadas após excluir um provedor"
+        },
         "section": {
           "title": "Autenticação"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "URI de redirecionamento copiada",
         "errorToast": "Não foi possível copiar"
       },
+      "deleteProvider": {
+        "tooltip": "Excluir"
+      },
       "editProvider": {
         "tooltip": "Editar"
       },
@@ -9323,6 +9330,17 @@
         "title": "Falha ao carregar os provedores de SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Excluir {name}",
+          "description": "Os usuários que entraram com {name} mantêm suas contas. O próximo login por outro provedor com o mesmo e-mail abre a mesma conta. Adicione o provedor substituto antes de excluir este.",
+          "countsError": "Não foi possível carregar quem entrou com este provedor. Feche e tente novamente.",
+          "countsLoading": "Carregando quem entrou com este provedor…",
+          "linkedUsers": "{count, plural, =0 {Nenhum usuário entrou com {name}.} one {# usuário entrou com {name}.} other {# usuários entraram com {name}.}}",
+          "renamedUsers": "{count, plural, one {# deles foi renomeado e precisa da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.} other {# deles foram renomeados e precisam da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.}}",
+          "submit": {
+            "label": "Excluir"
+          }
+        },
         "domainVerification": {
           "description": "Um domínio autentica os usuários do seu workspace automaticamente somente depois que você comprova que é o dono dele. Adicione o registro DNS abaixo e depois verifique.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "Permita que os usuários entrem pelo seu provedor de identidade."
       },
       "toasts": {
+        "providerDeleted": "{name} excluído",
         "unexpectedError": "Ocorreu um erro inesperado."
       },
       "providerTypes": {

@@ -8602,6 +8602,10 @@
           "description": "Everyone signs in and registers through SSO only. Requires at least one enabled SSO provider.",
           "title": "Disable Password Login & Signup"
         },
+        "renamedClaim": {
+          "description": "Let users whose email was renamed sign in through another provider to the account that holds their current email, when that account has no provider link left. Turn on only while moving users off a deleted SSO provider.",
+          "title": "Claim Renamed Accounts After a Provider Delete"
+        },
         "section": {
           "title": "Authentication"
         },
@@ -9311,6 +9315,9 @@
         "successToast": "Redirect URI copied",
         "errorToast": "Could not copy"
       },
+      "deleteProvider": {
+        "tooltip": "Delete"
+      },
       "editProvider": {
         "tooltip": "Edit"
       },
@@ -9323,6 +9330,17 @@
         "title": "Failed to load SSO providers"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Delete {name}",
+          "description": "Users who signed in with {name} keep their accounts. Their next sign-in through another provider with the same email opens the same account. Add the replacement provider before you delete this one.",
+          "countsError": "We couldn't load who signed in with this provider. Close and try again.",
+          "countsLoading": "Loading who signed in with this provider…",
+          "linkedUsers": "{count, plural, =0 {No users have signed in with {name}.} one {# user signed in with {name}.} other {# users signed in with {name}.}}",
+          "renamedUsers": "{count, plural, one {# of them was renamed and needs the renamed-account claim window in Security Hardening to sign in through another provider.} other {# of them were renamed and need the renamed-account claim window in Security Hardening to sign in through another provider.}}",
+          "submit": {
+            "label": "Delete"
+          }
+        },
         "domainVerification": {
           "description": "A domain signs your workspace's users in automatically only after you verify you own it. Add the DNS record below, then verify.",
           "loadError": {
@@ -9421,6 +9439,7 @@
         "description": "Let users sign in through your identity provider."
       },
       "toasts": {
+        "providerDeleted": "{name} deleted",
         "unexpectedError": "Unexpected error occurred."
       },
       "providerTypes": {

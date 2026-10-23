@@ -6,6 +6,12 @@
 
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
+// Who a delete unlinks, so the admin can open the renamed-account claim window first.
+export interface SSOProviderHandoffResponse {
+  linked_users: number;
+  renamed_users: number;
+}
+
 export interface SSOProviderResponse {
   id: number;
   name: string;
