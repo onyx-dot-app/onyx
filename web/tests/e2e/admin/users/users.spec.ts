@@ -531,11 +531,11 @@ test.describe("Users page: group management", () => {
     await usersPage.saveGroupsModal();
     await usersPage.expectToast("User updated");
 
-    // Verify group shows in the row
+    // The groups cell can fold the new group into "+N", so check the modal.
     await usersPage.goto();
     await usersPage.search(testUserEmail);
-    const rowWithGroup = usersPage.getRowByEmail(testUserEmail);
-    await expect(rowWithGroup).toContainText(groupName);
+    await usersPage.openEditGroupsModal(testUserEmail);
+    await expect(usersPage.editGroupsDialog.getByText(groupName)).toBeVisible();
   });
 
   test("remove user from group via edit groups modal", async ({
