@@ -198,7 +198,6 @@ def test_unsubscribe_before_dispatch_and_after_idle_is_safe() -> None:
 def test_observer_backlog_preserves_output_and_cleanup_ownership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.agents.concurrency.AGENT_EVENT_BUFFER_MAX_BYTES", 512)
     monkeypatch.setattr("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02)
     entered = threading.Event()
     release = threading.Event()
