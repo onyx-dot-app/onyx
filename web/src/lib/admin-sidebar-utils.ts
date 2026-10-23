@@ -5,10 +5,11 @@ import {
   AdminRouteEntry,
   FeatureFlags,
 } from "@/lib/admin-routes";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
-import { Settings, Tier } from "@/lib/settings/types";
-import { tierAtLeast } from "@/lib/tiers";
+import { Settings } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
+import { tierAtLeast } from "@/lib/tiers/utils";
 
 export type { FeatureFlags } from "@/lib/admin-routes";
 
@@ -21,17 +22,20 @@ export type AdminNavItemId =
   | "webSearch"
   | "imageGeneration"
   | "voice"
+  | "decisionModels"
   | "codeInterpreter"
   | "chatPreferences"
+  | "llmGateway"
   | "craftAccess"
   | "craftApps"
   | "craftPreferences"
   | "customAnalytics"
   | "agents"
+  | "plugins"
   | "mcpActions"
   | "openapiActions"
-  | "existingConnectors"
-  | "addConnector"
+  | "indexingStatus"
+  | "connectors"
   | "documentSets"
   | "indexSettings"
   | "serviceAccounts"
@@ -74,20 +78,24 @@ export const NAV_ITEM_IDS: Record<
   AdminNavItemId | null
 > = {
   LLM_MODELS: "languageModels",
+  DECISION_MODELS: "decisionModels",
   WEB_SEARCH: "webSearch",
   IMAGE_GENERATION: "imageGeneration",
   VOICE: "voice",
   CODE_INTERPRETER: "codeInterpreter",
   CHAT_PREFERENCES: "chatPreferences",
+  LLM_GATEWAY: "llmGateway",
   CRAFT_ACCESS: "craftAccess",
-  CRAFT_APPS: "craftApps",
+  CRAFT_APPS: null,
   CRAFT_PREFERENCES: "craftPreferences",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  MCP_ACTIONS: "mcpActions",
-  OPENAPI_ACTIONS: "openapiActions",
-  INDEXING_STATUS: "existingConnectors",
-  ADD_CONNECTOR: "addConnector",
+  PLUGINS: "plugins",
+  PLUGINS_EXTERNAL_APP: null,
+  MCP_ACTIONS: null,
+  OPENAPI_ACTIONS: null,
+  INDEXING_STATUS: "indexingStatus",
+  CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
   DOCUMENT_EXPLORER: null,
   DOCUMENT_FEEDBACK: null,
@@ -171,6 +179,11 @@ const NAV_SECTION_IDS: readonly (readonly [
   ["Usage", "usage"],
 ];
 
+/** Sections whose heading shows a Beta tag. */
+export const BETA_SECTION_IDS: ReadonlySet<AdminNavSectionId> = new Set([
+  "craft",
+]);
+
 /** `null` for the unlabeled (default) section. */
 function sectionIdFor(section: string): AdminNavSectionId | null {
   return NAV_SECTION_IDS.find(([label]) => label === section)?.[1] ?? null;
@@ -185,6 +198,7 @@ export interface SidebarItemEntry {
   error?: boolean;
   disabled?: boolean;
   requiredTier?: Tier | null;
+  beta?: boolean;
 }
 
 export function buildItems(
@@ -219,6 +233,7 @@ export function buildItems(
       sectionId: sectionIdFor(route.section),
       disabled,
       requiredTier: route.requiredTier,
+      beta: route.beta,
     };
 
     // INDEX_SETTINGS surfaces a reindexing-needed error indicator

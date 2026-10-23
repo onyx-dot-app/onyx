@@ -14,3 +14,5 @@ LABEL_K8S_MANAGED_BY_ONYX = "onyx"
 # onto every sandbox container it creates.
 LABEL_DOCKER_COMPONENT = "onyx.app/component"
 LABEL_DOCKER_COMPONENT_SANDBOX = "craft-sandbox"
+LABEL_DOCKER_NETWORK = "onyx.app/sandbox-network"
+LABEL_K8S_COMPONENT_AUTH = "sandbox-opencode-auth"

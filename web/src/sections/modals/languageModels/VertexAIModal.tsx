@@ -4,10 +4,8 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleUploadField, InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -62,6 +60,8 @@ function VertexAIModalInternals({
   isOnboarding,
 }: VertexAIModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
+  const tInputSelect = useTranslations("common.inputSelect");
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
   const settings = useSettings();
@@ -73,7 +73,6 @@ function VertexAIModalInternals({
     } else if (authMethod === AUTH_METHOD_SERVICE_ACCOUNT) {
       formikProps.setFieldValue(FIELD_VERTEX_PROJECT, "");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMethod]);
 
   const showAuthMethodSelector = !isMultiTenant;
@@ -86,29 +85,31 @@ function VertexAIModalInternals({
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
               title={t("vertexAi.authMethodField.title")}
-              subDescription={t("vertexAi.authMethodField.description")}
+              subDescription={t("vertexAi.authMethodField.description", {
+                appName: settings.appName,
+              })}
             >
-              <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_SERVICE_ACCOUNT}
-                    description={t(
+              <InputSingleSelectField
+                name={FIELD_VERTEX_AUTH_METHOD}
+                defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={[
+                  {
+                    value: AUTH_METHOD_SERVICE_ACCOUNT,
+                    title: t("vertexAi.authMethodField.serviceAccount.label"),
+                    description: t(
                       "vertexAi.authMethodField.serviceAccount.description"
-                    )}
-                  >
-                    {t("vertexAi.authMethodField.serviceAccount.label")}
-                  </InputSelect.Item>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                    description={t(
+                    ),
+                  },
+                  {
+                    value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                    title: t("vertexAi.authMethodField.workloadIdentity.label"),
+                    description: t(
                       "vertexAi.authMethodField.workloadIdentity.description"
-                    )}
-                  >
-                    {t("vertexAi.authMethodField.workloadIdentity.label")}
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelectField>
+                    ),
+                  },
+                ]}
+              />
             </InputVertical>
           )}
 
@@ -132,7 +133,10 @@ function VertexAIModalInternals({
             title={t("vertexAi.credentialsField.title")}
             subDescription={t("vertexAi.credentialsField.description")}
           >
-            <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
+            <InputSingleUploadField
+              name={FIELD_VERTEX_CREDENTIALS}
+              accept="application/json,.json"
+            />
           </InputVertical>
         </InputPadder>
       )}
@@ -141,8 +145,12 @@ function VertexAIModalInternals({
         <>
           <InputPadder>
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="info"
-              title={t("vertexAi.workloadIdentityNotice.title")}
+              title={t("vertexAi.workloadIdentityNotice.title", {
+                appName: settings.appName,
+              })}
             />
           </InputPadder>
           <Card color="background-tint-00" border="none" padding={2}>
@@ -153,7 +161,7 @@ function VertexAIModalInternals({
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
-                placeholder="my-vertex-project"
+                placeholder={tPlaceholders("vertexAi.projectId")}
               />
             </InputVertical>
           </Card>

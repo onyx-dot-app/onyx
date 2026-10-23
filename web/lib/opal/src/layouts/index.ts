@@ -31,11 +31,26 @@ export {
   type InputPadderProps,
 } from "@opal/layouts/inputs/components";
 
+/* StickyBox */
+export {
+  StickyBox,
+  type StickyBoxItemHandle,
+  type StickyBoxItemProps,
+  type StickyBoxRootProps,
+  type StickyEdge,
+} from "@opal/layouts/sticky-box/components";
+
 /* IllustrationContent */
 export {
   IllustrationContent,
   type IllustrationContentProps,
 } from "@opal/layouts/illustration-content/components";
+
+/* CardGrid */
+export {
+  CardGrid,
+  type CardGridProps,
+} from "@opal/layouts/card-grid/components";
 
 /* Section (general layout primitive) */
 export {
@@ -89,12 +104,15 @@ export {
 } from "@opal/layouts/toast/components";
 export {
   toast,
+  useErrorToast,
   useToast,
   useToastFromQuery,
   MAX_VISIBLE_TOASTS,
   type Toast,
+  type ToastAction,
   type ToastLevel,
   type ToastOptions,
+  type UseErrorToastOptions,
 } from "@opal/layouts/toast/store";
 
 /* ConfirmationModalLayout */
@@ -103,8 +121,8 @@ export {
   type ConfirmationModalProps,
 } from "@opal/layouts/modal/components";
 
-/* PageLoader */
+/* PageCenter */
 export {
-  PageLoader,
-  type PageLoaderProps,
-} from "@opal/layouts/page-loader/components";
+  PageCenter,
+  type PageCenterProps,
+} from "@opal/layouts/page-center/components";

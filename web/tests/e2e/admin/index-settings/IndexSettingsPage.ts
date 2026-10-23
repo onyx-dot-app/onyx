@@ -9,6 +9,12 @@ import { type Page, type Locator, expect } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
+/** Forward-only confirmation for a Contextual Retrieval model change. */
+export const MODEL_FORWARD_DIALOG_TITLE =
+  "Apply Contextual Retrieval LLM going forward";
+/** Forward-only confirmation for turning Contextual Retrieval on. */
+export const ENABLE_FORWARD_DIALOG_TITLE =
+  "Turn on Contextual Retrieval going forward";
 
 export class IndexSettingsPage {
   readonly page: Page;
@@ -17,9 +23,18 @@ export class IndexSettingsPage {
   readonly viewAllModelsButton: Locator;
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
+  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, Bifrost, custom). */
+  readonly bringYourOwnToggle: Locator;
   readonly applyReindexButton: Locator;
+  readonly applyWithoutReindexButton: Locator;
+  readonly revertButton: Locator;
   readonly applyContextualModelForwardButton: Locator;
   readonly rebuildExistingDocumentsButton: Locator;
+  /** The apply strategy dropdown in the changes banner. */
+  readonly strategySelect: Locator;
+  readonly contextualRetrievalSwitch: Locator;
+  readonly imageProcessingSwitch: Locator;
+  readonly noModelSelectedWarning: Locator;
 
   // The provider setup modal opened via `openProviderSetup`. Held so the
   // credential / model-spec fill methods scope their fields to the right
@@ -34,6 +49,9 @@ export class IndexSettingsPage {
     });
     this.cloudTab = page.getByRole("tab", { name: /cloud.based/i });
     this.selfHostedTab = page.getByRole("tab", { name: /self.hosted/i });
+    this.bringYourOwnToggle = page.getByRole("button", {
+      name: "Advanced: bring your own model or proxy",
+    });
     this.applyReindexButton = page.getByRole("button", {
       name: "Apply & Re-index",
     });
@@ -43,6 +61,22 @@ export class IndexSettingsPage {
     this.rebuildExistingDocumentsButton = page.getByRole("button", {
       name: "Rebuild all existing documents",
     });
+    this.applyWithoutReindexButton = page.getByRole("button", {
+      name: "Apply without Re-index",
+    });
+    this.revertButton = page.getByRole("button", { name: "Revert" });
+    // Opal's select is a combobox named by its placeholder; its value is
+    // the chosen option's title.
+    this.strategySelect = page.getByRole("combobox", {
+      name: "Select a switchover strategy",
+    });
+    this.contextualRetrievalSwitch = page.getByRole("switch", {
+      name: /contextual retrieval/i,
+    });
+    this.imageProcessingSwitch = page.getByRole("switch", {
+      name: /extract & caption images/i,
+    });
+    this.noModelSelectedWarning = page.getByText("No model selected");
   }
 
   // ---------------------------------------------------------------------------
@@ -65,9 +99,25 @@ export class IndexSettingsPage {
     await this.cloudTab.click();
   }
 
+  /** Open the collapsed "bring your own" section of the active tab. */
+  async expandBringYourOwnSection(): Promise<void> {
+    await expect(this.bringYourOwnToggle).toBeVisible({ timeout: 10000 });
+    // Control flow only: the section stays open after an earlier expand.
+    if (
+      (await this.bringYourOwnToggle.getAttribute("aria-expanded")) !== "true"
+    ) {
+      await this.bringYourOwnToggle.click();
+    }
+    await expect(this.bringYourOwnToggle).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Cloud-provider setup modal (LiteLLM / Azure — providers with no
-  // pre-registered models render an "Add Configuration" card)
+  // pre-registered models render an "Add Configuration" card inside the
+  // collapsed "bring your own" section)
   // ---------------------------------------------------------------------------
 
   private setupModalFor(displayName: string): Locator {
@@ -79,13 +129,14 @@ export class IndexSettingsPage {
   private get activeSetupModal(): Locator {
     if (!this.currentSetupModal) {
       throw new Error(
-        "No provider setup modal is open — call openProviderSetup() first."
+        "No provider setup modal is open. Call openProviderSetup() first."
       );
     }
     return this.currentSetupModal;
   }
 
   async openProviderSetup(displayName: string): Promise<void> {
+    await this.expandBringYourOwnSection();
     await this.page
       .getByText(
         new RegExp(
@@ -97,6 +148,27 @@ export class IndexSettingsPage {
     const modal = this.setupModalFor(displayName);
     await expect(modal).toBeVisible({ timeout: 10000 });
     this.currentSetupModal = modal;
+  }
+
+  async openGoogleModelSetup(modelName: string): Promise<void> {
+    await this.page.getByText(modelName, { exact: true }).click();
+    const modal = this.setupModalFor("Google");
+    await expect(modal).toBeVisible();
+    this.currentSetupModal = modal;
+  }
+
+  async fillGoogleWorkloadIdentity(
+    projectId: string,
+    location: string
+  ): Promise<void> {
+    await this.activeSetupModal.getByRole("combobox").click();
+    await this.page
+      .getByRole("option", { name: "Workload Identity (GKE)", exact: true })
+      .click();
+    await this.activeSetupModal.getByLabel(/GCP Project ID/).fill(projectId);
+    await this.activeSetupModal
+      .getByLabel(/Google Cloud Region Name/)
+      .fill(location);
   }
 
   // Fields are targeted by input id (which equals the Formik field name) rather
@@ -126,6 +198,15 @@ export class IndexSettingsPage {
       .fill(creds.deploymentName);
   }
 
+  /** Bifrost takes no dimension: the credential test reports it. */
+  async fillBifrostCredentials(creds: {
+    apiBaseUrl: string;
+    modelName: string;
+  }): Promise<void> {
+    await this.activeSetupModal.locator("#apiUrl").fill(creds.apiBaseUrl);
+    await this.activeSetupModal.locator("#modelName").fill(creds.modelName);
+  }
+
   async fillModelSpec(spec: {
     modelName: string;
     modelDim: number;
@@ -148,6 +229,34 @@ export class IndexSettingsPage {
   }
 
   // ---------------------------------------------------------------------------
+  // Model cards
+  // ---------------------------------------------------------------------------
+
+  private modelCard(providerType: string, modelName: string): Locator {
+    return this.page.getByTestId(
+      `embedding-model-card:${providerType}:${modelName}`
+    );
+  }
+
+  async expectBringYourOwnSectionOpen(): Promise<void> {
+    await expect(this.bringYourOwnToggle).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  }
+
+  /** The card is listed and its button carries the given state label. */
+  async expectModelCardState(
+    providerType: string,
+    modelName: string,
+    stateLabel: "Selected" | "Current Model"
+  ): Promise<void> {
+    const card = this.modelCard(providerType, modelName);
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByRole("button", { name: stateLabel })).toBeVisible();
+  }
+
+  // ---------------------------------------------------------------------------
   // Staging / apply
   // ---------------------------------------------------------------------------
 
@@ -161,15 +270,121 @@ export class IndexSettingsPage {
   }
 
   async stageContextualModel(displayName: string): Promise<void> {
-    const contextualModelField = this.page
+    await this.pickModelInField("Contextual Retrieval LLM", displayName);
+  }
+
+  async pickCaptioningModel(displayName: string): Promise<void> {
+    await this.pickModelInField("Captioning LLM", displayName);
+  }
+
+  /**
+   * Open the model picker in the labelled row, search, and choose the row.
+   * The list is portalled and carries its own search box, pinned above the
+   * listbox rather than inside it; it takes focus as the list opens, which
+   * tells it apart from the page's search field. A search unfolds every
+   * provider group.
+   */
+  private async pickModelInField(
+    fieldLabel: string,
+    displayName: string
+  ): Promise<void> {
+    await this.page
       .locator("label")
-      .filter({ hasText: "Contextual Retrieval LLM" });
-    await contextualModelField
-      .getByTestId("llm-popover-trigger")
-      .getByRole("button")
+      .filter({ hasText: fieldLabel })
+      .getByRole("combobox", { name: "Select model" })
       .click();
-    await this.page.getByPlaceholder("Search models...").fill(displayName);
-    await this.page.getByText(displayName, { exact: true }).click();
+    const listbox = this.page.getByRole("listbox", { name: "Select model" });
+    await expect(listbox).toBeVisible();
+    await this.page
+      .getByRole("textbox", { name: "Search" })
+      .and(this.page.locator(":focus"))
+      .fill(displayName);
+    await listbox.getByRole("option", { name: displayName }).click();
+  }
+
+  /** Open the contextual model picker and leave it open, touching nothing. */
+  async openContextualModelPicker(): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Contextual Retrieval LLM" })
+      .getByRole("combobox", { name: "Select model" })
+      .click();
+    await expect(this.modelListbox).toBeVisible();
+  }
+
+  /**
+   * The open list shows its selection without help: the selected row is on
+   * screen and, when the list is long enough to scroll, its first row is not.
+   */
+  async expectPickerOpenedOnSelection(): Promise<void> {
+    await expect(
+      this.modelListbox.getByRole("option", { selected: true })
+    ).toBeInViewport();
+    await expect(
+      this.modelListbox.getByRole("option").first()
+    ).not.toBeInViewport();
+  }
+
+  private get modelListbox(): Locator {
+    return this.page.getByRole("listbox", { name: "Select model" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vector quantization
+  // ---------------------------------------------------------------------------
+
+  /** The staged-change banner calls a quantization-only change a rebuild. */
+  async expectQuantizationRebuildBanner(): Promise<void> {
+    await expect(
+      this.page.getByText("The index will be rebuilt.")
+    ).toBeVisible();
+    await expect(this.page.getByText("A full re-index will run.")).toHaveCount(
+      0
+    );
+  }
+
+  /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */
+  async selectVectorQuantization(label: string): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    await this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option", { name: label })
+      .click();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Apply strategy
+  // ---------------------------------------------------------------------------
+
+  async selectStrategy(label: string): Promise<void> {
+    await this.strategySelect.click();
+    await this.page
+      .getByRole("listbox", { name: "Select a switchover strategy" })
+      .getByRole("option", { name: label })
+      .click();
+  }
+
+  async expectStrategy(label: RegExp): Promise<void> {
+    await expect(this.strategySelect).toHaveValue(label);
+  }
+
+  /** Opens the dropdown, asserts the option is not offered, and closes it. */
+  async expectStrategyOptionAbsent(label: string): Promise<void> {
+    await this.strategySelect.click();
+    const listbox = this.page.getByRole("listbox", {
+      name: "Select a switchover strategy",
+    });
+    await expect(listbox.getByRole("option").first()).toBeVisible();
+    await expect(listbox.getByRole("option", { name: label })).toHaveCount(0);
+    await this.page.keyboard.press("Escape");
+  }
+
+  async expectBannerTitle(title: string): Promise<void> {
+    await expect(this.page.getByText(title, { exact: true })).toBeVisible();
   }
 
   async expectContextualModelActions(): Promise<void> {
@@ -177,28 +392,37 @@ export class IndexSettingsPage {
     await expect(this.rebuildExistingDocumentsButton).toBeVisible();
   }
 
-  async openForwardOnlyConfirmation(): Promise<void> {
+  async enableContextualRetrieval(): Promise<void> {
+    await this.contextualRetrievalSwitch.click();
+    await expect(this.contextualRetrievalSwitch).toBeChecked();
+  }
+
+  async openForwardOnlyConfirmation(
+    title: string = MODEL_FORWARD_DIALOG_TITLE
+  ): Promise<void> {
     await this.applyContextualModelForwardButton.click();
-    await expect(this.forwardOnlyDialog).toBeVisible();
+    await expect(this.forwardOnlyDialog(title)).toBeVisible();
   }
 
   async expectForwardOnlyWarning(): Promise<void> {
-    await expect(this.forwardOnlyDialog).toContainText(
+    await expect(
+      this.forwardOnlyDialog(MODEL_FORWARD_DIALOG_TITLE)
+    ).toContainText(
       "Existing documents will keep context generated by the previous model"
     );
   }
 
-  async confirmForwardOnlyUpdate(): Promise<void> {
-    await this.forwardOnlyDialog
+  async confirmForwardOnlyUpdate(
+    title: string = MODEL_FORWARD_DIALOG_TITLE
+  ): Promise<void> {
+    await this.forwardOnlyDialog(title)
       .getByRole("button", {
         name: "Apply to new and updated documents",
       })
       .click();
   }
 
-  private get forwardOnlyDialog(): Locator {
-    return this.page.getByRole("dialog", {
-      name: "Apply Contextual Retrieval LLM going forward",
-    });
+  private forwardOnlyDialog(title: string): Locator {
+    return this.page.getByRole("dialog", { name: title });
   }
 }

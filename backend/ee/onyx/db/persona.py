@@ -90,7 +90,7 @@ def _assert_group_share_within_scope(
     caller's row lock, so the write reconciles this same snapshot. Both the pre-call and
     current is_public must be private — sharing a public agent in would capture it."""
     # A global groups admin administers every group, so group shares are theirs to set —
-    # same bypass _assert_group_update_within_scope takes for cc_pairs. Which agents they
+    # same bypass assert_cc_pairs_attachable_to_group takes for cc_pairs. Which agents they
     # may touch is still gated by the caller's fetch.
     if has_global_permission(acting_user, Permission.MANAGE_USER_GROUPS):
         return

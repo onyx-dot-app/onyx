@@ -1,5 +1,5 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { hasPaidSubscription } from "@/lib/billing/interfaces";
+import { hasPaidSubscription } from "@/lib/billing/types";
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 
 /**

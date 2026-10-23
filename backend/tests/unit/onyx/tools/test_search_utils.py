@@ -1,11 +1,15 @@
 """Unit tests for search utility functions."""
 
 from typing import NamedTuple
+from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk, InferenceSection
 from onyx.tools.tool_implementations.search.search_tool import deduplicate_queries
 from onyx.tools.tool_implementations.search.search_utils import (
+    _retrieve_adjacent_chunks,
     weighted_reciprocal_rank_fusion,
 )
 
@@ -570,3 +574,123 @@ class TestDeduplicateQueries:
         assert len(result) == 1
         assert result[0][0] == "Café"
         assert result[0][1] == 4.5
+
+
+# =============================================================================
+# Tests for _retrieve_adjacent_chunks
+# =============================================================================
+
+
+def _inference_chunk(document_id: str, chunk_id: int) -> InferenceChunk:
+    return InferenceChunk(
+        document_id=document_id,
+        chunk_id=chunk_id,
+        content=f"content-{chunk_id}",
+        source_type=DocumentSource.MOCK_CONNECTOR,
+        semantic_identifier=document_id,
+        title=document_id,
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb=f"blurb-{chunk_id}",
+    )
+
+
+def _section(document_id: str, chunk_ids: list[int]) -> InferenceSection:
+    chunks = [_inference_chunk(document_id, chunk_id) for chunk_id in chunk_ids]
+    return InferenceSection(
+        center_chunk=chunks[0],
+        chunks=chunks,
+        combined_content=" ".join(chunk.content for chunk in chunks),
+    )
+
+
+class TestRetrieveAdjacentChunks:
+    """`_retrieve_adjacent_chunks` expands a search hit with its neighbors."""
+
+    def test_passes_the_raw_document_id(self) -> None:
+        """OpenSearch stores document IDs unchanged, so the lookup must not
+        rewrite them. The former Vespa backend replaced `'` with `_`, which made
+        expansion miss every document whose ID has an apostrophe."""
+        document_id = "https://example.com/o'brien's-notes"
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section(document_id, [3, 4]),
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
+
+        requested_ids = {
+            call.kwargs["chunk_requests"][0].document_id
+            for call in document_index.id_based_retrieval.call_args_list
+        }
+        assert requested_ids == {document_id}
+
+    def test_requests_the_ranges_around_the_section(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section("doc", [3, 4]),
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=3,
+        )
+
+        ranges = [
+            (
+                call.kwargs["chunk_requests"][0].min_chunk_ind,
+                call.kwargs["chunk_requests"][0].max_chunk_ind,
+            )
+            for call in document_index.id_based_retrieval.call_args_list
+        ]
+        assert ranges == [(1, 2), (5, 7)]
+        for call in document_index.id_based_retrieval.call_args_list:
+            # Permissions were already enforced when the section was found.
+            assert call.kwargs["filters"].access_control_list is None
+            assert call.kwargs["batch_retrieval"] is True
+
+    def test_skips_above_request_at_document_start(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.return_value = []
+
+        _retrieve_adjacent_chunks(
+            section=_section("doc", [0, 1]),
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=1,
+        )
+
+        assert document_index.id_based_retrieval.call_count == 1
+        request = document_index.id_based_retrieval.call_args.kwargs["chunk_requests"][
+            0
+        ]
+        assert (request.min_chunk_ind, request.max_chunk_ind) == (2, 2)
+
+    def test_sorts_results_and_tolerates_index_errors(self) -> None:
+        document_index = MagicMock()
+        document_index.id_based_retrieval.side_effect = [
+            [_inference_chunk("doc", 2), _inference_chunk("doc", 1)],
+            RuntimeError("index unavailable"),
+        ]
+
+        above, below = _retrieve_adjacent_chunks(
+            section=_section("doc", [3]),
+            document_index=document_index,
+            num_chunks_above=2,
+            num_chunks_below=2,
+        )
+
+        assert [chunk.chunk_id for chunk in above] == [1, 2]
+        assert below == []

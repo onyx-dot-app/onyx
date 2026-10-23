@@ -33,8 +33,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
    - We prefer double newlines for readability
+   - Also returns an empty assistant message with finish_reason "length" when the
+     response is incomplete (max_output_tokens) and carries no message item, e.g.
+     a reasoning model that spent the whole budget on reasoning. Upstream raises
+     ValueError there, which surfaces as APIConnectionError; streaming returns an
+     empty message for the same reply.
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
+           The incomplete-reply handling is fixed upstream in v1.99.0 (BerriAI/litellm
+           PR #37710); drop _incomplete_response_as_empty_message once we are on >= 1.99.0.
 
 4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
    - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
@@ -86,9 +93,9 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      assistant message with tool_calls carries no thinking blocks, guarding against
      "Expected thinking or redacted_thinking, but found tool_use"
    - The guard tests `thinking is not None` rather than whether thinking is enabled,
-     so it also drops thinking={"type": "disabled"}, the one value that cannot
-     produce that error: disabled thinking is the state in which Anthropic requires
-     those blocks to be absent
+     so it also drops the off types, thinking={"type": "disabled"} and Sonnet 5.5's
+     {"type": "between_tools"}, the values that cannot produce that error: off
+     thinking is the state in which Anthropic requires those blocks to be absent
    - Reasoning off then silently becomes the API's own default on every turn after a
      tool call, which on the Claude 5 line is full reasoning
    - Bedrock Converse carries its own copy of the same check in
@@ -96,6 +103,14 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      additionalModelRequestFields rather than at the top level, so both transforms
      are wrapped
    STATUS: STILL NEEDED - v1.93.0 gates on presence, not on the thinking type.
+
+9. OpenRouter Routed Model Lost In Streams (_patch_openrouter_routed_model):
+   - OpenRouter stream chunks carry the model a router (openrouter/auto) actually
+     served, but CustomStreamWrapper overwrites every chunk's `model` with the
+     requested name, so routed calls cannot be priced
+   - Our patch keeps the served name in provider_specific_fields["routed_model"],
+     which the wrapper copies through to the consumer
+   STATUS: STILL NEEDED - v1.93.0 only preserves chunk models for Azure.
 
 """
 
@@ -109,6 +124,9 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
+from litellm.llms.openrouter.chat.transformation import (
+    OpenRouterChatCompletionStreamingHandler,
+)
 from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
@@ -367,6 +385,81 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     )
 
 
+_INCOMPLETE_REASON_TO_FINISH_REASON = {
+    "max_output_tokens": "length",
+    "content_filter": "content_filter",
+}
+
+
+def _incomplete_response_as_empty_message(
+    model: str, raw_response: Any, model_response: Any
+) -> Any | None:
+    """Build the chat response for an incomplete Responses API reply whose
+    output holds nothing but reasoning items, or None for any other reply.
+
+    A reasoning model can spend all of max_output_tokens on reasoning. The
+    reply is then "incomplete" with no message item, upstream finds no
+    choices and raises. Streaming returns an empty message for the same
+    reply; mirror that, keep the reasoning summary, and report the truncation
+    as the finish reason. Every other shape, including an incomplete reply
+    that does carry a message, goes through upstream untouched.
+    """
+    from litellm.responses.utils import ResponseAPILoggingUtils
+    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.utils import Choices, Message
+    from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+    if not isinstance(raw_response, ResponsesAPIResponse):
+        return None
+    if raw_response.error is not None:
+        return None
+    details = raw_response.incomplete_details
+    if details is None or not details.reason:
+        return None
+    if not raw_response.output or not all(
+        isinstance(item, ResponseReasoningItem) for item in raw_response.output
+    ):
+        return None
+
+    summary_texts: list[str] = [
+        summary.text
+        for item in raw_response.output
+        if isinstance(item, ResponseReasoningItem)
+        for summary in item.summary
+        if summary.text
+    ]
+    model_response.choices = [
+        Choices(
+            finish_reason=_INCOMPLETE_REASON_TO_FINISH_REASON.get(
+                details.reason, "stop"
+            ),
+            index=0,
+            message=Message(
+                content=None,
+                role="assistant",
+                reasoning_content="\n\n".join(summary_texts) or None,
+            ),
+        )
+    ]
+    model_response.model = model
+    model_response.usage = (
+        ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
+            raw_response.usage
+        )
+    )
+    # Same as upstream's completed path: keep provider headers (x-request-id)
+    # so a truncated reply is as traceable as a complete one.
+    hidden_params = getattr(  # ods: ignore[getattr]
+        raw_response, "_hidden_params", None
+    )
+    if hidden_params:
+        model_response._hidden_params = {
+            **(model_response._hidden_params or {}),
+            **hidden_params,
+        }
+    return model_response
+
+
 def _patch_openai_responses_transform_response() -> None:
     """
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
@@ -402,6 +495,12 @@ def _patch_openai_responses_transform_response() -> None:
     ) -> Any:
         from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+
+        incomplete = _incomplete_response_as_empty_message(
+            model, raw_response, model_response
+        )
+        if incomplete is not None:
+            return incomplete
 
         result = original_transform_response(
             self,
@@ -724,23 +823,28 @@ def _patch_responses_api_bridge_check() -> None:
     )
 
 
-def _disabled_thinking(optional_params: dict) -> dict | None:
-    """The thinking param when it explicitly asks for no thinking at all."""
+# The thinking types that turn up-front thinking off: disabled everywhere it is
+# accepted, between_tools on Sonnet 5.5, which rejects disabled.
+_THINKING_OFF_TYPES = frozenset({"disabled", "between_tools"})
+
+
+def _thinking_off(optional_params: dict) -> dict | None:
+    """The thinking param when it explicitly asks for no up-front thinking."""
     thinking = optional_params.get("thinking")
-    if isinstance(thinking, dict) and thinking.get("type") == "disabled":
+    if isinstance(thinking, dict) and thinking.get("type") in _THINKING_OFF_TYPES:
         return thinking
     return None
 
 
 def _patch_anthropic_keeps_disabled_thinking() -> None:
     """
-    Patches the two Anthropic request transforms to keep an explicit
-    thinking={"type": "disabled"} on a turn whose history carries tool calls
-    with no thinking blocks.
+    Patches the two Anthropic request transforms to keep an explicit off
+    thinking type (disabled, or between_tools on Sonnet 5.5) on a turn whose
+    history carries tool calls with no thinking blocks.
 
     Upstream drops the param there to avoid "Expected thinking or
     redacted_thinking, but found tool_use", but it gates on `thinking is not
-    None` rather than on thinking being enabled. Disabled thinking cannot raise
+    None` rather than on thinking being enabled. Off thinking cannot raise
     that error: it is the state where Anthropic requires the blocks to be
     absent, which is exactly what we send. Dropping it silently returns the
     model to its default effort, which on the Claude 5 line is full reasoning.
@@ -766,7 +870,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             litellm_params: dict,
             headers: dict,
         ) -> dict:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             body = original_transform_request(
                 self, model, messages, optional_params, litellm_params, headers
             )
@@ -794,7 +898,7 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
             headers: Optional[dict] = None,
             drop_params: bool = False,
         ) -> Any:
-            thinking = _disabled_thinking(optional_params)
+            thinking = _thinking_off(optional_params)
             data = original_request_helper(
                 self,
                 model=model,
@@ -818,6 +922,32 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
         )
 
 
+_original_openrouter_chunk_parser = (
+    OpenRouterChatCompletionStreamingHandler.chunk_parser
+)
+
+
+def _patch_openrouter_routed_model() -> None:
+    if (
+        OpenRouterChatCompletionStreamingHandler.chunk_parser.__name__
+        == "_patched_openrouter_chunk_parser"
+    ):
+        return
+
+    def _patched_openrouter_chunk_parser(self: Any, chunk: dict) -> ModelResponseStream:
+        response: ModelResponseStream = _original_openrouter_chunk_parser(self, chunk)
+        served_model: Any = chunk.get("model")
+        if isinstance(served_model, str) and served_model:
+            fields: dict[str, Any] = dict(response.provider_specific_fields or {})
+            fields["routed_model"] = served_model
+            response.provider_specific_fields = fields
+        return response
+
+    OpenRouterChatCompletionStreamingHandler.chunk_parser = (  # type: ignore[method-assign]
+        _patched_openrouter_chunk_parser
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -832,6 +962,7 @@ def apply_monkey_patches() -> None:
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
+    - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -841,3 +972,4 @@ def apply_monkey_patches() -> None:
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
     _patch_anthropic_keeps_disabled_thinking()
+    _patch_openrouter_routed_model()

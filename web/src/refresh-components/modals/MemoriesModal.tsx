@@ -22,6 +22,7 @@ import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface MemoryItemProps {
   memory: LocalMemory;
@@ -171,6 +172,7 @@ export default function MemoriesModal({
   focusNewLine = false,
 }: MemoriesModalProps) {
   const t = useTranslations("settings.memory");
+  const { appName } = useSettings();
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
@@ -190,7 +192,6 @@ export default function MemoriesModal({
       void refreshUser();
     }
     // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const internalSaveMemories = useCallback(
@@ -253,7 +254,6 @@ export default function MemoriesModal({
     if (id !== null && focusNewLine) {
       setFocusMemoryId(id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onAddLine = () => {
@@ -269,7 +269,7 @@ export default function MemoriesModal({
         <Modal.Header
           icon={SvgAddLines}
           title={t("title")}
-          description={t("modal.description")}
+          description={t("modal.description", { appName })}
           onClose={close}
         >
           <Section flexDirection="row" gap={2}>

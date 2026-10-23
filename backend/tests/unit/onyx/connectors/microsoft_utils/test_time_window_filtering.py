@@ -14,9 +14,12 @@ from typing import Any
 
 import pytest
 
+from onyx.connectors.microsoft_utils.drive_delta import (
+    fetch_drive_delta_checkpoint_page,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
-    fetch_one_delta_page,
+    iter_delta_page_files,
     iter_delta_pages,
     iter_drive_items_paged,
     parse_graph_datetime,
@@ -130,21 +133,21 @@ def _delta_pages_ids(client: GraphApiClient, window: Window) -> list[str]:
 
 def _one_delta_page_ids(client: GraphApiClient, window: Window) -> list[str]:
     start, end = window
-    items, _ = fetch_one_delta_page(
+    result = fetch_drive_delta_checkpoint_page(
         client,
         page_url=f"{GRAPH_API_BASE}/drives/{DRIVE_ID}/root/delta",
         drive_id=DRIVE_ID,
-        start=start,
-        end=end,
     )
-    return [item.id for item in items]
+    return [
+        item.id for item in iter_delta_page_files(result.page, start=start, end=end)
+    ]
 
 
 # Each item source applies the same window filter, so they get the same cases.
 ITEM_SOURCES = [
     pytest.param(_paged_ids, id="iter_drive_items_paged"),
     pytest.param(_delta_pages_ids, id="iter_delta_pages"),
-    pytest.param(_one_delta_page_ids, id="fetch_one_delta_page"),
+    pytest.param(_one_delta_page_ids, id="fetch_drive_delta_checkpoint_page"),
 ]
 
 # (window, ids expected out of ALL_ITEMS). Order follows ALL_ITEMS.

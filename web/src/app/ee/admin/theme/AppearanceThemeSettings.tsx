@@ -26,9 +26,9 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { planTagProps } from "@/lib/tier-badge";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
+import { PlanTag } from "@/lib/tiers/components";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -530,16 +530,14 @@ export const AppearanceThemeSettings = forwardRef<
           >
             <FormField.Label>
               {t("helpLink.label")}
-              {!enterpriseTier && (
-                <Tag {...planTagProps("enterprise")} size="sm" />
-              )}
+              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} size="sm" />}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
                 ref={customHelpLinkUrlInputRef}
                 data-label="custom-help-link-url-input"
                 clearButton
-                placeholder="https://docs.onyx.app"
+                placeholder={t("placeholders.helpUrl")}
                 variant={
                   !enterpriseTier
                     ? "disabled"
@@ -579,36 +577,6 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Control>
           </FormField>
         </div>
-      </Disabled>
-
-      <Disabled
-        disabled={!enterpriseTier}
-        tooltip={t("branding.enterpriseTooltip")}
-      >
-        <FormField state="idle" className="gap-0">
-          <div className="flex justify-between items-center">
-            <FormField.Label>
-              {t("branding.label")}
-              {!enterpriseTier && (
-                <Tag {...planTagProps("enterprise")} size="sm" />
-              )}
-            </FormField.Label>
-            <FormField.Control>
-              <InputSwitch
-                aria-label={t("branding.label")}
-                data-label="hide-onyx-branding-toggle"
-                checked={values.hide_onyx_branding}
-                onCheckedChange={(checked) =>
-                  setFieldValue("hide_onyx_branding", checked)
-                }
-                disabled={!enterpriseTier}
-              />
-            </FormField.Control>
-          </div>
-          <FormField.Description>
-            {t("branding.description")}
-          </FormField.Description>
-        </FormField>
       </Disabled>
 
       <Divider />

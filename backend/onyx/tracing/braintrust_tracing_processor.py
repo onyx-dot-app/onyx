@@ -191,6 +191,7 @@ class BraintrustTracingProcessor(TracingProcessor):
             output_tokens = int(completion_tokens or 0)
             input_cents, output_cents = compute_cost_cents(
                 model=model_name,
+                served_model=span.span_data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
@@ -207,6 +208,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             "model": span.span_data.model,
             "model_config": span.span_data.model_config,
         }
+        if span.span_data.routed_model:
+            metadata["routed_model"] = span.span_data.routed_model
 
         # Include reasoning in metadata if present
         if span.span_data.reasoning:

@@ -1,6 +1,7 @@
 import ipaddress
 import socket
 import unicodedata
+from collections.abc import Iterator
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -26,6 +27,14 @@ BLOCKED_HOSTNAMES = {
     "kubernetes.default.svc",
     "kubernetes.default.svc.cluster.local",
 }
+
+
+# Always part of the targeted-block floor. The AWS IPv6 IMDS
+# address is a ULA (fc00::/7), not link-local, so the class checks miss it.
+_CLOUD_METADATA_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fd00:ec2::254/128"),
+)
 
 
 class SSRFException(Exception):
@@ -63,10 +72,14 @@ def _is_targeted_blocked_ip(
     block_link_local: bool,
 ) -> bool:
     """IP classes to reject even when private networks are allowed. Unspecified
-    (0.0.0.0, ::) always — the kernel aliases it to loopback. Loopback and
-    link-local (169.254.0.0/16, the cloud-metadata range) per flag, so MCP
-    opt-ins can permit loopback while IMDS stays unreachable."""
+    (0.0.0.0, ::) and cloud metadata always — the kernel aliases unspecified to
+    loopback. Loopback and link-local per flag, so MCP opt-ins can permit
+    loopback while IMDS stays unreachable."""
     if ip_obj.is_unspecified:
+        return True
+    if isinstance(ip_obj, ipaddress.IPv6Address) and ip_obj.ipv4_mapped:
+        ip_obj = ip_obj.ipv4_mapped
+    if any(ip_obj in network for network in _CLOUD_METADATA_NETWORKS):
         return True
     if block_loopback and ip_obj.is_loopback:
         return True
@@ -325,16 +338,27 @@ class _PinnedHostAdapter(HTTPAdapter):
         super().init_poolmanager(*args, **kwargs)
 
 
-def _pinned_get(
+class _NoRedirectSession(requests.Session):
+    """With ``allow_redirects=False`` requests still reads the full body of a
+    3xx response to build ``Response.next``, even when streaming. The caller
+    follows redirects itself, so skip that read."""
+
+    def resolve_redirects(self, *_args: Any, **_kwargs: Any) -> Iterator[Any]:
+        return iter(())
+
+
+def _pinned_request(
+    method: str,
     url: str,
     validated_ip: str,
     hostname: str,
     port: int,
     headers: dict[str, str] | None,
     timeout: float | tuple[float, float],
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
-    """GET the already-validated IP directly, presenting ``hostname`` for the
+    """Send to the already-validated IP directly, presenting ``hostname`` for the
     Host header and (on https) SNI + certificate verification."""
     parsed = urlparse(url)
     ip_literal = f"[{validated_ip}]" if ":" in validated_ip else validated_ip
@@ -346,18 +370,12 @@ def _pinned_get(
     request_headers = headers.copy() if headers else {}
     request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
 
-    if parsed.scheme != "https":
-        return requests.get(
-            request_url,
-            headers=request_headers,
-            timeout=timeout,
-            allow_redirects=False,
-            **kwargs,
-        )
-
-    with requests.Session() as session:
-        session.mount("https://", _PinnedHostAdapter(hostname))
-        return session.get(
+    with _NoRedirectSession() as session:
+        session.trust_env = trust_env
+        if parsed.scheme == "https":
+            session.mount("https://", _PinnedHostAdapter(hostname))
+        return session.request(
+            method,
             request_url,
             headers=request_headers,
             timeout=timeout,
@@ -396,7 +414,7 @@ def _resolve_permissive_ip(
     )
 
 
-def _make_ssrf_safe_request(
+def ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
@@ -404,10 +422,11 @@ def _make_ssrf_safe_request(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    method: str = "GET",
     **kwargs: Any,
 ) -> requests.Response:
     """
-    Make a single GET request with SSRF protection (no redirect following).
+    Make a single request with SSRF protection (no redirect following).
 
     Returns the response which may be a redirect (3xx status).
 
@@ -446,14 +465,21 @@ def _make_ssrf_safe_request(
             block_loopback=block_loopback,
             block_link_local=block_link_local,
         )
-        return _pinned_get(
-            url, validated_ip, hostname, port, headers, timeout, **kwargs
+        return _pinned_request(
+            method, url, validated_ip, hostname, port, headers, timeout, **kwargs
         )
 
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
-    return _pinned_get(
-        url, validated_ip, original_hostname, port, headers, timeout, **kwargs
+    return _pinned_request(
+        method,
+        url,
+        validated_ip,
+        original_hostname,
+        port,
+        headers,
+        timeout,
+        **kwargs,
     )
 
 
@@ -466,6 +492,7 @@ def ssrf_safe_get(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    trust_env: bool = True,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -484,6 +511,7 @@ def ssrf_safe_get(
             IPs. Use only when the operator has explicitly opted in (e.g. trusted
             self-hosted deployment fetching internal docs). Scheme, credential, and
             blocked-hostname checks still apply on each hop.
+        trust_env: Use environment proxies, CA bundles, and netrc credentials.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -494,7 +522,7 @@ def ssrf_safe_get(
         ValueError: If the URL is malformed
         requests.RequestException: If the request fails
     """
-    response = _make_ssrf_safe_request(
+    response = ssrf_safe_request(
         url,
         headers,
         timeout,
@@ -502,6 +530,7 @@ def ssrf_safe_get(
         block_loopback_and_link_local=block_loopback_and_link_local,
         block_link_local_only=block_link_local_only,
         https_only=https_only,
+        trust_env=trust_env,
         **kwargs,
     )
 
@@ -512,41 +541,46 @@ def ssrf_safe_get(
     redirect_count = 0
     current_url = url
 
-    while response.is_redirect and redirect_count < MAX_REDIRECTS:
-        redirect_count += 1
+    # Callers may stream; close whichever response we hold if we don't return it.
+    try:
+        while response.is_redirect and redirect_count < MAX_REDIRECTS:
+            redirect_count += 1
 
-        # Get the redirect location
-        redirect_url = response.headers.get("Location")
-        if not redirect_url:
-            break
+            # Get the redirect location
+            redirect_url = response.headers.get("Location")
+            if not redirect_url:
+                break
 
-        # Handle relative redirects
-        if not redirect_url.startswith(("http://", "https://")):
-            parsed_current = urlparse(current_url)
-            if redirect_url.startswith("/"):
-                redirect_url = (
-                    f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
-                )
-            else:
-                # Relative path
-                base_path = parsed_current.path.rsplit("/", 1)[0]
-                redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
+            # Handle relative redirects
+            if not redirect_url.startswith(("http://", "https://")):
+                parsed_current = urlparse(current_url)
+                if redirect_url.startswith("/"):
+                    redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{redirect_url}"
+                else:
+                    # Relative path
+                    base_path = parsed_current.path.rsplit("/", 1)[0]
+                    redirect_url = f"{parsed_current.scheme}://{parsed_current.netloc}{base_path}/{redirect_url}"
 
-        # Validate and follow the redirect (this will raise SSRFException if invalid)
-        current_url = redirect_url
-        response = _make_ssrf_safe_request(
-            redirect_url,
-            headers,
-            timeout,
-            allow_private_network=allow_private_network,
-            block_loopback_and_link_local=block_loopback_and_link_local,
-            block_link_local_only=block_link_local_only,
-            https_only=https_only,
-            **kwargs,
-        )
+            # Validate and follow the redirect (this will raise SSRFException if invalid)
+            response.close()
+            current_url = redirect_url
+            response = ssrf_safe_request(
+                redirect_url,
+                headers,
+                timeout,
+                allow_private_network=allow_private_network,
+                block_loopback_and_link_local=block_loopback_and_link_local,
+                block_link_local_only=block_link_local_only,
+                https_only=https_only,
+                trust_env=trust_env,
+                **kwargs,
+            )
 
-    if response.is_redirect and redirect_count >= MAX_REDIRECTS:
-        raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
+        if response.is_redirect and redirect_count >= MAX_REDIRECTS:
+            raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
+    except BaseException:
+        response.close()
+        raise
 
     return response
 

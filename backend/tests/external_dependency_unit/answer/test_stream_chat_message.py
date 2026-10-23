@@ -26,7 +26,6 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
     SectionEnd,
-    TopLevelBranching,
 )
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_assertions import (
@@ -783,13 +782,6 @@ def test_parallel_internal_and_web_search_tool_calls(
         ).expect_reasoning(
             reasoning_tokens=tokenise(THINKING_RESPONSE_1),
             turn_index=0,
-        ).expect(
-            Packet(
-                placement=create_placement(1),
-                obj=TopLevelBranching(
-                    num_parallel_branches=2,
-                ),
-            )
         ).expect(
             Packet(
                 placement=create_placement(1, 0),

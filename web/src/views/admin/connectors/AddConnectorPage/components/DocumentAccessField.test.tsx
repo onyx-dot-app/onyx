@@ -1,0 +1,121 @@
+import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
+import { Formik } from "formik";
+import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
+import {
+  ConfigurableSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
+
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: jest.fn(),
+}));
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
+  useTierAtLeast: jest.fn(),
+}));
+jest.mock(
+  "@/views/admin/connectors/AddConnectorPage/components/AutoSyncOptions",
+  () => ({
+    __esModule: true,
+    default: () => null,
+  })
+);
+jest.mock("@/lib/connectors/components/GroupShareList", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
+const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
+const { useTierAtLeast } = jest.requireMock("@/lib/tiers/hooks");
+
+function renderForm(connector: ConfigurableSources) {
+  return render(
+    <Formik
+      initialValues={{
+        access_type: "public",
+        groups: [],
+        data_access_group_ids: [],
+      }}
+      onSubmit={() => {}}
+    >
+      {({ values }) => (
+        <>
+          <DocumentAccessField connector={connector} />
+          <output data-testid="access-type">{values.access_type}</output>
+        </>
+      )}
+    </Formik>
+  );
+}
+
+describe("DocumentAccessField", () => {
+  beforeEach(() => {
+    useTierAtLeast.mockReturnValue(true);
+    usePermissionAuthority.mockReturnValue({
+      isGlobalHolder: true,
+      isScopedManager: false,
+    });
+  });
+
+  it("leaves public alone for a user who is still offered it", () => {
+    renderForm(ValidSources.Web as ConfigurableSources);
+
+    expect(screen.getByTestId("access-type")).toHaveTextContent("public");
+  });
+
+  it("moves a scoped manager off public, which they are not offered", async () => {
+    usePermissionAuthority.mockReturnValue({
+      isGlobalHolder: false,
+      isScopedManager: true,
+    });
+
+    renderForm(ValidSources.Web as ConfigurableSources);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("private")
+    );
+  });
+
+  it("defaults to auto sync on a source that supports it", async () => {
+    renderForm(ValidSources.GoogleDrive as ConfigurableSources);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
+    );
+  });
+
+  it("prefers auto sync over private on a source that supports it", async () => {
+    usePermissionAuthority.mockReturnValue({
+      isGlobalHolder: false,
+      isScopedManager: true,
+    });
+
+    renderForm(ValidSources.GoogleDrive as ConfigurableSources);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
+    );
+  });
+
+  it("lists the Business options locked under an upgrade link below Business", async () => {
+    useTierAtLeast.mockReturnValue(false);
+    const user = userEvent.setup();
+    renderForm(ValidSources.Confluence as ConfigurableSources);
+
+    expect(screen.getByText("Business Plan")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox"));
+
+    // Every option shows, locked, with Everyone selected.
+    const everyone = screen.getByRole("option", { name: /Everyone/ });
+    expect(everyone).toHaveAttribute("aria-disabled", "true");
+    expect(everyone).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("option", { name: /Specific Groups/ })
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("option", { name: /Upgrade Plan/ })
+    ).toHaveAttribute("href", "/admin/billing");
+    expect(screen.getByText("Available for Business Plan")).toBeInTheDocument();
+    expect(screen.getByTestId("access-type")).toHaveTextContent("public");
+  });
+});

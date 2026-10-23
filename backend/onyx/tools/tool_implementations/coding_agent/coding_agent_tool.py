@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CodingAgentStart, Packet
 from onyx.tools.interface import Tool
@@ -79,36 +80,33 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         return BashTool.is_available(db_session)
 
     @override
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CODING_AGENT_QUERY_KEY: {
-                            "type": "string",
-                            "description": (
-                                "The user's question or task to perform "
-                                "against the repository."
-                            ),
-                        },
-                        CODING_AGENT_REPO_KEY: {
-                            "type": "string",
-                            "description": (
-                                "GitHub repository URL or 'owner/repo' "
-                                "identifier (e.g. "
-                                "'https://github.com/onyx-dot-app/onyx' "
-                                "or 'onyx-dot-app/onyx')."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CODING_AGENT_QUERY_KEY: {
+                        "type": "string",
+                        "description": (
+                            "The user's question or task to perform "
+                            "against the repository."
+                        ),
                     },
-                    "required": [CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY],
+                    CODING_AGENT_REPO_KEY: {
+                        "type": "string",
+                        "description": (
+                            "GitHub repository URL or 'owner/repo' "
+                            "identifier (e.g. "
+                            "'https://github.com/onyx-dot-app/onyx' "
+                            "or 'onyx-dot-app/onyx')."
+                        ),
+                    },
                 },
+                "required": [CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY],
             },
-        }
+        )
 
     @override
     def emit_start(self, placement: Placement) -> None:

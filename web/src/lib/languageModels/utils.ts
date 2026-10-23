@@ -1,8 +1,20 @@
+import type { IconFunctionComponent } from "@opal/types";
+import { SvgCpu } from "@opal/icons";
 import { MinimalAgent } from "@/lib/agents/types";
+import {
+  AGGREGATOR_PROVIDERS,
+  CUSTOM_CONFIG_OVERRIDES,
+  DEFAULT_ENTRY,
+  MODEL_ICON_MAP,
+  PROVIDERS,
+} from "@/lib/languageModels/constants";
+import CustomModal from "@/sections/modals/languageModels/CustomModal";
 import type {
   DefaultModel,
   LLMProviderDescriptor,
+  LLMProviderView,
   ModelConfiguration,
+  ProviderEntry,
 } from "@/lib/languageModels/types";
 import { LlmDescriptor } from "@/lib/hooks";
 
@@ -206,4 +218,70 @@ export function getDisplayName(
     if (mc) return mc.effectiveDisplayName;
   }
   return undefined;
+}
+
+export function getProvider(
+  providerName: string,
+  existingProvider?: LLMProviderView
+): ProviderEntry {
+  const entry = PROVIDERS[providerName] ?? {
+    ...DEFAULT_ENTRY,
+    productName: providerName,
+    companyName: providerName,
+  };
+
+  // An empty custom_config carries no signal of origin. Only a non-empty map
+  // marks a provider created via the custom form.
+  const customConfig = existingProvider?.custom_config;
+  if (
+    customConfig != null &&
+    Object.keys(customConfig).length > 0 &&
+    CUSTOM_CONFIG_OVERRIDES.has(providerName)
+  ) {
+    return { ...entry, Modal: CustomModal };
+  }
+
+  return entry;
+}
+
+/**
+ * Model-aware icon resolver that checks both provider name and model name
+ * to pick the most specific icon (e.g. Claude icon for a Bedrock Claude model).
+ */
+export function getModelIcon(
+  providerName: string,
+  modelName?: string
+): IconFunctionComponent {
+  const lowerProviderName = providerName.toLowerCase();
+
+  // For aggregator providers, prioritise showing the vendor icon based on model name
+  if (AGGREGATOR_PROVIDERS.has(lowerProviderName) && modelName) {
+    const lowerModelName = modelName.toLowerCase();
+    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
+      if (lowerModelName.includes(key)) {
+        return icon;
+      }
+    }
+  }
+
+  // Check if provider name directly matches an icon
+  if (lowerProviderName in MODEL_ICON_MAP) {
+    const icon = MODEL_ICON_MAP[lowerProviderName];
+    if (icon) {
+      return icon;
+    }
+  }
+
+  // For non-aggregator providers, check if model name contains any of the keys
+  if (modelName) {
+    const lowerModelName = modelName.toLowerCase();
+    for (const [key, icon] of Object.entries(MODEL_ICON_MAP)) {
+      if (lowerModelName.includes(key)) {
+        return icon;
+      }
+    }
+  }
+
+  // Fallback to CPU icon if no matches
+  return SvgCpu;
 }

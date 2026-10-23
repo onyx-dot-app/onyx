@@ -1,4 +1,4 @@
-import {
+import type {
   ConfluenceConfig,
   Connector,
   GithubConfig,
@@ -6,8 +6,8 @@ import {
   JiraConfig,
   SlackConfig,
   ZulipConfig,
-} from "@/lib/connectors/connectors";
-import { getSourceMetadata } from "@/lib/sources";
+} from "@/lib/connectors/types";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 
 import Link from "next/link";

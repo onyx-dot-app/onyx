@@ -26,14 +26,14 @@ interface TableQualifierProps {
   imageAlt?: string;
   /** Show a tinted background container behind the content. */
   background?: boolean;
-  /** Icon size preset. `"lg"` = 28/24, `"md"` = 20/16. @default "md" */
-  iconSize?: "lg" | "md";
+  /** The icon is an avatar: 28px or 24px by row height, instead of 16px. */
+  avatar?: boolean;
 }
 
-const iconSizesMap = {
-  lg: { lg: 28, md: 24 },
-  md: { lg: 20, md: 16 },
-} as const;
+// An icon is Opal's standard 16px at every row height; an avatar fills more
+// of the tile, by row height.
+const AVATAR_SIZES = { 2.75: 28, 2.25: 24 } as const;
+const ICON_SIZE = 16;
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {
   if (disabled) {
@@ -55,16 +55,24 @@ function TableQualifier({
   imageSrc,
   imageAlt = "",
   background = false,
-  iconSize: iconSizePreset = "md",
+  avatar = false,
 }: TableQualifierProps) {
   const resolvedSize = useTableSize();
-  const iconSize = iconSizesMap[iconSizePreset][resolvedSize];
+  const iconSize = avatar ? AVATAR_SIZES[resolvedSize] : ICON_SIZE;
   const overlayStyles = getOverlayStyles(selected, disabled);
 
   function renderContent() {
     switch (content) {
       case "icon":
-        return Icon ? <Icon size={iconSize} /> : null;
+        // shrink-0 and overflow-visible: a flex item may otherwise shrink the
+        // SVG, and its own default overflow cuts a stroke at its edge. The
+        // stroke is currentColor, so text-02 colors it.
+        return Icon ? (
+          <Icon
+            size={iconSize}
+            className="shrink-0 overflow-visible text-text-02"
+          />
+        ) : null;
 
       case "image":
         return imageSrc ? (
@@ -75,34 +83,36 @@ function TableQualifier({
           />
         ) : null;
 
-      case "simple":
+      case "checkbox":
       default:
         return null;
     }
   }
 
   const inner = renderContent();
-  const showBackground = background && content !== "simple";
+  const showBackground = background && content !== "checkbox";
 
   return (
     <div
       className={cn(
         "group relative inline-flex shrink-0 items-center justify-center",
-        resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
+        resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
         disabled ? "cursor-not-allowed" : "cursor-default"
       )}
     >
       {showBackground ? (
         <div
           className={cn(
-            "flex items-center justify-center overflow-hidden rounded-08 transition-colors",
-            resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
+            "tbl-qualifier-tile flex items-center justify-center rounded-08 transition-colors",
+            // Only an image needs the tile's corners clipped.
+            content === "image" && "overflow-hidden",
+            resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
             disabled
               ? "bg-background-neutral-03"
-              : selected
-                ? "bg-action-selection-00"
-                : "bg-background-tint-01"
+              : selected && "bg-action-selection-00"
           )}
+          // At rest the tile's colour depends on the row's (see styles.css).
+          data-rest={!disabled && !selected ? "" : undefined}
         >
           {inner}
         </div>
@@ -115,7 +125,7 @@ function TableQualifier({
         <div
           className={cn(
             "absolute inset-0 items-center justify-center rounded-08",
-            content === "simple" ? "flex" : overlayStyles
+            content === "checkbox" ? "flex" : overlayStyles
           )}
         >
           <InputCheckbox

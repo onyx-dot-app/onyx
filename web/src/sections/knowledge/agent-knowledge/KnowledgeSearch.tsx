@@ -2,23 +2,23 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
-import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
-import type { SearchDocWithContent } from "@/lib/search/interfaces";
-import type { ValidSources } from "@/lib/types";
+} from "@/lib/hierarchy/types";
+import type { SearchDocWithContent } from "@/lib/search/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import {
   Button,
   InputCheckbox,
   Divider,
   InputTypeIn,
   LineItemButton,
+  OverflowText,
 } from "@opal/components";
 import {
   SvgArrowLeft,
@@ -30,7 +30,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 
-import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/interfaces";
+import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeSearchBarProps {
   query: string;
@@ -322,19 +322,31 @@ export function KnowledgeSearchResultsPanel({
                       <GeneralLayouts.Section
                         flexDirection="column"
                         justifyContent="start"
-                        alignItems="start"
+                        alignItems="stretch"
                         gap={0}
                         height="auto"
                         className="min-w-0 grow"
                       >
-                        <Truncated>{node.title}</Truncated>
+                        <OverflowText
+                          as="p"
+                          textPosition="text-start"
+                          font="main-ui-body"
+                          color="text-05"
+                        >
+                          {node.title}
+                        </OverflowText>
                         {node.link && (
-                          <Truncated text03 secondaryBody>
+                          <OverflowText
+                            as="p"
+                            textPosition="text-start"
+                            font="secondary-body"
+                            color="text-03"
+                          >
                             {node.link
                               .replace(/^https?:\/\//i, "")
                               .replace(/^www\./i, "")
                               .replace(/\/+$/, "")}
-                          </Truncated>
+                          </OverflowText>
                         )}
                       </GeneralLayouts.Section>
                       <Button
@@ -387,16 +399,28 @@ export function KnowledgeSearchResultsPanel({
                     <GeneralLayouts.Section
                       flexDirection="column"
                       justifyContent="start"
-                      alignItems="start"
+                      alignItems="stretch"
                       gap={0}
                       height="auto"
                       className="min-w-0 grow"
                     >
-                      <Truncated>{doc.semantic_identifier}</Truncated>
+                      <OverflowText
+                        as="p"
+                        textPosition="text-start"
+                        font="main-ui-body"
+                        color="text-05"
+                      >
+                        {doc.semantic_identifier}
+                      </OverflowText>
                       {doc.blurb && (
-                        <Truncated text03 secondaryBody>
+                        <OverflowText
+                          as="p"
+                          textPosition="text-start"
+                          font="secondary-body"
+                          color="text-03"
+                        >
                           {doc.blurb}
-                        </Truncated>
+                        </OverflowText>
                       )}
                     </GeneralLayouts.Section>
                   </GeneralLayouts.Section>

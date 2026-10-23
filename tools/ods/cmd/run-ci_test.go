@@ -10,10 +10,11 @@ package cmd
 //	R3 --rerun while on the CI branch       -> reset to the fork head, stash
 //	                                           restored, no new PR             TestRunCI_rerunOnCIBranchUpdatesExistingPR
 //	R4 --dry-run with a stale local branch  -> branch recreated locally only   TestRunCI_dryRunRecreatesLocalBranchOnly
-//	R5 --no-verify with a failing hook      -> push bypasses the hook          TestRunCI_noVerifySkipsPrePushHook
+//	R5 a failing pre-push hook              -> push skips the hook             TestRunCI_pushSkipsPrePushHook
 //	R6 gh, fork, or push failures           -> errors, back on the original    TestRunCI_failures
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,8 +25,8 @@ import (
 
 const (
 	gitrelEditableBranch  = "chore/feature-pr-7353-edits"
-	gitrelForkPRJSON      = `{"number":7353,"title":"feat: from a fork","body":"PR body","headRefName":"feature","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
-	gitrelPRViewArm       = `"pr view 7353 --json number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
+	gitrelForkPRJSON      = `{"number":7353,"title":"feat: from a fork","body":"PR body","headRefName":"feature","headRefOid":"'"$GITREL_FORK_SHA"'","headRepository":{"name":"onyx"},"headRepositoryOwner":{"login":"alice"},"baseRefName":"main","isCrossRepository":true}`
+	gitrelPRViewArm       = `"pr view 7353 --json number,title,body,headRefName,headRefOid,headRepository,headRepositoryOwner,baseRefName,isCrossRepository") echo '` + gitrelForkPRJSON + `' ;;`
 	gitrelNoCIPRArm       = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[]' ;;`
 	gitrelCIPRArm         = `"pr list --head run-ci/7353 --state open --limit 1 --json url") echo '[{"url":"https://github.com/onyx-dot-app/onyx/pull/8000"}]' ;;`
 	gitrelNoEditablePRArm = `"pr list --head ` + gitrelEditableBranch + ` --state all --limit 1 --json url") echo '[]' ;;`
@@ -60,6 +61,7 @@ func gitrelSetupRunCIRepo(t *testing.T) gitrelRunCIRepo {
 	// Refuse any transport but local paths, should the rewrite ever miss.
 	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
 	t.Chdir(work)
+	t.Setenv("GITREL_FORK_SHA", forkSHA)
 	return gitrelRunCIRepo{Origin: origin, Work: work, ForkSHA: forkSHA}
 }
 
@@ -78,6 +80,12 @@ func TestRunCI_createsBranchAndPR(t *testing.T) {
 	if tip := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/run-ci/7353"); tip != repo.ForkSHA {
 		t.Errorf("expected origin run-ci/7353 at the fork head %s, got %s", repo.ForkSHA, tip)
 	}
+	if remote := gittest.Git(t, repo.Work, "config", "branch.run-ci/7353.remote"); remote != "origin" {
+		t.Errorf("expected CI branch remote origin, got %q", remote)
+	}
+	if merge := gittest.Git(t, repo.Work, "config", "branch.run-ci/7353.merge"); merge != "refs/heads/run-ci/7353" {
+		t.Errorf("expected CI branch merge ref, got %q", merge)
+	}
 	creates := gitrelCallsWithPrefix(calls(), "pr", "create")
 	if len(creates) != 1 {
 		t.Fatalf("expected one gh pr create call, got %q", creates)
@@ -87,7 +95,7 @@ func TestRunCI_createsBranchAndPR(t *testing.T) {
 		"--base", "main",
 		"--head", "run-ci/7353",
 		"--title", "chore: [Running GitHub actions for #7353]",
-		"--body", "This PR runs GitHub Actions CI for #7353.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**",
+		"--body", "This PR runs GitHub Actions CI for #7353.\n\n**This PR should be closed (not merged) after CI completes.**",
 	})
 	if branch := gittest.Git(t, repo.Work, "branch", "--show-current"); branch != "main" {
 		t.Errorf("expected to be back on main, got %q", branch)
@@ -115,7 +123,7 @@ func TestRunCI_forEditsCreatesReplacementPR(t *testing.T) {
 		"--base", "main",
 		"--head", gitrelEditableBranch,
 		"--title", "feat: from a fork [edit of #7353]",
-		"--body", "> [!IMPORTANT]\n> This PR supersedes #7353. Merge this PR and close #7353 without merging.\n\n## Original PR description\n\nPR body\n\n- [ ] [Optional] Please cherry-pick this PR to the latest release version.\n- [x] Override Linear Check",
+		"--body", "> [!IMPORTANT]\n> This PR supersedes #7353. Merge this PR and close #7353 without merging.\n\n## Original PR description\n\nPR body\n\n- [ ] [Optional] Please cherry-pick this PR to the latest release version.",
 	})
 }
 
@@ -230,14 +238,15 @@ func TestRunCI_dryRunRecreatesLocalBranchOnly(t *testing.T) {
 	}
 }
 
-func TestRunCI_noVerifySkipsPrePushHook(t *testing.T) {
-	// Precondition.
+func TestRunCI_pushSkipsPrePushHook(t *testing.T) {
+	// Precondition: a pre-push hook that records it ran and fails.
 	repo := gitrelSetupRunCIRepo(t)
 	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoCIPRArm+"\n"+gitrelCIPRCreate)
-	gitrelHooks(t, repo.Work, map[string]string{"pre-push": "#!/bin/sh\nexit 1\n"})
+	marker := filepath.Join(t.TempDir(), "pre-push-ran")
+	gitrelHooks(t, repo.Work, map[string]string{"pre-push": "#!/bin/sh\ntouch '" + marker + "'\nexit 1\n"})
 
 	// Under test.
-	err := runCI("7353", &RunCIOptions{Yes: true, NoVerify: true})
+	err := runCI("7353", &RunCIOptions{Yes: true})
 
 	// Postcondition.
 	if err != nil {
@@ -245,6 +254,9 @@ func TestRunCI_noVerifySkipsPrePushHook(t *testing.T) {
 	}
 	if !gitrelRefExists(repo.Origin, "refs/heads/run-ci/7353") {
 		t.Error("expected the push to bypass the failing hook")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("pre-push hook ran during run-ci")
 	}
 }
 
@@ -309,12 +321,32 @@ func TestRunCI_failures(t *testing.T) {
 			wantErr: "Failed to fetch fork branch: exit status 1",
 		},
 		{
+			name:   "CI branch held by another worktree",
+			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm,
+			setup: func(t *testing.T, repo gitrelRunCIRepo) {
+				gittest.Git(t, repo.Work, "worktree", "add", "--quiet", "-b", "run-ci/7353", filepath.Join(t.TempDir(), "wt"))
+			},
+			wantErr: "Failed to create CI branch: exit status 128",
+		},
+		{
 			name:   "push rejected",
 			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm,
 			setup: func(t *testing.T, repo gitrelRunCIRepo) {
 				gittest.RejectPushes(t, repo.Origin)
 			},
 			wantErr: "Failed to push CI branch: exit status 1",
+		},
+		{
+			name:   "upstream config write fails",
+			ghArms: gitrelPRViewArm + "\n" + gitrelNoCIPRArm + "\n" + gitrelCIPRCreate,
+			setup: func(t *testing.T, repo gitrelRunCIRepo) {
+				// A held config lock makes the post-push tracking write fail.
+				lock := filepath.Join(gittest.Git(t, repo.Work, "rev-parse", "--absolute-git-dir"), "config.lock")
+				if err := os.WriteFile(lock, nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantErr: "Failed to set CI branch upstream remote: ",
 		},
 		{
 			name:    "PR creation fails",
@@ -342,5 +374,57 @@ func TestRunCI_failures(t *testing.T) {
 				t.Errorf("expected to stay on or return to main, got %q", branch)
 			}
 		})
+	}
+}
+
+func TestRunCI_rejectsChangedForkHead(t *testing.T) {
+	for _, onCI := range []bool{false, true} {
+		t.Run(fmt.Sprintf("onCI=%v", onCI), func(t *testing.T) {
+			repo := gitrelSetupRunCIRepo(t)
+			if onCI {
+				gittest.Git(t, repo.Work, "checkout", "--quiet", "-b", "run-ci/7353")
+			}
+			before := gittest.Git(t, repo.Work, "rev-parse", "HEAD")
+			t.Setenv("GITREL_FORK_SHA", before)
+			gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoCIPRArm+"\n"+gitrelCIPRCreate)
+			err := runCI("7353", &RunCIOptions{Yes: true})
+			if err == nil || !strings.Contains(err.Error(), "Fork branch moved") {
+				t.Fatalf("expected changed-head rejection, got %v", err)
+			}
+			if head := gittest.Git(t, repo.Work, "rev-parse", "HEAD"); head != before {
+				t.Fatalf("local head changed: %s", head)
+			}
+			if gitrelRefExists(repo.Origin, "refs/heads/run-ci/7353") {
+				t.Fatal("unconfirmed commit was pushed")
+			}
+		})
+	}
+}
+
+func TestRunCI_neverChecksOutForkCode(t *testing.T) {
+	// Precondition: a post-checkout hook that records it ran, as a fork's
+	// pre-commit config would.
+	repo := gitrelSetupRunCIRepo(t)
+	gitrelFakeGH(t, gitrelPRViewArm+"\n"+gitrelNoCIPRArm+"\n"+gitrelCIPRCreate)
+	marker := filepath.Join(t.TempDir(), "post-checkout-ran")
+	gitrelHooks(t, repo.Work, map[string]string{"post-checkout": "#!/bin/sh\ntouch '" + marker + "'\n"})
+
+	// Under test.
+	if err := runCI("7353", &RunCIOptions{Yes: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Postcondition.
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("post-checkout hook ran: run-ci checked out the fork's tree")
+	}
+	if tip := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/run-ci/7353"); tip != repo.ForkSHA {
+		t.Errorf("expected origin run-ci/7353 at the confirmed commit %s, got %s", repo.ForkSHA, tip)
+	}
+	if tip := gittest.Git(t, repo.Work, "rev-parse", "refs/heads/run-ci/7353"); tip != repo.ForkSHA {
+		t.Errorf("expected local run-ci/7353 at %s, got %s", repo.ForkSHA, tip)
+	}
+	if branch := gittest.Git(t, repo.Work, "branch", "--show-current"); branch != "main" {
+		t.Errorf("expected to stay on main, got %q", branch)
 	}
 }

@@ -182,6 +182,7 @@ def find_tags(
         .correlate(Tag)
     )
     accessible_documents = apply_document_access_filter(
+        db_session,
         accessible_documents,
         user_email,
         external_group_ids,

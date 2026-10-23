@@ -13,6 +13,8 @@ ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 # The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
 MASK_CREDENTIAL_CHAR = "\u2022"
+# What mask_string returns for strings < 14 chars: twelve bullets.
+MASK_CREDENTIAL_SHORT = MASK_CREDENTIAL_CHAR * 12
 # Pattern produced by mask_string for strings >= 14 chars: "abcd...wxyz" (exactly 11 chars)
 MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
 
@@ -105,6 +107,8 @@ KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
     "allow_same_provider_subject_relink_override"
 )
+KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY = "allow_renamed_account_claim_override"
+KV_LEGACY_SAML_IMPORTED_KEY = "legacy_saml_conf_imported"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -115,10 +119,11 @@ KV_CRED_KEY = "credential_id_{}"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
-KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
+KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
+KV_TABULAR_RECHUNK_PROGRESS_KEY = "tabular_rechunk_progress"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -126,9 +131,42 @@ KV_KG_CONFIG_KEY = "kg_config"
 # rather than holding the beat lock past its timeout.
 INCOGNITO_FILE_CLEANUP_BATCH = 200
 
+
+def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
+    """A Redis lock TTL in seconds that an operator may set through the env.
+
+    Values under ``minimum`` would break the guard (0 is a lock with no TTL that
+    a crashed worker leaves stuck forever, negatives fail acquisition, and a
+    lock refreshed on a fixed cadence must outlive that cadence), so a bad
+    override falls back to the default loudly: an operator who set a TTL needs
+    to know it is not in effect."""
+    raw: str | None = os.environ.get(name)
+    value: int
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        value = minimum - 1
+    if value >= minimum:
+        return value
+    logging.getLogger(__name__).warning(
+        "Ignoring invalid %s=%r (must be an integer of at least %d seconds); "
+        "using the %ds default.",
+        name,
+        raw,
+        minimum,
+        default,
+    )
+    return default
+
+
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
-CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+# Beat lock for one document-index sync pass, reacquired every quarter of its
+# TTL. A step that outruns it loses the lock and aborts the pass, so large
+# tenants raise it.
+CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT", 120
+)
 
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
@@ -143,6 +181,9 @@ CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 # code path once we have already decided the process needs to die.
 CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 
+# The indexing beat runs every 15 s, so a late kick of its check has no value.
+CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -153,46 +194,37 @@ CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
 # Heartbeat interval for indexing worker liveness detection
 INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 
+# Permission and group sync attempts hold a lease in Postgres: the worker renews
+# heartbeat_at on this interval, and the beat reaper fails attempts whose lease
+# is older than the timeout.
+PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
+PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A group sync still running this long past PERMISSION_SYNC_TIMEOUT is hung (its
+# own timeout check never ran), so its lease stops renewing and the reaper
+# frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
+# A worker that could not renew for this long stops writing, before the reaper
+# can fail its attempt and let a replacement start.
+PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
+    PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
+)
+# A doc permission sync has no time limit: a crawl that keeps yielding may run
+# for days. One with no progress for this long is stuck, so the reaper fails
+# its attempt, which stops the worker and lets a replacement start.
+PERMISSION_SYNC_STALL_TIMEOUT = 60 * 60  # seconds
+# Celery drops a doc permission sync task that waited longer than this in the
+# queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
+PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
+# A NOT_STARTED attempt this old whose task is not in the broker queue lost its
+# task (e.g. a Redis restart without persistence), so the reaper fails it.
+PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
-
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
-
-# While this lock is held, duplicate dispatches for the same cc_pair exit
-# immediately. Deployments whose group syncs legitimately run for hours should
-# raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
-# stack concurrent crawls on one heavy worker; a worker that dies mid-sync
-# leaves the lock stuck for at most this TTL.
-# Non-positive values would break the guard (0 = a lock with no TTL that a
-# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
-# bad overrides back to the default — loudly, since an operator who set a
-# long TTL needs to know their duplicate-crawl protection is NOT in effect.
-_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
-_external_group_sync_lock_timeout_raw = os.environ.get(
-    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT"
-)
-try:
-    _external_group_sync_lock_timeout = (
-        int(_external_group_sync_lock_timeout_raw)
-        if _external_group_sync_lock_timeout_raw
-        else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
-    )
-except ValueError:
-    _external_group_sync_lock_timeout = -1
-if _external_group_sync_lock_timeout > 0:
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = _external_group_sync_lock_timeout
-else:
-    logging.getLogger(__name__).warning(
-        "Ignoring invalid CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT=%r "
-        "(must be a positive integer of seconds); using the %ds default.",
-        _external_group_sync_lock_timeout_raw,
-        _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT,
-    )
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
@@ -224,7 +256,7 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 
 # Per-doc metadata-sync task expiry: bounds queue growth if consumers stall. An
 # expired task's doc stays needs_sync / secondary_only_sync_pending and is
-# re-enqueued on the next vespa-sync beat pass, so dropping it is safe.
+# re-enqueued on the next document index sync beat pass, so dropping it is safe.
 CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
@@ -276,6 +308,7 @@ class DocumentSource(str, Enum):
     BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
+    ONEDRIVE = "onedrive"
     TEAMS = "teams"
     OUTLOOK = "outlook"
     SALESFORCE = "salesforce"
@@ -305,6 +338,7 @@ class DocumentSource(str, Enum):
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
+    YOUTRACK = "youtrack"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -348,11 +382,6 @@ class BlobType(str, Enum):
     OCI_STORAGE = "oci_storage"
 
 
-class DocumentIndexType(str, Enum):
-    COMBINED = "combined"  # Vespa
-    SPLIT = "split"  # Typesense + Qdrant
-
-
 class QueryHistoryType(str, Enum):
     DISABLED = "disabled"
     ANONYMIZED = "anonymized"
@@ -388,15 +417,9 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
+    SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
-
-
-class ChatMessageSimpleType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_CALL = "tool_call"
-    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -412,6 +435,11 @@ class FileStoreType(str, Enum):
     AZURE = "azure"
 
 
+# Key in FileRecord.file_metadata naming the chat session that produced a
+# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
+
+
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
@@ -422,6 +450,7 @@ class FileOrigin(str, Enum):
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     INDEXING_STAGING = "indexing_staging"
     LOG_EXPORT = "log_export"
+    PERM_SYNC_CHECKPOINT = "perm_sync_checkpoint"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
@@ -473,6 +502,11 @@ class OnyxCeleryQueues:
     # Manual credential capability check runs; probes may legitimately hang up
     # to their per-check guard, so they live with the long-running work.
     CAPABILITY_CHECKS = "capability_checks"
+    # Draft runs for an unsaved connector form. The form waits on them, so they
+    # do not share a queue with the long-running perm and group syncs. Draft
+    # checks are capped at DRAFT_CHECK_TIMEOUT_SECONDS so they fit the light
+    # worker.
+    CAPABILITY_CHECKS_DRAFT = "capability_checks_draft"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
@@ -502,8 +536,6 @@ class OnyxCeleryQueues:
     # Scheduled tasks queue (Craft scheduled-task executor)
     SCHEDULED_TASKS = "scheduled_tasks"
 
-    OPENSEARCH_MIGRATION = "opensearch_migration"
-
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -523,23 +555,20 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
-    OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
+    CC_PAIR_IDS_BACKFILL_LOCK = "da_lock:cc_pair_ids_backfill"
+    TABULAR_RECHUNK_LOCK = "da_lock:tabular_rechunk"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     SECURITY_SETTINGS = "da_lock:security_settings"
 
-    MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
     # its chained tasks) so the beat won't start a second chain per tenant.
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
-    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
-        "da_lock:connector_doc_permissions_sync"
-    )
-    CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
+    ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
 
     SLACK_BOT_LOCK = "da_lock:slack_bot"
@@ -560,6 +589,9 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_QUEUED_PREFIX = "da_lock:user_file_project_sync_queued"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     INCOGNITO_FILE_CLEANUP_BEAT_LOCK = "da_lock:check_incognito_file_cleanup_beat"
+    STAGED_CONNECTOR_FILE_CLEANUP_BEAT_LOCK = (
+        "da_lock:check_staged_connector_file_cleanup_beat"
+    )
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -575,13 +607,9 @@ class OnyxRedisLocks:
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
-    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
-        "signal:block_validate_external_group_sync_fences"
-    )
-    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
-        "signal:block_validate_permission_sync_fences"
-    )
     BLOCK_PRUNING = "signal:block_pruning"
+    # Set by a sweep that skipped because another one held the lock.
+    ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
     BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
@@ -661,15 +689,18 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    CLEANUP_OAUTH_PROVIDER_GRANTS = "cleanup_oauth_provider_grants"
+    CLEANUP_OAUTH_PROVIDER_CLIENTS = "cleanup_oauth_provider_clients"
+
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
     RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
-    MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
-    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
+    COLLECT_FLEET_TELEMETRY = "collect_fleet_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -692,7 +723,16 @@ class OnyxCeleryTask:
 
     # Credential capability checks (granular runs of the registered checks)
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
+    RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+    CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS = "check_for_scheduled_capability_checks"
+
+    # Draft credentials of connector forms that were never submitted
+    CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"
+    CLEANUP_OLD_CAPABILITY_CHECK_RUNS = "cleanup_old_capability_check_runs"
+
+    # Files uploaded for a connector edit that no applied plan claimed
+    CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
@@ -728,15 +768,9 @@ class OnyxCeleryTask:
     SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
     SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
-    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
-        "check_for_documents_for_opensearch_migration_task"
-    )
-    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
-    )
-    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
-    )
+    BACKFILL_CC_PAIR_IDS_TASK = "backfill_cc_pair_ids_task"
+
+    TABULAR_RECHUNK_TASK = "tabular_rechunk_task"
 
 
 # this needs to correspond to the matching entry in supervisord
@@ -755,11 +789,6 @@ if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009  # ods: ignore[getattr]
 else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
-
-
-class OnyxCallTypes(str, Enum):
-    FIREFLIES = "FIREFLIES"
-    GONG = "GONG"
 
 
 NUM_DAYS_TO_KEEP_CHECKPOINTS = 7
@@ -799,6 +828,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
+    DocumentSource.ONEDRIVE: "Files and folders from Microsoft 365 OneDrive",
     DocumentSource.TEAMS: "Chat messages and channels",
     DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
@@ -825,4 +855,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
+    DocumentSource.YOUTRACK: "Issues and project tracking",
 }

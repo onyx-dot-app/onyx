@@ -28,15 +28,13 @@ class ClickupConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        api_token: str | None = None,
-        team_id: str | None = None,
         connector_type: str | None = None,
         connector_ids: list[str] | None = None,
         retrieve_task_comments: bool = True,
     ) -> None:
         self.batch_size = batch_size
-        self.api_token = api_token
-        self.team_id = team_id
+        self.api_token: str | None = None
+        self.team_id: str | None = None
         self.connector_type = connector_type or "workspace"
         self.connector_ids = connector_ids
         self.retrieve_task_comments = retrieve_task_comments

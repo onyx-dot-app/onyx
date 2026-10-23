@@ -94,8 +94,20 @@ export interface ToolCallState {
  * These are stored in chronological order and rendered directly.
  */
 export type StreamItem =
-  | { type: "text"; id: string; content: string; isStreaming: boolean }
-  | { type: "thinking"; id: string; content: string; isStreaming: boolean }
+  | {
+      type: "text";
+      id: string;
+      content: string;
+      isStreaming: boolean;
+      partId?: string;
+    }
+  | {
+      type: "thinking";
+      id: string;
+      content: string;
+      isStreaming: boolean;
+      partId?: string;
+    }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
   | { type: "todo_list"; id: string; todoList: TodoListState }
   | {
@@ -119,34 +131,35 @@ export interface ContextUsage {
   usedTokens: number;
 }
 
-/**
- * Discriminated union of transient tabs that the side panel can render.
- *
- * Pinned tabs (Preview, Files, Artifacts) are handled separately via the
- * existing `OutputTabType` — they are not represented in `PanelTab`. Only
- * tabs that the user opens and closes dynamically (file viewers, etc.) live
- * here. Subagent transcripts are NOT panel tabs — they swap the main chat
- * column in place (see `viewedSubagentSessionId` in the store).
- *
- * Future view kinds: add a new variant here, render its chrome in
- * `OutputPanel.tsx`'s tab-row map, and its body in the panel body switch.
- */
-export type PanelTab = { kind: "file"; path: string; fileName: string };
+/** Resource tabs belong to one session's workspace. */
+export type PanelTab =
+  | { kind: "outputs" }
+  | { kind: "files" }
+  | { kind: "file"; path: string; fileName: string }
+  | { kind: "browser"; id: string; appId: string | null; appName?: string };
 
-/**
- * Stable string ID for a `PanelTab`, namespaced by kind. Used as the value
- * of `activePanelTabId` in the store and as React keys for tab rendering.
- *
- * Format: "<kind>:<identifier>" — e.g. "file:web/src/app/page.tsx".
- */
+export type OutputPanelMode = "closed" | "medium" | "full";
+
+export function normalizePanelPath(path: string): string {
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  return segments.join("/");
+}
+
 export function panelTabId(tab: PanelTab): string {
   switch (tab.kind) {
+    case "outputs":
+      return "outputs";
+    case "files":
+      return "files";
     case "file":
-      return `file:${tab.path}`;
-    default: {
-      const _exhaustive: never = tab.kind;
-      throw new Error(`Unknown PanelTab kind: ${String(_exhaustive)}`);
-    }
+      return `file:${normalizePanelPath(tab.path)}`;
+    case "browser":
+      return `browser:${tab.id}`;
   }
 }
 

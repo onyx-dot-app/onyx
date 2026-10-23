@@ -52,20 +52,20 @@ func TestFindPostgresContainer(t *testing.T) {
 			want: "proj-relational_db-1",
 		},
 		{
-			name: "falls back to legacy names in order",
+			name: "rejects unrelated legacy containers",
 			body: `if [ "$1" = inspect ]; then
   case "$4" in
     onyx-relational_db-1|relational_db) echo true ;;
     *) echo false ;;
   esac
 fi`,
-			want: "onyx-relational_db-1",
+			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
 		},
 		{
-			name: "falls back to any container running a postgres image",
+			name: "rejects unrelated postgres images",
 			body: `[ "$1" = inspect ] && exit 1
 printf 'web\tnginx:1.27\ndb\tpostgres:15.2-alpine\n'`,
-			want: "db",
+			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
 		},
 		{
 			name: "errors when nothing matches",
@@ -107,15 +107,23 @@ func TestFindPostgresContainer_queriesDockerInOrder(t *testing.T) {
 
 	want := []string{
 		"inspect -f {{.State.Running}} proj-relational_db-1",
-		"inspect -f {{.State.Running}} onyx_postgres",
-		"inspect -f {{.State.Running}} onyx-relational_db-1",
-		"inspect -f {{.State.Running}} onyx-stack-relational_db-1",
-		"inspect -f {{.State.Running}} docker_compose-relational_db-1",
-		"inspect -f {{.State.Running}} relational_db",
-		"ps --format {{.Names}}\t{{.Image}}",
 	}
 	if got := readCalls(t, calls); !slices.Equal(got, want) {
 		t.Fatalf("expected calls %q, got %q", want, got)
+	}
+}
+
+func TestFindPostgresContainerUsesOnlyTheNormalizedSelectedProject(t *testing.T) {
+	calls := fakeDocker(t, `echo true`)
+	container, err := FindPostgresContainer("Selected.Project")
+	if err != nil || container != "selectedproject-relational_db-1" {
+		t.Fatalf("unexpected selected container %q: %v", container, err)
+	}
+	if got := readCalls(t, calls); !slices.Equal(got, []string{"inspect -f {{.State.Running}} selectedproject-relational_db-1"}) {
+		t.Fatalf("unexpected lookup %v", got)
+	}
+	if _, err := FindPostgresContainer(""); err == nil {
+		t.Fatal("an empty project must not select a default database")
 	}
 }
 
@@ -261,20 +269,5 @@ func TestGetHostPort(t *testing.T) {
 				t.Fatalf("expected %d, got %d, %v", tt.want, got, err)
 			}
 		})
-	}
-}
-
-func TestIsPortExposed(t *testing.T) {
-	calls := fakeDocker(t, `[ "$2" = web ] && echo 0.0.0.0:3000`)
-
-	if !IsPortExposed("web", "3000") {
-		t.Fatal("expected web:3000 to be exposed")
-	}
-	if IsPortExposed("db", "5432") {
-		t.Fatal("expected db:5432 not to be exposed")
-	}
-	want := []string{"port web 3000", "port db 5432"}
-	if got := readCalls(t, calls); !slices.Equal(got, want) {
-		t.Fatalf("expected calls %q, got %q", want, got)
 	}
 }

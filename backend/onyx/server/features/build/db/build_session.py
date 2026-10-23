@@ -65,12 +65,16 @@ def get_build_session(
     session_id: UUID,
     user_id: UUID,
     db_session: Session,
+    *,
+    for_update: bool = False,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
     stmt = select(BuildSession).where(
         BuildSession.id == session_id,
         BuildSession.user_id == user_id,
     )
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalar(stmt)
 
 
@@ -315,6 +319,7 @@ def update_sandbox_heartbeat(
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
     if sandbox:
         sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
+        sandbox.cleanup_checkpoint = None
         db_session.commit()
 
 

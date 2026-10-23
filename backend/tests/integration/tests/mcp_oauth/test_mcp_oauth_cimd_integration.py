@@ -19,17 +19,20 @@ from tests.integration.common_utils.cimd_oauth import (
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import (
-    DATestLLMProvider,
-    DATestPersona,
-    DATestUser,
+from tests.integration.common_utils.test_models import DATestPersona, DATestUser
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
 )
 
 MCP_SERVER_NAME = "integration-mcp-cimd"
 KNOWN_PROVIDER_SERVER_NAME = "integration-mcp-known-provider"
 RETURN_PATH = "/admin/actions/mcp"
 MCP_TOOL_NAME = "tool_0"
+MCP_TOOL_CALL_ID = "call_mcp_1"
 
 
 def _create_oauth_mcp_server(
@@ -40,6 +43,7 @@ def _create_oauth_mcp_server(
     provider_mode: MCPOAuthProviderMode,
     authorization_endpoint: str | None = None,
     token_endpoint: str | None = None,
+    cimd_enabled: bool = True,
 ) -> int:
     request: dict[str, object] = {
         "name": name,
@@ -49,6 +53,7 @@ def _create_oauth_mcp_server(
         "auth_type": MCPAuthenticationType.OAUTH.value,
         "auth_performer": MCPAuthenticationPerformer.PER_USER.value,
         "oauth_provider_mode": provider_mode.value,
+        "oauth_cimd_enabled": cimd_enabled,
         "is_public": True,
     }
     if provider_mode is MCPOAuthProviderMode.KNOWN_PROVIDER:
@@ -184,11 +189,17 @@ def _complete_oauth_flow(
     _complete_oauth_callback(callback_params, admin_user)
 
 
+def _mock_oidc_status(services: CimdOAuthTestServices) -> MockOidcStatus:
+    status_response = httpx.get(f"{services.oidc_issuer}/test/status", timeout=10)
+    status_response.raise_for_status()
+    return MockOidcStatus.model_validate(status_response.json())
+
+
 def test_mcp_oauth_cimd_only_flow(
     cimd_oauth_services: CimdOAuthTestServices,
     admin_user: DATestUser,
     basic_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    mock_llm: MockLLMScript,
 ) -> None:
     discovery_response = httpx.get(
         f"{cimd_oauth_services.oidc_issuer}/.well-known/oauth-authorization-server",
@@ -272,6 +283,25 @@ def test_mcp_oauth_cimd_only_flow(
             force_reauthentication=True,
         )
 
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id=MCP_TOOL_CALL_ID,
+                        name=MCP_TOOL_NAME,
+                        arguments={"name": "integration-test"},
+                    )
+                ],
+                conditions=RequestConditions(
+                    offers=[MCP_TOOL_NAME], tool_choice="required"
+                ),
+            ),
+            Reply(
+                text="The MCP tool ran.",
+                conditions=RequestConditions(has_results_for=[MCP_TOOL_CALL_ID]),
+            ),
+        )
         chat_session = ChatSessionManager.create(
             persona_id=persona.id,
             user_performing_action=admin_user,
@@ -281,9 +311,6 @@ def test_mcp_oauth_cimd_only_flow(
             message="Invoke the CIMD MCP tool.",
             user_performing_action=admin_user,
             forced_tool_ids=[tool_id],
-            mock_llm_response=(
-                '{"name":"tool_0","arguments":{"name":"integration-test"}}'
-            ),
         )
         assert chat_response.error is None
         assert any(
@@ -292,12 +319,7 @@ def test_mcp_oauth_cimd_only_flow(
             for tool_call in chat_response.tool_call_debug
         )
 
-        status_response = httpx.get(
-            f"{cimd_oauth_services.oidc_issuer}/test/status",
-            timeout=10,
-        )
-        status_response.raise_for_status()
-        status = MockOidcStatus.model_validate(status_response.json())
+        status = _mock_oidc_status(cimd_oauth_services)
         assert status.client_metadata_fetch_count >= 2
         assert status.registration_request_count == 0
         assert status.last_client_id == cimd_oauth_services.client_metadata_url
@@ -362,3 +384,60 @@ def test_mcp_oauth_known_provider_flow(
         assert MCP_TOOL_NAME in _available_tool_names(server_id, admin_user)
     finally:
         _delete_mcp_server(server_id, admin_user)
+
+
+def test_mcp_oauth_cimd_disabled_registers_through_dcr(
+    cimd_dcr_oauth_services: CimdOAuthTestServices,
+    admin_user: DATestUser,
+) -> None:
+    """With CIMD off, auto-discovery registers through DCR even though the
+    provider advertises CIMD."""
+    discovery_response = httpx.get(
+        f"{cimd_dcr_oauth_services.oidc_issuer}/.well-known/oauth-authorization-server",
+        timeout=10,
+    )
+    discovery_response.raise_for_status()
+    discovery = discovery_response.json()
+    assert discovery["client_id_metadata_document_supported"] is True
+    assert "registration_endpoint" in discovery
+
+    cimd_server_id = _create_oauth_mcp_server(
+        cimd_dcr_oauth_services,
+        admin_user,
+        name=f"{MCP_SERVER_NAME}-cimd-default",
+        provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+    )
+    dcr_server_id: int | None = None
+    try:
+        _complete_oauth_flow(
+            cimd_server_id,
+            admin_user,
+            cimd_dcr_oauth_services,
+            force_reauthentication=False,
+        )
+        status = _mock_oidc_status(cimd_dcr_oauth_services)
+        assert status.registration_request_count == 0
+        assert status.last_client_id == cimd_dcr_oauth_services.client_metadata_url
+
+        dcr_server_id = _create_oauth_mcp_server(
+            cimd_dcr_oauth_services,
+            admin_user,
+            name=f"{MCP_SERVER_NAME}-dcr",
+            provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+            cimd_enabled=False,
+        )
+        _complete_oauth_flow(
+            dcr_server_id,
+            admin_user,
+            cimd_dcr_oauth_services,
+            force_reauthentication=False,
+        )
+        status = _mock_oidc_status(cimd_dcr_oauth_services)
+        assert status.registration_request_count == 1
+        assert status.last_client_id is not None
+        assert status.last_client_id.startswith("mock-client-")
+        assert MCP_TOOL_NAME in _available_tool_names(dcr_server_id, admin_user)
+    finally:
+        if dcr_server_id is not None:
+            _delete_mcp_server(dcr_server_id, admin_user)
+        _delete_mcp_server(cimd_server_id, admin_user)

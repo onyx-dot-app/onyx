@@ -1,5 +1,5 @@
 import { Permission } from "@/lib/types";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
@@ -8,7 +8,6 @@ import {
   SvgAudio,
   SvgShareWebhook,
   SvgBarChart,
-  SvgBookOpen,
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
@@ -19,9 +18,11 @@ import {
   SvgGlobe,
   SvgHistory,
   SvgImage,
+  SvgLinkedDots,
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgProgressBars,
   SvgPieChart,
   SvgPlug,
   SvgSearchMenu,
@@ -29,7 +30,6 @@ import {
   SvgSliders,
   SvgTerminal,
   SvgThumbsUp,
-  SvgUploadCloud,
   SvgUser,
   SvgUserCheck,
   SvgUserKey,
@@ -48,7 +48,6 @@ export interface FeatureFlags {
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
   hooksEnabled: boolean;
-  opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
 }
@@ -81,6 +80,7 @@ export interface FeatureFlags {
  *   visible (subject to the permission and tier checks above).** When
  *   provided, the predicate is evaluated against the resolved feature flags;
  *   returning `false` hides the route from the sidebar.
+ * - `beta`: Shows a Beta tag on the sidebar entry.
  */
 export interface AdminRouteEntry {
   path: string;
@@ -91,6 +91,7 @@ export interface AdminRouteEntry {
   section: string;
   requiredTier: Tier | null;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;
+  beta?: boolean;
 }
 
 export const ADMIN_ROUTES = {
@@ -104,6 +105,17 @@ export const ADMIN_ROUTES = {
     section: "",
     requiredTier: null,
     visibleWhen: null,
+  },
+  DECISION_MODELS: {
+    path: "/admin/decision-models",
+    icon: SvgUserCheck,
+    title: "Decision Models",
+    sidebarLabel: "Decision Models",
+    requiredPermission: Permission.MANAGE_LLMS,
+    section: "",
+    requiredTier: null,
+    visibleWhen: null,
+    beta: true,
   },
   WEB_SEARCH: {
     path: "/admin/web-search",
@@ -155,6 +167,16 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  LLM_GATEWAY: {
+    path: "/admin/llm-gateway",
+    icon: SvgGlobe,
+    title: "LLM Gateway",
+    sidebarLabel: "LLM Gateway",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
   // ── Craft ─────────────────────────────────────────────────────────
   CRAFT_ACCESS: {
     path: "/admin/craft/access",
@@ -170,7 +192,7 @@ export const ADMIN_ROUTES = {
     path: "/admin/craft/apps",
     icon: SvgPlug,
     title: "Apps",
-    sidebarLabel: "Apps",
+    sidebarLabel: "",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -209,6 +231,26 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  PLUGINS: {
+    path: "/admin/plugins",
+    icon: SvgPlug,
+    title: "Plugins",
+    sidebarLabel: "Plugins",
+    requiredPermission: Permission.MANAGE_ACTIONS,
+    section: "Agents & Actions",
+    requiredTier: null,
+    visibleWhen: null,
+  },
+  PLUGINS_EXTERNAL_APP: {
+    path: "/admin/plugins/external-app",
+    icon: SvgPlug,
+    title: "Plugins",
+    sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Agents & Actions",
+    requiredTier: null,
+    visibleWhen: null,
+  },
   MCP_ACTIONS: {
     path: "/admin/mcp-actions",
     icon: SvgMcp,
@@ -231,21 +273,11 @@ export const ADMIN_ROUTES = {
   },
 
   // ── Documents & Knowledge ─────────────────────────────────────────
-  INDEXING_STATUS: {
-    path: "/admin/indexing/status",
-    icon: SvgBookOpen,
-    title: "Existing Connectors",
-    sidebarLabel: "Existing Connectors",
-    requiredPermission: Permission.MANAGE_CONNECTORS,
-    section: "Documents & Knowledge",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
-  },
-  ADD_CONNECTOR: {
-    path: "/admin/add-connector",
-    icon: SvgUploadCloud,
-    title: "Add Connector",
-    sidebarLabel: "Add Connector",
+  CONNECTORS: {
+    path: "/admin/connectors",
+    icon: SvgLinkedDots,
+    title: "Connectors",
+    sidebarLabel: "Connectors",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
@@ -297,6 +329,16 @@ export const ADMIN_ROUTES = {
     title: "Document Processing",
     sidebarLabel: "",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Documents & Knowledge",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
+  },
+  INDEXING_STATUS: {
+    path: "/admin/indexing-status",
+    icon: SvgProgressBars,
+    title: "Indexing Status",
+    sidebarLabel: "Indexing Status",
+    requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
@@ -533,7 +575,7 @@ export function sidebarItem(route: AdminRouteEntry) {
  */
 export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   // Covers /sets, /explorer, and /feedback — all require a vector DB.
   ADMIN_ROUTES.DOCUMENTS.path,
   ADMIN_ROUTES.INDEX_SETTINGS.path,

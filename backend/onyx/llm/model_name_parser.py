@@ -2,9 +2,8 @@
 LiteLLM Model Name Parser
 
 Parses LiteLLM model strings and returns structured metadata for UI display.
-All metadata comes from litellm's model_cost dictionary. Until this upstream patch to LiteLLM
-is merged (https://github.com/BerriAI/litellm/pull/17330), we use the model_metadata_enrichments.json
-to add these fields at server startup.
+All metadata comes from the vendored model catalog (onyx.llm.model_catalog)
+plus the Onyx-owned fields in model_metadata_enrichments.json.
 
 Enrichment fields:
 - display_name: Human-friendly name (e.g., "Claude 3.5 Sonnet")
@@ -12,7 +11,7 @@ Enrichment fields:
 - model_version: Version string (e.g., "20241022-v2:0", "v1:0")
 
 The parser only extracts provider and region from the model key - everything
-else comes from enrichment.
+else comes from the catalog and enrichments.
 """
 
 import re
@@ -43,30 +42,32 @@ class ParsedModelName(BaseModel):
 
 
 def _get_model_info(model_key: str) -> dict:
-    """Get model info from litellm.model_cost."""
-    from onyx.llm.litellm_singleton import litellm
+    """Get model info from the rendered model catalog map."""
+    from onyx.llm.model_capabilities import get_model_map
+
+    model_map = get_model_map()
 
     # Try exact key first
-    info = litellm.model_cost.get(model_key)
+    info = model_map.get(model_key)
     if info:
         return info
 
     # Try without provider prefix (e.g., "bedrock/anthropic.claude-..." -> "anthropic.claude-...")
     if "/" in model_key:
-        return litellm.model_cost.get(model_key.split("/", 1)[-1], {})
+        return model_map.get(model_key.split("/", 1)[-1], {})
 
     return {}
 
 
 def _extract_provider(model_key: str) -> str:
     """Extract provider from model key prefix."""
-    from onyx.llm.litellm_singleton import litellm
+    from onyx.llm.model_capabilities import get_model_map
 
     if "/" in model_key:
         return model_key.split("/")[0]
 
-    # No prefix - try to get from litellm.model_cost
-    info = litellm.model_cost.get(model_key, {})
+    # No prefix - resolve via the catalog's provider attribution
+    info = get_model_map().get(model_key, {})
     litellm_provider = info.get("litellm_provider", "")
 
     if litellm_provider:
@@ -135,7 +136,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         "gemini-2.5-pro-exp-03-25" → "Gemini 2.5 Pro"
         "claude-3-5-sonnet-20241022" → "Claude 3.5 Sonnet"
         "gpt-oss:120b" → "GPT-OSS 120B" (hyphenated exception)
-        "gpt-4o-mini" → "GPT-4o Mini" (GPT- brand prefix kept)
+        "gpt-6-luna" → "GPT-6 Luna" (GPT- brand prefix kept)
     """
     try:
         # Remove provider prefix if present
@@ -166,7 +167,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         cleaned = re.sub(r"-v\d+$", "", cleaned)
 
         # GPT models keep the "GPT-" brand prefix, with the hyphen bound to the
-        # version token (e.g., "gpt-4o-mini" → "GPT-4o Mini")
+        # version token (e.g., "gpt-6-luna" → "GPT-6 Luna")
         gpt_prefix = ""
         if base_name_lower.startswith("gpt-"):
             gpt_prefix = "GPT-"

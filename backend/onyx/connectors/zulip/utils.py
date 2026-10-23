@@ -3,7 +3,9 @@ from collections.abc import Callable
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -30,15 +32,25 @@ class ZulipHTTPError(ZulipAPIError):
         return f"HTTP error {self.status_code} occurred during Zulip API call"
 
 
+# Cloud only; self-hosted retries until the server stops rate limiting.
+_MAX_RATE_LIMIT_RETRIES_MULTI_TENANT = 5
+
+
 def __call_with_retry(fun: Callable, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-    result = fun(*args, **kwargs)
-    if result.get("result") == "error":
-        if result.get("code") == "RATE_LIMIT_HIT":
-            retry_after = float(result["retry-after"]) + 1
-            logger.warning("Rate limit hit, retrying after %s seconds", retry_after)
-            time.sleep(retry_after)
-            return __call_with_retry(fun, *args)
-    return result
+    retries = 0
+    while True:
+        result = fun(*args, **kwargs)
+        if not (
+            result.get("result") == "error" and result.get("code") == "RATE_LIMIT_HIT"
+        ):
+            return result
+        if MULTI_TENANT and retries >= _MAX_RATE_LIMIT_RETRIES_MULTI_TENANT:
+            # __raise_if_error raises the rate-limit error.
+            return result
+        retries += 1
+        retry_after = bound_server_wait(float(result["retry-after"]) + 1, "zulip")
+        logger.warning("Rate limit hit, retrying after %s seconds", retry_after)
+        time.sleep(retry_after)
 
 
 def __raise_if_error(response: dict[str, Any]) -> None:

@@ -19,8 +19,8 @@ import {
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";
@@ -28,7 +28,7 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
 import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
-import { useFederatedConnectors } from "@/lib/hooks";
+import { useFederatedConnectors } from "@/lib/connectors/hooks";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];

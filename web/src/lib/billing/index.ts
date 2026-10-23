@@ -3,7 +3,7 @@
  */
 
 // Types and interfaces
-export * from "./interfaces";
+export * from "@/lib/billing/types";
 
 // Service functions
 export * from "./svc";

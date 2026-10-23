@@ -9,7 +9,7 @@ import type {
   SearchFullResponse,
   SearchHistoryResponse,
   SendSearchQueryRequest,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 
 /**
  * Classify a query as search or chat flow

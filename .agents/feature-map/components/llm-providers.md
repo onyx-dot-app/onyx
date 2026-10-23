@@ -1,0 +1,673 @@
+# LLM Providers
+
+> How Onyx reaches a language model: provider and model configuration, per-flow
+> default resolution, the per-turn factory, the LiteLLM wrapper and its streaming
+> contract, retries, and cost and trace instrumentation.
+
+**Verified against:** `268e4d5a3d` (2026-10-05)
+**Domain:** core-loop (platform surface, consumed by every LLM caller)
+**Edition:** CE, with EE gating on visibility (`is_public`) and groups
+**Owns:**
+`backend/onyx/llm/factory.py`, `interfaces.py`, `multi_llm.py`, `model_response.py`,
+`tool_parsing.py`, `cost.py`, and the rest of `backend/onyx/llm/`,
+`backend/onyx/db/llm.py`, `db/llm_usage.py`,
+`backend/onyx/server/manage/llm/api.py`,
+`backend/onyx/tracing/flows.py`, `llm_utils.py`, `setup.py`, `provider_config.py`,
+`dynamic_processor.py`, `backend/onyx/server/manage/tracing/api.py`
+
+---
+
+## 1. What the user experiences
+
+An admin adds an LLM provider (OpenAI, Anthropic, Bedrock, Ollama, a custom
+OpenAI-compatible endpoint, and more) under **Admin > LLM**, enters credentials,
+and picks which of the provider's models are visible to end users. The admin
+then marks one model as the default for chat, and optionally separate defaults
+for vision, contextual RAG, chat naming, search selection, and Craft.
+The selected chat model still answers and rewrites queries.
+
+TypeSafe AI has a dedicated setup card that discovers System One models using
+the configured API key. Models remain excluded from chat and auto mode.
+Provider configuration rows show a Decision tag for decision-capable models.
+Its tooltip distinguishes decision-only models, which do not appear in chat,
+from models that support both chat and decision tasks.
+**Admin > Decision Models** manages decision providers and an optional model.
+It starts unset and never inherits a chat model. No workflow consumes it yet.
+TypeSafe appears only on this page; shared OpenAI and OpenRouter connections
+remain available on Language Models. Dedicated decision-provider saves preserve shared
+chat settings, defaults, visibility, and access. New shared models stay hidden
+from chat. Clear the selected decision model before removing its model or provider.
+TypeSafe System One, Zoom AI Services, OpenAI Decisions, and OpenRouter Decisions use the separate
+client in `backend/onyx/llm/decisions/`.
+Vercel AI Gateway discovers `evaluation` catalog entries through the dedicated
+decision provider request. Its `language` entries remain chat models.
+Zoom decision requests carry a shared Zoom Scribe connection ID. Only full admins
+can validate or save this link. Each request signs with the current connection credentials.
+
+A user picks a model per chat session, or leaves it on the assistant's default,
+or leaves that on the workspace default. Whichever call actually reaches the
+model, the user experience is the same: streamed tokens, and (if the provider
+supports it) streamed reasoning. If a request to the provider times out or the
+connection drops before the provider yields any chunk, Onyx retries retryable
+errors for up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` attempts. The user sees a
+short delay. If all attempts fail, the error propagates. Once any chunk has
+been yielded, the error propagates with no retry, and a drop mid-answer shows
+as a stream cut off.
+
+An admin with usage tracking enabled can see LLM cost and per-user usage in the
+observability surfaces. An admin can connect Braintrust or Langfuse to see full
+traces of every model call, tagged by what the call was for.
+
+---
+
+## 2. Surfaces
+
+### HTTP endpoints (`server/manage/llm/api.py`)
+
+Admin router, prefix `/admin/llm`:
+
+| Method | Path | Handler | Notes |
+|---|---|---|---|
+| GET | `/admin/llm/provider` | `list_llm_providers` | All configured providers. |
+| GET | `/admin/llm/provider/{id}` | `get_llm_provider` | |
+| PUT | `/admin/llm/provider` | `put_llm_provider` | Create or update. Restores masked credential fields via `_restore_masked_custom_config_values`. |
+| DELETE | `/admin/llm/provider/{id}` | `delete_llm_provider` | |
+| POST | `/admin/llm/test` | `test_llm_configuration` | Tests chat before saving. Saved credentials cannot be tested against another provider. |
+| PUT | `/admin/llm/decision-provider` | `put_decision_provider` | Saves credentials and explicit selected model names. Preserves shared settings and access. |
+| POST | `/admin/llm/decision-provider/test` | `test_decision_provider` | Validates catalog capability and tests the decision protocol. |
+| POST | `/admin/llm/test/default` | `test_default_provider` | Tests the currently configured default. |
+| POST | `/admin/llm/default` | `set_provider_as_default` | Sets the CHAT default. |
+| POST | `/admin/llm/default-vision` | `set_provider_as_default_vision` | Rejects a model that fails `model_supports_image_input`. |
+| POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
+| POST/DELETE | `/admin/llm/default-search-selection` | `set_provider_as_default_search_selection` / `clear_default_search_selection` | Independent optional model for selecting and checking retrieved sections. |
+| GET/POST/DELETE | `/admin/llm/decision-model` | `get_decision_model_configuration`, `set_decision_model`, `delete_decision_model` | Decision Models page selection. Explicit opt-in only. GET includes all eligible configured models without pagination. |
+| POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Requires a chat-capable model; see §9. |
+| GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
+| GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
+| GET | `/admin/llm/auto-config` | `get_auto_config` | |
+| GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
+| GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
+| GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
+
+Non-admin router, prefix `/llm`:
+
+| Method | Path | Handler | Notes |
+|---|---|---|---|
+| GET | `/llm/provider` | `list_llm_provider_basics` | Providers visible to the caller, credentials stripped. |
+| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id` and `flow_type`). Chat pickers filter CHAT before pagination; admin configuration lists all models. Non-admin requests always filter CHAT. |
+| GET | `/llm/persona/{persona_id}/providers` | `list_llm_providers_for_persona` | The providers/models a given assistant may use, group- and persona-filtered. |
+
+Every provider view returned by any of the above masks `api_key` and sensitive
+`custom_config` entries via `_mask_provider_credentials` (`server/manage/llm/api.py`).
+The raw key never appears in a response body.
+
+### Tracing admin endpoints (`server/manage/tracing/api.py`)
+
+| Method | Path | Handler | Notes |
+|---|---|---|---|
+| GET | `/admin/tracing/providers` | `list_tracing_providers` | Braintrust / Langfuse config, env or DB. |
+| POST | `/admin/tracing/providers` | `upsert_tracing_provider_endpoint` | Upsert, not PUT. |
+| DELETE | `/admin/tracing/providers/{provider_type}` | `disconnect_tracing_provider` | |
+| POST | `/admin/tracing/providers/test` | `test_tracing_provider` | Not per provider type; the type is in the body. |
+| POST | `/admin/tracing/providers/{provider_type}/adopt-env` | `adopt_env_tracing_provider` | Copies an env-configured provider into the DB. |
+
+`_reject_if_multi_tenant` (`tracing/api.py`) blocks all of these under cloud;
+see §9.
+
+### Environment configuration
+
+| Variable | Default | Effect |
+|---|---|---|
+| `GEN_AI_TEMPERATURE` | 0 (`configs/model_configs.py`) | Last-resort temperature when nothing else sets one. |
+| `LLM_FIRST_CHUNK_MAX_RETRIES` | 2 | (`configs/chat_configs.py`) Retries allowed before the first streamed chunk. |
+| `LLM_SOCKET_READ_TIMEOUT` | 60 | (`configs/chat_configs.py`) Socket read timeout. It is also the default stall timeout between streamed chunks and, as `LLM_INVOKE_TIMEOUT_S`, the default total timeout of `invoke`. |
+| `BRAINTRUST_API_KEY`, `BRAINTRUST_PROJECT`, `BRAINTRUST_API_URL` | | Env fallback for Braintrust tracing. |
+| `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_HOST` | | Env fallback for Langfuse tracing. |
+| `USER_USAGE_TRACKING_ENABLED` | true | Gates the per-user usage recorder, independent of Braintrust/Langfuse. |
+| `TRACING_CONFIG_CACHE_TTL_SECONDS` | 30 | How often `DynamicTracingProcessor` re-reads the effective config. |
+| `MULTI_TENANT` | | Forces tracing config to env-only; blocks the tracing admin API. |
+
+### Admin UI
+
+`web/src/app/admin/language-models/page.tsx` is the provider list and
+edit surface. It is a thin client over the endpoints above.
+
+`web/src/app/admin/decision-models/page.tsx` renders `DecisionModelsPage`.
+It manages decision providers and an optional model selection. Shared provider
+modals use dedicated decision-provider requests for saves and tests.
+These saves preserve chat settings, defaults, model visibility, and provider access.
+Shared model settings link to Language Models instead of offering edits here.
+TypeSafe and Zoom use `decisionOnly` metadata to appear only on Decision Models.
+Decision-only provider cards have deletion controls. Clear the selected decision
+model before removing its provider, including through the provider API.
+
+Zoom uses `LLMProvider.zoom_voice_provider_id` to reference its shared connection.
+Its encrypted key and secret stay in the VoiceProvider record. Both pages reuse
+the same setup form. Only a Decision Models save creates the decision provider
+and its hidden decision models. A Voice save keeps an existing link in sync but
+never creates one. Decision setup does not activate Voice or choose a decision
+model. Removing Zoom from Decision Models deletes only the decision provider.
+
+`web/src/views/admin/LanguageModelsPage.tsx` owns provider configuration, the
+default chat model, model routing, and the Reasoning Control, Temperature
+Control and Hide Provider Grouping switches. Model selection for naming and
+search lives in Chat Preferences.
+`web/src/views/admin/ChatTaskModelSettings.tsx` renders the Chat Naming Model
+row (chat card) and the Search Selection Model row (search card).
+Neither selector offers hidden models; a hidden current value stays listed.
+Each starts
+with a "Chat Default" row (in the Search UI, unset selection uses the workspace
+default); picking it
+deletes that designation. Each selector stays disabled during its own save,
+without blocking the other setting.
+CHAT_NAMING handles chat naming; SEARCH_SELECTION handles document selection
+and relevance checks. Search rewrites and answers retain the primary model.
+An unset SEARCH_SELECTION falls directly back to the primary client, never
+CHAT_NAMING. Naming uses CHAT_NAMING or the session client. The generic FAST
+designation and endpoints have been removed.
+
+---
+
+## 3. Data model
+
+- **`LLMProvider`** (`db/models.py`): one row per configured connection.
+  `provider`, encrypted `api_key` (`EncryptedString`), `api_base`, `api_version`,
+  `custom_config` (JSONB, for provider-specific fields like Bedrock's access
+  keys), `deployment_name`, `is_public`, `is_auto_mode`. Bedrock's optional
+  `AWS_ROLE_NAME` / `AWS_EXTERNAL_ID` make LiteLLM and the model fetch assume a
+  role in another AWS account; `_reject_assume_role_in_multi_tenant` blocks
+  them under `MULTI_TENANT`. Four columns are
+  **deprecated in favour of `LLMModelFlow`** and kept only for back-compat
+  reads: `default_model_name`, `is_default_provider`, `is_default_vision_provider`,
+  `default_vision_model`. Do not write to them for new behavior; see §9.
+- **`ModelConfiguration`** (`db/models.py`): one row per model under a provider.
+  `is_visible` gates end-user selectability, `max_input_tokens` is an optional
+  override, `display_name` / `custom_display_name` control the UI label, and
+  `reasoning_effort_default` / `reasoning_effort_max` bound reasoning requests.
+  `is_router` marks a virtual router entry (e.g. `openrouter/auto`) instead of
+  a real upstream model. Router rows are hidden from the normal model list and
+  can back the picker's synthesized "Auto" item when the admin enables model
+  routing (`Settings.model_routing_enabled` plus
+  `model_routing_model_configuration_id`).
+  `supports_image_input` is **deprecated in favour of `LLMModelFlow` with the
+  `VISION` flow type**; see §9.
+- **`LLMModelFlow`** (`db/models.py`): joins a `model_configuration_id` to an
+  `llm_model_flow_type`, with `is_default`. Two constraints matter:
+  - `uq_model_config_per_llm_model_flow_type`: one row per (model, flow type).
+  - `ix_one_default_per_llm_model_flow`: a **partial unique index** on
+    `llm_model_flow_type` where `is_default = true`. This guarantees at most
+    one default per flow across the whole table, not per provider. It does not
+    guarantee that a default exists. Seed a default separately.
+- **`LLMModelFlowType`** (`db/enums.py`): `CHAT`, `VISION`, `CONTEXTUAL_RAG`,
+  `REASONING`, `CHAT_NAMING`, `SEARCH_SELECTION`, `DECISION`, `CRAFT`. Stored on `llm_model_flow` as
+  `Enum(LLMModelFlowType, native_enum=False)`, which SQLAlchemy renders as a
+  plain `VARCHAR` column with **no `CHECK` constraint**
+  (`alembic/versions/f220515df7b4_add_flow_mapping_table.py:upgrade`,
+  `db/models.py:LLMModelFlow`). See §9 for why this matters.
+- **`TracingProviderConfig`** (`db/models.py`, via `db/tracing.py`): one row per
+  tracing provider (Braintrust, Langfuse) with `enabled`, encrypted `api_key`,
+  and a `config` JSONB blob.
+- **`UserUsage`** (`db/models.py`, via `db/llm_usage.py`): per-user rolling
+  window of `input_tokens`, `output_tokens`, `cache_read_tokens`,
+  `cache_creation_tokens`, `cost_cents`, upserted with
+  `build_usage_upsert_values` (additive merge, not overwrite).
+
+---
+
+## 4. How it works
+
+### 4.1 Resolving which model answers a turn: `get_llm_for_persona`
+
+`factory.py:get_llm_for_persona(persona, user, llm_override, additional_headers, policy_fn)`
+is the per-turn entry point. Resolution priority:
+
+1. **`LLMOverride`** (a session-level override), resolved by
+   `factory.py:_resolve_provider_and_model`:
+   - by `model_configuration_id` if set (a stale id falls back to the default
+     LLM, never to a name lookup, because provider display names are not
+     unique and a name match could silently pick the wrong same-named
+     provider);
+   - else by `provider` name plus `model_version`.
+2. The persona's `default_model_configuration_id`.
+3. `get_default_llm()`, the CHAT-flow default.
+
+After resolving `(provider, model_name)`, it fetches the caller's group
+membership with `db/llm.py:fetch_user_group_ids` and checks
+`db/llm.py:can_user_access_llm_provider(provider, user_group_ids, persona,
+can_manage_llms)`. A failed check falls back to the default LLM rather than
+raising. `can_user_access_llm_provider` documents its own decision matrix: `is_public`
+gates plain user access (bypassed by `MANAGE_LLMS`), while a persona whitelist
+on the provider is enforced unconditionally, even for `is_public=True`
+providers.
+
+### 4.2 Building the `LLM`: `llm_from_provider` and `get_llm`
+
+`factory.py:llm_from_provider` resolves `max_input_tokens` (configured value,
+else `get_max_input_tokens_from_llm_provider`, which resolves the model catalog in
+`llm/price_table/` through `llm/model_catalog.py` — remote-first: the provider's
+`price_table/<provider>.json` from GitHub main wins when reachable (TTL +
+negative cached, skipped when `ONYX_AIRGAPPED` or for local providers), with the
+vendored copy as the offline floor — then falls back to
+`GEN_AI_MODEL_FALLBACK_MAX_TOKENS`) and temperature, in this
+precedence: session override, then `ModelConfiguration.temperature_default`,
+then `user.temperature_default` (via `UserChatDefaults`), then
+`GEN_AI_TEMPERATURE` (applied inside `factory.py:get_llm` if still `None`).
+
+`factory.py:get_llm` merges extra headers and `model_kwargs` from three
+sources: the request, provider-specific handling
+(`_build_provider_extra_headers`, e.g. OpenRouter attribution headers or a
+Bearer token pulled out of `custom_config` for providers in
+`PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING`), and a `policy_fn`-provided
+`LlmRequestPolicy`. **The policy is merged last on purpose**, so it always wins
+over everything else (used for things like incognito retention suppression).
+It then constructs `onyx.llm.multi_llm.LitellmLLM`.
+
+Other entry points, all funneling through `llm_from_provider`:
+- `get_default_llm()`: fetches `db/llm.py:fetch_default_model(..., LLMModelFlowType.CHAT)` (CHAT flow).
+- `get_default_llm_with_vision()`: uses `fetch_default_model(..., LLMModelFlowType.VISION)`. If that
+  model is absent or does not support image input, it returns `None` and image
+  summarization is off. It has no fallback and does not scan other models.
+- `get_llm_for_contextual_rag(model_configuration_id)` and
+  `get_contextual_rag_llm_for_search_settings(search_settings)`: the latter
+  uses the search settings' explicit `contextual_rag_model_configuration_id`
+  if set, else `fetch_default_model(..., LLMModelFlowType.CONTEXTUAL_RAG)`.
+
+### 4.3 Default resolution in the DB layer
+
+`db/llm.py:fetch_default_model(db_session, flow_type)` is the shared query: it
+joins `ModelConfiguration` to `LLMModelFlow` and filters on
+`llm_model_flow_type == flow_type AND is_default == true`. Callers pass an explicit
+`LLMModelFlowType`: `CHAT`, `VISION`, `CONTEXTUAL_RAG`, `CHAT_NAMING`,
+`SEARCH_SELECTION`, or `CRAFT`.
+
+Setting a new default goes through `db/llm.py:update_default_model`, which
+clears the prior `is_default` row for that flow type and sets the new one in
+the same transaction, so the partial unique index is never violated mid-write.
+Chat callers pass `LLMModelFlowType.CHAT` directly. `update_default_vision_provider`
+checks `model_supports_image_input` before updating the default.
+Naming, selection, and Craft callers use `update_default_pointer_model` with
+an explicit flow type. This function requires a chat-capable model and creates its pointer mapping through
+`create_new_flow_mapping__no_commit`. `fetch_existing_models(db_session, flow_types)`
+returns every `ModelConfiguration` that has an `LLMModelFlow` row matching any
+flow type in the list.
+
+`factory.py:get_search_selection_llm` resolves SEARCH_SELECTION and returns the
+same supplied fallback client when unset. It never uses the naming default.
+Configured utility defaults resolve directly from their admin designation, with
+explicit request headers, provider-specific policy, and a managed-key cost check.
+Provider conversion includes only the designated model row, preserving its
+configured limits even when an undated alias also exists.
+It does not inherit user temperature or reasoning overrides. Operation tracing
+tags remain unchanged. `get_default_utility_llm(..., flow_type=LLMModelFlowType.CHAT_NAMING)` resolves CHAT_NAMING or returns
+`None`. The naming endpoint constructs and cost-checks the session client only
+when no naming default exists.
+
+CHAT_NAMING and SEARCH_SELECTION preserve `ModelConfiguration.is_visible`; they do
+not add a model to the user picker. Provider edits can change a task-only default's visibility, but
+cannot remove its model until the default is cleared. Auto-mode sync does not
+restore visibility solely because a model holds either designation. Admin listings expose and
+pin `default_chat_naming` and `default_search_selection`, including hidden models.
+User and persona listings leave both descriptors empty and do not pin their models.
+
+Migration `c92b67e56ec4` converts draft FAST mappings into CHAT_NAMING mappings.
+Existing canonical naming defaults take precedence. Duplicate mappings merge,
+and model visibility remains unchanged. The downgrade does not reverse the
+merge because original and converted naming rows cannot be distinguished.
+
+### Decision client
+
+`factory.py:get_decision_client` resolves only the selected `DECISION` row and
+returns `None` when unset. The internal `is_default` column stores this optional
+selection. Selection requires an existing capability row and preserves visibility.
+Provider edits preserve the selection. A selected model cannot be removed until
+the selection is cleared. Deleting its provider removes the selection.
+
+`model_catalog.py:model_supports_decisions` reads explicit provider-scoped metadata.
+OpenRouter discovery also requests `output_modalities=decisions` and derives
+capabilities from the returned modalities. Decision-only models lack `CHAT` and
+do not appear in chat selectors. Models can support both protocols.
+Dedicated decision-provider saves validate selected names and create DECISION mappings.
+General saves preserve stored mappings. Discovery never selects additional models.
+
+`decisions/client.py:DecisionClient.decide` accepts text input and typed predicate,
+choice, or score questions. It requires an operation `LLMFlow` and validates the
+provider response. It preserves probabilities, confidence, scores, and refusals.
+TypeSafe and OpenRouter use the System One request shape. OpenAI and Zoom use
+question arrays. Requests have a finite timeout and no automatic retries.
+Image input and product use cases are outside this implementation.
+
+### 4.4 The LiteLLM wrapper: `LitellmLLM`
+
+`multi_llm.py:LitellmLLM` (subclass of `interfaces.py:LLM`) wraps the LiteLLM
+SDK. `_completion` (`multi_llm.py:_completion`) builds the provider-specific
+request: it detects model identity (Claude, Qwen, GLM), reasoning capability,
+and provider quirks (Ollama, Mistral, Vertex AI), and shapes `stream_options`,
+tool-calling params, and reasoning params accordingly. On a `BadRequestError`
+naming a rejected kwarg, a retry ladder (`_retry_attempts`) strips that kwarg
+and retries with a narrower request, up to the ladder's length.
+
+`LLMConfig.supports_images` records the resolved image capability. A configured
+`supports_image_input=True` overrides catalog values. Configured `False` permits
+catalog fallback. Unknown catalog capability stays `None`. Direct client callers
+can explicitly set `supports_images=False` to disable fallback.
+The client shallow-copies string-valued custom configuration at construction.
+It deep-copies model settings after merging deployment headers and body defaults.
+Explicit image capability overrides skip catalog lookup.
+Chat image replay uses this resolved capability; only `None` falls back to the DB/catalog lookup.
+Capability remains fixed for that client, including across model steps.
+Later caller mutations do not change the client's captured settings.
+
+### 4.5 Streaming contract
+
+`interfaces.py:LLM.invoke(request: GenerationRequest, context)` returns one
+`AssistantMessage`. `LLM.stream(request, context)` yields `GenerationEvent` objects
+(`models.py`: text, thinking, and tool-call events, then lifecycle and usage events).
+`LitellmLLM` builds both on two lower-level methods. `invoke_raw` and `stream_raw` call
+`_completion(..., parallel_tool_calls=True, ...)`. `stream_raw` converts each LiteLLM
+chunk with `model_response.py:from_litellm_model_response_stream` into a
+`ModelResponseStream`. `LitellmLLM.stream` feeds those chunks to
+`model_response.py:MessageAccumulator`, which emits the ordered events.
+`invoke_raw` uses a non-streaming request unless the call actually injects
+environment-only custom configuration. When injection is enabled, ordinary calls
+hold a shared read lock throughout the request. Injecting calls stream and
+reassemble the response, releasing the write lock after connection setup.
+Lock acquisition uses the invocation deadline; provider timeouts use the remaining
+budget after acquisition. Injecting calls can wait for active non-streaming readers.
+Explicit streaming calls keep their existing transport.
+
+The LLM gateway skips the event layer. It reads `stream_raw` chunks directly.
+
+`model_response.py:ModelResponseStream` carries `choice.delta.content`,
+`choice.delta.tool_calls` (a list of `ChatCompletionDeltaToolCall`
+**fragments**, not complete calls), and `choice.delta.reasoning_content`. Tool
+call fragments are keyed by `index`: an early chunk carries `id` and
+`function.name`, later chunks for the same index carry only
+`function.arguments` slices with `id`/`name` unset. Callers must accumulate by
+`index` (see `model_response.py:MessageAccumulator.add`, or
+`ee/onyx/server/gateway/stream_bridge.py:merge_tool_call_delta` for raw chunks);
+reading any single chunk's `tool_calls` as complete
+truncates the call.
+
+Both response converters use `model_response.py:_usage_from_usage_data` to normalize
+usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
+falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
+over the nested count. Missing counts become zero.
+
+Cost is tracked with `LitellmLLM._track_llm_cost` whenever a chunk's `usage`
+is set, which is normally only the final chunk. It records cost only when usage
+limits are enabled and the call uses an Onyx-managed API key (some providers emit a
+trailing usage-only chunk with empty `choices`, handled explicitly in
+`from_litellm_model_response_stream`).
+
+Router models (`is_router`, e.g. `openrouter/auto`) have no price of their own.
+`LitellmLLM._routed_model` reads the model the gateway reports serving the call
+(`ModelResponse.model`; for streams the `routed_model` that the OpenRouter
+`chunk_parser` monkey patch keeps in `provider_specific_fields`, because
+LiteLLM's stream wrapper overwrites chunk models with the requested name) and
+records it with `tracing/llm_utils.py:record_llm_routed_model` on the generation
+span. `_track_llm_cost` and the usage processors pass it as
+`compute_cost_cents(served_model=...)`: the catalog is priced by the served
+model, an admin cost override on the router name still wins, and the ledger key
+stays the router name.
+
+### 4.6 Retries
+
+`multi_llm.py:LitellmLLM.stream_raw` retries only on a fixed set of transient
+LiteLLM exceptions: `Timeout`, `APIConnectionError`, `ServiceUnavailableError`,
+`InternalServerError`. It retries **only if nothing has been yielded yet**
+(`yielded_any` is `False`), up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` total
+attempts. The boundary is the first yielded chunk, even an empty or role-only one. Once any chunk has reached the caller, the same exception class
+propagates immediately; the stream is not restarted mid-answer.
+
+### Cooperative cancellation and shared message ownership
+
+`GenerationContext.cancellation` accepts a `CancellationSignal`. Shared calls also inherit
+an enclosing cancellation scope. The adapter checks the signal before provider attempts,
+between stream reads, and before retries. Cancellation after a partial answer emits an
+`aborted` generation error and preserves accepted content. Stream cleanup closes any per-request HTTP client.
+`AgentCancelled` bypasses ordinary exception recovery. Callers must handle it explicitly.
+
+Total deadlines use a child scope, so an expired generation does not cancel its parent.
+Blocked provider reads can delay cancellation and deadline checks. This is cooperative
+cancellation, not immediate socket interruption. Existing chat Stop wiring does not change here.
+
+Shared messages can carry an identity and local metadata/token estimates. Metadata and
+estimates are excluded from serialization. ToolResult adds typed details and error/termination
+flags; raw message dumps include their defaults. Provider serialization forwards only the
+existing provider message fields, not execution identities or result details.
+
+### 4.7 Tracing
+
+Cancellation listeners use the same exception handling before and after cancellation.
+`AgentCancelled` from one listener does not prevent other listeners from running.
+Active generation spans record cancellation errors. If an invoke response arrives before
+cancellation is observed, its usage remains recorded even when the answer is discarded.
+
+`LitellmLLM.invoke` and `LitellmLLM.stream` each open their own generation span with
+`tracing/llm_utils.py:llm_generation_span`. The flow tag comes from
+`GenerationContext.flow`. If the caller sets no flow, the span uses
+`LLMFlow.UNTAGGED_INVOKE` or `LLMFlow.UNTAGGED_STREAM` (`tracing/flows.py`). No wrapper
+adds spans on its own. `invoke_raw` and `stream_raw` open no span, so a caller of those
+methods owns the span.
+
+**This is the single most important verification signal for this component.**
+`UNTAGGED_INVOKE` / `UNTAGGED_STREAM` appearing in a tracing dashboard means a
+call site invoked an `LLM` without setting `GenerationContext.flow`. Any new call
+site should set an explicit flow.
+
+Explicit instrumentation:
+- `tracing/llm_utils.py:llm_generation_span(llm, flow, ...)` for any call that
+  goes through an `LLM` subclass; it pulls model/provider off `llm.config`.
+- `tracing/llm_utils.py:traced_llm_call(flow, model, provider, ...)` for
+  direct provider-SDK calls that bypass `LLM` entirely (image generation,
+  voice, embeddings/rerank across the model_server boundary).
+
+`tracing/flows.py:LLMFlow` enumerates every tagged flow: chat/agent flows
+(`CHAT_RESPONSE`, `CHAT_HISTORY_SUMMARIZATION`), secondary LLM flows (query
+rephrase, filter extraction, session naming), Craft (`CRAFT_LLM_GENERATION`),
+the gateway (`LLM_GATEWAY`), indexing (`CONTEXTUAL_RAG_*`),
+image generation, voice (`STT`/`TTS`), and cross-process calls
+(`EMBED_QUERY`, `RERANK`).
+
+`tracing/setup.py:setup_tracing()` registers a
+`dynamic_processor.py:DynamicTracingProcessor`, which periodically calls
+`provider_config.py:resolve_effective_tracing_config()`. That function prefers
+a DB `TracingProviderConfig` row per provider (`_braintrust_from_row`,
+`_langfuse_from_row`); if no row exists for a provider, it falls back to that
+provider's env vars. Under `MULTI_TENANT`, DB rows are never read and only
+env vars apply (`server/manage/tracing/api.py:_reject_if_multi_tenant` also
+blocks the admin endpoints outright). `USER_USAGE_TRACKING_ENABLED` gates a
+separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
+
+---
+
+## 5. Contracts and invariants
+
+1. **At most one default per flow type**, enforced by the DB partial unique
+   index `ix_one_default_per_llm_model_flow` (`db/models.py:LLMModelFlow`),
+   not by application logic alone. `update_default_model` clears the old
+   default and sets the new one in one transaction so this index is never
+   violated.
+2. **User-selected providers are group- and persona-gated.** Resolution runs
+   through `can_user_access_llm_provider` or falls back to the default.
+   Admin-designated SEARCH_SELECTION and CHAT_NAMING defaults resolve independently
+   of picker access. Document ACLs, tenant policy, and managed-key cost limits
+   still apply.
+3. **The policy function is applied last.** `factory.py:get_llm` merges
+   `policy_headers` / `policy_model_kwargs` after every other header/kwarg
+   source. A new merge step must preserve that ordering, or a policy like
+   incognito's retention suppression can be silently overridden.
+4. **Tool-call deltas must be accumulated, never read as complete.**
+   `ChatCompletionDeltaToolCall` fragments are keyed by `index`; a consumer
+   that reads one chunk's `tool_calls` as a finished call will get a partial
+   name or truncated arguments.
+5. **Retries must not fire after the first yielded chunk.** `yielded_any`
+   gates the retry loop in `LitellmLLM.stream_raw`. If it fires after content has
+   streamed, the client would see duplicated or garbled output.
+6. **Every new LLM call site needs an explicit `LLMFlow` tag.** The untagged
+   sentinel flows exist as a safety net, not a substitute for instrumentation.
+   Leaving a call untagged degrades cost attribution and dashboard grouping.
+7. **API keys are encrypted at rest (`EncryptedString`) and must never be
+   logged or returned by an endpoint.** Every provider view returned by
+   `server/manage/llm/api.py` masks `api_key` and sensitive `custom_config`
+   entries via `_mask_provider_credentials`.
+8. **Decision selection is strictly opt-in.** Neither provider creation nor
+   chat defaults select a decision model. Clearing it returns the factory to
+   `None`. A request cannot grant decision capability to an arbitrary model.
+9. **Decision-provider edits preserve shared chat state.** Keep chat capabilities,
+   settings, defaults, visibility, and provider access. New shared models stay
+   hidden from chat. Loading a catalog must not select additional decision models
+   on an existing connection.
+10. **Zoom Decisions use a linked Zoom Scribe connection.** Do not copy its
+    credentials into the LLM provider row or accept a custom destination. Each
+    request reads the linked credentials and signs a fresh token. Only full
+    admins can test or change a linked connection. Every `zoom_ai` provider must
+    be linked, and a link cannot move to another connection. Shared connection
+    saves are atomic and idempotent from either admin page. A failed validation must not
+    leave credentials or a paired provider behind.
+
+---
+
+## 6. Relationships
+
+**Depends on**
+- [[observability]]: the tracing framework (`generation_span`, trace
+  processors) that `multi_llm.py` and `tracing/llm_utils.py` build on.
+- [[rate-and-usage-limits]]: `db/usage.py` and `server/usage_limits.py`, which
+  `LitellmLLM._track_llm_cost` calls into.
+- [[auth-and-identity]]: `has_global_permission(user, Permission.MANAGE_LLMS)`
+  gates the group-bypass path in `can_user_access_llm_provider`.
+
+**Depended on by**
+- [[core-chat-loop]]: `get_llm_for_persona` is how `build_chat_turn` resolves
+  the model(s) for a turn.
+- [[agents-personas]]: `Persona.default_model_configuration_id` and
+  provider/persona whitelisting live on the persona.
+- [[llm-gateway]]: the OpenAI-compatible gateway routes external calls through
+  this same factory and tags them `LLMFlow.LLM_GATEWAY`.
+- [[document-index]]: contextual RAG chunk summarization resolves its model
+  through `get_contextual_rag_llm_for_search_settings`.
+- Craft (`craft-sessions`): `LLMModelFlowType.CRAFT` and
+  `LLMFlow.CRAFT_LLM_GENERATION` are Craft's hooks into this component.
+- [[observability]]: LLM cost and per-user usage are recorded here and
+  surfaced there.
+
+---
+
+## 7. Blast radius
+
+| If your change… | Also check |
+|---|---|
+| adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, pass the new flow to `fetch_default_model` where needed, and decide the fallback behavior when no row exists yet (see §9) |
+| adds a provider | `llm/well_known_providers/`, `_build_provider_extra_headers` if it needs special header handling, `PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING` if it needs a synthesized Authorization header, the admin UI catalogue, and a `/admin/llm/{provider}/available-models` endpoint if it supports live model discovery |
+| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
+| changes default resolution (`fetch_default_model`, `update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` factory still returns a model, not `None`, where callers assume one exists |
+| adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
+| changes retry behavior in `LitellmLLM.stream_raw` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |
+| changes provider credential handling | confirm masking still happens in every response path in `server/manage/llm/api.py`, and that `_restore_masked_custom_config_values` still round-trips a masked value back to the stored one on update |
+
+---
+
+## 8. How to verify a change
+
+### Adding or testing a provider locally
+
+1. Admin > LLM > Add Provider, or `PUT /admin/llm/provider` directly.
+2. Use `POST /admin/llm/test` to fire one real call against the draft config
+   before saving; it exercises the same `llm_from_provider` path a live turn
+   would. Decision providers use `/admin/llm/decision-provider/test` and validate
+   the returned decision through the dedicated decision client.
+3. Set it as a flow default (`POST /admin/llm/default` etc.) and send a real
+   chat message to confirm `get_llm_for_persona` picks it up.
+
+For TypeSafe, refresh models with the saved key, select a discovered model,
+and save. Its model rows have only the DECISION flow and auto mode is off.
+The provider appears in the admin list, but not in chat or onboarding options.
+In Decision Models, select and clear the decision model across page reloads.
+Refreshing provider models after clearing must leave the decision model unset.
+Skip step 3 because TypeSafe has no chat default. Adding TypeSafe must not change
+the first-provider or last-provider behavior for chat providers.
+
+### Confirming a new call site is tagged
+
+1. Connect a tracing provider (`POST /admin/tracing/providers`, or set the
+   `BRAINTRUST_*`/`LANGFUSE_*` env vars) and confirm it shows in
+   `GET /admin/tracing/providers`.
+2. Exercise the new call site.
+3. In the tracing dashboard, confirm the span's `model_config.flow` is the new
+   `LLMFlow` value, not `untagged_invoke` / `untagged_stream`.
+
+### Tests
+
+```bash
+cd backend && uv run pytest tests/unit -k "llm or multi_llm or factory"
+cd backend && uv run pytest tests/integration -k llm
+```
+
+See `backend/AGENTS.md` for authoritative commands and required env
+(`@pytest.mark.secrets(...)` for any test that needs a real provider key).
+
+### What "working" looks like
+
+- Chat Preferences shows Chat Naming Model in the chat card and Search
+  Selection Model in the search card. Neither offers hidden models. Selecting
+  a model saves only its task default without changing CHAT or visibility.
+  Language Models has no task-model controls. Configuring CHAT_NAMING alone
+  must not change query rewrites or selection; setting SEARCH_SELECTION must
+  change only selection and relevance classification.
+- `/admin/llm/test` succeeds against the real provider before the config is
+  saved.
+- Exactly one row has `is_default = true` per flow type (verify with a direct
+  query against `llm_model_flow` if in doubt).
+- No unexpected `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` spans from the code path
+  you touched.
+- A forced timeout before the first chunk retries and recovers; a forced
+  failure after the first chunk propagates instead of duplicating output.
+
+---
+
+## 9. Footguns
+
+- **`UNTAGGED_INVOKE` / `UNTAGGED_STREAM` in a dashboard means missing
+  instrumentation**, not a bug in tracing. Add an explicit `llm_generation_span`
+  or `traced_llm_call` at the call site.
+- **Deprecated `LLMProvider` and `ModelConfiguration` columns still exist and
+  still have live values from before the `LLMModelFlow` migration**:
+  `LLMProvider.default_model_name`, `is_default_provider`,
+  `is_default_vision_provider`, `default_vision_model`, and
+  `ModelConfiguration.supports_image_input`. Reading them instead of the
+  corresponding `LLMModelFlow` row will silently reintroduce pre-migration
+  behavior.
+- **A flow with no seeded `LLMModelFlow` row does not default silently.**
+  `fetch_default_model` returns `None` for that flow; callers like
+  `get_default_llm` raise (`"No default LLM model found"`) while others
+  (`get_default_utility_llm(..., flow_type=LLMModelFlowType.CHAT_NAMING)`) return `None` and the caller must decide
+  the fallback. Check the specific caller before assuming a flow is
+  populated. Craft in particular is what `db/llm.py:update_default_pointer_model`
+  calls a "pointer flow, not a capability": nothing populates a CRAFT
+  `LLMModelFlow` row automatically, so it must be created explicitly before it
+  can be defaulted. The selected model must also have a CHAT flow.
+- **Retry semantics are asymmetric before and after the first chunk.** Before
+  any content streams, a transient error retries transparently. After even
+  one chunk has reached the caller, the same error propagates as a hard
+  failure. Do not assume retry behavior is uniform across a stream's
+  lifetime.
+- **Provider display names are not unique.** `LLMOverride` resolution
+  therefore prefers `model_configuration_id` over `(provider, model_version)`
+  whenever it is available; a stale `model_configuration_id` falls back to
+  the default LLM rather than attempting a name-based lookup, specifically to
+  avoid picking a different same-named provider.
+- **Disconnecting Zoom on Voice also removes its linked decision provider.**
+  Clear the selected decision model first. The foreign key uses
+  `ON DELETE RESTRICT` to prevent dangling credential references outside this
+  shared deletion path.
+- **The tracing admin API and DB-backed tracing config are unavailable under
+  `MULTI_TENANT`.** Env vars are the only configuration surface on cloud;
+  `_reject_if_multi_tenant` enforces this at the endpoint level.
+
+---
+
+Related: [[core-chat-loop]], [[agents-personas]], [[observability]],
+[[llm-gateway]], [[rate-and-usage-limits]], [[auth-and-identity]],
+[[document-index]].

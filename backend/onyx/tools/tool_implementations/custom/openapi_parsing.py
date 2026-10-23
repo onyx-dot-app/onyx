@@ -1,8 +1,9 @@
 from typing import Any, cast
 from urllib.parse import quote, urlencode
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
+from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
 
 REQUEST_BODY = "requestBody"
@@ -64,34 +65,17 @@ class MethodSpec(BaseModel):
             url += f"?{urlencode(query_params)}"
         return url
 
-    def to_tool_definition(self) -> dict[str, Any]:
-        tool_definition: Any = {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.summary,
-                "parameters": {"type": "object", "properties": {}},
-            },
-        }
-
-        request_body_schema = self.get_request_body_schema()
-        if request_body_schema:
-            tool_definition["function"]["parameters"]["properties"][REQUEST_BODY] = (
-                request_body_schema
-            )
-
-        query_param_schemas = self.get_query_param_schemas()
-        if query_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in query_param_schemas}
-            )
-
-        path_param_schemas = self.get_path_param_schemas()
-        if path_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in path_param_schemas}
-            )
-        return tool_definition
+    def to_tool_definition(self) -> ToolDefinition:
+        properties: dict[str, JsonValue] = {}
+        if request_body_schema := self.get_request_body_schema():
+            properties[REQUEST_BODY] = request_body_schema
+        for param in self.get_query_param_schemas() + self.get_path_param_schemas():
+            properties[param["name"]] = param["schema"]
+        return ToolDefinition(
+            name=self.name,
+            description=self.summary,
+            parameters={"type": "object", "properties": properties},
+        )
 
     def validate_spec(self) -> None:
         # Validate url construction
@@ -190,6 +174,8 @@ def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
     servers = cast(list[dict[str, Any]], openapi_schema.get("servers", []))
     for server in servers:
         url = server.get("url")
+        if url is not None and not isinstance(url, str):
+            raise ValueError("`servers[].url` must be a string")
         if url:
             urls.append(url)
 

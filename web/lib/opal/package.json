@@ -49,6 +49,10 @@
       "types": "./dist/illustrations/index.d.ts",
       "import": "./dist/illustrations/index.js"
     },
+    "./loaders": {
+      "types": "./dist/loaders/index.d.ts",
+      "import": "./dist/loaders/index.js"
+    },
     "./logos": {
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
@@ -109,7 +113,7 @@
     "react": "^19.0.0",
     "react-day-picker": "^9.0.0",
     "react-dom": "^19.0.0",
-    "react-dropzone": "^14.0.0 || ^20.0.0",
+    "react-dropzone": "^20.0.0",
     "react-markdown": "^9.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.0"

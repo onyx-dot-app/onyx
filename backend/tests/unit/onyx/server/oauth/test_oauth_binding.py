@@ -11,10 +11,11 @@ from starlette.requests import Request
 
 from ee.onyx.server.oauth import api as connector_api
 from ee.onyx.server.oauth import confluence_cloud, google_drive, slack
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.federated_connectors.models import OAuthResult
 from onyx.federated_connectors.oauth_utils import OAuthSession
 from onyx.server.features.oauth_config import api as config_api
 from onyx.server.features.oauth_config.models import (
@@ -245,3 +246,44 @@ def test_oauth_config_partial_update_validates_retained_urls(field: str) -> None
             config_api.update_oauth_config_endpoint(
                 1, OAuthConfigUpdate(name="renamed"), MagicMock(), User(id=uuid4())
             )
+
+
+def test_federated_callback_stores_tokens_without_returning_them() -> None:
+    owner = uuid4()
+    request = Request({"type": "http", "query_string": b"state=test&code=code"})
+    connector = MagicMock()
+    connector.source = FederatedConnectorSource.FEDERATED_SLACK
+    connector.credentials.get_value.return_value = {}
+    connector_instance = MagicMock()
+    connector_instance.callback.return_value = OAuthResult(
+        access_token="xoxp-user-secret",
+        refresh_token="xoxe-refresh-secret",
+        token_type="user",
+        scope="search:read",
+        raw_response={"authed_user": {"access_token": "xoxp-user-secret"}},
+    )
+    with (
+        patch.object(
+            federated_api,
+            "verify_oauth_state",
+            return_value=OAuthSession(1, str(owner)),
+        ),
+        patch.object(
+            federated_api, "fetch_federated_connector_by_id", return_value=connector
+        ),
+        patch.object(
+            federated_api,
+            "_get_federated_connector_instance",
+            return_value=connector_instance,
+        ),
+        patch.object(federated_api, "update_federated_connector_oauth_token") as store,
+    ):
+        result = federated_api.handle_oauth_callback_generic(
+            request, User(id=owner), MagicMock()
+        )
+
+    assert store.call_args.kwargs["token"] == "xoxp-user-secret"
+    wire = result.model_dump_json()
+    assert "xoxp-user-secret" not in wire
+    assert "xoxe-refresh-secret" not in wire
+    assert result.source == FederatedConnectorSource.FEDERATED_SLACK

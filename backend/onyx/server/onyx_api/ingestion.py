@@ -8,9 +8,10 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, PUBLIC_API_TAGS
 from onyx.connectors.models import Document, IndexAttemptMetadata, TabularSection
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_cc_pair_ids_for_document,
     get_connector_credential_pair_from_id,
-    verify_user_can_edit_all_cc_pairs,
+    verify_user_can_manage_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.document import (
@@ -32,7 +33,7 @@ from onyx.db.search_settings import (
     get_secondary_search_settings,
 )
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.adapters.document_indexing_adapter import (
@@ -64,7 +65,9 @@ def get_docs_by_connector_credential_pair(
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
     # GATE 2
-    if not verify_user_has_access_to_cc_pair(cc_pair_id, db_session, user):
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
@@ -153,7 +156,9 @@ def upsert_ingestion_doc(
         )
 
     # GATE 2: the default pair is public, so a scoped manager cannot ingest into it
-    if not verify_user_has_access_to_cc_pair(target_cc_pair_id, db_session, user):
+    if not verify_user_has_access_to_cc_pair(
+        target_cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
@@ -162,8 +167,8 @@ def upsert_ingestion_doc(
     # GATE 2 on every pair serving this id — the upsert rewrites the shared doc row and
     # replaces its chunks. Must run before the pipeline, which adds the target as owner.
     existing_cc_pair_ids = get_cc_pair_ids_for_document(db_session, document.id)
-    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
-        existing_cc_pair_ids, db_session, user
+    if existing_cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -186,12 +191,7 @@ def upsert_ingestion_doc(
 
     # Need to index for both the primary and secondary index if possible
     active_search_settings = get_active_search_settings(db_session)
-    # This flow is for indexing so we get all indices.
-    document_indices = get_all_document_indices(
-        active_search_settings.primary,
-        None,
-        None,
-    )
+    document_index = get_default_document_index(active_search_settings.primary, None)
 
     search_settings = get_current_search_settings(db_session)
 
@@ -212,7 +212,7 @@ def upsert_ingestion_doc(
 
     indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
-        document_indices=document_indices,
+        document_index=document_index,
         ignore_time_skip=True,
         db_session=db_session,
         tenant_id=tenant_id,
@@ -235,14 +235,13 @@ def upsert_ingestion_doc(
             search_settings=sec_search_settings
         )
 
-        # This flow is for indexing so we get all indices.
-        sec_document_indices = get_all_document_indices(
-            active_search_settings.secondary, None, None
+        sec_document_index = get_default_document_index(
+            active_search_settings.secondary, None
         )
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
-            document_indices=sec_document_indices,
+            document_index=sec_document_index,
             ignore_time_skip=True,
             # FUTURE write: skip content_hash dedup, else the primary run's hash
             # suppresses this into a no-op.
@@ -280,8 +279,11 @@ def delete_ingestion_doc(
         )
 
     # GATE 2 on every owning pair — one is not enough to drop a doc another group serves
-    if not verify_user_can_edit_all_cc_pairs(
-        get_cc_pair_ids_for_document(db_session, document_id), db_session, user
+    if not verify_user_can_manage_all_cc_pairs(
+        get_cc_pair_ids_for_document(db_session, document_id),
+        db_session,
+        user,
+        CCPairAccessLevel.EDIT,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -301,18 +303,15 @@ def delete_ingestion_doc(
     if recorded_ids:
         db_session.commit()
 
-    # This flow is for deletion so we get all indices.
-    document_indices = get_all_document_indices(
+    document_index = get_default_document_index(
         active_search_settings.primary,
         active_search_settings.secondary,
-        None,
     )
     try:
-        for document_index in document_indices:
-            document_index.delete(
-                document_id,
-                chunk_count=document.chunk_count,
-            )
+        document_index.delete(
+            document_id,
+            chunk_count=document.chunk_count,
+        )
         delete_documents_complete(db_session, [document_id])
     except Exception:
         # A failed DB delete leaves the session aborted; roll back before the candidate

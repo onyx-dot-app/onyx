@@ -49,7 +49,7 @@ export const GrepDenseHits: Story = {
   args: {
     toolCall: search({
       description: "trailingAssistantSlot",
-      rawOutput: `web/src/app/craft/components/BuildMessageList.tsx:28:   * Trailing content attached to the last assistant block — either the
+      rawOutput: `web/src/app/craft/components/BuildMessageList.tsx:28:   * Trailing content attached to the last assistant block, either the
 web/src/app/craft/components/BuildMessageList.tsx:34:  trailingAssistantSlot?: React.ReactNode;
 web/src/app/craft/components/BuildMessageList.tsx:53:  trailingAssistantSlot,
 web/src/app/craft/components/BuildMessageList.tsx:228:          {trailing}

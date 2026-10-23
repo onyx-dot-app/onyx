@@ -138,6 +138,7 @@ def _safe_run_single_tool(
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
+            tool.emitter.tool_started(is_search=isinstance(tool, SearchTool))
             tool_response = tool.run(
                 placement=tool_call.placement,
                 override_kwargs=override_kwargs,
@@ -250,8 +251,6 @@ def run_tool_calls(
     # When False, don't pass memory context to search tools for query expansion
     # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True,
-    # Ask SearchTool to collect retrieval diagnostics for search receipts
-    include_search_retrieval_candidates: bool = False,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -379,7 +378,6 @@ def run_tool_calls(
                 user_memory_context=search_memory_context,
                 user_info=user_info,
                 skip_query_expansion=skip_search_query_expansion,
-                include_retrieval_candidates=include_search_retrieval_candidates,
             )
             # Increment citation number for next search tool to avoid conflicts
             # Estimate: reserve 100 citation slots per search tool

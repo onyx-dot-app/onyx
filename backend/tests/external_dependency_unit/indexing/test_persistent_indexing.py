@@ -40,7 +40,7 @@ from onyx.connectors.models import (
     InputType,
     TextSection,
 )
-from onyx.db.enums import EmbeddingPrecision, IndexingStatus, IndexModelStatus
+from onyx.db.enums import IndexingStatus, IndexModelStatus
 from onyx.db.index_attempt import get_index_attempt, get_index_attempt_errors
 from onyx.db.models import IndexAttempt, IndexAttemptError, SearchSettings
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -157,7 +157,6 @@ def _seed_attempt(db_session: Session) -> tuple[int, int, int]:
         passage_prefix="",
         status=IndexModelStatus.PRESENT,
         index_name=f"test_index_{uuid4().hex[:8]}",
-        embedding_precision=EmbeddingPrecision.FLOAT,
     )
     db_session.add(search_settings)
     db_session.commit()

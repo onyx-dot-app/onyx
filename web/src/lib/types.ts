@@ -1,10 +1,13 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { Credential } from "@/lib/credentials/types";
+import type { Connector } from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+// Imported from the module itself, not the barrel: the barrel re-exports
+// shapes that import from here, and the enum is a runtime value.
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export enum ThemePreference {
   LIGHT = "light",
@@ -184,7 +187,7 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync";
+export type AccessType = "public" | "private" | "sync" | "sync_restricted";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -214,15 +217,24 @@ export interface IndexAttemptSnapshot {
   total_docs_indexed: number;
   error_msg: string | null;
   error_count: number;
+  /** Unresolved errors, whole entities such as a drive or channel included. */
+  open_error_count: number;
+  /** Unresolved document-level errors, the ones a targeted reindex can retry. */
+  open_doc_error_count: number;
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
+  /** When a finished attempt ended. `time_updated` also moves on checkpoint cleanup. */
+  time_finished: string | null;
+  /** Indexed under the FUTURE search settings of a running model switch. */
+  is_new_model: boolean;
+  /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
+  is_backfill: boolean;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
-// declaration order is the canonical pipeline order — the API serializes
-// stages in this order and the "Pipeline order" sort renders them as-is.
-// Keep in sync with the Python enum.
+// declaration order is the canonical pipeline order, which the API serializes
+// and the stage details popover renders. Keep in sync with the Python enum.
 export const INDEX_ATTEMPT_STAGES = [
   "CONNECTOR_VALIDATION",
   "PERMISSION_VALIDATION",
@@ -239,6 +251,8 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "EMBEDDING_RATE_LIMIT_WAIT",
+  "EMBEDDING_PROVIDER_THROTTLE_WAIT",
   "DOC_LOCK_ACQUIRE_WAIT",
   "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
@@ -580,8 +594,10 @@ export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
+  allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
+  allow_renamed_account_claim: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;
@@ -598,128 +614,7 @@ export interface SecuritySettings {
   jwt_expected_issuer: string | null;
 }
 
-export enum ValidSources {
-  Web = "web",
-  GitHub = "github",
-  GitLab = "gitlab",
-  Slack = "slack",
-  GoogleDrive = "google_drive",
-  Gmail = "gmail",
-  Bookstack = "bookstack",
-  Outline = "outline",
-  Confluence = "confluence",
-  Jira = "jira",
-  Productboard = "productboard",
-  Slab = "slab",
-  Coda = "coda",
-  Notion = "notion",
-  Guru = "guru",
-  Gong = "gong",
-  Zulip = "zulip",
-  Linear = "linear",
-  Hubspot = "hubspot",
-  Document360 = "document360",
-  File = "file",
-  UserFile = "user_file",
-  GoogleSites = "google_sites",
-  Loopio = "loopio",
-  Box = "box",
-  Dropbox = "dropbox",
-  Discord = "discord",
-  Salesforce = "salesforce",
-  Sharepoint = "sharepoint",
-  Teams = "teams",
-  Outlook = "outlook",
-  Zendesk = "zendesk",
-  Discourse = "discourse",
-  Axero = "axero",
-  Clickup = "clickup",
-  Wikipedia = "wikipedia",
-  Mediawiki = "mediawiki",
-  Asana = "asana",
-  S3 = "s3",
-  R2 = "r2",
-  GoogleCloudStorage = "google_cloud_storage",
-  Xenforo = "xenforo",
-  OciStorage = "oci_storage",
-  NotApplicable = "not_applicable",
-  IngestionApi = "ingestion_api",
-  Freshdesk = "freshdesk",
-  Fireflies = "fireflies",
-  Egnyte = "egnyte",
-  Airtable = "airtable",
-  Gitbook = "gitbook",
-  Highspot = "highspot",
-  DrupalWiki = "drupal_wiki",
-  Imap = "imap",
-  Bitbucket = "bitbucket",
-  TestRail = "testrail",
-  Braintrust = "braintrust",
-  Lumapps = "lumapps",
-  Canvas = "canvas",
-
-  // Craft-specific sources
-  CraftFile = "craft_file",
-
-  // Federated Connectors
-  FederatedSlack = "federated_slack",
-}
-
-export const federatedSourceToRegularSource = (
-  maybeFederatedSource: ValidSources
-): ValidSources => {
-  if (maybeFederatedSource === ValidSources.FederatedSlack) {
-    return ValidSources.Slack;
-  }
-  return maybeFederatedSource;
-};
-
-export const validAutoSyncSources = [
-  ValidSources.Confluence,
-  ValidSources.Jira,
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-  ValidSources.Slack,
-  ValidSources.Salesforce,
-  ValidSources.GitHub,
-  ValidSources.Sharepoint,
-  ValidSources.Teams,
-  ValidSources.Outlook,
-  ValidSources.Canvas,
-  ValidSources.Box,
-] as const;
-
-// Create a type from the array elements
-export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
-
-export type ConfigurableSources = Exclude<
-  ValidSources,
-  | ValidSources.NotApplicable
-  | ValidSources.IngestionApi
-  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
-  | ValidSources.UserFile
-  | ValidSources.CraftFile // User Library - managed through dedicated UI
->;
-
-export const oauthSupportedSources: ConfigurableSources[] = [
-  ValidSources.Slack,
-  // NOTE: temporarily disabled until our GDrive App is approved
-  // ValidSources.GoogleDrive,
-  ValidSources.Confluence,
-];
-
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
-
 // Federated Connector Types
-export interface CredentialFieldSpec {
-  type: string;
-  description: string;
-  required: boolean;
-  default?: any;
-  example?: any;
-  secret: boolean;
-}
-
 export interface ConfigurationFieldSpec {
   type: string;
   description: string;
@@ -728,10 +623,6 @@ export interface ConfigurationFieldSpec {
   example?: any;
   secret: boolean;
   hidden_when?: Record<string, any>;
-}
-
-export interface CredentialSchemaResponse {
-  credentials: Record<string, CredentialFieldSpec>;
 }
 
 export interface ConfigurationSchemaResponse {
@@ -758,4 +649,14 @@ export interface IndexingStatusRequest {
   source_to_page?: Record<ValidSources, number>;
   source?: ValidSources;
   get_all_connectors?: boolean;
+}
+
+export interface SpreadsheetSheet {
+  name: string;
+  csv: string;
+  truncated: boolean;
+}
+
+export interface SpreadsheetPreviewData {
+  sheets: SpreadsheetSheet[];
 }

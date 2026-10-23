@@ -119,6 +119,14 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        """Reset an unexpired key's TTL to ``seconds`` only while it holds ``expected``.
+
+        Returns whether the key was renewed.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def ttl(self, key: str) -> int:
         """Return remaining TTL in seconds.
 

@@ -40,7 +40,7 @@ const MockSwitch = () => (
 // ---------------------------------------------------------------------------
 
 export const VerticalNoLabel: Story = {
-  name: "Vertical — no label",
+  name: "Vertical: no label",
   render: () => (
     <div className="w-96">
       <Vertical title="Team Name" description="Your organization's name.">
@@ -51,7 +51,7 @@ export const VerticalNoLabel: Story = {
 };
 
 export const VerticalWithLabel: Story = {
-  name: "Vertical — implicit label",
+  name: "Vertical: implicit label",
   render: () => (
     <div className="w-96">
       <Vertical
@@ -66,7 +66,7 @@ export const VerticalWithLabel: Story = {
 };
 
 export const VerticalWithFieldName: Story = {
-  name: "Vertical — field name (Formik)",
+  name: "Vertical: field name (Formik)",
   render: () => (
     <Formik initialValues={{ email: "" }} onSubmit={() => {}}>
       <Form className="w-96">
@@ -84,7 +84,7 @@ export const VerticalWithFieldName: Story = {
 };
 
 export const VerticalDisabled: Story = {
-  name: "Vertical — disabled",
+  name: "Vertical: disabled",
   render: () => (
     <div className="w-96">
       <Vertical withLabel title="Email" disabled>
@@ -99,7 +99,7 @@ export const VerticalDisabled: Story = {
 // ---------------------------------------------------------------------------
 
 export const HorizontalNoLabel: Story = {
-  name: "Horizontal — no label (button child)",
+  name: "Horizontal: no label (button child)",
   render: () => (
     <div className="w-128">
       <Horizontal
@@ -116,7 +116,7 @@ export const HorizontalNoLabel: Story = {
 };
 
 export const HorizontalWithLabel: Story = {
-  name: "Horizontal — implicit label (switch)",
+  name: "Horizontal: implicit label (switch)",
   render: () => (
     <div className="w-128">
       <Horizontal
@@ -131,7 +131,7 @@ export const HorizontalWithLabel: Story = {
 };
 
 export const HorizontalCentered: Story = {
-  name: "Horizontal — centered",
+  name: "Horizontal: centered",
   render: () => (
     <div className="w-128">
       <Horizontal
@@ -191,7 +191,7 @@ export const ErrorTextStory: Story = {
 };
 
 export const Comparison: Story = {
-  name: "Comparison — all variants",
+  name: "Comparison: all variants",
   render: () => (
     <div className="flex flex-col gap-6 w-128">
       <div className="flex flex-col gap-1">

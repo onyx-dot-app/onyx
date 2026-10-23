@@ -20,7 +20,6 @@ type RunCIOptions struct {
 	DryRun   bool
 	Yes      bool
 	Rerun    bool
-	NoVerify bool
 	ForEdits bool
 }
 
@@ -32,7 +31,6 @@ const (
 
 	cherryPickOptionText = "Please cherry-pick this PR to the latest release version."
 	cherryPickOption     = "- [ ] [Optional] " + cherryPickOptionText
-	linearCheckOverride  = "- [x] Override Linear Check"
 
 	gitRefComponentMaxBytes = 255
 	githubPRTitleMaxRunes   = 256
@@ -64,9 +62,14 @@ func NewRunCICommand() *cobra.Command {
 This command will:
   1. Fetch the PR information using the GitHub CLI
   2. Fetch the branch from the fork
-  3. Create a new branch in the main repo (run-ci/<pr-number>)
+  3. Point a local branch (run-ci/<pr-number>) at the fork's commit
+     without checking it out
   4. Push and create a PR that triggers CI
-  5. Switch back to the original branch
+
+The fork's code does not become your working tree, and the push skips local
+git hooks, so nothing from the fork runs on your machine. The exception is a
+run from run-ci/<pr-number> itself: that branch is reset to the fork's commit
+(git reset fires no hooks), so later git commands there use the fork's tree.
 
 This is useful for running CI on PRs from forks, which don't automatically
 trigger GitHub Actions for security reasons.
@@ -97,7 +100,9 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.Rerun, "rerun", false, "Update an existing CI PR with the latest fork changes to re-trigger CI")
-	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
+	var noVerify bool
+	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
+	_ = cmd.Flags().MarkDeprecated("no-verify", "the CI branch push always skips local git hooks")
 	cmd.Flags().BoolVar(&opts.ForEdits, "for-edits", false, "Create a replacement PR intended for editing and merging")
 
 	return cmd
@@ -109,6 +114,7 @@ type PRInfo struct {
 	Title          string `json:"title"`
 	Body           string `json:"body"`
 	HeadRefName    string `json:"headRefName"`
+	HeadRefOid     string `json:"headRefOid"`
 	HeadRepository struct {
 		Name string `json:"name"`
 	} `json:"headRepository"`
@@ -179,9 +185,8 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 			Branch: fmt.Sprintf("run-ci/%d", prInfo.Number),
 			Title:  fmt.Sprintf("chore: [Running GitHub actions for #%d]", prInfo.Number),
 			Body: fmt.Sprintf(
-				"This PR runs GitHub Actions CI for #%d.\n\n%s\n\n**This PR should be closed (not merged) after CI completes.**",
+				"This PR runs GitHub Actions CI for #%d.\n\n**This PR should be closed (not merged) after CI completes.**",
 				prInfo.Number,
-				linearCheckOverride,
 			),
 		}
 	}
@@ -194,12 +199,9 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 	if originalBody := strings.TrimSpace(prInfo.Body); originalBody != "" {
 		body += "\n\n## Original PR description\n\n" + originalBody
 	}
-	additionalOptions := []string{}
 	if !cherryPickOptionPattern.MatchString(prInfo.Body) {
-		additionalOptions = append(additionalOptions, cherryPickOption)
+		body += "\n\n" + cherryPickOption
 	}
-	additionalOptions = append(additionalOptions, linearCheckOverride)
-	body += "\n\n" + strings.Join(additionalOptions, "\n")
 
 	return runCIPRMetadata{
 		Branch: buildEditableBranchName(prInfo),
@@ -236,7 +238,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		log.Warning("=== DRY RUN MODE: No remote operations will be performed ===")
 	}
 
-	// Save the current branch to switch back later
+	// The current branch decides between resetting and pointing the CI branch
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
 		return fatalErrorf("Failed to get current branch: %w", err)
@@ -293,7 +295,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		if existingPRURL != "" {
 			action = "Update existing CI branch"
 		}
-		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s? (yes/no): ", action, prNumber)) {
+		if !prompt.Confirm(fmt.Sprintf("%s for PR #%s (%s:%s @ %s)? (yes/no): ", action, prNumber, forkRepo, prInfo.HeadRefName, prInfo.HeadRefOid)) {
 			log.Info("Exiting...")
 			return nil
 		}
@@ -309,7 +311,15 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		return fatalErrorf("Failed to fetch fork branch: %w", err)
 	}
 
-	// Create or update the CI branch from FETCH_HEAD
+	fetchedSHA, err := git.ResolveCommit("FETCH_HEAD")
+	if err != nil {
+		return fatalErrorf("Failed to resolve FETCH_HEAD: %w", err)
+	}
+	if fetchedSHA != prInfo.HeadRefOid {
+		return fatalErrorf("Fork branch moved since PR #%s was read: fetched %s, expected %s. Re-run to review the new head", prNumber, fetchedSHA, prInfo.HeadRefOid)
+	}
+
+	// Create or update the CI branch from the confirmed commit
 	if originalBranch == ciBranch {
 		// Already on the CI branch - stash any uncommitted changes before resetting
 		stashResult, err := git.StashChanges()
@@ -317,20 +327,15 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 			return fatalErrorf("Failed to stash changes: %w", err)
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
-		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
+		if err := git.RunCommand("reset", "--hard", fetchedSHA); err != nil {
 			return fatalErrorf("Failed to reset branch to fork's HEAD: %w", err)
 		}
 		git.RestoreStash(stashResult)
 	} else {
-		// Delete branch if it already exists locally (to ensure we're in sync with fork)
-		if git.BranchExists(ciBranch) {
-			log.Infof("Deleting existing local branch: %s", ciBranch)
-			if err := git.RunCommand("branch", "-D", ciBranch); err != nil {
-				return fatalErrorf("Failed to delete existing branch: %w", err)
-			}
-		}
-		log.Infof("Creating CI branch: %s", ciBranch)
-		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
+		// Never check out fork code: a checkout fires post-checkout hooks,
+		// which read the fork's .pre-commit-config.yaml.
+		log.Infof("Pointing CI branch %s at %s", ciBranch, fetchedSHA)
+		if err := git.RunCommand("branch", "--force", ciBranch, fetchedSHA); err != nil {
 			return fatalErrorf("Failed to create CI branch: %w", err)
 		}
 	}
@@ -342,39 +347,31 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		} else {
 			log.Warnf("[DRY RUN] Would update existing PR: %s", existingPRURL)
 		}
-		// Switch back to original branch
-		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-			log.Warnf("Failed to switch back to original branch: %v", err)
-		}
 		return nil
 	}
 
 	// Editable branches must still be absent when pushed.
 	log.Infof("Pushing CI branch: %s", ciBranch)
-	pushArgs := []string{"push"}
-	if opts.NoVerify {
-		pushArgs = append(pushArgs, "--no-verify")
-	}
+	// Hooks would run with the fork's hook config, so the push skips them.
+	pushArgs := []string{"push", "--no-verify"}
 	if opts.ForEdits {
 		pushArgs = append(pushArgs, fmt.Sprintf("--force-with-lease=refs/heads/%s:", ciBranch))
 	} else {
 		pushArgs = append(pushArgs, "-f")
 	}
-	pushArgs = append(pushArgs, "--quiet", "-u", "origin", ciBranch)
-	if err := pushWithHookHint(opts.NoVerify, func() error { return git.RunCommand(pushArgs...) }); err != nil {
-		// Switch back to original branch before exiting
-		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-			log.Warnf("Failed to switch back to original branch: %v", switchErr)
-		}
+	pushArgs = append(pushArgs, "--quiet", "origin", fetchedSHA+":refs/heads/"+ciBranch)
+	if err := git.RunCommand(pushArgs...); err != nil {
 		return fatalErrorf("Failed to push CI branch: %w", err)
+	}
+
+	for _, setting := range [][2]string{{"remote", "origin"}, {"merge", "refs/heads/" + ciBranch}} {
+		if err := git.RunCommand("config", "branch."+ciBranch+"."+setting[0], setting[1]); err != nil {
+			return fatalErrorf("Failed to set CI branch upstream %s: %w", setting[0], err)
+		}
 	}
 
 	if existingPRURL != "" {
 		// PR already exists - force push is enough to re-trigger CI
-		log.Infof("Switching back to original branch: %s", originalBranch)
-		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-			log.Warnf("Failed to switch back to original branch: %v", err)
-		}
 		log.Infof("CI PR updated successfully: %s", existingPRURL)
 		log.Info("The force push will re-trigger CI. Remember to close (not merge) this PR after CI completes!")
 		return nil
@@ -384,17 +381,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	log.Info("Creating PR...")
 	prURL, err := createCIPR(ciBranch, prInfo.BaseRefName, prMetadata.Title, prMetadata.Body)
 	if err != nil {
-		// Switch back to original branch before exiting
-		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-			log.Warnf("Failed to switch back to original branch: %v", switchErr)
-		}
 		return fatalErrorf("Failed to create PR: %w", err)
-	}
-
-	// Switch back to the original branch
-	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
 	log.Infof("PR created successfully: %s", prURL)
@@ -409,7 +396,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 // getPRInfo fetches PR information using the GitHub CLI
 func getPRInfo(prNumber string) (*PRInfo, error) {
 	cmd := exec.Command("gh", "pr", "view", prNumber,
-		"--json", "number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
+		"--json", "number,title,body,headRefName,headRefOid,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

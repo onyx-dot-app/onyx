@@ -5,6 +5,7 @@ from sqlalchemy import ColumnElement, column, desc, func, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.expression import ColumnClause
 
+from onyx.db.chat import visible_chat_messages_filter
 from onyx.db.models import ChatMessage, ChatSession
 
 
@@ -80,6 +81,7 @@ def search_chat_sessions(
         select(ChatMessage.chat_session_id)
         .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
         .where(*base_conditions)
+        .where(visible_chat_messages_filter())
         .where(message_tsv.op("@@")(ts_query))
     )
 

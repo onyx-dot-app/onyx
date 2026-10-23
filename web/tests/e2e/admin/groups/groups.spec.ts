@@ -47,7 +47,7 @@ async function withApiContext(
 // List page
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — layout", () => {
+test.describe("Groups page: layout", () => {
   let basicGroupId: number;
   let layoutGroupId: number;
   const layoutGroupName = uniqueGroupName("layout");
@@ -103,7 +103,13 @@ test.describe("Groups page — layout", () => {
     await expect(groupsPage.saveButton).toBeEnabled();
 
     await expect(groupsPage.deleteGroupButton).toHaveCount(0);
-    await expect(groupsPage.permissionsSectionHeader).toHaveCount(0);
+    // Basic offers its allowlisted toggle and nothing else. The switch state is
+    // left alone because the gating spec flips it from another worker.
+    await expect(groupsPage.permissionsSectionHeader).toBeVisible();
+    await expect(
+      groupsPage.permissionRow("Create User Access Token")
+    ).toBeVisible();
+    await expect(groupsPage.permissionSwitches).toHaveCount(1);
     await expect(groupsPage.sharedResourcesSectionHeader).toHaveCount(0);
   });
 
@@ -140,7 +146,7 @@ test.describe("Groups page — layout", () => {
 // Create flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — create", () => {
+test.describe("Groups page: create", () => {
   test("navigates to create page via New Group button", async ({
     groupsPage,
   }) => {
@@ -192,7 +198,7 @@ test.describe("Groups page — create", () => {
 // Edit flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — edit @exclusive", () => {
+test.describe("Groups page: edit @exclusive", () => {
   let groupId: number;
   const groupName = uniqueGroupName("edit");
 
@@ -249,7 +255,7 @@ test.describe("Groups page — edit @exclusive", () => {
 // Delete flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — delete", () => {
+test.describe("Groups page: delete", () => {
   test("delete group via edit page", async ({ groupsPage, api }) => {
     const name = uniqueGroupName("delete");
     const groupId = await api.createUserGroup(name);
@@ -272,7 +278,7 @@ test.describe("Groups page — delete", () => {
 // Sync status (No Vector DB)
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — sync @lite", () => {
+test.describe("Groups page: sync @lite", () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({
       storageState: "admin_auth.json",

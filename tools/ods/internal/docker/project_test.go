@@ -2,23 +2,10 @@ package docker
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
-
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
-
-func TestName_usesFlag(t *testing.T) {
-	SetProjectFlags("custom-project")
-	defer SetProjectFlags("")
-
-	if got := ProjectName(); got != "custom-project" {
-		t.Fatalf("expected \"custom-project\", got %q", got)
-	}
-}
 
 func TestNormalizeProjectName(t *testing.T) {
 	tests := []struct {
@@ -34,44 +21,17 @@ func TestNormalizeProjectName(t *testing.T) {
 		{"...", defaultProjectName},
 	}
 	for _, tt := range tests {
-		if got := normalizeProjectName(tt.input); got != tt.want {
-			t.Errorf("normalizeProjectName(%q) = %q, want %q", tt.input, got, tt.want)
+		if got := NormalizeProjectName(tt.input); got != tt.want {
+			t.Errorf("NormalizeProjectName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
 
-func TestName_usesNormalizedGitRootBasename(t *testing.T) {
-	SetProjectFlags("")
-	repo := filepath.Join(t.TempDir(), "Feature.X")
-	if err := os.Mkdir(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gittest.Git(t, repo, "init")
-	t.Chdir(repo)
-
-	if got := ProjectName(); got != "featurex" {
-		t.Fatalf("expected %q, got %q", "featurex", got)
-	}
-}
-
-func TestName_defaultsOutsideGitRepo(t *testing.T) {
-	SetProjectFlags("")
-	dir := t.TempDir()
-	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
-	t.Chdir(dir)
-
-	if got := ProjectName(); got != defaultProjectName {
-		t.Fatalf("expected %q, got %q", defaultProjectName, got)
-	}
-}
-
 func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
-	SetProjectFlags("proj")
-	t.Cleanup(func() { SetProjectFlags("") })
 	// Every container reports host port 2<containerPort>, e.g. 25432.
 	calls := fakeDocker(t, `echo "0.0.0.0:2$3"`)
 
-	resolved, err := FindAvailablePorts()
+	resolved, err := FindAvailablePorts("proj")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,8 +41,7 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 		"REDIS_HOST_PORT":            "26379",
 		"OPENSEARCH_HOST_PORT":       "29200",
 		"MODEL_SERVER_HOST_PORT":     "29000",
-		"MINIO_API_HOST_PORT":        "29000",
-		"MINIO_CONSOLE_HOST_PORT":    "29001",
+		"OBJECT_STORE_HOST_PORT":     "28333",
 		"CODE_INTERPRETER_HOST_PORT": "28000",
 	}
 	if got := resolved.ComposeEnv(); !maps.Equal(got, want) {
@@ -93,8 +52,7 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 		"port proj-cache-1 6379",
 		"port proj-opensearch-1 9200",
 		"port proj-inference_model_server-1 9000",
-		"port proj-minio-1 9000",
-		"port proj-minio-1 9001",
+		"port proj-object-store-1 8333",
 		"port proj-code-interpreter-1 8000",
 	}
 	if got := readCalls(t, calls); !slices.Equal(got, wantCalls) {
@@ -103,13 +61,11 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 }
 
 func TestFindAvailablePorts_probesWithoutReusingClaimedPorts(t *testing.T) {
-	SetProjectFlags("proj")
-	t.Cleanup(func() { SetProjectFlags("") })
-	// Only the model server runs, and it holds minio's default API port.
+	// Only the model server runs, and it holds object-store's default port.
 	fakeDocker(t, `[ "$2" = proj-inference_model_server-1 ] && echo 0.0.0.0:9004 && exit 0
 exit 1`)
 
-	resolved, err := FindAvailablePorts()
+	resolved, err := FindAvailablePorts("proj")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,8 +121,7 @@ func TestResolvedPorts_ComposeEnv(t *testing.T) {
 		"REDIS_HOST_PORT":            "6379",
 		"OPENSEARCH_HOST_PORT":       "9200",
 		"MODEL_SERVER_HOST_PORT":     "9000",
-		"MINIO_API_HOST_PORT":        "9004",
-		"MINIO_CONSOLE_HOST_PORT":    "9005",
+		"OBJECT_STORE_HOST_PORT":     "9004",
 		"CODE_INTERPRETER_HOST_PORT": "8000",
 	}
 
@@ -207,10 +162,6 @@ func TestResolvedPorts_AppEnv(t *testing.T) {
 			t.Errorf("%s: expected %q, got %q", k, want, got)
 		}
 	}
-
-	if _, ok := env["MINIO_CONSOLE_HOST_PORT"]; ok {
-		t.Error("MINIO_CONSOLE_HOST_PORT should not appear in AppEnv (empty AppVar)")
-	}
 }
 
 func TestResolvedPorts_AppEnv_emptyAppVarSkipped(t *testing.T) {
@@ -218,7 +169,7 @@ func TestResolvedPorts_AppEnv_emptyAppVarSkipped(t *testing.T) {
 	resolved.Append(9005, PortSpec{
 		ContainerPort: 9001,
 		DefaultHost:   9005,
-		ComposeVar:    "MINIO_CONSOLE_HOST_PORT",
+		ComposeVar:    "EXAMPLE_CONSOLE_HOST_PORT",
 	})
 
 	env := resolved.AppEnv()

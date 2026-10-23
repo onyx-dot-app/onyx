@@ -16,8 +16,8 @@ from onyx.connectors.notion.connector import (
     NotionConnector,
     NotionDataSource,
     NotionPage,
-    NotionSearchResponse,
 )
+from onyx.connectors.notion.models import NotionSearchObjectType, NotionSearchResponse
 
 _CREATED = "2026-01-01T00:00:00.000Z"
 
@@ -90,14 +90,17 @@ _BLOCKS: dict[str, list[dict[str, Any]]] = {
 }
 
 
-def _search(query_dict: dict[str, Any]) -> NotionSearchResponse:
-    if query_dict["filter"]["value"] == "data_source":
-        return NotionSearchResponse(
+def _search(
+    *, object_type: NotionSearchObjectType, **_kwargs: Any
+) -> Iterator[NotionSearchResponse]:
+    if object_type == NotionSearchObjectType.DATA_SOURCE:
+        yield NotionSearchResponse(
             results=[{"id": "ds-1", "parent": {"database_id": "db-1"}}],
             next_cursor=None,
             has_more=False,
         )
-    return NotionSearchResponse(
+        return
+    yield NotionSearchResponse(
         results=[_RAW_PAGES["page-a"], _RAW_PAGES["page-b"], _RAW_PAGES["page-f"]],
         next_cursor=None,
         has_more=False,
@@ -122,9 +125,12 @@ def _fetch_data_source(
 
 def _mock_workspace(connector: NotionConnector, stack: ExitStack) -> dict[str, Any]:
     """Patch all Notion API helpers; returns the mocks for call assertions."""
+    connector.load_credentials({"notion_integration_token": "fake-token"})
     mocks = {
-        "_search_notion": stack.enter_context(
-            patch.object(connector, "_search_notion", side_effect=_search)
+        "iter_search": stack.enter_context(
+            patch.object(
+                connector.source_operations, "iter_search", side_effect=_search
+            )
         ),
         "_fetch_child_blocks": stack.enter_context(
             patch.object(
@@ -235,7 +241,7 @@ class TestSlimCoverage:
 
         slim_doc_ids = {i.id for i in items if isinstance(i, SlimDocument)}
         assert slim_doc_ids == {"page-a", "page-b", "page-c", "page-e"}
-        mocks["_search_notion"].assert_not_called()
+        mocks["iter_search"].assert_not_called()
 
     def test_non_recursive_mode_does_not_follow_children(self) -> None:
         connector = NotionConnector(recursive_index_enabled=False)

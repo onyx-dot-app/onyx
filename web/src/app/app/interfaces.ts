@@ -2,7 +2,7 @@ import {
   OnyxDocument,
   SearchOnyxDocument,
   StreamStopReason,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
@@ -204,7 +204,7 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
-  current_run?: { run_id: number } | null;
+  current_stream?: { stream_id: number } | null;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }

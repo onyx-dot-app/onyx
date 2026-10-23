@@ -8,8 +8,9 @@ they can be unit-tested against synthetic gateways and directories.
 import ast
 import importlib
 import sys
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
 from pydantic import BaseModel, ConfigDict
@@ -63,6 +64,8 @@ class UncoveredUnit(BaseModel):
 def compute_uncovered_units(
     gateway_class: type[SourceOperations],
     checks: Sequence[CapabilityCheck],
+    configure_spy: Callable[[MagicMock], None] | None = None,
+    connector_specific_config: dict[str, Any] | None = None,
 ) -> list[UncoveredUnit]:
     """Runs each check against a spy gateway and returns unexercised units.
 
@@ -72,15 +75,21 @@ def compute_uncovered_units(
     against mock data and may raise; their valid calls still count. The spy is
     autospecced, so a call whose shape the real operation would reject raises
     and records nothing -- a broken call cannot certify coverage.
+    ``configure_spy`` gives the spy return values for checks whose path
+    depends on the data (e.g. a server version). ``connector_specific_config``
+    is the config the checks read (default: empty), for checks whose probes
+    need a configured target (e.g. a repository owner).
     """
     exercised: set[tuple[str, str | None, CredentialCapability]] = set()
     for check in checks:
         spy = create_autospec(gateway_class, instance=True)
+        if configure_spy is not None:
+            configure_spy(spy)
         context = CapabilityCheckContext(
             source=gateway_class.source,
             credential_json={},
             connector=MagicMock(spec=BaseConnector),
-            connector_specific_config={},
+            connector_specific_config=connector_specific_config or {},
             source_operations=spy,
         )
         try:

@@ -1,4 +1,8 @@
 import { renderHook, act } from "@testing-library/react";
+import {
+  type SourceMetadata,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import {
   selectedSourcesFrom,
@@ -6,8 +10,6 @@ import {
   toggleSourceSelection,
   normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
-import type { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
 
 const CHAT_KEY = "onyx:tools:chat:abc";
 
@@ -39,7 +41,7 @@ function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
 const NOTION = source(ValidSources.Notion, "notion");
 const SLACK = source(ValidSources.Slack, "slack");
 
-describe("useToolConfiguration — stored shapes", () => {
+describe("useToolConfiguration: stored shapes", () => {
   test("the pre-filters flat shape still reads as the tool map", () => {
     sessionStorage.setItem(
       CHAT_KEY,
@@ -68,7 +70,7 @@ describe("useToolConfiguration — stored shapes", () => {
   });
 });
 
-describe("useToolConfiguration — chat scoping", () => {
+describe("useToolConfiguration: chat scoping", () => {
   test("each chat keeps its own configuration", () => {
     const { result, rerender } = renderHook(() => useToolConfiguration());
     act(() => {
@@ -100,7 +102,7 @@ describe("useToolConfiguration — chat scoping", () => {
   });
 });
 
-describe("useToolConfiguration — orthogonal axes", () => {
+describe("useToolConfiguration: orthogonal axes", () => {
   test("editing sources never touches a forced pin", () => {
     const { result } = renderHook(() => useToolConfiguration());
     act(() => result.current.toggleToolState(7, "forced"));
@@ -136,7 +138,7 @@ describe("useToolConfiguration — orthogonal axes", () => {
   });
 });
 
-describe("selectedSourcesFrom — positive-selection semantics", () => {
+describe("selectedSourcesFrom: positive-selection semantics", () => {
   const configured = [NOTION, SLACK];
 
   test("an untouched selection means no source filter at all", () => {
@@ -191,7 +193,7 @@ describe("selectedSourcesFrom — positive-selection semantics", () => {
   });
 });
 
-describe("toggleSourceSelection — edit-boundary normalization", () => {
+describe("toggleSourceSelection: edit-boundary normalization", () => {
   const keys = ["notion", "slack"];
 
   test("the first toggle materialises the untouched default", () => {

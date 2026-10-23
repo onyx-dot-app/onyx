@@ -41,7 +41,7 @@ function toolCall(overrides: Partial<ToolCallState>): ToolCallState {
     command: "",
     status: "completed",
     rawOutput:
-      "## Gartner — Cloud market share Q3\nhttps://gartner.com/...\nAWS 31%, Azure 25%, GCP 11%.\n\n## Canalys\nhttps://canalys.com/...\nTotal spend up 21% YoY.",
+      "## Gartner: Cloud market share Q3\nhttps://gartner.com/...\nAWS 31%, Azure 25%, GCP 11%.\n\n## Canalys\nhttps://canalys.com/...\nTotal spend up 21% YoY.",
     ...overrides,
   };
 }
@@ -69,12 +69,13 @@ const SLACK_APPROVAL: ApprovalView = {
   app_name: "Slack",
   payload: {
     channel: "#sales-ops",
-    text: "Heads up — 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
+    text: "Heads up: 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
   },
   display_payload: {
     channel: "#sales-ops",
-    text: "Heads up — 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
+    text: "Heads up: 3 enterprise deals slipped to Q4 on procurement review. Recovery playbook in thread. 🧵",
   },
+  expires_at: null,
   created_at: "2026-05-28T15:42:11Z",
   decision: null,
   decided_at: null,
@@ -174,7 +175,7 @@ export const SpeedComparison: Story = {
       {[
         { speed: 1.6, note: "fast" },
         { speed: 2.6, note: "skill in flight" },
-        { speed: 3.6, note: "approval — slow patrol" },
+        { speed: 3.6, note: "approval: slow patrol" },
       ].map(({ speed, note }) => (
         <CometEdge key={speed} active tone="info" speedSeconds={speed}>
           <CraftToolCard toolCall={toolCall({ description: note })} />

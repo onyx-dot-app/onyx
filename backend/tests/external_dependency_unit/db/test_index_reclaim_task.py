@@ -6,6 +6,7 @@ replace it at the module boundary and drive the state machine against real Postg
 One end-to-end test still runs the real primitive.
 """
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -18,15 +19,15 @@ from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexModelStatus,
     IndexReclaimStatus,
+    PortAttemptStatus,
 )
 from onyx.db.models import ConnectorCredentialPair, PortAttempt, SearchSettings
 from onyx.db.port_attempt import (
     create_port_attempt,
-    mark_port_canceled,
     mark_port_in_progress,
+    mark_port_terminal,
 )
 from onyx.db.search_settings import (
     create_search_settings,
@@ -51,7 +52,6 @@ def _saved_settings(index_name: str | None = None) -> SavedSearchSettings:
         passage_prefix="",
         provider_type=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         index_name=index_name or f"test_reclaim_task_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )
@@ -76,15 +76,29 @@ def _make_past_settings(
     return ss
 
 
-def _make_present_settings(db_session: Session) -> SearchSettings:
-    """Without a PRESENT row the driver records the resulting error as a reclaim
-    attempt bump, so these tests own one instead of trusting whatever the shared DB
-    holds. get_current_search_settings reads the highest id, so this row always wins."""
-    return create_search_settings(
+@pytest.fixture
+def present_search_settings(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[SearchSettings, None, None]:
+    """The PRESENT row the reclaim driver reads. Reuses the shared database's row,
+    since the model allows only one, and creates one only when none exists."""
+    try:
+        existing: SearchSettings | None = get_current_search_settings(db_session)
+    except RuntimeError:
+        existing = None
+    if existing is not None:
+        yield existing
+        return
+
+    created = create_search_settings(
         _saved_settings(f"test_reclaim_present_{uuid4().hex[:8]}"),
         db_session,
         status=IndexModelStatus.PRESENT,
     )
+    yield created
+    db_session.rollback()
+    _delete_settings(db_session, created)
 
 
 def _delete_settings(db_session: Session, ss: SearchSettings) -> None:
@@ -228,12 +242,12 @@ def test_soaking_waits_until_retention_elapses(
 
 def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: True)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -246,11 +260,11 @@ def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_soaking_holds_when_new_index_cannot_serve(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -258,7 +272,6 @@ def test_soaking_holds_when_new_index_cannot_serve(
     counter — a benign wait counted as a failure would eventually BLOCK the row."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: False)
-    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -272,11 +285,11 @@ def test_soaking_holds_when_new_index_cannot_serve(
         assert ss.reclaim_attempts == 0
     finally:
         _delete_settings(db_session, ss)
-        _delete_settings(db_session, present)
 
 
 def test_deleting_complete_marks_reclaimed_and_keeps_row(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -297,6 +310,7 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
 
 def test_deleting_refuses_to_delete_the_live_index(
     db_session: Session,
+    present_search_settings: SearchSettings,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -308,9 +322,9 @@ def test_deleting_refuses_to_delete_the_live_index(
         "reclaim_index_data",
         lambda name, *_a, **_k: deleted.append(name) or ReclaimOutcome.COMPLETE,
     )
-    live_name = get_current_search_settings(db_session).index_name
+    present = present_search_settings
     ss = _make_past_settings(
-        db_session, IndexReclaimStatus.DELETING, index_name=live_name
+        db_session, IndexReclaimStatus.DELETING, index_name=present.index_name
     )
     try:
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
@@ -325,6 +339,7 @@ def test_deleting_refuses_to_delete_the_live_index(
 
 def test_deleting_incomplete_stays_deleting(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -343,6 +358,7 @@ def test_deleting_incomplete_stays_deleting(
 
 def test_deleting_single_tenant_end_to_end_drops_real_index(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -373,6 +389,7 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
 
 def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_retry(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -404,7 +421,7 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
 
         # The port acks the cancel -> terminal. Now the reclaim drops the real index,
         # marks RECLAIMED, and the guard clears (retry unblocked).
-        mark_port_canceled(db_session, attempt.id)
+        mark_port_terminal(db_session, attempt.id, PortAttemptStatus.CANCELED)
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
         db_session.refresh(ss)
         assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED
@@ -426,6 +443,7 @@ def test_reverted_future_reclaim_gates_on_port_then_drops_index_and_unblocks_ret
 
 def test_step_failure_bumps_attempts_then_blocks_at_cap(
     db_session: Session,
+    present_search_settings: SearchSettings,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

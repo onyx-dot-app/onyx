@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 from collections.abc import Generator
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -678,3 +680,270 @@ def test_health_network_error_reports_not_connected() -> None:
     assert result.connected is False
     assert result.error == "Unable to reach the Code Interpreter service"
     assert client.base_url not in result.error
+
+
+def _make_status_response(
+    status_code: int, retry_after: str | None = None
+) -> MagicMock:
+    """Build a mock ``requests.Response`` with an error status and headers."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    http_error = requests.HTTPError(f"{status_code} Error")
+    http_error.response = resp
+    resp.raise_for_status.side_effect = http_error
+    return resp
+
+
+def test_health_parses_new_payload_fields() -> None:
+    """0.4.8 adds ``executor_backend`` and ``network_isolation``; they are ignored."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    resp = _make_health_response()
+    resp.json.return_value = {
+        "status": "ok",
+        "message": None,
+        "version": "0.4.8",
+        "executor_backend": "kubernetes",
+        "network_isolation": "net_admin_init_container+network_policy",
+    }
+
+    with patch.object(client.session, "get", return_value=resp):
+        result = client.health()
+
+    assert result.healthy is True
+    assert result.version == "0.4.8"
+    assert client.supports(CodeInterpreterClient.create_session) is True
+
+
+@pytest.mark.parametrize("status_code", [429, 503])
+def test_execute_retries_admission_rejection_then_succeeds(status_code: int) -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    rejected = _make_status_response(status_code, retry_after="3")
+    ok = _make_batch_response(stdout="done\n")
+
+    with (
+        patch.object(client.session, "post", side_effect=[rejected, ok]) as post,
+        patch.object(cic.time, "sleep") as sleep,
+    ):
+        result = client.execute(code="print('done')")
+
+    assert result.stdout == "done\n"
+    assert post.call_count == 2
+    sleep.assert_called_once_with(3.0)
+    rejected.close.assert_called_once()
+
+
+def test_execute_raises_busy_error_when_retries_exhausted() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    responses = [_make_status_response(429, retry_after="2") for _ in range(3)]
+
+    with (
+        patch.object(client.session, "post", side_effect=responses) as post,
+        patch.object(cic.time, "sleep") as sleep,
+        pytest.raises(cic.CodeInterpreterBusyError) as exc_info,
+    ):
+        client.execute(code="print(1)")
+
+    assert post.call_count == cic._ADMISSION_MAX_ATTEMPTS
+    assert sleep.call_count == cic._ADMISSION_MAX_ATTEMPTS - 1
+    assert exc_info.value.status_code == 429
+    assert "busy" in str(exc_info.value)
+
+
+def test_execute_stops_retrying_when_wait_exceeds_budget() -> None:
+    """A wait that would overrun the request budget is not taken."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            return_value=_make_status_response(503, retry_after="10"),
+        ) as post,
+        patch.object(cic.time, "sleep") as sleep,
+        pytest.raises(cic.CodeInterpreterBusyError),
+    ):
+        # budget = 0s + 10s; a 10s wait cannot fit
+        client.execute(code="print(1)", timeout_ms=0)
+
+    assert post.call_count == 1
+    sleep.assert_not_called()
+
+
+@pytest.mark.parametrize("status_code", [422, 500])
+def test_execute_does_not_retry_other_errors(status_code: int) -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            return_value=_make_status_response(status_code, retry_after="1"),
+        ) as post,
+        patch.object(cic.time, "sleep") as sleep,
+        pytest.raises(requests.HTTPError),
+    ):
+        client.execute(code="print(1)")
+
+    assert post.call_count == 1
+    sleep.assert_not_called()
+
+
+def _make_sse_response(body: str) -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.iter_lines.return_value = iter(body.split("\n"))
+    return resp
+
+
+def test_execute_streaming_retries_429_before_stream_starts() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    rejected = _make_status_response(429, retry_after="2")
+    stream = _make_sse_response(
+        "event: output\n"
+        'data: {"stream": "stdout", "data": "hi\\n"}\n'
+        "\n"
+        "event: result\n"
+        'data: {"exit_code": 0, "timed_out": false, "duration_ms": 5, "files": []}\n'
+        "\n"
+    )
+
+    with (
+        patch.object(client.session, "post", side_effect=[rejected, stream]) as post,
+        patch.object(cic.time, "sleep") as sleep,
+    ):
+        events = list(client.execute_streaming(code="print('hi')"))
+
+    assert post.call_count == 2
+    assert all(c.args[0].endswith("/v1/execute/stream") for c in post.call_args_list)
+    sleep.assert_called_once_with(2.0)
+    assert isinstance(events[0], StreamOutputEvent)
+    assert isinstance(events[1], StreamResultEvent)
+
+
+def test_create_session_retries_503() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    _prime_health(client.base_url, "0.4.8")
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            side_effect=[
+                _make_status_response(503, retry_after="10"),
+                _make_create_session_response(),
+            ],
+        ),
+        patch.object(cic.time, "sleep") as sleep,
+    ):
+        result = client.create_session()
+
+    assert result.session_id == "sess-abc123"
+    sleep.assert_called_once_with(10.0)
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("2", 2.0),
+        ("0", 0.0),
+        ("120", cic._ADMISSION_RETRY_AFTER_CAP_SECONDS),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", 0.0),
+        ("-5", 0.0),
+        ("nan", cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
+        (None, cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS),
+    ],
+)
+def test_parse_retry_after(header: str | None, expected: float) -> None:
+    assert cic._parse_retry_after(header) == expected
+
+
+def test_execute_caps_large_retry_after() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            side_effect=[
+                _make_status_response(429, retry_after="3600"),
+                _make_batch_response(),
+            ],
+        ),
+        patch.object(cic.time, "sleep") as sleep,
+    ):
+        client.execute(code="print(1)")
+
+    sleep.assert_called_once_with(cic._ADMISSION_RETRY_AFTER_CAP_SECONDS)
+
+
+def test_execute_invalid_retry_after_uses_fallback() -> None:
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            side_effect=[
+                _make_status_response(429, retry_after="soon"),
+                _make_batch_response(),
+            ],
+        ),
+        patch.object(cic.time, "sleep") as sleep,
+    ):
+        client.execute(code="print(1)")
+
+    sleep.assert_called_once_with(cic._ADMISSION_RETRY_AFTER_FALLBACK_SECONDS)
+
+
+def test_parse_retry_after_future_http_date_is_capped() -> None:
+    retry_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    assert cic._parse_retry_after(format_datetime(retry_at, usegmt=True)) == (
+        cic._ADMISSION_RETRY_AFTER_CAP_SECONDS
+    )
+
+
+def test_execute_retry_gets_only_the_remaining_budget() -> None:
+    """A retry must not get a fresh full timeout: the whole call stays within
+    timeout_ms / 1000 + 10."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    clock = iter([100.0, 100.0, 130.0])
+    timeouts: list[float] = []
+
+    def fake_post(*_args: object, **kwargs: object) -> MagicMock:
+        timeouts.append(kwargs["timeout"])  # ty: ignore[invalid-argument-type]
+        if len(timeouts) == 1:
+            return _make_status_response(429, retry_after="3")
+        return _make_batch_response()
+
+    with (
+        patch.object(client.session, "post", side_effect=fake_post),
+        patch.object(cic.time, "sleep"),
+        patch.object(cic.time, "monotonic", side_effect=lambda: next(clock, 130.0)),
+    ):
+        client.execute(code="print(1)", timeout_ms=30000)
+
+    # Budget is 40s from t=100; the retry starts at t=130 with 10s left.
+    assert timeouts == [40.0, 10.0]
+
+
+def test_execute_gives_up_when_wake_up_is_past_the_budget() -> None:
+    """A late wake-up after the Retry-After sleep must not send past the deadline."""
+    client = CodeInterpreterClient(base_url="http://fake:9000")
+    clock = iter([100.0, 100.0, 139.0])
+
+    with (
+        patch.object(
+            client.session,
+            "post",
+            return_value=_make_status_response(429, retry_after="3"),
+        ) as post,
+        patch.object(cic.time, "sleep"),
+        patch.object(cic.time, "monotonic", side_effect=lambda: next(clock, 139.0)),
+        pytest.raises(cic.CodeInterpreterBusyError),
+    ):
+        client.execute(code="print(1)", timeout_ms=30000)
+
+    # Budget ends at t=140; waking at t=139 leaves 1s, below the 5s minimum.
+    assert post.call_count == 1

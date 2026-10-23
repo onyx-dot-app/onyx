@@ -1,25 +1,26 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { Form, Formik, useField } from "formik";
+import { Form, Formik, useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import {
   Button,
   Card,
   CopyButton,
-  InputMultiSelect,
+  InputTypeInTag,
   type TagItem,
   Text,
 } from "@opal/components";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import type {
   SSOProviderCreateRequest,
   SSOProviderResponse,
   SSOProviderType,
   SSOProviderUpdateRequest,
-} from "@/lib/sso/interfaces";
+} from "@/lib/sso/types";
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
@@ -34,8 +35,8 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSwitchField } from "@opal/form";
+import { InputSingleSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
 
@@ -181,7 +182,7 @@ interface TagListFieldProps {
   transform?: (value: string) => string;
 }
 
-// Formik-bound Opal InputMultiSelect for string[] values. Always writes an array, so
+// Formik-bound Opal InputTypeInTag for string[] values. Always writes an array, so
 // clearing every tag stores [] rather than leaving the previous value.
 function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const [field, meta, helpers] = useField<string[]>(name);
@@ -190,7 +191,7 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
   return (
     <>
-      <InputMultiSelect
+      <InputTypeInTag
         tags={tags}
         onRemoveTag={(id) => {
           void helpers.setValue(values.filter((value) => value !== id));
@@ -216,20 +217,15 @@ function TagListField({ name, placeholder, transform }: TagListFieldProps) {
   );
 }
 
-function ConfigInput({
-  field,
-  isEditing,
-}: {
-  field: SSOConfigField;
-  isEditing: boolean;
-}) {
+function ConfigInput({ field }: { field: SSOConfigField }) {
   const t = useTranslations("admin.ssoProviders");
+  const { initialValues } = useFormikContext<SSOProviderFormValues>();
   const name = `config.${field.name}`;
   const placeholder = field.placeholderKey
     ? t(field.placeholderKey)
-    : field.placeholder;
+    : undefined;
   if (field.kind === "switch") {
-    return <SwitchField name={name} />;
+    return <InputSwitchField name={name} />;
   }
   if (field.kind === "chips") {
     return <TagListField name={name} placeholder={placeholder} />;
@@ -238,11 +234,15 @@ function ConfigInput({
     return <InputTextAreaField name={name} placeholder={placeholder} />;
   }
   if (field.kind === "password") {
+    // On edit, the initial value is the backend's masked stored secret.
+    const stored = initialValues.config[field.name];
     return (
       <PasswordInputTypeInField
         name={name}
         placeholder={placeholder}
-        isNonRevealable={isEditing}
+        existingValue={
+          typeof stored === "string" && stored ? stored : undefined
+        }
       />
     );
   }
@@ -357,38 +357,28 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     )}
                     withLabel="provider_type"
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.provider_type}
                       onValueChange={(value) => {
                         void setFieldValue("provider_type", value);
                       }}
                       disabled={isEditing || providerTypesLoading}
-                      error={Boolean(
+                      isError={Boolean(
                         touched.provider_type && errors.provider_type
                       )}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t(
-                          "modals.provider.providerTypeField.placeholder"
-                        )}
-                      />
-                      <InputSelect.Content>
-                        {providerTypes.map((type) => {
-                          const detail = SSO_PROVIDER_DETAILS[type];
-                          return (
-                            <InputSelect.Item
-                              key={type}
-                              value={type}
-                              icon={detail.icon}
-                              description={t(detail.descriptionKey)}
-                              wrapDescription
-                            >
-                              {detail.label}
-                            </InputSelect.Item>
-                          );
-                        })}
-                      </InputSelect.Content>
-                    </InputSelect>
+                      placeholder={t(
+                        "modals.provider.providerTypeField.placeholder"
+                      )}
+                      options={providerTypes.map((type) => {
+                        const detail = SSO_PROVIDER_DETAILS[type];
+                        return {
+                          value: type,
+                          title: detail.label,
+                          description: t(detail.descriptionKey),
+                          icon: detail.icon,
+                        };
+                      })}
+                    />
                   </InputVertical>
 
                   <InputVertical
@@ -398,7 +388,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   >
                     <InputTypeInField
                       name="name"
-                      placeholder="company-a"
+                      placeholder={t("modals.provider.nameField.placeholder")}
                       variant={isEditing ? "disabled" : undefined}
                     />
                   </InputVertical>
@@ -431,7 +421,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       description={t(field.descriptionKey)}
                       withLabel={`config.${field.name}`}
                     >
-                      <ConfigInput field={field} isEditing={isEditing} />
+                      <ConfigInput field={field} />
                     </InputVertical>
                   ))}
 
@@ -513,7 +503,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   <Button
                     type="submit"
                     disabled={isSubmitting || !isValid || !dirty}
-                    icon={isSubmitting ? SvgSimpleLoader : undefined}
+                    icon={isSubmitting ? IconLoader : undefined}
                   >
                     {isEditing
                       ? t("modals.provider.submitButton.updateLabel")

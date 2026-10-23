@@ -13,6 +13,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_BATCH_PATH_PREFIX = "iab"
+# Backfill batches live apart, so a backfill never deletes or reissues the
+# leftover batches a normal attempt resumes from, and vice versa.
+_BACKFILL_BATCH_PATH_PREFIX = "iab_backfill"
+
 
 def _has_legacy_tabular_section(doc_dict: dict) -> bool:
     """True if a section is a pre-`csv_file_id` tabular section (inline text only).
@@ -50,9 +55,12 @@ class BatchStoragePathInfo(BaseModel):
 class DocumentBatchStorage(ABC):
     """Abstract base class for document batch storage implementations."""
 
-    def __init__(self, cc_pair_id: int, index_attempt_id: int):
+    def __init__(
+        self, cc_pair_id: int, index_attempt_id: int, is_backfill: bool = False
+    ):
         self.cc_pair_id = cc_pair_id
         self.index_attempt_id = index_attempt_id
+        self.is_backfill = is_backfill
         self.base_path = f"{self._per_cc_pair_base_path()}/{index_attempt_id}"
 
     @abstractmethod
@@ -80,12 +88,12 @@ class DocumentBatchStorage(ABC):
         """Get all IDs of batches stored in the file store."""
 
     @abstractmethod
-    def update_old_batches_to_new_index_attempt(self, batch_names: list[str]) -> None:
-        """Update all batches to the new index attempt."""
-        """
-        This is used when we need to re-issue docprocessing tasks for a new index attempt.
-        We need to update the batch file names to the new index attempt ID.
-        """
+    def update_old_batches_to_new_index_attempt(
+        self, batch_names: list[str]
+    ) -> list[str]:
+        """Move the given batches to this index attempt, so docprocessing tasks
+        of this attempt can re-issue them. Returns the new names of the batches
+        it moved. A batch deleted before its move is left out."""
 
     @abstractmethod
     def extract_path_info(self, path: str) -> BatchStoragePathInfo | None:
@@ -150,14 +158,21 @@ class DocumentBatchStorage(ABC):
 
     def _per_cc_pair_base_path(self) -> str:
         """Get the base path for the cc pair."""
-        return f"iab/{self.cc_pair_id}"
+        prefix = _BACKFILL_BATCH_PATH_PREFIX if self.is_backfill else _BATCH_PATH_PREFIX
+        return f"{prefix}/{self.cc_pair_id}"
 
 
 class FileStoreDocumentBatchStorage(DocumentBatchStorage):
     """FileStore-based implementation of document batch storage."""
 
-    def __init__(self, cc_pair_id: int, index_attempt_id: int, file_store: FileStore):
-        super().__init__(cc_pair_id, index_attempt_id)
+    def __init__(
+        self,
+        cc_pair_id: int,
+        index_attempt_id: int,
+        file_store: FileStore,
+        is_backfill: bool = False,
+    ):
+        super().__init__(cc_pair_id, index_attempt_id, is_backfill)
         self.file_store = file_store
 
     def _get_batch_file_name(self, batch_num: int) -> str:
@@ -167,6 +182,14 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
     def store_batch(self, batch_num: int, documents: list[Document]) -> None:
         """Store a batch of documents using FileStore."""
         file_name = self._get_batch_file_name(batch_num)
+        # An overwrite would repoint a re-issued batch's record at this batch
+        # and lose its documents.
+        if self.file_store.has_file(
+            file_id=file_name,
+            file_origin=FileOrigin.OTHER,
+            file_type="application/json",
+        ):
+            raise RuntimeError(f"Batch {file_name} already exists")
         try:
             data = self._serialize_documents(documents)
             content = StringIO(data)
@@ -253,8 +276,10 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             )
         ]
 
-    def update_old_batches_to_new_index_attempt(self, batch_names: list[str]) -> None:
-        """Update all batches to the new index attempt."""
+    def update_old_batches_to_new_index_attempt(
+        self, batch_names: list[str]
+    ) -> list[str]:
+        moved_batch_names: list[str] = []
         for batch_file_name in batch_names:
             path_info = self.extract_path_info(batch_file_name)
             if path_info is None:
@@ -270,14 +295,19 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
                 )
                 continue
             new_batch_file_name = self._get_batch_file_name(path_info.batch_num)
-            self.file_store.change_file_id(batch_file_name, new_batch_file_name)
+            # The old attempt's task deleted the batch after processing it.
+            if not self.file_store.change_file_id(batch_file_name, new_batch_file_name):
+                logger.info("Batch %s was deleted before its move", batch_file_name)
+                continue
+            moved_batch_names.append(new_batch_file_name)
+        return moved_batch_names
 
     def extract_path_info(self, path: str) -> BatchStoragePathInfo | None:
         """Extract path info from a path."""
         path_spl = path.split("/")
         # TODO: remove this in a few months, just for backwards compatibility
         if len(path_spl) == 3:
-            path_spl = ["iab"] + path_spl
+            path_spl = [_BATCH_PATH_PREFIX] + path_spl
         try:
             _, cc_pair_id, index_attempt_id, batch_num = path_spl
             return BatchStoragePathInfo(
@@ -291,10 +321,12 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
 
 def get_document_batch_storage(
-    cc_pair_id: int, index_attempt_id: int
+    cc_pair_id: int, index_attempt_id: int, *, is_backfill: bool
 ) -> DocumentBatchStorage:
     """Factory function to get the configured document batch storage implementation."""
     # The get_default_file_store will now correctly use S3BackedFileStore
     # or other configured stores based on environment variables
     file_store = get_default_file_store()
-    return FileStoreDocumentBatchStorage(cc_pair_id, index_attempt_id, file_store)
+    return FileStoreDocumentBatchStorage(
+        cc_pair_id, index_attempt_id, file_store, is_backfill
+    )

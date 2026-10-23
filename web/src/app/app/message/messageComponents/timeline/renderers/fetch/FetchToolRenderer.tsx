@@ -3,11 +3,11 @@ import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { openExternalLink } from "@/lib/search/utils";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
 import { getMetadataTags } from "../search/searchStateUtils";
 import {

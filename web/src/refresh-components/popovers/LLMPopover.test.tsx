@@ -1,10 +1,7 @@
-import {
-  buildLlmOptions,
-  groupLlmOptions,
-  LLMOption,
-} from "@/lib/languageModels/options";
+import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
+import type { LLMOption } from "@/lib/languageModels/types";
 
 describe("LLMPopover helpers", () => {
   test("deduplicates identical provider+model combinations across provider entries", () => {
@@ -101,8 +98,8 @@ describe("LLMPopover helpers", () => {
         name: "OpenAI Provider",
         provider: "openai",
         providerDisplayName: "ChatGPT (OpenAI)",
-        modelName: "gpt-4o-mini",
-        displayName: "GPT-4o Mini",
+        modelName: "gpt-6-luna",
+        displayName: "GPT-6 Luna",
         vendor: null,
       },
     ];

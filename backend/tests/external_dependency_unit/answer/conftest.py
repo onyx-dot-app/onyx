@@ -6,12 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import update_default_provider, upsert_llm_provider
+from onyx.db.enums import LLMModelFlowType
+from onyx.db.llm import update_default_model, upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     ModelConfigurationUpsertRequest,
 )
+from tests.common.models import CI_OPENAI_MODEL
 
 # Counter for generating unique file IDs in mock file store
 _mock_file_id_counter = 0
@@ -28,7 +30,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             is_public=True,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name="gpt-4o-mini",
+                    name=CI_OPENAI_MODEL,
                     is_visible=True,
                 )
             ],
@@ -38,7 +40,12 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             llm_provider_upsert_request=llm_provider_request,
             db_session=db_session,
         )
-        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_model(
+            provider_id=provider.id,
+            model=CI_OPENAI_MODEL,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
     except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues
         # Rollback to clear the pending transaction state
         db_session.rollback()
@@ -84,15 +91,6 @@ def mock_gpu_status() -> Iterator[None]:
 
 
 @pytest.fixture
-def mock_vespa_query() -> Iterator[None]:
-    """Stub Vespa query to a safe empty response to avoid CI flakiness."""
-    with patch(
-        "onyx.document_index.vespa.vespa_document_index.query_vespa", return_value=[]
-    ):
-        yield
-
-
-@pytest.fixture
 def mock_file_store() -> Iterator[None]:
     """Mock the file store to avoid S3/storage dependencies in tests."""
     global _mock_file_id_counter
@@ -118,7 +116,6 @@ def mock_file_store() -> Iterator[None]:
 def mock_external_deps(
     mock_nlp_embeddings_post: None,  # noqa: ARG001
     mock_gpu_status: None,  # noqa: ARG001
-    mock_vespa_query: None,  # noqa: ARG001
     mock_file_store: None,  # noqa: ARG001
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""

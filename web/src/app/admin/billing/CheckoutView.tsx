@@ -11,7 +11,7 @@ import { SvgUsers, SvgCheck } from "@opal/icons";
 import { createCheckoutSession } from "@/lib/billing/svc";
 import { useUser } from "@/providers/UserProvider";
 import { formatDateShort } from "@/lib/dateUtils";
-import type { PlanType } from "@/lib/billing/interfaces";
+import type { PlanType } from "@/lib/billing/types";
 import { InputNumber } from "@opal/components";
 import useUsers from "@/hooks/useUsers";
 

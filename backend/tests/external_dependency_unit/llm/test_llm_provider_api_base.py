@@ -25,6 +25,7 @@ from onyx.db.llm import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLM
 from onyx.server.manage.llm.api import _mask_string, put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import (
@@ -33,7 +34,7 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
-from tests.external_dependency_unit.mock_llm import LLM
+from tests.common.models import CI_OPENAI_MODEL
 
 
 def _create_test_provider(
@@ -52,7 +53,7 @@ def _create_test_provider(
             api_base=api_base,
             custom_config=custom_config,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name=CI_OPENAI_MODEL, is_visible=True)
             ],
         ),
         db_session=db_session,
@@ -539,7 +540,7 @@ def test_upload_with_custom_config_then_change(
                     custom_config_changed=True,
                     custom_config=custom_config,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -571,7 +572,7 @@ def test_upload_with_custom_config_then_change(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -585,7 +586,7 @@ def test_upload_with_custom_config_then_change(
                             name=default_model_name, is_visible=True
                         ),
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name=CI_OPENAI_MODEL, is_visible=True
                         ),
                     ],
                     api_key_changed=False,
@@ -741,7 +742,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                         "vertex_location": "us-central1",
                     },
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -815,7 +816,7 @@ def test_vertex_workload_identity_provider_create(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -915,7 +916,7 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 

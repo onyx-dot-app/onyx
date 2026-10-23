@@ -52,7 +52,7 @@ const getSessionMock = getChatSession as unknown as Mock<
   (id: string) => Promise<unknown>
 >;
 const stopSessionMock = stopChatSession as unknown as Mock<
-  (id: string) => Promise<void>
+  (id: string, streamId?: number) => Promise<void>
 >;
 const renameSessionMock = renameChatSession as unknown as Mock<
   (id: string) => Promise<void>
@@ -316,7 +316,7 @@ describe("useChatController", () => {
         llmOverride: {
           model_configuration_id: 7,
           model_provider: "OpenAI Prod",
-          model_version: "gpt-5",
+          model_version: "gpt-6-sol",
         },
       });
     });
@@ -337,7 +337,7 @@ describe("useChatController", () => {
     expect(body.llm_override).toEqual({
       model_configuration_id: 7,
       model_provider: "OpenAI Prod",
-      model_version: "gpt-5",
+      model_version: "gpt-6-sol",
     });
   });
 
@@ -570,11 +570,12 @@ describe("useChatController", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it("stop aborts the stream and stops the backend run", async () => {
+  it("stop aborts the stream and stops the backend stream by ID", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
+        yield idInfo;
         yield startPacket("Hello");
         while (!signal.aborted) {
           await new Promise((resolve) => setTimeout(resolve, 5));
@@ -592,7 +593,7 @@ describe("useChatController", () => {
     act(() => result.current.stop());
 
     await waitFor(() => expect(result.current.chatState).toBe("input"));
-    expect(stopSessionMock).toHaveBeenCalledWith("s1");
+    expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
   });
 
   it("hydrates an opened session from the backend snapshot", async () => {

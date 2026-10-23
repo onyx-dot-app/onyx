@@ -46,6 +46,15 @@ updates:
     labels:
       - "dependabot:javascript"
   - package-ecosystem: "bun"
+    directory: "/mobile"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependabot:javascript"
+  - package-ecosystem: "bun"
     directory: "/backend/onyx/server/features/build/sandbox/image/templates/outputs/web"
     schedule:
       interval: "weekly"

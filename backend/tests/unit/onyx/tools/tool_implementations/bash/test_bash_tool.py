@@ -89,13 +89,14 @@ def test_tool_definition_shape() -> None:
     tool, _ = _make_tool()
     definition = tool.tool_definition()
 
-    assert definition["type"] == "function"
-    fn = definition["function"]
-    assert fn["name"] == "bash"
-    params = fn["parameters"]
+    assert definition.name == "bash"
+    params = definition.parameters
     assert params["type"] == "object"
-    assert CMD_FIELD in params["properties"]
-    assert params["properties"][CMD_FIELD]["type"] == "string"
+    properties = params["properties"]
+    assert isinstance(properties, dict)
+    command = properties[CMD_FIELD]
+    assert isinstance(command, dict)
+    assert command["type"] == "string"
     assert params["required"] == [CMD_FIELD]
 
 

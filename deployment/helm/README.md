@@ -43,7 +43,7 @@ unless you specifically need OCI.
 
 # Recent chart changes (0.5.0)
 
-If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
+If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart. Onyx no longer uses Vespa.
 
 Other 0.5.0 changes:
 
@@ -64,9 +64,13 @@ Other 0.5.0 changes:
   (`postgresql.crds.create: false`). Run `scripts/check-cnpg-crds.sh` after
   bumping the CNPG subchart version to verify the copy is in sync.
 * **Pre-delete hook** — a cleanup Job (`templates/pre-delete-cleanup.yaml`)
-  deletes operator-managed CRs before `helm uninstall` tears down the
-  operators, ensuring finalizers are processed and namespace cleanup
-  completes promptly.
+  deletes this release's CNPG Cluster and Redis CRs, by name, before
+  `helm uninstall` tears down the operators. This makes sure finalizers are
+  processed and namespace cleanup completes promptly. Set
+  `postgresql.cluster.retainOnUninstall: true` to keep the CNPG Cluster and
+  its PVCs instead. The operator is still removed, so the kept Cluster has no
+  controller: reinstall with the same release name to adopt it, or delete it
+  and clear its finalizers (see the comment in `values.yaml`).
 
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
@@ -104,6 +108,57 @@ container starts after the sidecar's startup restore gate is ready.
 The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft
 installs.
+
+### Sandbox runtime and network enforcement
+
+The default sandbox uses the cluster's default runtime and installs iptables
+rules before any workload starts. You can select a cluster-provided RuntimeClass:
+
+```yaml
+sandboxPod:
+  runtimeClassName: your-runtime
+  netAdminLockdown: true
+```
+
+The cluster administrator must configure the runtime and compatible nodes.
+Runtime selection does not replace network restrictions. Test the chosen runtime
+with Craft. The current sandbox image uses nft-based iptables. With gVisor
+release-20261005.0 in its default configuration, firewall bootstrap fails with
+`Protocol not supported`. That tested configuration needs external network
+enforcement with lockdown disabled. Other firewall backends or runtime settings
+need separate validation.
+These settings apply to newly created sandbox pods after a Helm upgrade.
+The image prepuller uses the same RuntimeClass to follow its scheduling constraints.
+
+For clusters that prohibit `NET_ADMIN`, set `sandboxPod.netAdminLockdown: false`
+only when the cluster enforces equivalent network restrictions from pod creation.
+This removes `NET_ADMIN` from `sandbox-init` and skips firewall commands and
+verification. CA installation still runs as root. This setting alone does not
+make the pod compatible with policies that prohibit root init containers.
+Use a sandbox image built with this option; older images still run iptables.
+
+In this mode, the chart's policies allow only the proxy endpoint. A separate DNS
+policy excludes pods created with lockdown disabled, including after Helm upgrades.
+This also applies to `craft.dnsExtraCIDRs`. The backend supplies the proxy address
+through pod `hostAliases`. Proxy environment variables, CA
+trust, destination checks, and approval handling remain active.
+
+The operator must use a CNI that enforces NetworkPolicy before workload startup.
+Other policies must not grant broader access. Verify IPv4 and IPv6 restrictions,
+including internal services, node addresses, and cloud metadata. Standard
+NetworkPolicy has node-traffic exceptions; additional cluster controls may be
+needed. A rendered policy cannot prove enforcement. Test direct connections with
+proxy variables removed, and confirm approved requests still work through the
+proxy. Do not disable lockdown solely because a sandboxed runtime is selected.
+
+The proxy also needs cluster access to the Kubernetes API, DNS, and Onyx services.
+Some CNIs exclude cluster destinations from IP-range rules; see
+[Cilium CIDR policies](https://docs.cilium.io/en/latest/security/policy/layer3/#cidr-based).
+Configure explicit proxy access for these destinations when required by the CNI.
+Keep those rules scoped to the proxy pods.
+
+Docker deployments retain mandatory iptables enforcement. The bootstrap rejects
+disabling lockdown in Docker entrypoint mode.
 
 ## Using an external Redis
 
@@ -273,14 +328,10 @@ Other docker-compose-style values you should set deliberately:
 * helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
   * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
   * the OpenSearch admin password must be set on first install unless you are supplying `auth.opensearch.existingSecret`.
-  * no flag for ephemeral vespa storage yet, might be good for testing
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
 * When you are finished
   * helm uninstall onyx -n onyx
-  * Vespa leaves behind a PVC. Delete it if you are completely done.
-    * k -n onyx get pvc
-    * k -n onyx delete pvc vespa-storage-da-vespa-0
   * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
 
 ## Run as non-root user
@@ -290,14 +341,6 @@ By default, some onyx containers run as root. If you'd like to explicitly run th
     securityContext:
       runAsNonRoot: true
       runAsUser: 1001
-    ```
-  * `vespa`
-    ```yaml
-    podSecurityContext:
-      fsGroup: 1000
-    securityContext:
-      privileged: false
-      runAsUser: 1000
     ```
 
 ## Resourcing

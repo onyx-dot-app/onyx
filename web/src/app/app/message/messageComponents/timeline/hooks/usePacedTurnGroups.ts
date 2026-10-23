@@ -364,7 +364,6 @@ export function usePacedTurnGroups(
     }
 
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolTurnGroups, revealTrigger, shouldBypassPacing, hasNodeChanged]);
 
   useEffect(() => {
@@ -379,7 +378,6 @@ export function usePacedTurnGroups(
       shouldBypassPacing || state.toolPacingComplete || stopPacketSeen
         ? displayGroups
         : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       state.toolPacingComplete,
       displayGroups,
@@ -393,7 +391,6 @@ export function usePacedTurnGroups(
   // Only signal finalAnswerComing when tool pacing is complete (or bypassing)
   const pacedFinalAnswerComing = useMemo(
     () => (shouldBypassPacing || state.toolPacingComplete) && finalAnswerComing,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       state.toolPacingComplete,
       finalAnswerComing,

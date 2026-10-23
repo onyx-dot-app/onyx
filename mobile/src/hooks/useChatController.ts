@@ -365,9 +365,14 @@ export function useChatController(
 
   const stop = useCallback(() => {
     if (sessionId == null) return;
-    useChatSessionStore.getState().abortSession(sessionId);
+    const store = useChatSessionStore.getState();
+    const tree = store.sessions.get(sessionId)?.messageTree;
+    const last = tree ? getLatestMessageChain(tree).at(-1) : undefined;
+    // the reserved assistant ID is the stream ID; unknown before the ID packet arrives
+    const streamId = last?.type === "assistant" ? last.messageId : undefined;
+    store.abortSession(sessionId);
     // client abort alone leaves the backend generating
-    void stopChatSession(sessionId).catch(() => {});
+    void stopChatSession(sessionId, streamId).catch(() => {});
   }, [sessionId]);
 
   return {

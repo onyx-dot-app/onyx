@@ -1,16 +1,16 @@
 "use client";
 
-import { SearchDocWithContent } from "@/lib/search/interfaces";
+import { OverflowText } from "@opal/components";
+import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { ValidSources } from "@/lib/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
 import { useLocale } from "next-intl";
@@ -73,9 +73,14 @@ export default function SearchCard({
               <SourceIcon sourceType={document.source_type} iconSize={16} />
             )}
 
-            <Truncated mainUiAction className="text-start">
+            <OverflowText
+              as="p"
+              textPosition="text-start"
+              font="main-ui-action"
+              color="text-05"
+            >
               {document.semantic_identifier}
-            </Truncated>
+            </OverflowText>
           </Section>
 
           {/* Body Row */}

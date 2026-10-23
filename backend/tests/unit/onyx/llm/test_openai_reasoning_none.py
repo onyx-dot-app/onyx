@@ -9,7 +9,8 @@ from litellm.types.utils import Delta
 from onyx.configs.constants import MessageType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_CHAT_COMPLETIONS,
@@ -203,7 +204,8 @@ def test_bifrost_chat_tools_off_sends_only_reasoning_effort_none() -> None:
         custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_CHAT_COMPLETIONS},
     )
     kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF, tools=_TOOLS)
-    assert kwargs["reasoning_effort"] == "none"
+    # LiteLLM bridges this tool turn to the responses API.
+    assert kwargs["reasoning_effort"] == {"effort": "none"}
     assert "reasoning" not in kwargs
 
 
@@ -306,13 +308,19 @@ def _search_llm() -> LitellmLLM:
 
 
 def test_semantic_query_rephrase_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         semantic_query_rephrase(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_keyword_query_expansion_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         keyword_query_expansion(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 

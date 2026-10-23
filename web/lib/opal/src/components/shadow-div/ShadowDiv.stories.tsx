@@ -29,7 +29,7 @@ export const Default: Story = {
 
 export const BottomOnly: Story = {
   args: {
-    bottomOnly: true,
+    shadowDirection: "bottom-only",
     className: "max-h-[250px]",
     style: { width: 300 },
     children: sampleItems,
@@ -38,7 +38,7 @@ export const BottomOnly: Story = {
 
 export const TopOnly: Story = {
   args: {
-    topOnly: true,
+    shadowDirection: "top-only",
     className: "max-h-[250px]",
     style: { width: 300 },
     children: sampleItems,
@@ -47,7 +47,7 @@ export const TopOnly: Story = {
 
 export const CustomShadowHeight: Story = {
   args: {
-    shadowHeight: "3rem",
+    shadowHeight: 12,
     className: "max-h-[250px]",
     style: { width: 300 },
     children: sampleItems,

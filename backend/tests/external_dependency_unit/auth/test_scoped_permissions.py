@@ -20,7 +20,7 @@ from onyx.auth.scoped_permissions import (
     within_scope,
 )
 from onyx.db.document_set import get_document_set_by_id
-from onyx.db.enums import AccessType, Permission
+from onyx.db.enums import AccessType, ConnectorManageRole, Permission
 from onyx.db.models import (
     ConnectorCredentialPair,
     DocumentSet,
@@ -374,7 +374,9 @@ def test_within_managed_scope_clause_handles_enum_privateness(
     for pair in (private_pair, public_pair):
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=managed.id, cc_pair_id=pair.id
+                user_group_id=managed.id,
+                cc_pair_id=pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
     db_session.commit()
@@ -412,7 +414,9 @@ def test_within_managed_scope_clause_includes_sync_cc_pairs(
     for pair in (private_pair, sync_pair, public_pair):
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=managed.id, cc_pair_id=pair.id
+                user_group_id=managed.id,
+                cc_pair_id=pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
     db_session.commit()

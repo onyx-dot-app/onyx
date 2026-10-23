@@ -8,6 +8,7 @@ import type {
   Rounding,
 } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
+import type { TagProps } from "@opal/components/tag/components";
 import {
   type ContentActionProps,
   type ContentVariant,
@@ -26,7 +27,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The `ContentAction` props a row actually uses — eleven of the twenty-two it
+ * The `ContentAction` props a row actually uses — twelve of the twenty-two it
  * offers. Listed rather than spread, so that everything a caller passes which
  * is *not* here is DOM, and reaches the row element.
  *
@@ -55,6 +56,18 @@ type RowContentProps = {
 
   /** Secondary line under the title. */
   description?: string | RichStr;
+
+  /**
+   * Muted text beside the title, like "(Default)". Shown only by the
+   * `heading` variant with a `main-*` size preset.
+   */
+  suffix?: string;
+
+  /**
+   * Tag beside the title, like a plan badge. Shown only by the `heading`
+   * variant with a `main-*` size preset.
+   */
+  tag?: TagProps;
 
   /**
    * Cap the description at N lines and truncate the rest. Unset wraps without
@@ -131,8 +144,8 @@ type LineItemButtonOwnProps = Pick<
     /** Container width. @default "full" */
     width?: ExtremaSizeVariants;
 
-    /** Tooltip text shown on hover. */
-    tooltip?: string;
+    /** Tooltip shown on hover. Accepts markdown, e.g. a link. */
+    tooltip?: string | RichStr;
 
     /** Which side the tooltip appears on. @default "top" */
     tooltipSide?: TooltipSide;
@@ -177,6 +190,8 @@ function LineItemButton({
   icon,
   description,
   descriptionMaxLines,
+  suffix,
+  tag,
   rightChildren,
   sizePreset,
   variant,
@@ -261,6 +276,8 @@ function LineItemButton({
               icon,
               description,
               descriptionMaxLines,
+              suffix,
+              tag,
               rightChildren,
               sizePreset,
               variant,

@@ -12,7 +12,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
     fetch_existing_llm_providers,
     remove_llm_provider,
-    update_default_provider,
+    update_default_model,
     upsert_llm_provider,
 )
 from onyx.llm.constants import LlmProviderNames
@@ -62,7 +62,12 @@ def test_answer_with_only_anthropic_provider(
     )
 
     try:
-        update_default_provider(anthropic_provider.id, anthropic_model, db_session)
+        update_default_model(
+            provider_id=anthropic_provider.id,
+            model=anthropic_model,
+            db_session=db_session,
+            flow_type=LLMModelFlowType.CHAT,
+        )
 
         test_user = create_test_user(db_session, email_prefix="anthropic_only")
         chat_session = create_chat_session(

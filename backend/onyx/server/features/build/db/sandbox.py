@@ -11,6 +11,7 @@ from onyx.auth.pat import hash_pat
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
 from onyx.db.pat import create_pat, revoke_pat
+from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -60,6 +61,26 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
     return raw_token
 
 
+def has_active_craft_pat(db_session: Session, user_id: UUID) -> bool:
+    """True if the user has an unexpired, unrevoked Craft PAT."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (
+        db_session.scalar(
+            select(
+                select(PersonalAccessToken.id)
+                .where(PersonalAccessToken.user_id == user_id)
+                .where(PersonalAccessToken.pat_type == PatType.CRAFT)
+                .where(
+                    (PersonalAccessToken.expires_at.is_(None))
+                    | (PersonalAccessToken.expires_at > now)
+                )
+                .exists()
+            )
+        )
+        is True
+    )
+
+
 def create_sandbox__no_commit(
     db_session: Session,
     user_id: UUID,
@@ -105,6 +126,7 @@ def begin_provisioning_attempt__no_commit(
     sandbox.status = SandboxStatus.PROVISIONING
     sandbox.provisioning_attempt_number += 1
     sandbox.provisioning_started_at = datetime.datetime.now(datetime.timezone.utc)
+    sandbox.cleanup_checkpoint = None
     db_session.flush()
     return sandbox.provisioning_attempt_number
 
@@ -129,6 +151,7 @@ def begin_recovery_attempt__no_commit(
             status=SandboxStatus.PROVISIONING,
             provisioning_attempt_number=expected_attempt_number + 1,
             provisioning_started_at=datetime.datetime.now(datetime.timezone.utc),
+            cleanup_checkpoint=None,
         )
     )
     if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
@@ -162,6 +185,35 @@ def finalize_provisioning_attempt__no_commit(
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
+def record_cleanup_checkpoint__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    checkpoint: SandboxCleanupCheckpoint,
+) -> bool:
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.status == SandboxStatus.RUNNING,
+            Sandbox.provisioning_attempt_number
+            == checkpoint.provisioning_attempt_number,
+            Sandbox.last_heartbeat.is_not_distinct_from(checkpoint.last_heartbeat),
+        )
+        .values(
+            cleanup_checkpoint={
+                "provisioning_attempt_number": checkpoint.provisioning_attempt_number,
+                "storage_identity": checkpoint.storage_identity,
+                "last_heartbeat": (
+                    checkpoint.last_heartbeat.isoformat()
+                    if checkpoint.last_heartbeat is not None
+                    else None
+                ),
+            }
+        )
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def sleep_running_sandbox__no_commit(
     db_session: Session,
     sandbox_id: UUID,
@@ -178,7 +230,7 @@ def sleep_running_sandbox__no_commit(
             Sandbox.provisioning_attempt_number == attempt_number,
             Sandbox.status == SandboxStatus.RUNNING,
         )
-        .values(status=SandboxStatus.SLEEPING)
+        .values(status=SandboxStatus.SLEEPING, cleanup_checkpoint=None)
     )
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
@@ -243,6 +295,7 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
+    sandbox.cleanup_checkpoint = None
     db_session.flush()
     return sandbox
 
@@ -251,6 +304,50 @@ def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get all RUNNING sandboxes (the sweep task's working set)."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
     return list(db_session.execute(stmt).scalars().all())
+
+
+def get_stale_provisioning_sandboxes(
+    db_session: Session,
+    cutoff: datetime.datetime,
+    limit: int,
+) -> list[Sandbox]:
+    return list(
+        db_session.scalars(
+            select(Sandbox)
+            .where(
+                Sandbox.status == SandboxStatus.PROVISIONING,
+                or_(
+                    Sandbox.provisioning_started_at < cutoff,
+                    Sandbox.provisioning_started_at.is_(None),
+                ),
+            )
+            .order_by(Sandbox.created_at, Sandbox.id)
+            .limit(limit)
+        )
+    )
+
+
+def fail_stale_provisioning__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    attempt_number: int,
+    cutoff: datetime.datetime,
+) -> bool:
+    """Fence late finalization before collecting an abandoned attempt's resources."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.status == SandboxStatus.PROVISIONING,
+            Sandbox.provisioning_attempt_number == attempt_number,
+            or_(
+                Sandbox.provisioning_started_at < cutoff,
+                Sandbox.provisioning_started_at.is_(None),
+            ),
+        )
+        .values(status=SandboxStatus.FAILED)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
 def user_has_stale_active_session(

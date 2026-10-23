@@ -22,15 +22,6 @@ jest.mock("next/headers", () => ({
   cookies: jest.fn(),
 }));
 
-// Toggled per test so both proxy branches run against one module instance.
-const mockFlags = { ee: false };
-jest.mock("@/lib/constants", () => ({
-  ...jest.requireActual("@/lib/constants"),
-  get SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED() {
-    return mockFlags.ee;
-  },
-}));
-
 const mockHeaders = headers as jest.MockedFunction<typeof headers>;
 const mockCookies = cookies as jest.MockedFunction<typeof cookies>;
 
@@ -43,10 +34,6 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("proxy stamps the original path", () => {
-  beforeEach(() => {
-    mockFlags.ee = false;
-  });
-
   test("on a pass-through, query included", async () => {
     const res = await proxy(
       new NextRequest(`${APP_DOMAIN}/app?user-prompt=hello&sources=slack`)
@@ -57,7 +44,6 @@ describe("proxy stamps the original path", () => {
   });
 
   test("on the EE rewrite", async () => {
-    mockFlags.ee = true;
     const res = await proxy(
       new NextRequest(`${APP_DOMAIN}/admin/groups?tab=members`, {
         headers: { cookie: `${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=session` },

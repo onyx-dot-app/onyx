@@ -5,3 +5,39 @@ export {
   type FormFieldState,
 } from "@opal/form/FieldContext";
 export { FieldMessage } from "@opal/form/FieldMessage";
+export {
+  InputCheckboxField,
+  type InputCheckboxFieldProps,
+} from "@opal/form/InputCheckboxField";
+export {
+  InputNumberField,
+  type InputNumberFieldProps,
+} from "@opal/form/InputNumberField";
+export {
+  InputSwitchField,
+  type InputSwitchFieldProps,
+} from "@opal/form/InputSwitchField";
+export {
+  InputSingleUploadField,
+  type InputSingleUploadFieldProps,
+} from "@opal/form/InputSingleUploadField";
+export {
+  InputMultiUploadField,
+  type InputMultiUploadFieldProps,
+} from "@opal/form/InputMultiUploadField";
+export {
+  InputSingleSelectField,
+  type InputSingleSelectFieldProps,
+} from "@opal/form/InputSingleSelectField";
+export {
+  InputSingleComboBoxField,
+  type InputSingleComboBoxFieldProps,
+} from "@opal/form/InputSingleComboBoxField";
+export {
+  InputMultiSelectField,
+  type InputMultiSelectFieldProps,
+} from "@opal/form/InputMultiSelectField";
+export {
+  InputMultiComboBoxField,
+  type InputMultiComboBoxFieldProps,
+} from "@opal/form/InputMultiComboBoxField";

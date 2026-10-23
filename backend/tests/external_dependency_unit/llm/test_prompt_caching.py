@@ -1,6 +1,6 @@
 """External dependency unit tests for prompt caching functionality.
 
-These tests call LLM providers directly and use litellm's completion_cost() to verify
+These tests call LLM providers directly and price each call with Onyx's model catalog to verify
 that prompt caching reduces costs.
 """
 
@@ -12,18 +12,19 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from litellm import completion_cost
 from sqlalchemy.orm import Session
 
-from onyx.llm.model_response import Usage
-from onyx.llm.models import (
+from onyx.llm.cost import compute_cost_cents
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     SystemMessage,
     UserMessage,
 )
+from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from tests.common.models import CI_OPENAI_MODEL
 
 VERTEX_CREDENTIALS_ENV = "VERTEX_CREDENTIALS"
 VERTEX_LOCATION_ENV = "VERTEX_LOCATION"
@@ -59,6 +60,20 @@ def _extract_cache_read_tokens(usage: Usage | None) -> int:
         return 0
 
     return usage.cache_read_input_tokens
+
+
+def _cost_cents(llm: LitellmLLM, usage: Usage | None) -> float:
+    if not usage:
+        return 0.0
+    input_cents, output_cents = compute_cost_cents(
+        llm.config.model_name,
+        llm.config.model_provider,
+        usage.prompt_tokens,
+        usage.completion_tokens,
+        cache_read_tokens=usage.cache_read_input_tokens,
+        cache_creation_tokens=usage.cache_creation_input_tokens,
+    )
+    return input_cents + output_cents
 
 
 def _get_usage_value(usage: Any, key: str) -> int:
@@ -165,7 +180,7 @@ def test_openai_prompt_caching_reduces_costs(
         llm = LitellmLLM(
             api_key=os.environ["OPENAI_API_KEY"],
             model_provider="openai",
-            model_name="gpt-4o",
+            model_name=CI_OPENAI_MODEL,
             max_input_tokens=128000,
         )
         import random
@@ -212,17 +227,14 @@ def test_openai_prompt_caching_reduces_costs(
         # print(f"Cache key 1: {metadata1.cache_key if metadata1 else None}")
 
         # Call litellm directly so we can get the raw response
-        response1 = llm.invoke(prompt=processed_messages1)
-        cost1 = completion_cost(
-            completion_response=response1.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
-        )
+        response1 = llm.invoke_raw(prompt=processed_messages1)
+        cost1 = _cost_cents(llm, response1.usage)
 
         usage1 = response1.usage
         cached_tokens_1 = _extract_cached_tokens(usage1)
         prompt_tokens_1 = _extract_prompt_tokens(usage1)
         # print(f"Response 1 usage: {usage1}")
-        # print(f"Cost 1: ${cost1:.10f}")
+        # print(f"Cost 1: {cost1:.10f}¢")
 
         # Wait to ensure cache is available
         time.sleep(5)
@@ -241,22 +253,19 @@ def test_openai_prompt_caching_reduces_costs(
             continuation=False,
         )
         # print(f"Processed messages 2: {processed_messages2}")
-        response2 = llm.invoke(prompt=processed_messages2)
-        cost2 = completion_cost(
-            completion_response=response2.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
-        )
+        response2 = llm.invoke_raw(prompt=processed_messages2)
+        cost2 = _cost_cents(llm, response2.usage)
 
         usage2 = response2.usage
         cached_tokens_2 = _extract_cache_read_tokens(usage2)
         prompt_tokens_2 = _extract_prompt_tokens(usage2)
         # print(f"Response 2 usage: {usage2}")
-        # print(f"Cost 2: ${cost2:.10f}")
+        # print(f"Cost 2: {cost2:.10f}¢")
 
         # Verify caching occurred – OpenAI reports cached work via prompt_tokens_details.cached_tokens
         print(f"\nCached tokens call 1: {cached_tokens_1}, call 2: {cached_tokens_2}")
         print(f"Prompt tokens call 1: {prompt_tokens_1}, call 2: {prompt_tokens_2}")
-        print(f"Cost delta (1 -> 2): ${cost1 - cost2:.10f}")
+        print(f"Cost delta (1 -> 2): {cost1 - cost2:.10f}¢")
 
         # The first call is expected to *create* cache (cached_tokens may be 0).
         # The second call should show cached tokens being used.
@@ -294,9 +303,7 @@ def test_anthropic_prompt_caching_reduces_costs(
     else:
         candidate_models = [
             "claude-haiku-4-5-20251001",
-            "claude-sonnet-4-5-20250929",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-latest",
+            "claude-sonnet-5",
         ]
 
     import random
@@ -351,7 +358,7 @@ def test_anthropic_prompt_caching_reduces_costs(
         )
 
         try:
-            response1 = llm.invoke(prompt=processed_messages1, max_tokens=8)
+            response1 = llm.invoke_raw(prompt=processed_messages1, max_tokens=8)
         except Exception as e:
             error_str = str(e).lower()
             if (
@@ -363,14 +370,11 @@ def test_anthropic_prompt_caching_reduces_costs(
                 continue
             raise
 
-        cost1 = completion_cost(
-            completion_response=response1.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
-        )
+        cost1 = _cost_cents(llm, response1.usage)
 
         usage1 = response1.usage
         print(f"Response 1 usage: {usage1}")
-        print(f"Cost 1: ${cost1:.10f}")
+        print(f"Cost 1: {cost1:.10f}¢")
 
         # Wait to ensure cache is available
         time.sleep(2)
@@ -391,22 +395,19 @@ def test_anthropic_prompt_caching_reduces_costs(
             continuation=False,
         )
 
-        response2 = llm.invoke(prompt=processed_messages2, max_tokens=8)
-        cost2 = completion_cost(
-            completion_response=response2.model_dump(),
-            model=f"{llm._model_provider}/{llm._model_version}",
-        )
+        response2 = llm.invoke_raw(prompt=processed_messages2, max_tokens=8)
+        cost2 = _cost_cents(llm, response2.usage)
 
         usage2 = response2.usage
         print(f"Response 2 usage: {usage2}")
-        print(f"Cost 2: ${cost2:.10f}")
+        print(f"Cost 2: {cost2:.10f}¢")
 
         cache_creation_tokens = _get_usage_value(usage1, "cache_creation_input_tokens")
         cache_read_tokens = _get_usage_value(usage2, "cache_read_input_tokens")
 
         print(f"\nCache creation tokens (call 1): {cache_creation_tokens}")
         print(f"Cache read tokens (call 2): {cache_read_tokens}")
-        print(f"Cost reduction: ${cost1 - cost2:.10f}")
+        print(f"Cost reduction: {cost1 - cost2:.10f}¢")
 
         # Model is available but does not expose Anthropic cache usage metrics
         if cache_creation_tokens <= 0 or cache_read_tokens <= 0:
@@ -415,7 +416,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 
         # Cost should be lower on second call
         assert cost2 < cost1, (
-            f"Expected lower cost on cached call. Cost 1: ${cost1:.10f}, Cost 2: ${cost2:.10f}"
+            f"Expected lower cost on cached call. Cost 1: {cost1:.10f}¢, Cost 2: {cost2:.10f}¢"
         )
         return
 
@@ -518,11 +519,8 @@ def test_google_genai_prompt_caching_reduces_costs(
             )
             print(f"Processed messages structure (first msg): {first_msg}")
 
-            response1 = llm.invoke(prompt=processed_messages1)
-            cost1 = completion_cost(
-                completion_response=response1.model_dump(),
-                model=f"{llm._model_provider}/{llm._model_version}",
-            )
+            response1 = llm.invoke_raw(prompt=processed_messages1)
+            cost1 = _cost_cents(llm, response1.usage)
             usage1 = response1.usage
             cache_creation_tokens = _get_usage_value(
                 usage1, "cache_creation_input_tokens"
@@ -531,7 +529,7 @@ def test_google_genai_prompt_caching_reduces_costs(
             cache_read_tokens_1 = _extract_cache_read_tokens(usage1)
 
             print(f"Vertex response 1 usage: {usage1}")
-            print(f"Vertex cost 1: ${cost1:.10f}")
+            print(f"Vertex cost 1: {cost1:.10f}¢")
 
             time.sleep(5)
 
@@ -549,17 +547,14 @@ def test_google_genai_prompt_caching_reduces_costs(
                 continuation=False,
             )
 
-            response2 = llm.invoke(prompt=processed_messages2)
-            cost2 = completion_cost(
-                completion_response=response2.model_dump(),
-                model=f"{llm._model_provider}/{llm._model_version}",
-            )
+            response2 = llm.invoke_raw(prompt=processed_messages2)
+            cost2 = _cost_cents(llm, response2.usage)
             usage2 = response2.usage
             cache_read_tokens_2 = _extract_cache_read_tokens(usage2)
             cached_tokens_2 = _extract_cached_tokens(usage2)
 
             print(f"Vertex response 2 usage: {usage2}")
-            print(f"Vertex cost 2: ${cost2:.10f}")
+            print(f"Vertex cost 2: {cost2:.10f}¢")
             print(
                 f"Vertex cache metrics - creation: {cache_creation_tokens}, "
                 f"call1 cached tokens: {cached_tokens_1}, "
@@ -567,7 +562,7 @@ def test_google_genai_prompt_caching_reduces_costs(
                 f"call2 cached tokens: {cached_tokens_2}, "
                 f"call2 cache read tokens: {cache_read_tokens_2}"
             )
-            print(f"Vertex cost delta (1 -> 2): ${cost1 - cost2:.10f}")
+            print(f"Vertex cost delta (1 -> 2): {cost1 - cost2:.10f}¢")
 
             last_metrics = {
                 "cache_creation_tokens": cache_creation_tokens,
@@ -620,7 +615,7 @@ def test_prompt_caching_with_conversation_history(
     llm = LitellmLLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-4o-mini",
+        model_name=CI_OPENAI_MODEL,
         max_input_tokens=128000,
     )
 
@@ -649,15 +644,12 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content=long_context + "\n\nWhat is this about?"),
     ]
 
-    response1 = llm.invoke(prompt=messages_turn1)
-    cost1 = completion_cost(
-        completion_response=response1.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
-    )
+    response1 = llm.invoke_raw(prompt=messages_turn1)
+    cost1 = _cost_cents(llm, response1.usage)
 
     usage1 = response1.usage
     print(f"Turn 1 usage: {usage1}")
-    print(f"Turn 1 cost: ${cost1:.10f}")
+    print(f"Turn 1 cost: {cost1:.10f}¢")
 
     # Wait for cache
     time.sleep(2)
@@ -671,15 +663,12 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content="Tell me about the first topic."),
     ]
 
-    response2 = llm.invoke(prompt=messages_turn2)
-    cost2 = completion_cost(
-        completion_response=response2.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
-    )
+    response2 = llm.invoke_raw(prompt=messages_turn2)
+    cost2 = _cost_cents(llm, response2.usage)
 
     usage2 = response2.usage
     print(f"Turn 2 usage: {usage2}")
-    print(f"Turn 2 cost: ${cost2:.10f}")
+    print(f"Turn 2 cost: {cost2:.10f}¢")
 
     # Turn 3 - continue conversation
     print("\n=== Turn 3 (with even more cached history) ===")
@@ -688,15 +677,12 @@ def test_prompt_caching_with_conversation_history(
         UserMessage(role="user", content="What about the second topic?"),
     ]
 
-    response3 = llm.invoke(prompt=messages_turn3)
-    cost3 = completion_cost(
-        completion_response=response3.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
-    )
+    response3 = llm.invoke_raw(prompt=messages_turn3)
+    cost3 = _cost_cents(llm, response3.usage)
 
     usage3 = response3.usage
     print(f"Turn 3 usage: {usage3}")
-    print(f"Turn 3 cost: ${cost3:.10f}")
+    print(f"Turn 3 cost: {cost3:.10f}¢")
 
     # Verify caching in subsequent turns
     cache_tokens_2 = _get_usage_value(usage2, "cache_read_input_tokens")
@@ -735,7 +721,7 @@ def test_no_caching_without_process_with_prompt_cache(
     llm = LitellmLLM(
         api_key=os.environ["OPENAI_API_KEY"],
         model_provider="openai",
-        model_name="gpt-4o-mini",
+        model_name=CI_OPENAI_MODEL,
         max_input_tokens=128000,
     )
 
@@ -750,15 +736,12 @@ def test_no_caching_without_process_with_prompt_cache(
         UserMessage(role="user", content=long_context + "\n\nSummarize this.")
     ]
 
-    response1 = llm.invoke(prompt=messages1)
-    cost1 = completion_cost(
-        completion_response=response1.model_dump(),
-        model=f"{llm._model_provider}/{llm._model_version}",
-    )
+    response1 = llm.invoke_raw(prompt=messages1)
+    cost1 = _cost_cents(llm, response1.usage)
 
     usage1 = response1.usage
     print(f"Response 1 usage: {usage1}")
-    print(f"Cost 1: ${cost1:.10f}")
+    print(f"Cost 1: {cost1:.10f}¢")
 
     # This test just verifies the LLM works and we can calculate costs
     # It serves as a baseline comparison for the caching tests

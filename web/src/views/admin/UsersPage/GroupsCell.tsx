@@ -196,7 +196,7 @@ export default function GroupsCell({
                 icon={SvgEdit}
                 prominence="tertiary"
                 tooltip={t("groupsCell.editButton.tooltip")}
-                tooltipSide="left"
+                tooltipSide="start"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowModal(true);

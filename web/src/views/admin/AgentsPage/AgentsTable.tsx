@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Table, createTableColumns } from "@opal/components";
+import { OverflowText, Table, type TableColumn } from "@opal/components";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import Text from "@/refresh-components/texts/Text";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -24,10 +23,43 @@ import { can } from "@/lib/permissions/resource-actions";
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<Agent>();
-
 /** Typographic placeholder for a blank cell. */
 const BLANK_CELL = "—";
+
+/** Matches the server's order: display_priority (nulls last), then |id|. */
+function compareAgentOrder(a: Agent, b: Agent): number {
+  const pa = a.display_priority ?? Number.POSITIVE_INFINITY;
+  const pb = b.display_priority ?? Number.POSITIVE_INFINITY;
+  if (pa !== pb) return pa - pb;
+  return Math.abs(a.id) - Math.abs(b.id);
+}
+
+/**
+ * Merges the reordered visible IDs back into the full agent order and returns
+ * the priority map for every agent whose position changed. The table may show
+ * a filtered subset, and untouched agents may have stale or null priorities,
+ * so the whole list is renumbered.
+ */
+function buildDisplayPriorityMap(
+  allAgents: Agent[],
+  reorderedVisibleIds: string[]
+) {
+  const visible = new Set(reorderedVisibleIds);
+  const queue = [...reorderedVisibleIds];
+  const fullOrder = allAgents.map((agent) => {
+    const id = String(agent.id);
+    return visible.has(id) ? (queue.shift() ?? id) : id;
+  });
+
+  const priorityById = new Map(
+    allAgents.map((agent) => [String(agent.id), agent.display_priority])
+  );
+  const changed: Record<string, number> = {};
+  fullOrder.forEach((id, index) => {
+    if (priorityById.get(id) !== index) changed[id] = index;
+  });
+  return changed;
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -39,7 +71,7 @@ export default function AgentsTable() {
 
   const { agents, isLoading, refresh } = useAdminAgents();
 
-  const columns = useMemo(() => {
+  const columns = useMemo((): TableColumn<Agent>[] => {
     function renderCreatedByColumn(
       _value: MinimalUserSnapshot | null,
       row: Agent
@@ -49,6 +81,7 @@ export default function AgentsTable() {
           sizePreset="main-ui"
           variant="section"
           icon={SvgUser}
+          titleMaxLines={1}
           title={
             row.builtin_persona
               ? t("table.createdBy.system.label")
@@ -73,6 +106,8 @@ export default function AgentsTable() {
           sizePreset="main-ui"
           variant="section"
           title={getAccessTitle(row)}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
           description={
             !row.is_listed
               ? t("table.access.unlisted.label")
@@ -85,49 +120,61 @@ export default function AgentsTable() {
     }
 
     return [
-      tc.qualifier({
+      {
+        kind: "qualifier",
         content: "icon",
         background: true,
-        getContent: (row) => (props) => (
-          <AgentAvatar agent={row} size={props.size} />
-        ),
-      }),
-      tc.column("name", {
-        header: t("table.nameColumn.header"),
+        icon: (row) => (props) => <AgentAvatar agent={row} size={props.size} />,
+      },
+      {
+        kind: "data",
+        truncate: true,
+        field: "name",
+        title: t("table.nameColumn.header"),
         weight: 25,
         cell: (value) => (
-          <Text as="span" mainUiBody text05>
+          <OverflowText font="main-ui-body" color="text-05">
             {value}
-          </Text>
+          </OverflowText>
         ),
-      }),
-      tc.column("description", {
-        header: t("table.descriptionColumn.header"),
+      },
+      {
+        kind: "data",
+        truncate: true,
+        field: "description",
+        title: t("table.descriptionColumn.header"),
         weight: 35,
         cell: (value) => (
-          <Text as="span" mainUiBody text03>
+          <OverflowText font="main-ui-body" color="text-03">
             {value || BLANK_CELL}
-          </Text>
+          </OverflowText>
         ),
-      }),
-      tc.column("owner", {
-        header: t("table.createdByColumn.header"),
+      },
+      {
+        kind: "data",
+        truncate: true,
+        field: "owner",
+        title: t("table.createdByColumn.header"),
         weight: 20,
         cell: renderCreatedByColumn,
-      }),
-      tc.column("is_public", {
-        header: t("table.accessColumn.header"),
+      },
+      {
+        kind: "data",
+        truncate: true,
+        field: "is_public",
+        title: t("table.accessColumn.header"),
         weight: 12,
         cell: renderAccessColumn,
-      }),
-      tc.actions({
+      },
+      {
+        kind: "actions",
         cell: (row) => <AgentRowActions agent={row} onMutate={refresh} />,
-      }),
+      },
     ];
   }, [refresh, t]);
 
   const nonBuiltinAgents = useMemo(
-    () => agents.filter((p) => !p.builtin_persona),
+    () => agents.filter((p) => !p.builtin_persona).sort(compareAgentOrder),
     [agents]
   );
 
@@ -136,12 +183,26 @@ export default function AgentsTable() {
 
   const canReorder = nonBuiltinAgents.some((agent) => can(agent, "reorder"));
 
-  async function handleReorder(
-    _orderedIds: string[],
-    changedOrders: Record<string, number>
-  ) {
+  async function handleReorder(orderedIds: string[]) {
+    const priorityMap = buildDisplayPriorityMap(nonBuiltinAgents, orderedIds);
+    if (Object.keys(priorityMap).length === 0) return;
+
+    // Apply the new order locally so the row does not snap back while saving.
+    void refresh(
+      (current) =>
+        Array.isArray(current)
+          ? current.map((agent) => {
+              const priority = priorityMap[String(agent.id)];
+              return priority === undefined
+                ? agent
+                : { ...agent, display_priority: priority };
+            })
+          : current,
+      { revalidate: false }
+    );
+
     try {
-      await updateAgentDisplayPriorities(changedOrders);
+      await updateAgentDisplayPriorities(priorityMap);
       refresh();
     } catch (err) {
       toast.error(
@@ -169,11 +230,11 @@ export default function AgentsTable() {
         </Section>
       </Section>
       <Table
-        data={filteredAgents}
+        items={filteredAgents}
         columns={columns}
         getRowId={(row) => String(row.id)}
         pageSize={DEFAULT_PAGE_SIZE}
-        searchTerm={searchTerm}
+        query={searchTerm}
         draggable={canReorder ? { onReorder: handleReorder } : undefined}
         emptyState={
           <IllustrationContent

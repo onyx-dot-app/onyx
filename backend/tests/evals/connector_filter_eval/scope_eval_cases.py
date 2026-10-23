@@ -34,7 +34,8 @@ ZENDESK = DocumentSource.ZENDESK
 
 class ScopeEvalCase(BaseModel):
     name: str
-    # Reporting bucket: "unscoped" | "combined" | "backoff" | "multi-turn".
+    # Reporting bucket: "unscoped" | "false-positive" | "combined" |
+    # "backoff" | "multi-turn".
     category: str
     # User-side turns, oldest first; the last one is the current user query.
     user_turns: list[str]
@@ -102,12 +103,9 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         expected=None,
     ),
     # --- FALSE-POSITIVE TRAPS: a CONNECTED source is named, but as the topic
-    # --- of the question, not as where to look — must stay unfiltered.
-    # --- (currently failing: the prompt scopes to topic-named sources; the
-    # --- WHERE-vs-TOPIC tuning that fixes these is landing separately) -------
+    # --- of the question, not as where to look. Must stay unscoped. --------
     ScopeEvalCase(
-        # Real reported failure: scoped to gmail/highspot when the connectors
-        # are the SUBJECT of the question ("which customers use them").
+        # Taken from a real user query.
         name="connector-as-topic-not-directive",
         category="false-positive",
         user_turns=[
@@ -141,6 +139,18 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         current_queries=["Slack bot maintainer code repository"],
         expected=None,
     ),
+    ScopeEvalCase(
+        # A subject source in an earlier turn must not carry into the follow-up.
+        name="subject-source-in-earlier-turn",
+        category="false-positive",
+        user_turns=[
+            "What's our Slack message retention policy?",
+            "Does it differ for private channels?",
+        ],
+        connected_sources=[SLACK, CONFLUENCE, GOOGLE_DRIVE],
+        current_queries=["Slack retention policy private channels"],
+        expected=None,
+    ),
     # --- COMBINED: named set held, every cycle -------------------------------
     ScopeEvalCase(
         name="single-named-source",
@@ -148,6 +158,15 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         user_turns=["Find the deployment runbook in Confluence."],
         connected_sources=[CONFLUENCE, GITHUB, SLACK],
         current_queries=["deployment runbook"],
+        expected={CONFLUENCE},
+    ),
+    ScopeEvalCase(
+        # One source is where to look, the other is only the subject.
+        name="where-source-with-subject-source",
+        category="combined",
+        user_turns=["Search Confluence for our policy on sending emails from Gmail."],
+        connected_sources=[CONFLUENCE, GMAIL, SLACK],
+        current_queries=["email sending policy Gmail"],
         expected={CONFLUENCE},
     ),
     ScopeEvalCase(

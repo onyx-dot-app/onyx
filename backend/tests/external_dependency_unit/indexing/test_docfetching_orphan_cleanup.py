@@ -38,7 +38,7 @@ from onyx.connectors import factory as connector_factory
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document, HierarchyNode, InputType, TextSection
-from onyx.db.enums import EmbeddingPrecision, IndexingStatus, IndexModelStatus
+from onyx.db.enums import IndexingStatus, IndexModelStatus
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import Credential, FileRecord, IndexAttempt, SearchSettings
 from onyx.file_store.file_store import get_default_file_store
@@ -534,7 +534,6 @@ def test_run_docfetching_entrypoint_leaves_crash_orphans_for_next_sweep(
             passage_prefix="",
             status=IndexModelStatus.PRESENT,
             index_name=f"test_index_{uuid4().hex[:8]}",
-            embedding_precision=EmbeddingPrecision.FLOAT,
         )
         db_session.add(search_settings)
         db_session.commit()

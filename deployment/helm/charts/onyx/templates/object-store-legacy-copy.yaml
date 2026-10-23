@@ -1,0 +1,15 @@
+{{- with include "onyx.objectStore.legacyCopyJobName" . }}
+{{- $copy := (include "onyx.objectStore.values" $ | fromYaml).legacyCopy }}
+{{- /* A plain Job, not a hook, so helm upgrade does not wait out the copy. */}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ . }}
+  labels:
+    {{- include "onyx.labels" $ | nindent 4 }}
+    app: legacy-minio-copy
+spec:
+  backoffLimit: {{ $copy.backoffLimit }}
+  template:
+    {{- include "onyx.objectStore.legacyCopyPod" (dict "ctx" $ "copy" $copy) | nindent 4 }}
+{{- end }}

@@ -1,8 +1,7 @@
 """Document-level metadata used during indexing.
 
-Previously declared in the now-removed `onyx.document_index.interfaces` module.
 Used by the indexing pipeline / Postgres upsert layer; not part of the search
-backend interface.
+backend interface (`onyx.document_index.interfaces`).
 """
 
 from dataclasses import dataclass

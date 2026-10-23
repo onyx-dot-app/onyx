@@ -10,9 +10,8 @@ from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 from onyx.context.search.federated.models import ChannelMetadata, DirectThreadFetch
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import UserMessage
-from onyx.llm.utils import llm_response_to_string
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import GenerationRequest, UserMessage
 from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS_SET
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import (
@@ -20,7 +19,6 @@ from onyx.prompts.federated_search import (
     SLACK_QUERY_EXPANSION_PROMPT,
 )
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -197,14 +195,11 @@ def extract_date_range_from_query(
         prompt_msg = UserMessage(content=prompt)
 
         # Call LLM with Braintrust tracing
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.SLACK_DATE_EXTRACTION,
-            input_messages=[prompt_msg],
-        ) as span_generation:
-            llm_response = llm.invoke(prompt_msg)
-            record_llm_response(span_generation, llm_response)
-            response = llm_response_to_string(llm_response)
+        llm_response = llm.invoke(
+            GenerationRequest(messages=[prompt_msg]),
+            context=GenerationContext(flow=LLMFlow.SLACK_DATE_EXTRACTION),
+        )
+        response = llm_response.text
 
         response_clean = _parse_llm_code_block_response(response)
 
@@ -610,12 +605,11 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
 
     try:
         # Call LLM with Braintrust tracing
-        with llm_generation_span(
-            llm=llm, flow=LLMFlow.SLACK_QUERY_EXPANSION, input_messages=[prompt]
-        ) as span_generation:
-            llm_response = llm.invoke(prompt)
-            record_llm_response(span_generation, llm_response)
-            response = llm_response_to_string(llm_response)
+        llm_response = llm.invoke(
+            GenerationRequest(messages=[prompt]),
+            context=GenerationContext(flow=LLMFlow.SLACK_QUERY_EXPANSION),
+        )
+        response = llm_response.text
 
         response_clean = _parse_llm_code_block_response(response)
 

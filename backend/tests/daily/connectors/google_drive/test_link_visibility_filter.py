@@ -1,10 +1,13 @@
 from collections.abc import Iterable
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage, RetrievedDriveFile
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 
 
 def _stub_run_functions(
@@ -33,7 +36,7 @@ def _prepare_connector(exclude: bool) -> GoogleDriveConnector:
         include_shared_drives=True,
         exclude_domain_link_only=exclude,
     )
-    connector._creds = object()  # ty: ignore[invalid-assignment]
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector._primary_admin_email = "admin@example.com"
     return connector
 

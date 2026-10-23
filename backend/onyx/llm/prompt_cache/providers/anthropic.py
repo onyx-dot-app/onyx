@@ -2,20 +2,21 @@
 
 from collections.abc import Sequence
 
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
-from onyx.llm.prompt_cache.utils import (
-    prepare_messages_with_cacheable_transform,
-    revalidate_message_from_original,
-)
+from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
 ) -> Sequence[ChatCompletionMessage]:
-    """Add cache_control parameter to messages for Anthropic caching.
+    """Add cache_control parameters to messages for Anthropic caching.
+
+    Anthropic allows up to 4 cache breakpoints. We mark the last cacheable
+    message (tail of the prefix) and, when there is more than one, the first
+    (usually the system prompt): the head breakpoint keeps the stable prefix
+    readable when history truncation moves the tail breakpoint.
 
     Args:
         messages: Messages to transform
@@ -23,12 +24,13 @@ def _add_anthropic_cache_control(
     Returns:
         Messages with cache_control added
     """
-    last_message_dict = dict(messages[-1])
-    last_message_dict["cache_control"] = {"type": "ephemeral"}
-    last_message = revalidate_message_from_original(
-        original=messages[-1], mutated=last_message_dict
-    )
-    return list(messages[:-1]) + [last_message]
+    result: list[ChatCompletionMessage] = list(messages)
+    result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
+    if len(result) > 1:
+        result[0] = result[0].model_copy(
+            update={"cache_control": {"type": "ephemeral"}}
+        )
+    return result
 
 
 class AnthropicPromptCacheProvider(PromptCacheProvider):
@@ -46,11 +48,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
 
     def prepare_messages_for_caching(
         self,
-        cacheable_prefix: LanguageModelInput | None,
-        suffix: LanguageModelInput,
+        cacheable_prefix: list[ChatCompletionMessage] | None,
+        suffix: list[ChatCompletionMessage],
         continuation: bool,
         cache_metadata: CacheMetadata | None,  # noqa: ARG002
-    ) -> LanguageModelInput:
+    ) -> list[ChatCompletionMessage]:
         """Prepare messages for Anthropic caching.
 
         Anthropic requires cache_control parameter on cacheable messages.

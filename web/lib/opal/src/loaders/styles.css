@@ -1,0 +1,136 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Shimmer block (LineLoader, CardLoader): a placeholder surface with a wave
+   sweeping across it. The wave matches TextLoader's (see the constants in
+   text-loader/components.tsx): 40% of the block's width but at least 40px,
+   a 2s crossing whatever the width, then a 1s pause. Only `translate`
+   animates, so the sweep composites on the GPU. Under
+   `prefers-reduced-motion` the sweep stops and the block holds still.
+   --------------------------------------------------------------------------- */
+
+.opal-shimmer-block {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--background-tint-02);
+  /* Lets the sweep reach the block's far edge with `cqw`. */
+  container-type: inline-size;
+}
+
+.opal-shimmer-block::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  /* Physical, not logical: the sweep runs left to right in every language. */
+  left: 0;
+  width: max(40px, 40%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--background-tint-00) 50%,
+    transparent
+  );
+  will-change: transform;
+  animation: opal-shimmer-slide 3s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Text shimmer (TextLoader). The wave is the background of an inline
+   element, clipped to its glyphs. An inline background is laid out as one
+   strip across all its line fragments, so the wave follows wrapped text
+   from the end of one line to the start of the next. Two layers: the wave
+   on top, the resting text colour beneath.
+
+   TextLoader sets three variables from the measured text length, so the
+   wave moves at one rate on any text:
+     --opal-text-shimmer-band      the wave's width
+     --opal-text-shimmer-tail      the distance travelled off the end, which
+                                   is the pause between waves
+     --opal-text-shimmer-duration  one pass, at the set rate
+   --------------------------------------------------------------------------- */
+
+.opal-text-loader {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.opal-text-loader-wave {
+  color: transparent;
+  background-image:
+    linear-gradient(90deg, transparent, var(--text-04) 50%, transparent),
+    linear-gradient(var(--text-02), var(--text-02));
+  background-size:
+    var(--opal-text-shimmer-band, 40px) 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  /* At rest, and under reduced motion, the wave waits off the left edge. */
+  background-position:
+    calc(-1 * var(--opal-text-shimmer-band, 40px)) 0,
+    0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: opal-text-loader-wave var(--opal-text-shimmer-duration, 3s) linear
+    infinite;
+}
+
+/* From one band-width off the start to past the end by the tail. With the
+   band as the image width, `calc(100% + X)` resolves to the text length
+   minus the band plus X. */
+@keyframes opal-text-loader-wave {
+  from {
+    background-position:
+      calc(-1 * var(--opal-text-shimmer-band, 40px)) 0,
+      0 0;
+  }
+  to {
+    background-position:
+      calc(
+          100% + var(--opal-text-shimmer-band, 40px) +
+            var(--opal-text-shimmer-tail, 60px)
+        )
+        0,
+      0 0;
+  }
+}
+
+/* One 3s cycle: the wave crosses for 2s, from one band-width off the left
+   edge to just past the right one, then waits off the block for 1s. */
+@keyframes opal-shimmer-slide {
+  0% {
+    translate: -100% 0;
+  }
+  66.6667% {
+    translate: 100cqw 0;
+  }
+  100% {
+    translate: 100cqw 0;
+  }
+}
+
+/* Right-to-left text is read from the right, so both waves run that way. */
+.opal-shimmer-block:dir(rtl)::after,
+.opal-text-loader-wave:dir(rtl) {
+  animation-direction: reverse;
+}
+
+/* Forced colours (e.g. Windows High Contrast) drop background images, and
+   the text's glyphs are painted only by its clipped background. Show plain
+   system-coloured text instead. */
+@media (forced-colors: active) {
+  .opal-text-loader-wave {
+    color: CanvasText;
+    background: none;
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-shimmer-block::after {
+    animation: none;
+    display: none;
+  }
+
+  .opal-text-loader-wave {
+    animation: none;
+  }
+}

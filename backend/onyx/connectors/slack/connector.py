@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, cast
 from urllib.parse import urlparse
 
+import regex
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import override
 
@@ -33,6 +34,7 @@ from onyx.connectors.interfaces import (
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     NormalizationResult,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
@@ -214,6 +216,64 @@ def _channel_history_variant(channel: ChannelType) -> SlackChannelVariant:
     )
 
 
+# conversations.join errors that describe the channel or the bot's standing in
+# it. Anything else (auth, scope, transient) is about the run and propagates.
+_CHANNEL_JOIN_REFUSALS = frozenset(
+    {
+        "is_archived",
+        "channel_not_found",
+        "method_not_supported_for_channel_type",
+        "restricted_action",
+        "user_is_restricted",
+        "user_is_ultra_restricted",
+    }
+)
+
+
+# Slack errors about the token or the whole workspace. Targeted reindex stops
+# on these; any other error fails only the target that caused it. A missing
+# scope is per target: the crawl also reads public channels without
+# ``groups:*``.
+_RUN_LEVEL_SLACK_ERRORS = frozenset(
+    {
+        "invalid_auth",
+        "not_authed",
+        "account_inactive",
+        "token_revoked",
+        "token_expired",
+        "ratelimited",
+    }
+)
+
+
+def _join_channel(slack_client: SlackSourceOperations, channel: ChannelType) -> None:
+    """Join the channel when the bot is not a member."""
+    if channel["is_member"]:
+        return
+    slack_client.join_channel(channel_id=channel["id"])
+    logger.info("Successfully joined '%s'", channel["name"])
+
+
+def _join_channel_or_skip(
+    slack_client: SlackSourceOperations, channel: ChannelType
+) -> bool:
+    """Indexing variant of `_join_channel`: False when Slack refuses this channel.
+
+    A refused channel is skipped so one channel does not fail the run. Only
+    full indexing may skip: the slim listing feeds pruning, where a missing
+    channel reads as deleted history.
+    """
+    try:
+        _join_channel(slack_client, channel)
+    except SlackApiError as e:
+        error = e.response["error"]
+        if error not in _CHANNEL_JOIN_REFUSALS:
+            raise
+        logger.warning("Cannot join channel %s (%s). Skipping.", channel["name"], error)
+        return False
+    return True
+
+
 def get_channel_messages(
     slack_client: SlackSourceOperations,
     channel: ChannelType,
@@ -222,10 +282,8 @@ def get_channel_messages(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[list[MessageType], None, None]:
     """Get all messages in a channel"""
-    # join so that the bot can access messages
-    if not channel["is_member"]:
-        slack_client.join_channel(channel_id=channel["id"])
-        logger.info("Successfully joined '%s'", channel["name"])
+    # A refused join propagates: pruning must see every channel or none.
+    _join_channel(slack_client, channel)
 
     for result in slack_client.fetch_channel_history(
         variant=_channel_history_variant(channel),
@@ -260,7 +318,8 @@ def get_latest_message_time(thread: ThreadType) -> datetime:
     return datetime.fromtimestamp(max_ts, tz=timezone.utc)
 
 
-def _build_doc_id(channel_id: str, thread_ts: str) -> str:
+def build_slack_doc_id(channel_id: str, thread_ts: str) -> str:
+    """Id of the Onyx document made from a Slack thread."""
     return f"{channel_id}__{thread_ts}"
 
 
@@ -331,7 +390,7 @@ def thread_to_doc(
     channel_name = channel["name"]
 
     return Document(
-        id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
+        id=build_slack_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
             TextSection(
                 link=get_message_link(
@@ -428,34 +487,132 @@ def filter_channels(
 
     if channels_to_include:
         if not include_regex_enabled:
+            channels_to_include = normalize_channel_entries(channels_to_include)
             _validate_channels_exist(all_channels, channels_to_include)
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if _channel_name_matches(
-                channel["name"], channels_to_include, include_regex_enabled
+            if _channel_matches(
+                channel,
+                channels_to_include,
+                include_regex_enabled,
+                match_on_timeout=False,
             )
         ]
 
-    # unlike includes, exclude names aren't validated — excluding a missing channel is harmless
+    # unlike includes, exclude entries aren't validated: excluding a missing channel is harmless
     if channels_to_exclude:
+        if not exclude_regex_enabled:
+            channels_to_exclude = normalize_channel_entries(channels_to_exclude)
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if not _channel_name_matches(
-                channel["name"], channels_to_exclude, exclude_regex_enabled
+            if not _channel_matches(
+                channel,
+                channels_to_exclude,
+                exclude_regex_enabled,
+                match_on_timeout=True,
             )
         ]
 
     return filtered_channels
 
 
-def _channel_name_matches(
-    channel_name: str, patterns: list[str], regex_enabled: bool
+def channel_in_scope(
+    channel: ChannelType,
+    channels_to_include: list[str] | None,
+    include_regex_enabled: bool,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
 ) -> bool:
+    """One-channel form of ``filter_channels``, without the check that every
+    include entry names an existing channel."""
+    if channels_to_include and not _channel_matches(
+        channel,
+        channels_to_include
+        if include_regex_enabled
+        else normalize_channel_entries(channels_to_include),
+        include_regex_enabled,
+        match_on_timeout=False,
+    ):
+        return False
+    return not (
+        channels_to_exclude
+        and _channel_matches(
+            channel,
+            channels_to_exclude
+            if exclude_regex_enabled
+            else normalize_channel_entries(channels_to_exclude),
+            exclude_regex_enabled,
+            match_on_timeout=True,
+        )
+    )
+
+
+# A channel id: a type letter, then uppercase letters and digits. A channel
+# name is lowercase, so the two never collide.
+_CHANNEL_ID_PATTERN = re.compile(r"[CGD][A-Z0-9]{8,}")
+
+# A doc id from `_build_doc_id`: the channel id and the thread root's ts.
+_DOC_ID_PATTERN = re.compile(
+    rf"(?P<channel_id>{_CHANNEL_ID_PATTERN.pattern})__(?P<thread_ts>\d+\.\d+)"
+)
+
+
+def normalize_channel_entries(entries: list[str]) -> list[str]:
+    """Exact config entries as Slack stores them: an id as given, a typed name
+    lowercase without its leading ``#``."""
+    return [
+        entry
+        if _CHANNEL_ID_PATTERN.fullmatch(entry)
+        else entry.removeprefix("#").lower()
+        for entry in entries
+    ]
+
+
+# Channel patterns come from the connector config; bound each match so a
+# backtracking pattern cannot pin the worker.
+_CHANNEL_REGEX_TIMEOUT_SECONDS = 0.05
+
+
+def _channel_regex_matches(pattern: str, name: str, match_on_timeout: bool) -> bool:
+    try:
+        return (
+            regex.fullmatch(
+                pattern,
+                name,
+                concurrent=True,
+                timeout=_CHANNEL_REGEX_TIMEOUT_SECONDS,
+            )
+            is not None
+        )
+    except TimeoutError:
+        logger.warning(
+            "Slack channel regex '%s' timed out on channel '%s'", pattern, name
+        )
+        return match_on_timeout
+
+
+def _channel_matches(
+    channel: ChannelType,
+    patterns: list[str],
+    regex_enabled: bool,
+    match_on_timeout: bool,
+) -> bool:
+    """An exact entry names the channel by id, which survives a rename, or by
+    name. A regex matches the name only. A regex that times out counts as
+    ``match_on_timeout``, so a slow exclude still excludes."""
     if regex_enabled:
-        return any(re.fullmatch(pattern, channel_name) for pattern in patterns)
-    return channel_name in patterns
+        return any(
+            _channel_regex_matches(pattern, channel["name"], match_on_timeout)
+            for pattern in patterns
+        )
+    return channel["id"] in patterns or channel["name"] in patterns
+
+
+def channel_keys(channels: list[ChannelType]) -> set[str]:
+    """Every string an exact config entry may use for one of ``channels``."""
+    return {key for channel in channels for key in (channel["id"], channel["name"])}
 
 
 def _validate_channels_exist(
@@ -463,9 +620,10 @@ def _validate_channels_exist(
 ) -> None:
     # fail loudly on an unknown channel so the user knows one of the
     # channels they've specified is typo'd or private
+    known_channels = channel_keys(all_channels)
     all_channel_names = {channel["name"] for channel in all_channels}
     for channel in channels_to_include:
-        if channel not in all_channel_names:
+        if channel not in known_channels:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
                 f"Available channels (Showing {len(all_channel_names)} of "
@@ -474,11 +632,11 @@ def _validate_channels_exist(
             )
 
 
-def _validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
+def validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
     for pattern in patterns or []:
         try:
-            re.compile(pattern)
-        except re.error as e:
+            regex.compile(pattern)
+        except regex.error as e:
             raise ConnectorValidationError(
                 f"Invalid {label} regex '{pattern}': {e}"
             ) from e
@@ -540,18 +698,8 @@ def _get_messages(
 ) -> tuple[list[MessageType], bool]:
     """Slack goes from newest to oldest."""
 
-    # have to be in the channel in order to read messages
-    if not channel["is_member"]:
-        try:
-            slack_client.join_channel(channel_id=channel["id"])
-        except SlackApiError as e:
-            if e.response["error"] == "is_archived":
-                logger.warning("Channel %s is archived. Skipping.", channel["name"])
-                return [], False
-
-            logger.exception("Error joining channel %s", channel["name"])
-            raise
-        logger.info("Successfully joined '%s'", channel["name"])
+    if not _join_channel_or_skip(slack_client, channel):
+        return [], False
 
     # Single page: the gateway paginator is lazy, so taking one yield makes
     # exactly one request, and the page still carries the cursor metadata.
@@ -588,8 +736,6 @@ def _message_to_doc(
     """Returns a doc or None.
     If None is returned, the second element of the tuple may be a filter reason
     """
-    filtered_thread: ThreadType | None = None
-    filter_reason: SlackMessageFilterReason | None = None
     thread_ts = message.get("thread_ts")
     if thread_ts:
         # NOTE: if thread_ts is present, there's a thread we need to process
@@ -603,24 +749,41 @@ def _message_to_doc(
         thread = get_thread(
             slack_client=slack_client, channel=channel, thread_id=thread_ts
         )
-
-        # we'll just set and use the last filter reason if
-        # we bomb out later
-        filtered_thread = []
-        for message in thread:
-            filter_reason = msg_filter_func(message)
-            if filter_reason:
-                continue
-
-            filtered_thread.append(message)
     else:
-        filter_reason = msg_filter_func(message)
+        thread = [message]
+
+    return _thread_to_filtered_doc(
+        thread=thread,
+        slack_client=slack_client,
+        channel=channel,
+        slack_cleaner=slack_cleaner,
+        user_cache=user_cache,
+        channel_access=channel_access,
+        msg_filter_func=msg_filter_func,
+        team_id_to_url=team_id_to_url,
+    )
+
+
+def _thread_to_filtered_doc(
+    thread: ThreadType,
+    slack_client: SlackSourceOperations,
+    channel: ChannelType,
+    slack_cleaner: SlackTextCleaner,
+    user_cache: dict[str, BasicExpertInfo | None],
+    channel_access: ExternalAccess | None,
+    msg_filter_func: Callable[[MessageType], SlackMessageFilterReason | None],
+    team_id_to_url: dict[str, str] | None = None,
+) -> tuple[Document | None, SlackMessageFilterReason | None]:
+    """Drops filtered messages, then builds the doc. The doc id comes from the
+    first kept message. With no kept message, returns the last filter reason."""
+    filter_reason: SlackMessageFilterReason | None = None
+    filtered_thread: ThreadType = []
+    for thread_message in thread:
+        filter_reason = msg_filter_func(thread_message)
         if filter_reason:
-            return None, filter_reason
+            continue
+        filtered_thread.append(thread_message)
 
-        filtered_thread = [message]
-
-    # we'll just set and use the last filter reason if we get an empty list
     if not filtered_thread:
         return None, filter_reason
 
@@ -716,7 +879,7 @@ def _get_all_doc_ids(
 
                 slim_doc_batch.append(
                     SlimDocument(
-                        id=_build_doc_id(
+                        id=build_slack_doc_id(
                             channel_id=channel_id, thread_ts=message["ts"]
                         ),
                         external_access=external_access,
@@ -790,7 +953,7 @@ def _process_message(
             filter_reason=None,
             failure=ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=_build_doc_id(
+                    document_id=build_slack_doc_id(
                         channel_id=channel["id"], thread_ts=thread_or_message_ts
                     ),
                     document_link=get_message_link(
@@ -805,6 +968,24 @@ def _process_message(
                 exception=e,
             ),
         )
+
+
+def _raise_if_run_level_error(e: Exception) -> None:
+    if (
+        isinstance(e, SlackApiError)
+        and e.response.get("error", "") in _RUN_LEVEL_SLACK_ERRORS
+    ):
+        raise e
+
+
+def _reindex_failure(
+    doc_id: str, message: str, exception: Exception | None = None
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(document_id=doc_id),
+        failure_message=message,
+        exception=exception,
+    )
 
 
 class _WorkspaceMetadata(BaseModel):
@@ -823,7 +1004,12 @@ class SlackConnector(
     SlimConnectorWithPermSync,
     CredentialsConnector,
     CheckpointedConnectorWithPermSync[SlackCheckpoint],
+    Resolver,
 ):
+    # A thread whose root is older than `start` is indexed through a newer
+    # broadcast reply, but the slim listing lists only the reply.
+    slim_listing_honors_indexing_start = False
+
     MAX_CHANNELS_TO_LOG = 50
 
     # *** values to use when filtering bot channels ***
@@ -1390,6 +1576,160 @@ class SlackConnector(
             start, end, checkpoint, include_permissions=True
         )
 
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads failed threads again by doc id, one channel at a time.
+        Entity failures are skipped: they name a channel, not a document."""
+        if self.slack_client is None or self.text_cleaner is None:
+            raise ConnectorMissingCredentialError("Slack")
+
+        # channel id -> {doc id -> thread ts}
+        targets_by_channel: dict[str, dict[str, str]] = {}
+        for error in errors:
+            if error.failed_document is None:
+                continue
+            doc_id = error.failed_document.document_id
+            match = _DOC_ID_PATTERN.fullmatch(doc_id)
+            if match is None:
+                yield _reindex_failure(
+                    doc_id,
+                    f"Cannot parse Slack doc id '{doc_id}'; expected "
+                    "'<channel_id>__<thread_ts>'.",
+                )
+                continue
+            targets_by_channel.setdefault(match["channel_id"], {})[doc_id] = match[
+                "thread_ts"
+            ]
+
+        if not targets_by_channel:
+            return
+
+        self._ensure_workspace_metadata()
+
+        for channel_id, targets in targets_by_channel.items():
+            opened = self._open_channel_for_reindex(
+                self.slack_client, channel_id, include_permissions
+            )
+            if isinstance(opened, str):
+                for doc_id in targets:
+                    yield _reindex_failure(doc_id, opened)
+                continue
+
+            channel, channel_access = opened
+            yield _channel_to_hierarchy_node(
+                channel,
+                channel_access,
+                self.workspace_url,
+                team_id_to_url=self.grid_team_id_to_url,
+            )
+            for doc_id, thread_ts in targets.items():
+                yield self._reindex_thread(
+                    slack_client=self.slack_client,
+                    slack_cleaner=self.text_cleaner,
+                    channel=channel,
+                    channel_access=channel_access,
+                    doc_id=doc_id,
+                    thread_ts=thread_ts,
+                )
+
+    def _open_channel_for_reindex(
+        self,
+        slack_client: SlackSourceOperations,
+        channel_id: str,
+        include_permissions: bool,
+    ) -> tuple[ChannelType, ExternalAccess | None] | str:
+        """The channel and its access, or the reason its targets fail. Applies
+        the same channel scope as the crawl."""
+        try:
+            channel = _get_channel_by_id(slack_client, channel_id)
+        except Exception as e:
+            _raise_if_run_level_error(e)
+            return f"Cannot read Slack channel {channel_id}: {e}"
+
+        if channel.get("is_im") or channel.get("is_mpim"):
+            return f"Slack conversation {channel_id} is a direct message; the connector indexes channels only."
+        if channel.get("is_archived"):
+            return f"Slack channel #{channel['name']} is archived; the connector skips archived channels."
+        if not channel_in_scope(
+            channel,
+            self.channels,
+            self.channel_regex_enabled,
+            self.exclude_channels,
+            self.exclude_channel_regex_enabled,
+        ):
+            return f"Slack channel #{channel['name']} is outside the connector's channel filters."
+
+        try:
+            _join_channel(slack_client, channel)
+            channel_access = (
+                get_channel_access(
+                    slack_client=slack_client,
+                    channel=channel,
+                    user_cache=self.user_cache,
+                    team_id_to_user_emails=self.grid_team_id_to_user_emails,
+                )
+                if include_permissions
+                else None
+            )
+        except Exception as e:
+            _raise_if_run_level_error(e)
+            return f"Cannot open Slack channel #{channel['name']}: {e}"
+        return channel, channel_access
+
+    def _reindex_thread(
+        self,
+        slack_client: SlackSourceOperations,
+        slack_cleaner: SlackTextCleaner,
+        channel: ChannelType,
+        channel_access: ExternalAccess | None,
+        doc_id: str,
+        thread_ts: str,
+    ) -> Document | ConnectorFailure:
+        try:
+            thread = get_thread(
+                slack_client=slack_client, channel=channel, thread_id=thread_ts
+            )
+            # The crawl ids a thread by its first kept message, which is a
+            # reply when the root is filtered. Read the whole thread then.
+            root_ts = thread[0].get("thread_ts") if thread else None
+            if root_ts and root_ts != thread[0]["ts"]:
+                thread = get_thread(
+                    slack_client=slack_client, channel=channel, thread_id=root_ts
+                )
+            doc, _ = _thread_to_filtered_doc(
+                thread=thread,
+                slack_client=slack_client,
+                channel=channel,
+                slack_cleaner=slack_cleaner,
+                user_cache=self.user_cache,
+                channel_access=channel_access,
+                msg_filter_func=self.msg_filter_func,
+                team_id_to_url=self.grid_team_id_to_url,
+            )
+        except Exception as e:
+            _raise_if_run_level_error(e)
+            logger.exception("Error reindexing Slack doc %s", doc_id)
+            return _reindex_failure(
+                doc_id, f"Cannot read Slack thread {doc_id}: {e}", e
+            )
+
+        if doc is None:
+            return _reindex_failure(
+                doc_id,
+                f"Slack thread {doc_id} has no message the connector indexes "
+                "(all are filtered, e.g. bot messages).",
+            )
+        if doc.id != doc_id:
+            return _reindex_failure(
+                doc_id,
+                f"Slack message {doc_id} is now part of document {doc.id}.",
+            )
+        return doc
+
     def validate_connector_settings(self) -> None:
         """
         1. Verify any channel include/exclude regexes compile.
@@ -1399,15 +1739,13 @@ class SlackConnector(
         Channel existence (for non-regex includes) is validated during indexing
         via filter_channels, not here.
         """
-        # Config-shape validation, load-bearing at creation time: unlike the
-        # credential probes below (mirrored as named capability checks in
-        # ``slack/capability_checks.py``), regex compilation is
-        # credential-invariant and has NO capability-check counterpart. This is
-        # the only thing that blocks a malformed regex from being created.
+        # Config-shape validation. Pairing creation runs the named capability
+        # checks instead (``slack/capability_checks.py``), where
+        # ``_ChannelPatternsCheck`` mirrors this.
         if self.channel_regex_enabled:
-            _validate_channel_regexes(self.channels, "channel")
+            validate_channel_regexes(self.channels, "channel")
         if self.exclude_channel_regex_enabled:
-            _validate_channel_regexes(self.exclude_channels, "excluded channel")
+            validate_channel_regexes(self.exclude_channels, "excluded channel")
 
         if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")

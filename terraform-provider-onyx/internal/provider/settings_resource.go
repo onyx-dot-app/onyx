@@ -36,8 +36,8 @@ type settingsResource struct {
 //
 // These fields are read-only. The license gives ApplicationStatus, Tier,
 // EEFeaturesEnabled, GPUEnabled, SeatCount and UsedSeats. Backend env vars
-// overwrite HideQueryHistoryFromAdminPanel, ShowExtraConnectors and
-// OpenSearchIndexingEnabled on every read.
+// overwrite HideQueryHistoryFromAdminPanel and ShowExtraConnectors on every
+// read. OpenSearchIndexingEnabled is deprecated and always true.
 type settingsResourceModel struct {
 	ID                                types.String  `tfsdk:"id"`
 	CompanyName                       types.String  `tfsdk:"company_name"`
@@ -213,8 +213,8 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"opensearch_indexing_enabled": schema.BoolAttribute{
 				Computed: true,
-				MarkdownDescription: "OpenSearch migration flag. Read-only: controlled by the " +
-					"ENABLE_OPENSEARCH_INDEXING_FOR_ONYX backend env var.",
+				MarkdownDescription: "Deprecated: always true, because OpenSearch is " +
+					"the only document index. Read-only.",
 			},
 		},
 	}

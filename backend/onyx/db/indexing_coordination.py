@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import (
     count_error_rows_for_index_attempt,
@@ -38,8 +39,10 @@ class IndexingCoordination:
         db_session: Session,
         cc_pair_id: int,
         search_settings_id: int,
-        celery_task_id: str,
+        # None creates the attempt without its docfetching task, to send later.
+        celery_task_id: str | None,
         from_beginning: bool = False,
+        backfill: BackfillSpec | None = None,
     ) -> int | None:
         """
         Try to create a new index attempt for the given CC pair and search settings.
@@ -52,7 +55,8 @@ class IndexingCoordination:
             # Check for existing active full-run attempts (the "fence" check).
             # Targeted reindex attempts are allowed to overlap with a full crawl
             # by design (per-doc row-locks handle write conflicts), so they're
-            # excluded here.
+            # excluded here. A backfill runs the connector like a full run, so
+            # it fences and is fenced.
             existing_attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(
@@ -82,14 +86,16 @@ class IndexingCoordination:
                 from_beginning=from_beginning,
                 db_session=db_session,
                 celery_task_id=celery_task_id,
+                backfill=backfill,
             )
 
             logger.info(
-                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s",
+                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s is_backfill=%s",
                 cc_pair_id,
                 search_settings_id,
                 attempt_id,
                 celery_task_id,
+                backfill is not None,
             )
 
             return attempt_id
@@ -117,19 +123,15 @@ class IndexingCoordination:
         return attempt.cancellation_requested if attempt else False
 
     @staticmethod
-    def request_cancellation(
+    def request_cancellation__no_commit(
         db_session: Session,
         index_attempt_id: int,
     ) -> None:
-        """
-        Request cancellation of an indexing attempt.
-        This replaces Redis termination signals.
-        """
+        """Flags the attempt for cancellation; its task reads the flag. The
+        caller commits."""
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt:
             attempt.cancellation_requested = True
-            db_session.commit()
-
             logger.info("Requested cancellation for attempt %s", index_attempt_id)
 
     @staticmethod
@@ -152,6 +154,17 @@ class IndexingCoordination:
                 index_attempt_id,
                 total_batches,
             )
+
+    @staticmethod
+    def get_completed_batches(db_session: Session, index_attempt_id: int) -> int:
+        """Reads the count from the database. A column query skips the
+        session's identity map, so an attempt loaded earlier cannot make it stale."""
+        completed = db_session.scalar(
+            select(IndexAttempt.completed_batches).where(
+                IndexAttempt.id == index_attempt_id
+            )
+        )
+        return completed or 0
 
     @staticmethod
     def update_batch_completion_and_docs(

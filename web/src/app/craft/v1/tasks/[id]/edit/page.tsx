@@ -1,16 +1,17 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgClock, SvgSimpleLoader } from "@opal/icons";
+import { SvgClock } from "@opal/icons";
 import { Text } from "@opal/components";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { decodeUtcCronToLocalPayload } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -39,7 +40,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
@@ -57,13 +58,13 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title={data ? t("title", { name: data.name }) : t("fallbackTitle")}
-          backButton={handleBack}
+          cancel={handleBack}
           divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           ) : (
             <Text font="main-ui-body" color="text-03">
@@ -77,6 +78,7 @@ export default function EditScheduledTaskPage() {
 
   return (
     <ScheduleTaskForm
+      key={data.id}
       initial={toFormInitial(data)}
       isEdit
       title={t("title", { name: data.name })}
@@ -101,7 +103,5 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
-    preApprovedAppIds: detail.pre_approved_app_ids,
-    preApprovedMcpServerIds: detail.pre_approved_mcp_server_ids,
   };
 }

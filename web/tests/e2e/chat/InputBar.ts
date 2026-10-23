@@ -27,6 +27,7 @@ export class InputBar {
   readonly container: Locator;
   readonly textbox: Locator;
   readonly sendButton: Locator;
+  readonly processingFileChips: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -42,6 +43,7 @@ export class InputBar {
     this.container = page.locator("#onyx-chat-input");
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
+    this.processingFileChips = this.container.getByText("Processing...");
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -211,6 +213,16 @@ export class InputBar {
 
   async expectFocused(): Promise<void> {
     await expect(this.textbox).toBeFocused();
+  }
+
+  async expectFileProcessing(processing = true): Promise<void> {
+    if (processing) {
+      await expect(this.processingFileChips.first()).toBeVisible();
+    } else {
+      await expect(this.processingFileChips).toHaveCount(0, {
+        timeout: 10000,
+      });
+    }
   }
 
   async expectEmpty(): Promise<void> {

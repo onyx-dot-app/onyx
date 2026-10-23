@@ -161,6 +161,33 @@ class OnyxRequestIDFilter(logging.Filter):
         return True
 
 
+UVICORN_ACCESS_LOGGER_NAME = "uvicorn.access"
+# uvicorn logs WebSocket handshake lines here, not on the access logger.
+UVICORN_ERROR_LOGGER_NAME = "uvicorn.error"
+
+
+class UvicornQueryStringRedactionFilter(logging.Filter):
+    """Drops the query string from path args on uvicorn request lines. OAuth,
+    OIDC and SAML callbacks and WebSocket auth carry credentials there."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _strip_query_string_from_path(arg) for arg in record.args
+            )
+        return True
+
+
+def _strip_query_string_from_path(arg: object) -> object:
+    # uvicorn URL-quotes the path, so a "?" after a "/" can only start the query.
+    # This also covers absolute-form targets such as "http%3A//host/path?code=...".
+    if isinstance(arg, str):
+        query_start = arg.find("?")
+        if query_start != -1 and "/" in arg[:query_start]:
+            return arg[:query_start]
+    return arg
+
+
 class OnyxLoggingAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
@@ -453,7 +480,7 @@ def setup_uvicorn_logger(
     log_level: int = get_log_level_from_str(),
     shared_file_handlers: list[logging.FileHandler] | None = None,
 ) -> None:
-    uvicorn_logger = logging.getLogger("uvicorn.access")
+    uvicorn_logger = logging.getLogger(UVICORN_ACCESS_LOGGER_NAME)
     if not uvicorn_logger:
         return
 
@@ -467,6 +494,10 @@ def setup_uvicorn_logger(
     uvicorn_logger.addHandler(handler)
     uvicorn_logger.setLevel(log_level)
     uvicorn_logger.addFilter(OnyxRequestIDFilter())
+    uvicorn_logger.addFilter(UvicornQueryStringRedactionFilter())
+    logging.getLogger(UVICORN_ERROR_LOGGER_NAME).addFilter(
+        UvicornQueryStringRedactionFilter()
+    )
 
     if shared_file_handlers:
         for fh in shared_file_handlers:

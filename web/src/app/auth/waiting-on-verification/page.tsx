@@ -4,7 +4,7 @@ import { AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
 import { User } from "@/lib/types";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import { Text } from "@opal/components";
 import { markdown, richNodes } from "@opal/utils";
 import { getTranslations } from "next-intl/server";
@@ -36,7 +36,7 @@ export default async function Page() {
   return (
     <main>
       <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 gap-4">
-        <Logo folded size={64} className="mx-auto w-fit" />
+        <FoldableLogo folded size={64} className="mx-auto w-fit" />
         <div className="flex flex-col gap-2">
           <Text as="span">
             {markdown(

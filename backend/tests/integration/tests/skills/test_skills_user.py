@@ -75,7 +75,7 @@ def test_user_does_not_see_private_skill_without_share(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User-group management requires EE features enabled.",
 )
 def test_user_sees_private_skill_with_group_share(

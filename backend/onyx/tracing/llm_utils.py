@@ -5,8 +5,9 @@ from contextlib import contextmanager
 from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_request import ToolCall
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import ToolCall
+from onyx.llm.models import GenerationRequestParams
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
@@ -99,7 +100,7 @@ def traced_llm_call(
         yield span
 
 
-def record_llm_request_params(params: Mapping[str, Any]) -> None:
+def record_llm_request_params(params: GenerationRequestParams) -> None:
     """Attach request-shaping params (reasoning effort, provider kwargs) to the
     active generation span. Call once per send attempt with the provider-mapped
     kwargs: last write wins. No-op when the current span is not a generation span."""
@@ -108,7 +109,16 @@ def record_llm_request_params(params: Mapping[str, Any]) -> None:
         return
     if span.content_mode == TraceContentMode.METADATA_ONLY:
         return
-    span.span_data.request_params = dict(params)
+    span.span_data.request_params = params.model_dump(mode="json")
+
+
+def record_llm_routed_model(model: str) -> None:
+    """Record the model a router served on the active generation span so usage
+    is priced by it instead of the router's unpriced name."""
+    span = get_current_span()
+    if span is None or not isinstance(span.span_data, GenerationSpanData):
+        return
+    span.span_data.routed_model = model
 
 
 def record_llm_response(

@@ -7,7 +7,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 ENTERPRISE_SKIP = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 

@@ -55,7 +55,7 @@ resource "onyx_settings" "workspace" {
 - `gpu_enabled` (Boolean) Whether the deployment has GPU support (read-only).
 - `hide_query_history_from_admin_panel` (Boolean) Whether the query history page is hidden in the admin panel. Read-only: controlled by the HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL backend env var.
 - `id` (String) Always `"settings"`.
-- `opensearch_indexing_enabled` (Boolean) OpenSearch migration flag. Read-only: controlled by the ENABLE_OPENSEARCH_INDEXING_FOR_ONYX backend env var.
+- `opensearch_indexing_enabled` (Boolean) Deprecated: always true, because OpenSearch is the only document index. Read-only.
 - `seat_count` (Number) Licensed seat count (read-only).
 - `show_extra_connectors` (Boolean) Whether the extended connector catalog is shown. Read-only: controlled by the SHOW_EXTRA_CONNECTORS backend env var.
 - `tier` (String) Resolved license tier: `community`, `business`, or `enterprise` (read-only).

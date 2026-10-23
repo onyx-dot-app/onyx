@@ -28,6 +28,7 @@ class TestSecret(StrEnum):
     LITELLM_API_KEY = "LITELLM_API_KEY"
     LITELLM_API_URL = "LITELLM_API_URL"
     OLLAMA_API_KEY = "OLLAMA_API_KEY"
+    VERCEL_AI_GATEWAY_API_KEY = "VERCEL_AI_GATEWAY_API_KEY"
     BEDROCK_API_KEY = "bedrock-api-key"
     ONYX_DEV_LICENSE = "onyx-dev-license"
 
@@ -99,6 +100,7 @@ class TestSecret(StrEnum):
     BOX_ENTERPRISE_ID = "box-enterprise-id"
     BOX_USER_EMAIL = "box-user-email"
     BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
+    LINEAR_API_KEY = "linear-api-key"
 
     @classmethod
     def aws_prefix(cls) -> str:

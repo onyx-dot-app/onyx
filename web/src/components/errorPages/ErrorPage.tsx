@@ -3,9 +3,11 @@ import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import { SvgAlertCircle } from "@opal/icons";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function Error() {
   const t = useTranslations("common.errorPages");
+  const { appName } = useSettings();
   return (
     <ErrorPageLayout>
       <div className="flex flex-row items-center gap-2">
@@ -16,7 +18,7 @@ export default function Error() {
       </div>
 
       <Text as="p" text03>
-        {t("configError.heading.description")}
+        {t("configError.heading.description", { appName })}
       </Text>
 
       <Text as="p" text03>

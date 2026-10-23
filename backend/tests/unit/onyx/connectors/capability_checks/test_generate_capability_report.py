@@ -46,7 +46,7 @@ class _CallableCheck(CapabilityCheck):
 def _make_credential() -> MagicMock:
     credential = MagicMock()
     credential.id = 7
-    credential.source = DocumentSource.GITHUB
+    credential.source = DocumentSource.BOX
     credential.credential_json = None
     return credential
 
@@ -98,13 +98,13 @@ def test_configless_run_attempts_empty_config_instantiation(
 
     # Postcondition.
     instantiate.assert_called_once_with(
-        source=DocumentSource.GITHUB,
+        source=DocumentSource.BOX,
         input_type=None,
         connector_specific_config={},
         credential_id=7,
     )
     assert report.credential_id == 7
-    assert report.source == DocumentSource.GITHUB
+    assert report.source == DocumentSource.BOX
     assert report.connector_id is None
     assert report.trigger == CapabilityCheckTrigger.MANUAL
     assert report.check_results[0].status == CapabilityCheckStatus.PASSED
@@ -278,7 +278,7 @@ def test_unregistered_source_gets_no_gateway(
 ) -> None:
     """Verifies the context carries no gateway for unmigrated sources."""
     # Precondition.
-    # Github has no registered gateway, so the real lookup returns None.
+    # Box has no registered gateway, so the real lookup returns None.
     seen_contexts: list[CapabilityCheckContext] = []
     check = _CallableCheck(
         seen_contexts.append,
@@ -316,7 +316,7 @@ def test_report_decrypt_emits_a_credential_audit_event(
     # Postcondition.
     emit.assert_called_once_with(
         credential_type="connector",
-        provider=str(DocumentSource.GITHUB),
+        provider=str(DocumentSource.BOX),
         row_id=7,
     )
 
@@ -338,7 +338,7 @@ def test_empty_credential_decrypts_nothing_and_emits_no_audit(
     emit.assert_not_called()
 
 
-def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
+def test_hung_instantiation_is_bounded_and_surfaces_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verifies the instantiation guard: a hang cannot outlive its budget.
@@ -360,7 +360,7 @@ def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
 
     # Postcondition.
     # The supplied-config timeout surfaces on the instance-requiring check as
-    # INDETERMINATE, per the check contract.
+    # INCOMPLETE, per the check contract.
     (result,) = report.check_results
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.INCOMPLETE
     assert result.error_type == "TimeoutError"

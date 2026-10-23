@@ -7,6 +7,8 @@ import {
   setPreferredResponse,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
+import { getConfiguredSources } from "@/lib/connectors/utils";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
@@ -16,8 +18,7 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { StreamStopInfo } from "@/lib/search/interfaces";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -32,7 +33,7 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -49,7 +50,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { StreamStopReason } from "@/lib/search/interfaces";
+import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
@@ -67,6 +68,11 @@ import {
   selectedSourcesFrom,
 } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
+import {
+  isStillOnLocation,
+  locationKey,
+} from "@/app/app/services/submitLocation";
+import { useTranslations } from "next-intl";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -86,11 +92,15 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import {
+  effectiveChatForcedToolId,
+  enabledChatToolIds,
+} from "@/lib/plugins/chat";
+import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
-import { getConfiguredSources } from "@/lib/sources";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -126,20 +136,30 @@ interface UseChatControllerProps {
   /** Owned by the surface, so the input bar and this read the same one. */
   toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
+  memberPlugins?: readonly MemberPlugin[];
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
+  /** Puts a message and its files back after a send fails before it starts. */
+  restoreInputBar: (message: string, files: ProjectFile[]) => void;
 }
 
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+async function stopChatSession(
+  chatSessionId: string,
+  streamId: number | undefined
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  const response = await fetch(
+    `/api/chat/stop-chat-session/${chatSessionId}${query}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to stop chat session: ${response.statusText}`);
@@ -151,10 +171,13 @@ export default function useChatController({
   toolConfiguration,
   availableAgents,
   activeAgent,
+  memberPlugins,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
+  restoreInputBar,
 }: UseChatControllerProps) {
+  const t = useTranslations("chat.app");
   // The chat's search filters ride the tool configuration, resolved against
   // the sources the active agent can reach. An explicit selection resolves
   // only against a complete roster — `settled` allows stale data (a failed
@@ -377,7 +400,10 @@ export default function useChatController({
     // This signals the backend to stop processing as soon as possible
     // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(
+        currentSession,
+        useChatSessionStore.getState().sessions.get(currentSession)?.streamId
+      );
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
@@ -423,16 +449,13 @@ export default function useChatController({
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
       const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
-      {
-        const params = new URLSearchParams(searchParams?.toString() || "");
-        if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
-          params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          const newUrl = params.toString()
-            ? `${pathname}?${params.toString()}`
-            : pathname;
-          // SAFETY: built from the current pathname, which is a route of this app.
-          router.replace(newUrl as Route, { scroll: false });
-        }
+      const paramsWithoutProject = new URLSearchParams(searchParams.toString());
+      paramsWithoutProject.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const startUrl = locationKey(pathname, searchParams.toString());
+      const urlWithoutProject = locationKey(pathname, paramsWithoutProject);
+      if (searchParams.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
+        // SAFETY: built from the current pathname, which is a route of this app.
+        router.replace(urlWithoutProject as Route, { scroll: false });
       }
 
       updateSubmittedMessage(getCurrentSessionId(), message);
@@ -556,13 +579,34 @@ export default function useChatController({
       if (isNewSession) {
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
-        currChatSessionId = await createChatSession(
-          incognito ? 0 : activeAgent?.id || 0,
-          searchParamBasedChatSessionName,
-          projectId ? parseInt(projectId) : null,
-          incognito,
-          incognito ? incognitoSessionId : null
-        );
+        // The caller already cleared the input bar, so a failure here must
+        // give the message back instead of dropping it.
+        try {
+          currChatSessionId = await createChatSession(
+            incognito ? 0 : activeAgent?.id || 0,
+            searchParamBasedChatSessionName,
+            projectId ? parseInt(projectId) : null,
+            incognito,
+            incognito ? incognitoSessionId : null
+          );
+        } catch (error) {
+          console.error("Failed to create chat session:", error);
+          toast.error(t("createSessionFailed.toast"));
+          // The user moved to a different page while the request was pending.
+          // Do not take them back or put the message into that page.
+          if (
+            !isStillOnLocation([startUrl, urlWithoutProject], window.location)
+          ) {
+            return;
+          }
+          // Put the project back in the URL so a retry stays in the project.
+          if (projectId) {
+            // SAFETY: built from the current pathname, which is a route of this app.
+            router.replace(startUrl as Route, { scroll: false });
+          }
+          restoreInputBar(message, currentMessageFiles);
+          return;
+        }
 
         // This send is what created the chat, so the configuration chosen for
         // it moves onto the session before the id reaches the composer.
@@ -626,6 +670,9 @@ export default function useChatController({
       // set the ability to cancel the request
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
+      useChatSessionStore
+        .getState()
+        .updateSessionData(currChatSessionId, { streamId: undefined });
 
       const messageToResend = currentHistory.find(
         (message) => message.messageId === messageIdToResend
@@ -1056,19 +1103,14 @@ export default function useChatController({
         // The tool this message is made to use: the search tool when the
         // caller asked for a search, otherwise whatever the chat has forced.
         //
-        // Only if the agent still has it. A configuration outlives the agent
-        // being edited, and a chat can be handed one that named a tool this
-        // agent does not have; the backend raises on a forced tool it cannot
-        // find, so an id nobody can act on would fail the whole message rather
-        // than the model simply choosing for itself.
         const requestedForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
           : toolConfiguration.forcedToolId;
-        const effectiveForcedToolId =
-          requestedForcedToolId !== null &&
-          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
-            ? requestedForcedToolId
-            : null;
+        const effectiveForcedToolId = effectiveChatForcedToolId({
+          requestedToolId: requestedForcedToolId,
+          agent: activeAgent,
+          plugins: memberPlugins ?? [],
+        });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
@@ -1123,15 +1165,9 @@ export default function useChatController({
           // the frontend can see — which excludes those marked
           // `expose_to_frontend=False`. Sending it always would quietly
           // withhold tools nobody chose to disable.
-          enabledToolIds:
-            activeAgent && toolConfiguration.disabledToolIds.length > 0
-              ? activeAgent.tools
-                  .filter(
-                    (tool) =>
-                      !toolConfiguration.disabledToolIds.includes(tool.id)
-                  )
-                  .map((tool) => tool.id)
-              : undefined,
+          enabledToolIds: activeAgent
+            ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
+            : undefined,
           forcedToolId: effectiveForcedToolId,
           origin: messageOrigin,
           additionalContext,
@@ -1199,6 +1235,11 @@ export default function useChatController({
             ) {
               newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
+              useChatSessionStore
+                .getState()
+                .updateSessionData(frozenSessionId, {
+                  streamId: newAgentMessageId,
+                });
             }
 
             // Multi-model: handle reserved IDs for N parallel model responses.
@@ -1213,6 +1254,14 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
+              // A multi-model stream is keyed by its user message.
+              if (newUserMessageId !== null) {
+                useChatSessionStore
+                  .getState()
+                  .updateSessionData(frozenSessionId, {
+                    streamId: newUserMessageId,
+                  });
+              }
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;
                 assistantMessageIds[mi] = slot.message_id;
@@ -1519,11 +1568,14 @@ export default function useChatController({
       llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
+      memberPlugins,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
+      restoreInputBar,
+      t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,

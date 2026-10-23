@@ -45,6 +45,9 @@ spec:
         admission.datadoghq.com/enabled: "false"
     spec:
       {{- /* Same placement as the sandbox pods, or the wrong nodes get warmed. */}}
+      {{- with $sandboxPod.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
       nodeSelector:
         {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}
       tolerations:

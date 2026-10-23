@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
     OpenAiResponsesToChatCompletionStreamIterator,
@@ -10,6 +11,7 @@ from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 from litellm.types.utils import ModelResponse
+from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
 from openai.types.responses.response_reasoning_item import (
@@ -128,40 +130,21 @@ def test_ollama_chunk_parser_preserves_content_when_thinking_and_content_coexist
     assert response.choices[0].delta.content == "Visible answer token"
 
 
-def test_responses_transform_response_preserves_reasoning_summary_sections() -> None:
-    apply_monkey_patches()
-    raw_response = ResponsesAPIResponse(
+def _build_responses_response(
+    output: list[Any],
+    incomplete_details: IncompleteDetails | None = None,
+    output_tokens: int = 3,
+) -> ResponsesAPIResponse:
+    return ResponsesAPIResponse(
         id="resp_1",
         created_at=0,
         error=None,
-        incomplete_details=None,
+        incomplete_details=incomplete_details,
         instructions=None,
         metadata={},
         model="m",
         object="response",
-        output=[
-            ResponseReasoningItem(
-                id="rs_1",
-                type="reasoning",
-                summary=[
-                    Summary(text="first section", type="summary_text"),
-                    Summary(text="second section", type="summary_text"),
-                ],
-            ),
-            ResponseOutputMessage(
-                id="msg_1",
-                type="message",
-                role="assistant",
-                status="completed",
-                content=[
-                    ResponseOutputText(
-                        type="output_text",
-                        text="answer",
-                        annotations=[],
-                    )
-                ],
-            ),
-        ],
+        output=output,
         parallel_tool_calls=False,
         temperature=None,
         tool_choice="auto",
@@ -170,15 +153,22 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
         max_output_tokens=None,
         previous_response_id=None,
         reasoning=None,
-        status="completed",
+        status="incomplete" if incomplete_details else "completed",
         text=None,
         truncation=None,
-        usage=ResponseAPIUsage(input_tokens=2, output_tokens=3, total_tokens=5),
+        usage=ResponseAPIUsage(
+            input_tokens=2,
+            output_tokens=output_tokens,
+            total_tokens=2 + output_tokens,
+        ),
         user=None,
         store=False,
     )
 
-    result = LiteLLMResponsesTransformationHandler().transform_response(
+
+def _invoke_transform_response(raw_response: ResponsesAPIResponse) -> Any:
+    apply_monkey_patches()
+    return LiteLLMResponsesTransformationHandler().transform_response(
         model="m",
         raw_response=raw_response,
         model_response=ModelResponse(),
@@ -198,9 +188,75 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
         encoding=None,
     )
 
+
+def _reasoning_item(*texts: str) -> ResponseReasoningItem:
+    return ResponseReasoningItem(
+        id="rs_1",
+        type="reasoning",
+        summary=[Summary(text=text, type="summary_text") for text in texts],
+    )
+
+
+def _message_item(text: str) -> ResponseOutputMessage:
+    return ResponseOutputMessage(
+        id="msg_1",
+        type="message",
+        role="assistant",
+        status="completed",
+        content=[ResponseOutputText(type="output_text", text=text, annotations=[])],
+    )
+
+
+def test_responses_transform_response_preserves_reasoning_summary_sections() -> None:
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[
+                _reasoning_item("first section", "second section"),
+                _message_item("answer"),
+            ]
+        )
+    )
+
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
+    """A reasoning model that spends max_output_tokens on reasoning returns an
+    incomplete reply with no message item. Upstream raises; the patch returns
+    an empty message with the truncation as finish_reason, as streaming does,
+    and keeps the reasoning summary."""
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[_reasoning_item("thinking about lighthouses", "ran out of budget")],
+            incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+            output_tokens=20,
+        )
+    )
+
+    choice = result.choices[0]
+    assert choice.finish_reason == "length"
+    assert not choice.message.content
+    assert (
+        choice.message.reasoning_content
+        == "thinking about lighthouses\n\nran out of budget"
+    )
+    assert result.usage.completion_tokens == 20
+
+
+def test_responses_transform_response_incomplete_with_message_uses_upstream() -> None:
+    """An incomplete reply that still carries a message item is upstream's
+    business: the partial text must come back, not an empty fallback."""
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[_message_item("Once upon a")],
+            incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+            output_tokens=20,
+        )
+    )
+
+    assert result.choices[0].message.content == "Once upon a"
 
 
 def _minimal_completed_response_dict() -> dict[str, Any]:
@@ -305,11 +361,11 @@ def test_bridge_check_delegates_without_prefix() -> None:
 
     apply_monkey_patches()
     model_info, model = litellm_main.responses_api_bridge_check(
-        model="gpt-4o",
+        model="gpt-6-sol",
         custom_llm_provider="openai",
     )
     assert model_info.get("mode") != "responses"
-    assert model == "gpt-4o"
+    assert model == "gpt-6-sol"
 
 
 def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
@@ -323,7 +379,7 @@ def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
         side_effect=Exception("This model isn't mapped yet"),
     ) as get_model_info_mock:
         result = config.should_fake_stream(
-            model="bedrock_mantle/openai.gpt-5.6-sol",
+            model="bedrock_mantle/openai.gpt-6.1-sol",
             stream=True,
             custom_llm_provider="openai",
         )
@@ -419,12 +475,13 @@ _TOOL_HISTORY: list[Any] = [
 ]
 
 
-def test_disabled_thinking_survives_tool_call_history() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
     """Upstream drops any thinking param once tool calls arrive without thinking
-    blocks. Disabled thinking cannot cause the error that guard exists for, and
+    blocks. Off thinking cannot cause the error that guard exists for, and
     dropping it hands the Claude 5 line back its default effort."""
-    body = _anthropic_body({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert body["thinking"] == {"type": "disabled"}
+    body = _anthropic_body({"type": off_type}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": off_type}
 
 
 def test_enabled_thinking_still_dropped_after_tool_calls() -> None:
@@ -448,13 +505,37 @@ def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
     return data.get("additionalModelRequestFields")
 
 
-def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> None:
     """Converse carries its own copy of the upstream drop, and puts thinking
     under additionalModelRequestFields rather than at the top level."""
-    fields = _converse_fields({"type": "disabled"}, list(_TOOL_HISTORY))
-    assert fields == {"thinking": {"type": "disabled"}}
+    fields = _converse_fields({"type": off_type}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": off_type}}
 
 
 def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
     assert not (fields or {}).get("thinking")
+
+
+def test_openrouter_chunk_parser_keeps_served_model() -> None:
+    from litellm.llms.openrouter.chat.transformation import (
+        OpenRouterChatCompletionStreamingHandler,
+    )
+
+    apply_monkey_patches()
+    handler = OpenRouterChatCompletionStreamingHandler(
+        streaming_response=iter([]), sync_stream=True
+    )
+    chunk = {
+        "id": "gen-1",
+        "created": 1762544600,
+        "model": "deepseek/deepseek-v4-flash",
+        "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}],
+    }
+
+    parsed = handler.chunk_parser(chunk)
+
+    assert parsed.provider_specific_fields == {
+        "routed_model": "deepseek/deepseek-v4-flash"
+    }

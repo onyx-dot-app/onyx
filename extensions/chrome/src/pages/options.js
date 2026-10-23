@@ -1,11 +1,16 @@
+import { CHROME_SPECIFIC_STORAGE_KEYS } from "../utils/constants.js";
 import {
-  CHROME_SPECIFIC_STORAGE_KEYS,
-  DEFAULT_ONYX_DOMAIN,
-} from "../utils/constants.js";
+  getOnyxDomain,
+  getUseOnyxAsDefaultNewTab,
+  getManagedSettings,
+  normalizeOnyxDomain,
+} from "../utils/storage.js";
 
 document.addEventListener("DOMContentLoaded", function () {
   const domainInput = document.getElementById("onyxDomain");
   const useOnyxAsDefaultToggle = document.getElementById("useOnyxAsDefault");
+  const domainManagedNotice = document.getElementById("domainManagedNotice");
+  const newTabManagedNotice = document.getElementById("newTabManagedNotice");
   const statusContainer = document.getElementById("statusContainer");
   const statusElement = document.getElementById("status");
   const newTabButton = document.getElementById("newTab");
@@ -29,49 +34,70 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function loadStoredValues() {
-    chrome.storage.local.get(
-      {
-        [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: DEFAULT_ONYX_DOMAIN,
-        [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]: false,
+  let domainManaged = false;
+  let newTabManaged = false;
+
+  async function loadStoredValues() {
+    const managed = await getManagedSettings();
+    domainManaged =
+      typeof managed[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] === "string";
+    newTabManaged =
+      typeof managed[
+        CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
+      ] === "boolean";
+
+    const [domain, useOnyxAsDefault, themeResult] = await Promise.all([
+      getOnyxDomain(),
+      getUseOnyxAsDefaultNewTab(),
+      chrome.storage.local.get({
         [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: "dark",
-      },
-      (result) => {
-        if (domainInput)
-          domainInput.value = result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
-        if (useOnyxAsDefaultToggle)
-          useOnyxAsDefaultToggle.checked =
-            result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
+      }),
+    ]);
 
-        currentTheme = result[CHROME_SPECIFIC_STORAGE_KEYS.THEME] || "dark";
-        updateThemeIcon(currentTheme);
+    if (domainInput) {
+      domainInput.value = domain;
+      domainInput.disabled = domainManaged;
+    }
+    if (domainManagedNotice) {
+      domainManagedNotice.style.display = domainManaged ? "block" : "none";
+    }
+    if (useOnyxAsDefaultToggle) {
+      useOnyxAsDefaultToggle.checked = !!useOnyxAsDefault;
+      useOnyxAsDefaultToggle.disabled = newTabManaged;
+    }
+    if (newTabManagedNotice) {
+      newTabManagedNotice.style.display = newTabManaged ? "block" : "none";
+    }
 
-        document.body.className = currentTheme === "light" ? "light-theme" : "";
-      }
-    );
+    currentTheme = themeResult[CHROME_SPECIFIC_STORAGE_KEYS.THEME] || "dark";
+    updateThemeIcon(currentTheme);
+
+    document.body.className = currentTheme === "light" ? "light-theme" : "";
   }
 
   function saveSettings() {
-    const domain = domainInput.value.trim();
     const useOnyxAsDefault = useOnyxAsDefaultToggle
       ? useOnyxAsDefaultToggle.checked
       : false;
 
-    chrome.storage.local.set(
-      {
-        [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: domain,
-        [CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB]:
-          useOnyxAsDefault,
-        [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: currentTheme,
-      },
-      () => {
-        showStatusMessage(
-          useOnyxAsDefault
-            ? "Settings updated. Open a new tab to test it out. Click on the extension icon to bring up Onyx from any page."
-            : "Settings updated."
-        );
-      }
-    );
+    const values = { [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: currentTheme };
+    if (!domainManaged) {
+      values[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] = normalizeOnyxDomain(
+        domainInput.value
+      );
+    }
+    if (!newTabManaged) {
+      values[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB] =
+        useOnyxAsDefault;
+    }
+
+    chrome.storage.local.set(values, () => {
+      showStatusMessage(
+        useOnyxAsDefault
+          ? "Settings updated. Open a new tab to test it out. Click on the extension icon to bring up Onyx from any page."
+          : "Settings updated."
+      );
+    });
   }
 
   function showStatusMessage(message) {
@@ -124,7 +150,16 @@ document.addEventListener("DOMContentLoaded", function () {
       clearTimeout(domainInput.saveTimeout);
       domainInput.saveTimeout = setTimeout(saveSettings, 1000);
     });
+    domainInput.addEventListener("blur", () => {
+      domainInput.value = normalizeOnyxDomain(domainInput.value);
+    });
   }
+
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "managed") {
+      loadStoredValues();
+    }
+  });
 
   if (useOnyxAsDefaultToggle) {
     useOnyxAsDefaultToggle.addEventListener("change", saveSettings);

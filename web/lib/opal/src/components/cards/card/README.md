@@ -29,6 +29,7 @@ import { Card } from "@opal/components";
 | `border`      | `"none" \| "dashed" \| "solid"` | `"none"`               | Border style                                                                                                  |
 | `borderColor` | `StatusVariants`                | `"default"`            | Status-palette border color (needs `border` ≠ `"none"`)                                                       |
 | `disabled`    | `boolean`                       | `false`                | Dims the card and shows a not-allowed cursor. Visual only — see below.                                        |
+| `height`      | `"fit" \| "full"`               | `"fit"`                | `"full"` fills the parent, shrinks to a capped one, and lays the children out as a column so one can scroll   |
 | `ref`         | `React.Ref<HTMLDivElement>`     | —                      | Ref forwarded to the root div                                                                                 |
 | `children`    | `React.ReactNode`               | —                      | Card content                                                                                                  |
 | `data-*`      | `string \| boolean`             | —                      | Forwarded to the root. See below.                                                                             |
@@ -67,12 +68,13 @@ label a card for tests or analytics:
 <Card data-card>…</Card>
 ```
 
-A card owns how it looks, not what the surrounding app calls it — `data-*` is the
-app's namespace, and silently dropping it is worse than either forwarding or
-rejecting it. Only `data-*` is picked up. `className` and `style` stay out, so the
-card's appearance is still its own; behavioural props such as `onClick` are a
-deliberate API decision rather than something inherited by a rest spread (use
-`SelectCard` for an interactive card).
+Card forwards standard div attributes, DOM events, and accessibility attributes to
+its root in both modes. It merges `className` with its own classes. Inline `style`
+is not part of the public API; use the card's appearance props.
+
+This supports composition with `Interactive.Simple`, which supplies click handlers
+and hover classes. Callers must supply keyboard handlers, `role`, and `tabIndex`
+when they make a card interactive. Card does not add button behavior on its own.
 
 The card's own `data-color`, `data-border`, `data-shadow`, and
 `data-opal-status-border` are written after the forwarded attributes, so a caller
@@ -100,7 +102,7 @@ uses. So `padding={2}` is the same distance as `p-2`, and the default `4` is `1r
 
 ## Expandable mode
 
-Enabled by passing `expandable: true`. The type is a discriminated union — `expanded` and `expandedContent` are only available (and type-checked) when `expandable: true`.
+Enabled by passing `expandable: true`. The type is a discriminated union — `expanded` and `expandedContent` are only available (and type-checked) when `expandable: true`. `expandableKeepMounted` keeps `expandedContent` mounted while folded, e.g. so a form keeps what was typed.
 
 ```tsx
 import { Card } from "@opal/components";
@@ -150,7 +152,7 @@ Everything from plain mode, **plus**:
 - **Rounding adapts automatically.** When `expanded && expandedContent !== undefined`, the header's bottom corners flatten and the content's top corners flatten so they meet seamlessly. When collapsed (or when `expandedContent` is undefined), the header is fully rounded.
 - **Content background is always transparent.** The `color` prop applies to the header only; the content slot never fills its own background so the page shows through and keeps the two regions visually distinct.
 - **Content has no intrinsic padding.** The `padding` prop applies to the header only. Callers own any padding inside whatever they pass to `expandedContent` — wrap it in a `<div className="p-4">` (or whatever) if you want spacing.
-- **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation with an opacity fade (~200ms ease-out). No `@radix-ui/react-collapsible` dependency.
+- **Animation.** Content uses a pure CSS grid `0fr ↔ 1fr` animation and a fade. Opening grows the body and squares the header's bottom corners together (150ms), then fades the content in (100ms). Closing fades the content out (100ms), then shrinks the body and rounds the corners together (150ms). No `@radix-ui/react-collapsible` dependency. The fold lives in `cards/fold/` as `CardFold` and is shared with [`SelectCard`](../select-card/README.md), which has the same `expandable` API on an interactive header.
 
 ### Accessibility
 
@@ -159,7 +161,7 @@ Because Card doesn't own the trigger, it also doesn't generate IDs or ARIA attri
 ## Complete prop reference
 
 ```ts
-type CardBaseProps = {
+type CardBaseProps = Omit<React.HTMLAttributes<HTMLDivElement>, "color" | "style"> & {
   padding?: Spacing;
   rounding?: Rounding;
   color?: CardColor;

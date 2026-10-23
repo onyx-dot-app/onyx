@@ -8,10 +8,10 @@
  * Components covered:
  * - CheckboxField (unlabeled, from CheckboxField.tsx)
  * - LabeledCheckboxField (from LabeledCheckboxField.tsx)
- * - SwitchField
+ * - InputSwitchField
  * - InputTypeInField
  * - InputTextAreaField
- * - InputSelectField
+ * - InputSingleSelectField (from @opal/form)
  * - InputDatePickerField
  * - PasswordInputTypeInField
  */
@@ -22,13 +22,11 @@ import React from "react";
 
 import UnlabeledCheckboxField from "./CheckboxField";
 import { CheckboxField as LabeledCheckboxField } from "./LabeledCheckboxField";
-import SwitchField from "./SwitchField";
 import InputTypeInField from "./InputTypeInField";
 import InputTextAreaField from "./InputTextAreaField";
-import InputSelectField from "./InputSelectField";
+import { InputSingleSelectField, InputSwitchField } from "@opal/form";
 import InputDatePickerField from "./InputDatePickerField";
 import PasswordInputTypeInField from "./PasswordInputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,17 +112,17 @@ export const LabeledCheckboxWithTooltip: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// SwitchField
+// InputSwitchField
 // ---------------------------------------------------------------------------
 
 export const Switch: Story = {
-  name: "SwitchField",
+  name: "InputSwitchField",
   render: () => (
     <FormikWrapper initialValues={{ notifications: true }}>
       <label htmlFor="notifications" style={{ fontWeight: 500 }}>
         Enable notifications
       </label>
-      <SwitchField name="notifications" />
+      <InputSwitchField name="notifications" />
     </FormikWrapper>
   ),
 };
@@ -169,21 +167,22 @@ export const TextArea: Story = {
 };
 
 // ---------------------------------------------------------------------------
-// InputSelectField
+// InputSingleSelectField
 // ---------------------------------------------------------------------------
 
 export const Select: Story = {
-  name: "InputSelectField",
+  name: "InputSingleSelectField",
   render: () => (
     <FormikWrapper initialValues={{ role: "" }}>
-      <InputSelectField name="role">
-        <InputSelect.Trigger placeholder="Select a role" />
-        <InputSelect.Content>
-          <InputSelect.Item value="admin">Admin</InputSelect.Item>
-          <InputSelect.Item value="editor">Editor</InputSelect.Item>
-          <InputSelect.Item value="viewer">Viewer</InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelectField>
+      <InputSingleSelectField
+        name="role"
+        placeholder="Select a role"
+        options={[
+          { value: "admin", title: "Admin" },
+          { value: "editor", title: "Editor" },
+          { value: "viewer", title: "Viewer" },
+        ]}
+      />
     </FormikWrapper>
   ),
 };

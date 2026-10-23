@@ -11,7 +11,7 @@ test.describe.configure({ mode: "parallel" });
 const THEMES = ["light", "dark"] as const;
 
 for (const theme of THEMES) {
-  test.describe(`Welcome page — /app (${theme} mode)`, () => {
+  test.describe(`Welcome page: /app (${theme} mode)`, () => {
     test.beforeEach(async ({ page }) => {
       // Always log in before each test to ensure a valid session.
       await loginAs(page, "admin");

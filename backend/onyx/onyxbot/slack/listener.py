@@ -93,10 +93,11 @@ from onyx.onyxbot.slack.utils import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
-    set_is_ee_based_on_env_variable,
+    set_is_ee_if_available,
 )
 from shared_configs.configs import (
     DISALLOWED_SLACK_BOT_TENANT_LIST,
@@ -1388,11 +1389,14 @@ if __name__ == "__main__":
     # Initialize the SqlEngine
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
+    # Start telemetry before the handler starts message-processing threads.
+    start_telemetry("slack")
+
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_based_on_env_variable()
+    set_is_ee_if_available()
     setup_tracing()
 
     try:

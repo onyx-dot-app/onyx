@@ -38,6 +38,56 @@ def _make_session(
 
 
 @pytest.mark.asyncio
+async def test_winning_session_token_is_stashed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolved_user = MagicMock()
+    resolved_user.id = uuid.uuid4()
+    monkeypatch.setattr(
+        users_module,
+        "_resolve_optional_user",
+        AsyncMock(return_value=resolved_user),
+    )
+    request = _make_request()
+    session = _make_session()
+
+    gen = users_module.optional_user(
+        request,
+        async_db_session=session,
+        user_token=(resolved_user, "accepted-token"),
+        user_manager=MagicMock(),
+    )
+    try:
+        assert await anext(gen) is resolved_user
+        assert request.state.authenticated_session_token == "accepted-token"
+    finally:
+        await gen.aclose()
+
+
+@pytest.mark.asyncio
+async def test_rejected_candidate_token_is_not_stashed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        users_module, "_resolve_optional_user", AsyncMock(return_value=None)
+    )
+    request = _make_request()
+    session = _make_session()
+
+    gen = users_module.optional_user(
+        request,
+        async_db_session=session,
+        user_token=(None, "rejected-token"),
+        user_manager=MagicMock(),
+    )
+    try:
+        assert await anext(gen) is None
+        assert not hasattr(request.state, "authenticated_session_token")
+    finally:
+        await gen.aclose()
+
+
+@pytest.mark.asyncio
 async def test_ends_clean_read_transaction_before_yield(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -53,7 +103,7 @@ async def test_ends_clean_read_transaction_before_yield(
     gen = users_module.optional_user(
         _make_request(),
         async_db_session=session,
-        user=None,
+        user_token=(None, None),
         user_manager=MagicMock(),
     )
     try:
@@ -75,7 +125,7 @@ async def test_pending_writes_are_not_committed(
     gen = users_module.optional_user(
         _make_request(),
         async_db_session=session,
-        user=None,
+        user_token=(None, None),
         user_manager=MagicMock(),
     )
     try:
@@ -99,7 +149,7 @@ async def test_failed_transaction_is_not_committed(
     gen = users_module.optional_user(
         _make_request(),
         async_db_session=session,
-        user=None,
+        user_token=(None, None),
         user_manager=MagicMock(),
     )
     try:
@@ -126,7 +176,7 @@ async def test_commit_failure_does_not_break_auth(
     gen = users_module.optional_user(
         _make_request(),
         async_db_session=session,
-        user=None,
+        user_token=(None, None),
         user_manager=MagicMock(),
     )
     try:
@@ -148,7 +198,7 @@ async def test_no_transaction_means_no_commit(
     gen = users_module.optional_user(
         _make_request(),
         async_db_session=session,
-        user=None,
+        user_token=(None, None),
         user_manager=MagicMock(),
     )
     try:

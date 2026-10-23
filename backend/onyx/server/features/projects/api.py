@@ -642,7 +642,9 @@ def move_chat_session(
         .one_or_none()
     )
     if chat_session is None:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
+    if not check_project_ownership(project_id, user_id, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
     chat_session.project_id = project_id
     db_session.commit()
     return Response(status_code=204)

@@ -57,7 +57,10 @@ export class AdminVoicePage {
   async openZoomSetupModal(): Promise<void> {
     await this.zoomSttCard.getByRole("button", { name: "Connect" }).click();
     await expect(this.modal).toBeVisible();
-    await expect(this.modal).toContainText("Set up Zoom Scribe");
+    await expect(this.modal).toContainText("Connect Zoom AI Services");
+    await expect(
+      this.modal.getByRole("button", { name: "Connect" })
+    ).toBeVisible();
   }
 
   async openZoomEditModal(): Promise<void> {
@@ -66,7 +69,10 @@ export class AdminVoicePage {
       .getByRole("button", { name: "Edit Zoom Scribe" })
       .click();
     await expect(this.modal).toBeVisible();
-    await expect(this.modal).toContainText("Configure Zoom Scribe");
+    await expect(this.modal).toContainText("Connect Zoom AI Services");
+    await expect(
+      this.modal.getByRole("button", { name: "Update" })
+    ).toBeVisible();
   }
 
   async expectZoomSetupFields(): Promise<void> {
@@ -76,7 +82,7 @@ export class AdminVoicePage {
   }
 
   async expectLanguageValue(language: string): Promise<void> {
-    await expect(this.languageSelect).toContainText(language);
+    await expect(this.languageSelect).toHaveValue(language);
   }
 
   async fillZoomCredentials(credentials: {

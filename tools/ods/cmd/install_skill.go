@@ -5,116 +5,308 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/charlievieth/fastwalk"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 	"github.com/spf13/cobra"
 )
 
 const (
-	defaultSkillSource = ".claude/skills/onyx-llm-context"
-	claudeSkillsDir    = ".claude/skills"
-	claudeMDFile       = ".claude/CLAUDE.md"
-	llmContextCloneURL = "https://github.com/onyx-dot-app/onyx-llm-context.git"
+	defaultSkillSource = ".claude/skills/agent-context"
+	// Parent of the default checkout. A checkout of the internal infra repo
+	// under another name here (an older default) is still found.
+	skillSourceParent = ".claude/skills"
+	// Checkout location used before the skills moved into the internal infra
+	// repo, still honored when it is the only checkout on disk.
+	legacySkillSource = ".claude/skills/onyx-llm-context"
+	claudeMDFile      = ".claude/CLAUDE.md"
+	// Repo-relative home of on-demand skills. Claude, Codex and Cursor read
+	// it through the .claude/skills, .codex/skills and .cursor/skills symlinks.
+	projectSkillsDir = ".agents/skills"
+	// The skills live in the agent-context/ subdirectory of the internal infra
+	// repo, a private repo that is large, so --clone fetches only that
+	// subdirectory. This env var overrides the repo (owner/name); see
+	// resolveInternalRepo.
+	agentContextRepoEnv = "ODS_AGENT_CONTEXT_REPO"
+	agentContextDir     = "agent-context"
+
+	agentClaudeCode = "claude-code"
+	agentCursor     = "cursor"
+	agentCodex      = "codex"
 )
+
+// knownAgents maps each supported --agent value to its installer. Every
+// installer regenerates its output, so reruns update in place.
+var knownAgents = map[string]func(
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
+) error{
+	agentClaudeCode: installClaudeSkills,
+	agentCursor: func(
+		cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, _ bool,
+	) error {
+		return installCursorSkills(cmd, ui, skills, repoRoot)
+	},
+	agentCodex: installCodexSkills,
+}
 
 func NewInstallSkillCommand() *cobra.Command {
 	var (
 		source    string
 		copyMode  bool
 		cloneRepo bool
+		noPull    bool
+		agents    []string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "install-skill",
-		Short: "Install onyx-llm-context skills for Claude Code",
-		Long: `Install skills from onyx-llm-context into Claude Code.
+		Short: "Install Onyx agent-context skills for your coding agent",
+		Long: `Install skills from agent-context/ in the internal infra repo (private) for
+one or more coding agents.
 
-Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md (project-scoped, git-ignored).
-Manual skills (skills/) are symlinked into ~/.claude/skills/ and invoked via /skill-name.
+claude-code (default):
+  Enforced skills (enforced/) are added as @imports in .claude/CLAUDE.md
+  (project-scoped, git-ignored). Manual skills (skills/) are symlinked into
+  .agents/skills/ of the repo (git-excluded; .claude/skills points there) and
+  invoked via /skill-name.
 
-By default, looks for onyx-llm-context at ~/.claude/skills/onyx-llm-context.`,
+cursor:
+  Every skill is rendered as a rule in .cursor/rules/ (git-ignored).
+  Enforced skills apply always; on-demand skills attach when Cursor matches
+  their description, or on an explicit @skill-name mention.
+
+codex:
+  Enforced skills are compiled into .agents-local.md at the repo root
+  (git-excluded; the committed AGENTS.md points agents at it), since Codex
+  skills cannot be always-on. Manual skills are symlinked into
+  .agents/skills/ of the repo (git-excluded; .codex/skills points there),
+  invoked via $skill-name. A skill named like a committed one is skipped.
+
+The checkout is fast-forwarded before installing, so a plain rerun picks up
+new skills; --no-pull installs from the checkout as it is.
+
+By default, looks for a checkout of the internal infra repo at
+~/.claude/skills/agent-context, or for any other checkout under
+~/.claude/skills that holds agent-context/. --clone fetches only its
+agent-context/ directory (shallow, sparse). It reads the repo from the
+CLOUD_DEPLOYMENT_REPO variable of onyx-dot-app/onyx, or from
+ODS_AGENT_CONTEXT_REPO (owner/name) when set. Checkouts of the old
+onyx-llm-context repo still work.`,
 		Example: `  ods install-skill --clone
-  ods install-skill --source /path/to/onyx-llm-context
+  ods install-skill --agent cursor
+  ods install-skill --agent claude-code --agent cursor --agent codex
+  ods install-skill --source /path/to/checkout
   ods install-skill --copy`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			installers, err := resolveAgents(agents)
+			if err != nil {
+				return err
+			}
+
 			if source == "" {
 				home, err := os.UserHomeDir()
 				if err != nil {
 					return fmt.Errorf("could not determine home directory: %w", err)
 				}
 				source = filepath.Join(home, defaultSkillSource)
+				legacy := filepath.Join(home, legacySkillSource)
+				if _, err := os.Stat(source); os.IsNotExist(err) {
+					if found := findAgentContextCheckout(filepath.Join(home, skillSourceParent)); found != "" {
+						source = found
+					} else if _, err := os.Stat(legacy); err == nil && !cloneRepo {
+						_, _ = fmt.Fprintf(
+							cmd.ErrOrStderr(),
+							"Warning: using the old checkout at %s, which is no longer updated.\n"+
+								"  Re-run with --clone to switch to the internal infra repo.\n",
+							legacy,
+						)
+						source = legacy
+					}
+				}
 			}
 
 			if _, err := os.Stat(source); os.IsNotExist(err) {
 				if !cloneRepo {
-					return fmt.Errorf("onyx-llm-context not found at %s\n  Re-run with --clone to fetch it automatically", source)
+					return fmt.Errorf("agent-context checkout not found at %s\n  Re-run with --clone to fetch it automatically", source)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s → %s\n", llmContextCloneURL, source)
-				gitCmd := exec.Command("git", "clone", llmContextCloneURL, source)
-				gitCmd.Stdout = cmd.OutOrStdout()
-				gitCmd.Stderr = cmd.ErrOrStderr()
-				if err := gitCmd.Run(); err != nil {
-					return fmt.Errorf("git clone failed: %w", err)
+				repo, err := resolveInternalRepo(agentContextRepoEnv)
+				if err != nil {
+					return err
 				}
+				if err := cloneAgentContext(cmd, "https://github.com/"+repo+".git", source); err != nil {
+					return err
+				}
+			} else if !noPull {
+				pullSource(cmd, source)
 			}
 
 			repoRoot, err := paths.GitRoot()
 			if err != nil {
 				return err
 			}
-			if err := installEnforcedSkills(cmd, source, repoRoot); err != nil {
+			skills, err := discoverAgentContextSkills(source)
+			if err != nil {
 				return err
 			}
-			if err := installManualSkills(cmd, source, copyMode); err != nil {
-				return err
+			ui := newInstallUI(cmd.OutOrStdout())
+			for _, install := range installers {
+				if err := install(cmd, ui, skills, repoRoot, copyMode); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&source, "source", "", "Path to onyx-llm-context (default: ~/.claude/skills/onyx-llm-context)")
-	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking")
-	cmd.Flags().BoolVar(&cloneRepo, "clone", false, fmt.Sprintf("Clone onyx-llm-context from %s if not already present", llmContextCloneURL))
+	cmd.Flags().StringVar(&source, "source", "", "Path to a checkout of the internal infra repo (default: ~/.claude/skills/agent-context)")
+	cmd.Flags().BoolVar(&copyMode, "copy", false, "Copy files instead of symlinking (claude-code and codex manual skills)")
+	cmd.Flags().BoolVar(&cloneRepo, "clone", false, "Clone the agent-context/ directory of the internal infra repo if not already present")
+	cmd.Flags().BoolVar(&noPull, "no-pull", false, "Install from the checkout as it is, without updating it first")
+	cmd.Flags().StringSliceVar(&agents, "agent", []string{agentClaudeCode}, "Agents to install for (repeatable): claude-code, cursor, codex")
 
 	return cmd
 }
 
-// installEnforcedSkills writes @imports for all enforced/ skills into .claude/CLAUDE.md at the repo root.
-func installEnforcedSkills(cmd *cobra.Command, source, repoRoot string) error {
-	enforcedDir := filepath.Join(source, "enforced")
-	entries, err := os.ReadDir(enforcedDir)
+// findAgentContextCheckout returns the first directory under parent that holds
+// agent-context/, or "" when there is none. It finds checkouts made at an
+// older default location.
+func findAgentContextCheckout(parent string) string {
+	entries, err := os.ReadDir(parent)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("could not read %s: %w", enforcedDir, err)
+		return ""
 	}
-
-	var imports []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		candidate := filepath.Join(parent, entry.Name())
+		if info, err := os.Stat(filepath.Join(candidate, agentContextDir)); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// cloneAgentContext makes a shallow, sparse checkout of url at dest holding
+// only agent-context/, since the internal infra repo is large and the rest is
+// not needed.
+func cloneAgentContext(cmd *cobra.Command, url, dest string) error {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cloning %s (%s/ only) → %s\n", url, agentContextDir, dest)
+	steps := [][]string{
+		{"clone", "--depth", "1", "--filter=blob:none", "--sparse", url, dest},
+		{"-C", dest, "sparse-checkout", "set", agentContextDir},
+	}
+	for i, args := range steps {
+		gitCmd := exec.Command("git", args...)
+		gitCmd.Stdout = cmd.OutOrStdout()
+		gitCmd.Stderr = cmd.ErrOrStderr()
+		if err := gitCmd.Run(); err != nil {
+			if i > 0 {
+				// A half-configured checkout would be mistaken for a good one on the next run.
+				_ = os.RemoveAll(dest)
+			}
+			if i == 0 {
+				return fmt.Errorf(
+					"git clone failed: %w\n  the internal infra repo is a private repo; make sure you have access to it "+
+						"and that git can authenticate to GitHub (for example with `gh auth login`)",
+					err,
+				)
+			}
+			return fmt.Errorf("git sparse-checkout failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// pullSource fast-forwards the source checkout so a plain rerun picks up new
+// skills without a separate git pull. Local work is never lost: --ff-only
+// refuses diverged history, and git itself refuses a pull that would
+// overwrite uncommitted changes. Any pull that cannot run (those cases,
+// offline, no upstream) warns and installs from the local state, since a
+// stale install is better than none. Local edits that do not conflict
+// survive the update.
+func pullSource(cmd *cobra.Command, source string) {
+	// Not a git checkout (an exported copy, say): nothing to update.
+	if _, err := os.Stat(filepath.Join(source, ".git")); os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: could not inspect %s (%v); installing without updating it.\n",
+			source,
+			err,
+		)
+		return
+	}
+	gitCmd := exec.Command("git", "-C", source, "pull", "--ff-only")
+	out, err := gitCmd.CombinedOutput()
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: could not update %s; installing from the local state.\n%s",
+			source,
+			out,
+		)
+		return
+	}
+	summary, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pulled  %s (%s)\n", source, summary)
+}
+
+// resolveAgents maps the --agent values to installers, in the given order and
+// deduplicated. An unknown agent is an error rather than a skip, so a typo
+// never reads as a successful install.
+func resolveAgents(agents []string) (
+	[]func(*cobra.Command, *installUI, []agentContextSkill, string, bool) error, error,
+) {
+	var installers []func(*cobra.Command, *installUI, []agentContextSkill, string, bool) error
+	seen := make(map[string]bool, len(agents))
+	for _, agent := range agents {
+		if seen[agent] {
 			continue
 		}
-		skillFile := filepath.Join(enforcedDir, entry.Name(), "SKILL.md")
-		if _, err := os.Stat(skillFile); os.IsNotExist(err) {
-			continue
+		seen[agent] = true
+		install, ok := knownAgents[agent]
+		if !ok {
+			known := make([]string, 0, len(knownAgents))
+			for name := range knownAgents {
+				known = append(known, name)
+			}
+			return nil, fmt.Errorf(
+				"unknown agent %q; known agents: %s", agent, strings.Join(known, ", "),
+			)
 		}
-		imports = append(imports, fmt.Sprintf("@%s", skillFile))
+		installers = append(installers, install)
+	}
+	return installers, nil
+}
+
+func installClaudeSkills(
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
+) error {
+	if err := installEnforcedSkills(cmd, skills, repoRoot); err != nil {
+		return err
+	}
+	return linkManualSkills(cmd, ui, skills, repoRoot, copyMode)
+}
+
+// installEnforcedSkills writes @imports for all enforced skills into .claude/CLAUDE.md at the repo root.
+func installEnforcedSkills(
+	cmd *cobra.Command, skills []agentContextSkill, repoRoot string,
+) error {
+	var imports []string
+	for _, skill := range skills {
+		if skill.Enforced {
+			imports = append(imports, fmt.Sprintf("@%s", skill.File))
+		}
 	}
 
 	if len(imports) == 0 {
 		return nil
 	}
 
-	claudeDir := filepath.Join(repoRoot, ".claude")
 	destFile := filepath.Join(repoRoot, claudeMDFile)
-
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		return fmt.Errorf("could not create .claude directory: %w", err)
-	}
 
 	content := strings.Join(imports, "\n") + "\n"
 	existing, err := os.ReadFile(destFile)
@@ -123,45 +315,109 @@ func installEnforcedSkills(cmd *cobra.Command, source, repoRoot string) error {
 		return nil
 	}
 
-	if err := os.WriteFile(destFile, []byte(content), 0o644); err != nil {
+	if err := safefs.WriteFileNoFollow(repoRoot, destFile, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", destFile, err)
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", destFile)
 	return nil
 }
 
-// installManualSkills symlinks each skills/ subdirectory into ~/.claude/skills/.
-func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error {
-	skillsDir := filepath.Join(source, "skills")
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
+// linkManualSkills symlinks each on-demand skill directory into the repo's
+// .agents/skills, which .claude/skills, .codex/skills and .cursor/skills point
+// at. The links are git-excluded, and a skill named like a committed one is
+// skipped, so an install never dirties the tree or replaces a repo skill.
+func linkManualSkills(
+	cmd *cobra.Command, ui *installUI, skills []agentContextSkill, repoRoot string, copyMode bool,
+) error {
+	if len(skills) == 0 {
+		return nil
+	}
+	// Claude and Codex share one directory; one pass is enough.
+	if ui.manualSkillsLinked {
+		return nil
+	}
+	ui.manualSkillsLinked = true
+
+	var candidates []agentContextSkill
+	for _, skill := range skills {
+		if !skill.Enforced {
+			candidates = append(candidates, skill)
+		}
+	}
+
+	skillsDir := filepath.Join(repoRoot, projectSkillsDir)
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		// Nothing installed here before, so nothing to clean up either.
+		if len(candidates) == 0 {
 			return nil
 		}
-		return fmt.Errorf("could not read %s: %w", skillsDir, err)
+		// The user may pick another directory, so every check below runs
+		// against the resolved one.
+		if skillsDir, err = ui.resolveTargetDir("Agent skills", skillsDir); err != nil {
+			return err
+		}
 	}
 
-	home, err := os.UserHomeDir()
+	// Resolve symlinks (.claude/skills points at .agents/skills) so git
+	// paths and exclusions name the real location.
+	realDir, err := filepath.EvalSymlinks(skillsDir)
 	if err != nil {
-		return fmt.Errorf("could not determine home directory: %w", err)
+		return fmt.Errorf("could not resolve %s: %w", skillsDir, err)
 	}
-
-	claudeSkills := filepath.Join(home, claudeSkillsDir)
-	if err := os.MkdirAll(claudeSkills, 0o755); err != nil {
-		return fmt.Errorf("could not create %s: %w", claudeSkills, err)
+	skillsDir = realDir
+	realRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		return fmt.Errorf("could not resolve %s: %w", repoRoot, err)
 	}
+	// A directory outside the repo has no committed files to protect and
+	// nothing git could show as untracked.
+	dirRel, err := filepath.Rel(realRoot, skillsDir)
+	inRepo := err == nil && dirRel != ".." && !strings.HasPrefix(dirRel, ".."+string(filepath.Separator))
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	manual := candidates
+	if inRepo {
+		manual = nil
+		for _, skill := range candidates {
+			rel := path.Join(filepath.ToSlash(dirRel), skill.Name)
+			tracked, err := isTrackedByGit(realRoot, rel)
+			if err != nil {
+				return err
+			}
+			if tracked {
+				_, _ = fmt.Fprintf(
+					cmd.ErrOrStderr(),
+					"Warning: skipping skill %q: %s is committed in this repo.\n", skill.Name, rel,
+				)
+				continue
+			}
+			manual = append(manual, skill)
 		}
 
-		srcDir := filepath.Join(skillsDir, entry.Name())
-		dstDir := filepath.Join(claudeSkills, entry.Name())
+		// The exclusion comes first, so a failure leaves nothing untracked behind.
+		patterns := make([]string, 0, len(manual))
+		for _, skill := range manual {
+			patterns = append(patterns, "/"+path.Join(filepath.ToSlash(dirRel), skill.Name))
+		}
+		if err := excludeFromGit(realRoot, patterns...); err != nil {
+			return err
+		}
+	}
+
+	// Every skill sits at <source>/<tier>/<name>, so any of them names the
+	// source checkout that stale links of past installs point into. Cleanup
+	// runs even when the manual tier emptied, so its old links go too.
+	source := filepath.Dir(filepath.Dir(skills[0].Dir))
+	if err := removeStaleSkillLinks(cmd, skillsDir, source, manual); err != nil {
+		return err
+	}
+
+	for _, skill := range manual {
+		srcDir := skill.Dir
+		dstDir := filepath.Join(skillsDir, skill.Name)
 
 		if copyMode {
 			if err := copySkill(srcDir, dstDir); err != nil {
-				return fmt.Errorf("could not copy %s: %w", entry.Name(), err)
+				return fmt.Errorf("could not copy %s: %w", skill.Name, err)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s\n", dstDir)
 			continue
@@ -174,14 +430,14 @@ func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error
 				return fmt.Errorf("could not remove existing %s: %w", dstDir, err)
 			}
 		}
-		rel, err := filepath.Rel(claudeSkills, srcDir)
+		rel, err := filepath.Rel(skillsDir, srcDir)
 		if err != nil {
-			return fmt.Errorf("could not compute relative path for %s: %w", entry.Name(), err)
+			return fmt.Errorf("could not compute relative path for %s: %w", skill.Name, err)
 		}
 
 		if err := os.Symlink(rel, dstDir); err != nil {
 			if copyErr := copySkill(srcDir, dstDir); copyErr != nil {
-				return fmt.Errorf("could not install %s: %w", entry.Name(), copyErr)
+				return fmt.Errorf("could not install %s: %w", skill.Name, copyErr)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s (symlink failed)\n", dstDir)
 			continue
@@ -190,6 +446,58 @@ func installManualSkills(cmd *cobra.Command, source string, copyMode bool) error
 	}
 
 	return nil
+}
+
+// removeStaleSkillLinks deletes symlinks in skillsDir that resolve into the
+// source checkout but no longer match an on-demand skill — the ownership test
+// for a link, since only this command links from there. Hand-written entries,
+// links to other places and past --copy installs are left alone.
+func removeStaleSkillLinks(
+	cmd *cobra.Command, skillsDir, source string, manual []agentContextSkill,
+) error {
+	current := make(map[string]bool, len(manual))
+	for _, skill := range manual {
+		current[skill.Name] = true
+	}
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return fmt.Errorf("could not read %s: %w", skillsDir, err)
+	}
+	for _, entry := range entries {
+		if current[entry.Name()] || entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		path := filepath.Join(skillsDir, entry.Name())
+		target, err := os.Readlink(path)
+		if err != nil {
+			return fmt.Errorf("could not read link %s: %w", path, err)
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(skillsDir, target)
+		}
+		rel, err := filepath.Rel(source, filepath.Clean(target))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("could not remove stale skill link %s: %w", path, err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed %s\n", path)
+	}
+	return nil
+}
+
+// isTrackedByGit reports whether git tracks anything at the repo-relative
+// path. A failing git is an error, never an answer of "not tracked", since the
+// caller would then replace what may be a committed file.
+func isTrackedByGit(repoRoot, rel string) (bool, error) {
+	gitCmd := exec.Command("git", "ls-files", "--", rel)
+	gitCmd.Dir = repoRoot
+	out, err := gitCmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("could not check whether %s is committed: %w", rel, err)
+	}
+	return strings.TrimSpace(string(out)) != "", nil
 }
 
 func copySkill(srcDir, dstDir string) error {

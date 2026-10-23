@@ -8,7 +8,7 @@ import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@opal/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 
 export interface ExpandableContentWrapperProps {
   fileDescriptor: FileDescriptor;

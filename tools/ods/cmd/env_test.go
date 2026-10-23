@@ -7,13 +7,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
 )
 
-func TestSetEnvValues_createsFileWhenMissing(t *testing.T) {
+func TestUpsertEnvFile_createsFileWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
-	err := setEnvValues(envPath, map[string]string{
+	err := devstack.UpsertEnvFile(envPath, map[string]string{
 		"FOO": "bar",
 		"BAZ": "qux",
 	})
@@ -35,7 +37,7 @@ func TestSetEnvValues_createsFileWhenMissing(t *testing.T) {
 	}
 }
 
-func TestSetEnvValues_upsertsExistingKeys(t *testing.T) {
+func TestUpsertEnvFile_upsertsExistingKeys(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
@@ -44,7 +46,7 @@ func TestSetEnvValues_upsertsExistingKeys(t *testing.T) {
 		t.Fatalf("failed to write initial file: %v", err)
 	}
 
-	err := setEnvValues(envPath, map[string]string{
+	err := devstack.UpsertEnvFile(envPath, map[string]string{
 		"FOO": "new",
 	})
 	if err != nil {
@@ -68,7 +70,7 @@ func TestSetEnvValues_upsertsExistingKeys(t *testing.T) {
 	}
 }
 
-func TestSetEnvValues_appendsNewKeys(t *testing.T) {
+func TestUpsertEnvFile_appendsNewKeys(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
@@ -77,7 +79,7 @@ func TestSetEnvValues_appendsNewKeys(t *testing.T) {
 		t.Fatalf("failed to write initial file: %v", err)
 	}
 
-	err := setEnvValues(envPath, map[string]string{
+	err := devstack.UpsertEnvFile(envPath, map[string]string{
 		"NEW_KEY": "new_value",
 	})
 	if err != nil {
@@ -98,7 +100,7 @@ func TestSetEnvValues_appendsNewKeys(t *testing.T) {
 	}
 }
 
-func TestSetEnvValues_doesNotDuplicateOnRepeatedCalls(t *testing.T) {
+func TestUpsertEnvFile_doesNotDuplicateOnRepeatedCalls(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
@@ -107,7 +109,7 @@ func TestSetEnvValues_doesNotDuplicateOnRepeatedCalls(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		if err := setEnvValues(envPath, values); err != nil {
+		if err := devstack.UpsertEnvFile(envPath, values); err != nil {
 			t.Fatalf("call %d: unexpected error: %v", i, err)
 		}
 	}
@@ -123,7 +125,7 @@ func TestSetEnvValues_doesNotDuplicateOnRepeatedCalls(t *testing.T) {
 	}
 }
 
-func TestSetEnvValues_doesNotMatchCommentedOutKeys(t *testing.T) {
+func TestUpsertEnvFile_doesNotMatchCommentedOutKeys(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
@@ -132,7 +134,7 @@ func TestSetEnvValues_doesNotMatchCommentedOutKeys(t *testing.T) {
 		t.Fatalf("failed to write initial file: %v", err)
 	}
 
-	err := setEnvValues(envPath, map[string]string{
+	err := devstack.UpsertEnvFile(envPath, map[string]string{
 		"FOO": "new",
 	})
 	if err != nil {
@@ -153,14 +155,14 @@ func TestSetEnvValues_doesNotMatchCommentedOutKeys(t *testing.T) {
 	}
 }
 
-func TestSetEnvValues_overwritesWithNewValue(t *testing.T) {
+func TestUpsertEnvFile_overwritesWithNewValue(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
 
-	if err := setEnvValues(envPath, map[string]string{"PORT": "5432"}); err != nil {
+	if err := devstack.UpsertEnvFile(envPath, map[string]string{"PORT": "5432"}); err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	if err := setEnvValues(envPath, map[string]string{"PORT": "15432"}); err != nil {
+	if err := devstack.UpsertEnvFile(envPath, map[string]string{"PORT": "15432"}); err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 
@@ -183,15 +185,14 @@ func TestSetEnvValues_overwritesWithNewValue(t *testing.T) {
 
 func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 	bin := composeFakeBin(t)
-	composeFakeTool(t, bin, "docker", `case "$2" in *-relational_db-1|*-minio-1) echo "0.0.0.0:3$3" ;; *) exit 1 ;; esac`)
+	composeFakeTool(t, bin, "docker", `case "$2" in *-relational_db-1|*-object-store-1) echo "0.0.0.0:3$3" ;; *) exit 1 ;; esac`)
 	logs := composeCaptureLog(t)
 
 	resolved := queryContainerPorts("proj")
 
 	wantEnv := map[string]string{
-		"POSTGRES_HOST_PORT":      "35432",
-		"MINIO_API_HOST_PORT":     "39000",
-		"MINIO_CONSOLE_HOST_PORT": "39001",
+		"POSTGRES_HOST_PORT":     "35432",
+		"OBJECT_STORE_HOST_PORT": "38333",
 	}
 	if got := resolved.ComposeEnv(); !maps.Equal(got, wantEnv) {
 		t.Fatalf("expected %v, got %v", wantEnv, got)
@@ -201,8 +202,7 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 		"port proj-cache-1 6379",
 		"port proj-opensearch-1 9200",
 		"port proj-inference_model_server-1 9000",
-		"port proj-minio-1 9000",
-		"port proj-minio-1 9001",
+		"port proj-object-store-1 8333",
 		"port proj-code-interpreter-1 8000",
 	}
 	if got := composeCalls(t, bin, "docker"); !slices.Equal(got, wantCalls) {
@@ -224,7 +224,7 @@ var composeAppEnv = map[string]string{
 	"REDIS_PORT":                "16379",
 	"OPENSEARCH_REST_API_PORT":  "19200",
 	"MODEL_SERVER_PORT":         "19000",
-	"S3_ENDPOINT_URL":           "http://localhost:19000",
+	"S3_ENDPOINT_URL":           "http://localhost:18333",
 	"CODE_INTERPRETER_BASE_URL": "http://localhost:18000",
 }
 
@@ -239,7 +239,7 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	bin := composeEnvDocker(t)
 	root := composeRepo(t)
 	envPath := filepath.Join(root, ".vscode", ".env")
-	writeFile(t, envPath, "CUSTOM_SETTING=x\nPOSTGRES_PORT=1\n")
+	writeFile(t, envPath, "CUSTOM_SETTING=x\nPOSTGRES_PORT=1\nS3_LEGACY_ENDPOINT_URL=http://localhost:9005\n")
 
 	command := NewEnvCommand()
 	command.SetArgs([]string{})
@@ -251,12 +251,13 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	if !strings.HasPrefix(content, "CUSTOM_SETTING=x\nPOSTGRES_PORT=15432\n") {
 		t.Fatalf("expected existing lines to stay in place, got %q", content)
 	}
+	// The legacy endpoint is dropped: dev runs the object store only.
 	want := maps.Clone(composeAppEnv)
 	want["CUSTOM_SETTING"] = "x"
 	if got := composeEnvFile(t, content); !maps.Equal(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}
-	if got := composeCalls(t, bin, "docker"); len(got) != 7 || got[0] != "port ods-proj-relational_db-1 5432" {
+	if got := composeCalls(t, bin, "docker"); len(got) != 6 || got[0] != "port ods-proj-relational_db-1 5432" {
 		t.Fatalf("expected port queries for project ods-proj, got %q", got)
 	}
 }
@@ -280,6 +281,21 @@ func TestRunEnv_dryRunPrintsWithoutWriting(t *testing.T) {
 }
 
 func TestRunEnv_errors(t *testing.T) {
+	t.Run("missing selected database leaves dotenv unchanged", func(t *testing.T) {
+		bin := composeFakeBin(t)
+		composeFakeTool(t, bin, "docker", `case "$2" in *-relational_db-1) exit 1 ;; *) echo "0.0.0.0:1$3" ;; esac`)
+		root := composeRepo(t)
+		envPath := filepath.Join(root, ".vscode", ".env")
+		initial := "POSTGRES_PORT=5432\nS3_LEGACY_ENDPOINT_URL=http://localhost:9005\nSECRET=keep\n"
+		writeFile(t, envPath, initial)
+		if err := runEnv(false); err == nil || !strings.Contains(err.Error(), "PostgreSQL") {
+			t.Fatalf("expected missing selected PostgreSQL error, got %v", err)
+		}
+		if got := composeReadFile(t, envPath); got != initial {
+			t.Fatalf("dotenv changed without selected database: %q", got)
+		}
+	})
+
 	t.Run("env file is a directory", func(t *testing.T) {
 		composeEnvDocker(t)
 		root := composeRepo(t)
@@ -299,7 +315,7 @@ func TestRunEnv_errors(t *testing.T) {
 		composeRepo(t)
 		composeNoRepo(t)
 		err := runEnv(false)
-		if err == nil || !strings.HasPrefix(err.Error(), "Failed to find git root: ") {
+		if err == nil || !strings.Contains(err.Error(), "not inside a git worktree") {
 			t.Fatalf("expected a git root error, got %v", err)
 		}
 	})

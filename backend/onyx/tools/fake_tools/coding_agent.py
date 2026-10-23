@@ -7,7 +7,8 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, ToolCallSimple
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
+from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_CMD_KEY,
     BASH_TOOL_NAME,
     CODING_AGENT_QUERY_KEY,
@@ -15,9 +16,8 @@ from onyx.coding_agent.mock_tools import (
     GENERATE_ANSWER_TOOL_NAME,
     get_coding_agent_tool_definitions,
 )
-from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
 from onyx.configs.constants import MessageType
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
@@ -25,6 +25,7 @@ from onyx.deep_research.dr_mock_tools import (
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.coding_agent.coding_agent import (
     CODING_AGENT_FINAL_ANSWER_PROMPT,
@@ -302,7 +303,6 @@ def run_coding_agent_call(
                 cycle_count = 0
                 llm_cycle_count = 0
                 reasoning_cycles = 0
-                most_recent_reasoning: str | None = None
 
                 while cycle_count < MAX_CODING_AGENT_CYCLES:
                     elapsed = time.monotonic() - start_time
@@ -352,8 +352,10 @@ def run_coding_agent_call(
                     )
                     step_generator = run_llm_step_pkt_generator(
                         history=constructed_history,
-                        tool_definitions=get_coding_agent_tool_definitions(
-                            include_think_tool=not is_reasoning_model
+                        tool_definitions=serialize_tools(
+                            get_coding_agent_tool_definitions(
+                                include_think_tool=not is_reasoning_model
+                            )
                         ),
                         tool_choice=ToolChoiceOptions.REQUIRED,
                         llm=llm,
@@ -369,6 +371,7 @@ def run_coding_agent_call(
                         max_tokens=2048,
                     )
 
+                    rendered_text: bool = False
                     while True:
                         try:
                             packet = next(step_generator)
@@ -377,9 +380,10 @@ def run_coding_agent_call(
                                 (AgentResponseStart, AgentResponseDelta),
                             ):
                                 if isinstance(packet.obj, AgentResponseDelta):
+                                    rendered_text = True
                                     emitter.emit(
                                         Packet(
-                                            placement=step_placement,
+                                            placement=packet.placement,
                                             obj=CodingAgentThinkingDelta(
                                                 content=packet.obj.content
                                             ),
@@ -435,8 +439,11 @@ def run_coding_agent_call(
                                 image_files=None,
                             )
                         )
-                        most_recent_reasoning = llm_step_result.reasoning
                         cycle_count += 1
+                        # Think arguments render only as reasoning, which is
+                        # counted above; narration needs its own sub-turn.
+                        if rendered_text:
+                            llm_cycle_count += 1
                         continue
 
                     # Otherwise: dispatch all bash tool calls sequentially.
@@ -485,7 +492,6 @@ def run_coding_agent_call(
                             )
                         )
 
-                    most_recent_reasoning = None
                     cycle_count += 1
                     llm_cycle_count += 1
 
@@ -500,7 +506,6 @@ def run_coding_agent_call(
                     emitter=emitter,
                     placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 )
-                _ = most_recent_reasoning  # currently unused; kept for parity
                 span.span_data.output = final_answer
                 emitter.emit(
                     Packet(

@@ -7,6 +7,7 @@ from ee.onyx.external_permissions.perm_sync_types import (
 from ee.onyx.external_permissions.utils import credential_json, generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.outlook.connector import OutlookConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -22,7 +23,11 @@ def outlook_doc_sync(
 ) -> Generator[ElementExternalAccess, None, None]:
     """The connector's own slim walk supplies each document's readers, so this
     only wires it into the shared sync."""
-    connector = OutlookConnector(**cc_pair.connector.connector_specific_config)
+    connector = OutlookConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(credential_json(cc_pair))
 
     yield from generic_doc_sync(
