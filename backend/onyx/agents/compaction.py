@@ -1,5 +1,6 @@
 """Build bounded model context without changing recorded execution output."""
 
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -58,16 +59,20 @@ def _encoder() -> "Encoding":
     return tiktoken.get_encoding("cl100k_base")
 
 
-def count_tokens(text: str) -> int:
+def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -> int:
+    if cached_counts is not None and (count := cached_counts.get(text)) is not None:
+        return count
     return len(_encoder().encode(text, disallowed_special=()))
 
 
-def message_tokens(message: Message) -> int:
-    count = count_tokens(message.text) + MESSAGE_OVERHEAD_TOKENS
+def message_tokens(
+    message: Message, token_counter: Callable[[str], int] = count_tokens
+) -> int:
+    count = token_counter(message.text) + MESSAGE_OVERHEAD_TOKENS
     if isinstance(message, AssistantMessage):
-        count += count_tokens(message.thinking)
+        count += token_counter(message.thinking)
         count += sum(
-            count_tokens(call.model_dump_json()) for call in message.tool_calls
+            token_counter(call.model_dump_json()) for call in message.tool_calls
         )
     elif isinstance(message, UserMessage) and not isinstance(message.content, str):
         count += sum(
@@ -78,12 +83,27 @@ def message_tokens(message: Message) -> int:
     return count
 
 
-def request_tokens(request: GenerationRequest) -> int:
-    return (
-        count_tokens(request.system_prompt)
-        + sum(count_tokens(tool.model_dump_json()) for tool in request.tools)
-        + sum(message_tokens(message) for message in request.messages)
+def request_tokens(
+    request: GenerationRequest, cached_counts: dict[str, int] | None = None
+) -> int:
+    """Count the request and retain only its text counts for the next request."""
+    current_counts: dict[str, int] = {}
+
+    def count(text: str) -> int:
+        if (tokens := current_counts.get(text)) is None:
+            tokens = count_tokens(text, cached_counts=cached_counts)
+            current_counts[text] = tokens
+        return tokens
+
+    total = (
+        count(request.system_prompt)
+        + sum(count(tool.model_dump_json()) for tool in request.tools)
+        + sum(message_tokens(message, count) for message in request.messages)
     )
+    if cached_counts is not None:
+        cached_counts.clear()
+        cached_counts.update(current_counts)
+    return total
 
 
 def context_budget(model: LLM) -> ContextBudget:
@@ -221,6 +241,7 @@ def compact_history(
     history: list[Message],
     previous: CompactionCheckpoint | None,
     generation_context: GenerationContext,
+    token_counter: Callable[[str], int] = count_tokens,
 ) -> CompactionCheckpoint:
     budget = context_budget(model)
     start = checkpoint_boundary(history, previous) if previous else 0
@@ -231,7 +252,9 @@ def compact_history(
     tail_tokens = 0
     tail_end = len(history)
     for end in reversed(boundaries):
-        tail_tokens += sum(message_tokens(message) for message in history[end:tail_end])
+        tail_tokens += sum(
+            message_tokens(message, token_counter) for message in history[end:tail_end]
+        )
         tail_end = end
         if tail_tokens > budget.recent:
             break
@@ -255,7 +278,7 @@ def compact_history(
     cutoff = eligible_cutoff
     summary = previous.summary if previous else ""
     input_budget = (
-        budget.input_limit - budget.summary - count_tokens(AGENT_COMPACTION_PROMPT)
+        budget.input_limit - budget.summary - token_counter(AGENT_COMPACTION_PROMPT)
     )
     if input_budget <= 0:
         raise ContextLimitError("The model input limit is too small for a summary")
@@ -265,9 +288,9 @@ def compact_history(
             break
         available = (
             input_budget
-            - count_tokens(summary)
+            - token_counter(summary)
             - MESSAGE_OVERHEAD_TOKENS
-            - count_tokens("Previous summary:\n\nHistory:\n")
+            - token_counter("Previous summary:\n\nHistory:\n")
         )
         if available <= 0:
             raise ContextLimitError("The summary leaves no room for history")
@@ -314,8 +337,12 @@ def compact_history(
         summary=summary,
         covered_through_message_id=cutoff_message_id,
     )
-    before = sum(message_tokens(m) for m in working_messages(history, previous))
-    after = sum(message_tokens(m) for m in working_messages(history, checkpoint))
+    before = sum(
+        message_tokens(m, token_counter) for m in working_messages(history, previous)
+    )
+    after = sum(
+        message_tokens(m, token_counter) for m in working_messages(history, checkpoint)
+    )
     if after >= before:
         raise ContextLimitError("Compaction did not reduce the model context")
     return checkpoint
