@@ -174,13 +174,13 @@ export class ConnectorSetupPage {
   }
 
   /**
-   * Submit the form and wait for the post-creation redirect to the connector
-   * status page. Creation validates the config server-side (up to ~10s in the
-   * UI), so allow a generous timeout.
+   * Submit the form and wait for the post-creation redirect to the new
+   * connector's page. Creation validates the config server-side (up to ~10s
+   * in the UI), so allow a generous timeout.
    */
   async submitAndWaitForCreation() {
     await this.createConnectorButton.click();
-    await this.page.waitForURL("**/admin/indexing-status**", {
+    await this.page.waitForURL(/\/admin\/connector\/\d+/, {
       timeout: 30_000,
     });
   }

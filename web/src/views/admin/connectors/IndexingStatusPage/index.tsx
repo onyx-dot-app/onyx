@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import { Section, SettingsLayouts } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { LARGE_BREAKPOINT_PX } from "@/lib/constants";
@@ -87,13 +87,6 @@ export default function IndexingStatusPage() {
   useEffect(() => {
     if (subject !== null) revealHistory(panelRef.current);
   }, [subject]);
-
-  useToastFromQuery({
-    "connector-created": {
-      message: t("connectorCreated.toast"),
-      type: "success",
-    },
-  });
 
   // The history panel takes the Activities card's place and widens the page to fit beside the column.
   return (

@@ -190,7 +190,7 @@ export class OneDriveConnectorSetupPage {
   }
 
   async expectCreated() {
-    await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
+    await expect(this.page).toHaveURL(/\/admin\/connector\/\d+/);
   }
 
   /**
