@@ -7,6 +7,7 @@ from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
+from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from onyx.agents.compaction import (
     ContextLimitError,
     compact_history,
     context_budget,
+    count_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -423,6 +425,7 @@ class Run:
         self._lock = threading.RLock()
         self._state = state
         self._history = history if history is not None else AgentState()
+        self._token_counts: dict[str, int] = {}
         self._cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
@@ -956,6 +959,7 @@ class Run:
             self._drain_workers()
 
     def _clear_execution_config(self) -> None:
+        self._token_counts.clear()
         self._llm = None
         self._prepared_step = None
         self._defaults = PreparedStep()
@@ -1259,13 +1263,19 @@ def _compact_context(
     request = prepared.generation_request(messages)
     cancellation_signal.check()
     budget = context_budget(llm)
-    original_size = request_tokens(request)
+    original_size = request_tokens(request, run._token_counts)
     if not force and original_size <= budget.trigger:
         return _limit_output(llm, request, original_size)
 
     selected_checkpoint = None
     try:
-        selected_checkpoint = compact_history(llm, source, previous, generation_context)
+        selected_checkpoint = compact_history(
+            llm,
+            source,
+            previous,
+            generation_context,
+            partial(count_tokens, cached_counts=run._token_counts),
+        )
         cancellation_signal.check()
     except Exception:
         cancellation_signal.check()
@@ -1285,13 +1295,14 @@ def _compact_context(
             working_messages(source, selected_checkpoint)
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request)
+        candidate_size = request_tokens(candidate_request, run._token_counts)
 
     if selected_checkpoint is None or candidate_size > budget.input_limit:
         selected_checkpoint, candidate_request, candidate_size = _truncate_context(
             cancellation_signal,
             source,
             prepared,
+            token_counts=run._token_counts,
             input_limit=budget.input_limit,
             original_size=original_size,
         )
@@ -1307,6 +1318,7 @@ def _truncate_context(
     source: list[Message],
     prepared: PreparedStep,
     *,
+    token_counts: dict[str, int],
     input_limit: int,
     original_size: int,
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
@@ -1327,7 +1339,7 @@ def _truncate_context(
             working_messages(source, checkpoint)
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request)
+        candidate_size = request_tokens(candidate_request, token_counts)
         if candidate_size <= input_limit and candidate_size < original_size:
             return checkpoint, candidate_request, candidate_size
     raise ContextLimitError(
