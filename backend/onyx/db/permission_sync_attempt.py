@@ -907,37 +907,64 @@ def renew_external_group_sync_attempt_lease(
     )
 
 
+def _fail_attempts_where(
+    model: _AttemptModel,
+    db_session: Session,
+    condition: ColumnElement[bool],
+    error_message: str,
+) -> list[int]:
+    now = func.now()
+    return list(
+        db_session.execute(
+            update(model)
+            .where(condition)
+            .values(
+                status=PermissionSyncStatus.FAILED,
+                time_started=func.coalesce(model.time_started, now),
+                time_finished=now,
+                error_message=error_message,
+            )
+            .returning(model.id)
+        ).scalars()
+    )
+
+
 def _fail_expired_attempts(
     model: _AttemptModel,
     db_session: Session,
     lease_timeout: timedelta,
     not_started_timeout: timedelta,
+    stall_timeout: timedelta | None = None,
 ) -> list[int]:
+    """``stall_timeout`` also fails a running attempt with no recorded progress
+    for that long, even while its lease is still renewed."""
     now = func.now()
     last_alive = func.coalesce(model.heartbeat_at, model.time_started)
-    failed_ids = list(
-        db_session.execute(
-            update(model)
-            .where(
-                or_(
-                    (model.status == PermissionSyncStatus.IN_PROGRESS)
-                    & (last_alive < now - lease_timeout),
-                    (model.status == PermissionSyncStatus.NOT_STARTED)
-                    & (model.time_created < now - not_started_timeout),
-                )
-            )
-            .values(
-                status=PermissionSyncStatus.FAILED,
-                time_started=func.coalesce(model.time_started, now),
-                time_finished=now,
-                error_message=(
-                    "The worker running this attempt stopped renewing its lease "
-                    "(it crashed, restarted, or lost its task)"
-                ),
-            )
-            .returning(model.id)
-        ).scalars()
+    # Lease first, so a dead worker's attempt records the lease reason
+    failed_ids = _fail_attempts_where(
+        model,
+        db_session,
+        or_(
+            (model.status == PermissionSyncStatus.IN_PROGRESS)
+            & (last_alive < now - lease_timeout),
+            (model.status == PermissionSyncStatus.NOT_STARTED)
+            & (model.time_created < now - not_started_timeout),
+        ),
+        "The worker running this attempt stopped renewing its lease "
+        "(it crashed, restarted, or lost its task)",
     )
+    if stall_timeout is not None:
+        last_progress = func.coalesce(model.last_progress_at, model.time_started)
+        failed_ids.extend(
+            _fail_attempts_where(
+                model,
+                db_session,
+                (model.status == PermissionSyncStatus.IN_PROGRESS)
+                & (last_progress < now - stall_timeout),
+                "The sync made no progress for "
+                f"{int(stall_timeout.total_seconds())}s and was stopped as stalled",
+            )
+        )
     db_session.commit()
     return failed_ids
 
@@ -946,11 +973,17 @@ def fail_expired_doc_permission_sync_attempts(
     db_session: Session,
     lease_timeout: timedelta,
     not_started_timeout: timedelta,
+    stall_timeout: timedelta,
 ) -> list[int]:
-    """Fails IN_PROGRESS attempts whose lease expired and NOT_STARTED attempts
-    that never started. Returns the IDs it failed."""
+    """Fails IN_PROGRESS attempts whose lease expired or whose progress
+    stalled, and NOT_STARTED attempts that never started. Returns the IDs it
+    failed."""
     return _fail_expired_attempts(
-        DocPermissionSyncAttempt, db_session, lease_timeout, not_started_timeout
+        DocPermissionSyncAttempt,
+        db_session,
+        lease_timeout,
+        not_started_timeout,
+        stall_timeout,
     )
 
 

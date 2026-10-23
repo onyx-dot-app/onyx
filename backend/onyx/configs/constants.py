@@ -195,14 +195,19 @@ INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 # is older than the timeout.
 PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
 PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A group sync still running this long past PERMISSION_SYNC_TIMEOUT is hung (its
+# own timeout check never ran), so its lease stops renewing and the reaper
+# frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 # A worker that could not renew for this long stops writing, before the reaper
 # can fail its attempt and let a replacement start.
-# A sync still running this long past its time limit is hung (its own timeout
-# check never ran), so its lease stops renewing and the reaper frees its row.
-PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
     PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
 )
+# A doc permission sync has no time limit: a crawl that keeps yielding may run
+# for days. One with no progress for this long is stuck, so the reaper fails
+# its attempt, which stops the worker and lets a replacement start.
+PERMISSION_SYNC_STALL_TIMEOUT = 60 * 60  # seconds
 # Celery drops a doc permission sync task that waited longer than this in the
 # queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
 PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds

@@ -53,7 +53,7 @@ class _FakeCrawlCheckpoint(ConnectorCheckpoint):
 
 class _FakeCheckpointedCrawl:
     """Crawls elements 0.._NUM_ELEMENTS-1, saving after each one. The first run
-    stops after _STOP_AFTER elements, as PERMISSION_SYNC_TIMEOUT would."""
+    stops after _STOP_AFTER elements, as a stop signal or stall would."""
 
     def __init__(self) -> None:
         self.crawled_by_run: list[list[int]] = []
