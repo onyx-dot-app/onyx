@@ -517,10 +517,11 @@ even when no RUNNING row exists. It marks stale PROVISIONING attempts FAILED
 with a conditional update, so late finalization cannot report them RUNNING.
 It then inventories runtime resources. A successful per-resource DB read must
 find no owner, or an owner in FAILED, SLEEPING, or TERMINATED state.
-RUNNING and live PROVISIONING owners remain protected. Resources get a 15-minute
-creation grace period. Each pass attempts at most 100 resource deletions under
-the same per-sandbox lock that provisioning uses. Errors retain the resource
-for retry and do not prevent independent resource cleanup.
+RUNNING and live PROVISIONING owners remain protected. Resources get a creation
+grace period of `SANDBOX_RESOURCE_GRACE_SECONDS` (15 minutes by default). Each
+pass attempts at most 100 resource deletions under the same per-sandbox lock
+that provisioning uses. Errors retain the resource for retry and do not prevent
+independent resource cleanup.
 If a FAILED owner's resources can contain prior session work, cleanup checkpoints
 that work first. A checkpoint failure retains the resources for retry. A failed
 fresh Kubernetes pod from the current provisioning attempt has not admitted new

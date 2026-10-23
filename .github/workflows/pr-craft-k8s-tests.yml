@@ -43,6 +43,8 @@ env:
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_TEST_ISOLATED_DEPLOYMENT: "true"
   SANDBOX_TEST_RUN_ID: ${{ github.run_id }}
+  # Shared by the test process and the deployed cleanup worker (900s default).
+  SANDBOX_RESOURCE_GRACE_SECONDS: "180"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
@@ -524,6 +526,7 @@ jobs:
               -n "${HELM_RELEASE_NAMESPACE}" \
               -f deployment/helm/charts/onyx/values-ci.yaml \
               --set "celery_worker_heavy.logLevel=DEBUG" \
+              --set-string "configMap.SANDBOX_RESOURCE_GRACE_SECONDS=${SANDBOX_RESOURCE_GRACE_SECONDS}" \
               --set "api.image.repository=localhost:5001/onyx-backend" \
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \

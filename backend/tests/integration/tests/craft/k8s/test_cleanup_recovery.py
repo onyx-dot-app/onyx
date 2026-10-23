@@ -17,13 +17,13 @@ from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
     SANDBOX_NAMESPACE,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
     SandboxBackend,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
 from tests.common.craft.cleanup_worker import (
     APP_NAMESPACE,
     require_isolated_cleanup_deployment,
@@ -145,7 +145,7 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
     _write_marker(core, owned.pod_name, owned.session_id, "retained-failed-work")
     lease = get_cache_backend(tenant_id="public").lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
-        timeout=RESOURCE_GRACE_SECONDS + 1800,
+        timeout=SANDBOX_RESOURCE_GRACE_SECONDS + 1800,
     )
     assert lease.acquire(blocking=True, blocking_timeout=30)
     try:
