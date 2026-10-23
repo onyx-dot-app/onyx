@@ -6792,6 +6792,10 @@
           "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
       },
+      "retiredModelWarning": {
+        "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",
+        "title": "{title} 已不再可用"
+      },
       "setDefaultError": {
         "message": "设置默认项失败"
       },

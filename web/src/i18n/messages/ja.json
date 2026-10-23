@@ -6792,6 +6792,10 @@
           "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
+      "retiredModelWarning": {
+        "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",
+        "title": "{title} は利用できなくなりました"
+      },
       "setDefaultError": {
         "message": "デフォルトに設定できませんでした"
       },

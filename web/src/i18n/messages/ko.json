@@ -6792,6 +6792,10 @@
           "description": "가장 정밀한 편집을 위한 OpenAI의 프리미엄 이미지 생성 모델입니다."
         }
       },
+      "retiredModelWarning": {
+        "description": "다른 모델을 연결하고 기본값으로 설정한 다음 {title} 연결을 해제하세요.",
+        "title": "{title}은(는) 더 이상 사용할 수 없습니다"
+      },
       "setDefaultError": {
         "message": "기본값 설정에 실패했습니다"
       },

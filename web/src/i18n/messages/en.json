@@ -6792,6 +6792,10 @@
           "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
       },
+      "retiredModelWarning": {
+        "description": "Connect another model and set it as the default, then disconnect {title}.",
+        "title": "{title} is no longer available"
+      },
       "setDefaultError": {
         "message": "Failed to set default"
       },
