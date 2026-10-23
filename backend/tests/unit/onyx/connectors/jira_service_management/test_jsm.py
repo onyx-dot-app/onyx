@@ -72,10 +72,6 @@ def test_build_jsm_jql() -> None:
     jql = _build_jsm_jql(project_key="ITSM")
     assert jql == 'project = "ITSM" ORDER BY updated ASC'
 
-    # Service desk ID only
-    jql = _build_jsm_jql(service_desk_id="12")
-    assert jql == 'project = "12" ORDER BY updated ASC'
-
     # Custom JQL
     jql = _build_jsm_jql(custom_jql="issuetype = 'Service Request'")
     assert jql == "(issuetype = 'Service Request') ORDER BY updated ASC"
@@ -544,3 +540,69 @@ def test_api_client_scoped_token(mock_scoped_url: MagicMock) -> None:
     assert client.jira_base_url == "https://api.atlassian.com/ex/jira/12345"
     assert client.raw_base_url == "https://example.atlassian.net"
     mock_scoped_url.assert_called_once_with("https://example.atlassian.net", "jira")
+
+
+@patch.object(JiraServiceManagementApiClient, "_request")
+def test_get_request_comments_propagates_exception(mock_request: MagicMock) -> None:
+    client = JiraServiceManagementApiClient(
+        jira_base_url="https://example.atlassian.net",
+        jira_user_email="agent@example.com",
+        jira_api_token="token",
+    )
+    mock_request.side_effect = requests.exceptions.HTTPError("500 Internal Server Error")
+    with pytest.raises(requests.exceptions.HTTPError):
+        client.get_request_comments("SD-100")
+
+
+@patch.object(JiraServiceManagementApiClient, "get_customer_requests")
+@patch.object(JiraServiceManagementApiClient, "get_request_comments")
+def test_service_desk_comment_timestamp_updates_doc(
+    mock_comments: MagicMock,
+    mock_requests: MagicMock,
+) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://example.atlassian.net",
+        service_desk_id="10",
+    )
+    connector.load_credentials(
+        {
+            "jira_base_url": "https://example.atlassian.net",
+            "jira_api_token": "tok",
+        }
+    )
+
+    # Request has older timestamp: 2026-10-01
+    mock_requests.return_value = {
+        "values": [
+            {
+                "issueKey": "SD-101",
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Old ticket with new comment"},
+                    {"fieldId": "updated", "value": "2026-10-01T10:00:00.000Z"},
+                ],
+                "createdDate": {"iso8601": "2026-10-01T09:00:00.000Z"},
+            }
+        ],
+        "isLastPage": True,
+    }
+    # Comment added on 2026-10-20
+    mock_comments.return_value = [
+        {
+            "author": {"displayName": "Helper", "emailAddress": "helper@example.com"},
+            "body": "Fixed this today!",
+            "created": {"iso8601": "2026-10-20T15:30:00.000Z"},
+        }
+    ]
+
+    # Poll window: 2026-10-15 to 2026-10-22
+    start_ts = int(datetime(2026, 10, 15, tzinfo=timezone.utc).timestamp())
+    end_ts = int(datetime(2026, 10, 22, tzinfo=timezone.utc).timestamp())
+
+    batches = list(connector.poll_source(start=start_ts, end=end_ts))
+    assert len(batches) == 1
+    assert len(batches[0]) == 1
+    doc = batches[0][0]
+    assert doc.id == "https://example.atlassian.net/browse/SD-101"
+    assert doc.doc_updated_at == datetime(2026, 10, 20, 15, 30, tzinfo=timezone.utc)
+    assert "Fixed this today!" in doc.sections[0].text
+

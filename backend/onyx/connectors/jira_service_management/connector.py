@@ -103,7 +103,6 @@ def _parse_timestamp(raw: str | None) -> datetime | None:
 
 def _build_jsm_jql(
     project_key: str | None = None,
-    service_desk_id: str | None = None,
     custom_jql: str | None = None,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
@@ -115,8 +114,6 @@ def _build_jsm_jql(
         clauses.append(f"({custom_jql})")
     elif project_key:
         clauses.append(f'project = "{project_key}"')
-    elif service_desk_id:
-        clauses.append(f'project = "{service_desk_id}"')
 
     if start is not None:
         clauses.append(f'updated >= "{_format_jql_timestamp(start)}"')
@@ -330,6 +327,16 @@ def _request_to_document(
     rendered_comments: list[str] = []
     if comments:
         for c in comments:
+            c_created = c.get("created")
+            if isinstance(c_created, dict):
+                c_dt = _parse_timestamp(c_created.get("iso8601"))
+            elif isinstance(c_created, str):
+                c_dt = _parse_timestamp(c_created)
+            else:
+                c_dt = None
+            if c_dt and (not updated_dt or c_dt > updated_dt):
+                updated_dt = c_dt
+
             author = c.get("author") or {}
             author_email = author.get("emailAddress", "")
             if author_email and author_email in comment_email_blacklist:
@@ -487,7 +494,7 @@ class JiraServiceManagementApiClient:
             return res.get("values", [])
         except Exception as e:
             logger.warning("Failed to fetch comments for request %s: %s", issue_id_or_key, e)
-            return []
+            raise
 
     def search_issues_jql(
         self,
@@ -609,9 +616,12 @@ class JiraServiceManagementConnector(
                 )
                 values = resp.get("values", [])
                 for req in values:
+                    issue_key = req.get("issueKey") or req.get("issueId")
+                    comments = client.get_request_comments(issue_key) if issue_key else []
                     doc = _request_to_document(
                         req=req,
                         jira_base_url=self.jira_base_url,
+                        comments=comments,
                         comment_email_blacklist=self.comment_email_blacklist,
                         labels_to_skip=self.labels_to_skip,
                     )
@@ -621,19 +631,6 @@ class JiraServiceManagementConnector(
                         continue
                     if end_dt is not None and doc.doc_updated_at and doc.doc_updated_at > end_dt:
                         continue
-
-                    issue_key = req.get("issueKey") or req.get("issueId")
-                    comments = client.get_request_comments(issue_key) if issue_key else []
-                    if comments:
-                        doc = _request_to_document(
-                            req=req,
-                            jira_base_url=self.jira_base_url,
-                            comments=comments,
-                            comment_email_blacklist=self.comment_email_blacklist,
-                            labels_to_skip=self.labels_to_skip,
-                        )
-                        if doc is None:
-                            continue
 
                     current_batch.append(doc)
                     if len(current_batch) >= self.batch_size:
@@ -651,7 +648,6 @@ class JiraServiceManagementConnector(
         # Otherwise, query via JQL (scoped to JSM project or custom JQL query)
         jql = _build_jsm_jql(
             project_key=self.project_key,
-            service_desk_id=self.service_desk_id,
             custom_jql=self.jql_query,
             start=start,
             end=end,
@@ -750,7 +746,7 @@ class JiraServiceManagementConnector(
                         elif fid == "updated" and isinstance(val, str):
                             req_updated_dt = _parse_timestamp(val)
 
-                    if self.labels_to_skip and any(l in self.labels_to_skip for l in req_labels):
+                    if self.labels_to_skip and any(label in self.labels_to_skip for label in req_labels):
                         continue
 
                     if not req_updated_dt:
@@ -763,6 +759,26 @@ class JiraServiceManagementConnector(
                         created_info = req.get("createdDate") or {}
                         created_iso = created_info.get("iso8601", "") if isinstance(created_info, dict) else str(created_info)
                         req_updated_dt = _parse_timestamp(created_iso)
+
+                    if start_dt is not None or end_dt is not None:
+                        try:
+                            comments = client.get_request_comments(issue_key)
+                            for c in comments:
+                                c_created = c.get("created")
+                                if isinstance(c_created, dict):
+                                    c_dt = _parse_timestamp(c_created.get("iso8601"))
+                                elif isinstance(c_created, str):
+                                    c_dt = _parse_timestamp(c_created)
+                                else:
+                                    c_dt = None
+                                if c_dt and (not req_updated_dt or c_dt > req_updated_dt):
+                                    req_updated_dt = c_dt
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to fetch comments for slim doc timestamp check on %s: %s",
+                                issue_key,
+                                e,
+                            )
 
                     if start_dt is not None and req_updated_dt and req_updated_dt < start_dt:
                         continue
@@ -786,7 +802,6 @@ class JiraServiceManagementConnector(
 
         jql = _build_jsm_jql(
             project_key=self.project_key,
-            service_desk_id=self.service_desk_id,
             custom_jql=self.jql_query,
             start=start,
             end=end,
