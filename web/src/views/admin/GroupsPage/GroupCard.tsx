@@ -59,8 +59,7 @@ function GroupCard({ group }: GroupCardProps) {
         description={buildGroupDescription(group, t)}
         sizePreset="main-content"
         variant="section"
-        // The card's own padding is the only inset.
-        padding={0}
+        padding={1}
         tag={
           builtIn && !isAdmin
             ? { title: t("card.defaultTag.label") }
