@@ -2840,7 +2840,7 @@
           "groupsTitle": "Group Membership Sync Status",
           "last": "Last synced {when}",
           "never": "Not synced yet",
-          "neverTooltip": "Indexed docs won't be searchable until their permissions are synced.",
+          "neverTooltip": "Indexed docs may not be searchable until their permissions are synced.",
           "waitingForFirstIndex": "Waiting for first index"
         },
         "accessTitle": "Connector Documents Access"

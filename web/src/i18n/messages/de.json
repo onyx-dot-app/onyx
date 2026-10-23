@@ -2840,7 +2840,7 @@
           "groupsTitle": "Status der Synchronisierung der Gruppenmitgliedschaften",
           "last": "Zuletzt synchronisiert {when}",
           "never": "Noch nicht synchronisiert",
-          "neverTooltip": "Indexierte Dokumente sind erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
+          "neverTooltip": "Indexierte Dokumente sind möglicherweise erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
           "waitingForFirstIndex": "Wartet auf die erste Indexierung"
         },
         "accessTitle": "Dokumentzugriff des Konnektors"

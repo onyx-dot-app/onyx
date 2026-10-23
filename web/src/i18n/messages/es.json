@@ -2840,7 +2840,7 @@
           "groupsTitle": "Estado de sincronización de membresías de grupos",
           "last": "Última sincronización {when}",
           "never": "Aún no sincronizado",
-          "neverTooltip": "Los documentos indexados no se podrán buscar hasta que se sincronicen sus permisos.",
+          "neverTooltip": "Es posible que los documentos indexados no se puedan buscar hasta que se sincronicen sus permisos.",
           "waitingForFirstIndex": "Esperando la primera indexación"
         },
         "accessTitle": "Acceso a los documentos del conector"

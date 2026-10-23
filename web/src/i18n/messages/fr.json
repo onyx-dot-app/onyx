@@ -2840,7 +2840,7 @@
           "groupsTitle": "État de la synchronisation des adhésions aux groupes",
           "last": "Dernière synchronisation {when}",
           "never": "Pas encore synchronisé",
-          "neverTooltip": "Les documents indexés ne seront pas consultables tant que leurs autorisations ne seront pas synchronisées.",
+          "neverTooltip": "Les documents indexés peuvent ne pas être consultables tant que leurs autorisations ne sont pas synchronisées.",
           "waitingForFirstIndex": "En attente de la première indexation"
         },
         "accessTitle": "Accès aux documents du connecteur"
