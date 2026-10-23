@@ -260,6 +260,11 @@ whenever you touch this component.
    there. A new thread without the copy silently writes to the wrong tenant.
 4. **Browser rendering must not drive execution.** SDK state owns model and tool
    progress. The presenter and renderer consume that state to produce packets.
+   Text, thinking-text, and argument deltas without mutable attachments are shared
+   with observers. Other events are copied before publication returns and remain
+   isolated between observers. Payload accounting
+   includes both queued events and events still being delivered. Payload size is an
+   estimate, not an exact Python heap limit.
 5. **Root finalization uses `ChatResponsePersistence`.** It reports one final
    outcome. Progressive execution saves and checkpoints belong to `ChatRunStore`.
 6. **The assistant message row exists before the first token.** IDs are reserved up

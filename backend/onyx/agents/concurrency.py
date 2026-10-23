@@ -6,10 +6,15 @@ from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
 from contextvars import copy_context
+from sys import getsizeof
 
 from pydantic_core import to_json
 
-from onyx.agents.events import AgentEvent
+from onyx.agents.events import (
+    AgentEvent,
+    MessageUpdateEvent,
+    shareable_delta_text,
+)
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import (
@@ -23,6 +28,8 @@ CLEANUP_SECONDS = 2.0
 EVENT_QUEUE_CAPACITY = 1024
 AGENT_EVENT_BUFFER_MAX_BYTES = 4 * 1024 * 1024
 EVENT_FLUSH_INTERVAL_SECONDS = 0.05
+# Queue accounting estimates payload size, not the complete Python object graph.
+DELTA_EVENT_OVERHEAD_BYTES = 256
 
 
 class WorkTracker:
@@ -152,9 +159,25 @@ class EventDispatcher:
                         current = current._parent
                 if not has_listeners:
                     return
-                size = len(
-                    to_json(event.model_dump(mode="python"), bytes_mode="base64")
-                )
+                delta_text = shareable_delta_text(event)
+                if isinstance(event, MessageUpdateEvent) and delta_text is not None:
+                    size = DELTA_EVENT_OVERHEAD_BYTES + sum(
+                        getsizeof(value)
+                        for value in (
+                            event.agent_id,
+                            event.run_id,
+                            event.parent_run_id,
+                            event.parent_tool_call_id,
+                            event.parent_message_id,
+                            event.message_id,
+                            delta_text,
+                        )
+                        if value is not None
+                    )
+                else:
+                    size = len(
+                        to_json(event.model_dump(mode="python"), bytes_mode="base64")
+                    )
                 if self._closed:
                     raise RuntimeError("Agent event dispatcher is closed")
                 if (
@@ -162,7 +185,9 @@ class EventDispatcher:
                     or self._bytes + size > AGENT_EVENT_BUFFER_MAX_BYTES
                 ):
                     raise RuntimeError("Agent observer backlog exceeded its bound")
-                owned_event = event.model_copy(deep=True)
+                owned_event = (
+                    event if delta_text is not None else event.model_copy(deep=True)
+                )
                 self.start()
                 self._bytes += size
                 self._queue.append((tuple(channels), owned_event, size))
@@ -309,6 +334,7 @@ class EventDelivery:
         return self.dispatcher.is_dispatch_thread
 
     def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
+        shareable = shareable_delta_text(event) is not None
         with self._lock:
             listeners = tuple(self._listeners)
         for index, listener in enumerate(listeners):
@@ -316,10 +342,10 @@ class EventDelivery:
                 if listener not in self._listeners:
                     continue
             try:
-                # Only the final channel's last listener can consume the queued event.
+                # Mutable snapshots belong exclusively to the final listener.
                 listener(
                     event
-                    if owns_event and index == len(listeners) - 1
+                    if shareable or owns_event and index == len(listeners) - 1
                     else event.model_copy(deep=True)
                 )
             except AgentCancelled:
