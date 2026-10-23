@@ -150,7 +150,6 @@ export default function AuthenticationAccountSection({
           detailsOpen={detailsOpen}
           onDetailsOpenChange={setDetailsOpen}
           checkReport={checkReports.reportFor(credential.id)}
-          onRerunChecks={() => checkReports.rerun(credential.id)}
           groupsLocked={!businessTier}
           onSaveAccount={(update) => saveSharing(credential.id, update)}
           onUpdateCredentials={

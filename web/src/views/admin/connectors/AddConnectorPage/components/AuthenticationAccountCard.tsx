@@ -23,7 +23,6 @@ import {
   SvgChevronUp,
   SvgEdit,
   SvgLinkedDots,
-  SvgPlay,
   SvgTrash,
   SvgUserKey,
 } from "@opal/icons";
@@ -42,7 +41,6 @@ import {
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
-import { IconLoader } from "@opal/loaders";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
@@ -109,8 +107,6 @@ interface AuthenticationAccountCardProps {
   onDetailsOpenChange: (open: boolean) => void;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
-  /** Starts the checks on this account; resolves once the run is queued. */
-  onRerunChecks: () => Promise<void>;
   /** Locks sharing with groups, which needs the Business plan. */
   groupsLocked: boolean;
   /**
@@ -142,7 +138,6 @@ export default function AuthenticationAccountCard({
   detailsOpen,
   onDetailsOpenChange,
   checkReport,
-  onRerunChecks,
   groupsLocked,
   onSaveAccount,
   onUpdateCredentials,
@@ -153,23 +148,11 @@ export default function AuthenticationAccountCard({
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
   const { user, permissions } = useUser();
-  const [starting, setStarting] = useState<boolean>(false);
-  const running: boolean = starting || checkReport?.run_status === "running";
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
     ? formatDateTimeLog(lastChecked)
     : null;
 
-  async function rerunChecks() {
-    setStarting(true);
-    try {
-      await onRerunChecks();
-    } catch {
-      toast.error(t("rerunFailed.toast"));
-    } finally {
-      setStarting(false);
-    }
-  }
   // What the server holds, and what the select shows: group edits stay
   // local until focus leaves the group picker.
   const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
@@ -416,16 +399,6 @@ export default function AuthenticationAccountCard({
                           }
                           onClick={() => setConfirmingDelete(true)}
                         />
-                        <Button
-                          prominence="secondary"
-                          // The label holds still while the checks run; only
-                          // the icon turns into a spinner.
-                          icon={running ? IconLoader : SvgPlay}
-                          disabled={running}
-                          onClick={rerunChecks}
-                        >
-                          {t("rerunButton.label")}
-                        </Button>
                       </Section>
                     }
                   />
