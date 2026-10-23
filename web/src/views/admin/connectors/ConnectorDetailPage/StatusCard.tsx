@@ -4,17 +4,39 @@ import { useLocale, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgListCheck, SvgPlayCircle } from "@opal/icons";
+import {
+  SvgListCheck,
+  SvgOrganization,
+  SvgPlayCircle,
+  SvgUsers,
+} from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
+import type { RichStr } from "@opal/types";
 import {
   ConnectorCredentialPairStatus,
   type CCPairFullInfo,
+  type CCPairRun,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
+import type { AccessType } from "@/lib/types";
+import { isPermSynced } from "@/lib/connectors/accessType";
+import { useLatestCCPairRun } from "@/lib/connectors/ccPair/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  attemptStatusTag,
+  ccPairStatusTag,
+  runStatusTag,
+  type StatusTag,
+} from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import {
+  RATE_FORMAT,
+  RunWarningsTag,
+  isActive,
+  useSyncRateLabel,
+} from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -25,17 +47,18 @@ import ThroughputChart, {
   type SliceRange,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 
-// The chart waits for the pair's first successful run.
+// Statuses a pair keeps until its first index succeeds, a failed first run included.
 const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
   ConnectorCredentialPairStatus.SCHEDULED,
   ConnectorCredentialPairStatus.INITIAL_INDEXING,
 ]);
 
 interface StatBlockProps {
+  title?: string | RichStr;
   children: React.ReactNode;
 }
-/** One column of the card: a figure or tag over its two-line label. */
-function StatBlock({ children }: StatBlockProps) {
+/** One column of a card: a titled status tag, or a figure over its label. */
+function StatBlock({ title, children }: StatBlockProps) {
   return (
     // Columns share the row evenly and wrap below 12rem, so three fit at 640px.
     <Section
@@ -47,13 +70,121 @@ function StatBlock({ children }: StatBlockProps) {
       height="fit"
       className="grow basis-0 min-w-48"
     >
+      {title !== undefined && (
+        <Text font="secondary-action" color="text-04">
+          {title}
+        </Text>
+      )}
       {children}
     </Section>
   );
 }
 
+interface FigureStatBlockProps {
+  value: number;
+  label: string | RichStr;
+}
+function FigureStatBlock({ value, label }: FigureStatBlockProps) {
+  const locale = useLocale();
+  return (
+    <StatBlock>
+      <Text font="main-content-emphasis" color="text-04">
+        {value.toLocaleString(locale)}
+      </Text>
+      <Text font="secondary-body" color="text-03">
+        {label}
+      </Text>
+    </StatBlock>
+  );
+}
+
 // Matches the page's own poll of the pair.
 const POLL_MS = 5000;
+
+interface SyncStatBlockProps {
+  title: string | RichStr;
+  /** The sync's newest run, undefined before its first. */
+  run: CCPairRun | undefined;
+  /** The pair's last successful sync of this kind, null until one succeeds. */
+  lastSynced: string | null;
+  /** The pair's Paused tag while it is paused. A paused pair starts no sync, so it outranks all but a queued or running one. */
+  pausedTag: StatusTag | null;
+  /** The sync starts only once the pair's first index succeeds. */
+  waitsForFirstIndex: boolean;
+}
+/** A permission sync's column: its newest run's tag over its live rate or its last success. */
+function SyncStatBlock({
+  title,
+  run,
+  lastSynced,
+  pausedTag,
+  waitsForFirstIndex,
+}: SyncStatBlockProps) {
+  const t = useTranslations("admin.connector.statusCard.sync");
+  const locale = useLocale();
+  const syncRateLabel = useSyncRateLabel();
+  const shownRun =
+    pausedTag !== null && run !== undefined && !isActive(run) ? undefined : run;
+  // A success can outlive its run: an old sync, or a shared group sync logged on a since-deleted pair.
+  function tag(): StatusTag {
+    if (shownRun !== undefined) return runStatusTag(shownRun);
+    if (pausedTag !== null) return pausedTag;
+    return attemptStatusTag(lastSynced === null ? null : "success", true);
+  }
+  const liveRate = shownRun === undefined ? null : syncRateLabel(shownRun);
+  const neverSynced = liveRate === null && lastSynced === null;
+  function detail(): string {
+    if (liveRate !== null) return liveRate;
+    if (lastSynced !== null) {
+      return t("last", { when: timeAgo(lastSynced, locale) ?? "-" });
+    }
+    return t(waitsForFirstIndex ? "waitingForFirstIndex" : "never");
+  }
+  return (
+    <StatBlock title={title}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={1}
+        width="fit"
+        height="fit"
+      >
+        <StatusTagPill tag={tag()} />
+        {shownRun !== undefined && <RunWarningsTag run={shownRun} />}
+      </Section>
+      <Tooltip tooltip={neverSynced ? t("neverTooltip") : undefined} side="top">
+        <Section width="fit" height="fit">
+          <Text font="secondary-body" color="text-03">
+            {detail()}
+          </Text>
+        </Section>
+      </Tooltip>
+    </StatBlock>
+  );
+}
+
+interface AccessStatBlockProps {
+  accessType: AccessType;
+}
+/** Who reads the documents of a pair that syncs no permissions. */
+function AccessStatBlock({ accessType }: AccessStatBlockProps) {
+  const t = useTranslations("admin.connector.statusCard");
+  const tAccess = useTranslations(
+    "admin.connectorsList.settings.documentAccess"
+  );
+  const everyone = accessType === "public";
+  return (
+    <StatBlock title={t("accessTitle")}>
+      <Tag
+        icon={everyone ? SvgOrganization : SvgUsers}
+        title={tAccess(everyone ? "everyone.title" : "specificGroups.title")}
+        color="gray"
+        variant="status"
+        font="secondary-body"
+      />
+    </StatBlock>
+  );
+}
 
 export interface StatusCardProps {
   ccPair: CCPairFullInfo;
@@ -70,7 +201,7 @@ export interface StatusCardProps {
   onRangeChange?: (range: SliceRange | null) => void;
 }
 
-/** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
+/** The pair at a glance: its indexing and permission sync statuses or its document access, then its documents and documents indexed over time. */
 export default function StatusCard({
   ccPair,
   onStartIndexing,
@@ -82,7 +213,6 @@ export default function StatusCard({
   onRangeChange,
 }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
-  const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
   const hold = ccPair.indexing_hold;
   const { data: latestIndexAttempts, error } = useSWR<PaginatedIndexAttempts>(
@@ -90,25 +220,43 @@ export default function StatusCard({
     errorHandlingFetcher,
     { refreshInterval: POLL_MS }
   );
-  // Waits for the latest attempt, so a running pair never flashes as indexed.
-  if (latestIndexAttempts === undefined && error === undefined) {
+  const permSynced = isPermSynced(ccPair.access_type);
+  const docSync = useLatestCCPairRun(
+    ccPair.id,
+    "doc_permission_sync",
+    permSynced,
+    POLL_MS
+  );
+  const groupSync = useLatestCCPairRun(
+    ccPair.id,
+    "group_sync",
+    permSynced,
+    POLL_MS
+  );
+  // Waits for the latest attempt, so a running pair never flashes as indexed, and for the sync runs, so the columns land together.
+  if (
+    (latestIndexAttempts === undefined && error === undefined) ||
+    (permSynced &&
+      [docSync, groupSync].some(
+        (sync) => sync.data === undefined && sync.error === undefined
+      ))
+  ) {
     return <CardLoader descriptionLines={2} />;
   }
   const latestIndexAttempt = latestIndexAttempts?.items[0];
   const paused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
+  const firstRun = FIRST_RUN_STATUSES.has(ccPair.status);
   const status = ccPairStatusTag(
     ccPair.status,
     ccPair.in_repeated_error_state,
     latestIndexAttempt?.status
   );
+  const pausedTag = paused ? status : null;
   const speed =
     ccPair.indexing &&
     ccPair.overall_indexing_speed !== null &&
     ccPair.num_docs_indexed > 0
-      ? ccPair.overall_indexing_speed.toLocaleString(locale, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
+      ? ccPair.overall_indexing_speed.toLocaleString(locale, RATE_FORMAT)
       : null;
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
   const lastIndexed = t("lastIndexed.value", {
@@ -116,33 +264,44 @@ export default function StatusCard({
   });
   // The rate is the connector's average over every run, where a run row shows one run's live rate.
   const showsSpeed = !paused && hold === null && speed !== null;
-  // A paused pair names only its last run. Others lead with the card's title.
-  const statusLine = paused
-    ? lastIndexed
-    : t("statusLine", {
-        detail:
-          hold !== null
-            ? t(`hold.${hold.reason}`)
-            : speed === null
-              ? lastIndexed
-              : t("indexingSpeed", { speed }),
-      });
+  // A paused pair names only its last run.
+  function statusLine(): string {
+    if (paused) return lastIndexed;
+    if (hold !== null) return t(`hold.${hold.reason}`);
+    return speed === null ? lastIndexed : t("indexingSpeed", { speed });
+  }
 
-  const chart = !FIRST_RUN_STATUSES.has(ccPair.status);
-  // Before the first run, or while it is held, there is no recent run to count.
-  const totalOnly = !chart || hold !== null;
+  // Each sync kind the pair's source runs gets a column.
+  const showsDocSync =
+    docSync.data?.kinds.includes("doc_permission_sync") ?? false;
+  const showsGroupSync = groupSync.data?.kinds.includes("group_sync") ?? false;
+  const docSyncRun = docSync.data?.items[0];
+  const groupSyncRun = groupSync.data?.items[0];
+  // A paused pair's counts stay as its last runs left them.
+  const syncedDocs =
+    docSyncRun?.kind === "doc_permission_sync"
+      ? docSyncRun.attempt.total_docs_synced
+      : null;
+  const syncedMemberships =
+    groupSyncRun?.kind === "group_sync"
+      ? groupSyncRun.attempt.total_group_memberships_synced
+      : null;
+  // The chart waits for the first successful index, and a paused pair's counts no longer move.
+  const chart = !firstRun && !paused;
+  // Before the first index succeeds, the card shows only documents a run already indexed.
+  const showsDocuments = !firstRun || ccPair.num_docs_indexed > 0;
 
-  // The stage details popover spans the card, so the card is its anchor.
   return (
-    <Popover>
-      <Popover.Anchor asChild>
-        <Card
-          border="solid"
-          rounding={4}
-          padding={2}
-          data-testid="connector-indexing-status"
-        >
-          <Section alignItems="stretch" gap={1} height="fit">
+    <Section
+      alignItems="stretch"
+      gap={2}
+      height="fit"
+      data-testid="connector-indexing-status"
+    >
+      {/* The stage details popover spans the status card, so that card is its anchor. */}
+      <Popover>
+        <Popover.Anchor asChild>
+          <Card border="solid" rounding={4} padding={2}>
             <Section
               flexDirection="row"
               alignItems="start"
@@ -151,7 +310,7 @@ export default function StatusCard({
               height="fit"
               wrap
             >
-              <StatBlock>
+              <StatBlock title={t("title")}>
                 <Section
                   flexDirection="row"
                   justifyContent="start"
@@ -159,13 +318,7 @@ export default function StatusCard({
                   width="fit"
                   height="fit"
                 >
-                  <Tag
-                    icon={status.icon}
-                    title={tBadges(status.labelKey)}
-                    color={status.color}
-                    variant="status"
-                    font="secondary-body"
-                  />
+                  <StatusTagPill tag={status} />
                   {hold !== null ? (
                     <Button
                       icon={SvgListCheck}
@@ -186,7 +339,7 @@ export default function StatusCard({
                 >
                   <Section width="fit" height="fit">
                     <Text font="secondary-body" color="text-03">
-                      {statusLine}
+                      {statusLine()}
                     </Text>
                   </Section>
                 </Tooltip>
@@ -205,61 +358,91 @@ export default function StatusCard({
                     </Button>
                   )}
               </StatBlock>
-              <StatBlock>
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  alignItems="end"
-                  gap={1}
-                  width="fit"
-                  height="fit"
-                >
-                  <Text font="main-content-emphasis" color="text-04">
-                    {(totalOnly
-                      ? ccPair.num_docs_indexed
-                      : recent
-                    ).toLocaleString(locale)}
-                  </Text>
-                  {!totalOnly && (
-                    <Text font="main-content-body" color="text-04">
-                      {t("documents.total", {
-                        total: ccPair.num_docs_indexed.toLocaleString(locale),
-                      })}
-                    </Text>
-                  )}
-                </Section>
-                <Text font="secondary-body" color="text-03">
-                  {totalOnly ? t("documents.totalLabel") : t("documents.label")}
-                </Text>
-                {!totalOnly && (
-                  <Text font="secondary-body" color="text-03">
-                    {t("documentsIndexed.label")}
-                  </Text>
-                )}
-              </StatBlock>
+              {!permSynced && (
+                <AccessStatBlock accessType={ccPair.access_type} />
+              )}
+              {showsDocSync && (
+                <SyncStatBlock
+                  title={t("sync.permissionsTitle")}
+                  run={docSyncRun}
+                  lastSynced={ccPair.last_time_perm_sync}
+                  pausedTag={pausedTag}
+                  waitsForFirstIndex={firstRun}
+                />
+              )}
+              {/* A group sync needs no index, so it can run during the first one. */}
+              {showsGroupSync && (
+                <SyncStatBlock
+                  title={t("sync.groupsTitle")}
+                  run={groupSyncRun}
+                  lastSynced={ccPair.last_time_external_group_sync}
+                  pausedTag={pausedTag}
+                  waitsForFirstIndex={false}
+                />
+              )}
+            </Section>
+          </Card>
+        </Popover.Anchor>
+        {latestIndexAttempt !== undefined && (
+          <StageDetailsPopoverContent indexAttemptId={latestIndexAttempt.id} />
+        )}
+      </Popover>
+      {showsDocuments && (
+        <Card border="solid" rounding={4} padding={2}>
+          <Section alignItems="stretch" gap={1} height="fit">
+            <Section
+              flexDirection="row"
+              alignItems="start"
+              justifyContent="start"
+              gap={1}
+              height="fit"
+              wrap
+            >
+              <FigureStatBlock
+                value={ccPair.num_docs_indexed}
+                label={t("documents.totalLabel")}
+              />
+              {paused && showsDocSync && syncedDocs !== null && (
+                <FigureStatBlock
+                  value={syncedDocs}
+                  label={t("documents.syncedPermissionsLabel")}
+                />
+              )}
+              {paused && showsGroupSync && syncedMemberships !== null && (
+                <FigureStatBlock
+                  value={syncedMemberships}
+                  label={t("documents.syncedMembershipsLabel")}
+                />
+              )}
               {chart && (
-                <Section
-                  flexDirection="row"
-                  justifyContent="end"
-                  alignItems="center"
-                  gap={1}
-                  width="auto"
-                  height="fit"
-                  className="grow basis-0"
-                  wrap
-                >
-                  <ThroughputWindowPicker
-                    windows={PAIR_WINDOWS}
-                    value={timeWindow}
-                    onChange={onTimeWindowChange}
-                    selection={range}
-                    onClearSelection={
-                      onRangeChange === undefined
-                        ? undefined
-                        : () => onRangeChange(null)
-                    }
+                <>
+                  <FigureStatBlock
+                    value={recent}
+                    label={t("documents.recentLabel")}
                   />
-                </Section>
+                  <Section
+                    flexDirection="row"
+                    justifyContent="end"
+                    alignItems="center"
+                    gap={1}
+                    width="auto"
+                    height="fit"
+                    className="grow basis-0"
+                    wrap
+                  >
+                    <ThroughputWindowPicker
+                      windows={PAIR_WINDOWS}
+                      value={timeWindow}
+                      onChange={onTimeWindowChange}
+                      selection={range}
+                      onClearSelection={
+                        onRangeChange === undefined
+                          ? undefined
+                          : () => onRangeChange(null)
+                      }
+                    />
+                  </Section>
+                </>
               )}
             </Section>
             {chart && (
@@ -280,10 +463,7 @@ export default function StatusCard({
             )}
           </Section>
         </Card>
-      </Popover.Anchor>
-      {latestIndexAttempt !== undefined && (
-        <StageDetailsPopoverContent indexAttemptId={latestIndexAttempt.id} />
       )}
-    </Popover>
+    </Section>
   );
 }

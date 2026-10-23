@@ -16,6 +16,8 @@ import type {
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
+  CCPairRunKind,
+  CCPairRunsResponse,
   CCPairRef,
   CCPairRunLevel,
   CCPairRunsQuery,
@@ -484,4 +486,35 @@ export function useResolveRunErrors() {
   }
 
   return { resolving, resolve, resolveRun, resolveMatching };
+}
+
+// ---------------------------------------------------------------------------
+// useLatestCCPairRun
+// ---------------------------------------------------------------------------
+
+/** The pair's newest run of one kind. The response's `kinds` lists every kind the pair runs. */
+export function useLatestCCPairRun(
+  ccPairId: number,
+  kind: CCPairRunKind,
+  enabled: boolean,
+  pollMs: number
+) {
+  return useSWR<CCPairRunsResponse>(
+    enabled
+      ? SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: 0,
+          pageSize: 1,
+          since: null,
+          until: null,
+          kinds: [kind],
+          statusGroups: null,
+          q: "",
+          errors: null,
+          superseded: null,
+          resolved: null,
+        })
+      : null,
+    errorHandlingFetcher,
+    { refreshInterval: pollMs }
+  );
 }

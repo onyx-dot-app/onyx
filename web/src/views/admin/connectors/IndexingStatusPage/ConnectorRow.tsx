@@ -36,6 +36,7 @@ import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
@@ -71,7 +72,6 @@ export default function ConnectorRow({
 }: ConnectorRowProps) {
   const t = useTranslations("admin.indexing.list");
   const tRuns = useTranslations("admin.connector.runs");
-  const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
   const format = useFormatter();
   const attempt = row.latest_index_attempt;
@@ -284,13 +284,7 @@ export default function ConnectorRow({
                       width="fit"
                       height="fit"
                     >
-                      <Tag
-                        icon={tag.icon}
-                        title={tBadges(tag.labelKey)}
-                        color={tag.color}
-                        variant="status"
-                        font="secondary-body"
-                      />
+                      <StatusTagPill tag={tag} />
                       {attempt !== null && !idle && (
                         <StageDetailsTrigger open={stagesOpen} />
                       )}
