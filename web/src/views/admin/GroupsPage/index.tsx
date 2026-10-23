@@ -1,7 +1,8 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useGridNavigation, useHotkey } from "@opal/hooks";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -53,6 +54,56 @@ function GroupsPage() {
     [groups]
   );
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Moves focus to the search field, with the caret at the end. A query
+   * passed in replaces the current one.
+   */
+  function focusSearch(nextQuery?: string) {
+    const input = searchInputRef.current;
+    if (!input) return;
+    if (nextQuery !== undefined) setSearchQuery(nextQuery);
+    input.focus();
+    // After React writes the new value.
+    requestAnimationFrame(() => {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    });
+  }
+
+  useHotkey("/", () => focusSearch());
+
+  // Up and Down move between the cards, Tab follows them in order, and Enter
+  // opens one. Leaving the top card, Escape, or typing returns to search.
+  const { ref: listRef, focusFirst } = useGridNavigation({
+    itemSelector: "[data-card]",
+    onExit: (direction) => {
+      if (direction === "up") focusSearch();
+    },
+    onEscape: () => focusSearch(),
+    onTypeAhead: (character) => {
+      if (character === "/") return false;
+      focusSearch(searchQuery + character);
+    },
+  });
+
+  // Enter or ArrowDown moves to the first card. Escape clears the query,
+  // then, on an empty field, leaves it.
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Keys that build or cancel an IME composition belong to the IME.
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (searchQuery !== "") setSearchQuery("");
+      else e.currentTarget.blur();
+      return;
+    }
+    if ((e.key === "Enter" || e.key === "ArrowDown") && focusFirst()) {
+      e.preventDefault();
+    }
+  }
+
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
@@ -93,6 +144,8 @@ function GroupsPage() {
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}
+          inputRef={searchInputRef}
+          onSearchKeyDown={handleSearchKeyDown}
         />
 
         {isLoading && <IconLoader />}
@@ -106,7 +159,9 @@ function GroupsPage() {
         )}
 
         {!isLoading && !error && groups && (
-          <GroupsList groups={manageableGroups} searchQuery={searchQuery} />
+          <div ref={listRef}>
+            <GroupsList groups={manageableGroups} searchQuery={searchQuery} />
+          </div>
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
