@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
-import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
+import { SvgChevronRight, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
 import { Button, SelectCard } from "@opal/components";
 import {
@@ -27,6 +27,7 @@ function GroupCard({ group }: GroupCardProps) {
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
+  const isBasic = builtIn && group.name === "Basic";
   const isSyncing = !group.is_up_to_date;
   // a default group has only members, so no `manage` — `manage_members` still opens it
   const canManage = can(group, "manage");
@@ -54,7 +55,7 @@ function GroupCard({ group }: GroupCardProps) {
       rounding={4}
     >
       <ContentAction
-        icon={isAdmin ? SvgUserManage : SvgUsers}
+        icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
         title={displayGroupName(group, t)}
         description={buildGroupDescription(group, t)}
         sizePreset="main-content"
