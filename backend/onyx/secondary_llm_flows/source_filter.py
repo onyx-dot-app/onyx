@@ -22,8 +22,8 @@ logger = setup_logger()
 
 # Only the most recent user turns feed the scope decision — older turns add
 # tokens and stale directives without helping the current request. Older turns
-# that name a connected source are kept (up to the same count) so a standing
-# directive outlives the window.
+# that mention sources are kept (up to the same count) so a standing directive,
+# or its revocation, outlives the window.
 MAX_SOURCE_FILTER_USER_TURNS = 5
 
 
@@ -45,8 +45,12 @@ def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
     return sources
 
 
-def _names_connected_source(turn: str, connected_sources: list[DocumentSource]) -> bool:
+def _mentions_sources(turn: str, connected_sources: list[DocumentSource]) -> bool:
+    """True when the turn names a connected source or says "source(s)", so both
+    a standing directive and a later revocation ("search all sources") are kept."""
     text = turn.lower()
+    if re.search(r"\bsources?\b", text):
+        return True
     return any(
         re.search(rf"\b{re.escape(source.value.replace('_', ' '))}\b", text)
         or re.search(rf"\b{re.escape(source.value)}\b", text)
@@ -99,13 +103,13 @@ def decide_search_scope(
     ]
     if not user_turns:
         return None
-    source_naming_older_turns = [
+    source_older_turns = [
         turn
         for turn in user_turns[:-MAX_SOURCE_FILTER_USER_TURNS]
-        if _names_connected_source(turn, connected_sources)
+        if _mentions_sources(turn, connected_sources)
     ]
     user_turns = (
-        source_naming_older_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
+        source_older_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
         + user_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
     )
 

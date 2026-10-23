@@ -150,8 +150,9 @@ Runs, in one parallel batch, whichever of these apply:
   `True` for the rest of the turn (a "no source directive" result cannot flip
   back mid-turn).
   Its prompt gets the last `MAX_SOURCE_FILTER_USER_TURNS` user turns, plus up to
-  the same number of older user turns that name a connected source. This keeps a
-  standing directive ("for anything I ask, check Zendesk") active past the window.
+  the same number of older user turns that name a connected source or say
+  "source(s)". This keeps a standing directive ("for anything I ask, check
+  Zendesk"), and a later revocation ("search all sources"), past the window.
 - `decide_time_filter` (`secondary_llm_flows/time_filter.py`), computed once per
   turn and cached in `_time_filter`/`_time_filter_computed`.
 
