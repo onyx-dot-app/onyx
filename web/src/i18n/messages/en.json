@@ -2806,19 +2806,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Indexed documents"
-        },
         "indexingSpeed": "{speed} docs/min",
         "indexingSpeedTooltip": "Documents indexed per minute since the connector was created",
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
-        "statusLine": "Indexing Status - {detail}",
         "documents": {
-          "label": "Recent / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total documents indexed",
+          "recentLabel": "Recently processed documents",
+          "syncedPermissionsLabel": "Synced permissions",
+          "syncedMembershipsLabel": "Synced group memberships"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
@@ -2835,7 +2832,16 @@
           "releaseFailed": "Couldn't start indexing",
           "viewChecks": "View connector checks"
         },
-        "title": "Indexing Status"
+        "title": "Indexing Status",
+        "sync": {
+          "permissionsTitle": "Permissions Sync Status",
+          "groupsTitle": "Group Membership Sync Status",
+          "last": "Last synced {when}",
+          "never": "Not synced yet",
+          "neverTooltip": "Indexed docs may not be searchable until their permissions are synced.",
+          "waitingForFirstIndex": "Waiting for first index"
+        },
+        "accessTitle": "Connector Documents Access"
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",

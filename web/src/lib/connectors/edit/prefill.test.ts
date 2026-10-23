@@ -63,6 +63,8 @@ function githubPair(
     last_indexed: null,
     last_pruned: null,
     last_full_permission_sync: null,
+    last_time_perm_sync: null,
+    last_time_external_group_sync: null,
     overall_indexing_speed: null,
     latest_checkpoint_description: null,
     last_permission_sync_attempt_status: null,
