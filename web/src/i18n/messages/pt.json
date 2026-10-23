@@ -1353,6 +1353,9 @@
         "jira": {
           "description": "Rastreador de issues da Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk e solicitações da Atlassian"
+        },
         "productboard": {
           "description": "Gestão de produto"
         },
@@ -4177,6 +4180,45 @@
             "comment_email_blacklist": {
               "label": "Lista de bloqueio de e-mails de comentários",
               "description": "Em geral é útil para ignorar determinados bots. Adicione os e-mails dos usuários cujos comentários NÃO devem ser indexados."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar o conector do Jira Service Management",
+          "subtext": "Configure qual conteúdo do Jira Service Management indexar. Você pode indexar tudo ou especificar um projeto ou central de atendimento específico.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL do site",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "project": {
+                  "label": "Projeto"
+                },
+                "jql": {
+                  "label": "Consulta JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexa todas as solicitações que a conta pode ler",
+              "description": "O Onyx indexa todas as solicitações de clientes e tíquetes em todas as centrais de atendimento que a conta selecionada pode ler."
+            },
+            "project_key": {
+              "label": "Chave do projeto",
+              "description": "A chave de um projeto específico da central de atendimento a ser indexado (ex.: 'ITSM')."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Uma consulta JQL personalizada para filtrar solicitações do Jira Service Management.\n\nIMPORTANTE: Não inclua filtros baseados em tempo nem cláusulas ORDER BY."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista de bloqueio de e-mails para comentários",
+              "description": "Útil para ignorar determinados bots. Adicione e-mails cujos comentários NÃO devem ser indexados."
             }
           }
         },

@@ -1353,6 +1353,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 서비스 데스크 및 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4177,6 +4180,45 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 설정",
+          "subtext": "색인할 Jira Service Management 콘텐츠를 설정합니다. 모든 항목을 색인하거나 특정 프로젝트 또는 서비스 데스크를 지정할 수 있습니다.",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "jql": {
+                  "label": "JQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "계정이 읽을 수 있는 모든 요청 색인",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 서비스 데스크의 고객 요청 및 티켓을 색인합니다."
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "색인할 특정 서비스 데스크 프로젝트의 키 (예: 'ITSM')."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "Jira Service Management 요청을 필터링하기 위한 사용자 지정 JQL 쿼리입니다.\n\n중요: 시간 기반 필터 또는 ORDER BY 절을 포함하지 마세요."
+            },
+            "comment_email_blacklist": {
+              "label": "댓글 제외 이메일 목록",
+              "description": "특정 봇을 무시하는 데 유용합니다. 댓글을 색인하지 않을 이메일을 추가하세요."
             }
           }
         },
