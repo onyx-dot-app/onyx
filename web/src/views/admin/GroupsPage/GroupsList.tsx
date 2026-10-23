@@ -35,14 +35,13 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
   const builtInGroups = filtered.filter(isBuiltInGroup);
   const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
-  // One flat list; the gap alone spaces the divider, as it does the cards.
   return (
     <Section flexDirection="column" gap={2}>
       {builtInGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}
       {builtInGroups.length > 0 && customGroups.length > 0 && (
-        <Divider paddingPerpendicular={0} paddingParallel={0} />
+        <Divider paddingPerpendicular={2} paddingParallel={0} />
       )}
       {customGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
