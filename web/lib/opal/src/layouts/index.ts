@@ -34,6 +34,7 @@ export {
 /* StickyBox */
 export {
   StickyBox,
+  type StickyBoxItemHandle,
   type StickyBoxItemProps,
   type StickyBoxRootProps,
   type StickyEdge,

@@ -1,12 +1,27 @@
 "use client";
 
 import "@opal/layouts/sticky-box/styles.css";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 import type { Spacing } from "@opal/types";
 
 type StickyEdge = "top" | "bottom";
+
+interface StickyBoxItemHandle {
+  /**
+   * Smoothly scrolls the container until the box's place in the flow sits
+   * where it is pinned, so turning `active` off then shows no jump. Resolves
+   * when the scroll ends, at once if the box is not pinned.
+   */
+  scrollToPlace: () => Promise<void>;
+}
 
 interface StickyBoxItemProps {
   /** The edge of the scroll container the box pins to. @default "top" */
@@ -28,6 +43,8 @@ interface StickyBoxItemProps {
   children: React.ReactNode;
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
+  /** Actions on the box, such as `scrollToPlace`. */
+  handleRef?: React.Ref<StickyBoxItemHandle>;
 }
 
 /** The nearest ancestor that scrolls, which is what a sticky box pins to. */
@@ -39,6 +56,28 @@ function findScrollParent(element: HTMLElement): Element | null {
     node = node.parentElement;
   }
   return null;
+}
+
+// Covers browsers without `scrollend`.
+const SCROLL_END_FALLBACK_MS = 600;
+
+/** Smooth-scrolls the container (or the page) by `delta`; resolves at the end. */
+function scrollBy(root: Element | null, delta: number): Promise<void> {
+  return new Promise((resolve) => {
+    const target: Element | Window = root ?? window;
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    let timer = 0;
+    function done() {
+      window.clearTimeout(timer);
+      target.removeEventListener("scrollend", done);
+      resolve();
+    }
+    target.addEventListener("scrollend", done);
+    timer = window.setTimeout(done, SCROLL_END_FALLBACK_MS);
+    target.scrollBy({ top: delta, behavior: reduce ? "auto" : "smooth" });
+  });
 }
 
 /**
@@ -62,6 +101,7 @@ function StickyBoxItem({
   shadow = false,
   children,
   ref,
+  handleRef,
 }: StickyBoxItemProps) {
   const [stuck, setStuck] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -73,6 +113,31 @@ function StickyBoxItem({
       else if (ref) ref.current = node;
     },
     [ref]
+  );
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      scrollToPlace: async () => {
+        const element = rootRef.current;
+        if (!element || !active) return;
+        // A pinned box reports its pinned position. Unstuck for one
+        // synchronous measure, it reports its place in the flow; nothing
+        // paints in between.
+        const pinned = element.getBoundingClientRect();
+        element.style.position = "static";
+        const place = element.getBoundingClientRect();
+        element.style.position = "";
+        const delta =
+          stick === "top"
+            ? place.top - pinned.top
+            : place.bottom - pinned.bottom;
+        // Under 1px apart, the box is already in its place.
+        if (Math.abs(delta) < 1) return;
+        await scrollBy(findScrollParent(element), delta);
+      },
+    }),
+    [active, stick]
   );
 
   useEffect(() => {
@@ -152,6 +217,7 @@ function StickyBoxRoot({ children, ref }: StickyBoxRootProps) {
     <div
       ref={ref}
       className="opal-sticky-box-root"
+      // SAFETY: CSSProperties has no custom properties; this sets one only.
       style={
         {
           "--sticky-box-top": "var(--settings-header-height, 0px)",
@@ -167,6 +233,7 @@ const StickyBox = { Root: StickyBoxRoot, Item: StickyBoxItem };
 
 export {
   StickyBox,
+  type StickyBoxItemHandle,
   type StickyBoxItemProps,
   type StickyBoxRootProps,
   type StickyEdge,

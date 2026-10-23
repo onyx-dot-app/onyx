@@ -4,7 +4,12 @@ import type { CredentialRef } from "@/lib/credentials/types";
 import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import { ContentAction, Section, StickyBox } from "@opal/layouts";
+import {
+  ContentAction,
+  Section,
+  StickyBox,
+  type StickyBoxItemHandle,
+} from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -501,12 +506,28 @@ export function CheckCardView({
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const cardRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<StickyBoxItemHandle>(null);
+  // Pinned, the card first scrolls back to its place in the form, so it
+  // opens there instead of jumping out of the pin.
+  // The fold button's click also reaches the card; one scroll runs at a time.
+  const expanding = useRef(false);
+  const expand = useCallback(async () => {
+    if (expanding.current) return;
+    expanding.current = true;
+    try {
+      await stickyRef.current?.scrollToPlace();
+      setCollapsed(false);
+    } finally {
+      expanding.current = false;
+    }
+  }, []);
   // The card can outgrow the viewport. Centered, its failed rows still show.
   useEffect(() => {
     if (expandRequest === 0) return;
-    setCollapsed(false);
-    cardRef.current?.scrollIntoView({ block: "center" });
-  }, [expandRequest]);
+    void expand().then(() =>
+      cardRef.current?.scrollIntoView({ block: "center" })
+    );
+  }, [expandRequest, expand]);
 
   const lines: CheckLine[] = useMemo(
     () => [
@@ -638,7 +659,7 @@ export function CheckCardView({
               aria-expanded={!collapsed}
               // Folded, it repeats the card's own action.
               tabIndex={collapsed ? -1 : undefined}
-              onClick={() => setCollapsed((value) => !value)}
+              onClick={() => (collapsed ? void expand() : setCollapsed(true))}
             />
           )}
         </Section>
@@ -657,6 +678,7 @@ export function CheckCardView({
       inset={4}
       active={stickyWhenFolded && collapsed}
       shadow
+      handleRef={stickyRef}
     >
       <SelectCard
         // Filled rests on white.
@@ -665,11 +687,16 @@ export function CheckCardView({
         rounding={4}
         padding={2}
         passive={!collapsed}
-        onClick={collapsed ? () => setCollapsed(false) : undefined}
+        onClick={collapsed ? () => void expand() : undefined}
         ref={cardRef}
         data-testid={CHECKS_CARD_ID}
       >
-        <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+        <Section
+          justifyContent="start"
+          alignItems="stretch"
+          height="fit"
+          gap={0}
+        >
           {header}
           {/* The header shows the failure; this announces it. */}
           {notice && (
