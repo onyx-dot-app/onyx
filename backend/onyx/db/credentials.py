@@ -55,8 +55,9 @@ PUBLIC_CREDENTIAL_ID = 0
 
 
 class CredentialAccessLevel(str, Enum):
-    """What the caller needs to do with a credential. USE covers listing it and
-    pairing it with a connector; EDIT covers changing, sharing or deleting it."""
+    """What the caller needs to do with a credential. USE covers listing it,
+    pairing it with a connector and running its checks; EDIT covers changing,
+    sharing or deleting it, which only its owner may do."""
 
     USE = "use"
     EDIT = "edit"
@@ -80,10 +81,9 @@ def _add_user_filters(
     """Limits ``stmt`` to the credentials the user may access.
 
     - The owner always has access.
-    - Global MANAGE_CONNECTORS holders (admins) also have access to credentials
-      with no owner or with ``admin_public``.
-    - For USE only: connector managers of a group the credential is shared
-      with (EE).
+    - For USE only: global MANAGE_CONNECTORS holders (admins) for credentials
+      with no owner or with ``admin_public``, and connector managers of a group
+      the credential is shared with (EE).
 
     ``curator_public`` grants nothing. Drafts are hidden; ``include_own_drafts``
     shows the user's own, for the connector form that made them."""
@@ -95,6 +95,8 @@ def _add_user_filters(
         if include_own_drafts
         else Credential.is_draft.is_(False)
     )
+    if access_level is CredentialAccessLevel.EDIT:
+        return stmt.where(Credential.user_id == user.id)
 
     authority = has_permission(user, Permission.MANAGE_CONNECTORS)
     access_clauses: list[ColumnElement[bool]] = [Credential.user_id == user.id]
@@ -104,10 +106,7 @@ def _add_user_filters(
             Credential.admin_public.is_(True),
             Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
         ]
-    if (
-        access_level is CredentialAccessLevel.USE
-        and authority is not PermissionAuthority.NONE
-    ):
+    if authority is not PermissionAuthority.NONE:
         group_access_clause_fn = fetch_versioned_implementation(
             "onyx.db.credentials", "_build_credential_group_access_clause"
         )
@@ -813,22 +812,6 @@ def discard_credential_if_unpaired(db_session: Session, credential_id: int) -> b
         )
         db_session.rollback()
         return False
-
-
-def delete_credential(
-    credential_id: int,
-    db_session: Session,
-    force: bool = False,
-) -> None:
-    """Delete a credential regardless of ownership (admin function)"""
-    credential = fetch_credential_by_id(credential_id, db_session)
-    if credential is None:
-        raise OnyxError(
-            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-            f"Credential {credential_id} does not exist",
-        )
-
-    _delete_credential_internal(credential, credential_id, db_session, force)
 
 
 def create_initial_public_credential(db_session: Session) -> None:
