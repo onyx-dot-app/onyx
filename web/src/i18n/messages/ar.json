@@ -7802,6 +7802,14 @@
             "label": "تحديد الكل"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "عنوان نقطة نهاية Inworld Router (بما في ذلك إصدار واجهة API)."
+          },
+          "apiKeyField": {
+            "description": "الصق مفتاح API من [بوابة Inworld](https://platform.inworld.ai/) لتحميل النماذج المتاحة."
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "عنوان URL لنقطة نهاية Nebius TokenFactory (بما في ذلك إصدار API)."

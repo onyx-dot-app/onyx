@@ -983,6 +983,23 @@ class VercelAIGatewayFinalModelResponse(BaseModel):
     supports_decisions: bool = False
 
 
+# Inworld Router dynamic models fetch
+class InworldModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class InworldFinalModelResponse(BaseModel):
+    name: str  # Router model id (e.g. "openai/gpt-5.4", "inworld/models/x", "auto")
+    display_name: str
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+    is_router: bool = False
+
+
 # Portkey dynamic models fetch
 class PortkeyModelsRequest(BaseModel):
     api_base: str

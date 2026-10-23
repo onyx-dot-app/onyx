@@ -7802,6 +7802,14 @@
             "label": "Alle auswählen"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "Endpunkt-URL von Inworld Router (einschließlich API-Version)."
+          },
+          "apiKeyField": {
+            "description": "Fügen Sie Ihren API-Schlüssel aus dem [Inworld Portal](https://platform.inworld.ai/) ein, um die verfügbaren Modelle zu laden."
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "Endpunkt-URL von Nebius TokenFactory (einschließlich API-Version)."

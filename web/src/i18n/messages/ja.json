@@ -7802,6 +7802,14 @@
             "label": "すべて選択"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "Inworld RouterのエンドポイントURL（APIバージョンを含む）。"
+          },
+          "apiKeyField": {
+            "description": "[Inworld Portal](https://platform.inworld.ai/)のAPIキーを貼り付けて、利用可能なモデルを読み込みます。"
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "Nebius TokenFactory のエンドポイント URL です（API バージョンを含む）。"

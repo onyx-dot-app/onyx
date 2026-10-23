@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import boto3
 import botocore.session
@@ -88,6 +89,8 @@ from onyx.llm.well_known_providers.constants import (
     AWS_EXTERNAL_ID_KWARG_ENV_VAR_FORMAT,
     AWS_ROLE_NAME_KWARG,
     AWS_ROLE_NAME_KWARG_ENV_VAR_FORMAT,
+    INWORLD_AUTO_ROUTER_MODEL,
+    INWORLD_MODELS_PATH,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
@@ -96,6 +99,7 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG,
     VERTEX_PROJECT_KWARG,
 )
+from onyx.llm.well_known_providers.inworld import inworld_authorization
 from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
@@ -113,6 +117,8 @@ from onyx.server.manage.llm.models import (
     DecisionProviderConnection,
     DecisionProviderUpsertRequest,
     DefaultModel,
+    InworldFinalModelResponse,
+    InworldModelsRequest,
     LitellmFinalModelResponse,
     LitellmModelDetails,
     LitellmModelsRequest,
@@ -2677,10 +2683,14 @@ def _get_openai_compatible_models_response(
     url: str,
     source_name: str,
     api_key: str | None = None,
+    authorization: str | None = None,
 ) -> dict:
-    """Fetch model metadata from an OpenAI-compatible `/models` endpoint."""
+    """Fetch model metadata from an OpenAI-compatible `/models` endpoint.
+
+    `authorization` replaces the default `Bearer <api_key>` header value.
+    """
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": authorization or f"Bearer {api_key}",
         "HTTP-Referer": "https://onyx.app",
         "X-Title": "Onyx",
     }
@@ -2692,7 +2702,8 @@ def _get_openai_compatible_models_response(
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
+        # Some gateways, Inworld among them, reject a bad key with 403.
+        if e.response.status_code in (401, 403):
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 f"Authentication failed: invalid or missing API key for {source_name}.",
@@ -2978,6 +2989,148 @@ def get_nebius_tokenfactory_available_models(
                 for r in sorted_results
             ],
             source_label="Nebius TokenFactory",
+        )
+
+    return sorted_results
+
+
+def _inworld_models_url(api_base: str) -> str:
+    """Inworld lists models on its model service, not on `/v1/models`, which
+    the public gateway does not route. The service shares the chat API host."""
+    parsed = urlsplit(api_base.strip())
+    return urlunsplit((parsed.scheme, parsed.netloc, INWORLD_MODELS_PATH, "", ""))
+
+
+def _get_inworld_models_response(api_base: str, api_key: str | None) -> dict:
+    """GET Inworld's model catalog and return parsed JSON."""
+    return _get_openai_compatible_models_response(
+        url=_inworld_models_url(api_base),
+        source_name="Inworld Router",
+        api_key=api_key,
+        authorization=inworld_authorization(api_key) if api_key else None,
+    )
+
+
+def _inworld_model_to_response(model: dict) -> InworldFinalModelResponse | None:
+    """Map one catalog entry (camelCase protobuf JSON) to a chat model, or
+    None when it is not a chat model."""
+    provider = model.get("provider")
+    model_name = model.get("model")
+    if not provider or not model_name:
+        return None
+
+    spec = model.get("spec") or {}
+    output_modalities = spec.get("outputModalities") or ["text"]
+    if "text" not in output_modalities:
+        return None
+
+    # Inworld-hosted models are listed as "models/<name>"; the router accepts
+    # the full `provider/model` id for every model.
+    model_id = f"{provider}/{model_name}"
+    if is_non_chat_model(model_id):
+        return None
+
+    display_name = model_name.removeprefix("models/")
+    capabilities = spec.get("capabilities")
+    if isinstance(capabilities, dict):
+        # The catalog omits false flags, so a missing reasoningCapability
+        # means no reasoning. Name heuristics would mark models like
+        # `xai/grok-4.20-non-reasoning` as reasoning.
+        reasoning_capability = capabilities.get("reasoningCapability") or {}
+        supports_reasoning = bool(reasoning_capability.get("supported"))
+    else:
+        capabilities = {}
+        # No capability data from the source; fall back to the LiteLLM
+        # cost map, then the substring heuristic
+        supports_reasoning = model_is_reasoning_model(
+            model_id, LlmProviderNames.INWORLD
+        ) or is_reasoning_model(model_id, display_name)
+    supports_image_input = bool(capabilities.get("vision")) or (
+        "image" in (spec.get("inputModalities") or [])
+    )
+
+    return InworldFinalModelResponse(
+        name=model_id,
+        display_name=display_name,
+        max_input_tokens=spec.get("contextLength") or None,
+        supports_image_input=supports_image_input,
+        supports_reasoning=supports_reasoning,
+    )
+
+
+@admin_router.post("/inworld/available-models")
+def get_inworld_available_models(
+    request: InworldModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[InworldFinalModelResponse]:
+    """Fetch chat models from Inworld Router's model catalog, plus its `auto`
+    router entry."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_inworld_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("models", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Inworld Router endpoint",
+        )
+
+    results: list[InworldFinalModelResponse] = []
+    for model in models:
+        try:
+            result = _inworld_model_to_response(model)
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Inworld Router model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+            continue
+        if result is not None:
+            results.append(result)
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Inworld Router",
+        )
+
+    # The router picks the served model per request, so it has no context
+    # limit of its own.
+    auto_router = InworldFinalModelResponse(
+        name=INWORLD_AUTO_ROUTER_MODEL,
+        display_name="Auto",
+        max_input_tokens=None,
+        supports_image_input=False,
+        supports_reasoning=False,
+        is_router=True,
+    )
+    sorted_results = [
+        auto_router,
+        *sorted(results, key=lambda m: m.name.lower()),
+    ]
+
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                    is_router=r.is_router,
+                )
+                for r in sorted_results
+            ],
+            source_label="Inworld Router",
         )
 
     return sorted_results

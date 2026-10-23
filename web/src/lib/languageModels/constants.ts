@@ -17,6 +17,7 @@ import {
   SvgQwen,
   SvgGoogle,
   SvgNebius,
+  SvgInworld,
   SvgPortkey,
   SvgTypeSafe,
   SvgVercel,
@@ -39,6 +40,7 @@ import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModa
 import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
+import InworldModal from "@/sections/modals/languageModels/InworldModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
 import type { ProviderEntry } from "@/lib/languageModels/types";
@@ -139,6 +141,12 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Nebius",
     Modal: NebiusTokenfactoryModal,
   },
+  [LLMProviderName.INWORLD]: {
+    icon: SvgInworld,
+    productName: "Inworld Router",
+    companyName: "Inworld",
+    Modal: InworldModal,
+  },
   [LLMProviderName.PORTKEY]: {
     icon: SvgPortkey,
     productName: "Portkey",
@@ -190,6 +198,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BIFROST,
   LLMProviderName.OPENAI_COMPATIBLE,
   LLMProviderName.NEBIUS_TOKENFACTORY,
+  LLMProviderName.INWORLD,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERCEL_AI_GATEWAY,
   LLMProviderName.VERTEX_AI,
@@ -211,6 +220,7 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
+  [LLMProviderName.INWORLD]: SvgInworld,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
 

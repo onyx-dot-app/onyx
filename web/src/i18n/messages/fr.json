@@ -7802,6 +7802,14 @@
             "label": "Tout sélectionner"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "URL du point de terminaison Inworld Router (avec la version de l’API)."
+          },
+          "apiKeyField": {
+            "description": "Collez votre clé API depuis [Inworld Portal](https://platform.inworld.ai/) pour charger les modèles disponibles."
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "URL du point de terminaison Nebius TokenFactory (avec la version de l'API)."

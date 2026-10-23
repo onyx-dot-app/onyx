@@ -7802,6 +7802,14 @@
             "label": "全选"
           }
         },
+        "inworld": {
+          "apiBaseField": {
+            "description": "Inworld Router 端点 URL（包括 API 版本）。"
+          },
+          "apiKeyField": {
+            "description": "粘贴来自 [Inworld Portal](https://platform.inworld.ai/) 的 API 密钥以加载可用模型。"
+          }
+        },
         "nebius": {
           "apiBaseField": {
             "description": "Nebius TokenFactory 端点 URL（包括 API 版本）。"
