@@ -2,7 +2,7 @@
 """Session-start hook: bootstrap the private Onyx agent context.
 
 Onyx staff keep agent skills, knowledge and session hooks in the private
-`onyx-agent-context` repo. This hook gets a new checkout to the point where the
+`onyx-agent-dev-workspace` repo. This hook gets a new checkout to the point where the
 agent can set the rest up:
 
 1. When the user already has the context's hooks registered, and the script they
@@ -35,12 +35,14 @@ import tempfile
 import time
 from pathlib import Path
 
-_REPO_NAME = "onyx-agent-context"
+_REPO_NAME = "onyx-agent-dev-workspace"
+# The workspace keeps code repos in its `repos/` folder.
+_WORKSPACE_REPOS_DIR = "repos"
 _IN_REPO_NAME = ".agent-context"
 _ENTRY_FILE = "AGENTS.md"
 _ENV_PATH = "ONYX_AGENT_CONTEXT"
 _CLONE_URL_ENV = "ONYX_AGENT_CONTEXT_URL"
-_CLONE_URL = "https://github.com/onyx-dot-app/onyx-agent-context.git"
+_CLONE_URL = "https://github.com/onyx-dot-app/onyx-agent-dev-workspace.git"
 _SKIP_ENV = "ONYX_SKIP_AGENT_CONTEXT_BOOTSTRAP"
 _STAFF_EMAIL_SUFFIX = "@onyx.app"
 # Entries the context's own setup writes into the user's agent settings.
@@ -56,6 +58,7 @@ _USER_SKILL_HOMES = (
     ".copilot/skills",
 )
 _CONTEXT_REPO_NAMES = ("onyx-agent-context", "onyx-llm-context")
+# (Links into the current workspace are made by its own setup, never flagged here.)
 _USER_SETTINGS = (".claude/settings.json", ".codex/hooks.json")
 _STAMP_NAME = "onyx-agent-context-clone-attempt"
 _RETRY_SECONDS = 7 * 24 * 60 * 60
@@ -111,7 +114,12 @@ def _find(repo: Path, main: Path) -> Path | None:
     candidates = (
         [Path(explicit).expanduser()]
         if explicit
-        else [main.parent / _REPO_NAME, repo / _IN_REPO_NAME, main / _IN_REPO_NAME]
+        else [
+            *([main.parent.parent] if main.parent.name == _WORKSPACE_REPOS_DIR else []),
+            main.parent / _REPO_NAME,
+            repo / _IN_REPO_NAME,
+            main / _IN_REPO_NAME,
+        ]
     )
     for candidate in candidates:
         if (candidate / _ENTRY_FILE).is_file():

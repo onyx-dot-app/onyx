@@ -44,7 +44,7 @@ def _setup(
     tmp_path: Path, email: str = "someone@onyx.app"
 ) -> tuple[Path, dict[str, str]]:
     """An onyx checkout in a workspace folder, a context remote, and a fake home."""
-    remote = tmp_path / "remote" / "onyx-agent-context"
+    remote = tmp_path / "remote" / "onyx-agent-dev-workspace"
     remote.mkdir(parents=True)
     _git(remote, "init", "-q", "-b", "main")
     (remote / "AGENTS.md").write_text("entry\n")
@@ -84,16 +84,16 @@ def test_clones_a_missing_context_for_staff_next_to_the_main_checkout(
 
     out = _run(worktree, env)
 
-    clone = tmp_path / "ws" / "onyx-agent-context"
+    clone = tmp_path / "ws" / "onyx-agent-dev-workspace"
     assert (clone / "AGENTS.md").is_file()
-    assert "Cloned `onyx-agent-context` for you." in out
+    assert "Cloned `onyx-agent-dev-workspace` for you." in out
     assert f"`{clone}`" in out
     assert "agent-context-setup" in out
 
 
 def test_points_at_a_context_already_on_disk(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path, email="someone@example.com")
-    context = tmp_path / "ws" / "onyx-agent-context"
+    context = tmp_path / "ws" / "onyx-agent-dev-workspace"
     context.mkdir()
     (context / "AGENTS.md").write_text("entry\n")
 
@@ -122,24 +122,26 @@ def test_is_silent_once_the_context_hooks_are_registered(tmp_path: Path) -> None
     _register(env, script)
 
     assert _run(onyx, env) == ""
-    assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+    assert not (tmp_path / "ws" / "onyx-agent-dev-workspace").exists()
 
 
 def test_registered_hooks_for_a_missing_checkout_do_not_count(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path)
     _register(env, tmp_path / "moved" / "hooks" / "session_start.py")
 
-    assert "Cloned `onyx-agent-context` for you." in _run(onyx, env)
+    assert "Cloned `onyx-agent-dev-workspace` for you." in _run(onyx, env)
 
 
 def test_mentions_an_older_setup(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path, email="someone@example.com")
-    context = tmp_path / "ws" / "onyx-agent-context"
+    context = tmp_path / "ws" / "onyx-agent-dev-workspace"
     context.mkdir()
     (context / "AGENTS.md").write_text("entry\n")
     skills = Path(env["HOME"]) / ".claude" / "skills"
     skills.mkdir(parents=True)
-    (skills / "celery-tasks").symlink_to(context / "skills" / "celery-tasks")
+    (skills / "celery-tasks").symlink_to(
+        tmp_path / "old" / "onyx-agent-context" / "skills" / "celery-tasks"
+    )
 
     out = _run(onyx, env)
 
@@ -151,7 +153,7 @@ def test_never_clones_for_other_emails(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path, email="someone@example.com")
 
     assert _run(onyx, env) == ""
-    assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+    assert not (tmp_path / "ws" / "onyx-agent-dev-workspace").exists()
 
 
 def test_reports_a_failed_clone_once_a_week(tmp_path: Path) -> None:
@@ -166,12 +168,12 @@ def test_can_be_turned_off(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path)
 
     assert _run(onyx, {**env, "ONYX_SKIP_AGENT_CONTEXT_BOOTSTRAP": "1"}) == ""
-    assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+    assert not (tmp_path / "ws" / "onyx-agent-dev-workspace").exists()
 
 
 def test_answers_cursor_with_json_and_reads_its_workspace_root(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path, email="someone@example.com")
-    context = tmp_path / "ws" / "onyx-agent-context"
+    context = tmp_path / "ws" / "onyx-agent-dev-workspace"
     context.mkdir()
     (context / "AGENTS.md").write_text("entry\n")
     payload = {
@@ -201,12 +203,12 @@ def test_a_failed_clone_leaves_nothing_behind(tmp_path: Path) -> None:
     _git(remote, "commit", "-qam", "drop entry")
 
     assert "Could not clone" in _run(onyx, env)
-    assert not (tmp_path / "ws" / "onyx-agent-context").exists()
+    assert not (tmp_path / "ws" / "onyx-agent-dev-workspace").exists()
 
 
 def test_ignores_git_location_variables_from_the_caller(tmp_path: Path) -> None:
     onyx, env = _setup(tmp_path, email="someone@example.com")
-    context = tmp_path / "ws" / "onyx-agent-context"
+    context = tmp_path / "ws" / "onyx-agent-dev-workspace"
     context.mkdir()
     (context / "AGENTS.md").write_text("entry\n")
     elsewhere = tmp_path / "elsewhere"
@@ -216,3 +218,21 @@ def test_ignores_git_location_variables_from_the_caller(tmp_path: Path) -> None:
     out = _run(onyx, {**env, "GIT_DIR": str(elsewhere / ".git")})
 
     assert f"`{context}`" in out
+
+
+def test_finds_the_workspace_root_above_repos(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "repos").mkdir(parents=True)
+    (workspace / "AGENTS.md").write_text("entry\n")
+    onyx = workspace / "repos" / "onyx"
+    onyx.mkdir()
+    _git(onyx, "init", "-q", "-b", "main")
+    _git(onyx, "commit", "-q", "--allow-empty", "-m", "init")
+    worktree = workspace / "repos" / "worktrees" / "onyx-feature"
+    _git(onyx, "worktree", "add", "-q", str(worktree))
+    home = tmp_path / "home"
+    home.mkdir()
+
+    out = _run(worktree, {"HOME": str(home)})
+
+    assert f"`{workspace}`" in out

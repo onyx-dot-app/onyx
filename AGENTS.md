@@ -72,13 +72,16 @@ Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills
 
 ### Onyx agent context
 
-Onyx staff keep a private `onyx-agent-context` repo with more skills and knowledge for agents.
-Look for a folder that has its `AGENTS.md`, in this order:
+Onyx staff work in a private `onyx-agent-dev-workspace` repo, which holds more skills and
+knowledge for agents and keeps the code repos in its `repos/` folder. Look for a folder that has its
+`AGENTS.md`, in this order. The main checkout is the first path that `git worktree list` prints, so
+this works from a worktree too.
 
 1. The path in `$ONYX_AGENT_CONTEXT`. When it is set, do not look anywhere else.
-2. `onyx-agent-context/` next to the main onyx checkout. The main checkout is the first path that
-   `git worktree list` prints, so this works from a worktree too.
-3. `.agent-context/` at the root of this checkout, then at the root of the main checkout.
+2. The workspace root: two folders above the main checkout, when the main checkout is in a `repos/`
+   folder (`<workspace>/repos/onyx`).
+3. `onyx-agent-dev-workspace/` next to the main checkout.
+4. `.agent-context/` at the root of this checkout, then at the root of the main checkout.
 
 If you find it, read its `AGENTS.md` and follow it. If you do not find it, continue without it.
 It holds the feature map and the agent session hooks. When its hooks are set up, the session
