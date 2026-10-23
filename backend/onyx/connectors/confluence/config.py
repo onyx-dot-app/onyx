@@ -43,6 +43,7 @@ _LABELS_TO_SKIP = "labels_to_skip"
 _INDEXING_SCOPE_FIELDS = (_SPACE, _PAGE_ID, _INDEX_RECURSIVELY, _CQL_QUERY)
 
 PAGE_ID_FORMAT_ERROR = "Enter the number from the page URL, e.g. 131368."
+SPACE_KEY_FORMAT_ERROR = "Enter a space key, e.g. ENG."
 CQL_LAST_MODIFIED_ERROR = "Unsupported filter: lastModified. Each sync adds its own."
 CQL_ORDER_BY_ERROR = (
     "Unsupported clause: ORDER BY. Each sync orders the results itself."
@@ -92,9 +93,9 @@ def get_indexing_mode(
     In PAGE mode the spaces count too: the scope is their union."""
     if cql_query and cql_query.strip():
         return ConfluenceIndexingMode.CQL
-    if page_id.strip():
+    if parse_scope_keys(page_id):
         return ConfluenceIndexingMode.PAGE
-    if space.strip():
+    if parse_scope_keys(space):
         return ConfluenceIndexingMode.SPACE
     return ConfluenceIndexingMode.EVERYTHING
 
@@ -173,10 +174,22 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
     @field_validator(_PAGE_ID)
     @classmethod
     def _page_id_is_a_number(cls, value: str) -> str:
+        page_ids = parse_scope_keys(value)
+        # Separators alone, such as ",", name no page.
+        if value.strip() and not page_ids:
+            raise field_format_error(PAGE_ID_FORMAT_ERROR)
         # isdigit alone accepts digits such as "²".
-        for page_id in parse_scope_keys(value):
+        for page_id in page_ids:
             if not (page_id.isascii() and page_id.isdigit()):
                 raise field_format_error(PAGE_ID_FORMAT_ERROR)
+        return value
+
+    @field_validator(_SPACE)
+    @classmethod
+    def _space_names_a_key(cls, value: str) -> str:
+        # Separators alone, such as ",", name no space.
+        if value.strip() and not parse_scope_keys(value):
+            raise field_format_error(SPACE_KEY_FORMAT_ERROR)
         return value
 
     # Each sync adds a lastModified filter and ORDER BY to the query, and a

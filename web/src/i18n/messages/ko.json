@@ -4107,7 +4107,8 @@
             "space": {
               "label": "스페이스",
               "description": "이 커넥터가 색인할 스페이스 키 (예: ENG).",
-              "placeholder": "스페이스 키 또는 URL 추가"
+              "placeholder": "스페이스 키 또는 URL 추가",
+              "required": "스페이스 또는 페이지를 하나 이상 추가하세요."
             },
             "page_id": {
               "label": "페이지",

@@ -4107,7 +4107,8 @@
             "space": {
               "label": "Bereiche",
               "description": "Bereichsschlüssel, die dieser Konnektor indexiert (z. B. ENG).",
-              "placeholder": "Bereichsschlüssel oder URL hinzufügen"
+              "placeholder": "Bereichsschlüssel oder URL hinzufügen",
+              "required": "Fügen Sie mindestens einen Bereich oder eine Seite hinzu."
             },
             "page_id": {
               "label": "Seiten",

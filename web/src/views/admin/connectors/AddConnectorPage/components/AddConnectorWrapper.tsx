@@ -722,6 +722,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
+          confluenceScopeRequired: t(
+            "connectors.confluence.fields.space.required"
+          ),
           specificGroupsRequired: t(
             "settings.documentAccess.specificGroups.required"
           ),

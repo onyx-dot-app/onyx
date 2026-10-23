@@ -4107,7 +4107,8 @@
             "space": {
               "label": "Spaces",
               "description": "List space keys to index for this connector (e.g. ENG).",
-              "placeholder": "Add space key or URL"
+              "placeholder": "Add space key or URL",
+              "required": "Add at least one space or page."
             },
             "page_id": {
               "label": "Pages",

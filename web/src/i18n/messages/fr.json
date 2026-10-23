@@ -4107,7 +4107,8 @@
             "space": {
               "label": "Espaces",
               "description": "Clés d'espace que ce connecteur indexe (par ex. ENG).",
-              "placeholder": "Ajoutez une clé d'espace ou une URL"
+              "placeholder": "Ajoutez une clé d'espace ou une URL",
+              "required": "Ajoutez au moins un espace ou une page."
             },
             "page_id": {
               "label": "Pages",

@@ -324,7 +324,7 @@ class ConfluenceConnector(
         self,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield hierarchy nodes for all spaces we're indexing."""
-        space_keys = [self.space] if self.space else None
+        space_keys = list(parse_scope_keys(self.space)) or None
 
         for space in self.source_operations.list_spaces(
             space_keys=space_keys,
@@ -1410,12 +1410,12 @@ class ConfluenceConnector(
                 "there truly are no spaces in this Confluence instance."
             )
 
-        if self.space:
+        for space_key in parse_scope_keys(self.space):
             try:
-                self.source_operations.get_space(space_key=self.space, fast=True)
+                self.source_operations.get_space(space_key=space_key, fast=True)
             except ConfluenceSpaceNotFoundError as e:
                 raise ConnectorValidationError(
-                    "Invalid Confluence space key provided"
+                    f"Invalid Confluence space key provided: {space_key}"
                 ) from e
 
     def probe_rest_space_permissions_admin_access(self) -> None:

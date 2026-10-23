@@ -4107,7 +4107,8 @@
             "space": {
               "label": "スペース",
               "description": "このコネクタでインデックスするスペースキー（例: ENG）。",
-              "placeholder": "スペースキーまたは URL を入力"
+              "placeholder": "スペースキーまたは URL を入力",
+              "required": "スペースまたはページを 1 つ以上追加してください。"
             },
             "page_id": {
               "label": "ページ",

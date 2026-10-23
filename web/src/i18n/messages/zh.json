@@ -4107,7 +4107,8 @@
             "space": {
               "label": "空间",
               "description": "此连接器要索引的空间键（例如 ENG）。",
-              "placeholder": "添加空间键或 URL"
+              "placeholder": "添加空间键或 URL",
+              "required": "请至少添加一个空间或页面。"
             },
             "page_id": {
               "label": "页面",
