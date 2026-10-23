@@ -96,6 +96,7 @@ import {
   type NewAccountSchema,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { deleteConnector } from "@/lib/connector";
+import { type FormikErrorTree, firstFormikError } from "@/lib/formikErrors";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
   toManageAccess,
@@ -516,13 +517,17 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   }
 
   /**
-   * Whether the form's errors allow Create. A typed account's errors do not
+   * The form's errors that block Create. A typed account's errors do not
    * while a saved account is picked: the typed one is not used then.
    */
+  const blockingErrors = (errors: FormikErrors<unknown>): FormikErrorTree[] =>
+    Object.entries<FormikErrorTree>(errors)
+      .filter(
+        ([key]) => key !== NEW_ACCOUNT_FIELD || currentCredential === null
+      )
+      .map(([, error]) => error);
   const blockingErrorsEmpty = (errors: FormikErrors<unknown>): boolean =>
-    Object.keys(errors).every(
-      (key) => key === NEW_ACCOUNT_FIELD && currentCredential !== null
-    );
+    blockingErrors(errors).length === 0;
 
   const createConnectorFromForm = async (
     values: typeof initialValues
@@ -863,9 +868,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 configUnlocked && (noCredentials || checks.createReady);
               const createLockReason: string | undefined = !configUnlocked
                 ? (gateMessage ?? undefined)
-                : createReady
-                  ? undefined
-                  : checksT("lockReason");
+                : !createReady
+                  ? checksT("lockReason")
+                  : (firstFormikError(blockingErrors(formikProps.errors)) ??
+                    undefined);
               const hasContentFields: boolean =
                 visibleConnectorFields(
                   contentConfiguration,
@@ -942,6 +948,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                             // Formik's own submit stops at any error.
                             await submitForm(formikProps.values);
                           } else {
+                            // The failing field can sit in a folded section, so name it.
+                            const message = firstFormikError(
+                              blockingErrors(errors)
+                            );
+                            if (message !== null) toast.error(message);
                             // Marks every field touched, so its error shows.
                             formikProps.handleSubmit();
                           }
