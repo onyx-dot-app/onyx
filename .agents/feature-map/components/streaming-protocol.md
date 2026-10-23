@@ -147,21 +147,14 @@ display without becoming executable.
 
 `Emitter.emit` (`emitter.py:Emitter.emit`):
 
-1. No-ops immediately if `drain_done` is set, so a cancelled turn's workers stop
-   pushing packets without blocking on the queue.
-2. Passes the packet to the turn's fleet `QueryObservation`, if any
+1. Passes the packet to the turn's fleet `QueryObservation`, if any
    (`packet_queued`). In the worker thread, it records the model's LLM cycle
    count at its first answer text, per [[observability]].
-3. Copies the packet's `Placement` with `model_index` overwritten
+2. Copies the packet's `Placement` with `model_index` overwritten
    (`base.model_copy(update={"model_index": self._model_idx})`). The producer's
    own `model_index`, if any, is discarded here.
-4. Puts `(model_idx, tagged_packet)` onto the shared `merged_queue`, the same
-   queue every model's worker thread writes to, per [[core-chat-loop]].
-
-`NullEmitter` (`emitter.py:NullEmitter`) implements the same interface but
-discards every packet. It is used where tools run outside a chat turn (the
-Search API, the MCP server), so tool code does not need to branch on whether it
-is inside a streaming context.
+3. Publishes the packet through the turn's `ChatDelivery`. A publication lock
+   preserves the same packet order for live delivery and replay storage.
 
 ### 4.4 Transport
 
@@ -194,12 +187,21 @@ chat generator still runs through Starlette's thread pool for each yielded packe
 
 ### 4.5 Buffering and resume
 
-`process_message.py` constructs one `StreamBufferWriter` per run
-(`process_message.py`, near `stream_buffer = StreamBufferWriter(...)`) and calls
-`stream_buffer.append_line(get_json_line(...))` for every packet before it
-reaches the HTTP response, in addition to yielding it live. `flush` compresses
-and writes a new chunk once `_FLUSH_THRESHOLD_BYTES` of pending text accumulates;
-`mark_done` finalizes the meta record when the run ends.
+`ChatDelivery` sends packets to the live reader and stages serialized lines for
+`StreamBufferWriter`. The event worker drains a full 256-line batch immediately,
+including when one event produces many packets. It also flushes smaller batches
+every 50 ms. Cache I/O runs outside the publication lock, so control and
+persistence threads can keep publishing while a cache write blocks.
+
+`StreamBufferWriter` compresses lines into cache chunks, flushing at 32 KiB or
+when the delivery worker requests a flush. `mark_done` finalizes replay retention
+or deletes content-free incognito buffers.
+
+Replay overflow, cache errors, and storage limits make the stream non-resumable;
+they do not fail live delivery. `STREAM_GAP` reports missing live output, such as
+reader overflow or failed agent-event delivery. Completion checks unfinished
+events separately from cache cleanup, so a slow final cache write does not
+produce a false live-stream error.
 
 `resume_chat_stream` (`chat_backend.py:resume_chat_stream`) finds the stream ID in
 the processing fence (`get_processing_stream_id`), then replays from

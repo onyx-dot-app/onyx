@@ -33,7 +33,7 @@ _PREFIX = "chatstream"
 # Idle flushes bound latency below the chunk-size threshold.
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
 _STREAM_QUEUE_CAPACITY = 1024
-_BUFFER_WORK_CAPACITY = 128
+_BUFFER_WORK_CAPACITY = 256
 
 
 class StreamBufferMeta(BaseModel):
@@ -357,7 +357,8 @@ class ChatDelivery:
         self._pending_replay: list[str] = []
         self._finished = threading.Event()
         self._closing = False
-        self._gap = threading.Event()
+        self._live_gap_reported = False
+        self._replay_unavailable = threading.Event()
         self._publish_lock = threading.RLock()
         self.events = EventDispatcher(flush=self._flush_replay)
 
@@ -370,7 +371,11 @@ class ChatDelivery:
         self.events.start()
 
     def publish(self, item: Packet | StreamingError) -> None:
-        line = get_json_line(item.model_dump()) if self._buffer is not None else None
+        line = (
+            get_json_line(item.model_dump())
+            if self._buffer is not None and not self._replay_unavailable.is_set()
+            else None
+        )
         # Concurrent model writers must produce the same order in both destinations.
         with self._publish_lock:
             if self._finished.is_set():
@@ -378,19 +383,26 @@ class ChatDelivery:
             if self._query_observation is not None:
                 self._query_observation.observe_packet(item)
             self.reader.publish(item)
-            if line is None or self._gap.is_set():
+            if line is None or self._replay_unavailable.is_set():
                 return
             if len(self._pending_replay) >= _BUFFER_WORK_CAPACITY:
                 logger.warning("Chat cache delivery exceeded its backlog bound")
-                self.report_gap()
+                self._replay_unavailable.set()
+                self._pending_replay.clear()
                 return
             self._pending_replay.append(line)
+            flush_replay = len(self._pending_replay) >= _BUFFER_WORK_CAPACITY
+        # Control publishers must not wait for cache I/O.
+        if flush_replay and self.events.is_dispatch_thread:
+            self._flush_replay(False)
 
     def report_gap(self) -> None:
         with self._publish_lock:
-            if self._gap.is_set():
+            if self._live_gap_reported:
                 return
-            self._gap.set()
+            self._live_gap_reported = True
+            self._replay_unavailable.set()
+            self._pending_replay.clear()
             self.reader.publish(_stream_gap())
 
     def finish(self) -> None:
@@ -407,8 +419,11 @@ class ChatDelivery:
             if not self.finished.done():
                 self.finished.set_result(None)
         if not self.finished.done():
-            logger.warning("Chat cache delivery cleanup exceeded its wait bound")
-            self.report_gap()
+            if self.events.has_pending_events:
+                logger.warning("Chat event delivery exceeded its wait bound")
+                self.report_gap()
+            else:
+                logger.warning("Chat cache delivery cleanup exceeded its wait bound")
         if self._query_observation is not None:
             self._query_observation.finish()
         self.reader.publish(_StreamStatus.DONE)
@@ -426,26 +441,26 @@ class ChatDelivery:
         try:
             if buffer is not None:
                 for line in lines:
-                    if self._gap.is_set():
+                    if self._replay_unavailable.is_set():
                         break
                     buffer.append_line(line)
-                if self._gap.is_set() and not buffer.truncated:
+                if self._replay_unavailable.is_set() and not buffer.truncated:
                     buffer.mark_truncated()
                 buffer.flush()
                 if buffer.truncated:
-                    self.report_gap()
+                    self._replay_unavailable.set()
         except Exception:
             logger.exception("Chat cache delivery failed")
-            self.report_gap()
+            self._replay_unavailable.set()
         if not final:
             return
         try:
             if buffer is not None:
-                if self._gap.is_set() and not buffer.truncated:
+                if self._replay_unavailable.is_set() and not buffer.truncated:
                     buffer.mark_truncated()
                 buffer.mark_done()
         except Exception:
             logger.exception("Chat cache delivery could not finalize")
-            self.report_gap()
+            self._replay_unavailable.set()
         finally:
             self.finished.set_result(None)

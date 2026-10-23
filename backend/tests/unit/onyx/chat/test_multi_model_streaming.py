@@ -1731,14 +1731,12 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
         try:
             assert cache_failed.wait(2)
             first = next(reader)
-            second = next(reader)
             assert isinstance(first, Packet)
-            assert isinstance(second, StreamingError)
-            assert second.error_code == "STREAM_GAP"
             persist.assert_not_called()
         finally:
             release.set()
-            list(reader)
+            remaining = list(reader)
+        assert not any(isinstance(item, StreamingError) for item in remaining)
         persist.assert_called_once()
     buffer.mark_done.assert_called_once()
     buffer.mark_truncated.assert_called_once()
