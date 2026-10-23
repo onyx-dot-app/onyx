@@ -122,9 +122,13 @@ function GroupsPage() {
             variant="info"
             title={t("permissionsChanged.title")}
             description={t("permissionsChanged.description", { appName })}
+            // Matches the md button's padding, so its label lines up with the
+            // title.
+            contentPadding={1}
             rightChildren={
               <Button
                 icon={SvgExternalLink}
+                size="md"
                 onClick={() =>
                   window.open(
                     "https://docs.onyx.app/admins/permissions/whats_changing",
