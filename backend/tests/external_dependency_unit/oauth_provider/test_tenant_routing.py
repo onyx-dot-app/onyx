@@ -160,7 +160,7 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
             return get_current_tenant_id()
 
         app.dependency_overrides[auth_backend.get_strategy] = get_redis_strategy
-        tenant_tracking.add_api_server_tenant_id_middleware(app, setup_logger())
+        app.add_middleware(tenant_tracking.tenant_id_middleware, logger=setup_logger())
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app),
             base_url="http://localhost:3000",

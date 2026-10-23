@@ -307,7 +307,7 @@ def _test_client(
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
-    # registers add_api_server_tenant_id_middleware (required to populate
+    # registers tenant_id_middleware (required to populate
     # CURRENT_TENANT_ID_CONTEXTVAR from the auth cookie in cloud mode).
     # `set_is_ee_if_available()` already ran at onyx.main module
     # load above; the dispatcher hits the lru_cache and resolves to the

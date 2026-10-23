@@ -153,7 +153,7 @@ Physical layout (Postgres):
 ### 4.1 An HTTP request: from cookie to a tenant-scoped session
 
 ```
-add_api_server_tenant_id_middleware              ee/onyx/server/middleware/tenant_tracking.py
+tenant_id_middleware              ee/onyx/server/middleware/tenant_tracking.py
   (registered only in EE's app; CE's onyx/main.py does not register any
    tenant-resolving middleware, because in CE MULTI_TENANT is always False)
   └─ _get_tenant_id_from_request
@@ -174,16 +174,22 @@ get_session() / get_session_with_current_tenant()             db/engine/sql_engi
   └─ Session(bind=connection)
 ```
 
+Tenant tracking, tier gating, and license enforcement use pure ASGI middleware.
+Tenant tracking runs before tier gating. It keeps tenant context through response
+streaming and restores the caller's context in `finally`, including on cancellation.
+Errors after response start propagate; they cannot replace the response with JSON.
+The model server's header-based tenant middleware also restores context in `finally`.
+
 Every source in `_get_tenant_id_from_request` is signed or server-issued (a PAT, a
 Redis-backed session token, a JWT). None of them lets an unauthenticated caller name
 an arbitrary tenant; an unauthenticated request resolves to `POSTGRES_DEFAULT_SCHEMA`,
 which owns no tenant data.
 
-**Where this breaks:** `onyx/utils/middleware.py:add_onyx_tenant_id_middleware`
+**Where this breaks:** `onyx/utils/middleware.py:tenant_header_middleware`
 also sets `CURRENT_TENANT_ID_CONTEXTVAR` from a raw `X-Onyx-Tenant-ID` request
 header, with no signature and no validation. It is wired up only in
 `backend/model_server/main.py`, not in the API server
-(`grep -rn "add_onyx_tenant_id_middleware" backend/` finds exactly those two files).
+(tests also register this middleware in isolated applications).
 The model server is an internal service, not directly internet-facing, which is the
 implicit justification; this document cannot verify the network topology that makes
 that safe, and a change that exposes the model server externally, or that reuses
@@ -264,7 +270,7 @@ The risk is a new call site that crosses a raw thread boundary without copying.
    (`sql_engine.py`), which is explicitly pinned to `public` for catalog tables.
 2. **The tenant comes from the authenticated context, never from client input.**
    The only place a header (`X-Onyx-Tenant-ID`) directly sets the contextvar is
-   `onyx/utils/middleware.py:add_onyx_tenant_id_middleware`, wired only into the
+   `onyx/utils/middleware.py:tenant_header_middleware`, wired only into the
    model server (§4.1, §9). No API-server endpoint accepts a tenant ID as a request
    body or query parameter; `is_valid_schema_name`/`TENANT_ID_PATTERN` validate
    every tenant ID that does cross a boundary (a JWT claim, a Redis-cached session,
@@ -459,7 +465,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
   builds a Redis client inside itself is reading or writing against the wrong
   tenant, or raising, not against "no tenant" safely. `asyncio.create_task` and
   `asyncio.to_thread` copy the context and are not affected.
-- **`onyx/utils/middleware.py:add_onyx_tenant_id_middleware` trusts a bare
+- **`onyx/utils/middleware.py:tenant_header_middleware` trusts a bare
   `X-Onyx-Tenant-ID` header with no signature check.** It is wired into
   `backend/model_server/main.py` only, never the API server. The exposure is
   currently bounded by a second fact: the model server never reads the value back.
@@ -504,7 +510,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
 
 - Whether the model server (`backend/model_server/`) is genuinely unreachable from
   outside the cluster in every deployment topology, which is the implicit
-  justification for `add_onyx_tenant_id_middleware` trusting a raw header. Not
+  justification for `tenant_header_middleware` trusting a raw header. Not
   verified from the code in this repository.
 - The full list of `MULTI_TENANT`-conditional behaviors below is a representative
   sample (`grep -rn "MULTI_TENANT" backend/onyx backend/ee | grep -v test` returns

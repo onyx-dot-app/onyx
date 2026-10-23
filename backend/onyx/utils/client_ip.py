@@ -19,9 +19,7 @@ import ipaddress
 from contextvars import ContextVar
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 _CLIENT_IP_CONTEXTVAR: ContextVar[str | None] = ContextVar(
     "onyx_client_ip", default=None
@@ -63,17 +61,22 @@ def current_client_ip() -> str | None:
     return _CLIENT_IP_CONTEXTVAR.get()
 
 
-class ClientIPMiddleware(BaseHTTPMiddleware):
+class ClientIPMiddleware:
     """Stash the per-request client IP into a contextvar so downstream code
     (telemetry, audit logs, rate limiters) can read it without threading the
     request through every call site. One extraction per request.
     """
 
-    async def dispatch(
-        self, request: StarletteRequest, call_next: RequestResponseEndpoint
-    ) -> Response:
-        token = _CLIENT_IP_CONTEXTVAR.set(get_client_ip(request))
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        token = _CLIENT_IP_CONTEXTVAR.set(get_client_ip(Request(scope)))
         try:
-            return await call_next(request)
+            await self.app(scope, receive, send)
         finally:
             _CLIENT_IP_CONTEXTVAR.reset(token)
