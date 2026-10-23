@@ -79,7 +79,8 @@ function GroupsPage() {
         </SettingsLayouts.Header>
       </div>
 
-      <SettingsLayouts.Body>
+      {/* The search row's own padding spaces it from the cards. */}
+      <SettingsLayouts.Body gap={0}>
         <AdminListHeader
           hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}
