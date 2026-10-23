@@ -122,6 +122,7 @@ function GroupsPage() {
             variant="info"
             title={t("permissionsChanged.title")}
             description={t("permissionsChanged.description", { appName })}
+            innerPadding={1}
             // Matches the md button's padding, so its label lines up with the
             // title.
             contentPadding={1}
