@@ -255,8 +255,8 @@ function ContentXl({
               icon={SvgEdit}
               prominence="internal"
               size={config.editButtonSize}
-              aria-label={editTooltip ?? strings.edit}
-              tooltip={editTooltip ?? strings.edit}
+              aria-label={editTooltip || strings.edit}
+              tooltip={editTooltip || strings.edit}
               tooltipSide="end"
               onClick={startEditing}
             />
