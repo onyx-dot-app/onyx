@@ -77,6 +77,16 @@ export interface InputNumberProps {
   plain?: boolean;
 }
 
+/**
+ * The text to show for `value`. Text that already reads as `value` stays as
+ * typed: `String(value)` would show a long number in exponent form or
+ * rounded ("1e+35" for 35 nines).
+ */
+function textFor(value: number | null, typed: string): string {
+  if (value === null) return "";
+  return typed.trim() !== "" && Number(typed) === value ? typed : String(value);
+}
+
 export default function InputNumber({
   value,
   onChange,
@@ -108,7 +118,7 @@ export default function InputNumber({
 
   // Sync input value when external value changes (e.g., from stepper buttons or reset)
   React.useEffect(() => {
-    setInputValue(value === null ? "" : String(value));
+    setInputValue((typed) => textFor(value, typed));
   }, [value]);
 
   const effectiveValue = value ?? 0;
@@ -146,8 +156,15 @@ export default function InputNumber({
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
       onChange(null);
+    } else if (value !== null && min !== undefined && value < min) {
+      // Typing is free; leaving the field clamps to the nearest bound.
+      onChange(min);
+      setInputValue(String(min));
+    } else if (value !== null && max !== undefined && value > max) {
+      onChange(max);
+      setInputValue(String(max));
     } else {
-      setInputValue(value === null ? "" : String(value));
+      setInputValue((typed) => textFor(value, typed));
     }
   };
 
@@ -169,8 +186,8 @@ export default function InputNumber({
     if (!Number.isFinite(val)) {
       return;
     }
-    // Typed values are not clamped: an out-of-range value stays as typed, so
-    // the form can flag it (see `InputNumberField`). The steppers clamp.
+    // Typed values are not clamped while typing, so a partial value (the "0"
+    // of "0.5") or a long one is kept as typed; blur clamps to the bounds.
     onChange(val);
   };
 

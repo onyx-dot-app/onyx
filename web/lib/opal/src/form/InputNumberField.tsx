@@ -18,10 +18,9 @@ type InputNumberFieldProps = Omit<InputNumberProps, "value" | "onChange"> & {
 
 /**
  * Formik-bound `InputNumber` over a `number | undefined` field; cleared, the
- * field holds `undefined`. A typed value outside `min`..`max` is kept as
- * typed and fails the field's validation, so the form shows the error
- * instead of the input clamping it. A touched field with an error shows the
- * error state.
+ * field holds `undefined`. A value typed outside `min`..`max` fails the
+ * field's validation while it is typed, and `InputNumber` clamps it on blur.
+ * A touched field with an error shows the error state.
  */
 function InputNumberField({
   name,

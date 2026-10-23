@@ -3,7 +3,7 @@
 **Import:** `import { InputNumber, type InputNumberProps } from "@opal/components";`
 
 A number field with chevron stepper buttons and an optional reset-to-default action.
-Typing never clamps: an out-of-range value stays as typed, so a form can flag it. For a Formik field, use `InputNumberField` from `@opal/form`, which shows the range error. Stepping clamps to both bounds. The chrome is the shared `.opal-input`, and the unit shows in `text-02`.
+Typing is free: any number can be typed, and leaving the field clamps it to `min`/`max`. For a Formik field, use `InputNumberField` from `@opal/form`, which also flags an out-of-range value while it is typed. Stepping clamps to both bounds. The chrome is the shared `.opal-input`, and the unit shows in `text-02`.
 With a negative `min`, the value can be typed with a leading minus sign.
 
 ## Props
