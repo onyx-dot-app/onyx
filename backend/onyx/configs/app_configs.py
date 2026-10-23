@@ -1753,7 +1753,8 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
-# A full permission or group sync of a large source can take longer than other jobs
+# Group sync only: a full group sync of a large source can take longer than
+# other jobs. A doc permission sync has no time limit.
 PERMISSION_SYNC_TIMEOUT = int(
     os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
 )
