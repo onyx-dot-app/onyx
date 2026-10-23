@@ -292,9 +292,8 @@ def _step(
     )
     # A parked cursor is driven as the process that listed its mailbox would.
     for cursor in checkpoint.active:
-        connector._listings.setdefault(
-            cursor.mailbox.id, connector_module._MailboxListing()
-        )
+        if cursor.mailbox.id not in connector._listings:
+            connector._listings[cursor.mailbox.id] = connector_module._mailbox_listing()
     generator = load(start, END, checkpoint)
     while True:
         try:
@@ -755,33 +754,6 @@ def test_a_checkpoint_from_the_table_based_walk_starts_the_attempt_over() -> Non
     assert checkpoint.has_more
     assert checkpoint.mailboxes is None
     assert checkpoint.active == []
-
-
-def test_a_mailbox_past_the_listing_cap_is_a_recorded_failure_and_skipped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(connector_module, "MAX_LISTING_ROWS_PER_MAILBOX", 1)
-    gateway = _happy_gateway()
-
-    items = _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS]), start=0)
-
-    failures = [item for item in items if isinstance(item, ConnectorFailure)]
-    assert [f.failed_entity.entity_id for f in failures if f.failed_entity] == [
-        MAILBOX_ADDRESS
-    ]
-    assert "more than 1 messages" in failures[0].failure_message
-    assert not [item for item in items if isinstance(item, Document)]
-    gateway.fetch_conversation_messages_page.assert_not_called()
-
-
-def test_slim_walk_stops_at_a_mailbox_past_the_listing_cap(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(connector_module, "MAX_LISTING_ROWS_PER_MAILBOX", 1)
-    connector = _connector(_happy_gateway(), mailboxes=[MAILBOX_ADDRESS])
-
-    with pytest.raises(ConnectorValidationError, match="more than 1 messages"):
-        list(connector.retrieve_all_slim_docs())
 
 
 def test_pruning_stops_at_an_unresolved_group() -> None:

@@ -150,6 +150,23 @@ def designated_builder(
     return next((m for m in candidates if is_available(m)), None)
 
 
+def thread_root(rows: Iterable[ThreadListing]) -> ThreadListing | None:
+    """The copy's first message of the thread, the one that names its builder."""
+    roots: list[ThreadListing] = [row for row in rows if row.is_root]
+    return min(roots, key=_row_order) if roots else None
+
+
+def rows_to_plan(rows: list[ThreadListing]) -> list[ThreadListing]:
+    """The rows of a copy ``plan_documents`` reads: its newest messages and
+    its first, each message once. Trimming in steps keeps the same rows as
+    trimming at once, so a long copy can be trimmed as it loads."""
+    kept: list[ThreadListing] = newest_rows(rows, MAX_MESSAGES_PER_CONVERSATION)
+    root: ThreadListing | None = thread_root(rows)
+    if root is not None and root.message_id not in {row.message_id for row in kept}:
+        kept.append(root)
+    return kept
+
+
 def _named_ids(row: ThreadListing) -> set[str]:
     return {mailbox.id for mailbox in row.named}
 
@@ -178,8 +195,7 @@ def plan_documents(
     if not kept:
         return []
     key: str = kept[0].key
-    roots: list[ThreadListing] = [row for row in rows if row.is_root]
-    root: ThreadListing | None = min(roots, key=_row_order) if roots else None
+    root: ThreadListing | None = thread_root(rows)
     builder: OutlookMailbox | None = (
         designated_builder(root, is_available) if root is not None else None
     )
