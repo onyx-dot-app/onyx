@@ -5155,6 +5155,9 @@
         },
         "submitError": {
           "toast": "Error al enviar la credencial"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Agrega tu token de acceso personal"
         }
       },
       "delete": {
@@ -5213,7 +5216,8 @@
         "zuliprcContent": "Contenido de zuliprc",
         "authenticationMethod": "Método de autenticación",
         "primaryAdminEmail": "Correo del administrador principal",
-        "serviceAccountKey": "Clave de la cuenta de servicio"
+        "serviceAccountKey": "Clave de la cuenta de servicio",
+        "personalAccessToken": "Token de acceso personal"
       },
       "hints": {
         "boxUserEmail": "Opcional. El usuario de Box al que suplantar.",
@@ -5225,7 +5229,8 @@
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Sube o pega la clave `.json` de una cuenta de servicio de Google con delegación de todo el dominio."
+        "googleServiceAccountKey": "Sube o pega la clave `.json` de una cuenta de servicio de Google con delegación de todo el dominio.",
+        "confluencePersonalAccessToken": "Pega el [token de acceso personal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de tu cuenta de administrador de Confluence."
       },
       "methods": {
         "labels": {

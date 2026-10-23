@@ -5155,6 +5155,9 @@
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "個人用アクセストークンを追加"
         }
       },
       "delete": {
@@ -5213,7 +5216,8 @@
         "zuliprcContent": "Zuliprc の内容",
         "authenticationMethod": "認証方法",
         "primaryAdminEmail": "プライマリ管理者のメールアドレス",
-        "serviceAccountKey": "サービスアカウントキー"
+        "serviceAccountKey": "サービスアカウントキー",
+        "personalAccessToken": "個人用アクセストークン"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -5225,7 +5229,8 @@
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。"
+        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
+        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
       },
       "methods": {
         "labels": {

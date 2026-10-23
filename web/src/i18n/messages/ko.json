@@ -5155,6 +5155,9 @@
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "개인 액세스 토큰 추가"
         }
       },
       "delete": {
@@ -5213,7 +5216,8 @@
         "zuliprcContent": "Zuliprc 내용",
         "authenticationMethod": "인증 방법",
         "primaryAdminEmail": "기본 관리자 이메일",
-        "serviceAccountKey": "서비스 계정 키"
+        "serviceAccountKey": "서비스 계정 키",
+        "personalAccessToken": "개인 액세스 토큰"
       },
       "hints": {
         "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
@@ -5225,7 +5229,8 @@
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요."
+        "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요.",
+        "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요."
       },
       "methods": {
         "labels": {

@@ -5155,6 +5155,9 @@
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "أضف رمز الوصول الشخصي"
         }
       },
       "delete": {
@@ -5213,7 +5216,8 @@
         "zuliprcContent": "محتوى Zuliprc",
         "authenticationMethod": "طريقة المصادقة",
         "primaryAdminEmail": "البريد الإلكتروني للمسؤول الرئيسي",
-        "serviceAccountKey": "مفتاح حساب الخدمة"
+        "serviceAccountKey": "مفتاح حساب الخدمة",
+        "personalAccessToken": "رمز الوصول الشخصي"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -5225,7 +5229,8 @@
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق."
+        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق.",
+        "confluencePersonalAccessToken": "الصق [رمز الوصول الشخصي](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) من حساب مسؤول Confluence."
       },
       "methods": {
         "labels": {

@@ -140,16 +140,17 @@ export default function AuthenticationAccountSection({
     source: displayName,
   });
   const selectedSavedId: number | null = currentCredential?.id ?? null;
-  // The source's fields when a new account is typed into this form; `null`
-  // when it saves through its own account form instead.
-  const typedSpec = typedAccountSpec(connector);
+  const { values, setFieldError, setFieldTouched, setFieldValue } =
+    useFormikContext<Record<string, unknown>>();
+  // The source's fields when a new account is typed into this form, as the
+  // connector form's values pick them; `null` when it saves through its own
+  // account form instead.
+  const typedSpec = typedAccountSpec(connector, values);
   const accountRealmFields = typedSpec ? realmFields(typedSpec) : [];
   const realmKeys: ReadonlySet<string> = new Set(
     accountRealmFields.map(([key]) => key)
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { values, setFieldError, setFieldTouched, setFieldValue } =
-    useFormikContext<Record<string, unknown>>();
 
   const newAccountValues: NewAccountValues | undefined = getIn(
     values,

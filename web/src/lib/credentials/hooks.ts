@@ -36,6 +36,7 @@ import type {
   AnyCredential,
   CredentialCheckReport,
   CredentialSharing,
+  CredentialSpecField,
   SimilarCredential,
   CredentialSetup,
   OAuthDetails,
@@ -53,17 +54,18 @@ export interface CredentialFieldCopy {
 }
 
 /**
- * Looks up a credential field's title and hint from the source's spec. A key
- * the spec does not list (a stored key of an older credential) falls back to
- * a title read from the key itself, so no field renders blank.
+ * Looks up a credential field's title and hint from the source's spec, or
+ * from `field` when given (a form variant's field). A key the spec does not
+ * list (a stored key of an older credential) falls back to a title read from
+ * the key itself, so no field renders blank.
  */
 export function useCredentialFieldCopy(
   source: ValidSources
-): (key: string) => CredentialFieldCopy {
+): (key: string, field?: CredentialSpecField) => CredentialFieldCopy {
   const t = useTranslations("admin.credentials");
   const spec = getCredentialSpec(source);
-  return (key) => {
-    const field = spec?.fields[key];
+  return (key, fieldOverride) => {
+    const field = fieldOverride ?? spec?.fields[key];
     if (!spec || !field) {
       return {
         title:
