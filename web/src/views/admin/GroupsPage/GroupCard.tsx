@@ -5,9 +5,7 @@ import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { Button, SelectCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import {
   isBuiltInGroup,
   buildGroupDescription,
@@ -65,25 +63,18 @@ function GroupCard({ group }: GroupCardProps) {
         editable={!isSyncing && canManage}
         onTitleChange={!isSyncing && canManage ? handleRename : undefined}
         rightChildren={
-          <Section flexDirection="row" alignItems="start" gap={0}>
-            <div className="py-1">
-              <Text mainUiBody text03>
-                {formatMemberCount(
-                  group.users.filter((u) => u.is_active).length,
-                  t
-                )}
-              </Text>
-            </div>
-            {canManageMembers && (
-              <Button
-                icon={SvgChevronRight}
-                prominence="tertiary"
-                tooltip={t("card.viewGroup.label")}
-                aria-label={t("card.viewGroup.label")}
-                onClick={() => router.push(`/admin/groups/${group.id}`)}
-              />
+          <Button
+            rightIcon={SvgChevronRight}
+            prominence="tertiary"
+            tooltip={t("card.viewGroup.label")}
+            disabled={!canManageMembers}
+            onClick={() => router.push(`/admin/groups/${group.id}`)}
+          >
+            {formatMemberCount(
+              group.users.filter((u) => u.is_active).length,
+              t
             )}
-          </Section>
+          </Button>
         }
       />
     </SelectCard>
