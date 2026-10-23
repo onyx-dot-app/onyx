@@ -6792,6 +6792,10 @@
           "description": "El modelo premium de generación de imágenes de OpenAI, para las ediciones más precisas."
         }
       },
+      "retiredModelWarning": {
+        "description": "Conecta otro modelo, establécelo como predeterminado y luego desconecta {title}.",
+        "title": "{title} ya no está disponible"
+      },
       "setDefaultError": {
         "message": "No se pudo establecer como predeterminado"
       },
