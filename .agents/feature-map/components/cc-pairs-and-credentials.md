@@ -213,8 +213,8 @@ Connector (1) ---< ConnectorCredentialPair >--- (1) Credential
   progress row for any document-index syncing operation, keyed by
   `(entity_id, sync_type)`. Connector deletion is `SyncType.CONNECTOR_DELETION`
   with `entity_id = cc_pair_id`; `monitor_connector_deletion_taskset`
-  (`background/celery/tasks/connector_deletion/tasks.py`) updates it as the
-  taskset drains.
+  (`background/celery/tasks/connector_deletion/tasks.py`) updates it on every
+  beat tick while the deletion runs.
 - `targeted_reindex_job` / `targeted_reindex_job_target`
   (`models.py:TargetedReindexJob`): a user-initiated retry of the specific
   documents that failed on a prior index attempt, not a general reindex. One
