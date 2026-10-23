@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "افتراضية"
+        "defaultSuffix": {
+          "label": "(افتراضية)"
         },
         "toasts": {
           "renameFailed": "فشلت إعادة تسمية المجموعة",
@@ -6190,7 +6190,7 @@
           "title": "لم يتم العثور على مجموعات"
         },
         "search": {
-          "placeholder": "البحث في المجموعات..."
+          "placeholder": "ابحث في المجموعات أو اضغط \"/\" للتركيز..."
         }
       },
       "members": {
@@ -6264,7 +6264,7 @@
         "learnMore": {
           "label": "اعرف المزيد"
         },
-        "title": "تغيّرت الأذونات"
+        "title": "تغيّرت الأذونات."
       },
       "sharedResources": {
         "agent": {

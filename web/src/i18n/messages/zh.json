@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "默认"
+        "defaultSuffix": {
+          "label": "（默认）"
         },
         "toasts": {
           "renameFailed": "重命名用户组失败",
@@ -6190,7 +6190,7 @@
           "title": "未找到用户组"
         },
         "search": {
-          "placeholder": "搜索用户组..."
+          "placeholder": "搜索用户组，或按 \"/\" 聚焦..."
         }
       },
       "members": {
@@ -6264,7 +6264,7 @@
         "learnMore": {
           "label": "了解更多"
         },
-        "title": "权限已变更"
+        "title": "权限已变更。"
       },
       "sharedResources": {
         "agent": {

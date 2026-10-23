@@ -6072,8 +6072,8 @@
     },
     "groups": {
       "card": {
-        "defaultTag": {
-          "label": "Padrão"
+        "defaultSuffix": {
+          "label": "(Padrão)"
         },
         "toasts": {
           "renameFailed": "Falha ao renomear o grupo",
@@ -6190,7 +6190,7 @@
           "title": "Nenhum grupo encontrado"
         },
         "search": {
-          "placeholder": "Pesquisar grupos..."
+          "placeholder": "Pesquise grupos ou pressione \"/\" para focar..."
         }
       },
       "members": {
@@ -6264,7 +6264,7 @@
         "learnMore": {
           "label": "Saiba mais"
         },
-        "title": "As permissões mudaram"
+        "title": "As permissões mudaram."
       },
       "sharedResources": {
         "agent": {
