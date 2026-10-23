@@ -32,7 +32,7 @@ logger = setup_logger()
 _PREFIX = "chatstream"
 # Idle flushes bound latency below the chunk-size threshold.
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
-_BUFFER_WORK_CAPACITY = 256
+_REPLAY_BACKLOG_MAX_BYTES = 4 * 1024 * 1024
 
 
 class StreamBufferMeta(BaseModel):
@@ -347,6 +347,7 @@ class ChatDelivery:
         self.finished: Future[None] = Future()
         self._buffer = buffer
         self._pending_replay: list[str] = []
+        self._pending_replay_bytes = 0
         self._finished = threading.Event()
         self._closing = False
         self._live_gap_reported = False
@@ -377,13 +378,19 @@ class ChatDelivery:
             self.reader.publish(item)
             if line is None or self._replay_unavailable.is_set():
                 return
-            if len(self._pending_replay) >= _BUFFER_WORK_CAPACITY:
-                logger.warning("Chat cache delivery exceeded its backlog bound")
+            pending_bytes = self._pending_replay_bytes + len(line.encode("utf-8"))
+            if pending_bytes > _REPLAY_BACKLOG_MAX_BYTES:
+                logger.warning(
+                    "Chat cache delivery exceeded its %d-byte backlog limit",
+                    _REPLAY_BACKLOG_MAX_BYTES,
+                )
                 self._replay_unavailable.set()
                 self._pending_replay.clear()
+                self._pending_replay_bytes = 0
                 return
             self._pending_replay.append(line)
-            flush_replay = len(self._pending_replay) >= _BUFFER_WORK_CAPACITY
+            self._pending_replay_bytes = pending_bytes
+            flush_replay = pending_bytes >= _FLUSH_THRESHOLD_BYTES
         # Control publishers must not wait for cache I/O.
         if flush_replay and self.events.is_dispatch_thread:
             self._flush_replay(False)
@@ -395,6 +402,7 @@ class ChatDelivery:
             self._live_gap_reported = True
             self._replay_unavailable.set()
             self._pending_replay.clear()
+            self._pending_replay_bytes = 0
             self.reader.publish(_stream_gap())
 
     def finish(self) -> None:
@@ -428,6 +436,7 @@ class ChatDelivery:
                 return
             lines = self._pending_replay
             self._pending_replay = []
+            self._pending_replay_bytes = 0
         # Cache I/O must leave control and error packet producers free to publish.
         buffer = self._buffer
         try:
