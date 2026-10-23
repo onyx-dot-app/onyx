@@ -469,117 +469,129 @@ export default function AuthenticationAccountSection({
   );
 
   return (
-    <Section gap={2} alignItems="stretch" width="full">
-      <ContentAction
-        title={t("add.credentialStep.title")}
-        description={t("add.credentialStep.description", {
-          appName: settings.appName,
-        })}
-        sizePreset="main-content"
-        variant="section"
-        padding={0}
-        rightChildren={
-          <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <Section padding={2} width="fit">
-              <Content
-                icon={SvgListTree}
-                title={t("add.savedAccounts.label", {
-                  count: credentials?.length ?? 0,
-                })}
-                sizePreset="main-ui"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
+    <>
+      <Section gap={2} alignItems="stretch" width="full">
+        <ContentAction
+          title={t("add.credentialStep.title")}
+          description={t("add.credentialStep.description", {
+            appName: settings.appName,
+          })}
+          sizePreset="main-content"
+          variant="section"
+          padding={0}
+          rightChildren={
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              gap={0}
+              width="fit"
+            >
+              <Section padding={2} width="fit">
+                <Content
+                  icon={SvgListTree}
+                  title={t("add.savedAccounts.label", {
+                    count: credentials?.length ?? 0,
+                  })}
+                  sizePreset="main-ui"
+                  variant="body"
+                  color="muted"
+                  width="fit"
+                />
+              </Section>
+              {/* Folding hides the saved accounts that are not the pick; with
+              none, it would do nothing, so the button is left out. */}
+              {hasSavedAccounts && (
+                <Button
+                  icon={accountsExpanded ? SvgFold : SvgExpand}
+                  prominence="tertiary"
+                  aria-label={
+                    accountsExpanded
+                      ? t("add.savedAccounts.collapseButton.ariaLabel")
+                      : t("add.savedAccounts.expandButton.ariaLabel")
+                  }
+                  aria-expanded={accountsExpanded}
+                  onClick={() =>
+                    accountsExpanded
+                      ? foldAccounts()
+                      : setAccountsExpanded(true)
+                  }
+                />
+              )}
             </Section>
-            {/* Folding hides the saved accounts that are not the pick; with
-            none, it would do nothing, so the button is left out. */}
-            {hasSavedAccounts && (
-              <Button
-                icon={accountsExpanded ? SvgFold : SvgExpand}
-                prominence="tertiary"
-                aria-label={
-                  accountsExpanded
-                    ? t("add.savedAccounts.collapseButton.ariaLabel")
-                    : t("add.savedAccounts.expandButton.ariaLabel")
-                }
-                aria-expanded={accountsExpanded}
-                onClick={() =>
-                  accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
-                }
-              />
-            )}
-          </Section>
-        }
-      />
+          }
+        />
 
-      {/* The page mounts this step only once the credentials have loaded,
-      and shows its own loader and error until then; the guard only keeps
-      the types honest. */}
-      {!credentials ? null : (
-        <Section gap={6} alignItems="stretch" width="full">
-          {/* One list in a fixed order. Folded, each card that is not the
-          chosen one fades, then its height collapses, so the chosen card
-          moves up on its own. Every item but the first is spaced from the
-          one above inside its fold, so a closed item takes no space. */}
-          <div className="flex flex-col">
-            {credentials.map((credential, index) => (
+        {/* The page mounts this step only once the credentials have loaded,
+        and shows its own loader and error until then; the guard only keeps
+        the types honest. */}
+        {!credentials ? null : (
+          <Section gap={6} alignItems="stretch" width="full">
+            {/* One list in a fixed order. Folded, each card that is not the
+            chosen one fades, then its height collapses, so the chosen card
+            moves up on its own. Every item but the first is spaced from the
+            one above inside its fold, so a closed item takes no space. */}
+            <div className="flex flex-col">
+              {credentials.map((credential, index) => (
+                <Fold
+                  key={credential.id}
+                  open={sectionExpanded || credential.id === selectedSavedId}
+                  keepMounted
+                >
+                  <div className={cn(index > 0 && "pt-2")}>
+                    {renderSavedCard(credential)}
+                  </div>
+                </Fold>
+              ))}
+              {canAuthorize && (
+                <Fold open={sectionExpanded} keepMounted>
+                  <div className={cn(credentials.length > 0 && "pt-2")}>
+                    <Section flexDirection="row" justifyContent="start" gap={1}>
+                      <Button
+                        disabled={isAuthorizing}
+                        variant="action"
+                        onClick={handleAuthorize}
+                      >
+                        {isAuthorizing
+                          ? t("add.authorizeButton.pendingLabel")
+                          : t("add.authorizeButton.label", {
+                              source: displayName,
+                            })}
+                      </Button>
+                    </Section>
+                  </div>
+                </Fold>
+              )}
+              {/* Shown unless a saved account is the pick. Its own fold (the
+              form) is independent of the section's. */}
               <Fold
-                key={credential.id}
-                open={sectionExpanded || credential.id === selectedSavedId}
+                open={sectionExpanded || selectedSavedId === null}
                 keepMounted
               >
-                <div className={cn(index > 0 && "pt-2")}>
-                  {renderSavedCard(credential)}
+                <div
+                  className={cn(
+                    (credentials.length > 0 || canAuthorize) && "pt-2"
+                  )}
+                >
+                  {newAccountCard}
                 </div>
               </Fold>
-            ))}
-            {canAuthorize && (
-              <Fold open={sectionExpanded} keepMounted>
-                <div className={cn(credentials.length > 0 && "pt-2")}>
-                  <Section flexDirection="row" justifyContent="start" gap={1}>
-                    <Button
-                      disabled={isAuthorizing}
-                      variant="action"
-                      onClick={handleAuthorize}
-                    >
-                      {isAuthorizing
-                        ? t("add.authorizeButton.pendingLabel")
-                        : t("add.authorizeButton.label", {
-                            source: displayName,
-                          })}
-                    </Button>
-                  </Section>
-                </div>
-              </Fold>
-            )}
-            {/* Shown unless a saved account is the pick. Its own fold (the
-            form) is independent of the section's. */}
-            <Fold
-              open={sectionExpanded || selectedSavedId === null}
-              keepMounted
-            >
-              <div
-                className={cn(
-                  (credentials.length > 0 || canAuthorize) && "pt-2"
-                )}
-              >
-                {newAccountCard}
-              </div>
-            </Fold>
-          </div>
-
-          <CredentialChecksCard
-            source={connector}
-            credential={toCredentialRef(checkedCredential)}
-            locked={checksLocked || !checkedCredential}
-            // Starting the checks completes the account step, so it folds.
-            onStart={foldAccounts}
-            ccPairId={editCCPairId}
-            expandRequest={expandChecksRequest}
-          />
-        </Section>
+            </div>
+          </Section>
+        )}
+      </Section>
+      {/* A sibling of the section, so it is a child of the form's column and
+      can stay pinned while the rest of the form scrolls by. */}
+      {credentials && (
+        <CredentialChecksCard
+          source={connector}
+          credential={toCredentialRef(checkedCredential)}
+          locked={checksLocked || !checkedCredential}
+          // Starting the checks completes the account step, so it folds.
+          onStart={foldAccounts}
+          ccPairId={editCCPairId}
+          expandRequest={expandChecksRequest}
+        />
       )}
-    </Section>
+    </>
   );
 }

@@ -4,7 +4,7 @@ import type { CredentialRef } from "@/lib/credentials/types";
 import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import { ContentAction, Section } from "@opal/layouts";
+import { ContentAction, Section, StickyBox } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
@@ -478,6 +478,8 @@ interface CheckCardViewProps {
   onRunCheck?: (checkId: string) => void;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
+  /** Folded, pins under the page header while the page scrolls. */
+  stickyWhenFolded?: boolean;
 }
 export function CheckCardView({
   status,
@@ -491,6 +493,7 @@ export function CheckCardView({
   onRunCheck,
   defaultCollapsed = false,
   expandRequest = 0,
+  stickyWhenFolded = false,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
   // The same "Re-run Checks" label the saved account cards use.
@@ -647,52 +650,61 @@ export function CheckCardView({
   // elements. Folded, the whole card is a target that opens it; open, it is
   // passive: no hover, and only its buttons act.
   return (
-    <SelectCard
-      // Filled rests on white.
-      state="filled"
-      border="solid"
-      rounding={4}
-      padding={2}
-      passive={!collapsed}
-      onClick={collapsed ? () => setCollapsed(false) : undefined}
-      ref={cardRef}
-      data-testid={CHECKS_CARD_ID}
+    // Folded, the live card pins 1rem under the page header while the form
+    // scrolls, so the checks' state stays in view.
+    <StickyBox.Item
+      stick="top"
+      inset={4}
+      active={stickyWhenFolded && collapsed}
+      shadow
     >
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
-        {header}
-        {/* The header shows the failure; this announces it. */}
-        {notice && (
-          <span role="alert" className="sr-only">
-            {notice}
-          </span>
-        )}
+      <SelectCard
+        // Filled rests on white.
+        state="filled"
+        border="solid"
+        rounding={4}
+        padding={2}
+        passive={!collapsed}
+        onClick={collapsed ? () => setCollapsed(false) : undefined}
+        ref={cardRef}
+        data-testid={CHECKS_CARD_ID}
+      >
+        <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+          {header}
+          {/* The header shows the failure; this announces it. */}
+          {notice && (
+            <span role="alert" className="sr-only">
+              {notice}
+            </span>
+          )}
 
-        <Fold open={!collapsed}>
-          {/* The space below the header lives inside the fold, so a closed
-              fold takes none. */}
-          <Section
-            justifyContent="start"
-            alignItems="stretch"
-            height="fit"
-            gap={1}
-          >
-            {hasRows ? (
-              <CheckLineGroups
-                lines={lines}
-                onSkipCheck={onSkipCheck}
-                onRunCheck={onRunCheck}
-              />
-            ) : (
-              !notice && (
-                <Text font="main-ui-body" color="text-03">
-                  {isRunning ? t("state.inProgress") : t("empty.label")}
-                </Text>
-              )
-            )}
-          </Section>
-        </Fold>
-      </Section>
-    </SelectCard>
+          <Fold open={!collapsed}>
+            {/* The space below the header lives inside the fold, so a closed
+                fold takes none. */}
+            <Section
+              justifyContent="start"
+              alignItems="stretch"
+              height="fit"
+              gap={1}
+            >
+              {hasRows ? (
+                <CheckLineGroups
+                  lines={lines}
+                  onSkipCheck={onSkipCheck}
+                  onRunCheck={onRunCheck}
+                />
+              ) : (
+                !notice && (
+                  <Text font="main-ui-body" color="text-03">
+                    {isRunning ? t("state.inProgress") : t("empty.label")}
+                  </Text>
+                )
+              )}
+            </Section>
+          </Fold>
+        </Section>
+      </SelectCard>
+    </StickyBox.Item>
   );
 }
 
@@ -774,6 +786,7 @@ export default function CredentialChecksCard({
       onSkipCheck={checks.skipCheck}
       onRunCheck={checks.runCheck}
       expandRequest={expandRequest}
+      stickyWhenFolded
     />
   );
 }

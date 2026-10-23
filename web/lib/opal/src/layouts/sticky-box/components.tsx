@@ -8,7 +8,7 @@ import type { Spacing } from "@opal/types";
 
 type StickyEdge = "top" | "bottom";
 
-interface StickyBoxProps {
+interface StickyBoxItemProps {
   /** The edge of the scroll container the box pins to. @default "top" */
   stick?: StickyEdge;
   /** Gap kept from that edge while pinned, as a spacing step. @default 0 */
@@ -43,7 +43,9 @@ function findScrollParent(element: HTMLElement): Element | null {
 
 /**
  * A block that pins to the top or bottom of its scroll container as the page
- * scrolls past it, on the `--z-sticky` level.
+ * scrolls past it, on the `--z-sticky` level. Inside a `StickyBox.Root`, a
+ * top item pins below the root's visible top (`--sticky-box-top`), e.g. under
+ * a sticky settings header; without one, at the container's edge.
  *
  * CSS has no "is pinned" state, so `shadow` watches the box with an
  * IntersectionObserver: fully visible inside the scroll container it is in
@@ -53,14 +55,14 @@ function findScrollParent(element: HTMLElement): Element | null {
  * `position: sticky` needs the scroll container to be an ancestor with no
  * `overflow: hidden` between the two; the box cannot fix that for a caller.
  */
-function StickyBox({
+function StickyBoxItem({
   stick = "top",
   inset = 0,
   active = true,
   shadow = false,
   children,
   ref,
-}: StickyBoxProps) {
+}: StickyBoxItemProps) {
   const [stuck, setStuck] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -115,11 +117,57 @@ function StickyBox({
       className={cn("opal-sticky-box", active && "opal-sticky-box-active")}
       data-stick={stick}
       data-stuck={stuck || undefined}
-      style={active ? { [stick]: spacingToRem(inset) } : undefined}
+      style={
+        active
+          ? {
+              [stick]:
+                stick === "top"
+                  ? `calc(var(--sticky-box-top, 0px) + ${spacingToRem(inset)})`
+                  : spacingToRem(inset),
+            }
+          : undefined
+      }
     >
       {children}
     </div>
   );
 }
 
-export { StickyBox, type StickyBoxProps, type StickyEdge };
+interface StickyBoxRootProps {
+  children: React.ReactNode;
+  /** Ref forwarded to the root `<div>`. */
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+/**
+ * The region its `StickyBox.Item`s pin inside. It sets `--sticky-box-top` to
+ * the region's visible top: below the sticky settings header, whose height
+ * `SettingsLayouts.Header` publishes, else the container's edge.
+ *
+ * An item still sticks only within its own parent's box, so the parent must
+ * span the region.
+ */
+function StickyBoxRoot({ children, ref }: StickyBoxRootProps) {
+  return (
+    <div
+      ref={ref}
+      className="opal-sticky-box-root"
+      style={
+        {
+          "--sticky-box-top": "var(--settings-header-height, 0px)",
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+const StickyBox = { Root: StickyBoxRoot, Item: StickyBoxItem };
+
+export {
+  StickyBox,
+  type StickyBoxItemProps,
+  type StickyBoxRootProps,
+  type StickyEdge,
+};
