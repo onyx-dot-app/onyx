@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "optional"
+        },
+        "availableRefresh": {
+          "tooltip": "Liste aktualisieren"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "Bereiche",
               "description": "Bereichsschlüssel, die dieser Konnektor indexiert (z. B. ENG).",
               "placeholder": "Bereichsschlüssel oder URL hinzufügen",
-              "required": "Fügen Sie mindestens einen Bereich oder eine Seite hinzu."
+              "required": "Fügen Sie mindestens einen Bereich oder eine Seite hinzu.",
+              "available": "{more, select, true {{count, number}+ Bereiche verfügbar} other {{count, plural, one {# Bereich verfügbar} other {# Bereiche verfügbar}}}}"
             },
             "page_id": {
               "label": "Seiten",
               "description": "Seiten-IDs, die dieser Konnektor indexiert (z. B. 123456).",
-              "placeholder": "Seiten-ID oder URL hinzufügen"
+              "placeholder": "Seiten-ID oder URL hinzufügen",
+              "available": "{more, select, true {{count, number}+ Seiten verfügbar} other {{count, plural, one {# Seite verfügbar} other {# Seiten verfügbar}}}}"
             },
             "index_recursively": {
               "label": "Unterseiten einbeziehen",

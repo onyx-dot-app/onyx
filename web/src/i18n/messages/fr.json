@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "facultatif"
+        },
+        "availableRefresh": {
+          "tooltip": "Actualiser la liste"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "Espaces",
               "description": "Clés d'espace que ce connecteur indexe (par ex. ENG).",
               "placeholder": "Ajoutez une clé d'espace ou une URL",
-              "required": "Ajoutez au moins un espace ou une page."
+              "required": "Ajoutez au moins un espace ou une page.",
+              "available": "{more, select, true {{count, number}+ espaces disponibles} other {{count, plural, one {# espace disponible} other {# espaces disponibles}}}}"
             },
             "page_id": {
               "label": "Pages",
               "description": "ID de page que ce connecteur indexe (par ex. 123456).",
-              "placeholder": "Ajoutez un ID de page ou une URL"
+              "placeholder": "Ajoutez un ID de page ou une URL",
+              "available": "{more, select, true {{count, number}+ pages disponibles} other {{count, plural, one {# page disponible} other {# pages disponibles}}}}"
             },
             "index_recursively": {
               "label": "Inclure les pages enfants",

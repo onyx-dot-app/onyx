@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "opcional"
+        },
+        "availableRefresh": {
+          "tooltip": "Atualizar a lista"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "Espaços",
               "description": "Chaves de espaço que este conector indexa (por exemplo, ENG).",
               "placeholder": "Adicione uma chave de espaço ou URL",
-              "required": "Adicione pelo menos um espaço ou uma página."
+              "required": "Adicione pelo menos um espaço ou uma página.",
+              "available": "{more, select, true {{count, number}+ espaços disponíveis} other {{count, plural, one {# espaço disponível} other {# espaços disponíveis}}}}"
             },
             "page_id": {
               "label": "Páginas",
               "description": "IDs de página que este conector indexa (por exemplo, 123456).",
-              "placeholder": "Adicione um ID de página ou URL"
+              "placeholder": "Adicione um ID de página ou URL",
+              "available": "{more, select, true {{count, number}+ páginas disponíveis} other {{count, plural, one {# página disponível} other {# páginas disponíveis}}}}"
             },
             "index_recursively": {
               "label": "Incluir páginas filhas",

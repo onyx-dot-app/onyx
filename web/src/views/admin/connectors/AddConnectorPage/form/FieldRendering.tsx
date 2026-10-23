@@ -43,6 +43,8 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
+import { useOptionsFinding } from "@/lib/connectors/checks/hooks";
+import type { ListOption } from "@/lib/connectors/types/form";
 import { escapeMarkdown, markdown } from "@opal/utils";
 
 // Define a general type for form values
@@ -167,6 +169,61 @@ interface CheckboxTabsFieldProps {
  * A checkbox option shown as two tabs. The tab labels name both choices, so
  * the label only names the tab strip for assistive technology.
  */
+interface ListAvailabilityProps {
+  connector: ConfigurableSources;
+  availability: NonNullable<ListOption["availableCount"]>;
+  reportScope: StoredReportScope | null;
+}
+
+/**
+ * How many options a discovery check found for a list, once it has run, and
+ * a button that runs the listing again without opening the checks.
+ */
+function ListAvailability({
+  connector,
+  availability,
+  reportScope,
+}: ListAvailabilityProps) {
+  const t = useTranslations("admin.connectorsList");
+  const checkActions = useConnectorCheckActions();
+  const finding = useOptionsFinding(
+    connector,
+    availability.finding,
+    reportScope
+  );
+  if (finding === null && checkActions === null) return null;
+  return (
+    <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+      {finding && (
+        <OpalText font="secondary-body" color="text-03">
+          {t(
+            // SAFETY: a config label is a key of `admin.connectorsList`;
+            // `connectorCopy.test.ts` checks each one against en.json.
+            availability.label as Parameters<typeof t>[0],
+            {
+              count: finding.options.length,
+              more: finding.truncated ? "true" : "false",
+            }
+          )}
+        </OpalText>
+      )}
+      {checkActions && (
+        <Button
+          icon={SvgRefreshCw}
+          prominence="internal"
+          size="sm"
+          type="button"
+          tooltip={t("field.availableRefresh.tooltip")}
+          aria-label={t("field.availableRefresh.tooltip")}
+          onClick={() =>
+            checkActions.runCheck(availability.checkId, { showChecks: false })
+          }
+        />
+      )}
+    </Section>
+  );
+}
+
 function CheckboxTabsField({
   option,
   label,
@@ -407,6 +464,15 @@ export const RenderField: FC<RenderFieldProps> = ({
           disabled={disabled}
           title={label}
           description={richDescription}
+          rightChildren={
+            field.availableCount && (
+              <ListAvailability
+                connector={connector}
+                availability={field.availableCount}
+                reportScope={reportScope}
+              />
+            )
+          }
           suffix={optionalSuffix}
         >
           {field.optionsFinding !== undefined ? (

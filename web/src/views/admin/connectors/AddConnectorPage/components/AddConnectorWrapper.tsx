@@ -171,9 +171,9 @@ function ConnectorChecksGate({
   // A field (e.g. Confluence's CQL query) can run its check from the form.
   const actions: ConnectorCheckActions = useMemo(
     () => ({
-      runCheck: (checkId) => {
+      runCheck: (checkId, options) => {
         runCheck(checkId);
-        onCheckRun?.();
+        if (options?.showChecks !== false) onCheckRun?.();
       },
     }),
     [runCheck, onCheckRun]

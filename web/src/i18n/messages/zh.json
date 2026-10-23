@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "可选"
+        },
+        "availableRefresh": {
+          "tooltip": "刷新列表"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "空间",
               "description": "此连接器要索引的空间键（例如 ENG）。",
               "placeholder": "添加空间键或 URL",
-              "required": "请至少添加一个空间或页面。"
+              "required": "请至少添加一个空间或页面。",
+              "available": "{more, select, true {{count, number}+ 个可用空间} other {{count, plural, one {# 个可用空间} other {# 个可用空间}}}}"
             },
             "page_id": {
               "label": "页面",
               "description": "此连接器要索引的页面 ID（例如 123456）。",
-              "placeholder": "添加页面 ID 或 URL"
+              "placeholder": "添加页面 ID 或 URL",
+              "available": "{more, select, true {{count, number}+ 个可用页面} other {{count, plural, one {# 个可用页面} other {# 个可用页面}}}}"
             },
             "index_recursively": {
               "label": "包含子页面",

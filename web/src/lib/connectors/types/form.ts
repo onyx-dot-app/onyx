@@ -59,6 +59,16 @@ export interface ListOption extends Option {
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */
   plainListCondition?: (values: Record<string, unknown>) => boolean;
+  /**
+   * Beside the title: how many options a discovery check found, and a button
+   * that lists them again. `label` is a key formatted with `count` and
+   * `more` ("true" when the listing stopped at the backend's cap).
+   */
+  availableCount?: {
+    finding: CheckFindingKey;
+    checkId: string;
+    label: string;
+  };
 }
 
 export interface StringPairListOption extends Option {

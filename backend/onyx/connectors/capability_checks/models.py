@@ -69,6 +69,7 @@ class CheckFindingKey(str, Enum):
     SHARED_DRIVES = "shared_drives"
     VISIBLE_ORGANIZATION_USERS = "visible_organization_users"
     VISIBLE_SPACES = "visible_spaces"
+    VISIBLE_PAGES = "visible_pages"
     READABLE_CHANNELS = "readable_channels"
     READABLE_MAILBOXES = "readable_mailboxes"
     READABLE_DRIVES = "readable_drives"

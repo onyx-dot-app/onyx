@@ -31,6 +31,7 @@ export type CheckFindingKey =
   | "shared_drives"
   | "visible_organization_users"
   | "visible_spaces"
+  | "visible_pages"
   | "readable_channels"
   | "readable_mailboxes"
   | "readable_drives";

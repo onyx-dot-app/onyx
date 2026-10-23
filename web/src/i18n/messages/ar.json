@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "اختياري"
+        },
+        "availableRefresh": {
+          "tooltip": "تحديث القائمة"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "المساحات",
               "description": "مفاتيح المساحات التي يفهرسها هذا الموصل (مثل ENG).",
               "placeholder": "أضف مفتاح مساحة أو عنوان URL",
-              "required": "أضف مساحة أو صفحة واحدة على الأقل."
+              "required": "أضف مساحة أو صفحة واحدة على الأقل.",
+              "available": "{more, select, true {{count, number}+ مساحات متاحة} other {{count, plural, one {# مساحة متاحة} other {# مساحات متاحة}}}}"
             },
             "page_id": {
               "label": "الصفحات",
               "description": "معرّفات الصفحات التي يفهرسها هذا الموصل (مثل 123456).",
-              "placeholder": "أضف معرّف صفحة أو عنوان URL"
+              "placeholder": "أضف معرّف صفحة أو عنوان URL",
+              "available": "{more, select, true {{count, number}+ صفحات متاحة} other {{count, plural, one {# صفحة متاحة} other {# صفحات متاحة}}}}"
             },
             "index_recursively": {
               "label": "تضمين الصفحات الفرعية",

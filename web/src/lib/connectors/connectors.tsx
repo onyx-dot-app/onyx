@@ -961,6 +961,11 @@ export const connectorConfigs: Record<
                 name: "space",
                 description: "connectors.confluence.fields.space.description",
                 placeholder: "connectors.confluence.fields.space.placeholder",
+                availableCount: {
+                  finding: "visible_spaces",
+                  checkId: "confluence_space_listing",
+                  label: "connectors.confluence.fields.space.available",
+                },
                 // Either list may stay empty, but not both; the schema checks
                 // the pair, so neither is marked optional.
                 optional: false,
@@ -974,6 +979,11 @@ export const connectorConfigs: Record<
                 name: "page_id",
                 description: "connectors.confluence.fields.page_id.description",
                 placeholder: "connectors.confluence.fields.page_id.placeholder",
+                availableCount: {
+                  finding: "visible_pages",
+                  checkId: "confluence_page_listing",
+                  label: "connectors.confluence.fields.page_id.available",
+                },
                 optional: false,
                 // The config takes one comma-separated string of page IDs.
                 transform: (entries: string[]) =>

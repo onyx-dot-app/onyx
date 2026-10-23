@@ -826,7 +826,8 @@ def test_optional_checks_are_the_approved_ones() -> None:
         "confluence_user_names",
     }
     assert {check.check_id for check in checks if check.discovery} == {
-        "confluence_space_listing"
+        "confluence_space_listing",
+        "confluence_page_listing",
     }
 
 

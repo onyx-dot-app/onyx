@@ -107,11 +107,13 @@ _TIMEOUT_TEXT = CheckRowText(
 _SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Confluence")
 _SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
 _SPACE_FIELD = "space"
+_PAGE_ID_FIELD = "page_id"
 
 # Pages sampled when a probe needs a page with attachments.
 _SAMPLE_PAGES = 5
 # Spaces per page when listing every visible space.
 _SPACE_LISTING_PAGE_SIZE = 250
+_PAGE_LISTING_PAGE_SIZE = 250
 _SAMPLE_ATTACHMENTS = 25
 # The attachment probe downloads one file; larger files only prove the listing.
 _MAX_PROBE_DOWNLOAD_BYTES = 5 * 1024 * 1024
@@ -341,6 +343,7 @@ _USER_LISTING_CHECK_IDS = ("confluence_user_listing", "confluence_user_listing_d
 _DEPENDS_ON: dict[str, tuple[str, ...]] = {
     "confluence_spaces_visible": _SIGN_IN_CHECK_IDS,
     "confluence_space_listing": ("confluence_spaces_visible",),
+    "confluence_page_listing": ("confluence_spaces_visible",),
     "confluence_configured_space": ("confluence_spaces_visible",),
     "confluence_configured_page": ("confluence_spaces_visible",),
     "confluence_cql_query": ("confluence_spaces_visible",),
@@ -669,6 +672,46 @@ class _SpaceListingCheck(_ConfluenceCheck):
             )
         count = f"{len(finding.options):,}{'+' if finding.truncated else ''}"
         return CheckOutput(summary=f"{count} spaces visible", findings=[finding])
+
+
+class _PageListingCheck(_ConfluenceCheck):
+    """Lists the visible pages, as options for the page field. The listing
+    stops at the finding's option cap, so a large site reads as "N+"."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="confluence_page_listing",
+            display_name="List pages",
+            remediation="Give the token's user view permission on the pages to index.",
+            discovery=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        try:
+            finding: OptionsFinding = bounded_options(
+                _gateway(context).search_pages(
+                    variant=ConfluenceSearchVariant.SLIM,
+                    cql="type=page",
+                    expand="space",
+                    limit=_PAGE_LISTING_PAGE_SIZE,
+                ),
+                key=CheckFindingKey.VISIBLE_PAGES,
+                field_name=_PAGE_ID_FIELD,
+                value=lambda page: str(page["id"]),
+                label=lambda page: page.get("title") or str(page["id"]),
+                detail=lambda page: (page.get("space") or {}).get("key"),
+            )
+        except HTTPError as e:
+            _raise_for_http_error(
+                e,
+                denied="The credential cannot search Confluence pages.",
+                denied_row=CheckRowText(
+                    summary="No permission to list pages",
+                    description="The account cannot search pages. (HTTP 403)",
+                ),
+            )
+        count = f"{len(finding.options):,}{'+' if finding.truncated else ''}"
+        return CheckOutput(summary=f"{count} pages visible", findings=[finding])
 
 
 class _ConfiguredSpaceCheck(_ConfluenceCheck):
@@ -1266,6 +1309,7 @@ def build_confluence_indexing_checks() -> list[CapabilityCheck]:
         _SiteAuthCheck(scoped=True),
         _SpacesVisibleCheck(),
         _SpaceListingCheck(),
+        _PageListingCheck(),
         _ConfiguredSpaceCheck(),
         _ConfiguredPageCheck(),
         _CqlQueryCheck(),

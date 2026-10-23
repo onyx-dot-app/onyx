@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "optional"
+        },
+        "availableRefresh": {
+          "tooltip": "Refresh the list"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "Spaces",
               "description": "List space keys to index for this connector (e.g. ENG).",
               "placeholder": "Add space key or URL",
-              "required": "Add at least one space or page."
+              "required": "Add at least one space or page.",
+              "available": "{more, select, true {{count, number}+ Spaces Available} other {{count, plural, one {# Space Available} other {# Spaces Available}}}}"
             },
             "page_id": {
               "label": "Pages",
               "description": "List page IDs to index for this connector (e.g. 123456).",
-              "placeholder": "Add page ID or URL"
+              "placeholder": "Add page ID or URL",
+              "available": "{more, select, true {{count, number}+ Pages Available} other {{count, plural, one {# Page Available} other {# Pages Available}}}}"
             },
             "index_recursively": {
               "label": "Include Child Pages",

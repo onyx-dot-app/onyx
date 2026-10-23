@@ -4,8 +4,11 @@ import { createContext, useContext } from "react";
 
 /** What a form field may do to the form's capability checks. */
 export interface ConnectorCheckActions {
-  /** Runs one check now, ignoring its cached result, and shows the checks. */
-  runCheck: (checkId: string) => void;
+  /**
+   * Runs one check now, ignoring its cached result. It shows the checks
+   * unless `showChecks` is false, e.g. for a listing a field refreshes.
+   */
+  runCheck: (checkId: string, options?: { showChecks?: boolean }) => void;
 }
 
 const ConnectorCheckActionsContext =

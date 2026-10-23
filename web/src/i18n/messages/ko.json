@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "선택 사항"
+        },
+        "availableRefresh": {
+          "tooltip": "목록 새로 고침"
         }
       },
       "gdrive": {
@@ -4108,12 +4111,14 @@
               "label": "스페이스",
               "description": "이 커넥터가 색인할 스페이스 키 (예: ENG).",
               "placeholder": "스페이스 키 또는 URL 추가",
-              "required": "스페이스 또는 페이지를 하나 이상 추가하세요."
+              "required": "스페이스 또는 페이지를 하나 이상 추가하세요.",
+              "available": "{more, select, true {사용 가능한 스페이스 {count, number}+개} other {{count, plural, one {사용 가능한 스페이스 #개} other {사용 가능한 스페이스 #개}}}}"
             },
             "page_id": {
               "label": "페이지",
               "description": "이 커넥터가 색인할 페이지 ID (예: 123456).",
-              "placeholder": "페이지 ID 또는 URL 추가"
+              "placeholder": "페이지 ID 또는 URL 추가",
+              "available": "{more, select, true {사용 가능한 페이지 {count, number}+개} other {{count, plural, one {사용 가능한 페이지 #개} other {사용 가능한 페이지 #개}}}}"
             },
             "index_recursively": {
               "label": "하위 페이지 포함",
