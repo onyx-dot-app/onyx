@@ -2970,6 +2970,7 @@
           "label": "実行の種類",
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
+          "backfill": "ドキュメントのバックフィル",
           "doc_permission_sync": "権限の同期",
           "group_sync": "グループメンバーシップの同期",
           "pruning": "ドキュメントのプルーニング",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, other {# 件の実行がキャンセルされました}}",
           "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
           "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "incompleteChecks": "{count, plural, one {# 件のチェックが未完了} other {# 件のチェックが未完了}}",
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
@@ -3402,11 +3404,13 @@
           },
           "deleteButton": {
             "label": "アカウントを削除",
-            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。",
+            "notOwnerTooltip": "この認証情報を削除できるのは所有者のみです"
           },
           "updateButton": {
             "label": "認証情報を更新",
-            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。"
+            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。",
+            "notOwnerTooltip": "この認証情報を更新できるのは所有者のみです"
           },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"
@@ -3426,14 +3430,14 @@
           "rerunButton": {
             "label": "チェックを再実行"
           },
+          "renameButton": {
+            "tooltip": "アカウント名を変更"
+          },
           "authenticationType": {
             "label": "認証タイプ"
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
-          },
-          "shareSaved": {
-            "toast": "共有を更新しました。"
           },
           "shareFailed": {
             "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
@@ -3448,10 +3452,16 @@
             "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
           },
           "shareLocked": {
-            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
+            "tooltip": "この認証情報を共有できるのは所有者のみです"
           },
           "viewDetails": {
             "tooltip": "詳細を表示"
+          },
+          "failedToRun": {
+            "title": "チェックを実行できませんでした"
+          },
+          "unavailable": {
+            "label": "利用不可"
           }
         },
         "accountUnavailable": {
@@ -5171,9 +5181,9 @@
           "message": "この認証情報を削除してもよろしいですか?稼働中のコネクタに関連付けられた認証情報は削除できません。"
         },
         "confirmButton": {
-          "label": "確認"
+          "label": "削除"
         },
-        "confirmTitle": "削除の確認"
+        "confirmTitle": "*{name}* を削除"
       },
       "displayNames": {
         "accessKeyId": "{source} アクセスキー ID",
@@ -6791,6 +6801,10 @@
         "openaiGptImage25Sunburst": {
           "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
+      },
+      "retiredModelWarning": {
+        "description": "別のモデルを接続してデフォルトに設定してから、{title} の接続を解除してください。",
+        "title": "{title} は利用できなくなりました"
       },
       "setDefaultError": {
         "message": "デフォルトに設定できませんでした"
@@ -8602,6 +8616,10 @@
           "description": "全員が SSO のみでサインインおよび登録します。有効な SSO プロバイダーが 1 つ以上必要です。",
           "title": "パスワードでのログインと登録を無効化"
         },
+        "renamedClaim": {
+          "description": "メールアドレスが変更されたユーザーが、プロバイダーとの関連付けが残っていない現在のメールアドレスのアカウントに、別のプロバイダーからサインインできるようにします。削除した SSO プロバイダーからユーザーを移行する間だけ有効にしてください。",
+          "title": "プロバイダー削除後に名前変更されたアカウントを引き継ぐ"
+        },
         "section": {
           "title": "認証"
         },
@@ -9311,6 +9329,9 @@
         "successToast": "リダイレクト URI をコピーしました",
         "errorToast": "コピーできませんでした"
       },
+      "deleteProvider": {
+        "tooltip": "削除"
+      },
       "editProvider": {
         "tooltip": "編集"
       },
@@ -9323,6 +9344,17 @@
         "title": "SSO プロバイダーの読み込みに失敗しました"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "{name} を削除",
+          "description": "{name} でサインインしたユーザーのアカウントはそのまま残ります。同じメールアドレスで別のプロバイダーからサインインすると、同じアカウントが開きます。このプロバイダーを削除する前に、代わりのプロバイダーを追加してください。",
+          "countsError": "このプロバイダーでサインインしたユーザーを読み込めませんでした。閉じてからもう一度お試しください。",
+          "countsLoading": "このプロバイダーでサインインしたユーザーを読み込んでいます…",
+          "linkedUsers": "{count, plural, =0 {{name} でサインインしたユーザーはいません。} other {# 人のユーザーが {name} でサインインしました。}}",
+          "renamedUsers": "{count, plural, other {そのうち # 人は名前変更されており、別のプロバイダーからサインインするにはセキュリティ強化の「名前変更されたアカウントの引き継ぎ」を有効にする必要があります。}}",
+          "submit": {
+            "label": "削除"
+          }
+        },
         "domainVerification": {
           "description": "ドメインの所有権を確認すると、そのドメインのユーザーはワークスペースに自動でサインインできます。下の DNS レコードを追加してから確認してください。",
           "loadError": {
@@ -9421,6 +9453,7 @@
         "description": "ユーザーが自社の ID プロバイダー経由でサインインできるようにします。"
       },
       "toasts": {
+        "providerDeleted": "{name} を削除しました",
         "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providerTypes": {
@@ -9666,6 +9699,8 @@
         "deleting": "削除中",
         "failed": "失敗",
         "indexed": "インデックス済み",
+        "backfilling": "バックフィル中",
+        "backfilled": "バックフィル済み",
         "indexing": "インデックス作成中",
         "initialIndexing": "初回インデックス作成",
         "interrupted": "中断",
@@ -10790,24 +10825,25 @@
         "title": "接続をテスト",
         "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
         "startButton": {
-          "label": "チェックを開始"
+          "label": "チェックを開始",
+          "disabledTooltip": "チェックを開始するには、上でアカウントを選択するか、新しいアカウントを入力してください"
         }
       },
       "title": "コネクターチェック",
       "groups": {
         "failed": "失敗 {count} 件",
-        "indeterminate": "未検証 {count} 件",
+        "indeterminate": "未完了 {count} 件",
         "passed": "成功 {count} 件",
         "skipped": "スキップ {count} 件",
-        "running": "実行中 {count} 件",
+        "running": "進行中 {count} 件",
         "expected": "予定 {count} 件"
       },
       "status": {
-        "passed": "合格",
+        "passed": "成功",
         "failed": "失敗",
-        "indeterminate": "検証できませんでした",
+        "indeterminate": "未完了",
         "skipped": "スキップ",
-        "running": "テスト中…",
+        "running": "実行中…",
         "pending": "待機中",
         "waiting": "設定を待っています",
         "stopped": "ユーザーが停止"
@@ -10823,9 +10859,10 @@
         "expand": "すべて表示"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "失敗 {count} 件",
-        "unverified": "未検証 {count} 件",
+        "unverified": "未完了 {count} 件",
         "inProgress": "実行中 {count} 件",
         "expected": "予定 {count} 件",
         "skipped": "スキップ {count} 件",
@@ -10866,6 +10903,13 @@
       },
       "docsButton": {
         "label": "ドキュメント"
+      },
+      "runLost": "チェックが応答しなくなりました。もう一度お試しください。",
+      "cancelButton": {
+        "label": "キャンセル"
+      },
+      "cancelFailed": {
+        "toast": "チェックをキャンセルできませんでした。もう一度お試しください。"
       }
     },
     "connectorEdit": {

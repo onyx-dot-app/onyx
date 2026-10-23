@@ -426,7 +426,9 @@ export function useBindingGateMessage(
             detail: reason.error.detail,
           });
     case "rejected":
-      return t("bindingGate.rejected", { detail: reason.rejection.detail });
+      return reason.rejection.code === "shared_credential_settings"
+        ? reason.rejection.detail
+        : t("bindingGate.rejected", { detail: reason.rejection.detail });
     case "custom":
       return reason.message;
   }

@@ -9,6 +9,7 @@ import {
   Section,
   StickyBox,
   type StickyBoxItemHandle,
+  toast,
 } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
 import {
@@ -37,7 +38,7 @@ import {
   SvgXOctagon,
   SvgRefreshCw,
 } from "@opal/icons";
-import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import {
   cn,
   escapeMarkdown,
@@ -56,6 +57,7 @@ import type {
 import { IconLoader } from "@opal/loaders";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
+  ChecksFailedIcon,
   useConnectorChecks,
   useConnectorChecksAutoRun,
   useResetChecksOnCredentialChange,
@@ -77,11 +79,13 @@ export type CheckLine = Pick<
   | "display_name"
   | "required"
   | "message"
+  | "summary"
+  | "description"
   | "remediation"
   | "docs_link"
 > & { state: CheckLineState };
 
-// Outcomes that need reading (passed, failed, unverified) show their details
+// Outcomes that need reading (passed, failed, incomplete) show their details
 // in the primary text colour; the rest stay muted. Only a required failure is
 // red and heavy, in `CheckLog`.
 const OUTCOME = { font: "main-ui-body", color: "text-04" } as const;
@@ -190,14 +194,22 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   // A failed required check blocks the form or Create, so its line is heavy.
   const blocking =
     (check.state === "failed" || check.state === "stopped") && check.required;
-  // A finished check with a fix or docs opens to show them.
+  // A finished check with details or docs opens to show them.
   const finished: boolean =
     check.state === "passed" ||
     check.state === "failed" ||
     check.state === "incomplete" ||
     check.state === "indeterminate";
+  // What happened and how to repair it: separate texts, unless they match.
+  const detailTexts: string[] = [
+    ...new Set(
+      [check.description, check.remediation].filter(
+        (text): text is string => text !== null
+      )
+    ),
+  ];
   const expandable: boolean =
-    finished && (check.remediation !== null || check.docs_link !== null);
+    finished && (detailTexts.length > 0 || check.docs_link !== null);
   // Expected: queued, or waiting on a field.
   const expected: boolean =
     check.state === "pending" || check.state === "waiting";
@@ -207,13 +219,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Tag
-      title={t("required.label")}
-      color="white"
-      variant="status"
-      font="secondary-action"
-      titleColor="text-03"
-    />
+    <Tag title={t("required.label")} color="white" variant="status" />
   ) : undefined;
 
   // A required expected check cannot be skipped.
@@ -320,10 +326,14 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
           </LinkButton>
         )}
       </Section>
-      {check.remediation !== null && (
-        <Text font="secondary-body" color="text-03">
-          {check.remediation}
-        </Text>
+      {detailTexts.length > 0 && (
+        <Section alignItems="start" height="fit" gap={0.5}>
+          {detailTexts.map((text) => (
+            <Text key={text} font="secondary-body" color="text-03">
+              {text}
+            </Text>
+          ))}
+        </Section>
       )}
     </Section>
   );
@@ -347,7 +357,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
           color={messageColor}
           textPosition="text-start"
         >
-          {check.message || t(detail)}
+          {check.summary ?? (check.message || t(detail))}
         </OverflowText>
         {required}
       </Section>
@@ -442,19 +452,6 @@ export function CheckLineGroups({ lines, ...actions }: CheckLineGroupsProps) {
  * The ring and the title count every check, so a run fills them in as checks
  * finish.
  */
-/**
- * A red stop sign, for a run that broke. Content colors its icon from its own
- * stylesheet, so the red is an inline style; Content's sizing stays.
- */
-function FailedToRunIcon({ style, ...props }: IconProps) {
-  return (
-    <SvgXOctagon
-      {...props}
-      style={{ ...style, color: "var(--status-error-05)" }}
-    />
-  );
-}
-
 interface CheckCardViewProps {
   status: ConnectorChecksStatus;
   /** The finished checks, in any order. */
@@ -475,6 +472,10 @@ interface CheckCardViewProps {
   onSkipCheck?: (checkId: string) => void;
   /** Runs a skipped check again, or an expected one next. */
   onRunCheck?: (checkId: string) => void;
+  /** Stops the running run; shown only while the checks run. */
+  onCancel?: () => void;
+  /** Why the run failed to run, in place of the generic notice. */
+  failureReason?: string;
   /** Each increment opens the card and scrolls it into view. */
   expandRequest?: number;
   /** Folded, pins under the page header while the page scrolls. */
@@ -490,6 +491,8 @@ export function CheckCardView({
   onRerun,
   onSkipCheck,
   onRunCheck,
+  onCancel,
+  failureReason,
   defaultCollapsed = false,
   expandRequest = 0,
   stickyWhenFolded = false,
@@ -553,7 +556,7 @@ export function CheckCardView({
   const isRunning: boolean = status === "running";
   // A broken run outranks the counts.
   const notice: string | undefined =
-    status === "failedToRun" ? t("failedToRun") : undefined;
+    status === "failedToRun" ? (failureReason ?? t("failedToRun")) : undefined;
   const hasResults: boolean = results.length > 0;
   // A run that broke can still list checks: some finished first, or an
   // earlier run's results stay after a failed re-run.
@@ -568,11 +571,11 @@ export function CheckCardView({
   const summary = useMemo(() => {
     if (notice) return notice;
     if (!hasChecks) return isRunning ? t("state.inProgress") : t("empty.label");
+    // The groups' order.
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
       [t("summary.unverified", { count: incompleteCount }), incompleteCount],
-      [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
-      [t("summary.expected", { count: expectedCount }), expectedCount],
+      [t("summary.successful", { count: count("passed") }), count("passed")],
       // A stopped check is still open, so it is counted from the run's states.
       [
         t("summary.skipped", {
@@ -580,7 +583,8 @@ export function CheckCardView({
         }),
         count("skipped") + stateCounts.stopped,
       ],
-      [t("summary.successful", { count: count("passed") }), count("passed")],
+      [t("summary.inProgress", { count: inProgressCount }), inProgressCount],
+      [t("summary.expected", { count: expectedCount }), expectedCount],
     ];
     return format.list(
       parts.filter(([, n]) => n > 0).map(([label]) => label),
@@ -598,13 +602,17 @@ export function CheckCardView({
     format,
   ]);
 
-  const progress = useConnectorChecksProgress(stateCounts, status);
+  const progress = useConnectorChecksProgress(
+    stateCounts,
+    status,
+    requiredFailed > 0
+  );
 
   const header = (
     <ContentAction
       // A run that broke has no counts, so the ring would read as complete;
       // a red X stands in, without dimming the title.
-      icon={notice ? FailedToRunIcon : progress.icon}
+      icon={notice ? ChecksFailedIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       description={summary}
@@ -613,6 +621,11 @@ export function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
+          {isRunning && onCancel !== undefined && (
+            <Button prominence="tertiary" onClick={onCancel}>
+              {t("cancelButton.label")}
+            </Button>
+          )}
           {onRerun !== undefined &&
             (notice ? (
               // The way to try again, so it says what it does.
@@ -766,11 +779,19 @@ export default function CredentialChecksCard({
   ccPairId = null,
   expandRequest = 0,
 }: CredentialChecksCardProps) {
+  const t = useTranslations("admin.connectorChecks");
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
   const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
+  const cancel = checks.cancel;
+  const failureReason: string | undefined =
+    checks.failure === null
+      ? undefined
+      : checks.failure.kind === "refused"
+        ? checks.failure.detail
+        : t("runLost");
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
     return null;
@@ -789,6 +810,10 @@ export default function CredentialChecksCard({
             <Button
               icon={SvgPlay}
               disabled={locked}
+              // Locked until the form has a usable account to check.
+              tooltip={
+                locked ? promptT("startButton.disabledTooltip") : undefined
+              }
               onClick={() => {
                 checks.begin();
                 onStart?.();
@@ -812,6 +837,13 @@ export default function CredentialChecksCard({
       onRerun={checks.rerun}
       onSkipCheck={checks.skipCheck}
       onRunCheck={checks.runCheck}
+      onCancel={
+        cancel === null
+          ? undefined
+          : () =>
+              void cancel().catch(() => toast.error(t("cancelFailed.toast")))
+      }
+      failureReason={failureReason}
       expandRequest={expandRequest}
       stickyWhenFolded
     />

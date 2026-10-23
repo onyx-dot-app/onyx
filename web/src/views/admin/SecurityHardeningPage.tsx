@@ -397,6 +397,15 @@ export default function SecurityHardeningPage() {
                 }
               />
 
+              <ToggleRow
+                title={t("authentication.renamedClaim.title")}
+                description={t("authentication.renamedClaim.description")}
+                checked={draft.allow_renamed_account_claim}
+                onCheckedChange={(checked) =>
+                  void saveSettings({ allow_renamed_account_claim: checked })
+                }
+              />
+
               {!isMultiTenant && (
                 <>
                   {isSingleTenantRuntime && (

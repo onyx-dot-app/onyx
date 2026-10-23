@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from pydantic import field_validator
 
@@ -28,6 +28,8 @@ JQL_ORDER_BY_ERROR = (
 
 
 class JiraCredentialBinding(CredentialBinding):
+    site_url_fields: ClassVar[frozenset[str]] = frozenset({"jira_base_url"})
+
     # Document ids are issue URLs on this base URL.
     jira_base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     # Only selects the API gateway: document ids keep jira_base_url.

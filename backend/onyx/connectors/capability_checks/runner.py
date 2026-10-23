@@ -81,7 +81,6 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
     "connector is configured."
 )
 _SKIP_FINDINGS_OFF_MESSAGE = "Findings are turned off for this workspace."
-_SKIP_VALIDATION_FAILED_MESSAGE = "Skipped: a required check failed."
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
@@ -367,25 +366,42 @@ def _findings_for_source(
 
 
 def _discovery_skip_outcome(
-    validation_results: Iterable[CapabilityCheckResult], keep_findings: bool
+    check: CapabilityCheck,
+    validation_results: Iterable[CapabilityCheckResult],
+    results_by_check_id: Mapping[str, CapabilityCheckResult],
+    keep_findings: bool,
 ) -> CheckOutcome | None:
-    """Why a discovery check does not run, or None when it runs."""
+    """Why a discovery check does not run, or None when it runs. A failed
+    required check stops it; its own dependency names the cause when one
+    stopped it, else the first failed required check does."""
     if not keep_findings:
         return CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_FINDINGS_OFF_MESSAGE,
             applicable=False,
         )
-    if any(
-        result.required and result.status == CapabilityCheckStatus.FAILED
-        for result in validation_results
-    ):
-        return CheckOutcome(
-            status=CapabilityCheckStatus.SKIPPED,
-            message=_SKIP_VALIDATION_FAILED_MESSAGE,
-            applicable=False,
-        )
-    return None
+    failed = next(
+        (
+            result
+            for result in validation_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ),
+        None,
+    )
+    if failed is None:
+        return None
+    if dependency_outcome := _dependency_not_run_outcome(check, results_by_check_id):
+        return dependency_outcome
+    line = _NOT_RUN_LINE_BY_REASON[CheckNotRunReason.DEPENDENCY_FAILED].format(
+        name=failed.display_name
+    )
+    return CheckOutcome(
+        status=CapabilityCheckStatus.SKIPPED,
+        message=line,
+        summary=line,
+        not_run_reason=CheckNotRunReason.DEPENDENCY_FAILED,
+        blocked_by=failed.check_id,
+    )
 
 
 def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
@@ -404,15 +420,28 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
 
 
-def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
-    """Age past which a RUNNING mark is a dead run, not a slow one.
+def capability_check_run_lease(source: DocumentSource) -> timedelta:
+    """How long a stored run's RUNNING mark lives without the worker renewing
+    it; past that, the run is dead and reads FAILED_TO_RUN.
 
-    The mark is set at trigger time, so a legitimate run's wall clock is queue
-    wait plus execution; the task expiry bounds the wait at one execution
-    ceiling, leaving two ceilings in total. Both the re-trigger guard and the
-    stale-run sweep use this cutoff.
+    The worker renews the mark as it starts the checks and after every result,
+    so the longest wait between renewals is the connector instantiation's guard
+    plus the slowest single check's guard, never the whole run. Bounding by
+    the slowest check rather than the sum keeps an orphaned run (a worker
+    restart) from spinning for hours.
     """
-    return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
+    slowest_check_seconds = max(
+        (
+            effective_check_timeout_seconds(check)
+            for check in get_capability_checks(source)
+        ),
+        default=0,
+    )
+    return timedelta(
+        seconds=CAPABILITY_CHECK_TIMEOUT_SECONDS
+        + slowest_check_seconds
+        + _THREAD_RETURN_SLACK_SECONDS
+    )
 
 
 def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[str]:
@@ -827,14 +856,21 @@ class _CheckRun:
     def _own_skip_outcome(self, check: CapabilityCheck) -> CheckOutcome | None:
         """The outcome of a check that must not run for a reason of its own, or
         None. Discovery checks run only when validation found the credential
-        usable: they exist to show what a working credential reaches."""
+        usable: they exist to show what a working credential reaches. A check
+        that does not apply drops out before a failed check can stop it."""
+        unrunnable = _unrunnable_outcome(check, self._context, self._form_run)
+        if unrunnable is not None and not unrunnable.applicable:
+            return unrunnable
         if check.discovery and (
             discovery_outcome := _discovery_skip_outcome(
-                [*self._prior_results, *self._results], check_findings_enabled()
+                check,
+                [*self._prior_results, *self._results],
+                self._result_by_check_id,
+                check_findings_enabled(),
             )
         ):
             return discovery_outcome
-        return _unrunnable_outcome(check, self._context, self._form_run)
+        return unrunnable
 
     def _record_finished_checks(self) -> None:
         # Each worker returns within its check's hang guard; the wait's
@@ -1085,9 +1121,9 @@ def generate_capability_report(
     )
     if should_instantiate:
         try:
-            # Under the guard the run ceiling budgets for it: construction and
+            # Under the guard the run lease budgets for it: construction and
             # ``load_credentials`` can probe the source with no timeout of their
-            # own, and the stale-run sweep trusts the ceiling.
+            # own, and the stale-run sweep trusts the lease.
             connector, fresh_credential_json = run_with_timeout(
                 _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
                 _instantiate_connector_isolated,

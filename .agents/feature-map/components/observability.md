@@ -214,6 +214,12 @@ metrics come from `celery_task_metrics.py:on_celery_task_prerun` /
 handlers; only `docfetching` and `docprocessing` currently do this
 (`docs/METRICS.md` "Current Worker Integration Status").
 
+Request ID and endpoint context middleware (`utils/middleware.py`) use pure ASGI
+calls. They keep context through response streaming and restore it in `finally`.
+They pass body messages directly to the downstream sender without a task or queue.
+The optional `server/middleware/latency_logging.py` wrapper logs at response start;
+it does not measure the full stream duration.
+
 ### 4.2 Per-tenant labelling
 
 `per_tenant.py:per_tenant_request_callback` reads

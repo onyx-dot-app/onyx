@@ -11,7 +11,7 @@
 **Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
 **Owns:**
 `backend/onyx/server/features/build/sandbox/base.py`, `factory.py`, `models.py`,
-`labels.py`, `resources.py`, `session_workspace.py`, `snapshot_manager.py`, `serve_transport.py`,
+`labels.py`, `locks.py`, `resources.py`, `session_workspace.py`, `snapshot_manager.py`, `serve_transport.py`,
 `event_schema.py`, `nextjs_dev.py` (spec only; the runtime lives in
 `[[craft-webapp-proxy]]`),
 `backend/onyx/server/features/build/sandbox/kubernetes/` (`kubernetes_sandbox_manager.py`,
@@ -25,6 +25,7 @@
 `opencode_config.py`, `mcp_config.py`, `api_url_check.py`),
 `backend/onyx/server/features/build/db/sandbox.py`,
 `backend/onyx/server/features/build/session/sandbox_lifecycle.py`,
+`backend/onyx/server/features/build/session/resource_cleanup.py`,
 `backend/onyx/background/celery/tasks/build/tasks.py`,
 `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `sandbox-rbac.yaml`,
 `network-policy-sandbox-egress.yaml`, `network-policy-sandbox-push.yaml`
@@ -218,10 +219,11 @@ external I/O (module docstring):
 3. **Finalize** (short transaction): `finalize_provisioning_attempt__no_commit`
    records `RUNNING`/`FAILED`, a no-op if a newer attempt superseded this one.
 
-A per-sandbox Redis lock (`_provisioning_lock`,
-`kubernetes_sandbox_manager.py:195`) serializes pod creation across api-server
-replicas; a losing acquirer raises `SandboxProvisionContentionError`, which the
-lifecycle layer treats as retryable.
+A per-sandbox `CacheBackend` lock (`sandbox/locks.py:sandbox_provision_lock`)
+serializes creation and resource collection across replicas for both backends.
+A losing acquirer raises `SandboxProvisionContentionError`, which the lifecycle
+layer treats as retryable. Cache failure during lock acquisition aborts the operation.
+Lock release errors are logged without replacing the operation's result or original error.
 
 `setup_session_workspace` (per-session, called after `provision`) execs into the
 pod (`k8s_stream`/`connect_get_namespaced_pod_exec`) to run a replay-safe,
@@ -478,9 +480,10 @@ session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
 already-deleted). The new archive is stored before any old blob is deleted.
 Pruning is best-effort. If `delete_snapshot` raises, the function logs a
 warning and keeps that old row, so more than one `Snapshot` row can remain.
-The new `Snapshot` row is committed only after those deletions
-(`db_session.commit()` is the last step). A commit failure in that window can
-leave no restorable snapshot, because the old blobs are already gone.
+The new `Snapshot` row commits before any old blob is deleted. If this initial
+commit fails, prior committed archives remain intact. Pruned row deletions commit
+in a second transaction. If that commit fails, prior blobs may already be deleted,
+but the new reference remains committed.
 The sandbox-global opencode history snapshot is **not** versioned at all: it
 overwrites one fixed FileStore path each capture (§3).
 
@@ -496,6 +499,19 @@ lost if the pod dies ungracefully (node eviction, OOM-kill, spot reclaim,
 crash) between captures.
 
 ### 4.6 Reaping
+
+The task first runs `session/resource_cleanup.py:reconcile_sandbox_resources`,
+even when no RUNNING row exists. It marks stale PROVISIONING attempts FAILED
+with a conditional update, so late finalization cannot report them RUNNING.
+It then inventories runtime resources. A successful per-resource DB read must
+find no owner, or an owner in SLEEPING or TERMINATED state.
+FAILED owners remain protected until checkpoint-aware collection is available.
+RUNNING and live PROVISIONING owners remain protected. Resources get a 15-minute
+creation grace period. Each pass attempts at most 100 resource deletions under
+the same per-sandbox lock that provisioning uses. Errors retain the resource
+for retry and do not prevent independent resource cleanup.
+Inventory failures stop reconciliation but do not skip snapshots or idle cleanup
+while the cleanup lease remains owned. Losing that lease aborts the task.
 
 Reap = `sleep_sandbox` (§4.5, step 1), run from `cleanup_idle_sandboxes_task`.
 Idle is `last_heartbeat` (falling back to `created_at`) older than
@@ -552,10 +568,9 @@ the sandbox namespace. The proxy-resolution Role retains only Service `get`.
    including on unhealthy pods (`sandbox_lifecycle.py:sleep_sandbox`).
    Workspace listing requires successful execution. Kubernetes also checks a
    completion marker so truncated output cannot report an empty workspace.
-2. **A snapshot write must not corrupt the previous one.** New-blob-before-delete:
-   the new blob is stored before any prior blob is deleted, but the DB commit is
-   the last step (`create_session_snapshot_keep_latest`, §4.5). A commit failure
-   after the prunes can leave no restorable snapshot. Restore extracts
+2. **A snapshot write must not corrupt the previous one.** The new blob and DB
+   reference commit before pruning begins (`create_session_snapshot_keep_latest`, §4.5).
+   A failed initial reference commit preserves the previous archive. Restore extracts
    to a temp dir and atomically renames into place
    (`sandbox_daemon/extract.py:safe_extract_then_atomic_swap`).
 3. **The pod spec lives in Helm, not in Python.** `_create_sandbox_pod` reads

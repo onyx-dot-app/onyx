@@ -37,7 +37,6 @@ export default function TaskActionPoliciesSummary({
         </Text>
       ) : (
         <TagList
-          size="md"
           items={enabledApps.map((app) => ({
             id: String(app.gated_app_id),
             label: app.name,

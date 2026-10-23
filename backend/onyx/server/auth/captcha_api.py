@@ -16,7 +16,8 @@ import hmac
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from onyx.auth.captcha import (
     CAPTCHA_COOKIE_NAME,
@@ -87,16 +88,22 @@ async def verify_oauth_captcha(
     return OAuthCaptchaVerifyResponse(ok=True)
 
 
-class CaptchaCookieMiddleware(BaseHTTPMiddleware):
+class CaptchaCookieMiddleware:
     """Reject OAuth-callback requests that don't carry a valid captcha cookie.
 
     No-op when ``is_captcha_enabled()`` is false so self-hosted and dev
     deployments pass through transparently.
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
         # Skip OPTIONS so CORS preflight is never blocked.
         is_guarded_callback = (
             request.method != "OPTIONS"
@@ -106,21 +113,31 @@ class CaptchaCookieMiddleware(BaseHTTPMiddleware):
         if is_guarded_callback:
             cookie_value = request.cookies.get(CAPTCHA_COOKIE_NAME)
             if not validate_captcha_cookie_value(cookie_value):
-                return onyx_error_to_json_response(
+                response = onyx_error_to_json_response(
                     OnyxError(
                         OnyxErrorCode.UNAUTHORIZED,
                         "Captcha challenge required. Refresh the page and try again.",
                     )
                 )
+                await response(scope, receive, send)
+                return
 
-        response = await call_next(request)
+        if not is_guarded_callback:
+            await self.app(scope, receive, send)
+            return
 
-        # One-time-use cookie: after the OAuth callback has been served, clear
-        # it so the remaining TTL cannot be replayed (e.g. via browser
-        # back-button) to re-enter the callback without a fresh challenge.
-        if is_guarded_callback:
-            response.delete_cookie(CAPTCHA_COOKIE_NAME, path="/")
-        return response
+        # Clear the challenge cookie without replacing the streamed body.
+        cookie_response = Response()
+        cookie_response.delete_cookie(CAPTCHA_COOKIE_NAME, path="/")
+
+        async def send_with_cookie(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).append(
+                    "set-cookie", cookie_response.headers["set-cookie"]
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_cookie)
 
 
 GUARDED_LOGIN_PATHS = frozenset({"/auth/login"})
@@ -151,7 +168,7 @@ def _client_ip_for_log(request: Request) -> str:
     return get_client_ip(request) or "unknown"
 
 
-class LoginCaptchaMiddleware(BaseHTTPMiddleware):
+class LoginCaptchaMiddleware:
     """Reject ``/auth/login`` requests without a valid captcha token.
 
     Enforced before the fastapi-users handler runs, so credential-stuffing
@@ -164,9 +181,15 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
     (credentials are still required by the login handler).
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
         if (
             request.method == "POST"
             and request.url.path in GUARDED_LOGIN_PATHS
@@ -182,8 +205,10 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
                 try:
                     await verify_captcha_token(token, CaptchaAction.LOGIN)
                 except CaptchaVerificationError as exc:
-                    return onyx_error_to_json_response(
+                    response = onyx_error_to_json_response(
                         OnyxError(OnyxErrorCode.UNAUTHORIZED, str(exc))
                     )
+                    await response(scope, receive, send)
+                    return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)

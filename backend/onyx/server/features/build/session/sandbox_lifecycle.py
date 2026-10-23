@@ -197,6 +197,10 @@ def create_session_snapshot_keep_latest(
         storage_path=result.storage_path,
         size_bytes=result.size_bytes,
     )
+    db_session.commit()
+
+    if not prior_snapshots:
+        return result
 
     snapshot_manager = SnapshotManager(get_default_file_store())
     for old in prior_snapshots:

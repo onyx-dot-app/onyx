@@ -592,9 +592,14 @@ document to the wrong person.
    loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
    no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
    shorter than the reaper's timeout, so a worker that cannot reach the DB
-   stops first. The heartbeat also stops renewing `PERMISSION_SYNC_LEASE_OVERRUN`
-   after the sync's time limit (`max_duration`), so a crawl thread that hangs
-   in a source call cannot hold the lease for the life of the process. Group sync writes (`upsert_external_groups`,
+   stops first. For a group sync the heartbeat also stops renewing
+   `PERMISSION_SYNC_LEASE_OVERRUN` after the sync's time limit
+   (`max_duration`), so a crawl thread that hangs in a source call cannot hold
+   the lease for the life of the process. A doc sync passes no `max_duration`:
+   the doc reaper also fails an `IN_PROGRESS` row whose
+   `coalesce(last_progress_at, time_started)` is older than
+   `PERMISSION_SYNC_STALL_TIMEOUT`, which frees a hung crawl's row the same
+   way without capping a crawl that keeps yielding. Group sync writes (`upsert_external_groups`,
    `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
    on the attempt row in the write's own transaction
    (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
@@ -610,13 +615,19 @@ document to the wrong person.
    group counts) and `last_progress_at` from an in-memory
    `DocPermissionSyncProgress` / `ExternalGroupSyncProgress`, so the admin UI
    and fleet telemetry see progress mid-run; `complete_*` replaces the counts
-   with the final values. One doc or group sync stops after
+   with the final values. One group sync stops after
    `PERMISSION_SYNC_TIMEOUT` (`PERMISSION_SYNC_TIMEOUT_SECONDS`, default
-   `JOB_TIMEOUT`); the attempt's `error_message` names the real stop cause
-   (timeout, stop signal, or lost lease), because connectors raise a generic
-   "Stop signal detected" for all of them.
-   A source whose crawl can outlast that timeout (Google Drive) sets
-   `DocSyncConfig.checkpointed_doc_sync_func` instead of `doc_sync_func`. The
+   `JOB_TIMEOUT`). A doc sync has no time limit: it runs for as long as it
+   keeps yielding. The doc reaper fails an attempt with no recorded progress
+   for `PERMISSION_SYNC_STALL_TIMEOUT`, which costs the worker its lease at
+   the next renewal; the task ticks progress on every yielded element, so a
+   source that never reports progress still counts. The attempt's
+   `error_message` names the real stop cause (timeout or stall, stop signal,
+   or lost lease), because connectors raise a generic "Stop signal detected"
+   for all of them.
+   A source whose full crawl runs for days (Google Drive) sets
+   `DocSyncConfig.checkpointed_doc_sync_func` instead of `doc_sync_func`, so
+   a stopped attempt resumes instead of restarting. The
    task passes it a
    `FileStoreDocSyncCheckpointer` (`doc_permission_syncing/checkpointer.py`),
    which saves one checkpoint file per cc_pair to the file store at most every

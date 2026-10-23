@@ -306,6 +306,50 @@ def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     return list(db_session.execute(stmt).scalars().all())
 
 
+def get_stale_provisioning_sandboxes(
+    db_session: Session,
+    cutoff: datetime.datetime,
+    limit: int,
+) -> list[Sandbox]:
+    return list(
+        db_session.scalars(
+            select(Sandbox)
+            .where(
+                Sandbox.status == SandboxStatus.PROVISIONING,
+                or_(
+                    Sandbox.provisioning_started_at < cutoff,
+                    Sandbox.provisioning_started_at.is_(None),
+                ),
+            )
+            .order_by(Sandbox.created_at, Sandbox.id)
+            .limit(limit)
+        )
+    )
+
+
+def fail_stale_provisioning__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    attempt_number: int,
+    cutoff: datetime.datetime,
+) -> bool:
+    """Fence late finalization before collecting an abandoned attempt's resources."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.status == SandboxStatus.PROVISIONING,
+            Sandbox.provisioning_attempt_number == attempt_number,
+            or_(
+                Sandbox.provisioning_started_at < cutoff,
+                Sandbox.provisioning_started_at.is_(None),
+            ),
+        )
+        .values(status=SandboxStatus.FAILED)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
 def user_has_stale_active_session(
     db_session: Session,
     user_id: UUID,

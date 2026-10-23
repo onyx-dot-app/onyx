@@ -120,17 +120,17 @@ export default function AuthenticationAccountSection({
   // With no saved account there is nothing to fold away, so the section
   // stays expanded whatever folded it (starting the checks does).
   const sectionExpanded: boolean = accountsExpanded || !hasSavedAccounts;
-  // The saved accounts whose details are open.
-  const [openDetailIds, setOpenDetailIds] = useState<ReadonlySet<number>>(
-    () => new Set()
-  );
+  // The saved account whose details are open. One card is open at a time:
+  // opening a saved account's details closes the new account's card, and
+  // the reverse.
+  const [openDetailId, setOpenDetailId] = useState<number | null>(null);
   /**
    * Folds the section. Every card's details close too, the new account's
    * form and each saved account's; expanding leaves them closed.
    */
   function foldAccounts() {
     close();
-    setOpenDetailIds(new Set());
+    setOpenDetailId(null);
     setAccountsExpanded(false);
   }
 
@@ -351,14 +351,17 @@ export default function AuthenticationAccountSection({
   }
 
   function renderSavedCard(credential: SimilarCredential) {
+    const selected: boolean = credential.id === selectedSavedId;
     return (
       <AuthenticationAccountCard
         key={credential.id}
         credential={credential}
         source={connector}
         sourceName={displayName}
-        selected={credential.id === selectedSavedId}
-        selectable={isSelectable(credential)}
+        selected={selected}
+        // A shared account the server would refuse here cannot be picked; an
+        // existing pick stays, so it can still be dropped.
+        selectable={isSelectable(credential) && (credential.usable || selected)}
         // Folded, the pick is the only card shown: it keeps a light look,
         // and a click opens the section rather than dropping the pick.
         quietSelection={!sectionExpanded}
@@ -367,17 +370,16 @@ export default function AuthenticationAccountSection({
           sectionExpanded ? onCredentialChange(null) : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
-        detailsOpen={openDetailIds.has(credential.id)}
-        onDetailsOpenChange={(open) =>
-          setOpenDetailIds((ids) => {
-            const next = new Set(ids);
-            if (open) next.add(credential.id);
-            else next.delete(credential.id);
-            return next;
-          })
-        }
+        detailsOpen={openDetailId === credential.id}
+        onDetailsOpenChange={(open) => {
+          if (open) {
+            close();
+            setOpenDetailId(credential.id);
+          } else {
+            setOpenDetailId((id) => (id === credential.id ? null : id));
+          }
+        }}
         checkReport={checkReports.reportFor(credential.id)}
-        onRerunChecks={() => checkReports.rerun(credential.id)}
         groupsLocked={!businessTier}
         onSaveAccount={(update) => saveSharing(credential.id, update)}
       />
@@ -450,7 +452,14 @@ export default function AuthenticationAccountSection({
           )}
         </div>
       }
-      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+      onClick={() => {
+        if (isCreating) {
+          close();
+        } else {
+          setOpenDetailId(null);
+          selectMethod(defaultMethod);
+        }
+      }}
     >
       {/* Closed, a usable new account shows its summary as the header. */}
       {!isCreating && chosenDraft ? (

@@ -22,6 +22,7 @@ func skillEnv(t *testing.T) (home, repoRoot string) {
 	}
 	home = t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv(agentContextRepoEnv, deployTestInternalRepo)
 	repoRoot = t.TempDir()
 	gittest.Git(t, repoRoot, "init", "--quiet")
 	t.Chdir(repoRoot)
@@ -33,8 +34,8 @@ func skillEnv(t *testing.T) (home, repoRoot string) {
 	return home, resolved
 }
 
-// skillWriteSource creates a skills root (the agent-context/ directory of
-// onyx-infra, or an old onyx-llm-context checkout) with one enforced skill,
+// skillWriteSource creates a skills root (the agent-context/ directory of the
+// internal infra repo, or an old onyx-llm-context checkout) with one enforced skill,
 // one enforced directory without a SKILL.md, and one manual skill with a
 // nested file.
 func skillWriteSource(t *testing.T, source string) {
@@ -69,7 +70,7 @@ func skillReadFile(t *testing.T, path string) string {
 
 func TestInstallSkill_linksManualSkillsAndImportsEnforcedOnes(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 	// A stale copy from an earlier --copy install must be replaced by a link.
 	deployWriteFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "stale.md"), "stale")
@@ -130,7 +131,7 @@ func TestInstallSkill_installsIntoTheSharedSkillsDirWithoutDirtyingTheTree(t *te
 	}
 	gittest.Git(t, repoRoot, "add", "-A")
 	gittest.Git(t, repoRoot, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "skills")
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 	deployWriteFile(t, filepath.Join(source, "skills", "fresh", "SKILL.md"), "fresh")
 
@@ -162,7 +163,7 @@ func TestLinkManualSkills_protectsCommittedSkillsInAChosenDirectory(t *testing.T
 	deployWriteFile(t, filepath.Join(chosen, "review", "SKILL.md"), "committed")
 	gittest.Git(t, repoRoot, "add", "-A")
 	gittest.Git(t, repoRoot, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "skills")
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 	deployWriteFile(t, filepath.Join(source, "skills", "fresh", "SKILL.md"), "fresh")
 	// .agents/skills is missing, so the user is asked and picks another directory.
@@ -216,7 +217,7 @@ func TestInstallSkill_failingGitLsFilesStopsBeforeChangingAnything(t *testing.T)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	skillsDir := filepath.Join(repoRoot, ".agents", "skills")
 	deployWriteFile(t, filepath.Join(skillsDir, "review", "SKILL.md"), "committed")
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	_, err = skillRun(t, "--source", source, "--no-pull", "--agent", "codex")
@@ -235,7 +236,7 @@ func TestInstallSkill_failingGitLsFilesStopsBeforeChangingAnything(t *testing.T)
 
 func TestInstallSkill_copyModeCopiesSkillTrees(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--copy")
@@ -286,8 +287,8 @@ func TestInstallSkill_missingSourceRequiresClone(t *testing.T) {
 
 	_, err := skillRun(t)
 
-	wantSource := filepath.Join(home, ".claude", "skills", "onyx-infra")
-	if err == nil || !strings.Contains(err.Error(), "onyx-infra checkout not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
+	wantSource := filepath.Join(home, ".claude", "skills", "agent-context")
+	if err == nil || !strings.Contains(err.Error(), "agent-context checkout not found at "+wantSource) || !strings.Contains(err.Error(), "--clone") {
 		t.Fatalf("expected a hint to use --clone for %s, got %v", wantSource, err)
 	}
 }
@@ -336,8 +337,9 @@ func TestInstallSkill_cloneFetchesTheDefaultSourceSparsely(t *testing.T) {
 		t.Fatalf("install-skill: %v", err)
 	}
 
-	source := filepath.Join(home, ".claude", "skills", "onyx-infra")
-	wantArgs := "clone\n--depth\n1\n--filter=blob:none\n--sparse\n" + agentContextCloneURL + "\n" + source + "\n" +
+	source := filepath.Join(home, ".claude", "skills", "agent-context")
+	cloneURL := "https://github.com/" + deployTestInternalRepo + ".git"
+	wantArgs := "clone\n--depth\n1\n--filter=blob:none\n--sparse\n" + cloneURL + "\n" + source + "\n" +
 		"-C\n" + source + "\nsparse-checkout\nset\nagent-context\n"
 	if got := skillReadFile(t, record); got != wantArgs {
 		t.Fatalf("expected git args %q, got %q", wantArgs, got)
@@ -345,7 +347,7 @@ func TestInstallSkill_cloneFetchesTheDefaultSourceSparsely(t *testing.T) {
 	if got := skillReadFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md")); got != "review\n" {
 		t.Fatalf("expected the cloned skill to be installed, got %q", got)
 	}
-	if !strings.Contains(out, "Cloning "+agentContextCloneURL) || !strings.Contains(out, source) {
+	if !strings.Contains(out, "Cloning "+cloneURL) || !strings.Contains(out, source) {
 		t.Fatalf("expected clone output, got %q", out)
 	}
 }
@@ -379,7 +381,7 @@ func TestInstallSkill_sparseCheckoutFailureRemovesTheCheckout(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "sparse-checkout failed") {
 		t.Fatalf("expected sparse-checkout failure, got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "onyx-infra")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "agent-context")); !os.IsNotExist(err) {
 		t.Fatalf("expected the half-made checkout to be removed, got %v", err)
 	}
 }
@@ -395,7 +397,7 @@ func TestCloneAgentContext_checksOutOnlyTheSkillsDirectory(t *testing.T) {
 	gittest.Git(t, remote, "add", "-A")
 	gittest.Git(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
 
-	dest := filepath.Join(t.TempDir(), "onyx-infra")
+	dest := filepath.Join(t.TempDir(), "infra-repo")
 	cmd := NewInstallSkillCommand()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -418,7 +420,7 @@ func TestCloneAgentContext_checksOutOnlyTheSkillsDirectory(t *testing.T) {
 
 func TestInstallSkill_readsSkillsFromTheAgentContextDirectory(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	checkout := filepath.Join(t.TempDir(), "onyx-infra")
+	checkout := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, filepath.Join(checkout, "agent-context"))
 	deployWriteFile(t, filepath.Join(checkout, "skills", "decoy", "SKILL.md"), "decoy")
 
@@ -437,8 +439,8 @@ func TestInstallSkill_readsSkillsFromTheAgentContextDirectory(t *testing.T) {
 
 func TestInstallSkill_sourceWithoutSkillsIsAnError(t *testing.T) {
 	skillEnv(t)
-	checkout := filepath.Join(t.TempDir(), "onyx-infra")
-	deployWriteFile(t, filepath.Join(checkout, "README.md"), "an onyx-infra without agent-context/")
+	checkout := filepath.Join(t.TempDir(), "infra-repo")
+	deployWriteFile(t, filepath.Join(checkout, "README.md"), "a checkout without agent-context/")
 
 	_, err := skillRun(t, "--source", checkout, "--no-pull")
 
@@ -464,6 +466,25 @@ func TestInstallSkill_fallsBackToTheOldDefaultCheckout(t *testing.T) {
 	}
 }
 
+func TestInstallSkill_findsACheckoutAtAnOlderDefaultName(t *testing.T) {
+	home, repoRoot := skillEnv(t)
+	skillWriteSource(t, filepath.Join(home, ".claude", "skills", "older-name", "agent-context"))
+	// Not a checkout of the internal infra repo: it has no agent-context/.
+	skillWriteSource(t, filepath.Join(home, ".claude", "skills", "onyx-llm-context"))
+
+	out, err := skillRun(t, "--no-pull")
+	if err != nil {
+		t.Fatalf("install-skill: %v", err)
+	}
+
+	if got := skillReadFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md")); got != "review" {
+		t.Fatalf("expected the checkout to be installed, got %q", got)
+	}
+	if strings.Contains(out, "old checkout") {
+		t.Fatalf("expected no warning for a current checkout, got %q", out)
+	}
+}
+
 func TestInstallSkill_refusesSymlinkedDestinations(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -478,7 +499,7 @@ func TestInstallSkill_refusesSymlinkedDestinations(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, repoRoot := skillEnv(t)
-			source := filepath.Join(t.TempDir(), "onyx-infra")
+			source := filepath.Join(t.TempDir(), "infra-repo")
 			skillWriteSource(t, source)
 			target := filepath.Join(t.TempDir(), "target")
 			if c.content != "" {

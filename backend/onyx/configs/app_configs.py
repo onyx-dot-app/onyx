@@ -1753,7 +1753,8 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
 # Miscellaneous
 #####
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
-# A full permission or group sync of a large source can take longer than other jobs
+# Group sync only: a full group sync of a large source can take longer than
+# other jobs. A doc permission sync has no time limit.
 PERMISSION_SYNC_TIMEOUT = int(
     os.environ.get("PERMISSION_SYNC_TIMEOUT_SECONDS") or JOB_TIMEOUT
 )
@@ -1883,7 +1884,7 @@ AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
 AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 
 # configurable image model
-IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
+IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-2.5-flare")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"

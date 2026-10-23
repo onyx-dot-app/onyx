@@ -8,7 +8,9 @@ import {
   OverflowText,
   Popover,
   SelectButton,
+  Chip,
   Tag,
+  Tooltip,
   Text,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -42,6 +44,7 @@ import { closedBySupersede } from "@/views/admin/connectors/ConnectorDetailPage/
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import type { PopoverPlacement } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+import { runKindLabelKey } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import {
   RUN_KIND_ICONS,
   isActive,
@@ -244,7 +247,9 @@ export default function ActivityCard({
       ? RUN_KIND_ICONS[run.kind]
       : getSourceMetadata(connector.source).icon;
   const identity =
-    connector === undefined ? tRuns(`kinds.${run.kind}`) : connector.name;
+    connector === undefined
+      ? tRuns(`kinds.${runKindLabelKey(run)}`)
+      : connector.name;
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
   const trace = runTrace(run);
@@ -374,11 +379,9 @@ export default function ActivityCard({
                   className="min-w-0"
                 >
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tag
-                      title={tRuns("newModel.label")}
-                      tooltip={tRuns("newModel.tooltip")}
-                      color="purple"
-                    />
+                    <Tooltip tooltip={tRuns("newModel.tooltip")} side="top">
+                      <Tag title={tRuns("newModel.label")} color="purple" />
+                    </Tooltip>
                   )}
                   <OverflowText font="secondary-body" color={mutedColor}>
                     {identity}
@@ -426,10 +429,9 @@ export default function ActivityCard({
                 {trace !== null && (
                   <Popover onOpenChange={togglePopover("trace")}>
                     <Popover.Trigger asChild>
-                      <Tag
+                      <Chip
                         icon={SvgTextLines}
                         title={t("tags.stackTrace")}
-                        size="md"
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
@@ -445,11 +447,10 @@ export default function ActivityCard({
                   <>
                     <Popover onOpenChange={togglePopover("items")}>
                       <Popover.Trigger asChild>
-                        <Tag
+                        <Chip
                           icon={WARNING_ICONS.indexing}
                           iconColor={pillIconColor}
                           title={docsLabel}
-                          size="md"
                           onClick={NOOP}
                         />
                       </Popover.Trigger>
@@ -484,11 +485,10 @@ export default function ActivityCard({
                 ) : run.kind === "checks" && listsChecks ? (
                   <Popover onOpenChange={togglePopover("items")}>
                     <Popover.Trigger asChild>
-                      <Tag
+                      <Chip
                         icon={WARNING_ICONS.checks}
                         iconColor={pillIconColor}
                         title={docsLabel}
-                        size="md"
                         onClick={NOOP}
                       />
                     </Popover.Trigger>
@@ -500,11 +500,10 @@ export default function ActivityCard({
                   </Popover>
                 ) : (
                   warnings > 0 && (
-                    <Tag
+                    <Chip
                       icon={WARNING_ICONS[run.kind]}
                       iconColor={pillIconColor}
                       title={docsLabel}
-                      size="md"
                     />
                   )
                 )}

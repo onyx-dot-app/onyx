@@ -1658,20 +1658,20 @@ export class OnyxApiClient {
    * API: POST /api/admin/image-generation/config
    * Schema (ImageGenerationConfigCreate):
    *   - image_provider_id: string (required) - unique key
-   *   - model_name: string (required) - e.g., "gpt-image-1"
+   *   - model_name: string (required) - e.g., "gpt-image-2.5-flare"
    *   - provider: string - e.g., "openai"
    *   - api_key: string
    *   - is_default: boolean
    *
    * @param imageProviderId - Unique identifier for the image generation config
-   * @param modelName - Model name (defaults to "gpt-image-1")
+   * @param modelName - Model name (defaults to "gpt-image-2.5-flare")
    * @param provider - Provider name (defaults to "openai")
    * @param isDefault - Whether this should be the default config (defaults to true)
    * @returns The image_provider_id
    */
   async createImageGenerationConfig(
     imageProviderId: string,
-    modelName: string = "gpt-image-1",
+    modelName: string = "gpt-image-2.5-flare",
     provider: string = "openai",
     isDefault: boolean = true
   ): Promise<string> {

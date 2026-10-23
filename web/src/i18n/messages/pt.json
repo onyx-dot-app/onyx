@@ -2970,6 +2970,7 @@
           "label": "Tipo de execução",
           "all": "Todos os tipos",
           "indexing": "Índice de documentos",
+          "backfill": "Preenchimento de documentos",
           "doc_permission_sync": "Sincronização de permissões",
           "group_sync": "Sincronização de membros de grupos",
           "pruning": "Limpeza de documentos",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, one {# execução cancelada} other {# execuções canceladas}}",
           "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
           "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "incompleteChecks": "{count, plural, one {# verificação incompleta} other {# verificações incompletas}}",
           "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
@@ -3402,11 +3404,13 @@
           },
           "deleteButton": {
             "label": "Excluir conta",
-            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a.",
+            "notOwnerTooltip": "Somente o proprietário pode excluir esta credencial"
           },
           "updateButton": {
             "label": "Atualizar credenciais",
-            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta.",
+            "notOwnerTooltip": "Somente o proprietário pode atualizar esta credencial"
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3426,14 +3430,14 @@
           "rerunButton": {
             "label": "Executar verificações novamente"
           },
+          "renameButton": {
+            "tooltip": "Renomear conta"
+          },
           "authenticationType": {
             "label": "Tipo de autenticação"
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
-          },
-          "shareSaved": {
-            "toast": "Compartilhamento atualizado."
           },
           "shareFailed": {
             "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
@@ -3448,10 +3452,16 @@
             "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
           },
           "shareLocked": {
-            "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+            "tooltip": "Somente o proprietário pode compartilhar esta credencial"
           },
           "viewDetails": {
             "tooltip": "Ver detalhes"
+          },
+          "failedToRun": {
+            "title": "Falha ao executar as verificações"
+          },
+          "unavailable": {
+            "label": "Indisponível"
           }
         },
         "accountUnavailable": {
@@ -5171,9 +5181,9 @@
           "message": "Tem certeza de que deseja excluir esta credencial? Não é possível excluir credenciais vinculadas a conectores ativos."
         },
         "confirmButton": {
-          "label": "Confirmar"
+          "label": "Excluir"
         },
-        "confirmTitle": "Confirmar exclusão"
+        "confirmTitle": "Excluir *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID da chave de acesso de {source}",
@@ -6791,6 +6801,10 @@
         "openaiGptImage25Sunburst": {
           "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
         }
+      },
+      "retiredModelWarning": {
+        "description": "Conecte outro modelo, defina-o como padrão e depois desconecte {title}.",
+        "title": "{title} não está mais disponível"
       },
       "setDefaultError": {
         "message": "Falha ao definir o padrão"
@@ -8602,6 +8616,10 @@
           "description": "Todos entram e se cadastram somente por SSO. Requer pelo menos um provedor de SSO ativado.",
           "title": "Desativar login e cadastro por senha"
         },
+        "renamedClaim": {
+          "description": "Permite que usuários cujo e-mail foi renomeado entrem por outro provedor na conta que tem seu e-mail atual, quando essa conta não tem mais vínculo com um provedor. Ative apenas enquanto migra usuários de um provedor SSO excluído.",
+          "title": "Reivindicar contas renomeadas após excluir um provedor"
+        },
         "section": {
           "title": "Autenticação"
         },
@@ -9311,6 +9329,9 @@
         "successToast": "URI de redirecionamento copiada",
         "errorToast": "Não foi possível copiar"
       },
+      "deleteProvider": {
+        "tooltip": "Excluir"
+      },
       "editProvider": {
         "tooltip": "Editar"
       },
@@ -9323,6 +9344,17 @@
         "title": "Falha ao carregar os provedores de SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Excluir {name}",
+          "description": "Os usuários que entraram com {name} mantêm suas contas. O próximo login por outro provedor com o mesmo e-mail abre a mesma conta. Adicione o provedor substituto antes de excluir este.",
+          "countsError": "Não foi possível carregar quem entrou com este provedor. Feche e tente novamente.",
+          "countsLoading": "Carregando quem entrou com este provedor…",
+          "linkedUsers": "{count, plural, =0 {Nenhum usuário entrou com {name}.} one {# usuário entrou com {name}.} other {# usuários entraram com {name}.}}",
+          "renamedUsers": "{count, plural, one {# deles foi renomeado e precisa da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.} other {# deles foram renomeados e precisam da janela de reivindicação de contas renomeadas em Reforço de segurança para entrar por outro provedor.}}",
+          "submit": {
+            "label": "Excluir"
+          }
+        },
         "domainVerification": {
           "description": "Um domínio autentica os usuários do seu workspace automaticamente somente depois que você comprova que é o dono dele. Adicione o registro DNS abaixo e depois verifique.",
           "loadError": {
@@ -9421,6 +9453,7 @@
         "description": "Permita que os usuários entrem pelo seu provedor de identidade."
       },
       "toasts": {
+        "providerDeleted": "{name} excluído",
         "unexpectedError": "Ocorreu um erro inesperado."
       },
       "providerTypes": {
@@ -9666,6 +9699,8 @@
         "deleting": "Excluindo",
         "failed": "Falhou",
         "indexed": "Indexado",
+        "backfilling": "Preenchendo",
+        "backfilled": "Preenchido",
         "indexing": "Indexando",
         "initialIndexing": "Indexação inicial",
         "interrupted": "Interrompido",
@@ -10790,24 +10825,25 @@
         "title": "Testar conexão",
         "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
         "startButton": {
-          "label": "Iniciar verificações"
+          "label": "Iniciar verificações",
+          "disabledTooltip": "Escolha uma conta ou preencha uma nova acima para iniciar as verificações"
         }
       },
       "title": "Verificações do conector",
       "groups": {
         "failed": "{count} com falha",
-        "indeterminate": "{count} não verificadas",
+        "indeterminate": "{count} incompletas",
         "passed": "{count} bem-sucedidas",
         "skipped": "{count} ignoradas",
-        "running": "{count} em execução",
+        "running": "{count} em andamento",
         "expected": "{count} esperadas"
       },
       "status": {
-        "passed": "Aprovada",
+        "passed": "Bem-sucedida",
         "failed": "Com falha",
-        "indeterminate": "Não foi possível verificar",
+        "indeterminate": "Incompleta",
         "skipped": "Ignorada",
-        "running": "Testando…",
+        "running": "Em execução…",
         "pending": "Na fila",
         "waiting": "Aguardando configurações",
         "stopped": "Interrompida por você"
@@ -10823,9 +10859,10 @@
         "expand": "Ver tudo"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} com falha",
-        "unverified": "{count} não verificadas",
+        "unverified": "{count} incompletas",
         "inProgress": "{count} em andamento",
         "expected": "{count} a mais previstas",
         "skipped": "{count} ignoradas",
@@ -10866,6 +10903,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "As verificações pararam de responder. Tente novamente.",
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "cancelFailed": {
+        "toast": "Não foi possível cancelar as verificações. Tente novamente."
       }
     },
     "connectorEdit": {

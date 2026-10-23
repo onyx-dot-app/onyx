@@ -163,7 +163,10 @@ rather than applied.
 When the scope narrows to a subset of sources, `run` appends a note to the
 response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
 call can vary its terms. Each call also records a `SearchCycle`, which
-`decide_search_scope` reads on later calls in the same turn.
+`decide_search_scope` reads on later calls in the same turn. It also passes the
+deduplicated `searched_sources` of those cycles as a separate prompt field, so a
+BACKOFF directive ("check A first, then B") advances to the next unsearched source
+while the subject stays the same.
 
 ### 4.3 Parallel retrieval lanes
 

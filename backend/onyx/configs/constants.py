@@ -13,6 +13,8 @@ ONYX_EMAILABLE_LOGO_MAX_DIM = 512
 
 # The mask_string() function in encryption.py uses "•" (U+2022 BULLET) to mask secrets.
 MASK_CREDENTIAL_CHAR = "\u2022"
+# What mask_string returns for strings < 14 chars: twelve bullets.
+MASK_CREDENTIAL_SHORT = MASK_CREDENTIAL_CHAR * 12
 # Pattern produced by mask_string for strings >= 14 chars: "abcd...wxyz" (exactly 11 chars)
 MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
 
@@ -105,6 +107,8 @@ KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
 KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
     "allow_same_provider_subject_relink_override"
 )
+KV_ALLOW_RENAMED_ACCOUNT_CLAIM_KEY = "allow_renamed_account_claim_override"
+KV_LEGACY_SAML_IMPORTED_KEY = "legacy_saml_conf_imported"
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
@@ -195,14 +199,19 @@ INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 # is older than the timeout.
 PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
 PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A group sync still running this long past PERMISSION_SYNC_TIMEOUT is hung (its
+# own timeout check never ran), so its lease stops renewing and the reaper
+# frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 # A worker that could not renew for this long stops writing, before the reaper
 # can fail its attempt and let a replacement start.
-# A sync still running this long past its time limit is hung (its own timeout
-# check never ran), so its lease stops renewing and the reaper frees its row.
-PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
     PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
 )
+# A doc permission sync has no time limit: a crawl that keeps yielding may run
+# for days. One with no progress for this long is stuck, so the reaper fails
+# its attempt, which stops the worker and lets a replacement start.
+PERMISSION_SYNC_STALL_TIMEOUT = 60 * 60  # seconds
 # Celery drops a doc permission sync task that waited longer than this in the
 # queue. The reaper fails its NOT_STARTED attempt once the task can no longer run.
 PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds

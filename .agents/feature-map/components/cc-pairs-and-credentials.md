@@ -80,12 +80,12 @@ deletion units.
 | POST | `/manage/credential`, `POST /manage/credential/private-key` | `create_credential_from_model` | `server/documents/credential.py` |
 | GET | `/manage/credential`, `/manage/credential/{id}` | `list_credentials`, `get_credential_by_id` | `server/documents/credential.py` |
 | PATCH | `/manage/credential/{id}` | `update_credential_from_model` | Changes the values. Keeps the owner. |
-| PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Global `MANAGE_CONNECTORS` only. Changes a credential the caller can edit (§4.7). Keeps the owner. |
-| PUT | `/manage/admin/credential/{id}/sharing` | `update_credential_sharing_endpoint` | Changes `admin_public`, `groups` (EE) and the name of a credential the caller can edit (§4.7). Checks the groups exist and runs `assert_within_scope` on the stored and requested groups. CE refuses groups. |
-| DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | |
+| PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Global `MANAGE_CONNECTORS` only. Changes a credential the caller owns (§4.7). |
+| PUT | `/manage/admin/credential/{id}/sharing` | `update_credential_sharing_endpoint` | Changes `admin_public`, `groups` (EE) and the name of a credential the caller owns (§4.7). Checks the groups exist and runs `assert_within_scope` on the stored and requested groups. CE refuses groups. |
+| DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | Global `MANAGE_CONNECTORS` only. Same as the owner delete, so an admin also deletes a credential with no owner here. |
 | DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
-| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`. |
+| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`; a similar-credentials snapshot also carries `usages`, `usable` and `refusal_reason` ([[connectors]] §4.9). |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
 | PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
@@ -340,7 +340,11 @@ requests cancellation of any in-progress `IndexAttempt` rows
 (`IndexingCoordination.request_cancellation__no_commit`), and revokes their Celery
 tasks after the commit. A first
 attempt that waits for capability checks has no task, so it is canceled directly
-(`cancel_waiting_index_attempt__no_commit`).
+(`cancel_waiting_index_attempt__no_commit`). A prune that is queued but not started
+is revoked, its `PRUNING` sync record ends `CANCELED`, and its fence is reset
+(`pruning/tasks.py:reset_prune_and_cancel_sync_record`). The pair's prune request
+stays, so the prune runs again on resume. A started prune stops on the stop fence.
+Only the deletion beat clears a stop fence it set itself, for a `DELETING` pair.
 It updates `status=PAUSED` and immediately re-fires `CHECK_FOR_INDEXING` so the
 change is picked up without waiting for the next 15-second tick. Pausing stops
 new indexing, permission sync, and pruning from starting; it does not touch
@@ -397,15 +401,26 @@ It does not block the delete call; see §9.
 ### 4.7 Credential access and sharing
 
 `db/credentials.py:_add_user_filters` decides which credentials a user can
-reach, at one of two `CredentialAccessLevel`s. Drafts are hidden from all but
+reach, at one of three `CredentialAccessLevel`s. Drafts are hidden from all but
 their owner's form.
 
-| Who | USE (list, fetch, pair) | EDIT (change values, sharing, delete) |
-|---|---|---|
-| The owner | Yes | Yes |
-| Global `MANAGE_CONNECTORS` holder ("admin") | No owner, `admin_public`, or a `CREDENTIAL_PERMISSIONS_TO_IGNORE` source | Same as USE |
-| Manager of a group in `credential__user_group`, or member of it who holds global `MANAGE_CONNECTORS` (EE) | Yes | No |
-| Anyone else | No | No |
+"Admin reach" is a credential with no owner, with `admin_public`, or of a
+`CREDENTIAL_PERMISSIONS_TO_IGNORE` source.
+
+| Who | Use and test (list, fetch, pair, run checks) | Change values | Change sharing | Delete |
+|---|---|---|---|---|
+| The owner | Yes | Yes | Yes | Yes |
+| Global `MANAGE_CONNECTORS` holder ("admin") | Admin reach only | No | No | Only a credential with no owner, never the seeded public credential |
+| Manager of a group in `credential__user_group`, or member of it who holds global `MANAGE_CONNECTORS` (EE) | Yes | No | No | No |
+| Anyone else | No | No | No | No |
+
+USE, EDIT and DELETE are the `CredentialAccessLevel`s. EDIT is the owner only:
+`_add_user_filters` matches `user_id` alone at that level. Every route that
+changes, shares or renames a credential needs EDIT, the admin routes included.
+The delete routes need DELETE: the owner, or a global admin when the
+credential has no owner. A credential with no owner can be used and deleted,
+but not changed. The seeded public credential (id `0`) cannot be deleted.
+Non-owners always get a credential's values masked (`credential_ids_to_mask`).
 
 The group clause comes from
 `fetch_versioned_implementation("onyx.db.credentials", "_build_credential_group_access_clause")`:
@@ -418,7 +433,8 @@ the same split: CE refuses groups, EE checks they exist. Both create paths and
 
 USE access lets a user see a shared credential. To pair it, swap to it, edit
 its bound fields or run checks with it, a non-owner must also keep the bound
-values of a pair that uses it: see [[connectors]] §4.9
+values of a pair that uses it, when its source has bound fields that the
+credential does not derive: see [[connectors]] §4.9
 (`factory.py:assert_user_can_use_credential`).
 
 ---

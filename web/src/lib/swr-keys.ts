@@ -68,6 +68,8 @@ export const SWR_KEYS = {
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderHandoff: (providerId: number) =>
+    `/api/admin/sso/provider/${providerId}/handoff`,
   adminSsoProviderTypes: "/api/admin/sso/provider-type",
   adminSsoDomains: "/api/admin/sso/domain",
   // Cache key for the POST /records lookup, keyed by the domains being configured.

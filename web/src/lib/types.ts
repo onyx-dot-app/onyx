@@ -228,6 +228,8 @@ export interface IndexAttemptSnapshot {
   time_finished: string | null;
   /** Indexed under the FUTURE search settings of a running model switch. */
   is_new_model: boolean;
+  /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
+  is_backfill: boolean;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
@@ -595,6 +597,7 @@ export interface SecuritySettings {
   allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
   allow_same_provider_subject_relink: boolean;
+  allow_renamed_account_claim: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;

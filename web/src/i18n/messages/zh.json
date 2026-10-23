@@ -2970,6 +2970,7 @@
           "label": "运行类型",
           "all": "所有类型",
           "indexing": "文档索引",
+          "backfill": "文档回填",
           "doc_permission_sync": "权限同步",
           "group_sync": "群组成员同步",
           "pruning": "文档清理",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, other {已取消 # 次运行}}",
           "passedChecks": "{count, plural, one {# 项检查通过} other {# 项检查通过}}",
           "failedChecks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "incompleteChecks": "{count, plural, one {# 项检查未完成} other {# 项检查未完成}}",
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
@@ -3402,11 +3404,13 @@
           },
           "deleteButton": {
             "label": "删除账户",
-            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。",
+            "notOwnerTooltip": "只有所有者可以删除此凭据"
           },
           "updateButton": {
             "label": "更新凭据",
-            "tooltip": "更改使用此帐户的所有连接器的已保存值。"
+            "tooltip": "更改使用此帐户的所有连接器的已保存值。",
+            "notOwnerTooltip": "只有所有者可以更新此凭据"
           },
           "usedBy": {
             "label": "{count, plural, other {# 个连接器}}正在使用"
@@ -3426,14 +3430,14 @@
           "rerunButton": {
             "label": "重新运行检查"
           },
+          "renameButton": {
+            "tooltip": "重命名账户"
+          },
           "authenticationType": {
             "label": "认证类型"
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
-          },
-          "shareSaved": {
-            "toast": "共享已更新。"
           },
           "shareFailed": {
             "toast": "无法更改可使用此账户的人员。请重试。"
@@ -3448,10 +3452,16 @@
             "tooltip": "只有添加此账户的人才能将其设为私有。"
           },
           "shareLocked": {
-            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+            "tooltip": "只有所有者可以共享此凭据"
           },
           "viewDetails": {
             "tooltip": "查看详情"
+          },
+          "failedToRun": {
+            "title": "检查运行失败"
+          },
+          "unavailable": {
+            "label": "不可用"
           }
         },
         "accountUnavailable": {
@@ -5171,9 +5181,9 @@
           "message": "确定要删除此凭据吗?无法删除与运行中的连接器关联的凭据。"
         },
         "confirmButton": {
-          "label": "确认"
+          "label": "删除"
         },
-        "confirmTitle": "确认删除"
+        "confirmTitle": "删除 *{name}*"
       },
       "displayNames": {
         "accessKeyId": "{source} 访问密钥 ID",
@@ -6791,6 +6801,10 @@
         "openaiGptImage25Sunburst": {
           "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
+      },
+      "retiredModelWarning": {
+        "description": "请连接其他模型并将其设为默认，然后断开 {title} 的连接。",
+        "title": "{title} 已不再可用"
       },
       "setDefaultError": {
         "message": "设置默认项失败"
@@ -8602,6 +8616,10 @@
           "description": "所有人只能通过 SSO 登录和注册。需要至少启用一个 SSO 提供商。",
           "title": "禁用密码登录和注册"
         },
+        "renamedClaim": {
+          "description": "允许电子邮件被改名的用户通过其他提供商登录当前电子邮件对应的账户，前提是该账户不再有任何提供商关联。仅在从已删除的 SSO 提供商迁移用户期间开启。",
+          "title": "提供商删除后接管已改名的账户"
+        },
         "section": {
           "title": "身份验证"
         },
@@ -9311,6 +9329,9 @@
         "successToast": "已复制重定向 URI",
         "errorToast": "无法复制"
       },
+      "deleteProvider": {
+        "tooltip": "删除"
+      },
       "editProvider": {
         "tooltip": "编辑"
       },
@@ -9323,6 +9344,17 @@
         "title": "加载 SSO 提供商失败"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "删除 {name}",
+          "description": "通过 {name} 登录的用户会保留其帐户。他们下次使用相同电子邮件通过其他提供商登录时，会进入同一个帐户。请先添加替代提供商，再删除此提供商。",
+          "countsError": "无法加载通过此提供商登录的用户。请关闭后重试。",
+          "countsLoading": "正在加载通过此提供商登录的用户…",
+          "linkedUsers": "{count, plural, =0 {没有用户通过 {name} 登录过。} other {# 位用户通过 {name} 登录过。}}",
+          "renamedUsers": "{count, plural, other {其中 # 位用户已改名，需要在安全加固中开启已改名账户接管，才能通过其他提供商登录。}}",
+          "submit": {
+            "label": "删除"
+          }
+        },
         "domainVerification": {
           "description": "只有在您验证域名归属之后，该域名才会自动为您工作区的用户登录。请添加下面的 DNS 记录，然后进行验证。",
           "loadError": {
@@ -9421,6 +9453,7 @@
         "description": "让用户通过您的身份提供商登录。"
       },
       "toasts": {
+        "providerDeleted": "已删除 {name}",
         "unexpectedError": "发生意外错误。"
       },
       "providerTypes": {
@@ -9666,6 +9699,8 @@
         "deleting": "正在删除",
         "failed": "失败",
         "indexed": "已索引",
+        "backfilling": "正在回填",
+        "backfilled": "已回填",
         "indexing": "正在索引",
         "initialIndexing": "初始索引",
         "interrupted": "已中断",
@@ -10790,24 +10825,25 @@
         "title": "测试连接",
         "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
         "startButton": {
-          "label": "开始检查"
+          "label": "开始检查",
+          "disabledTooltip": "请在上方选择一个账户或填写新账户以开始检查"
         }
       },
       "title": "连接器检查",
       "groups": {
         "failed": "{count} 项失败",
-        "indeterminate": "{count} 项未验证",
+        "indeterminate": "{count} 项未完成",
         "passed": "{count} 项成功",
         "skipped": "{count} 项跳过",
-        "running": "{count} 项运行中",
+        "running": "{count} 项进行中",
         "expected": "{count} 项待运行"
       },
       "status": {
-        "passed": "通过",
+        "passed": "成功",
         "failed": "失败",
-        "indeterminate": "无法验证",
+        "indeterminate": "未完成",
         "skipped": "已跳过",
-        "running": "正在测试…",
+        "running": "正在运行…",
         "pending": "排队中",
         "waiting": "正在等待设置",
         "stopped": "已由你停止"
@@ -10823,9 +10859,10 @@
         "expand": "查看全部"
       },
       "titleCount": "（{complete}/{total}）",
+      "titleTotal": "（{total}）",
       "summary": {
         "failed": "{count} 项失败",
-        "unverified": "{count} 项未验证",
+        "unverified": "{count} 项未完成",
         "inProgress": "{count} 项进行中",
         "expected": "{count} 项待执行",
         "skipped": "{count} 项跳过",
@@ -10866,6 +10903,13 @@
       },
       "docsButton": {
         "label": "文档"
+      },
+      "runLost": "检查已停止响应。请重试。",
+      "cancelButton": {
+        "label": "取消"
+      },
+      "cancelFailed": {
+        "toast": "无法取消检查。请重试。"
       }
     },
     "connectorEdit": {

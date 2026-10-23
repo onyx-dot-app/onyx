@@ -130,6 +130,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
+from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -870,6 +871,19 @@ class DockerSandboxManager(SandboxManager):
         return False
 
     def provision(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
+    ) -> SandboxInfo:
+        with sandbox_provision_lock(sandbox_id, tenant_id):
+            return self._provision(
+                sandbox_id, user_id, tenant_id, onyx_pat, provisioning_attempt_number
+            )
+
+    def _provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,

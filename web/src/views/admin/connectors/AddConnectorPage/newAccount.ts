@@ -128,13 +128,20 @@ export function typedDraft(
     source,
     credential_json: {
       // Only the shown fields: a field another variant asked for stays out.
+      // Text is trimmed: a pasted token often carries a trailing space or
+      // newline, which the schema's trim only ignores while validating.
       ...Object.fromEntries(
-        Object.entries(fields).filter(
-          ([key, value]) =>
-            (key in spec.fields || key === "authentication_method") &&
-            value !== null &&
-            value !== ""
-        )
+        Object.entries(fields)
+          .map(([key, value]): [string, unknown] => [
+            key,
+            typeof value === "string" ? value.trim() : value,
+          ])
+          .filter(
+            ([key, value]) =>
+              (key in spec.fields || key === "authentication_method") &&
+              value !== null &&
+              value !== ""
+          )
       ),
       ...realm,
     },

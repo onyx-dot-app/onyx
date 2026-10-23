@@ -14,6 +14,7 @@ import {
   MessageCard,
   Pagination,
   Tag,
+  Tooltip,
   Text,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
@@ -511,15 +512,19 @@ export default function RunsCard({
             {COUNT_TAGS.filter(
               ({ group }) => (data?.status_counts[group] ?? 0) > 0
             ).map(({ group, icon, color }) => (
-              <Tag
+              <Tooltip
                 key={group}
-                icon={icon}
-                title={format.number(data?.status_counts[group] ?? 0)}
                 tooltip={t(`counts.${group}`, {
                   count: data?.status_counts[group] ?? 0,
                 })}
-                color={color}
-              />
+                side="top"
+              >
+                <Tag
+                  icon={icon}
+                  title={format.number(data?.status_counts[group] ?? 0)}
+                  color={color}
+                />
+              </Tooltip>
             ))}
           </Section>
         </Section>

@@ -2970,6 +2970,7 @@
           "label": "Tipo de ejecución",
           "all": "Todos los tipos",
           "indexing": "Índice de documentos",
+          "backfill": "Relleno de documentos",
           "doc_permission_sync": "Sincronización de permisos",
           "group_sync": "Sincronización de miembros de grupos",
           "pruning": "Depuración de documentos",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, one {# ejecución cancelada} other {# ejecuciones canceladas}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+          "incompleteChecks": "{count, plural, one {# comprobación incompleta} other {# comprobaciones incompletas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
@@ -3402,11 +3404,13 @@
           },
           "deleteButton": {
             "label": "Eliminar cuenta",
-            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando."
+            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando.",
+            "notOwnerTooltip": "Solo el propietario puede eliminar esta credencial"
           },
           "updateButton": {
             "label": "Actualizar credenciales",
-            "tooltip": "Cambia los valores guardados para cada conector que usa esta cuenta."
+            "tooltip": "Cambia los valores guardados para cada conector que usa esta cuenta.",
+            "notOwnerTooltip": "Solo el propietario puede actualizar esta credencial"
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3426,14 +3430,14 @@
           "rerunButton": {
             "label": "Volver a ejecutar comprobaciones"
           },
+          "renameButton": {
+            "tooltip": "Cambiar el nombre de la cuenta"
+          },
           "authenticationType": {
             "label": "Tipo de autenticación"
           },
           "rerunFailed": {
             "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
-          },
-          "shareSaved": {
-            "toast": "Uso compartido actualizado."
           },
           "shareFailed": {
             "toast": "No se pudo cambiar quién puede usar esta cuenta. Inténtalo de nuevo."
@@ -3448,10 +3452,16 @@
             "tooltip": "Solo quien añadió esta cuenta puede hacerla privada."
           },
           "shareLocked": {
-            "tooltip": "Solo quien añadió esta cuenta, o un administrador con quien está compartida, puede cambiar quién puede usarla."
+            "tooltip": "Solo el propietario puede compartir esta credencial"
           },
           "viewDetails": {
             "tooltip": "Ver detalles"
+          },
+          "failedToRun": {
+            "title": "No se pudieron ejecutar las comprobaciones"
+          },
+          "unavailable": {
+            "label": "No disponible"
           }
         },
         "accountUnavailable": {
@@ -5171,9 +5181,9 @@
           "message": "¿Seguro que quieres eliminar esta credencial? No puedes eliminar credenciales vinculadas a conectores activos."
         },
         "confirmButton": {
-          "label": "Confirmar"
+          "label": "Eliminar"
         },
-        "confirmTitle": "Confirmar eliminación"
+        "confirmTitle": "Eliminar *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID de clave de acceso de {source}",
@@ -6791,6 +6801,10 @@
         "openaiGptImage25Sunburst": {
           "description": "El modelo premium de generación de imágenes de OpenAI, para las ediciones más precisas."
         }
+      },
+      "retiredModelWarning": {
+        "description": "Conecta otro modelo, establécelo como predeterminado y luego desconecta {title}.",
+        "title": "{title} ya no está disponible"
       },
       "setDefaultError": {
         "message": "No se pudo establecer como predeterminado"
@@ -8602,6 +8616,10 @@
           "description": "Todos inician sesión y se registran solo mediante SSO. Requiere al menos un proveedor de SSO activado.",
           "title": "Desactivar el inicio de sesión y el registro con contraseña"
         },
+        "renamedClaim": {
+          "description": "Permite que los usuarios cuyo correo electrónico fue renombrado inicien sesión con otro proveedor en la cuenta que tiene su correo actual, cuando esa cuenta ya no tiene ningún vínculo con un proveedor. Active esto solo mientras migra usuarios desde un proveedor SSO eliminado.",
+          "title": "Reclamar cuentas renombradas tras eliminar un proveedor"
+        },
         "section": {
           "title": "Autenticación"
         },
@@ -9311,6 +9329,9 @@
         "successToast": "URI de redirección copiada",
         "errorToast": "No se pudo copiar"
       },
+      "deleteProvider": {
+        "tooltip": "Eliminar"
+      },
       "editProvider": {
         "tooltip": "Editar"
       },
@@ -9323,6 +9344,17 @@
         "title": "No se pudieron cargar los proveedores de SSO"
       },
       "modals": {
+        "deleteProvider": {
+          "title": "Eliminar {name}",
+          "description": "Los usuarios que iniciaron sesión con {name} conservan sus cuentas. Su próximo inicio de sesión con otro proveedor y el mismo correo electrónico abre la misma cuenta. Añada el proveedor de reemplazo antes de eliminar este.",
+          "countsError": "No pudimos cargar quién inició sesión con este proveedor. Cierre e inténtelo de nuevo.",
+          "countsLoading": "Cargando quién inició sesión con este proveedor…",
+          "linkedUsers": "{count, plural, =0 {Ningún usuario ha iniciado sesión con {name}.} one {# usuario inició sesión con {name}.} other {# usuarios iniciaron sesión con {name}.}}",
+          "renamedUsers": "{count, plural, one {# de ellos fue renombrado y necesita la ventana de reclamación de cuentas renombradas en Refuerzo de seguridad para iniciar sesión con otro proveedor.} other {# de ellos fueron renombrados y necesitan la ventana de reclamación de cuentas renombradas en Refuerzo de seguridad para iniciar sesión con otro proveedor.}}",
+          "submit": {
+            "label": "Eliminar"
+          }
+        },
         "domainVerification": {
           "description": "Un dominio inicia la sesión de los usuarios de tu espacio de trabajo automáticamente solo después de que verifiques que te pertenece. Añade el registro DNS de abajo y luego verifícalo.",
           "loadError": {
@@ -9421,6 +9453,7 @@
         "description": "Permite que los usuarios inicien sesión con tu proveedor de identidad."
       },
       "toasts": {
+        "providerDeleted": "{name} eliminado",
         "unexpectedError": "Ocurrió un error inesperado."
       },
       "providerTypes": {
@@ -9666,6 +9699,8 @@
         "deleting": "Eliminando",
         "failed": "Fallido",
         "indexed": "Indexado",
+        "backfilling": "Rellenando",
+        "backfilled": "Rellenado",
         "indexing": "Indexando",
         "initialIndexing": "Indexación inicial",
         "interrupted": "Interrumpido",
@@ -10790,24 +10825,25 @@
         "title": "Probar conexión",
         "description": "{appName} ejecutará comprobaciones para validar los permisos necesarios antes de continuar.",
         "startButton": {
-          "label": "Iniciar comprobaciones"
+          "label": "Iniciar comprobaciones",
+          "disabledTooltip": "Elige una cuenta o completa una nueva arriba para iniciar las comprobaciones"
         }
       },
       "title": "Comprobaciones del conector",
       "groups": {
         "failed": "{count} fallidas",
-        "indeterminate": "{count} sin verificar",
+        "indeterminate": "{count} incompletas",
         "passed": "{count} correctas",
         "skipped": "{count} omitidas",
-        "running": "{count} en curso",
+        "running": "{count} en progreso",
         "expected": "{count} pendientes"
       },
       "status": {
-        "passed": "Superada",
+        "passed": "Correcta",
         "failed": "Fallida",
-        "indeterminate": "No se pudo verificar",
+        "indeterminate": "Incompleta",
         "skipped": "Omitida",
-        "running": "Probando…",
+        "running": "En ejecución…",
         "pending": "En cola",
         "waiting": "Esperando la configuración",
         "stopped": "Detenida por ti"
@@ -10823,9 +10859,10 @@
         "expand": "Ver todo"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} fallidas",
-        "unverified": "{count} sin verificar",
+        "unverified": "{count} incompletas",
         "inProgress": "{count} en curso",
         "expected": "{count} más pendientes",
         "skipped": "{count} omitidas",
@@ -10866,6 +10903,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "Las comprobaciones dejaron de responder. Inténtalo de nuevo.",
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "cancelFailed": {
+        "toast": "No se pudieron cancelar las comprobaciones. Inténtalo de nuevo."
       }
     },
     "connectorEdit": {

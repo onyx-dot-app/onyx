@@ -70,7 +70,7 @@ def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     google_drive_connector: GoogleDriveConnector,
     checkpointer: DocSyncCheckpointer,
-    callback: IndexingHeartbeatInterface | None = None,
+    callback: IndexingHeartbeatInterface | None,
 ) -> GenerateSlimDocumentOutput:
     resume = checkpointer.resume
     if resume is not None:
@@ -408,7 +408,7 @@ def gdrive_doc_sync(
     google_drive_connector.load_credentials(credential_json(cc_pair))
 
     slim_doc_generator = _get_slim_doc_generator(
-        cc_pair, google_drive_connector, checkpointer
+        cc_pair, google_drive_connector, checkpointer, callback
     )
 
     total_processed = 0
