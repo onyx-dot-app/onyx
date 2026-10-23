@@ -102,7 +102,6 @@ import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
-import { useTranslations } from "next-intl";
 
 const SYSTEM_MESSAGE_ID = -3;
 

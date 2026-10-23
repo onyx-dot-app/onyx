@@ -459,3 +459,68 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
     assert any(message.text == "Earlier question" for message in first.messages)
     assert not any(message.text == "Earlier question" for message in second.messages)
     assert [message.model_dump() for message in history] == original
+
+
+@pytest.mark.parametrize("inject_memories", [False, True])
+def test_user_information_is_split_out_of_the_shared_system_prompt(
+    monkeypatch: pytest.MonkeyPatch, inject_memories: bool
+) -> None:
+    from onyx.db.memory import UserInfo, UserMemoryContext
+    from onyx.llm.models import SystemMessage
+
+    monkeypatch.setattr(
+        "onyx.chat.prompt_utils.get_company_context", lambda: "Acme Inc"
+    )
+    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
+    requests = []
+    for name in ("Alice", "Bob"):
+        agent = ChatAgent(
+            messages=[],
+            tools=[],
+            custom_agent_prompt=None,
+            base_system_prompt="Base instructions",
+            persona=None,
+            context_files=ExtractedContextFiles(
+                file_texts=[],
+                image_files=[],
+                use_as_search_filter=False,
+                total_token_count=0,
+                uncapped_token_count=0,
+                file_metadata=[],
+            ),
+            user_memory_context=UserMemoryContext(
+                user_info=UserInfo(name=name, email=f"{name}@example.com"),
+                user_preferences=f"{name} prefers bullet points.",
+                memories=[f"{name} works on billing."],
+            ),
+            llm=ScriptedLLM([]),
+            token_counter=len,
+            inject_memories_in_prompt=inject_memories,
+            reminders_enabled=False,
+        )
+        current = UserMessage(content="Question")
+        prepared = agent._prepare_step(
+            StepInput(
+                history=[],
+                input_messages=[current],
+                messages=[],
+                step=AgentStep(index=0, limit=2),
+            )
+        )
+        requests.append(prepared.generation_request([current]))
+    assert requests[0].messages[0].text == requests[1].messages[0].text
+    for request, name, other in zip(
+        requests, ("Alice", "Bob"), ("Bob", "Alice"), strict=True
+    ):
+        shared, user_info, question = request.messages
+        assert isinstance(shared, SystemMessage)
+        assert shared.cacheable
+        assert "Acme Inc" in shared.text
+        assert name not in shared.text
+        assert isinstance(user_info, SystemMessage)
+        assert user_info.cacheable
+        assert name in user_info.text
+        assert other not in user_info.text
+        assert "prefers bullet points" in user_info.text
+        assert ("works on billing" in user_info.text) == inject_memories
+        assert question.text == "Question"
