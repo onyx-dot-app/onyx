@@ -1623,17 +1623,22 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
         request_context.reset(token)
 
 
-def test_slow_reader_receives_gap_instead_of_incomplete_success() -> None:
-    from onyx.chat.stream_buffer import _STREAM_QUEUE_CAPACITY, ChatStream
-    from onyx.server.query_and_chat.streaming_models import heartbeat_packet
+def test_slow_reader_drains_packet_burst_before_completion() -> None:
+    from onyx.chat.stream_buffer import ChatDelivery
 
-    reader = ChatStream()
-    for _ in range(_STREAM_QUEUE_CAPACITY + 1):
-        reader.publish(heartbeat_packet())
-    items = list(reader)
-    assert len(items) == 1
-    assert isinstance(items[0], StreamingError)
-    assert items[0].error_code == "STREAM_GAP"
+    delivery = ChatDelivery(None)
+    packets = [
+        Packet(
+            placement=Placement(turn_index=0),
+            obj=AgentResponseDelta(content=str(index)),
+        )
+        for index in range(4096)
+    ]
+    for packet in packets:
+        delivery.publish(packet)
+    delivery.finish()
+
+    assert list(delivery.reader) == packets
 
 
 def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
