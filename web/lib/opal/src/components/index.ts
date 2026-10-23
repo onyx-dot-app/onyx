@@ -137,11 +137,17 @@ export {
 export {
   Tag,
   TAG_COLORS,
-  TAG_REMOVE_CLASS,
   type TagProps,
   type TagVariant,
   type TagColor,
 } from "@opal/components/tag/components";
+
+/* Chip */
+export {
+  Chip,
+  CHIP_REMOVE_ATTR,
+  type ChipProps,
+} from "@opal/components/chip/components";
 
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";

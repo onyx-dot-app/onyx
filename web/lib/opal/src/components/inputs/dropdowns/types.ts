@@ -177,6 +177,12 @@ type InputMultiBaseProps = Omit<
   onSelectOption: (option: SelectOption) => void;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Show the chosen options as chips in the field. `false` keeps them only as
+   * selected rows in the list, for a caller that lists them elsewhere.
+   * @default true
+   */
+  showTags?: boolean;
 };
 
 /** `InputMultiComboBox`: chips beside a text input whose text filters the set. */

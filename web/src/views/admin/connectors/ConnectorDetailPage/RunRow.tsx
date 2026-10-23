@@ -241,16 +241,19 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
   const warnings = runWarnings(run);
   if (warnings === 0) return null;
   return (
-    <Tag
-      icon={SvgAlertTriangle}
-      title={format.number(warnings)}
+    <Tooltip
       tooltip={t(run.kind === "checks" ? "checks" : "tooltip", {
         count: warnings,
       })}
-      color="orange"
-      variant="count"
-      font="secondary-body"
-    />
+      side="top"
+    >
+      <Tag
+        icon={SvgAlertTriangle}
+        title={format.number(warnings)}
+        color="orange"
+        variant="count"
+      />
+    </Tooltip>
   );
 }
 
@@ -293,12 +296,9 @@ function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   const format = useFormatter();
   if (look === "tag") {
     return (
-      <Tag
-        icon={Icon}
-        title={format.number(value)}
-        tooltip={tooltip}
-        color="gray"
-      />
+      <Tooltip tooltip={tooltip} side="top">
+        <Tag icon={Icon} title={format.number(value)} color="gray" />
+      </Tooltip>
     );
   }
   return (
@@ -625,11 +625,9 @@ export default function RunRow({
                 >
                   <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Tag
-                      title={t("newModel.label")}
-                      tooltip={t("newModel.tooltip")}
-                      color="purple"
-                    />
+                    <Tooltip tooltip={t("newModel.tooltip")} side="top">
+                      <Tag title={t("newModel.label")} color="purple" />
+                    </Tooltip>
                   )}
                   {run.kind === "indexing" && (
                     <StageDetailsTrigger open={open} />

@@ -207,13 +207,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
   const messageColor: TextColor = blocking ? "status-error-05" : color;
 
   const required = check.required ? (
-    <Tag
-      title={t("required.label")}
-      color="white"
-      variant="status"
-      font="secondary-action"
-      titleColor="text-03"
-    />
+    <Tag title={t("required.label")} color="white" variant="status" />
   ) : undefined;
 
   // A required expected check cannot be skipped.

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, OverflowText, Tag, Text } from "@opal/components";
+import { Button, OverflowText, Tag, Text, Tooltip } from "@opal/components";
 import type { TagProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
@@ -22,6 +22,8 @@ type ContentMdSizePreset = "main-content" | "main-ui" | "secondary";
 type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
 type ContentMdSuffix = "optional" | (string & {});
+
+type ContentMdTag = TagProps & { tooltip?: string };
 
 interface ContentMdPresetConfig {
   /** Opal font name for the title. */
@@ -75,6 +77,12 @@ interface ContentMdProps {
   onTitleChange?: (newTitle: string) => void;
 
   /**
+   * Tooltip and accessible name of the edit button. Pass translated text;
+   * unset, it is the generic "Edit".
+   */
+  editTooltip?: string;
+
+  /**
    * Muted suffix rendered beside the title.
    * Use `"optional"` for the translated "(Optional)" label (`OpalStrings.contentOptional`), or pass any string.
    */
@@ -83,8 +91,8 @@ interface ContentMdProps {
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: ContentMdAuxIcon;
 
-  /** Tag rendered beside the title. */
-  tag?: TagProps;
+  /** Tag rendered beside the title, with an optional hover tooltip. */
+  tag?: ContentMdTag;
 
   /**
    * Clamp the title to N lines with ellipsis; a cut title shows in full in a
@@ -162,6 +170,7 @@ function ContentMd({
   descriptionMaxLines,
   editable,
   onTitleChange,
+  editTooltip,
   suffix,
   auxIcon,
   tag,
@@ -316,11 +325,17 @@ function ContentMd({
               );
             })()}
 
-          {tag && (
-            <span className="ms-1 flex shrink-0">
-              <Tag {...tag} />
-            </span>
-          )}
+          {tag &&
+            (() => {
+              const { tooltip, ...tagProps } = tag;
+              return (
+                <span className="ms-1 flex shrink-0">
+                  <Tooltip tooltip={tooltip} side="top">
+                    <Tag {...tagProps} />
+                  </Tooltip>
+                </span>
+              );
+            })()}
 
           {editable && !editing && editHandle == null && (
             <div
@@ -333,8 +348,8 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                aria-label={strings.edit}
-                tooltip={strings.edit}
+                aria-label={editTooltip ?? strings.edit}
+                tooltip={editTooltip ?? strings.edit}
                 tooltipSide="end"
                 onClick={handleTitleClick}
               />
@@ -383,4 +398,5 @@ export {
   type ContentMdSizePreset,
   type ContentMdSuffix,
   type ContentMdAuxIcon,
+  type ContentMdTag,
 };

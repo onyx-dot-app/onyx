@@ -269,11 +269,12 @@ export default function SkillCard({
           </div>
           <div className="p-0.5 pe-1.5 flex items-center gap-1">
             {isRequired && (
-              <Tag
-                title={skillCopy("modals.share.installation.required")}
-                tooltip={t("skill.tags.required.tooltip")}
-                color="blue"
-              />
+              <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
+                <Tag
+                  title={skillCopy("modals.share.installation.required")}
+                  color="blue"
+                />
+              </Tooltip>
             )}
             {item.can_toggle && (
               <div

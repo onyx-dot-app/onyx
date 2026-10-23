@@ -217,7 +217,7 @@ it("clears all collection filters when opening the same turn again", () => {
   });
 });
 
-it("clears only the turn filter from the colored Outputs pill", async () => {
+it("clears only the turn filter from the Outputs turn chip", async () => {
   mockRenderActualResources = true;
   store().openOutputsTab(sessionId, 3);
   store().updateOutputsTabState(sessionId, {
@@ -227,8 +227,8 @@ it("clears only the turn filter from the colored Outputs pill", async () => {
   });
   render(<BuildOutputPanel panelMode="medium" />);
   expect(
-    screen.getByText("Turn 4 outputs").closest("[data-color]")
-  ).toHaveAttribute("data-color", "blue");
+    screen.getByText("Turn 4 outputs").closest(".opal-chip")
+  ).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "Remove Turn 4 outputs" })
   );

@@ -1,0 +1,61 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Chip
+
+   A gray `Interactive` pill around a `Content` (secondary preset). Interactive
+   gives it its colours and states. 1.375rem tall; a transparent border keeps
+   the selected border from shifting layout, so the paddings are 1px smaller
+   than a Tag's.
+   --------------------------------------------------------------------------- */
+
+.opal-chip {
+  @apply flex flex-row items-center shrink-0;
+  max-width: 100%;
+  min-width: 0;
+  height: 1.375rem;
+  padding: 0 calc(0.375rem - 1px);
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+}
+
+/* The remove Button (16px) sits 2px inside the border top and bottom; the
+   same 2px at the end gives it an even bezel, and a 2px gap sets it off from
+   the title. */
+.opal-chip:has([data-opal-chip-remove]) {
+  padding-inline-end: 2px;
+  gap: 2px;
+}
+
+/* An icon with its own `iconColor` keeps it in every state. */
+.opal-chip.interactive[data-fixed-color] > [data-content-color] {
+  --content-foreground-icon: var(--opal-chip-icon-color);
+}
+
+/* Capped title: an ellipsis, with the full title on hover. */
+.opal-chip[data-capped] [data-opal-content-title] {
+  max-width: 160px;
+}
+
+/* ---------------------------------------------------------------------------
+   Selected: chip fields move focus to a chip's remove Button to select it
+   before deleting it. A dark pill with an outer ring (Figma State=Focus).
+   The extra attributes lift it over Interactive's hover rules, so a hovered
+   selected chip stays dark.
+   --------------------------------------------------------------------------- */
+
+.opal-chip.interactive[data-removable][data-interactive-variant][data-interactive-prominence]:focus-within {
+  @apply border-border-05 bg-background-tint-inverted-03 ring-2 ring-background-tint-04;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
+}
+
+/* On the dark pill the remove Button follows it: inverted text and no fill
+   of its own. The extra attributes outrank the Button's own internal hover
+   and focus rules. */
+.opal-chip.interactive[data-removable]:focus-within
+  .interactive[data-opal-chip-remove][data-interactive-variant] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
+}

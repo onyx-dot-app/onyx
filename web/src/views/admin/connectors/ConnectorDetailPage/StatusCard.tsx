@@ -180,7 +180,6 @@ function AccessStatBlock({ accessType }: AccessStatBlockProps) {
         title={tAccess(everyone ? "everyone.title" : "specificGroups.title")}
         color="gray"
         variant="status"
-        font="secondary-body"
       />
     </StatBlock>
   );

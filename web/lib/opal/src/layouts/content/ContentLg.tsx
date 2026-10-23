@@ -55,6 +55,12 @@ interface ContentLgProps {
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
 
+  /**
+   * Tooltip and accessible name of the edit button. Pass translated text;
+   * unset, it is the generic "Edit".
+   */
+  editTooltip?: string;
+
   /** Size preset. Default: `"headline"`. */
   sizePreset?: ContentLgSizePreset;
 
@@ -97,6 +103,7 @@ function ContentLg({
   strikethrough,
   editable,
   onTitleChange,
+  editTooltip,
   ref,
 }: ContentLgProps) {
   const [editing, setEditing] = useState(false);
@@ -189,8 +196,8 @@ function ContentLg({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
-                aria-label={strings.edit}
-                tooltip={strings.edit}
+                aria-label={editTooltip ?? strings.edit}
+                tooltip={editTooltip ?? strings.edit}
                 tooltipSide="end"
                 onClick={startEditing}
               />

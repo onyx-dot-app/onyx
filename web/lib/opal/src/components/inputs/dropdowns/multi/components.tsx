@@ -63,6 +63,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
     maxRows,
     focusOnMount,
     dropdownMaxHeight,
+    showTags = true,
   } = props;
   const strings = useOpalStrings();
   const typeIn = props.trigger !== "button";
@@ -213,7 +214,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
 
   return (
     <TagField
-      tags={iconTags}
+      tags={showTags ? iconTags : []}
       onRemoveTag={onRemoveTag}
       readOnly={!typeIn}
       triggerRef={triggerRef}

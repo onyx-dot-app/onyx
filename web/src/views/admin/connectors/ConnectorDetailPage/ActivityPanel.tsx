@@ -13,6 +13,7 @@ import {
   SelectButton,
   ShadowDiv,
   Tag,
+  Tooltip,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import {
@@ -76,24 +77,26 @@ export function ActivityCountTags({
   return (
     <>
       {failures > 0 && (
-        <Tag
-          icon={SvgXOctagon}
-          title={format.number(failures)}
-          tooltip={t("counts.failures", { count: failures })}
-          color="red"
-          variant={variant}
-          size="md"
-        />
+        <Tooltip tooltip={t("counts.failures", { count: failures })} side="top">
+          <Tag
+            icon={SvgXOctagon}
+            title={format.number(failures)}
+            color="red"
+            variant={variant}
+            size="md"
+          />
+        </Tooltip>
       )}
       {errors > 0 && (
-        <Tag
-          icon={SvgAlertTriangle}
-          title={format.number(errors)}
-          tooltip={t("counts.errors", { count: errors })}
-          color="orange"
-          variant={variant}
-          size="md"
-        />
+        <Tooltip tooltip={t("counts.errors", { count: errors })} side="top">
+          <Tag
+            icon={SvgAlertTriangle}
+            title={format.number(errors)}
+            color="orange"
+            variant={variant}
+            size="md"
+          />
+        </Tooltip>
       )}
     </>
   );
