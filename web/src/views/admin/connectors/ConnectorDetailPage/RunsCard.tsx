@@ -292,18 +292,6 @@ export default function RunsCard({
     range !== null ||
     search !== "";
 
-  const searchInputField = (
-    <InputTypeIn
-      searchIcon
-      variant={embedded ? "primary" : "internal"}
-      placeholder={t("search.placeholder")}
-      value={searchInput}
-      onChange={(event) => {
-        setSearchInput(event.target.value);
-        setPage(1);
-      }}
-    />
-  );
   const runList =
     error !== undefined ? (
       <MessageCard variant="error" title={t("loadError.title")} />
@@ -387,11 +375,131 @@ export default function RunsCard({
         <Section
           flexDirection="row"
           justifyContent="between"
+          alignItems="center"
           gap={2}
           height="fit"
         >
-          <Section height="fit" className="min-w-0 flex-1">
-            {searchInputField}
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            gap={1}
+            height="fit"
+            className="min-w-0 flex-1"
+            wrap
+          >
+            {sharedWindow !== undefined &&
+            onSharedWindowChange !== undefined ? (
+              // The shared window is always set, so it is the status card's picker, not a clearable filter.
+              <ThroughputWindowPicker
+                windows={PAIR_WINDOWS}
+                value={sharedWindow.window}
+                // A widened list reaches past the chart's window, and says so.
+                label={widened ? t("window.all") : undefined}
+                onChange={(window) => {
+                  // Picking the same window again still leaves the widened view.
+                  setWidened(false);
+                  onSharedWindowChange(window);
+                }}
+                selection={range}
+                onClearSelection={onClearRange}
+              />
+            ) : (
+              <Dropdown>
+                <Dropdown.Trigger asChild>
+                  <FilterButton
+                    icon={SvgClock}
+                    active={picked.hours !== null}
+                    onClear={() => pickWindow(ALL_TIME)}
+                  >
+                    {t(`window.${picked.id}`)}
+                  </FilterButton>
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("window.label")}
+                  value={picked.id}
+                  onSelect={(option) => {
+                    const window = WINDOWS.find((w) => w.id === option.value);
+                    if (window !== undefined) pickWindow(window);
+                  }}
+                  items={WINDOWS.map((option) => ({
+                    kind: "option" as const,
+                    value: option.id,
+                    title: t(`window.${option.id}`),
+                  }))}
+                />
+              </Dropdown>
+            )}
+            {kinds.length > 1 && (
+              <Dropdown>
+                <Dropdown.Trigger asChild>
+                  <FilterButton
+                    icon={SvgSlowMotion}
+                    active={kind !== null}
+                    onClear={() => pickKind(null)}
+                  >
+                    {kind === null ? t("kinds.all") : t(`kinds.${kind}`)}
+                  </FilterButton>
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("kinds.label")}
+                  value={kind ?? ALL}
+                  onSelect={(option) =>
+                    pickKind(
+                      kinds.find((candidate) => candidate === option.value) ??
+                        null
+                    )
+                  }
+                  items={[
+                    {
+                      kind: "option" as const,
+                      value: ALL,
+                      title: t("kinds.all"),
+                    },
+                    ...kinds.map((candidate) => ({
+                      kind: "option" as const,
+                      value: candidate,
+                      icon: RUN_KIND_ICONS[candidate],
+                      title: t(`kinds.${candidate}`),
+                    })),
+                  ]}
+                />
+              </Dropdown>
+            )}
+            <Dropdown>
+              <Dropdown.Trigger asChild>
+                <FilterButton
+                  icon={SvgActivity}
+                  active={statusGroup !== null}
+                  onClear={() => pickStatusGroup(null)}
+                >
+                  {statusGroup === null
+                    ? t("statusGroups.all")
+                    : t(`statusGroups.${statusGroup}`)}
+                </FilterButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("statusGroups.label")}
+                value={statusGroup ?? ALL}
+                onSelect={(option) =>
+                  pickStatusGroup(
+                    STATUS_GROUPS.find((group) => group === option.value) ??
+                      null
+                  )
+                }
+                items={[
+                  {
+                    kind: "option" as const,
+                    value: ALL,
+                    title: t("statusGroups.all"),
+                  },
+                  ...STATUS_GROUPS.map((group) => ({
+                    kind: "option" as const,
+                    value: group,
+                    title: t(`statusGroups.${group}`),
+                  })),
+                ]}
+              />
+            </Dropdown>
           </Section>
           <Section
             flexDirection="row"
@@ -414,126 +522,6 @@ export default function RunsCard({
               />
             ))}
           </Section>
-        </Section>
-
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={1}
-          height="fit"
-          wrap
-        >
-          {sharedWindow !== undefined && onSharedWindowChange !== undefined ? (
-            // The shared window is always set, so it is the status card's picker, not a clearable filter.
-            <ThroughputWindowPicker
-              windows={PAIR_WINDOWS}
-              value={sharedWindow.window}
-              // A widened list reaches past the chart's window, and says so.
-              label={widened ? t("window.all") : undefined}
-              onChange={(window) => {
-                // Picking the same window again still leaves the widened view.
-                setWidened(false);
-                onSharedWindowChange(window);
-              }}
-              selection={range}
-              onClearSelection={onClearRange}
-            />
-          ) : (
-            <Dropdown>
-              <Dropdown.Trigger asChild>
-                <FilterButton
-                  icon={SvgClock}
-                  active={picked.hours !== null}
-                  onClear={() => pickWindow(ALL_TIME)}
-                >
-                  {t(`window.${picked.id}`)}
-                </FilterButton>
-              </Dropdown.Trigger>
-              <Dropdown.Data
-                label={t("window.label")}
-                value={picked.id}
-                onSelect={(option) => {
-                  const window = WINDOWS.find((w) => w.id === option.value);
-                  if (window !== undefined) pickWindow(window);
-                }}
-                items={WINDOWS.map((option) => ({
-                  kind: "option" as const,
-                  value: option.id,
-                  title: t(`window.${option.id}`),
-                }))}
-              />
-            </Dropdown>
-          )}
-          {kinds.length > 1 && (
-            <Dropdown>
-              <Dropdown.Trigger asChild>
-                <FilterButton
-                  icon={SvgSlowMotion}
-                  active={kind !== null}
-                  onClear={() => pickKind(null)}
-                >
-                  {kind === null ? t("kinds.all") : t(`kinds.${kind}`)}
-                </FilterButton>
-              </Dropdown.Trigger>
-              <Dropdown.Data
-                label={t("kinds.label")}
-                value={kind ?? ALL}
-                onSelect={(option) =>
-                  pickKind(
-                    kinds.find((candidate) => candidate === option.value) ??
-                      null
-                  )
-                }
-                items={[
-                  {
-                    kind: "option" as const,
-                    value: ALL,
-                    title: t("kinds.all"),
-                  },
-                  ...kinds.map((candidate) => ({
-                    kind: "option" as const,
-                    value: candidate,
-                    icon: RUN_KIND_ICONS[candidate],
-                    title: t(`kinds.${candidate}`),
-                  })),
-                ]}
-              />
-            </Dropdown>
-          )}
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <FilterButton
-                icon={SvgActivity}
-                active={statusGroup !== null}
-                onClear={() => pickStatusGroup(null)}
-              >
-                {statusGroup === null
-                  ? t("statusGroups.all")
-                  : t(`statusGroups.${statusGroup}`)}
-              </FilterButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("statusGroups.label")}
-              value={statusGroup ?? ALL}
-              onSelect={(option) =>
-                pickStatusGroup(
-                  STATUS_GROUPS.find((group) => group === option.value) ?? null
-                )
-              }
-              items={[
-                {
-                  kind: "option" as const,
-                  value: ALL,
-                  title: t("statusGroups.all"),
-                },
-                ...STATUS_GROUPS.map((group) => ({
-                  kind: "option" as const,
-                  value: group,
-                  title: t(`statusGroups.${group}`),
-                })),
-              ]}
-            />
-          </Dropdown>
         </Section>
 
         {runList}
@@ -583,8 +571,18 @@ export default function RunsCard({
       >
         {logModal}
         <Section flexDirection="row" alignItems="center" gap={1} height="fit">
+          {/* The full card's filters narrow it, so only the embedded list searches. */}
           <Section height="fit" padding={2} className="min-w-0 flex-1">
-            {searchInputField}
+            <InputTypeIn
+              searchIcon
+              variant="primary"
+              placeholder={t("search.placeholder")}
+              value={searchInput}
+              onChange={(event) => {
+                setSearchInput(event.target.value);
+                setPage(1);
+              }}
+            />
           </Section>
           {actions}
         </Section>
