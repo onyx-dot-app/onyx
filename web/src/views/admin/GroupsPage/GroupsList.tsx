@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
-import { Divider } from "@opal/components";
 import GroupCard from "./GroupCard";
 import { isBuiltInGroup } from "./utils";
 import { IllustrationContent, Section } from "@opal/layouts";
@@ -32,32 +31,17 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     );
   }
 
-  const builtInGroups = filtered.filter(isBuiltInGroup);
-  const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
+  // One flat list; the built-in groups lead.
+  const ordered = [
+    ...filtered.filter(isBuiltInGroup),
+    ...filtered.filter((g) => !isBuiltInGroup(g)),
+  ];
 
-  // The divider's own padding is the only space around it, so each list
-  // spaces its cards on its own.
   return (
-    <Section flexDirection="column" gap={0}>
-      {builtInGroups.length > 0 && (
-        <Section flexDirection="column" gap={2}>
-          {builtInGroups.map((group) => (
-            <GroupCard key={group.id} group={group} />
-          ))}
-        </Section>
-      )}
-
-      {builtInGroups.length > 0 && customGroups.length > 0 && (
-        <Divider paddingPerpendicular={2} paddingParallel={0} />
-      )}
-
-      {customGroups.length > 0 && (
-        <Section flexDirection="column" gap={2}>
-          {customGroups.map((group) => (
-            <GroupCard key={group.id} group={group} />
-          ))}
-        </Section>
-      )}
+    <Section flexDirection="column" gap={2}>
+      {ordered.map((group) => (
+        <GroupCard key={group.id} group={group} />
+      ))}
     </Section>
   );
 }
