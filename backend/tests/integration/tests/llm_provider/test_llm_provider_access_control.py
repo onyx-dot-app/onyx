@@ -148,7 +148,7 @@ def test_can_user_access_llm_provider_or_logic(
         restricted_provider = _create_llm_provider(
             db_session,
             name="restricted-provider",
-            default_model_name="gpt-6-luna",
+            default_model_name="gpt-6-sol",
             is_public=False,
             is_default=False,
         )
@@ -388,7 +388,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         restricted_provider = _create_llm_provider(
             db_session,
             name="restricted-provider",
-            default_model_name="gpt-6-luna",
+            default_model_name="gpt-6-sol",
             is_public=False,
             is_default=False,
         )
