@@ -2984,7 +2984,8 @@
           "rate": "{rate} 件/分",
           "finished": "{time}（{duration}）",
           "rateFinished": "{rate} 件/分（{duration}）",
-          "membershipRate": "{rate} メンバーシップ/分"
+          "membershipRate": "{rate} メンバーシップ/分",
+          "membershipRateFinished": "{rate} メンバーシップ/分（{duration}）"
         },
         "actions": {
           "stages": "ステージの指標を表示",
