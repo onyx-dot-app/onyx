@@ -135,6 +135,7 @@ test("Stop during preference persistence prevents the pending send from dispatch
       selectedDocuments: [],
       searchParams: new ReadonlyURLSearchParams(),
       resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
     })
   );
 
