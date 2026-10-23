@@ -32,6 +32,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     cached_check_result,
     clear_draft_result_in_flight,
     form_draft_result_keys,
+    get_cached_draft_result,
     is_draft_result_in_flight,
     is_superseded,
     load_draft_run,
@@ -386,11 +387,14 @@ def run_draft_capability_checks_task(
             for check in pending
             for dependency in checks_by_id[check.check_id].dependency_ids
         }
+        # A cached result may predate that run (a forced rerun skips the cache
+        # without clearing it), so a check with one runs here instead.
         adopted = [
             check
             for check in pending
             if check.check_id not in needed
             and is_draft_result_in_flight(run.result_cache_keys[check.check_id])
+            and get_cached_draft_result(run.result_cache_keys[check.check_id]) is None
         ]
         adopted_ids = {check.check_id for check in adopted}
         pending = [

@@ -551,7 +551,8 @@ alternative that does not apply, or that lacked its own config or instance, is
 left out (HubSpot's sample checks after the read checks, Notion's page content
 after shared pages or the root page). After a rate limit, no other check
 starts: the checks not started are `SKIPPED`, and checks already running
-finish. Discovery checks start after every validation check has a result. A probe whose sample cannot decide raises
+finish. Discovery checks start after every required validation check has a
+result; an optional check does not hold them back. A probe whose sample cannot decide raises
 `InconclusiveValidationError` (`INCOMPLETE`, kind `inconclusive`); one that
 proves the scope has nothing to test raises `NothingToCheckError` (`SKIPPED`,
 `not_run_reason: nothing_in_scope`, still a row). An empty scope fails the
@@ -641,7 +642,7 @@ edit-plan responses hide findings stored earlier.
 A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
 much longer than validation, such as a listing of every space. It is never
 required and never counts toward a verdict. The runner runs it after the
-validation checks of the same run, and skips it (`applicable=False`) when a
+required validation checks of the same run, and skips it (`applicable=False`) when a
 required check failed or findings are off. Creation does not run it: a cached
 draft result is reused, else it is recorded as not run, so neither creation nor
 the first index attempt waits on it. `findings.py:bounded_options` and

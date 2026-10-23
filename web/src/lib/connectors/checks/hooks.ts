@@ -598,7 +598,10 @@ export function useResetChecksOnCredentialChange({
 export function useOptionsFinding(
   source: ConfigurableSources,
   key: CheckFindingKey,
-  scope: StoredReportScope | null
+  scope: StoredReportScope | null,
+  // The latest run's empty listing is its answer (nothing found), not a
+  // reason to read an older stored report.
+  keepEmpty: boolean = false
 ): OptionsFinding | null {
   const { data: session } = useSWR<ConnectorChecksSession>(
     SWR_KEYS.connectorCheckSession(source),
@@ -618,11 +621,11 @@ export function useOptionsFinding(
   return useMemo(() => {
     const fromRun: OptionsFinding | null =
       run && run.credential_id === accountId
-        ? optionsFinding(run.checks, key)
+        ? optionsFinding(run.checks, key, keepEmpty)
         : null;
     if (fromRun !== null || scope === null) return fromRun;
     return optionsFinding(storedCheckResults(reportFor, scope), key);
-  }, [run, accountId, key, scope, reportFor]);
+  }, [run, accountId, key, scope, reportFor, keepEmpty]);
 }
 
 /**

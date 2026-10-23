@@ -14,17 +14,21 @@ interface WithFindings {
   findings: CheckFinding[];
 }
 
-/** The first non-empty listing the checks found under `key`, else null. */
+/**
+ * The first non-empty listing the checks found under `key`, else null. With
+ * `keepEmpty`, an empty listing counts too: it found nothing.
+ */
 export function optionsFinding(
   checks: readonly WithFindings[],
-  key: CheckFindingKey
+  key: CheckFindingKey,
+  keepEmpty: boolean = false
 ): OptionsFinding | null {
   for (const check of checks) {
     for (const finding of check.findings) {
       if (
         finding.type === "options" &&
         finding.key === key &&
-        finding.options.length > 0
+        (keepEmpty || finding.options.length > 0)
       ) {
         return finding;
       }

@@ -190,10 +190,12 @@ function ListAvailability({
 }: ListAvailabilityProps) {
   const t = useTranslations("admin.connectorsList");
   const checkActions = useConnectorCheckActions();
+  // A refresh that finds nothing shows 0, not an older count.
   const finding = useOptionsFinding(
     connector,
     availability.finding,
-    reportScope
+    reportScope,
+    true
   );
   if (finding === null && checkActions === null) return null;
   return (
