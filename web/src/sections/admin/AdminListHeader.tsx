@@ -96,7 +96,7 @@ export default function AdminListHeader({
   }
 
   return (
-    <div className="flex flex-row gap-3 items-center px-2 py-3">
+    <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
         searchIcon
