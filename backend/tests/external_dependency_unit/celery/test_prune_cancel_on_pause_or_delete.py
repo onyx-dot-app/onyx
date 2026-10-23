@@ -1,8 +1,10 @@
 """A prune that a pause or a deletion abandons ends with a CANCELED sync
 record and no prune fence, and the deletion beat leaves a paused pair's stop
-signal in place. A generator runs only under its own fence, and a paused pair
-refuses a manual prune."""
+signal in place. Deleting a paused pair still revokes its blocking tasks and
+waits for them before it resets their fences. A generator runs only under its
+own fence, and a paused pair refuses a manual prune."""
 
+import time
 from collections.abc import Generator
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -47,6 +49,7 @@ def cc_pair(
     redis_connector.prune.reset()
     redis_connector.delete.reset()
     redis_connector.stop.set_fence(False)
+    redis_connector.stop.clear_timeout()
     db_session.rollback()
     db_session.execute(delete(SyncRecord).where(SyncRecord.entity_id == pair.id))
     db_session.commit()
@@ -173,12 +176,35 @@ def test_deletion_stop_timeout_cancels_the_prune(
     redis_connector = _queue_prune(db_session, cc_pair)
     # The deletion beat already signaled stop, and its wait timed out.
     redis_connector.stop.set_fence(True)
-    redis_connector.redis.delete(redis_connector.stop.timeout_key)
+    redis_connector.redis.set(redis_connector.stop.timeout_key, time.time() - 1)
 
     _run_deletion_beat(cc_pair, monkeypatch)
 
     assert not redis_connector.prune.fenced
     assert _prune_status(db_session, cc_pair) == SyncStatus.CANCELED
+
+
+def test_deleting_a_paused_pair_revokes_and_waits_for_blocking_tasks(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_status(db_session, cc_pair, ConnectorCredentialPairStatus.DELETING)
+    redis_connector = _queue_prune(db_session, cc_pair)
+    # The pause before the deletion left its stop signal.
+    redis_connector.stop.set_fence(True)
+    revoke = MagicMock()
+    monkeypatch.setattr(
+        connector_deletion_tasks, "revoke_tasks_blocking_deletion", revoke
+    )
+
+    _run_deletion_beat(cc_pair, monkeypatch)
+
+    revoke.assert_called_once()
+    assert redis_connector.stop.timeout_set
+    assert not redis_connector.stop.timed_out
+    assert redis_connector.prune.fenced
+    assert _prune_status(db_session, cc_pair) == SyncStatus.IN_PROGRESS
 
 
 def test_pause_cancels_a_queued_prune(

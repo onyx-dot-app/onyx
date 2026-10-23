@@ -219,7 +219,9 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                     # is exceeded
                     task_logger.info(str(e))
 
-                    if not redis_connector.stop.fenced:
+                    # Keyed on the timeout, not the fence: a pause sets the
+                    # fence too, and must not skip the revoke and the wait.
+                    if not redis_connector.stop.timeout_set:
                         # one time revoke of celery tasks
                         task_logger.info("Revoking any tasks blocking deletion.")
                         revoke_tasks_blocking_deletion(
@@ -256,6 +258,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                     # signal it set. Another pair's signal belongs to its pause.
                     if cc_pair_id in deleting_cc_pair_ids:
                         redis_connector.stop.set_fence(False)
+                        redis_connector.stop.clear_timeout()
 
         lock_beat.reacquire()
         keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
