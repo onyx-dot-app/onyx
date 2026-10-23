@@ -157,11 +157,13 @@ def test_can_user_access_llm_provider_or_logic(
             db_session,
             name="allowed-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
         blocked_persona = _create_persona(
             db_session,
             name="blocked-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
 
         access_group = UserGroup(name="access-group")
@@ -397,6 +399,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             db_session,
             name="fallback-persona",
             provider=restricted_provider,
+            model_name="gpt-6-sol",
         )
 
         access_group = UserGroup(name="persona-group")
