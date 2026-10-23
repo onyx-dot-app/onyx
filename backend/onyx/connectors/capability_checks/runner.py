@@ -440,8 +440,8 @@ def run_order(
     depends on; otherwise their given order.
 
     ``first_check_id`` (Start Now) moves that check, and the checks it needs,
-    ahead of the others of its kind. A discovery check still runs after
-    validation.
+    ahead of every other check: the admin asked for it, so a discovery check
+    started now does not wait for the validation checks.
 
     Raises:
         ValueError: The dependencies among ``checks`` form a cycle.
@@ -453,7 +453,7 @@ def run_order(
     )
     # A stable sort, so the given order holds within each group.
     remaining: list[CapabilityCheck] = sorted(
-        checks, key=lambda check: (check.discovery, check.check_id not in first_ids)
+        checks, key=lambda check: (check.check_id not in first_ids, check.discovery)
     )
     present_ids: set[str] = {check.check_id for check in checks}
     ordered: list[CapabilityCheck] = []
@@ -653,7 +653,8 @@ def run_capability_checks(
     running finish. ``prior_results`` are results of checks outside this run,
     such as a draft run's cached results: they count as dependencies, and a
     required failure among them skips the discovery checks. Discovery checks
-    start after every validation check has a result.
+    start after every required validation check has a result: only a required
+    failure skips them, so an optional check does not hold them back.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -707,8 +708,11 @@ class _CheckRun:
         self._checks_by_id: dict[str, list[CapabilityCheck]] = {}
         for check in self._ordered:
             self._checks_by_id.setdefault(check.check_id, []).append(check)
-        self._validation_ids: set[str] = {
-            check.check_id for check in self._ordered if not check.discovery
+        # The checks whose failure skips the discovery checks.
+        self._required_validation_ids: set[str] = {
+            check.check_id
+            for check in self._ordered
+            if not check.discovery and check.required
         }
         self._pending_ids: list[str] = list(self._checks_by_id)
         self._running: dict[Future[CheckOutcome], list[CapabilityCheck]] = {}
@@ -749,7 +753,7 @@ class _CheckRun:
 
     def _is_ready(self, check_id: str) -> bool:
         check = self._checks_by_id[check_id][0]
-        if check.discovery and not self._validation_ids <= self._settled_ids:
+        if check.discovery and not self._required_validation_ids <= self._settled_ids:
             return False
         return all(
             dependency in self._settled_ids or dependency not in self._checks_by_id

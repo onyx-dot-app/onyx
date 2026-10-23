@@ -309,6 +309,7 @@ def decide_draft_check_state(
         is_fallback=check.is_fallback,
         validates_binding=check.validates_binding,
         discovery=check.discovery,
+        reports_field=check.reports_field,
     )
     match readiness.kind:
         case CheckReadinessKind.RUNNABLE:

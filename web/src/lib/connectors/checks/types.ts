@@ -31,6 +31,7 @@ export type CheckFindingKey =
   | "shared_drives"
   | "visible_organization_users"
   | "visible_spaces"
+  | "visible_pages"
   | "readable_channels"
   | "readable_mailboxes"
   | "readable_drives";
@@ -138,6 +139,10 @@ export interface DraftCheckState {
   /** The generic validation of a source without checks of its own. */
   is_fallback: boolean;
   findings: CheckFinding[];
+  /** The row's short line, e.g. "No pages match the query". */
+  summary: string | null;
+  /** The config field whose error this check's failure is. */
+  reports_field: string | null;
 }
 
 export interface DraftCheckRunSnapshot {

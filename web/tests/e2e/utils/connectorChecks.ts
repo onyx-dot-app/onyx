@@ -31,6 +31,8 @@ function signInCheck(state: DraftCheckState["state"]): DraftCheckState {
     from_cache: false,
     validates_binding: true,
     is_fallback: false,
+    summary: null,
+    reports_field: null,
     findings: [],
   };
 }

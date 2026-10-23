@@ -267,9 +267,8 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     </Hoverable.Item>
   );
 
-  // A row has at most two action buttons. The right-most sits at the end, in a
-  // slot of one fixed width, so "Required" stays in one column; the other
-  // takes the place of "Required" on hover.
+  // A row has at most two action buttons, both in the end slot. The slot has
+  // one minimum width on every row, so "Required" always sits in one column.
   const endButtonNode: React.ReactNode = expandable
     ? chevron
     : runnable
@@ -289,13 +288,12 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
     <Section
       flexDirection="row"
       justifyContent="end"
-      // One width for every row, a md button's (1.75rem), so "Required"
-      // stays in one column whether or not the row has a button here.
-      width={1.75}
+      width="fit"
       height="fit"
       gap={0}
-      className="shrink-0"
+      className="shrink-0 min-w-[2.5rem]"
     >
+      {secondButton !== undefined && onHover(secondButton)}
       {endButtonNode}
     </Section>
   );
@@ -345,17 +343,7 @@ function CheckLog({ check, onSkipCheck, onRunCheck }: CheckLogProps) {
         >
           {check.message || t(detail)}
         </OverflowText>
-        {secondButton !== undefined ? (
-          <Hoverable.Item
-            group={ROW_HOVER_GROUP}
-            variant="replace-on-hover"
-            resting={required}
-          >
-            {secondButton}
-          </Hoverable.Item>
-        ) : (
-          required
-        )}
+        {required}
       </Section>
     ),
     endButton: actions,

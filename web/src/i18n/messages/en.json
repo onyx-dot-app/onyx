@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "optional"
+        },
+        "availableRefresh": {
+          "tooltip": "Refresh the list"
         }
       },
       "gdrive": {
@@ -4086,18 +4089,16 @@
             },
             "wiki_base": {
               "label": "Site URL",
-              "placeholder": "https://your-domain.atlassian.net/wiki"
+              "placeholder": "https://your-domain.atlassian.net/wiki",
+              "placeholderDataCenter": "https://your-domain.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Everything"
+                  "label": "Index Everything"
                 },
-                "space": {
-                  "label": "Space"
-                },
-                "page": {
-                  "label": "Page"
+                "select": {
+                  "label": "Select Spaces/Pages"
                 },
                 "cql": {
                   "label": "CQL Query"
@@ -4105,24 +4106,36 @@
               }
             },
             "everything": {
-              "label": "Indexes every page the account can read",
-              "description": "Onyx indexes all pages in every space that the selected account can read. To index fewer, choose another tab."
+              "label": "Index Everything",
+              "description": "Onyx will index all spaces and pages that the selected account has access to."
             },
             "space": {
-              "label": "Space Key",
-              "description": "The Confluence space key to index (e.g. `KB`)."
+              "label": "Spaces",
+              "description": "List space keys to index for this connector (e.g. ENG).",
+              "placeholder": "Add space key or URL",
+              "required": "Add at least one space or page.",
+              "available": "{more, select, true {{count, number}+ Spaces Available} other {{count, plural, one {# Space Available} other {# Spaces Available}}}}"
             },
             "page_id": {
-              "label": "Page ID",
-              "description": "Specific page ID to index (e.g. `131368`)"
+              "label": "Pages",
+              "description": "List page IDs to index for this connector (e.g. 123456).",
+              "placeholder": "Add page ID or URL",
+              "available": "{more, select, true {{count, number}+ Pages Available} other {{count, plural, one {# Page Available} other {# Pages Available}}}}"
             },
             "index_recursively": {
-              "label": "Index Recursively",
-              "description": "If this is set, we will index the page indicated by the Page ID as well as all of its children."
+              "label": "Include Child Pages",
+              "description": "Also index all pages nested under the named pages above, at any depth."
             },
             "cql_query": {
               "label": "CQL Query",
-              "description": "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details."
+              "description": "Return pages only. Keep `type=page` as the only type filter.\nAvoid sorting and date filters. `order by` or `lastModified` will break Onyx’s own query. [CQL references](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Test Query"
+              },
+              "required": "Add a CQL query."
+            },
+            "include_attachments": {
+              "description": "Index files and images attached to pages. See [Image indexing/processing settings]({indexSettingsPath})."
             }
           }
         },
@@ -5145,6 +5158,9 @@
         },
         "submitError": {
           "toast": "Error submitting credential"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Add your personal access token"
         }
       },
       "delete": {
@@ -5203,7 +5219,8 @@
         "zuliprcContent": "Zuliprc Content",
         "authenticationMethod": "Authentication Method",
         "primaryAdminEmail": "Primary Admin Email",
-        "serviceAccountKey": "Service Account Key"
+        "serviceAccountKey": "Service Account Key",
+        "personalAccessToken": "Personal Access Token"
       },
       "hints": {
         "boxUserEmail": "Optional. The Box user to impersonate.",
@@ -5215,7 +5232,8 @@
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation."
+        "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation.",
+        "confluencePersonalAccessToken": "Paste the [Personal Access Token](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) from your Confluence admin account."
       },
       "methods": {
         "labels": {

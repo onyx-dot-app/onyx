@@ -113,6 +113,11 @@ export class ConnectorSetupPage {
       .evaluate((el) => el.scrollTo(0, el.scrollHeight));
   }
 
+  /** Open a tab of a tab field (e.g. an indexing scope), by its label. */
+  async selectTab(label: string): Promise<void> {
+    await this.page.getByRole("tab", { name: label, exact: true }).click();
+  }
+
   /** A single-line text field from the connector config, by its config name. */
   textField(fieldName: string): Locator {
     return this.page.getByTestId(fieldName);

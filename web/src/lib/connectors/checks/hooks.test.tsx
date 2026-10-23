@@ -78,6 +78,8 @@ function check(
     from_cache: false,
     validates_binding: false,
     is_fallback: false,
+    summary: null,
+    reports_field: null,
     findings: [],
     ...overrides,
   };

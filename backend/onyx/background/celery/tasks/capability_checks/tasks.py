@@ -32,6 +32,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     cached_check_result,
     clear_draft_result_in_flight,
     form_draft_result_keys,
+    get_cached_draft_result,
     is_draft_result_in_flight,
     is_superseded,
     load_draft_run,
@@ -375,9 +376,36 @@ def run_draft_capability_checks_task(
         # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
         # than leaving it RUNNING until its lease runs out.
         registered_checks = get_capability_checks(snapshot.source)
+        checks_by_id = {check.check_id: check for check in registered_checks}
         pending = pending_in_run_order(snapshot, registered_checks, run.first_check_id)
+        # A check an older run of this draft is still running lands in the
+        # cache, so this run waits for that result, last, instead of running
+        # the check again. Only a check no other pending check needs, so the
+        # dependency order holds.
+        needed = {
+            dependency
+            for check in pending
+            for dependency in checks_by_id[check.check_id].dependency_ids
+        }
+        # A cached result may predate that run (a forced rerun skips the cache
+        # without clearing it), so a check with one runs here instead.
+        adopted = [
+            check
+            for check in pending
+            if check.check_id not in needed
+            and is_draft_result_in_flight(run.result_cache_keys[check.check_id])
+            and get_cached_draft_result(run.result_cache_keys[check.check_id]) is None
+        ]
+        adopted_ids = {check.check_id for check in adopted}
+        pending = [
+            check for check in pending if check.check_id not in adopted_ids
+        ] + adopted
         pending_result_keys = list(
-            dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
+            dict.fromkeys(
+                run.result_cache_keys[check.check_id]
+                for check in pending
+                if check.check_id not in adopted_ids
+            )
         )
         timeout_by_check_id = {
             check.check_id: min(
@@ -403,20 +431,53 @@ def run_draft_capability_checks_task(
         mark_next_running()
         save_draft_run(run)
         pair_scope: DraftRunPairScope | None = run.pair_scope
-        generate_capability_report(
-            credential,
-            source=snapshot.source,
-            connector_specific_config=connector_specific_config,
-            connector_id=pair_scope.connector_id if pair_scope is not None else None,
-            input_type=pair_scope.input_type if pair_scope is not None else None,
-            access_type=snapshot.access_type,
-            on_result=on_result,
-            check_ids=frozenset(check.check_id for check in pending),
-            timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
-            prior_results=settled_results(snapshot),
-            form_run=True,
-            first_check_id=run.first_check_id,
-        )
+
+        def run_checks(check_ids: frozenset[str]) -> None:
+            generate_capability_report(
+                credential,
+                source=snapshot.source,
+                connector_specific_config=connector_specific_config,
+                connector_id=(
+                    pair_scope.connector_id if pair_scope is not None else None
+                ),
+                input_type=pair_scope.input_type if pair_scope is not None else None,
+                access_type=snapshot.access_type,
+                on_result=on_result,
+                check_ids=check_ids,
+                timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
+                prior_results=settled_results(snapshot),
+                form_run=True,
+                first_check_id=run.first_check_id,
+            )
+
+        if own_ids := frozenset(
+            check.check_id for check in pending if check.check_id not in adopted_ids
+        ):
+            run_checks(own_ids)
+        # The older run's results; a check whose result does not come (that
+        # run stopped first) runs here after all.
+        not_adopted: list[str] = []
+        for check_state in adopted:
+            check = checks_by_id[check_state.check_id]
+            # The waits run one after another, so the lease covers each.
+            run.renew_lease(
+                timeout_by_check_id[check.check_id]
+                + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
+            )
+            save_draft_run(run)
+            cached = wait_for_draft_result(
+                run.result_cache_keys[check.check_id],
+                timeout_by_check_id[check.check_id],
+            )
+            if cached is None:
+                not_adopted.append(check.check_id)
+                continue
+            on_result([cached_check_result(check, cached)])
+        if not_adopted:
+            not_adopted_keys = [run.result_cache_keys[i] for i in not_adopted]
+            pending_result_keys.extend(not_adopted_keys)
+            mark_draft_results_in_flight(not_adopted_keys, DRAFT_RUN_TTL_SECONDS)
+            run_checks(frozenset(not_adopted))
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)
     except _DraftRunSupersededError:

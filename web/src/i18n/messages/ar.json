@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "اختياري"
+        },
+        "availableRefresh": {
+          "tooltip": "تحديث القائمة"
         }
       },
       "gdrive": {
@@ -4086,18 +4089,16 @@
             },
             "wiki_base": {
               "label": "عنوان URL للموقع",
-              "placeholder": "https://nitaquk.atlassian.net/wiki"
+              "placeholder": "https://nitaquk.atlassian.net/wiki",
+              "placeholderDataCenter": "https://nitaquk.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "كل شيء"
+                  "label": "فهرسة الكل"
                 },
-                "space": {
-                  "label": "مساحة"
-                },
-                "page": {
-                  "label": "صفحة"
+                "select": {
+                  "label": "تحديد المساحات/الصفحات"
                 },
                 "cql": {
                   "label": "استعلام CQL"
@@ -4105,24 +4106,36 @@
               }
             },
             "everything": {
-              "label": "يفهرس كل صفحة يمكن للحساب قراءتها",
-              "description": "يفهرس Onyx جميع الصفحات في كل مساحة يمكن للحساب المحدد قراءتها. لفهرسة عدد أقل، اختر علامة تبويب أخرى."
+              "label": "فهرسة الكل",
+              "description": "سيفهرس Onyx جميع المساحات والصفحات التي يمكن للحساب المحدد الوصول إليها."
             },
             "space": {
-              "label": "مفتاح المساحة",
-              "description": "مفتاح مساحة Confluence المراد فهرستها (مثل `KB`)."
+              "label": "المساحات",
+              "description": "مفاتيح المساحات التي يفهرسها هذا الموصل (مثل ENG).",
+              "placeholder": "أضف مفتاح مساحة أو عنوان URL",
+              "required": "أضف مساحة أو صفحة واحدة على الأقل.",
+              "available": "{more, select, true {{count, number}+ مساحات متاحة} other {{count, plural, one {# مساحة متاحة} other {# مساحات متاحة}}}}"
             },
             "page_id": {
-              "label": "معرّف الصفحة",
-              "description": "معرّف صفحة محددة للفهرسة (مثل `131368`)"
+              "label": "الصفحات",
+              "description": "معرّفات الصفحات التي يفهرسها هذا الموصل (مثل 123456).",
+              "placeholder": "أضف معرّف صفحة أو عنوان URL",
+              "available": "{more, select, true {{count, number}+ صفحات متاحة} other {{count, plural, one {# صفحة متاحة} other {# صفحات متاحة}}}}"
             },
             "index_recursively": {
-              "label": "فهرسة تكرارية",
-              "description": "عند تفعيل هذا الخيار، سنفهرس الصفحة المحددة بمعرّف الصفحة وجميع صفحاتها الفرعية."
+              "label": "تضمين الصفحات الفرعية",
+              "description": "يفهرس أيضًا جميع الصفحات المتداخلة تحت الصفحات المذكورة أعلاه، على أي عمق."
             },
             "cql_query": {
               "label": "استعلام CQL",
-              "description": "مهم: ندعم حاليًا فقط استعلامات CQL التي تعيد كائنات من النوع \"page\". هذا يعني أن كل استعلام CQL يجب أن يحتوي على \"type=page\" كمرشح النوع الوحيد. ومن المهم أيضًا ألا تُستخدم مرشحات \"lastModified\" لأنها تسبب مشكلات في منطق استطلاع الموصل. لا تستخدم ORDER BY لأن الموصل يحدد ترتيب الفرز بنفسه. سنجلب مع ذلك جميع المرفقات والتعليقات للصفحات التي يعيدها استعلام CQL. ستُستبدل أي مرشحات \"lastmodified\". راجع [توثيق CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) من Atlassian لمزيد من التفاصيل."
+              "description": "أرجع الصفحات فقط. أبقِ `type=page` عامل تصفية النوع الوحيد.\nتجنب الفرز وعوامل تصفية التاريخ. ستؤدي `order by` أو `lastModified` إلى تعطيل استعلام Onyx الخاص. [مرجع CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "اختبار الاستعلام"
+              },
+              "required": "أضف استعلام CQL."
+            },
+            "include_attachments": {
+              "description": "يفهرس الملفات والصور المرفقة بالصفحات. راجع [إعدادات فهرسة الصور ومعالجتها]({indexSettingsPath})."
             }
           }
         },
@@ -5145,6 +5158,9 @@
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "أضف رمز الوصول الشخصي"
         }
       },
       "delete": {
@@ -5203,7 +5219,8 @@
         "zuliprcContent": "محتوى Zuliprc",
         "authenticationMethod": "طريقة المصادقة",
         "primaryAdminEmail": "البريد الإلكتروني للمسؤول الرئيسي",
-        "serviceAccountKey": "مفتاح حساب الخدمة"
+        "serviceAccountKey": "مفتاح حساب الخدمة",
+        "personalAccessToken": "رمز الوصول الشخصي"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -5215,7 +5232,8 @@
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق."
+        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق.",
+        "confluencePersonalAccessToken": "الصق [رمز الوصول الشخصي](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) من حساب مسؤول Confluence."
       },
       "methods": {
         "labels": {

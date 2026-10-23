@@ -382,7 +382,11 @@ class _OnyxConfluence:
 
         params = [f"limit={limit}"]
         if space_keys:
-            params.append(f"{key_param}={','.join(space_keys)}")
+            # v2 takes a comma-separated list; v1 repeats the parameter.
+            if is_v2:
+                params.append(f"{key_param}={','.join(space_keys)}")
+            else:
+                params.extend(f"{key_param}={key}" for key in space_keys)
         if start is not None and not is_v2:
             params.append(f"start={start}")
 

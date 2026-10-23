@@ -214,6 +214,10 @@ interface ConnectorValidationMessages {
    */
   scheduleRequired?: { refreshFreq: string; pruneFreq: string };
   oneDriveUsersRequired?: string;
+  /** Confluence's Select tab with no space and no page. */
+  confluenceScopeRequired?: string;
+  /** Confluence's CQL Query tab with no query. */
+  confluenceCqlRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
   stringPairEmptyKey?: string;
@@ -313,6 +317,23 @@ function requiredIf(
   return message === undefined ? schema : schema.required(message);
 }
 
+/** A scope list as the form holds it, or a stored comma-separated string. */
+type ScopeListValue = string[] | string | undefined;
+
+/** Confluence's scope fields, as the validation reads them. */
+interface ConfluenceScopeValues {
+  indexing_scope?: string;
+  space?: ScopeListValue;
+  page_id?: ScopeListValue;
+}
+
+/** Whether a scope list names anything. */
+function hasScopeEntry(value: ScopeListValue): boolean {
+  const entries: string[] =
+    typeof value === "string" ? value.split(",") : (value ?? []);
+  return entries.some((entry) => entry.trim() !== "");
+}
+
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
   requireGroups: boolean = false,
@@ -362,6 +383,27 @@ export function createConnectorValidationSchema(
         is: OneDriveScope.Specific,
         then: (schema) => schema.min(1, messages.oneDriveUsersRequired),
       });
+  }
+
+  if (connector === ValidSources.Confluence) {
+    // An empty selection would index every space.
+    fieldSchemas.space = Yup.mixed().test(
+      "confluence-scope",
+      messages.confluenceScopeRequired ?? "Add at least one space or page.",
+      function hasScope(): boolean {
+        const values: ConfluenceScopeValues = this.parent;
+        if (values.indexing_scope !== "select") return true;
+        return [values.space, values.page_id].some(hasScopeEntry);
+      }
+    );
+    // A blank query would index every page too.
+    fieldSchemas.cql_query = Yup.string().when("indexing_scope", {
+      is: "cql",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(messages.confluenceCqlRequired ?? "Add a CQL query."),
+    });
   }
 
   const object = Yup.object().shape({
