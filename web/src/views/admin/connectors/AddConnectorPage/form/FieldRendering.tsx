@@ -406,7 +406,7 @@ export const RenderField: FC<RenderFieldProps> = ({
         <InputVertical
           disabled={disabled}
           title={label}
-          subDescription={richDescription}
+          description={richDescription}
           suffix={optionalSuffix}
         >
           {field.optionsFinding !== undefined ? (

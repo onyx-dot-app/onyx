@@ -292,7 +292,7 @@ export default function CraftPreferencesPage() {
           <Section alignItems="stretch" gap={1}>
             <InputVertical
               title={t("instructions.label")}
-              topRight={t("instructions.charCount.label", {
+              rightChildren={t("instructions.charCount.label", {
                 count: value.length,
                 max: MAX_INSTRUCTIONS_LENGTH,
               })}

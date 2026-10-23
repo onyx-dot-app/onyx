@@ -10,6 +10,7 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import { Text, Divider, type TagProps } from "@opal/components";
+import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { Content, ContentAction, Section } from "@opal/layouts";
 
@@ -92,8 +93,11 @@ function InputMessage({ error, warning, fieldName }: InputMessageProps) {
 
 interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
-  /** Optional text or markdown rendered at the top-right of the label row. */
-  topRight?: string | RichStr;
+  /**
+   * Content at the right of the title row. Text or markdown renders as
+   * secondary text; any other node renders as given, e.g. a button.
+   */
+  rightChildren?: string | RichStr | React.ReactNode;
 }
 
 function Vertical({
@@ -102,7 +106,7 @@ function Vertical({
   ref,
   children,
   subDescription,
-  topRight,
+  rightChildren,
   title,
   tag,
   description,
@@ -113,7 +117,7 @@ function Vertical({
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
-  const titleRow = topRight ? (
+  const titleRow = rightChildren ? (
     <ContentAction
       title={title}
       description={description}
@@ -124,9 +128,13 @@ function Vertical({
       width="full"
       padding={0}
       rightChildren={
-        <Text font="secondary-body" color="text-03" as="p">
-          {topRight}
-        </Text>
+        typeof rightChildren === "string" || isRichStr(rightChildren) ? (
+          <Text font="secondary-body" color="text-03" as="p">
+            {rightChildren}
+          </Text>
+        ) : (
+          rightChildren
+        )
       }
       center
     />

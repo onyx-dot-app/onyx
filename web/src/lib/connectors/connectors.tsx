@@ -961,7 +961,9 @@ export const connectorConfigs: Record<
                 name: "space",
                 description: "connectors.confluence.fields.space.description",
                 placeholder: "connectors.confluence.fields.space.placeholder",
-                optional: true,
+                // Either list may stay empty, but not both; the schema checks
+                // the pair, so neither is marked optional.
+                optional: false,
                 // The config takes one comma-separated string of keys.
                 transform: (entries: string[]) =>
                   entries.map(confluenceSpaceKey).join(","),
@@ -972,7 +974,7 @@ export const connectorConfigs: Record<
                 name: "page_id",
                 description: "connectors.confluence.fields.page_id.description",
                 placeholder: "connectors.confluence.fields.page_id.placeholder",
-                optional: true,
+                optional: false,
                 // The config takes one comma-separated string of page IDs.
                 transform: (entries: string[]) =>
                   entries.map(confluencePageId).join(","),
