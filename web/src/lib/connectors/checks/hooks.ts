@@ -538,9 +538,12 @@ export function useConnectorChecks({
           (check.state === "pending" || check.state === "waiting")
       );
       actionInFlight.current = true;
+      // Either way it starts now, ahead of any check the new run redoes.
       void start(
         "none",
-        queued ? { skip, startNow: checkId } : { skip, run: checkId }
+        queued
+          ? { skip, startNow: checkId }
+          : { skip, run: checkId, startNow: checkId }
       ).finally(() => {
         actionInFlight.current = false;
       });
