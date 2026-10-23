@@ -19,15 +19,18 @@ see README.md.
 from __future__ import annotations
 
 import os
-import random
 import time
 import uuid
 from typing import Any
 
-from locust import HttpUser, constant, task
+import gevent
+from locust import HttpUser, task
+from locust.runners import WorkerRunner
 
+from onyx_client import workload_metrics
 from onyx_client.env import env_float, env_int
 from onyx_client.messages import load_messages, sized_message
+from onyx_client.pacing import pause_seconds, question_order, user_seed
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
 
@@ -55,7 +58,14 @@ class OnyxChatUser(HttpUser):
     # (client disconnect). Recorded as <prefix>:disconnected, not a failure.
     disconnect_after_milestone: str | None = None
 
-    wait_time = constant(env_float("ONYX_WAIT_SECONDS", 15.0))
+    def wait_time(self) -> float:
+        return pause_seconds(
+            env_float("ONYX_WAIT_SECONDS", 15.0),
+            env_float("ONYX_WAIT_JITTER", 0.5),
+            self.schedule_seed,
+            self.turn_index,
+        )
+
     # Read timeout is between chunks, not total; chat_heartbeat keepalives in
     # the stream mean a healthy turn never goes silent this long.
     stream_read_timeout: float = env_float("ONYX_STREAM_READ_TIMEOUT", 180.0)
@@ -90,7 +100,15 @@ class OnyxChatUser(HttpUser):
         # Stagger users through the corpus. Starting everyone at 0 would have
         # the whole fleet asking the same question at the same moment, which
         # restores the cache-hit problem a large corpus is meant to avoid.
-        self.turn_index: int = random.randrange(len(self.messages))
+        runner = self.environment.runner
+        worker_index = runner.worker_index if isinstance(runner, WorkerRunner) else 0
+        self.schedule_seed = user_seed(
+            env_int("ONYX_SCHEDULE_SEED", 0),
+            worker_index,
+            workload_metrics.allocate_user(),
+        )
+        self.message_order = question_order(len(self.messages), self.schedule_seed)
+        self.turn_index = 0
 
         # Multi-turn session state (only used when max_session_turns > 1).
         self._session_id: str | None = None
@@ -101,6 +119,10 @@ class OnyxChatUser(HttpUser):
         # that exercise the file path; empty for plain chat).
         self.file_descriptors: list[dict[str, Any]] = []
         self.setup_files()
+        stagger = env_float("ONYX_START_STAGGER_SECONDS", 15.0)
+        if stagger < 0:
+            raise ValueError("ONYX_START_STAGGER_SECONDS must be nonnegative")
+        gevent.sleep(pause_seconds(stagger / 2, 1.0, self.schedule_seed, -1))
 
     def setup_files(self) -> None:
         """Hook for scenarios to upload files and populate file_descriptors.
@@ -118,7 +140,7 @@ class OnyxChatUser(HttpUser):
                 response.failure(f"HTTP {response.status_code}")
                 return None
             session_id = response.json().get("chat_session_id")
-            if not session_id:
+            if not isinstance(session_id, str) or not session_id:
                 # A 200 with no id would otherwise be counted a success while
                 # silently dropping the turn — fail it explicitly instead.
                 response.failure("create-chat-session: missing chat_session_id")
@@ -174,7 +196,21 @@ class OnyxChatUser(HttpUser):
 
     @task
     def chat_turn(self) -> None:
-        message = self.messages[self.turn_index % len(self.messages)]
+        counts = workload_metrics.local.setdefault(
+            self.scenario_prefix, workload_metrics.Counts()
+        )
+        counts.active += 1
+        counts.started += 1
+        try:
+            self._chat_turn()
+        finally:
+            counts.active -= 1
+            counts.finished += 1
+
+    def _chat_turn(self) -> None:
+        message = self.messages[
+            self.message_order[self.turn_index % len(self.messages)]
+        ]
         self.turn_index += 1
 
         payload = self._next_payload(message)
@@ -212,7 +248,23 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    for milestone in analyzer.feed(line):
+                    before = (
+                        analyzer.summary.packets,
+                        analyzer.summary.search_calls,
+                        analyzer.summary.reasoning_packets,
+                        analyzer.summary.citations,
+                        analyzer.summary.answer_chars,
+                    )
+                    milestones = analyzer.feed(line)
+                    counts = workload_metrics.local[self.scenario_prefix]
+                    counts.packets += analyzer.summary.packets - before[0]
+                    counts.search_calls += analyzer.summary.search_calls - before[1]
+                    counts.reasoning_packets += (
+                        analyzer.summary.reasoning_packets - before[2]
+                    )
+                    counts.citations += analyzer.summary.citations - before[3]
+                    counts.answer_chars += analyzer.summary.answer_chars - before[4]
+                    for milestone in milestones:
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:
                             disconnected = True
@@ -261,3 +313,6 @@ class BasicChatUser(OnyxChatUser):
 
     abstract = False
     weight = 70
+    mock_model = os.environ.get(
+        "ONYX_CHAT_MODEL", os.environ.get("ONYX_LLM_MODEL", "mock-profile-chat-v1")
+    )

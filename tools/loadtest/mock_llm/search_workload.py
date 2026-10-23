@@ -7,7 +7,7 @@ import json
 import re
 from functools import cache
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 
 class SelectionTemplate(TypedDict):
@@ -51,11 +51,46 @@ def sample_histogram(text: str, histogram: tuple[tuple[int, int], ...]) -> int:
     raise AssertionError("Invalid histogram")
 
 
+HelperKind = Literal[
+    "selection", "classification", "source", "time", "keyword", "semantic"
+]
+
+
+def helper_kind(prompt: str, system: str = "") -> HelperKind | None:
+    if prompt.startswith("Select the most relevant document sections for the user"):
+        return "selection"
+    if prompt.startswith(
+        "Analyze the relevance of document sections to a search query and classify"
+    ):
+        return "classification"
+    if prompt.startswith("You scope an internal search to its relevant sources."):
+        return "source"
+    if prompt.startswith("You scope an internal search to a time filter,"):
+        return "time"
+    if "reformulates the last user message" in system:
+        return "keyword" if "standalone keyword queries" in system else "semantic"
+    return None
+
+
+def helper_duration(prompt: str, system: str) -> float | None:
+    durations: dict[HelperKind, float] = {
+        "selection": 1.04,
+        "classification": 0.88,
+        "source": 1.0,
+        "time": 1.0,  # Uncalibrated scope calls.
+        "keyword": 1.15,
+        "semantic": 0.99,
+    }
+    kind = helper_kind(prompt, system)
+    return durations[kind] if kind is not None else None
+
+
 def search_helper_answer(
     prompt: str, *, selected_count: int | None = None, classification: int | None = None
 ) -> str | None:
     """Recognize full prompt contracts, not document text that quotes one phrase."""
-    if prompt.startswith("Select the most relevant document sections for the user"):
+    kind = helper_kind(prompt)
+    if kind == "selection":
         match = re.search(
             r"# Document Sections\s*```\s*(.*?)\n```\s*# User Query", prompt, re.DOTALL
         )
@@ -76,19 +111,17 @@ def search_helper_answer(
         return json.dumps(
             [ids[index] for index in ranks[: min(count, int(limit.group(1)))]]
         )
-    if prompt.startswith(
-        "Analyze the relevance of document sections to a search query and classify"
-    ):
+    if kind == "classification":
         value = (
             classification
             if classification is not None
             else sample_histogram(prompt, load_calibration()[2])
         )
         return str(value)
-    if prompt.startswith("You scope an internal search to its relevant sources."):
+    if kind == "source":
         # Unscoped ERAG workload: valid empty scope, never an invented source.
         return "[]"
-    if prompt.startswith("You scope an internal search to a time filter,"):
+    if kind == "time":
         return "updated (None, None)"
     return None
 

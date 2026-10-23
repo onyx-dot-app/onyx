@@ -21,26 +21,10 @@ from fastapi.testclient import TestClient
 from mock_llm.app import app
 from mock_llm.search_workload import load_calibration, search_helper_answer
 
+from .fixtures import INTERNAL_SEARCH_TOOL
+
 client = TestClient(app)
 
-INTERNAL_SEARCH_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "internal_search",
-        "description": "Search connected applications for information.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "queries": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "List of search queries to execute.",
-                }
-            },
-            "required": ["queries"],
-        },
-    },
-}
 
 RESEARCH_AGENT_TOOL = {
     "type": "function",
