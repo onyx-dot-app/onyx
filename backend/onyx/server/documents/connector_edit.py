@@ -194,7 +194,13 @@ def _proposed_state(
         name=proposal.name,
         refresh_freq=proposal.refresh_freq,
         prune_freq=proposal.prune_freq,
-        check_freq=proposal.check_freq,
+        # Omitted keeps the schedule (an older client); an explicit null
+        # clears it.
+        check_freq=(
+            proposal.check_freq
+            if "check_freq" in proposal.model_fields_set
+            else current.check_freq
+        ),
     )
 
 
