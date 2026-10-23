@@ -76,7 +76,6 @@ def _assert_marker(
 def test_idle_cleanup_restores_two_sessions_and_their_opencode_history(
     owned_live_pod: OwnedLivePod,
     k8s_client: client.CoreV1Api,
-    k8s_manager: KubernetesSandboxManager,
     db_session: Session,
 ) -> None:
     owned = owned_live_pod
@@ -126,12 +125,10 @@ def test_idle_cleanup_restores_two_sessions_and_their_opencode_history(
         response = BuildSessionManager.restore(owned.api_user, session_id)
         assert response.session_loaded_in_sandbox
         _assert_marker(k8s_client, owned.pod_name, session_id, marker)
-        assert (
-            k8s_manager.ensure_opencode_session(
-                sandbox_id, session_id, history_ids[session_id]
-            )
-            == history_ids[session_id]
-        )
+        session = db_session.get(BuildSession, session_id)
+        assert session is not None
+        db_session.refresh(session)
+        assert session.opencode_session_id == history_ids[session_id]
     replacement = k8s_client.read_namespaced_pod(owned.pod_name, SANDBOX_NAMESPACE)
     assert replacement.metadata.uid != original.metadata.uid
 
