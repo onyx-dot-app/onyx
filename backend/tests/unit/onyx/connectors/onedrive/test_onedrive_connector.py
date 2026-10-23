@@ -64,6 +64,7 @@ from onyx.connectors.onedrive.capability_checks import (
 from onyx.connectors.onedrive.connector import (
     MAX_DRIVE_DELTA_PAGES,
     MAX_USER_LISTING_PAGES,
+    MAX_USERS_PROBED_PER_CHECKPOINT,
     OneDriveConnector,
     drive_item_document,
     drive_root_id,
@@ -338,9 +339,54 @@ def test_onedrive_discovered_missing_drive_is_skipped() -> None:
     assert checkpoint.current_user is None
 
 
+def test_onedrive_one_step_skips_driveless_users_until_a_drive_opens() -> None:
+    connector, gateway = _connector()
+    driveless = [_user(f"user-{index}@example.com") for index in range(5)]
+    owner = _user()
+    gateway.list_users.return_value = OneDriveUserPage(users=[*driveless, owner])
+    gateway.get_default_drive.side_effect = lambda user_id: (
+        _drive() if user_id == owner.id else None
+    )
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
+        page=DriveDeltaPage(), next_checkpoint_url="delta-next"
+    )
+
+    output, checkpoint = _run_step(connector, connector.build_dummy_checkpoint())
+
+    assert gateway.get_default_drive.call_count == len(driveless) + 1
+    assert checkpoint.current_user == owner
+    assert checkpoint.current_drive == _drive()
+    assert [type(item) for item in output] == [HierarchyNode]
+
+
+def test_onedrive_driveless_probe_budget_returns_mid_page() -> None:
+    connector, gateway = _connector()
+    extra_users = 3
+    users = [
+        _user(f"user-{index}@example.com")
+        for index in range(MAX_USERS_PROBED_PER_CHECKPOINT + extra_users)
+    ]
+    gateway.list_users.return_value = OneDriveUserPage(
+        users=users, next_link="users-next"
+    )
+    gateway.get_default_drive.return_value = None
+
+    output, checkpoint = _run_step(connector, connector.build_dummy_checkpoint())
+
+    assert output == []
+    assert gateway.get_default_drive.call_count == MAX_USERS_PROBED_PER_CHECKPOINT
+    assert checkpoint.has_more
+    assert checkpoint.current_user is None
+    assert checkpoint.user_page == users[MAX_USERS_PROBED_PER_CHECKPOINT:]
+    assert checkpoint.users_next_link == "users-next"
+    gateway.get_delta_page.assert_not_called()
+
+
 def test_onedrive_all_user_drive_denial_skips_but_transient_error_retries() -> None:
     connector, gateway = _connector()
-    checkpoint = OneDriveCheckpoint(has_more=True, current_user=_user())
+    checkpoint = OneDriveCheckpoint(
+        has_more=True, current_user=_user(), user_listing_started=True
+    )
     gateway.get_default_drive.side_effect = OneDriveGraphError(
         403, "accessDenied", "not selected"
     )

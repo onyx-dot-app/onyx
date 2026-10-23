@@ -85,6 +85,9 @@ DRIVE_ENTITY_PREFIX = "drive:"
 MAX_PERMISSION_ENTRIES = ExternalAccess.MAX_NUM_ENTRIES
 MAX_PERMISSION_PAGES = 10_000
 MAX_CACHED_FOLDER_PERMISSIONS = 1_000
+# A count bounds each all-users probe call. At ~0.3 s per drive lookup this
+# keeps a call near one minute, so checkpoints and stop signals stay timely.
+MAX_USERS_PROBED_PER_CHECKPOINT = 200
 
 
 def _last_delta_item_occurrences(
@@ -419,7 +422,7 @@ class OneDriveConnector(
             return
         if drive is None:
             if self.settings.indexes_all_users:
-                logger.info(
+                logger.debug(
                     "OneDrive: skipping %s without a drive", user.user_principal_name
                 )
             else:
@@ -429,6 +432,21 @@ class OneDriveConnector(
             self._clear_current_user(checkpoint)
             return
         checkpoint.current_drive = drive
+
+    def _open_next_discovered_drive(
+        self, checkpoint: OneDriveCheckpoint
+    ) -> Generator[ConnectorFailure, None, None]:
+        """Probe tenant users until one has a drive. Most users in a large
+        tenant have none, so one call skips many of them instead of ending a
+        checkpoint per user; the budget keeps each call short."""
+        for _ in range(MAX_USERS_PROBED_PER_CHECKPOINT):
+            if checkpoint.current_drive is not None:
+                return
+            if checkpoint.current_user is None:
+                self._select_discovered_user(checkpoint)
+                if checkpoint.current_user is None:
+                    return
+            yield from self._open_current_drive(checkpoint)
 
     def _path_allowed(self, item: DriveDeltaItem) -> bool:
         path = build_item_relative_path(
@@ -632,17 +650,15 @@ class OneDriveConnector(
         None,
         OneDriveCheckpoint,
     ]:
-        if checkpoint.current_user is None:
-            if self.settings.indexes_all_users:
-                self._select_discovered_user(checkpoint)
-            else:
-                yield from self._select_explicit_user(checkpoint)
+        if self.settings.indexes_all_users:
+            yield from self._open_next_discovered_drive(checkpoint)
+        else:
             if checkpoint.current_user is None:
-                return checkpoint
+                yield from self._select_explicit_user(checkpoint)
+            if checkpoint.current_user is not None and checkpoint.current_drive is None:
+                yield from self._open_current_drive(checkpoint)
         if checkpoint.current_drive is None:
-            yield from self._open_current_drive(checkpoint)
-            if checkpoint.current_drive is None:
-                return checkpoint
+            return checkpoint
         yield from self._discover_delta_page(
             checkpoint,
             start,
