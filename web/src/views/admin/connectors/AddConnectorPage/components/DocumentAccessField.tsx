@@ -137,11 +137,12 @@ export default function DocumentAccessField({
         : everyTierOptions,
     [businessTier, businessOptions, everyTierOptions]
   );
-  // What the list shows: every option in one order. Below Business they all
-  // sit locked under an upgrade link, Everyone selected.
+  // What the list shows: every option in one order, Sync first as in the
+  // mock. Below Business they all sit locked under an upgrade link, Everyone
+  // selected.
   const lockForBusiness = useTierLockedOptions(Tier.BUSINESS);
   const listedOptions = useMemo(
-    () => lockForBusiness([...everyTierOptions, ...businessOptions]),
+    () => lockForBusiness([...businessOptions, ...everyTierOptions]),
     [everyTierOptions, businessOptions, lockForBusiness]
   );
 

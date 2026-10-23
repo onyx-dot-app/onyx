@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "Konto löschen",
-            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Konnektoren sie verwenden."
+            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Konnektoren sie verwenden.",
+            "notOwnerTooltip": "Nur der Eigentümer kann diese Anmeldedaten löschen"
           },
           "updateButton": {
             "label": "Anmeldedaten aktualisieren",
-            "tooltip": "Ändert die gespeicherten Werte für jeden Konnektor, der dieses Konto nutzt."
+            "tooltip": "Ändert die gespeicherten Werte für jeden Konnektor, der dieses Konto nutzt.",
+            "notOwnerTooltip": "Nur der Eigentümer kann diese Anmeldedaten aktualisieren"
           },
           "usedBy": {
             "label": "Verwendet von {count, plural, one {# Konnektor} other {# Konnektoren}}"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "Prüfungen erneut ausführen"
           },
+          "renameButton": {
+            "tooltip": "Konto umbenennen"
+          },
           "authenticationType": {
             "label": "Authentifizierungstyp"
           },
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
-          },
-          "shareSaved": {
-            "toast": "Freigabe aktualisiert."
           },
           "shareFailed": {
             "toast": "Die Freigabe dieses Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
@@ -3448,7 +3450,7 @@
             "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, kann es privat machen."
           },
           "shareLocked": {
-            "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, oder ein Admin, mit dem es geteilt ist, kann ändern, wer es nutzen darf."
+            "tooltip": "Nur der Eigentümer kann diese Anmeldedaten teilen"
           },
           "viewDetails": {
             "tooltip": "Details anzeigen"
@@ -5171,9 +5173,9 @@
           "message": "Möchten Sie diese Anmeldedaten wirklich löschen? Anmeldedaten, die mit aktiven Konnektoren verknüpft sind, können nicht gelöscht werden."
         },
         "confirmButton": {
-          "label": "Bestätigen"
+          "label": "Löschen"
         },
-        "confirmTitle": "Löschen bestätigen"
+        "confirmTitle": "*{name}* löschen"
       },
       "displayNames": {
         "accessKeyId": "{source}-Zugriffsschlüssel-ID",
@@ -10790,7 +10792,8 @@
         "title": "Verbindung testen",
         "description": "{appName} führt Prüfungen durch, um die erforderlichen Berechtigungen zu bestätigen, bevor es weitergeht.",
         "startButton": {
-          "label": "Prüfungen starten"
+          "label": "Prüfungen starten",
+          "disabledTooltip": "Wählen Sie oben ein Konto aus oder füllen Sie ein neues aus, um die Prüfungen zu starten"
         }
       },
       "title": "Konnektor-Prüfungen",

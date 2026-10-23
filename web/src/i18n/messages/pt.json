@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "Excluir conta",
-            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a.",
+            "notOwnerTooltip": "Somente o proprietário pode excluir esta credencial"
           },
           "updateButton": {
             "label": "Atualizar credenciais",
-            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta.",
+            "notOwnerTooltip": "Somente o proprietário pode atualizar esta credencial"
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "Executar verificações novamente"
           },
+          "renameButton": {
+            "tooltip": "Renomear conta"
+          },
           "authenticationType": {
             "label": "Tipo de autenticação"
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
-          },
-          "shareSaved": {
-            "toast": "Compartilhamento atualizado."
           },
           "shareFailed": {
             "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
@@ -3448,7 +3450,7 @@
             "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
           },
           "shareLocked": {
-            "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+            "tooltip": "Somente o proprietário pode compartilhar esta credencial"
           },
           "viewDetails": {
             "tooltip": "Ver detalhes"
@@ -5171,9 +5173,9 @@
           "message": "Tem certeza de que deseja excluir esta credencial? Não é possível excluir credenciais vinculadas a conectores ativos."
         },
         "confirmButton": {
-          "label": "Confirmar"
+          "label": "Excluir"
         },
-        "confirmTitle": "Confirmar exclusão"
+        "confirmTitle": "Excluir *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID da chave de acesso de {source}",
@@ -10790,7 +10792,8 @@
         "title": "Testar conexão",
         "description": "{appName} executará verificações para validar os escopos necessários antes de continuar.",
         "startButton": {
-          "label": "Iniciar verificações"
+          "label": "Iniciar verificações",
+          "disabledTooltip": "Escolha uma conta ou preencha uma nova acima para iniciar as verificações"
         }
       },
       "title": "Verificações do conector",

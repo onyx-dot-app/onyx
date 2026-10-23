@@ -16,7 +16,6 @@ import {
 } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import {
-  SvgAlertTriangle,
   SvgArrowRightCircle,
   SvgCheckSquare,
   SvgChevronDown,
@@ -41,9 +40,8 @@ import {
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { formatDateLog, formatDateTimeLog } from "@/lib/dateUtils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions/utils";
-import { Permission } from "@/lib/types";
 
 interface DetailRowProps {
   label: string;
@@ -147,7 +145,7 @@ export default function AuthenticationAccountCard({
   const tCredentialCopy = useTranslations("admin.credentials");
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
-  const { user, permissions } = useUser();
+  const { user } = useUser();
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
   const checkedAt: string | null = lastChecked
     ? formatDateTimeLog(lastChecked)
@@ -231,7 +229,6 @@ export default function AuthenticationAccountCard({
         if (waitingSave()?.sharing == null && !unsentGroupEditsRef.current) {
           setSharing(storedSharing);
         }
-        if (target.sharing) toast.success(t("shareSaved.toast"));
         if (target.name !== null) toast.success(t("renameSaved.toast"));
       } catch {
         if (
@@ -262,16 +259,18 @@ export default function AuthenticationAccountCard({
     credential.user_id === null
       ? null
       : (credential.user_personal_name ?? credential.user_email);
+  // The account's name, which its editors can change in place; an unnamed
+  // account shows who created it.
+  const accountName: string =
+    (pendingName ?? credential.name) ||
+    credential.user_email ||
+    t("untitled.label");
   const inUse: boolean = credential.usages.length > 0;
   const isOwnAccount: boolean =
     credential.is_owner ?? (user !== null && credential.user_id === user.id);
-  // The owner, or an admin when the account is shared with admins or has no
-  // owner, may rename it and change its sharing; a group-shared user may only
-  // use it.
-  const canEditAccount: boolean =
-    isOwnAccount ||
-    (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
-      (credential.admin_public || credential.user_id === null));
+  // Only the owner may rename the account and change its sharing; anyone it
+  // is shared with may only use it.
+  const canEditAccount: boolean = isOwnAccount;
 
   // The control beside the chevron: a caller's own, else the pick state.
   function pickControl(): React.ReactNode {
@@ -315,16 +314,26 @@ export default function AuthenticationAccountCard({
         <Modal open onOpenChange={() => setConfirmingDelete(false)}>
           <Modal.Content width="sm" height="sm">
             <Modal.Header
-              icon={SvgAlertTriangle}
-              title={tCredentials("confirmTitle")}
+              icon={SvgTrash}
+              title={markdown(
+                tCredentials("confirmTitle", {
+                  name: escapeMarkdown(accountName),
+                })
+              )}
               onClose={() => setConfirmingDelete(false)}
             />
             <Modal.Body>
-              <Text font="main-ui-body" color="text-04">
+              <Text font="main-ui-body" color="text-03">
                 {tCredentials("confirmBody.message")}
               </Text>
             </Modal.Body>
             <Modal.Footer>
+              <Button
+                prominence="secondary"
+                onClick={() => setConfirmingDelete(false)}
+              >
+                {tCredentials("cancelButton.label")}
+              </Button>
               <Button
                 variant="danger"
                 onClick={() => {
@@ -333,12 +342,6 @@ export default function AuthenticationAccountCard({
                 }}
               >
                 {tCredentials("confirmButton.label")}
-              </Button>
-              <Button
-                prominence="secondary"
-                onClick={() => setConfirmingDelete(false)}
-              >
-                {tCredentials("cancelButton.label")}
               </Button>
             </Modal.Footer>
           </Modal.Content>
@@ -382,20 +385,29 @@ export default function AuthenticationAccountCard({
                             prominence="tertiary"
                             icon={SvgEdit}
                             aria-label={t("updateButton.label")}
-                            tooltip={t("updateButton.tooltip")}
+                            disabled={!isOwnAccount}
+                            tooltip={
+                              isOwnAccount
+                                ? t("updateButton.tooltip")
+                                : t("updateButton.notOwnerTooltip")
+                            }
                             onClick={onUpdateCredentials}
                           />
                         )}
                         <Button
                           variant="danger"
-                          prominence="tertiary"
+                          prominence="internal"
                           icon={SvgTrash}
                           aria-label={t("deleteButton.label")}
-                          // The server refuses to delete an account that
-                          // connectors still use.
-                          disabled={inUse}
+                          // Only the owner may delete the account, and the
+                          // server refuses one that connectors still use.
+                          disabled={!isOwnAccount || inUse}
                           tooltip={
-                            inUse ? t("deleteButton.inUseTooltip") : undefined
+                            !isOwnAccount
+                              ? t("deleteButton.notOwnerTooltip")
+                              : inUse
+                                ? t("deleteButton.inUseTooltip")
+                                : undefined
                           }
                           onClick={() => setConfirmingDelete(true)}
                         />
@@ -427,6 +439,7 @@ export default function AuthenticationAccountCard({
                   tooltip={
                     canEditAccount ? undefined : t("shareLocked.tooltip")
                   }
+                  align="follow"
                 >
                   <div className="p-2">
                     <ShareAccountSelect
@@ -481,16 +494,11 @@ export default function AuthenticationAccountCard({
             >
               <Content
                 icon={getSourceMetadata(source).icon}
-                // The account's name, which its editors can change in place;
-                // an unnamed account shows who created it.
-                title={
-                  (pendingName ?? credential.name) ||
-                  credential.user_email ||
-                  t("untitled.label")
-                }
+                title={accountName}
                 // One line; a long name is cut, in full on hover.
                 titleMaxLines={1}
                 editable={canEditAccount}
+                editTooltip={t("renameButton.tooltip")}
                 onTitleChange={(name) => void saveAccount({ name })}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}

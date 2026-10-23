@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "删除账户",
-            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。",
+            "notOwnerTooltip": "只有所有者可以删除此凭据"
           },
           "updateButton": {
             "label": "更新凭据",
-            "tooltip": "更改使用此帐户的所有连接器的已保存值。"
+            "tooltip": "更改使用此帐户的所有连接器的已保存值。",
+            "notOwnerTooltip": "只有所有者可以更新此凭据"
           },
           "usedBy": {
             "label": "{count, plural, other {# 个连接器}}正在使用"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "重新运行检查"
           },
+          "renameButton": {
+            "tooltip": "重命名账户"
+          },
           "authenticationType": {
             "label": "认证类型"
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
-          },
-          "shareSaved": {
-            "toast": "共享已更新。"
           },
           "shareFailed": {
             "toast": "无法更改可使用此账户的人员。请重试。"
@@ -3448,7 +3450,7 @@
             "tooltip": "只有添加此账户的人才能将其设为私有。"
           },
           "shareLocked": {
-            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+            "tooltip": "只有所有者可以共享此凭据"
           },
           "viewDetails": {
             "tooltip": "查看详情"
@@ -5171,9 +5173,9 @@
           "message": "确定要删除此凭据吗?无法删除与运行中的连接器关联的凭据。"
         },
         "confirmButton": {
-          "label": "确认"
+          "label": "删除"
         },
-        "confirmTitle": "确认删除"
+        "confirmTitle": "删除 *{name}*"
       },
       "displayNames": {
         "accessKeyId": "{source} 访问密钥 ID",
@@ -10790,7 +10792,8 @@
         "title": "测试连接",
         "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
         "startButton": {
-          "label": "开始检查"
+          "label": "开始检查",
+          "disabledTooltip": "请在上方选择一个账户或填写新账户以开始检查"
         }
       },
       "title": "连接器检查",
