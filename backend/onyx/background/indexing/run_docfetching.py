@@ -287,7 +287,9 @@ def _emit_fetch_telemetry(
 ) -> None:
     """Count the documents and the failure of one ConnectorRunner batch."""
     if isinstance(item, tuple) and len(item) == 4:
-        docs, _hierarchy, failure, _checkpoint = item
+        docs, hierarchy, failure, _checkpoint = item
+        if docs is None and hierarchy is None and failure is None:
+            return
         emit_stage_counter(
             index_attempt_id,
             "fetch",
@@ -299,13 +301,23 @@ def _emit_fetch_telemetry(
         )
 
 
+def _is_fetch_batch(item: object) -> bool:
+    if not (isinstance(item, tuple) and len(item) == 4):
+        return False
+    docs, hierarchy, _failure, _checkpoint = item
+    return bool(docs) or bool(hierarchy)
+
+
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
     index_attempt_id: int,
 ) -> Generator[_TimedYield, None, None]:
     """Yield from `runner_iterable`, recording one CONNECTOR_FETCH event per
-    successful yield with the time spent inside the connector waiting for it.
+    document or hierarchy batch with the time spent inside the connector
+    waiting for it.
 
+    Failure and checkpoint-only yields are not batches: their wait time is
+    carried into the next batch, and time after the last batch is dropped.
     Time is measured between consecutive ``next()`` calls so the metric
     reflects "how slow is the source itself" rather than "how slow is each
     iteration of the docfetching loop body".
@@ -316,6 +328,7 @@ def _timed_connector_runs(
     """
     buffer = StageEventBuffer(IndexAttemptStage.CONNECTOR_FETCH, index_attempt_id)
     runner_iter = iter(runner_iterable)
+    carried_ms = 0
     try:
         while True:
             fetch_start = time.monotonic()
@@ -326,7 +339,9 @@ def _timed_connector_runs(
             except Exception:
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
-                failed_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
+                failed_ms: int = carried_ms + max(
+                    0, int((time.monotonic() - fetch_start) * 1000)
+                )
                 buffer.record(failed_ms)
                 emit_stage_counter(
                     index_attempt_id,
@@ -335,9 +350,14 @@ def _timed_connector_runs(
                     duration_ms=failed_ms,
                 )
                 raise
-            fetch_ms: int = max(0, int((time.monotonic() - fetch_start) * 1000))
-            buffer.record(fetch_ms)
-            _emit_fetch_telemetry(index_attempt_id, item, fetch_ms)
+            carried_ms += max(0, int((time.monotonic() - fetch_start) * 1000))
+            if not _is_fetch_batch(item):
+                _emit_fetch_telemetry(index_attempt_id, item, 0)
+                yield item
+                continue
+            buffer.record(carried_ms)
+            _emit_fetch_telemetry(index_attempt_id, item, carried_ms)
+            carried_ms = 0
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item
@@ -801,7 +821,7 @@ def connector_document_extraction(
 
         # Main extraction loop
         while checkpoint.has_more:
-            logger.info(
+            logger.debug(
                 "Running '%s' connector with checkpoint: %s",
                 db_connector.source.value,
                 checkpoint,
