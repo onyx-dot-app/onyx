@@ -24,10 +24,11 @@ import { Button, Divider, Text } from "@opal/components";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
-import { DocumentSetSummary } from "@/lib/types";
+import { DocumentSetSummary, Permission } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { can } from "@/lib/permissions/resource-actions";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -165,6 +166,11 @@ const DocumentSetTable = ({
 }: DocumentFeedbackTableProps) => {
   const t = useTranslations("admin.documents");
   const [page, setPage] = useState(1);
+  // The federated connector page's writes need global MANAGE_CONNECTORS, which a
+  // document-set manager may not hold.
+  const { isGlobalHolder: canManageConnectors } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   // editable rows first, then by name — editability now rides on each row's
   // permissions map, so no second fetch + set-diff is needed.
@@ -255,6 +261,7 @@ const DocumentSetTable = ({
                                     <FederatedConnectorTitle
                                       federatedConnector={federatedConnector}
                                       showMetadata={true}
+                                      isLink={canManageConnectors}
                                     />
                                   </div>
                                 );

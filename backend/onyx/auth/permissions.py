@@ -179,7 +179,7 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
     PermissionRegistryEntry(
         id="manage_connectors",
         display_name="Manage Connectors",
-        description="Add and update connectors, their credentials, and indexing.",
+        description="Add and update connectors and their credentials, and run indexing.",
         permissions=[Permission.MANAGE_CONNECTORS],
         group=0,
     ),
