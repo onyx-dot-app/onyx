@@ -2982,7 +2982,8 @@
           "rate": "{rate} docs/min",
           "finished": "{time} ({duration})",
           "rateFinished": "{rate} docs/min ({duration})",
-          "membershipRate": "{rate} memberships/min"
+          "membershipRate": "{rate} memberships/min",
+          "membershipRateFinished": "{rate} memberships/min ({duration})"
         },
         "actions": {
           "stages": "View Stage Metrics",

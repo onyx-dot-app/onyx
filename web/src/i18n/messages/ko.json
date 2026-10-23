@@ -2982,7 +2982,8 @@
           "rate": "분당 {rate}개 문서",
           "finished": "{time} ({duration})",
           "rateFinished": "분당 {rate}개 문서 ({duration})",
-          "membershipRate": "{rate} 멤버십/분"
+          "membershipRate": "{rate} 멤버십/분",
+          "membershipRateFinished": "{rate} 멤버십/분 ({duration})"
         },
         "actions": {
           "stages": "단계별 지표 보기",

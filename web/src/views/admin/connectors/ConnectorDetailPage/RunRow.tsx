@@ -173,14 +173,29 @@ function formatRunLength(
   );
 }
 
-/** Documents a finished index run indexed per minute of its run, or `null` while it goes on or when it indexed none. */
-function finishedIndexRate(run: CCPairRun): number | null {
-  if (run.kind !== "indexing" || run.attempt.total_docs_indexed === 0) {
-    return null;
+/** What a run's rate counts: documents indexed or synced, or memberships synced. `null` for a kind with no rate. */
+function rateCount(run: CCPairRun): number | null {
+  switch (run.kind) {
+    case "indexing":
+      return run.attempt.total_docs_indexed;
+    case "doc_permission_sync":
+      return run.attempt.total_docs_synced;
+    // Memberships, not groups, measure a group sync's work.
+    case "group_sync":
+      return run.attempt.total_group_memberships_synced;
+    case "pruning":
+    case "checks":
+      return null;
   }
+}
+
+/** What a finished index or sync run moved per minute of its run, or `null` while it goes on or when it moved nothing. */
+function finishedRunRate(run: CCPairRun): number | null {
+  const count = rateCount(run);
+  if (count === null || count === 0) return null;
   const ms = runDurationMs(run);
   if (ms === null || ms <= 0) return null;
-  return run.attempt.total_docs_indexed / (ms / 60_000);
+  return count / (ms / 60_000);
 }
 
 /** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
@@ -189,15 +204,11 @@ function syncRate(run: CCPairRun, now: number): number | null {
     return null;
   }
   const started = run.attempt.time_started;
-  if (started === null) return null;
+  const count = rateCount(run);
+  if (started === null || count === null) return null;
   const minutes = (now - new Date(started).getTime()) / 60_000;
   if (minutes <= 0) return null;
-  // The rate counts memberships, the work done, while the card counts groups.
-  const moved =
-    run.kind === "group_sync"
-      ? run.attempt.total_group_memberships_synced
-      : runMoved(run);
-  return moved / minutes;
+  return count / minutes;
 }
 
 /** Rates print with two decimals, such as 24.23 docs/min. */
@@ -511,8 +522,8 @@ export default function RunRow({
   const failed = run.attempt.status === "failed";
 
   const finished = finishedAt(run);
-  // A finished index run shows its rate and keeps its finish time in the tooltip.
-  const finishedRate = finishedIndexRate(run);
+  // A finished index or sync run shows its rate and keeps its finish time in the tooltip.
+  const finishedRate = finishedRunRate(run);
   const finishedTime =
     finishedRate === null || finished === null
       ? undefined
@@ -534,10 +545,12 @@ export default function RunRow({
     if (ms === null) return formatDateTimeLog(finished);
     const duration = formatRunLength(format, ms);
     if (finishedRate !== null) {
-      return t("detail.rateFinished", {
-        rate: format.number(finishedRate, RATE_FORMAT),
-        duration,
-      });
+      return t(
+        run.kind === "group_sync"
+          ? "detail.membershipRateFinished"
+          : "detail.rateFinished",
+        { rate: format.number(finishedRate, RATE_FORMAT), duration }
+      );
     }
     return t("detail.finished", {
       time: formatDateTimeLog(finished),

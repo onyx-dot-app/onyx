@@ -2982,7 +2982,8 @@
           "rate": "{rate} documentos/min",
           "finished": "{time} ({duration})",
           "rateFinished": "{rate} documentos/min ({duration})",
-          "membershipRate": "{rate} associações/min"
+          "membershipRate": "{rate} associações/min",
+          "membershipRateFinished": "{rate} associações/min ({duration})"
         },
         "actions": {
           "stages": "Ver métricas por etapa",
