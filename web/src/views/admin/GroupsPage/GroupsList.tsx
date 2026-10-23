@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
+import { Divider } from "@opal/components";
 import GroupCard from "./GroupCard";
 import { isBuiltInGroup } from "./utils";
 import { IllustrationContent, Section } from "@opal/layouts";
@@ -31,15 +32,19 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     );
   }
 
-  // One flat list; the built-in groups lead.
-  const ordered = [
-    ...filtered.filter(isBuiltInGroup),
-    ...filtered.filter((g) => !isBuiltInGroup(g)),
-  ];
+  const builtInGroups = filtered.filter(isBuiltInGroup);
+  const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
+  // One flat list; the gap alone spaces the divider, as it does the cards.
   return (
     <Section flexDirection="column" gap={2}>
-      {ordered.map((group) => (
+      {builtInGroups.map((group) => (
+        <GroupCard key={group.id} group={group} />
+      ))}
+      {builtInGroups.length > 0 && customGroups.length > 0 && (
+        <Divider paddingPerpendicular={0} paddingParallel={0} />
+      )}
+      {customGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}
     </Section>
