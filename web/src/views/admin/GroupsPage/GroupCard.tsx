@@ -49,45 +49,43 @@ function GroupCard({ group }: GroupCardProps) {
 
   return (
     <SelectCard state="empty" border="solid" padding={2} data-card rounding={4}>
-      <Section alignItems="start" height="fit">
-        <ContentAction
-          icon={isAdmin ? SvgUserManage : SvgUsers}
-          title={displayGroupName(group, t)}
-          description={buildGroupDescription(group, t)}
-          sizePreset="main-content"
-          variant="section"
-          // The card's own padding is the only inset.
-          padding={0}
-          tag={
-            builtIn && !isAdmin
-              ? { title: t("card.defaultTag.label") }
-              : undefined
-          }
-          editable={!isSyncing && canManage}
-          onTitleChange={!isSyncing && canManage ? handleRename : undefined}
-          rightChildren={
-            <Section flexDirection="row" alignItems="start" gap={0}>
-              <div className="py-1">
-                <Text mainUiBody text03>
-                  {formatMemberCount(
-                    group.users.filter((u) => u.is_active).length,
-                    t
-                  )}
-                </Text>
-              </div>
-              {canManageMembers && (
-                <Button
-                  icon={SvgChevronRight}
-                  prominence="tertiary"
-                  tooltip={t("card.viewGroup.label")}
-                  aria-label={t("card.viewGroup.label")}
-                  onClick={() => router.push(`/admin/groups/${group.id}`)}
-                />
-              )}
-            </Section>
-          }
-        />
-      </Section>
+      <ContentAction
+        icon={isAdmin ? SvgUserManage : SvgUsers}
+        title={displayGroupName(group, t)}
+        description={buildGroupDescription(group, t)}
+        sizePreset="main-content"
+        variant="section"
+        // The card's own padding is the only inset.
+        padding={0}
+        tag={
+          builtIn && !isAdmin
+            ? { title: t("card.defaultTag.label") }
+            : undefined
+        }
+        editable={!isSyncing && canManage}
+        onTitleChange={!isSyncing && canManage ? handleRename : undefined}
+        rightChildren={
+          <Section flexDirection="row" alignItems="start" gap={0}>
+            <div className="py-1">
+              <Text mainUiBody text03>
+                {formatMemberCount(
+                  group.users.filter((u) => u.is_active).length,
+                  t
+                )}
+              </Text>
+            </div>
+            {canManageMembers && (
+              <Button
+                icon={SvgChevronRight}
+                prominence="tertiary"
+                tooltip={t("card.viewGroup.label")}
+                aria-label={t("card.viewGroup.label")}
+                onClick={() => router.push(`/admin/groups/${group.id}`)}
+              />
+            )}
+          </Section>
+        }
+      />
     </SelectCard>
   );
 }
