@@ -263,6 +263,17 @@ def _ignore_traversed_id(_folder_id: str) -> None:
     """The phased flow tracks coverage by partition, not by traversed folder."""
 
 
+def _stop_or_report_progress(
+    callback: IndexingHeartbeatInterface | None, tag: str
+) -> None:
+    """Raises on a stop signal, since a slim walk cut short reads as deletions."""
+    if callback is None:
+        return
+    if callback.should_stop():
+        raise RuntimeError(f"{tag}: Stop signal detected")
+    callback.progress(tag, 1)
+
+
 def _public_access() -> ExternalAccess:
     return ExternalAccess(
         external_user_emails=set(),
@@ -2350,12 +2361,9 @@ class GoogleDriveConnector(
 
             if len(files_batch) >= SLIM_BATCH_SIZE:
                 yield _yield_slim_batch()
-                if callback:
-                    if callback.should_stop():
-                        raise RuntimeError(
-                            "_extract_slim_docs_from_google_drive: Stop signal detected"
-                        )
-                    callback.progress("_extract_slim_docs_from_google_drive", 1)
+                _stop_or_report_progress(
+                    callback, "_extract_slim_docs_from_google_drive"
+                )
 
         # Yield remaining files
         if files_batch:
@@ -2392,6 +2400,9 @@ class GoogleDriveConnector(
                     and checkpoint.completion_stage != DriveRetrievalStage.DONE
                 ):
                     on_checkpoint(checkpoint)
+                # A pass ends after a page budget or a partition even when every
+                # file was filtered or none changed, so it counts as progress
+                _stop_or_report_progress(callback, "_retrieve_all_slim_docs_impl")
             if fail_on_unreachable_targets and checkpoint.unreachable_target_ids:
                 # Pruning deletes whatever this listing lacks, which for an
                 # unreachable target is every document indexed from it.
