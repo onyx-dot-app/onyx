@@ -1,16 +1,22 @@
 """
-Periodic tasks for tenant pre-provisioning.
+Periodic tasks for tenant pre-provisioning, plus the on-demand provisioning
+task the api server hands a signup to when the pool cannot serve it.
 """
 
 import asyncio
 import datetime
+import threading
+import time
 import uuid
 
 from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
+from onyx.configs.app_configs import (
+    TARGET_AVAILABLE_TENANTS,
+    TENANT_PROVISIONING_WAIT_SECONDS,
+)
 from onyx.configs.constants import (
     ONYX_CLOUD_TENANT_ID,
     OnyxCeleryQueues,
@@ -32,6 +38,116 @@ _MAX_TENANTS_PER_RUN = 15
 # (~90s each) plus migrating up to TARGET_AVAILABLE_TENANTS pool tenants (~90s each).
 _TENANT_PROVISIONING_SOFT_TIME_LIMIT = 60 * 40  # 40 minutes
 _TENANT_PROVISIONING_TIME_LIMIT = 60 * 45  # 45 minutes
+
+# One signup's tenant: migrate a pool tenant or build one (~90s), with margin.
+_USER_PROVISION_LOCK_TIMEOUT = 60 * 10
+
+
+# Shares the monitoring queue with the refill task, which holds at most one
+# slot at a time.
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
+    queue=OnyxCeleryQueues.MONITORING,
+    ignore_result=True,
+    trail=False,
+    bind=True,
+)
+def provision_tenant_for_user(
+    self: Task,  # noqa: ARG001
+    *,
+    tenant_id: str,  # noqa: ARG001, the cloud system tenant, carried for TenantAwareTask
+    email: str,
+    attempt_id: str,
+    referral_source: str | None = None,
+) -> bool:
+    """Build or migrate the tenant for one signup, off the api server. The api
+    server enqueues this when the pool has no tenant at head, then polls the
+    mapping. Alembic never runs there: a hung migration pins its thread pool."""
+    if not MULTI_TENANT:
+        return False
+
+    # Imported here: provisioning reaches every tool implementation (~75 MB).
+    from ee.onyx.server.tenants.provisioning import (
+        provision_attempt_failure_key,
+        provision_user_tenant,
+        user_provision_lock_name,
+    )
+
+    r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    # Not thread-local: the heartbeat thread below must be able to extend it.
+    lock: RedisLock = r.lock(
+        user_provision_lock_name(email),
+        timeout=_USER_PROVISION_LOCK_TIMEOUT,
+        thread_local=False,
+    )
+    # Wait rather than skip: a request may hold this while assigning a pool
+    # tenant, and if it fails this run is the signup's only remaining chance.
+    if not lock.acquire(blocking_timeout=TENANT_PROVISIONING_WAIT_SECONDS):
+        raise RuntimeError(
+            "provision_tenant_for_user: the per-user lock stayed held past the "
+            "signup wait window"
+        )
+
+    # Celery time limits do not work on thread pools, so a long migration could
+    # outlive the lock and let a retried signup build a second tenant. Keep it alive.
+    heartbeat = _LockHeartbeat(lock, _USER_PROVISION_LOCK_TIMEOUT)
+    heartbeat.start()
+    try:
+        new_tenant_id = asyncio.run(
+            provision_user_tenant(email, referral_source, lock_owned=lock.owned)
+        )
+        task_logger.info("Provisioned tenant %s for a signup", new_tenant_id)
+        return True
+    except Exception:
+        # The request that enqueued this attempt reads the marker and fails
+        # now instead of at its deadline. The task itself fails loudly.
+        r.set(
+            provision_attempt_failure_key(attempt_id),
+            "1",
+            ex=TENANT_PROVISIONING_WAIT_SECONDS,
+        )
+        raise
+    finally:
+        heartbeat.stop()
+        try:
+            lock.release()
+        except Exception:
+            task_logger.warning(
+                "Could not release user provision lock (likely expired), continuing"
+            )
+
+
+class _LockHeartbeat(threading.Thread):
+    """Extends a Redis lock's TTL at a third of its timeout until stopped.
+
+    Gives up after one full timeout: a hung migration then lets the lock lapse
+    so a retried signup for the email can proceed on another slot."""
+
+    def __init__(self, lock: RedisLock, timeout_seconds: int) -> None:
+        super().__init__(daemon=True, name="user-provision-lock-heartbeat")
+        self._lock = lock
+        self._interval = timeout_seconds / 3
+        self._max_lifetime = timeout_seconds
+        self._stopped = threading.Event()
+
+    def run(self) -> None:
+        started = time.monotonic()
+        while not self._stopped.wait(self._interval):
+            if time.monotonic() - started >= self._max_lifetime:
+                task_logger.error(
+                    "User provision lock heartbeat gave up after %s s",
+                    self._max_lifetime,
+                )
+                return
+            try:
+                self._lock.reacquire()
+            except Exception:
+                # Keep trying: one failed extension leaves two thirds of the
+                # TTL, and a later one may still land before it runs out.
+                task_logger.exception("Could not extend the user provision lock")
+
+    def stop(self) -> None:
+        self._stopped.set()
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -114,12 +230,28 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         task_logger.exception("Error in check_available_tenants task")
 
     finally:
+        # After the refill so slow control plane deletes never hold up the
+        # pool, and in finally so a failed refill cannot skip them.
+        _reconcile_control_plane_orphans()
         try:
             lock_check.release()
         except Exception:
             task_logger.warning(
                 "Could not release check lock (likely expired), continuing"
             )
+
+
+def _reconcile_control_plane_orphans() -> None:
+    """Retry control-plane deletes that a signup rollback could not complete."""
+    from ee.onyx.server.tenants.provisioning import reconcile_control_plane_orphans
+
+    try:
+        removed = asyncio.run(reconcile_control_plane_orphans())
+    except Exception:
+        task_logger.exception("Control plane orphan reconciliation failed")
+        return
+    if removed:
+        task_logger.info("Removed %s orphaned control plane tenants", removed)
 
 
 def _migrate_stale_pool_tenants() -> None:
