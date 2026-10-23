@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
+from onyx.background.celery.tasks.pruning.tasks import (
+    reset_prune_and_cancel_sync_record,
+    try_creating_prune_generator_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
@@ -813,6 +816,18 @@ def update_cc_pair_status(
         status=status_update_request.status,
     )
 
+    # A started prune exits on the stop signal. A queued one is dropped here,
+    # under the row lock its generator takes to mark the start. The drop
+    # commits the status with the canceled sync record.
+    if (
+        status_update_request.status == ConnectorCredentialPairStatus.PAUSED
+        and (prune_payload := redis_connector.prune.payload)
+        and prune_payload.started is None
+    ):
+        if prune_payload.celery_task_id:
+            task_ids_to_revoke.append(prune_payload.celery_task_id)
+        reset_prune_and_cancel_sync_record(redis_connector, db_session)
+
     db_session.commit()
 
     for task_id in task_ids_to_revoke:
@@ -1029,6 +1044,13 @@ def prune_cc_pair(
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
+        )
+
+    # The generator drops a prune for a paused pair, so refuse it here.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to prune.",
         )
 
     r = get_redis_client()
