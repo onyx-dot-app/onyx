@@ -88,7 +88,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey,inworld}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
 
 Non-admin router, prefix `/llm`:
 
@@ -357,6 +357,12 @@ Explicit image capability overrides skip catalog lookup.
 Chat image replay uses this resolved capability; only `None` falls back to the DB/catalog lookup.
 Capability remains fixed for that client, including across model steps.
 Later caller mutations do not change the client's captured settings.
+
+Inworld Router uses the OpenAI chat completions surface. Its API key is a Base64
+`key:secret` credential. `LitellmLLM` sends it as `Authorization: Basic <key>`
+and replaces the SDK's Bearer header, because the router reads Bearer as a JWT.
+Its model discovery reads `/llm/v1alpha/models` on the API host, because the
+public gateway does not route `/v1/models`. Discovery adds the `auto` router model.
 
 ### 4.5 Streaming contract
 
