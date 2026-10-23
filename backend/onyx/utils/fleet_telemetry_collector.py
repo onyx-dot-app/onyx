@@ -50,6 +50,8 @@ _INVENTORY_SECONDS: int = 6 * 3600
 # Where the next run starts reading.
 _CURSOR_KEY: str = "fleet_telemetry_cursor"
 _INVENTORY_KEY: str = "fleet_telemetry_inventory"
+# The service rejects attempt events from more than 190 days ago.
+_ATTEMPT_HORIZON: timedelta = timedelta(days=180)
 # Connector configuration lists that select what to index. Only their sizes leave.
 _SELECTION_LISTS: tuple[str, ...] = (
     "folder_ids",
@@ -170,6 +172,18 @@ def connector_data(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _attempt_end(row: dict[str, Any]) -> datetime:
+    """When a finished attempt ended. Not its update time: checkpoint cleanup updates
+    finished attempts days later. Attempts with no finish time (from before the
+    column, or ended in bulk) fall back as the connector page's attempt list does."""
+    return (
+        row["time_finished"]
+        or row["last_heartbeat_at"]
+        or row["started_at"]
+        or row["time_created"]
+    )
+
+
 def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
     connector_type: str = row["source"].value.lower()
     data: dict[str, Any] = {
@@ -190,7 +204,7 @@ def attempt_data(row: dict[str, Any]) -> dict[str, Any]:
         "last_heartbeat_at": _iso(row["last_heartbeat_at"]),
     }
     if row["status"].is_terminal():
-        data["ended_at"] = _iso(row["time_updated"])
+        data["ended_at"] = _iso(_attempt_end(row))
     if row["error_sample"] is not None or row["error_count"]:
         category: str = classify_local_error(
             row["item_error_type"], row["error_sample"], row["item_error_sample"]
@@ -242,6 +256,7 @@ def _queue(
     tenant_id: str,
     event_id: str | None = None,
     occurred_at: float | None = None,
+    revision: int = 0,
 ) -> bool:
     """Queue one event. False when the sender cannot take a valid event now (a full
     queue or a closed sender), so the next run sends it again. An event that can
@@ -252,6 +267,7 @@ def _queue(
         tenant_id=tenant_id,
         event_id=event_id,
         occurred_at=occurred_at,
+        revision=revision,
     ):
         return True
     # Only the data decides this, so the sender thread cannot change the answer.
@@ -264,11 +280,15 @@ def _send(
     event_type: str,
     data: dict[str, Any],
     entity: str,
-    revision: datetime,
+    revision_at: datetime,
     occurred_at: datetime | None = None,
+    revision: int = 0,
 ) -> bool:
-    """Queue with an event ID made from the row's identity and revision time."""
-    identity: str = f"{tenant_id}:{entity}:{revision.isoformat()}"
+    """Queue with an event ID made from the row's identity, its revision time, and
+    the event's revision, which orders states of one entity at the service."""
+    identity: str = f"{tenant_id}:{entity}:{revision_at.isoformat()}"
+    if revision:
+        identity += f":{revision}"
     if occurred_at is not None:
         # A running job changes its counters without a new revision time.
         identity += ":" + fingerprint(json.dumps(data, sort_keys=True))
@@ -278,7 +298,41 @@ def _send(
         data,
         tenant_id,
         event_id=str(uuid.uuid5(uuid.UUID(str(sender.customer_uuid)), identity)),
-        occurred_at=(occurred_at or revision).timestamp(),
+        occurred_at=(occurred_at or revision_at).timestamp(),
+        revision=revision,
+    )
+
+
+def _send_attempt(
+    sender: BoundedTelemetry, tenant_id: str, row: dict[str, Any]
+) -> bool:
+    """A running attempt goes out at each update, at revision 0. A finished attempt
+    goes out at its end, at revision 1 plus its completed batches:
+
+    - Checkpoint cleanup updates finished rows days later. Those sends repeat the
+      event ID and revision, so the service drops or ignores them.
+    - Batches still in flight when the attempt ended can complete later and add to
+      its counts. Each one raises the revision, so the new counts replace the state.
+    - The end comes from the worker's clock and can be earlier than the database
+      time of the last running snapshot. The service orders states by (generation,
+      revision, time), so the finished state still replaces the running one."""
+    entity: str = f"attempt:{row['attempt_id']}"
+    if not row["status"].is_terminal():
+        return _send(
+            sender, tenant_id, "attempt", attempt_data(row), entity, row["time_updated"]
+        )
+    end: datetime = _attempt_end(row)
+    if end < datetime.now(timezone.utc) - _ATTEMPT_HORIZON:
+        # An old attempt that a bulk update touched. The service would reject it.
+        return True
+    return _send(
+        sender,
+        tenant_id,
+        "attempt",
+        attempt_data(row),
+        entity,
+        end,
+        revision=1 + (row["completed_batches"] or 0),
     )
 
 
@@ -398,14 +452,7 @@ def collect_snapshots(tenant_id: str) -> None:
                 since,
                 attempts,
                 "time_updated",
-                lambda row: _send(
-                    sender,
-                    tenant_id,
-                    "attempt",
-                    attempt_data(row),
-                    f"attempt:{row['attempt_id']}",
-                    row["time_updated"],
-                ),
+                lambda row: _send_attempt(sender, tenant_id, row),
             ),
             # The service requires the event time to equal the summary's last update.
             _send_in_order(

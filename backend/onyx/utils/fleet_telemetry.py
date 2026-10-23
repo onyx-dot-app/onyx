@@ -356,7 +356,7 @@ class BoundedTelemetry:
         self.instance_id: str = fingerprint(f"{self.pid}:{os.uname().nodename}")
         # deque append/popleft are thread-safe, so emitters take no lock.
         self._queue: deque[
-            tuple[str, dict[str, Any], str | None, float, str | None, str]
+            tuple[str, dict[str, Any], str | None, float, str | None, str, int]
         ] = deque()
         self._stop: threading.Event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -389,6 +389,7 @@ class BoundedTelemetry:
         event_id: str | None = None,
         occurred_at: float | None = None,
         service: str | None = None,
+        revision: int = 0,
     ) -> bool:
         """No locks, thread creation, serialization, logging, network, disk, or database calls."""
         try:
@@ -411,6 +412,7 @@ class BoundedTelemetry:
                     occurred_at if occurred_at is not None else time.time(),
                     event_id,
                     service or self.service,
+                    revision,
                 )
             )
             return True
@@ -454,7 +456,7 @@ class BoundedTelemetry:
         events: list[dict[str, Any]] = []
         for _ in range(_BATCH_SIZE):
             try:
-                event_type, data, tenant, occurred_at, event_id, service = (
+                event_type, data, tenant, occurred_at, event_id, service, revision = (
                     self._queue.popleft()
                 )
             except IndexError:
@@ -462,7 +464,13 @@ class BoundedTelemetry:
             try:
                 events.append(
                     self._envelope(
-                        event_type, data, tenant, occurred_at, event_id, service
+                        event_type,
+                        data,
+                        tenant,
+                        occurred_at,
+                        event_id,
+                        service,
+                        revision,
                     )
                 )
             except Exception:
@@ -478,6 +486,7 @@ class BoundedTelemetry:
         occurred_at: float,
         event_id: str | None,
         service: str,
+        revision: int,
     ) -> dict[str, Any]:
         if self._customer is None or self._deployment is None:
             raise RuntimeError("Fleet enrollment is not complete")
@@ -500,6 +509,7 @@ class BoundedTelemetry:
             **({"installation_scope": scope} if scope else {}),
             "service": service,
             "is_cloud": MULTI_TENANT,
+            "revision": revision,
             "data": data,
         }
 

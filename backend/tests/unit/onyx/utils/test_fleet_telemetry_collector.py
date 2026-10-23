@@ -56,7 +56,9 @@ def _attempt_row(**overrides: Any) -> dict[str, Any]:
         "total_batches": 4,
         "completed_batches": 2,
         "started_at": _NOW - timedelta(minutes=3),
+        "time_created": _NOW - timedelta(minutes=4),
         "time_updated": _NOW - timedelta(minutes=1),
+        "time_finished": None,
         "last_progress_at": _NOW - timedelta(minutes=1),
         "last_heartbeat_at": _NOW,
         "error_sample": None,
@@ -209,6 +211,7 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     failed: dict[str, Any] = collector.attempt_data(
         _attempt_row(
             status=IndexingStatus.FAILED,
+            time_finished=_NOW - timedelta(minutes=1),
             error_sample="Embedding request for PRIVATE-DOC failed",
         )
     )
@@ -218,6 +221,37 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     assert "PRIVATE" not in json.dumps(failed)
     for data in (running, failed):
         assert fleet.sanitize_data("attempt", data) == data
+
+
+def test_an_attempt_ends_when_it_finished_not_when_it_was_last_updated() -> None:
+    # Checkpoint cleanup updates a finished attempt days later.
+    cleaned: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            time_finished=_NOW - timedelta(days=6),
+            time_updated=_NOW,
+        )
+    )
+    assert cleaned["ended_at"] == (_NOW - timedelta(days=6)).isoformat()
+    unfinished: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            last_heartbeat_at=_NOW - timedelta(days=7),
+            time_updated=_NOW,
+        )
+    )
+    assert unfinished["ended_at"] == (_NOW - timedelta(days=7)).isoformat()
+    # Canceled in bulk before it started: no finish time, heartbeat, or start.
+    never_started: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.CANCELED,
+            started_at=None,
+            last_heartbeat_at=None,
+            time_created=_NOW - timedelta(days=2),
+            time_updated=_NOW,
+        )
+    )
+    assert never_started["ended_at"] == (_NOW - timedelta(days=2)).isoformat()
 
 
 def test_an_attempt_without_counts_reports_zero() -> None:
@@ -363,6 +397,79 @@ def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
     # A running job's progress and a changed inventory go out again.
     assert third["job"] != first["job"] and third["attempt"] == first["attempt"]
     assert {"connector", "tenant_domain", "license"} <= third.keys()
+
+
+def _attempt_event(sender: fleet.BoundedTelemetry) -> dict[str, Any]:
+    (attempt,) = [
+        event for event in sender._take_batch() if event["event_type"] == "attempt"
+    ]
+    return attempt
+
+
+def test_a_finished_attempt_goes_out_at_its_end_until_more_batches_complete(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    now: datetime = datetime.now(timezone.utc)
+    source.attempts = [_attempt_row(time_updated=now - timedelta(minutes=1))]
+    collector.collect_snapshots("public")
+    running: dict[str, Any] = _attempt_event(sender)
+    assert running["revision"] == 0
+    # The worker's clock recorded the end before the last running update's time.
+    ended: datetime = now - timedelta(minutes=1, seconds=1)
+
+    def finished(**overrides: Any) -> list[dict[str, Any]]:
+        values: dict[str, Any] = {
+            "status": IndexingStatus.FAILED,
+            "time_finished": ended,
+            "time_updated": now,
+        }
+        return [_attempt_row(**{**values, **overrides})]
+
+    source.attempts = finished()
+    collector.collect_snapshots("public")
+    failed: dict[str, Any] = _attempt_event(sender)
+    assert failed["occurred_at"] == ended.isoformat()
+    assert failed["revision"] > running["revision"]
+    # Checkpoint cleanup updates the finished row days later.
+    source.attempts = finished(time_updated=now + timedelta(days=6))
+    collector.collect_snapshots("public")
+    assert _attempt_event(sender)["event_id"] == failed["event_id"]
+    # A batch that was in flight at the end completes later.
+    source.attempts = finished(completed_batches=3, docs_indexed=20)
+    collector.collect_snapshots("public")
+    late: dict[str, Any] = _attempt_event(sender)
+    assert late["event_id"] != failed["event_id"]
+    assert late["revision"] > failed["revision"]
+    assert late["occurred_at"] == failed["occurred_at"]
+
+
+def test_finished_attempts_without_a_finish_time_or_past_the_service_horizon(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    now: datetime = datetime.now(timezone.utc)
+    # Failed in bulk with no finish time: the end is the last heartbeat.
+    bulk: dict[str, Any] = {
+        "status": IndexingStatus.FAILED,
+        "last_heartbeat_at": now - timedelta(days=2),
+    }
+    source.attempts = [_attempt_row(**bulk, time_updated=now - timedelta(days=1))]
+    collector.collect_snapshots("public")
+    first: dict[str, Any] = _attempt_event(sender)
+    source.attempts = [_attempt_row(**bulk, time_updated=now)]
+    collector.collect_snapshots("public")
+    assert _attempt_event(sender)["event_id"] == first["event_id"]
+    # The service would reject an attempt that ended long ago.
+    source.attempts = [
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            time_finished=now - timedelta(days=200),
+            time_updated=now,
+        )
+    ]
+    collector.collect_snapshots("public")
+    assert not [
+        event for event in sender._take_batch() if event["event_type"] == "attempt"
+    ]
 
 
 def test_a_finished_job_replaces_its_running_state(
