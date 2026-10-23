@@ -85,6 +85,22 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
+export interface JiraServiceManagementConfig {
+  jira_service_management_base_url: string;
+  project_key?: string;
+  service_desk_ids?: string[];
+  queue_ids?: string[];
+  request_types?: string[];
+  jql_query?: string;
+  comment_email_blacklist?: string[];
+  labels_to_skip?: string[];
+  include_internal_comments?: boolean;
+  include_sla?: boolean;
+  include_changelog?: boolean;
+  include_attachments?: boolean;
+  scoped_token?: boolean;
+}
+
 export interface SalesforceConfig {
   requested_objects?: string[];
 }
