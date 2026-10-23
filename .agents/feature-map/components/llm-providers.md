@@ -88,7 +88,7 @@ Admin router, prefix `/admin/llm`:
 | GET | `/admin/llm/router-models` | `list_router_model_providers` | Providers that own `is_router` model configurations. Options for the admin "Router Model" selector; hidden and persona-restricted routers included. |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey,truefoundry}/available-models` | per-vendor model discovery | Each calls the vendor's model-list API live. Several also sync the discovered models into the DB when the request carries a `provider_id` (`sync_model_configurations`). |
 
 Non-admin router, prefix `/llm`:
 

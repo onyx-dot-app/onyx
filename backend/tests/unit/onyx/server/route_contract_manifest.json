@@ -490,6 +490,7 @@
   "POST /admin/llm/portkey/available-models": "admin",
   "POST /admin/llm/test": "manage:llms",
   "POST /admin/llm/test/default": "manage:llms",
+  "POST /admin/llm/truefoundry/available-models": "manage:llms",
   "POST /admin/llm/typesafe/available-models": "manage:llms",
   "POST /admin/llm/vercel-ai-gateway/available-models": "manage:llms",
   "POST /admin/log-export": "admin",

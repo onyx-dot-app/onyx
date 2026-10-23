@@ -7881,6 +7881,15 @@
             "tooltip": "恢复默认"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "使用 TrueFoundry 网关端点，或粘贴您自托管网关的基础 URL。",
+            "placeholder": "您的 TrueFoundry 网关基础 URL"
+          },
+          "apiKeyField": {
+            "description": "粘贴来自 [TrueFoundry](https://www.truefoundry.com/) 的 Personal Access Token 或 Virtual Account Token，以加载您的令牌可访问的模型。"
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "使用 Vercel AI Gateway 端点，或粘贴自定义基础 URL。",

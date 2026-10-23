@@ -33,6 +33,7 @@ class LlmProviderNames(str, Enum):
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    TRUEFOUNDRY = "truefoundry"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -64,6 +65,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.TRUEFOUNDRY,
 ]
 
 
@@ -88,6 +90,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
     LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
+    LlmProviderNames.TRUEFOUNDRY: "TrueFoundry",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -182,6 +185,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.TRUEFOUNDRY,
 }
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
@@ -194,6 +198,9 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
         LlmProviderNames.OPENAI_COMPATIBLE,
+        # Keeps the stored `<account>/<model>` label, which the parser would
+        # collapse across accounts.
+        LlmProviderNames.TRUEFOUNDRY,
     }
 )
 
@@ -202,7 +209,8 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
 # authoritative and must never be second-guessed against LiteLLM's model map.
 # Nebius TokenFactory, Portkey, and Vercel AI Gateway do this without being
 # dynamic providers, so this is deliberately a superset of
-# DYNAMIC_LLM_PROVIDERS rather than a reuse.
+# DYNAMIC_LLM_PROVIDERS rather than a reuse. TrueFoundry stores no limit, so
+# membership is a no-op for it.
 SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
     {
         LlmProviderNames.NEBIUS_TOKENFACTORY,

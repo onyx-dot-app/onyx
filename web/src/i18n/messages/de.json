@@ -7881,6 +7881,15 @@
             "tooltip": "Standard wiederherstellen"
           }
         },
+        "truefoundry": {
+          "apiBaseField": {
+            "description": "Verwenden Sie den TrueFoundry-Gateway-Endpunkt oder fügen Sie die Basis-URL Ihres selbst gehosteten Gateways ein.",
+            "placeholder": "Ihre TrueFoundry-Gateway-Basis-URL"
+          },
+          "apiKeyField": {
+            "description": "Fügen Sie ein Personal Access Token oder Virtual Account Token von [TrueFoundry](https://www.truefoundry.com/) ein, um die Modelle zu laden, auf die Ihr Token zugreifen kann."
+          }
+        },
         "vercelAiGateway": {
           "apiBaseField": {
             "description": "Verwenden Sie den Vercel AI Gateway-Endpunkt oder fügen Sie eine eigene Basis-URL ein.",

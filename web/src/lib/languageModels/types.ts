@@ -78,6 +78,7 @@ export enum LLMProviderName {
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
   VERCEL_AI_GATEWAY = "vercel_ai_gateway",
+  TRUEFOUNDRY = "truefoundry",
   CUSTOM = "custom",
 }
 
