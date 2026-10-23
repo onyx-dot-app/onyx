@@ -25,7 +25,9 @@ class DeepResearchUser(OnyxChatUser):
 
     scenario_prefix: str = "dr"
     deep_research: bool = True
-    mock_model: str | None = os.environ.get("ONYX_DR_MODEL", "mock-agents2")
+    mock_model: str | None = os.environ.get(
+        "ONYX_DR_MODEL", "mock-profile-research-v1-agents2"
+    )
 
     # DR turns run minutes, not seconds: think longer between turns and
     # tolerate longer inter-chunk silence (heartbeats should still arrive).
