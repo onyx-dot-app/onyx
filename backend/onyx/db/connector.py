@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.orm import Session, aliased
 
-from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
@@ -178,11 +177,10 @@ def update_connector(
     connector.input_type = connector_data.input_type
     connector.connector_specific_config = connector_data.connector_specific_config
     connector.refresh_freq = connector_data.refresh_freq
-    connector.prune_freq = (
-        connector_data.prune_freq
-        if connector_data.prune_freq is not None
-        else DEFAULT_PRUNING_FREQ
-    )
+    # As check_freq: omitted keeps the schedule, an explicit null clears it
+    # (the connector then never prunes).
+    if "prune_freq" in connector_data.model_fields_set:
+        connector.prune_freq = connector_data.prune_freq
     # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
     if "check_freq" in connector_data.model_fields_set:
         connector.check_freq = connector_data.check_freq

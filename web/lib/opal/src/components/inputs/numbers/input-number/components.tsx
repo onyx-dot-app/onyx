@@ -152,17 +152,23 @@ export default function InputNumber({
     }
   };
 
+  // Whether the text was typed into since the field took focus. Blur clamps
+  // only a typed value, so a stored value outside the bounds stays as is.
+  const typedRef = React.useRef(false);
+
   const handleBlur = () => {
+    const typed: boolean = typedRef.current;
+    typedRef.current = false;
     if (inputValue.trim() === "" && !allowEmpty) {
       setInputValue(value === null ? "" : String(value));
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
       onChange(null);
-    } else if (value !== null && min !== undefined && value < min) {
+    } else if (typed && value !== null && min !== undefined && value < min) {
       // Typing is free; leaving the field clamps to the nearest bound.
       onChange(min);
       setInputValue(String(min));
-    } else if (value !== null && max !== undefined && value > max) {
+    } else if (typed && value !== null && max !== undefined && value > max) {
       onChange(max);
       setInputValue(String(max));
     } else {
@@ -178,6 +184,7 @@ export default function InputNumber({
     }
 
     setInputValue(rawValue);
+    typedRef.current = true;
 
     // Allow empty input while typing (fallback applied on blur)
     if (rawValue === "") {

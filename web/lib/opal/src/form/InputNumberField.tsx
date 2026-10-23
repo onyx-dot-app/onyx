@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { useField } from "formik";
+import { getIn, useField, useFormikContext } from "formik";
 import InputNumber, {
   type InputNumberProps,
 } from "@opal/components/inputs/numbers/input-number/components";
@@ -20,6 +20,7 @@ type InputNumberFieldProps = Omit<InputNumberProps, "value" | "onChange"> & {
  * Formik-bound `InputNumber` over a `number | undefined` field; cleared, the
  * field holds `undefined`. A value typed outside `min`..`max` fails the
  * field's validation while it is typed, and `InputNumber` clamps it on blur.
+ * The form's initial value is exempt, so an edit keeps a stored value.
  * A touched field with an error shows the error state.
  */
 function InputNumberField({
@@ -32,13 +33,18 @@ function InputNumberField({
   ...inputProps
 }: InputNumberFieldProps) {
   const strings = useOpalStrings();
+  // A value the form started with is not checked: an edit keeps a stored
+  // value outside the bounds until the user changes it.
+  const { initialValues } = useFormikContext<Record<string, unknown>>();
+  const initialValue: unknown = getIn(initialValues, name);
   const validate = useCallback(
     (value: number | undefined): string | undefined =>
       value !== undefined &&
+      value !== initialValue &&
       ((min !== undefined && value < min) || (max !== undefined && value > max))
         ? strings.inputNumberOutOfRange(min, max)
         : undefined,
-    [min, max, strings]
+    [min, max, strings, initialValue]
   );
   const [field, meta, helpers] = useField<number | undefined>({
     name,
