@@ -548,10 +548,11 @@ starts at `indexing_start`. The prune then also removes documents that still
 exist at the source but were last updated before the start. A dated listing
 omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
 keeps the hierarchy nodes above each kept document. A generator that starts for a
-pair that is gone, `PAUSED` or `DELETING` does not enumerate. Like every path that
-abandons a prune (fence validation, the deletion beat's stop timeout, a pause), it
+pair that is gone, `PAUSED` or `DELETING` does not enumerate. Like the other paths
+that abandon a prune on purpose (the deletion beat's stop timeout, a pause), it
 calls `reset_prune_and_cancel_sync_record`: the `PRUNING` sync record ends
-`CANCELED` and the fence is reset. The generator checks the status and marks
+`CANCELED` and the fence is reset. Fence validation and startup reset a lost
+prune's fence through `fail_orphaned_prune_records`, which ends its record `FAILED`. The generator checks the status and marks
 its start under the pair's row lock, and a pause drops a queued prune under the
 same lock. A generator whose fence now holds a different prune, or whose fence
 names another Celery task, exits without a reset. A manual prune of a `PAUSED`
