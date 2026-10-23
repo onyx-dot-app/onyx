@@ -116,12 +116,15 @@ PRUNE_LOST_STALE_FENCE_MSG = (
 PRUNE_LOST_ON_RESTART_MSG = (
     "Prune stopped without finishing: the primary worker restarted and reset its fence"
 )
-# Serializes prune dispatch (beat or API) with anything that fails records and
-# resets fences, so a prune never starts half inside such a reset
+# Serializes prune dispatch (beat or API) with the startup reset of every
+# fence, so a prune never starts half inside that reset
 PRUNE_DISPATCH_LOCK_NAME = (
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_creating_prune_generator_task"
 )
 PRUNE_DISPATCH_LOCK_TIMEOUT = 30  # seconds
+# The startup reset updates every running record and scans every prune key,
+# which can outlast a dispatch's hold, so it holds the lock longer and renews it
+PRUNE_STARTUP_RESET_LOCK_TIMEOUT = 10 * 60  # seconds
 
 
 def _get_pruning_block_expiration() -> int:
@@ -1007,6 +1010,19 @@ def fail_orphaned_prune_records(reason: str, cc_pair_id: int | None = None) -> N
         task_logger.warning(
             f"Failed prune records whose fence was reset: cc_pair={cc_pair_id} sync_records={failed_ids}"
         )
+
+
+def reset_prune_fences_on_startup(r: TenantRedisClient) -> None:
+    """Fails every running prune record, then clears every prune fence. Holds
+    the dispatch lock throughout, so a prune an API call starts meanwhile is
+    neither failed before its fence exists nor left running without one."""
+    lock: RedisLock = r.lock(
+        PRUNE_DISPATCH_LOCK_NAME, timeout=PRUNE_STARTUP_RESET_LOCK_TIMEOUT
+    )
+    with lock:
+        fail_orphaned_prune_records(PRUNE_LOST_ON_RESTART_MSG)
+        lock.reacquire()
+        RedisConnectorPrune.reset_all(r)
 
 
 def validate_pruning_fences(

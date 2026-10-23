@@ -138,3 +138,32 @@ def test_validator_reset_fails_the_running_prune_record(
     record = _prune_records(db_session, cc_pair.id)[record_id]
     assert record.sync_status == SyncStatus.FAILED
     assert record.error_message == pruning_tasks.PRUNE_LOST_TASK_MSG
+
+
+def test_startup_reset_holds_the_dispatch_lock_past_a_dispatch_hold(
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Both steps run under the dispatch lock with a TTL longer than a
+    dispatcher's, renewed between them, and the lock is free afterward. The
+    steps are stubbed: the real ones touch every pair in the shared dev stores."""
+    r = get_redis_client(tenant_id=get_current_tenant_id())
+    lock_ttls: list[int] = []
+
+    def _record_lock_ttl(*_args: object, **_kwargs: object) -> None:
+        lock_ttls.append(r.ttl(pruning_tasks.PRUNE_DISPATCH_LOCK_NAME))
+
+    with (
+        patch.object(
+            pruning_tasks, "fail_orphaned_prune_records", side_effect=_record_lock_ttl
+        ),
+        patch.object(
+            pruning_tasks.RedisConnectorPrune,
+            "reset_all",
+            side_effect=_record_lock_ttl,
+        ),
+    ):
+        pruning_tasks.reset_prune_fences_on_startup(r)
+
+    assert len(lock_ttls) == 2
+    assert all(ttl > pruning_tasks.PRUNE_DISPATCH_LOCK_TIMEOUT for ttl in lock_ttls)
+    assert not r.exists(pruning_tasks.PRUNE_DISPATCH_LOCK_NAME)

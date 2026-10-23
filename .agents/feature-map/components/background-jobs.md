@@ -320,8 +320,9 @@ generator, and a set of lightweight fan-out subtasks, tied together by a fence:
    `SyncRecord` as `FAILED` with the reason (`fail_orphaned_prune_records`,
    called while the fence still blocks a new prune), and the primary worker's
    single-tenant startup reset of every prune fence
-   (`RedisConnectorPrune.reset_all`, under the prune dispatch lock so an API
-   call cannot start a prune half inside the reset) does the same for every
+   (`reset_prune_fences_on_startup`, which holds the prune dispatch lock with
+   a longer TTL than a dispatch and renews it between steps, so an API call
+   cannot start a prune half inside the reset) does the same for every
    running prune record, which would otherwise stay `IN_PROGRESS` with no
    reason until the next prune cancels it;
    `pruning/tasks.py:validate_pruning_fence` has a comment
