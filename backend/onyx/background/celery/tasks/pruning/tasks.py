@@ -70,6 +70,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
 from onyx.db.sync_record import (
+    fail_in_progress_sync_records,
     insert_sync_record,
     record_sync_record_error,
     update_sync_record_status,
@@ -103,6 +104,24 @@ from onyx.utils.logger import (
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+PRUNE_LOST_TASK_MSG = (
+    "Prune stopped without finishing: its worker task was lost "
+    "(the worker crashed or restarted)"
+)
+PRUNE_LOST_STALE_FENCE_MSG = (
+    "Prune stopped without finishing: its fence had an outdated format and was reset"
+)
+PRUNE_LOST_ON_RESTART_MSG = (
+    "Prune stopped without finishing: the primary worker restarted and reset its fence"
+)
+# Serializes prune dispatch (beat or API) with anything that fails records and
+# resets fences, so a prune never starts half inside such a reset
+PRUNE_DISPATCH_LOCK_NAME = (
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_creating_prune_generator_task"
+)
+PRUNE_DISPATCH_LOCK_TIMEOUT = 30  # seconds
 
 
 def _get_pruning_block_expiration() -> int:
@@ -406,16 +425,14 @@ def try_creating_prune_generator_task(
             )
             return None
 
-    LOCK_TIMEOUT = 30
-
     # we need to serialize starting pruning since it can be triggered either via
     # celery beat or manually (API call)
     lock: RedisLock = r.lock(
-        DANSWER_REDIS_FUNCTION_LOCK_PREFIX + "try_creating_prune_generator_task",
-        timeout=LOCK_TIMEOUT,
+        PRUNE_DISPATCH_LOCK_NAME,
+        timeout=PRUNE_DISPATCH_LOCK_TIMEOUT,
     )
 
-    acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
+    acquired = lock.acquire(blocking_timeout=PRUNE_DISPATCH_LOCK_TIMEOUT / 2)
     if not acquired:
         logger.info(
             "try_creating_prune_generator_task: cc_pair=%s lock not acquired",
@@ -977,6 +994,21 @@ def sweep_orphan_tags(r: TenantRedisClient, db_session: Session) -> None:
             lock.release()
 
 
+def fail_orphaned_prune_records(reason: str, cc_pair_id: int | None = None) -> None:
+    """Ends the running prune records (one pair's, or every pair's) whose fence
+    is being reset. Otherwise a record stays IN_PROGRESS, with no reason, until
+    the next prune cancels it. Call it before the reset: the fence still blocks
+    a new prune, whose fresh record must not be the one failed."""
+    with get_session_with_current_tenant() as db_session:
+        failed_ids = fail_in_progress_sync_records(
+            db_session, SyncType.PRUNING, reason, entity_id=cc_pair_id
+        )
+    if failed_ids:
+        task_logger.warning(
+            f"Failed prune records whose fence was reset: cc_pair={cc_pair_id} sync_records={failed_ids}"
+        )
+
+
 def validate_pruning_fences(
     tenant_id: str,
     r: TenantRedisClient,
@@ -1068,6 +1100,7 @@ def validate_pruning_fence(
             f"fence={fence_key}"
         )
 
+        fail_orphaned_prune_records(PRUNE_LOST_STALE_FENCE_MSG, cc_pair_id)
         redis_connector.prune.reset()
         return
 
@@ -1151,5 +1184,6 @@ def validate_pruning_fence(
         f"payload_id={payload.id}"
     )
 
+    fail_orphaned_prune_records(PRUNE_LOST_TASK_MSG, cc_pair_id)
     redis_connector.prune.reset()
     return

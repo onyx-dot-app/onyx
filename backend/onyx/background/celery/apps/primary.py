@@ -17,6 +17,12 @@ from redis.lock import Lock as RedisLock
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.background.celery.tasks.pruning.tasks import (
+    PRUNE_DISPATCH_LOCK_NAME,
+    PRUNE_DISPATCH_LOCK_TIMEOUT,
+    PRUNE_LOST_ON_RESTART_MSG,
+    fail_orphaned_prune_records,
+)
 from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
 from onyx.configs.constants import (
@@ -193,7 +199,12 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     RedisDocumentSet.reset_all(r)
     RedisUserGroup.reset_all(r)
     RedisConnectorDelete.reset_all(r)
-    RedisConnectorPrune.reset_all(r)
+    # Under the dispatch lock, so a prune an API call starts meanwhile is neither
+    # failed before its fence exists nor left running without one
+    with r.lock(PRUNE_DISPATCH_LOCK_NAME, timeout=PRUNE_DISPATCH_LOCK_TIMEOUT):
+        # Their fences go next, so no running prune record can finish
+        fail_orphaned_prune_records(PRUNE_LOST_ON_RESTART_MSG)
+        RedisConnectorPrune.reset_all(r)
     RedisConnectorStop.reset_all(r)
 
     # mark orphaned index attempts as failed
