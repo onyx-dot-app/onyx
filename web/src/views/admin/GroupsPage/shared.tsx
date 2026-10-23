@@ -121,7 +121,7 @@ function nameColumn(
     cell: (_searchValue, row) => (
       <Content
         font="main-ui-action"
-        title={row.personal_name ?? row.email}
+        title={row.personal_name || row.email}
         description={row.personal_name ? row.email : undefined}
         badge={
           isManager?.(row)
