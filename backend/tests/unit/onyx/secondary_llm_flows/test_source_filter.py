@@ -146,3 +146,24 @@ def test_only_the_last_five_user_turns_reach_the_prompt() -> None:
     assert "msg 7" in text and "msg 3" in text
     assert "msg 2" not in text
     assert "msg 0" not in text
+
+
+def test_older_turn_naming_a_connected_source_outlives_the_window() -> None:
+    """A standing directive older than the window still reaches the prompt;
+    other old turns are still dropped."""
+    history = [
+        ChatMinimalTextMessage(
+            message="For anything I ask, always check Zendesk only.",
+            message_type=MessageType.USER,
+        ),
+        *[
+            ChatMinimalTextMessage(message=f"msg {i}", message_type=MessageType.USER)
+            for i in range(8)
+        ],
+    ]
+    _scope, prompt = _run_decision(history, [A, B], [], "[zendesk]")
+
+    text = prompt[-1].content
+    assert "always check Zendesk only" in text
+    assert "msg 3" in text
+    assert "msg 2" not in text
