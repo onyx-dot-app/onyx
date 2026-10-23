@@ -2802,19 +2802,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "已索引文档"
-        },
         "indexingSpeed": "{speed} 文档/分钟",
         "indexingSpeedTooltip": "自创建连接器以来每分钟索引的文档数",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
-        "statusLine": "索引状态 - {detail}",
         "documents": {
-          "label": "最近 / 总计",
-          "total": "/ {total}",
-          "totalLabel": "总计"
+          "totalLabel": "已索引文档总数",
+          "recentLabel": "最近处理的文档",
+          "syncedPermissionsLabel": "已同步的权限",
+          "syncedMembershipsLabel": "已同步的群组成员关系"
         },
         "throughput": {
           "ariaLabel": "随时间索引的文档",
@@ -2831,7 +2828,16 @@
           "releaseFailed": "无法开始索引",
           "viewChecks": "查看连接器检查"
         },
-        "title": "索引状态"
+        "title": "索引状态",
+        "sync": {
+          "permissionsTitle": "权限同步状态",
+          "groupsTitle": "组成员关系同步状态",
+          "last": "上次同步 {when}",
+          "never": "尚未同步",
+          "neverTooltip": "在权限同步完成之前，已索引的文档可能无法被搜索。",
+          "waitingForFirstIndex": "等待首次索引"
+        },
+        "accessTitle": "连接器文档访问权限"
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",

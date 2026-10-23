@@ -2802,19 +2802,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Indexierte Dokumente"
-        },
         "indexingSpeed": "{speed} Dok./Min.",
         "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Konnektors",
         "lastIndexed": {
           "value": "Zuletzt indexiert {when}"
         },
-        "statusLine": "Indexierungsstatus - {detail}",
         "documents": {
-          "label": "Aktuell / Gesamt",
-          "total": "/ {total}",
-          "totalLabel": "Gesamt"
+          "totalLabel": "Indexierte Dokumente gesamt",
+          "recentLabel": "Kürzlich verarbeitete Dokumente",
+          "syncedPermissionsLabel": "Synchronisierte Berechtigungen",
+          "syncedMembershipsLabel": "Synchronisierte Gruppenmitgliedschaften"
         },
         "throughput": {
           "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
@@ -2831,7 +2828,16 @@
           "releaseFailed": "Indexierung konnte nicht gestartet werden",
           "viewChecks": "Konnektor-Prüfungen anzeigen"
         },
-        "title": "Indexierungsstatus"
+        "title": "Indexierungsstatus",
+        "sync": {
+          "permissionsTitle": "Status der Berechtigungssynchronisierung",
+          "groupsTitle": "Status der Synchronisierung der Gruppenmitgliedschaften",
+          "last": "Zuletzt synchronisiert {when}",
+          "never": "Noch nicht synchronisiert",
+          "neverTooltip": "Indexierte Dokumente sind möglicherweise erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
+          "waitingForFirstIndex": "Wartet auf die erste Indexierung"
+        },
+        "accessTitle": "Dokumentzugriff des Konnektors"
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindexierung erfolgreich gestartet",

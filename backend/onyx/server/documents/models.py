@@ -960,6 +960,10 @@ class CCPairFullInfo(BaseModel):
     last_pruned: datetime | None
     # accounts for both doc sync and group sync
     last_full_permission_sync: datetime | None
+    # Last successful sync of each kind, None until one succeeds. A doc sync records
+    # its start, and a shared group sync stamps every pair of its source.
+    last_time_perm_sync: datetime | None
+    last_time_external_group_sync: datetime | None
     overall_indexing_speed: float | None
     latest_checkpoint_description: str | None
 
@@ -1098,6 +1102,8 @@ class CCPairFullInfo(BaseModel):
             last_indexed=last_successful_index_time,
             last_pruned=cc_pair_model.last_pruned,
             last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
+            last_time_perm_sync=cc_pair_model.last_time_perm_sync,
+            last_time_external_group_sync=cc_pair_model.last_time_external_group_sync,
             overall_indexing_speed=overall_indexing_speed,
             latest_checkpoint_description=None,
             last_permission_sync_attempt_status=last_permission_sync_attempt_status,

@@ -2802,19 +2802,16 @@
         }
       },
       "statusCard": {
-        "documentsIndexed": {
-          "label": "Documentos no índice"
-        },
         "indexingSpeed": "{speed} documentos/min",
         "indexingSpeedTooltip": "Documentos indexados por minuto desde a criação do conector",
         "lastIndexed": {
           "value": "Última indexação {when}"
         },
-        "statusLine": "Status da indexação - {detail}",
         "documents": {
-          "label": "Recentes / Total",
-          "total": "/ {total}",
-          "totalLabel": "Total"
+          "totalLabel": "Total de documentos no índice",
+          "recentLabel": "Documentos processados recentemente",
+          "syncedPermissionsLabel": "Permissões sincronizadas",
+          "syncedMembershipsLabel": "Associações a grupos sincronizadas"
         },
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
@@ -2831,7 +2828,16 @@
           "releaseFailed": "Não foi possível iniciar a indexação",
           "viewChecks": "Ver verificações do conector"
         },
-        "title": "Status da indexação"
+        "title": "Status da indexação",
+        "sync": {
+          "permissionsTitle": "Status da sincronização de permissões",
+          "groupsTitle": "Status da sincronização de associações a grupos",
+          "last": "Última sincronização {when}",
+          "never": "Ainda não sincronizado",
+          "neverTooltip": "Os documentos indexados podem não ser pesquisáveis até que suas permissões sejam sincronizadas.",
+          "waitingForFirstIndex": "Aguardando a primeira indexação"
+        },
+        "accessTitle": "Acesso aos documentos do conector"
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
