@@ -46,7 +46,7 @@ def _resource(**updates: object) -> SandboxResource:
     "status",
     [None, SandboxStatus.SLEEPING, SandboxStatus.TERMINATED],
 )
-def test_collects_orphans_and_failed_or_inactive_runtime_resources(
+def test_collects_orphans_and_inactive_runtime_resources(
     status: SandboxStatus | None,
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,
@@ -74,7 +74,7 @@ def test_collects_orphans_and_failed_or_inactive_runtime_resources(
 @pytest.mark.parametrize(
     "status", [SandboxStatus.RUNNING, SandboxStatus.PROVISIONING, SandboxStatus.FAILED]
 )
-def test_preserves_live_or_provisioning_owners(
+def test_preserves_live_provisioning_and_failed_owners(
     status: SandboxStatus,
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,

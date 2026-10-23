@@ -45,7 +45,7 @@ pytestmark = [
 ]
 
 
-def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows(
+def test_worker_collects_orphans_and_preserves_failed_owners_without_running_rows(
     k8s_client: client.CoreV1Api, db_session: Session
 ) -> None:
     manager = KubernetesSandboxManager()
@@ -66,7 +66,8 @@ def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows
     )
     db_session.add_all([failed, stale])
     db_session.commit()
-    owners = [uuid4(), failed.id, stale.id]
+    orphan = uuid4()
+    owners = [orphan, failed.id, stale.id]
     foreign = uuid4()
     all_owners = [*owners, foreign]
     lease = get_cache_backend(tenant_id="public").lock(
@@ -111,11 +112,15 @@ def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows
 
         run_cleanup(k8s_client)
 
-        for owner in owners:
+        name = f"sandbox-{str(orphan)[:8]}"
+        cluster.wait_absent("pod", name)
+        cluster.wait_absent("service", name)
+        cluster.wait_absent("secret", f"{name}-opencode-auth")
+        for owner in [failed.id, stale.id]:
             name = f"sandbox-{str(owner)[:8]}"
-            cluster.wait_absent("pod", name)
-            cluster.wait_absent("service", name)
-            cluster.wait_absent("secret", f"{name}-opencode-auth")
+            assert not cluster.absent("pod", name)
+            assert not cluster.absent("service", name)
+            assert not cluster.absent("secret", f"{name}-opencode-auth")
         assert not cluster.absent("pod", foreign_name)
         assert not cluster.absent("service", foreign_name)
         assert not cluster.absent("secret", f"{foreign_name}-opencode-auth")
