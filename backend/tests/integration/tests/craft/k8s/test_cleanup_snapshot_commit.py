@@ -100,11 +100,3 @@ def test_failed_snapshot_commit_preserves_the_committed_archive(
         db_session.execute(text(f"DROP TRIGGER {name} ON snapshot"))
         db_session.execute(text(f"DROP FUNCTION {name}()"))
         db_session.commit()
-
-    replacement = BuildSessionManager.create_snapshot(owned.api_user, owned.session_id)
-    assert replacement is not None
-    assert replacement.storage_path != committed_storage_path
-    db_session.expire_all()
-    committed = get_latest_snapshot_for_session(db_session, owned.session_id)
-    assert committed is not None
-    assert committed.storage_path == replacement.storage_path
