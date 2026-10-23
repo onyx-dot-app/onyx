@@ -724,19 +724,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         isScopedManager && edit === undefined,
         {
           required: (field) => tValidation("required", { field }),
-          ...(edit === undefined && {
-            // The titles are terse, so a blank field names its range.
-            scheduleRequired: {
-              refreshFreq: t("scheduled.rangeRequired", {
-                min: MIN_REFRESH_FREQ_MINUTES,
-                max: MAX_REFRESH_FREQ_MINUTES,
-              }),
-              pruneFreq: t("scheduled.rangeRequired", {
-                min: MIN_SCHEDULE_HOURS,
-                max: MAX_PRUNE_FREQ_HOURS,
-              }),
-            },
-          }),
+          ...(edit === undefined &&
+            // The File connector has no Schedule section to fill in.
+            connector !== "file" && {
+              // The titles are terse, so a blank field names its range.
+              scheduleRequired: {
+                refreshFreq: t("scheduled.rangeRequired", {
+                  min: MIN_REFRESH_FREQ_MINUTES,
+                  max: MAX_REFRESH_FREQ_MINUTES,
+                }),
+                pruneFreq: t("scheduled.rangeRequired", {
+                  min: MIN_SCHEDULE_HOURS,
+                  max: MAX_PRUNE_FREQ_HOURS,
+                }),
+              },
+            }),
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),

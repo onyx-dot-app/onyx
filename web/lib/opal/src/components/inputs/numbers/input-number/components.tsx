@@ -218,6 +218,7 @@ export default function InputNumber({
         disabled={isDisabled}
         value={inputValue}
         placeholder={placeholder}
+        aria-invalid={variant === "error" || undefined}
         onChange={handleInputChange}
         onBlur={handleBlur}
         className={cn(
