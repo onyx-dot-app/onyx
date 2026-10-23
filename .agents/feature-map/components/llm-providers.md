@@ -303,6 +303,14 @@ Later caller mutations do not change the client's captured settings.
 chunk with `model_response.py:from_litellm_model_response_stream` into a
 `ModelResponseStream`. `LitellmLLM.stream` feeds those chunks to
 `model_response.py:MessageAccumulator`, which emits the ordered events.
+`invoke_raw` uses a non-streaming request unless the call actually injects
+environment-only custom configuration. When injection is enabled, ordinary calls
+hold a shared read lock throughout the request. Injecting calls stream and
+reassemble the response, releasing the write lock after connection setup.
+Lock acquisition uses the invocation deadline; provider timeouts use the remaining
+budget after acquisition. Injecting calls can wait for active non-streaming readers.
+Explicit streaming calls keep their existing transport.
+
 The LLM gateway skips the event layer. It reads `stream_raw` chunks directly.
 
 `model_response.py:ModelResponseStream` carries `choice.delta.content`,
