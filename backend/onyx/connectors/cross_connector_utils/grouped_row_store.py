@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 # Groups one all_groups read loads at a time.
 GROUP_READ_SIZE = 1_000
+# Rows of one group a read loads before folding them through keep.
+GROUP_FOLD_ROWS = 1_000
 
 Row = TypeVar("Row", bound=BaseModel)
 
@@ -22,9 +24,11 @@ class GroupedRowStore(Generic[Row]):
 
     Rows live in an anonymous sqlite database, a temp file the OS removes
     even if the process dies. ``group`` numbers the groups by their first
-    row's arrival, so a read by position is stable. A read passes each group
-    through ``keep`` before the next one loads, so memory holds one whole
-    group and a slice of trimmed ones, however many rows the store takes.
+    row's arrival, so a read by position is stable. A read folds each group
+    through ``keep`` every GROUP_FOLD_ROWS rows as it loads, so memory holds
+    a slice of trimmed groups however many rows the store or a group takes.
+    ``keep`` must give the same result in steps as at once:
+    ``keep(keep(a) + b) == keep(a + b)``.
 
     Adds and ``group`` may run on one thread and reads on another, never at
     the same time, so the connection is shared without a lock.
@@ -66,8 +70,8 @@ class GroupedRowStore(Generic[Row]):
         self.grouped = True
 
     def groups(self, start: int, count: int) -> list[list[Row]]:
-        """The ``count`` groups from 0-based ``start``, each its rows in the
-        order they were added, passed through ``keep``."""
+        """The ``count`` groups from 0-based ``start``, each its rows folded
+        through ``keep`` in the order they were added."""
         cursor = self._conn.execute(
             "SELECT g.seq, r.row FROM groups g JOIN rows r ON r.key = g.key "
             "WHERE g.seq > ? AND g.seq <= ? ORDER BY g.seq, r.seq",
@@ -76,12 +80,16 @@ class GroupedRowStore(Generic[Row]):
         groups: list[list[Row]] = []
         current: int | None = None
         rows: list[Row] = []
+        unfolded = 0
         for group_seq, row in cursor:
             if current is not None and group_seq != current:
                 groups.append(self._keep(rows))
-                rows = []
+                rows, unfolded = [], 0
             current = group_seq
             rows.append(self._row_type.model_validate_json(row))
+            unfolded += 1
+            if unfolded >= GROUP_FOLD_ROWS:
+                rows, unfolded = self._keep(rows), 0
         if rows:
             groups.append(self._keep(rows))
         return groups

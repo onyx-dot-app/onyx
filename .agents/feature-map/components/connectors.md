@@ -368,11 +368,11 @@ shape the table above does not cover:
   replies that left the builder out. The builder's first message sits in
   its Sent Items, so excluding that folder has the same effect on every
   thread the mailbox started. Each listing lives in its own
-  `GroupedRowStore`, one mailbox per worker, eight at once. A read trims
-  each conversation with `threads.py:rows_to_plan` to its root and newest
-  `MAX_MESSAGES_PER_CONVERSATION` messages before the next one loads, so
-  memory holds one conversation and a slice of trimmed ones, however large
-  the mailbox. A checkpoint from the earlier table-based walk starts the
+  `GroupedRowStore`, one mailbox per worker, eight at once. A read folds
+  each conversation through `threads.py:rows_to_plan` as it loads, keeping
+  its root and newest `MAX_MESSAGES_PER_CONVERSATION` messages, so memory
+  holds a slice of trimmed conversations however large the mailbox or a
+  conversation. A checkpoint from the earlier table-based walk starts the
   attempt over.
 - **Polls.** Only messages in the window are listed, so each conversation
   with new mail is read whole through its outline (`_conversation_outline`),

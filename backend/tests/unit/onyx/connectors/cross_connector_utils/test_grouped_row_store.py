@@ -84,6 +84,25 @@ def test_a_read_trims_each_group_with_keep() -> None:
         assert _names(store.groups(0, 2)) == [["a3", "a4"], ["b0"]]
 
 
+def test_a_long_group_is_folded_through_keep_as_it_loads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(grouped_row_store, "GROUP_FOLD_ROWS", 3)
+    largest_input = 0
+
+    def keep_last_two(rows: list[_Row]) -> list[_Row]:
+        nonlocal largest_input
+        largest_input = max(largest_input, len(rows))
+        return rows[-2:]
+
+    with _store(keep=keep_last_two) as store:
+        store.add([_Row(group="a", name=f"a{i}") for i in range(20)])
+        store.group()
+
+        assert _names(store.groups(0, 1)) == [["a18", "a19"]]
+    assert largest_input == 5
+
+
 def test_close_releases_the_database() -> None:
     with _store() as store:
         store.add([_Row(group="a", name="a0")])

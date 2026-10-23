@@ -1,12 +1,14 @@
 """A mailbox listing groups rows by conversation in first-listed order, and a
 read returns only the rows plan_documents keeps: the root and the newest
-MAX_MESSAGES_PER_CONVERSATION messages, each message once."""
+MAX_MESSAGES_PER_CONVERSATION messages, each message once, whether the read
+trims a conversation at once or folds it in steps as it loads."""
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from onyx.connectors.cross_connector_utils import grouped_row_store
 from onyx.connectors.cross_connector_utils.grouped_row_store import GroupedRowStore
 from onyx.connectors.outlook.connector import _mailbox_listing
 from onyx.connectors.outlook.models import OutlookMailbox, ThreadListing
@@ -55,9 +57,13 @@ def test_conversations_come_back_in_first_listed_order(
     ]
 
 
+@pytest.mark.parametrize("fold_rows", [10_000, 7])
 def test_a_read_keeps_the_root_and_the_newest_messages_once_each(
     listing: GroupedRowStore[ThreadListing],
+    monkeypatch: pytest.MonkeyPatch,
+    fold_rows: int,
 ) -> None:
+    monkeypatch.setattr(grouped_row_store, "GROUP_FOLD_ROWS", fold_rows)
     first = datetime(2026, 1, 1, tzinfo=timezone.utc)
     rows = [_row("conv", "root", is_root=True, received_at=first)] + [
         _row("conv", f"m{i}", received_at=first + timedelta(minutes=i))
