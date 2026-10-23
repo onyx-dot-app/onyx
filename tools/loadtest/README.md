@@ -87,6 +87,9 @@ uses whitespace chunks for emission, timing, and estimated usage; it does not
 simulate hidden reasoning tokens or provider billing. TTFT and ITL remain explicit
 scenario controls. They are not fitted to the real helper latency distribution.
 Both transports return the same text, including whitespace and line breaks.
+Explicit `max_tokens` and `max_completion_tokens` limits cap these mock chunks
+after response selection. Truncated helper responses finish with `length`, so
+tests can exercise parser fallback behavior.
 
 Use `sections` and `class` to isolate expansion costs. Keep model knobs and corpus
 identical across builds. Preserve the old mock image digest when reproducing old

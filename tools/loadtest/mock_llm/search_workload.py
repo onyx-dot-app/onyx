@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from functools import cache
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -19,18 +20,24 @@ class Calibration(TypedDict):
     classification_labels: dict[str, int]
 
 
-_CALIBRATION = cast(
-    Calibration,
-    json.loads(Path(__file__).with_name("search_calibration.json").read_text()),
-)
-_TEMPLATES = _CALIBRATION["selection_templates"]
-_TEMPLATE_WEIGHTS = tuple(
-    (index, item["weight"]) for index, item in enumerate(_TEMPLATES)
-)
-CLASSIFICATIONS = tuple(
-    (int(value), weight)
-    for value, weight in _CALIBRATION["classification_labels"].items()
-)
+@cache
+def load_calibration() -> tuple[
+    list[SelectionTemplate], tuple[tuple[int, int], ...], tuple[tuple[int, int], ...]
+]:
+    """Load and prepare static fixture data once, when first requested."""
+    calibration = cast(
+        Calibration,
+        json.loads(Path(__file__).with_name("search_calibration.json").read_text()),
+    )
+    templates = calibration["selection_templates"]
+    template_weights = tuple(
+        (index, item["weight"]) for index, item in enumerate(templates)
+    )
+    classifications = tuple(
+        (int(value), weight)
+        for value, weight in calibration["classification_labels"].items()
+    )
+    return templates, template_weights, classifications
 
 
 def sample_histogram(text: str, histogram: tuple[tuple[int, int], ...]) -> int:
@@ -57,7 +64,8 @@ def search_helper_answer(
             raise ValueError("Unsupported document selection prompt")
         sections = json.loads(match.group(1))
         ids = list(dict.fromkeys(section["section_id"] for section in sections))
-        template = _TEMPLATES[sample_histogram(prompt, _TEMPLATE_WEIGHTS)]["indices"]
+        templates, template_weights, _ = load_calibration()
+        template = templates[sample_histogram(prompt, template_weights)]["indices"]
         count = selected_count if selected_count is not None else len(template)
         ranks = list(
             dict.fromkeys(
@@ -74,7 +82,7 @@ def search_helper_answer(
         value = (
             classification
             if classification is not None
-            else sample_histogram(prompt, CLASSIFICATIONS)
+            else sample_histogram(prompt, load_calibration()[2])
         )
         return str(value)
     if prompt.startswith("You scope an internal search to its relevant sources."):

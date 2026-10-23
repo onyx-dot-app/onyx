@@ -453,6 +453,17 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
             _FILLER_WORDS[i % len(_FILLER_WORDS)] for i in range(n_tokens)
         )
 
+    # Limits apply after choosing text, including helpers and query rewrites.
+    answer_chunks = re.findall(r"\S+\s*", answer)
+    finish_reason = "stop"
+    if not emit_tools and request.effective_max_tokens is not None:
+        output_limit = max(1, request.effective_max_tokens)
+        if len(answer_chunks) > output_limit:
+            answer_chunks = answer_chunks[:output_limit]
+            answer = "".join(answer_chunks)
+            finish_reason = "length"
+    n_tokens = len(answer_chunks)
+
     if not request.stream:
         await asyncio.sleep(
             knobs.ttft_s + (0 if emit_tools else knobs.itl_s * n_tokens)
@@ -462,7 +473,7 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
             finish = "tool_calls"
         else:
             message = AssistantMessage(content=answer)
-            finish = "stop"
+            finish = finish_reason
         completion_tokens = 20 if emit_tools else n_tokens
         response = ChatCompletionResponse(
             id=completion_id,
@@ -533,7 +544,7 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
                     None,
                 )
             )
-            for word in re.findall(r"\S+\s*", answer):
+            for word in answer_chunks:
                 yield _sse(
                     _make_chunk(
                         request.model,
@@ -544,7 +555,9 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
                 )
                 if knobs.itl_s > 0:
                     await asyncio.sleep(knobs.itl_s)
-            yield _sse(_make_chunk(request.model, completion_id, ChunkDelta(), "stop"))
+            yield _sse(
+                _make_chunk(request.model, completion_id, ChunkDelta(), finish_reason)
+            )
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

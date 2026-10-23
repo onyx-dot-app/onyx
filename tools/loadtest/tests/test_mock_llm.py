@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import ast
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from mock_llm.app import app
-from mock_llm.search_workload import search_helper_answer
+from mock_llm.search_workload import load_calibration, search_helper_answer
 
 client = TestClient(app)
 
@@ -612,3 +615,49 @@ def test_keyword_output_preserves_terms_and_ignores_prompt_scaffolding() -> None
         for chunk in stream_chunks(messages=messages)
     )
     assert streamed == answer
+
+
+def test_calibration_import_does_not_read_fixture() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; from unittest.mock import patch; "
+            "guard = patch.object(Path, 'read_text', side_effect=AssertionError('import read')); "
+            "guard.start(); import mock_llm.search_workload; guard.stop()",
+        ],
+        check=True,
+    )
+
+
+def test_calibration_loader_reuses_fixture() -> None:
+    fixture = (
+        Path(__file__).parents[1] / "mock_llm/search_calibration.json"
+    ).read_text()
+    load_calibration.cache_clear()
+    try:
+        with patch.object(Path, "read_text", return_value=fixture) as read:
+            first = load_calibration()
+            assert load_calibration() is first
+            assert read.call_count == 1
+    finally:
+        load_calibration.cache_clear()
+
+
+def test_helper_output_limits_match_text_usage_and_finish_reason() -> None:
+    messages = [{"role": "user", "content": _selection_prompt()}]
+    for field in ("max_tokens", "max_completion_tokens"):
+        body = {"model": "mock-sections10-ttft0-itl0", "messages": messages, field: 1}
+        response = client.post("/v1/chat/completions", json=body).json()
+        choice = response["choices"][0]
+        assert len(choice["message"]["content"].split()) == 1
+        assert choice["finish_reason"] == "length"
+        assert response["usage"]["completion_tokens"] == 1
+        chunks = stream_chunks(
+            model="mock-sections10-ttft0-itl0", messages=messages, **{field: 1}
+        )
+        text = "".join(
+            chunk["choices"][0]["delta"].get("content") or "" for chunk in chunks
+        )
+        assert text == choice["message"]["content"]
+        assert chunks[-1]["choices"][0]["finish_reason"] == "length"
