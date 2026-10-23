@@ -2815,7 +2815,9 @@
         },
         "documents": {
           "totalLabel": "Total des documents dans l'index",
-          "recentLabel": "Documents traités récemment"
+          "recentLabel": "Documents traités récemment",
+          "syncedPermissionsLabel": "Autorisations synchronisées",
+          "syncedMembershipsLabel": "Adhésions aux groupes synchronisées"
         },
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
@@ -2838,8 +2840,10 @@
           "groupsTitle": "État de la synchronisation des adhésions aux groupes",
           "last": "Dernière synchronisation {when}",
           "never": "Pas encore synchronisé",
-          "neverTooltip": "La recherche et les réponses du chat peuvent omettre les documents de ce connecteur jusqu'à ce que cette synchronisation aboutisse."
-        }
+          "neverTooltip": "Les documents indexés ne seront pas consultables tant que leurs autorisations ne seront pas synchronisées.",
+          "waitingForFirstIndex": "En attente de la première indexation"
+        },
+        "accessTitle": "Accès aux documents du connecteur"
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",

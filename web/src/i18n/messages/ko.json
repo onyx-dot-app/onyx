@@ -2815,7 +2815,9 @@
         },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
-          "recentLabel": "최근 처리된 문서"
+          "recentLabel": "최근 처리된 문서",
+          "syncedPermissionsLabel": "동기화된 권한",
+          "syncedMembershipsLabel": "동기화된 그룹 멤버십"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
@@ -2838,8 +2840,10 @@
           "groupsTitle": "그룹 멤버십 동기화 상태",
           "last": "마지막 동기화 {when}",
           "never": "아직 동기화되지 않음",
-          "neverTooltip": "이 동기화가 성공할 때까지 검색과 채팅 답변에서 이 커넥터의 문서가 빠질 수 있습니다."
-        }
+          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않습니다.",
+          "waitingForFirstIndex": "첫 인덱싱 대기 중"
+        },
+        "accessTitle": "커넥터 문서 액세스"
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",

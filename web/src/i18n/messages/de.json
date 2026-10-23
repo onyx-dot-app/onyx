@@ -2815,7 +2815,9 @@
         },
         "documents": {
           "totalLabel": "Indexierte Dokumente gesamt",
-          "recentLabel": "Kürzlich verarbeitete Dokumente"
+          "recentLabel": "Kürzlich verarbeitete Dokumente",
+          "syncedPermissionsLabel": "Synchronisierte Berechtigungen",
+          "syncedMembershipsLabel": "Synchronisierte Gruppenmitgliedschaften"
         },
         "throughput": {
           "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
@@ -2838,8 +2840,10 @@
           "groupsTitle": "Status der Synchronisierung der Gruppenmitgliedschaften",
           "last": "Zuletzt synchronisiert {when}",
           "never": "Noch nicht synchronisiert",
-          "neverTooltip": "Suche und Chat-Antworten können die Dokumente dieses Konnektors auslassen, bis diese Synchronisierung erfolgreich abgeschlossen ist."
-        }
+          "neverTooltip": "Indexierte Dokumente sind erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
+          "waitingForFirstIndex": "Wartet auf die erste Indexierung"
+        },
+        "accessTitle": "Dokumentzugriff des Konnektors"
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindexierung erfolgreich gestartet",

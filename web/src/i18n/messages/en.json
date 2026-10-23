@@ -2815,7 +2815,9 @@
         },
         "documents": {
           "totalLabel": "Total documents indexed",
-          "recentLabel": "Recently processed documents"
+          "recentLabel": "Recently processed documents",
+          "syncedPermissionsLabel": "Synced permissions",
+          "syncedMembershipsLabel": "Synced group memberships"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
@@ -2838,8 +2840,10 @@
           "groupsTitle": "Group Membership Sync Status",
           "last": "Last synced {when}",
           "never": "Not synced yet",
-          "neverTooltip": "Search and chat answers may leave out this connector's documents until this sync succeeds."
-        }
+          "neverTooltip": "Indexed docs won't be searchable until their permissions are synced.",
+          "waitingForFirstIndex": "Waiting for first index"
+        },
+        "accessTitle": "Connector Documents Access"
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",

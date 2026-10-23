@@ -260,10 +260,14 @@ running. The connector page's Manage Index menu offers Sync Permissions on a
 perm-synced pair whose source syncs document permissions (`supports_doc_permission_sync`
 on the pair, so Salesforce gets none), hidden while the pair is paused or deleting. It posts
 `sync-permissions` and is disabled while a sync is queued or running. The page's status
-card has a column for each sync kind the pair runs. A column shows the newest run's tag, or
-Synced when the pair has a success but no run. Under the tag it shows the live rate while a
-run is in progress, else the time from `last_time_perm_sync` or `last_time_external_group_sync`,
-else "Not synced yet". The indexing pipeline
+card has a column for each sync kind the pair runs, and a pair that is not perm-synced gets
+a document access column instead. A column shows the newest run's tag, or Synced when the
+pair has a success but no run, and Paused on a paused pair unless a run is queued or in
+progress. Under the tag it shows the live rate while a run is in progress, else the time from
+`last_time_perm_sync` or `last_time_external_group_sync`, else "Waiting for first index" for
+a doc sync until the pair's first index succeeds and "Not synced yet" otherwise. A paused
+pair's documents card shows the newest runs' synced document and membership counts in place
+of the chart. The indexing pipeline
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
 

@@ -29,6 +29,7 @@ import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import CheckRunPopoverContent, {
   CheckRunTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
@@ -205,7 +206,7 @@ export const RATE_FORMAT = {
   maximumFractionDigits: 2,
 } as const;
 
-/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min"; `null` for any other run. */
+/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
 export function useSyncRateLabel(): (run: CCPairRun) => string | null {
   const t = useTranslations("admin.connector.runs.detail");
   const format = useFormatter();
@@ -217,6 +218,29 @@ export function useSyncRateLabel(): (run: CCPairRun) => string | null {
       rate: format.number(rate, RATE_FORMAT),
     });
   };
+}
+
+interface RunWarningsTagProps {
+  run: CCPairRun;
+}
+/** The orange count of what the run could not handle, or nothing when it handled everything. */
+export function RunWarningsTag({ run }: RunWarningsTagProps) {
+  const t = useTranslations("admin.connector.runs.warnings");
+  const format = useFormatter();
+  const warnings = runWarnings(run);
+  if (warnings === 0) return null;
+  return (
+    <Tag
+      icon={SvgAlertTriangle}
+      title={format.number(warnings)}
+      tooltip={t(run.kind === "checks" ? "checks" : "tooltip", {
+        count: warnings,
+      })}
+      color="orange"
+      variant="count"
+      font="secondary-body"
+    />
+  );
 }
 
 interface FigureProps {
@@ -480,7 +504,6 @@ export default function RunRow({
   dimmed,
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
-  const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
   const syncRateLabel = useSyncRateLabel();
   const tag = runStatusTag(run);
@@ -587,13 +610,7 @@ export default function RunRow({
                   width="fit"
                   height="fit"
                 >
-                  <Tag
-                    icon={tag.icon}
-                    title={tBadges(tag.labelKey)}
-                    color={tag.color}
-                    variant="status"
-                    font="secondary-body"
-                  />
+                  <StatusTagPill tag={tag} />
                   {run.kind === "indexing" && run.attempt.is_new_model && (
                     <Tag
                       title={t("newModel.label")}
@@ -608,21 +625,7 @@ export default function RunRow({
                     run.attempt.check_results.length > 0 && (
                       <CheckRunTrigger open={open} />
                     )}
-                  {warnings > 0 && (
-                    <Tag
-                      icon={SvgAlertTriangle}
-                      title={format.number(warnings)}
-                      tooltip={t(
-                        run.kind === "checks"
-                          ? "warnings.checks"
-                          : "warnings.tooltip",
-                        { count: warnings }
-                      )}
-                      color="orange"
-                      variant="count"
-                      font="secondary-body"
-                    />
-                  )}
+                  <RunWarningsTag run={run} />
                 </Section>
                 <Tooltip tooltip={finishedTime} side="top">
                   <Text font="secondary-body" color="text-03">
