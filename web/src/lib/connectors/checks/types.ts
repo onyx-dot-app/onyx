@@ -135,6 +135,8 @@ export interface DraftCheckState {
   from_cache: boolean;
   /** The check proves the credential works with the credential-bound fields. */
   validates_binding: boolean;
+  /** The generic validation of a source without checks of its own. */
+  is_fallback: boolean;
   findings: CheckFinding[];
 }
 

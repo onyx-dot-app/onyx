@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "Run Checks Every",
-          "description": "Check connection for capabilities and health."
+          "description": "Check connection for capabilities and health.",
+          "placeholder": "Never"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "Open Sidebar",
       "close": "Close Sidebar"
+    },
+    "inputNumber": {
+      "outOfRange": "Enter a number from {min, number} to {max, number}",
+      "belowMin": "Enter a number of at least {min, number}",
+      "aboveMax": "Enter a number of at most {max, number}"
     }
   },
   "settings": {

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import "@opal/components/inputs/numbers/input-number/styles.css";
+import "@opal/components/inputs/shared.css";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
 import { Text } from "@opal/components";
@@ -14,7 +14,7 @@ type InputNumberVariant =
   | "disabled"
   | "readOnly";
 
-// Inner text styling per variant; the wrapper chrome lives in styles.css.
+// Inner text styling per variant; the wrapper chrome is the shared .opal-input.
 const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
   primary:
     "text-text-04 placeholder:!font-main-ui-muted placeholder:text-text-02",
@@ -146,8 +146,6 @@ export default function InputNumber({
     } else if (inputValue.trim() === "") {
       // Kept as null so the placeholder shows.
       onChange(null);
-    } else if (value !== null && min !== undefined && value < min) {
-      onChange(min);
     } else {
       setInputValue(value === null ? "" : String(value));
     }
@@ -171,9 +169,9 @@ export default function InputNumber({
     if (!Number.isFinite(val)) {
       return;
     }
-    // Clamp to max while typing, but to min only on blur: a value below min is
-    // often the start of a valid one (the "0" of "0.5").
-    onChange(max !== undefined ? Math.min(val, max) : val);
+    // Typed values are not clamped: an out-of-range value stays as typed, so
+    // the form can flag it (see `InputNumberField`). The steppers clamp.
+    onChange(val);
   };
 
   return (
@@ -181,11 +179,7 @@ export default function InputNumber({
     // already keyboard reachable.
     <div
       role="presentation"
-      className={cn(
-        "opal-input-number flex flex-row items-center justify-between w-full pe-1.5 ps-1.5 rounded-08",
-        // Without the steppers, keep the stepped field's 2.25rem height.
-        plain ? "h-9" : "h-fit"
-      )}
+      className="opal-input"
       data-variant={variant}
       onClick={() => inputRef.current?.focus()}
     >
@@ -216,10 +210,8 @@ export default function InputNumber({
 
       <div className="flex flex-row items-center gap-1">
         {suffix && (
-          <Text
-            font="main-ui-body"
-            color={isDisabled ? "text-01" : plain ? "text-02" : "text-03"}
-          >
+          // The placeholder's style: muted weight in text-02.
+          <Text font="main-ui-muted" color={isDisabled ? "text-01" : "text-02"}>
             {suffix}
           </Text>
         )}
@@ -232,22 +224,24 @@ export default function InputNumber({
           />
         )}
         {!plain && (
-          <div className="flex flex-col">
+          // The two steppers share the text line's height (1.5rem), so the
+          // field stays as tall as the other inputs.
+          <div className="flex flex-col h-6">
             <button
               type="button"
               onClick={handleIncrement}
               disabled={!canIncrement || isDisabled}
-              className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-1 items-end justify-center px-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
             >
-              <SvgChevronUp size={14} />
+              <SvgChevronUp size={12} />
             </button>
             <button
               type="button"
               onClick={handleDecrement}
               disabled={!canDecrement || isDisabled}
-              className="p-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-1 items-start justify-center px-0.5 text-text-03 hover:text-text-04 disabled:text-text-02 disabled:cursor-not-allowed transition-colors"
             >
-              <SvgChevronDown size={14} />
+              <SvgChevronDown size={12} />
             </button>
           </div>
         )}

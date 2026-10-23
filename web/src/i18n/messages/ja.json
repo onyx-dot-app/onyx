@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "チェックの実行間隔",
-          "description": "接続の機能と状態を確認します。"
+          "description": "接続の機能と状態を確認します。",
+          "placeholder": "なし"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "サイドバーを開く",
       "close": "サイドバーを閉じる"
+    },
+    "inputNumber": {
+      "outOfRange": "{min, number} から {max, number} までの数値を入力してください",
+      "belowMin": "{min, number} 以上の数値を入力してください",
+      "aboveMax": "{max, number} 以下の数値を入力してください"
     }
   },
   "settings": {

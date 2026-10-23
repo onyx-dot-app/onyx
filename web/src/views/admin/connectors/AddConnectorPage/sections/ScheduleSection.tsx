@@ -1,14 +1,9 @@
 import { useTranslations } from "next-intl";
-import {
-  Card,
-  Collapsible,
-  InputDatePicker,
-  InputNumber,
-} from "@opal/components";
+import { Card, Collapsible, InputDatePicker } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { FormikField } from "@/refresh-components/form/FormikField";
+import { InputNumberField } from "@opal/form";
 import {
-  defaultRefreshFreqMinutes,
   MAX_PRUNE_FREQ_HOURS,
   MAX_REFRESH_FREQ_MINUTES,
   MIN_PRUNE_FREQ_HOURS,
@@ -16,7 +11,8 @@ import {
 } from "@/lib/connectors/connectors";
 
 interface ScheduleSectionProps {
-  defaultPruneFreqHours?: number;
+  /** Shows Run Checks Every: the source has checks of its own. */
+  showCheckFreq?: boolean;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
 }
@@ -74,7 +70,7 @@ export function IndexingStartField({ disabled }: IndexingStartFieldProps) {
 
 /** The connector's schedule: refresh and prune frequency. */
 export default function ScheduleSection({
-  defaultPruneFreqHours = 600,
+  showCheckFreq = false,
   disabled,
 }: ScheduleSectionProps) {
   const t = useTranslations("admin.connectorsList.scheduled");
@@ -95,25 +91,12 @@ export default function ScheduleSection({
             fillInput
             center
           >
-            <FormikField<number | undefined>
+            <InputNumberField
               name="refreshFreq"
-              render={(field, helper) => (
-                <InputNumber
-                  id="refreshFreq"
-                  value={field.value ?? null}
-                  onChange={(value) => {
-                    // InputNumber has no blur callback, so touch on change to
-                    // show the field's validation error.
-                    helper.setTouched(true, false);
-                    helper.setValue(value ?? undefined);
-                  }}
-                  min={MIN_REFRESH_FREQ_MINUTES}
-                  max={MAX_REFRESH_FREQ_MINUTES}
-                  placeholder={String(defaultRefreshFreqMinutes)}
-                  suffix={t("units.minutes")}
-                  disabled={disabled}
-                />
-              )}
+              min={MIN_REFRESH_FREQ_MINUTES}
+              max={MAX_REFRESH_FREQ_MINUTES}
+              suffix={t("units.minutes")}
+              disabled={disabled}
             />
           </InputHorizontal>
 
@@ -125,26 +108,39 @@ export default function ScheduleSection({
             fillInput
             center
           >
-            <FormikField<number | undefined>
+            <InputNumberField
               name="pruneFreq"
-              render={(field, helper) => (
-                <InputNumber
-                  id="pruneFreq"
-                  value={field.value ?? null}
-                  onChange={(value) => {
-                    helper.setTouched(true, false);
-                    helper.setValue(value ?? undefined);
-                  }}
-                  min={MIN_PRUNE_FREQ_HOURS}
-                  max={MAX_PRUNE_FREQ_HOURS}
-                  decimalPlaces={3}
-                  placeholder={String(defaultPruneFreqHours)}
-                  suffix={t("units.hours")}
-                  disabled={disabled}
-                />
-              )}
+              min={MIN_PRUNE_FREQ_HOURS}
+              max={MAX_PRUNE_FREQ_HOURS}
+              decimalPlaces={3}
+              suffix={t("units.hours")}
+              disabled={disabled}
             />
           </InputHorizontal>
+
+          {showCheckFreq && (
+            <InputHorizontal
+              withLabel="checkFreq"
+              disabled={disabled}
+              title={t("checkFrequency.title")}
+              suffix="optional"
+              description={t("checkFrequency.description")}
+              fillInput
+              center
+            >
+              <InputNumberField
+                name="checkFreq"
+                // The backend's minimum and maximum match pruning's.
+                min={MIN_PRUNE_FREQ_HOURS}
+                max={MAX_PRUNE_FREQ_HOURS}
+                decimalPlaces={3}
+                // Cleared, the checks run only on request.
+                placeholder={t("checkFrequency.placeholder")}
+                suffix={t("units.hours")}
+                disabled={disabled}
+              />
+            </InputHorizontal>
+          )}
         </Section>
       </Card>
     </Collapsible>

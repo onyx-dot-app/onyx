@@ -3,8 +3,10 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import (
+    DEFAULT_CHECK_FREQ,
     DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
+    DEFAULT_REFRESH_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
@@ -169,6 +171,9 @@ class UserSettings(Settings):
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.
     default_pruning_freq: int = DEFAULT_PRUNING_FREQ
+    # A new connector's schedule as the create form fills it in, in seconds.
+    default_refresh_freq: int = DEFAULT_REFRESH_FREQ
+    default_check_freq: int = DEFAULT_CHECK_FREQ
     default_user_file_max_upload_size_mb: int = DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
     default_file_token_count_threshold_k: int = Field(
         default_factory=lambda: (

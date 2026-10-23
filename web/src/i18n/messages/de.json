@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "Prüfungen ausführen alle",
-          "description": "Prüft die Verbindung auf Funktionen und Zustand."
+          "description": "Prüft die Verbindung auf Funktionen und Zustand.",
+          "placeholder": "Nie"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "Seitenleiste öffnen",
       "close": "Seitenleiste schließen"
+    },
+    "inputNumber": {
+      "outOfRange": "Geben Sie eine Zahl von {min, number} bis {max, number} ein",
+      "belowMin": "Geben Sie eine Zahl von mindestens {min, number} ein",
+      "aboveMax": "Geben Sie eine Zahl von höchstens {max, number} ein"
     }
   },
   "settings": {

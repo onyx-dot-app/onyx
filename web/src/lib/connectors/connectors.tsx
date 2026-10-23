@@ -2310,7 +2310,6 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
 };
-export const defaultRefreshFreqMinutes = 30; // 30 minutes
 // Match the backend minimums in Connector.validate_refresh_freq / validate_prune_freq.
 const MIN_REFRESH_FREQ_SECONDS = 60;
 const MIN_PRUNE_FREQ_SECONDS = 300;

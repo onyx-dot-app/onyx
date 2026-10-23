@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "Exécuter les vérifications toutes les",
-          "description": "Vérifie la connexion, ses capacités et son état."
+          "description": "Vérifie la connexion, ses capacités et son état.",
+          "placeholder": "Jamais"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "Ouvrir la barre latérale",
       "close": "Fermer la barre latérale"
+    },
+    "inputNumber": {
+      "outOfRange": "Saisissez un nombre entre {min, number} et {max, number}",
+      "belowMin": "Saisissez un nombre d'au moins {min, number}",
+      "aboveMax": "Saisissez un nombre d'au plus {max, number}"
     }
   },
   "settings": {

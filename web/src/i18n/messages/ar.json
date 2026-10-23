@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "تشغيل الفحوصات كل",
-          "description": "يتحقق من الاتصال وقدراته وسلامته."
+          "description": "يتحقق من الاتصال وقدراته وسلامته.",
+          "placeholder": "أبدًا"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "فتح الشريط الجانبي",
       "close": "إغلاق الشريط الجانبي"
+    },
+    "inputNumber": {
+      "outOfRange": "أدخل رقمًا من {min, number} إلى {max, number}",
+      "belowMin": "أدخل رقمًا لا يقل عن {min, number}",
+      "aboveMax": "أدخل رقمًا لا يزيد عن {max, number}"
     }
   },
   "settings": {

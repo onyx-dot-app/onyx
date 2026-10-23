@@ -225,6 +225,7 @@ const NON_CONFIG_FORM_KEYS: ReadonlySet<string> = new Set([
   "pruneFreq",
   "indexingStart",
   "refreshFreq",
+  "checkFreq",
   "auto_sync_options",
 ]);
 

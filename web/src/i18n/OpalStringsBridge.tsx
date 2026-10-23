@@ -130,6 +130,12 @@ export default function OpalStringsBridge({
       keyValueGroup: (keyTitle, valueTitle) =>
         t("keyValue.group", { keyTitle, valueTitle }),
       keyValueInput: (label, index) => t("keyValue.input", { label, index }),
+      inputNumberOutOfRange: (min, max) =>
+        min !== undefined && max !== undefined
+          ? t("inputNumber.outOfRange", { min, max })
+          : min !== undefined
+            ? t("inputNumber.belowMin", { min })
+            : t("inputNumber.aboveMax", { max: max ?? 0 }),
       keyValuePairFallback: t("keyValue.pairFallback"),
       keyValueRemovePair: (label, index) =>
         t("keyValue.removePair", { label, index }),

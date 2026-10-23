@@ -3666,7 +3666,8 @@
         },
         "checkFrequency": {
           "title": "Executar verificações a cada",
-          "description": "Verifica a conexão, seus recursos e sua integridade."
+          "description": "Verifica a conexão, seus recursos e sua integridade.",
+          "placeholder": "Nunca"
         }
       },
       "settings": {
@@ -16050,6 +16051,11 @@
     "sidebar": {
       "open": "Abrir barra lateral",
       "close": "Fechar a barra lateral"
+    },
+    "inputNumber": {
+      "outOfRange": "Insira um número de {min, number} a {max, number}",
+      "belowMin": "Insira um número de pelo menos {min, number}",
+      "aboveMax": "Insira um número de no máximo {max, number}"
     }
   },
   "settings": {
