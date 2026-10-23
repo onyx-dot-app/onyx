@@ -326,7 +326,13 @@ const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
 function confluenceSpaceKey(entry: string): string {
   const trimmed = entry.trim();
   const match = /\/(?:spaces|display)\/([^/?#]+)/.exec(trimmed);
-  return match?.[1] ? decodeURIComponent(match[1]) : trimmed;
+  if (!match?.[1]) return trimmed;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    // A malformed escape, e.g. "KB%": keep the segment as typed.
+    return match[1];
+  }
 }
 
 /**

@@ -46,7 +46,14 @@ function tabFor(
   config: Record<string, unknown>
 ): string | null {
   const stored = config[field.name];
-  if (typeof stored === "string") return stored;
+  // A stored tab that no longer exists (a renamed tab) falls through to the
+  // tab whose fields hold values.
+  if (
+    typeof stored === "string" &&
+    field.tabs.some((tab) => tab.value === stored)
+  ) {
+    return stored;
+  }
   // Only a field that selects a scope picks the tab: a supporting checkbox
   // (e.g. Confluence's index_recursively) is stored under any scope.
   const withValues = field.tabs.find((option) =>

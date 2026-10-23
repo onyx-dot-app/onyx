@@ -455,6 +455,12 @@ def run_draft_capability_checks_task(
         not_adopted: list[str] = []
         for check_state in adopted:
             check = checks_by_id[check_state.check_id]
+            # The waits run one after another, so the lease covers each.
+            run.renew_lease(
+                timeout_by_check_id[check.check_id]
+                + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
+            )
+            save_draft_run(run)
             cached = wait_for_draft_result(
                 run.result_cache_keys[check.check_id],
                 timeout_by_check_id[check.check_id],
