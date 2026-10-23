@@ -6,7 +6,7 @@ import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { Button, Card } from "@opal/components";
+import { Button, SelectCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import {
   isBuiltInGroup,
@@ -48,7 +48,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   return (
-    <Card border="solid" padding={2} data-card rounding={4}>
+    <SelectCard state="empty" border="solid" padding={2} data-card rounding={4}>
       <Section alignItems="start" height="fit">
         <ContentAction
           icon={isAdmin ? SvgUserManage : SvgUsers}
@@ -82,7 +82,7 @@ function GroupCard({ group }: GroupCardProps) {
           }
         />
       </Section>
-    </Card>
+    </SelectCard>
   );
 }
 
