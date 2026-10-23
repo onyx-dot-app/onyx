@@ -19,6 +19,12 @@
   border-radius: 0.375rem;
 }
 
+/* The Content shrinks with the pill, so a long title truncates instead of
+   pushing the remove Button out. */
+.opal-chip > :first-child {
+  min-width: 0;
+}
+
 /* The remove Button (16px) sits 2px inside the border top and bottom; the
    same 2px at the end gives it an even bezel, and a 2px gap sets it off from
    the title. */
