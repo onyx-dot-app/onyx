@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import lru_cache
 
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ from onyx.llm.interfaces import LLM, LlmRequestPolicy
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.token_budget import TOKEN_COUNT_CACHE_SIZE
 from onyx.llm.utils import (
     get_max_input_tokens_from_llm_provider,
     model_supports_image_input,
@@ -571,4 +573,10 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
     tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
-    return lambda text: len(tokenizer_encode_func(text))
+
+    # Keep prompt content local to this counter, never in a process-wide cache.
+    @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
+    def count(text: str) -> int:
+        return len(tokenizer_encode_func(text))
+
+    return count
