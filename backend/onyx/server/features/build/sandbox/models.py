@@ -36,6 +36,7 @@ class SandboxResource(BaseModel):
     tenant_id: str
     created_at: datetime
     provisioning_attempt_number: int | None = None
+    legacy_ownership: bool = False
 
 
 class PromptAttachment(BaseModel):

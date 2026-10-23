@@ -291,10 +291,8 @@ class SandboxManager(_ServeMixin, ABC):
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
             provisioning_attempt_number: This attempt's number; stamped onto
-                backend resources at creation so operators can attribute
-                orphans (never read programmatically — the attempt-number
-                condition on DB status writes is what blocks stale
-                attempts).
+                backend resources for cleanup ownership checks. Database writes
+                also require the same current attempt number.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
