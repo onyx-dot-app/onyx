@@ -18,7 +18,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
-    InsufficientPermissionsError,
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
@@ -187,6 +186,14 @@ def protected_url_check(url: str) -> None:
             )
 
 
+class WebPageHTTPError(Exception):
+    """An HTTP error status from the connectivity probe."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def check_internet_connection(url: str) -> None:
     # SSRF guard on the fetch primitive itself, so no call site can reach an
     # internal target. No-op unless SSRF protection is at its strictest level.
@@ -223,7 +230,9 @@ def check_internet_connection(url: str) -> None:
             503: "Service Unavailable",
             504: "Gateway Timeout",
         }.get(status_code, "HTTP Error")
-        raise Exception(f"{error_msg} ({status_code}) for {url} - {e}")
+        raise WebPageHTTPError(
+            f"{error_msg} ({status_code}) for {url} - {e}", status_code
+        ) from e
     except requests.exceptions.SSLError as e:
         cause = (
             e.args[0].reason
@@ -828,30 +837,33 @@ class WebConnector(LoadConnector, SlimConnector):
             return None
 
         # Make a quick request to see if we get a valid response. This re-runs the
-        # SSRF check internally (intentional, cheap defense-in-depth).
+        # SSRF check internally (intentional, cheap defense-in-depth). Classify by
+        # status code, not message text: the message holds the URL, whose digits
+        # can look like a status code (e.g. port 33403).
         try:
             check_internet_connection(test_url)
-        except Exception as e:
-            err_str = str(e)
-            if "401" in err_str:
+        except WebPageHTTPError as e:
+            if e.status_code == 401:
                 raise CredentialExpiredError(
                     f"Unauthorized access to '{test_url}': {e}"
-                )
-            elif "403" in err_str:
-                raise InsufficientPermissionsError(
-                    f"Forbidden access to '{test_url}': {e}"
-                )
-            elif "404" in err_str:
-                raise ConnectorValidationError(f"Page not found for '{test_url}': {e}")
-            elif "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
+                ) from e
+            if e.status_code == 404:
+                raise ConnectorValidationError(
+                    f"Page not found for '{test_url}': {e}"
+                ) from e
+            # Could be a 5xx or another error, treat as unexpected
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
+        except Exception as e:
+            err_str = str(e)
+            if "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
                 raise ConnectorValidationError(
                     f"Unable to resolve hostname for '{test_url}'. Please check the URL and your internet connection."
-                )
-            else:
-                # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedValidationError(
-                    f"Unexpected error validating '{test_url}': {e}"
-                )
+                ) from e
+            raise UnexpectedValidationError(
+                f"Unexpected error validating '{test_url}': {e}"
+            ) from e
 
 
 if __name__ == "__main__":
