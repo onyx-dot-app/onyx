@@ -230,6 +230,12 @@ class EventDispatcher:
                     return
 
     @property
+    def has_pending_events(self) -> bool:
+        """Whether accepted events are queued or still being delivered."""
+        with self._condition:
+            return self._bytes > 0
+
+    @property
     def is_dispatch_thread(self) -> bool:
         with self._condition:
             return (
