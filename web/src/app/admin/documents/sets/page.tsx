@@ -23,7 +23,6 @@ import {
 import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
@@ -422,7 +421,9 @@ function Main() {
       {documentSets.length > 0 && (
         <>
           <Divider />
-          <Title>{t("sets.table.title")}</Title>
+          <Text as="h1" font="heading-h3-muted" color="text-05">
+            {t("sets.table.title")}
+          </Text>
           <Spacer rem={0.5} />
           <InputTypeIn
             searchIcon
