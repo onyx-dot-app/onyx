@@ -6,9 +6,9 @@ goes through ``OutlookSourceOperations``.
 
 Each mailbox is walked on its own, a few side by side. Its folders are read
 through delta pages of message metadata, headers included, one page per
-checkpoint step, and the rows are held in memory until the last folder is
-done. Each conversation is then decided from that copy alone and the bodies
-of the messages its documents need are read.
+checkpoint step, and the rows are kept in a temp file on disk. Once the
+last folder is done, each conversation is decided from that copy alone and
+the bodies of the messages its documents need are read.
 
 Incremental runs come from the poll window rather than saved delta links: an
 index attempt starts from a fresh checkpoint, so each folder's delta round
@@ -39,6 +39,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.grouped_row_store import GroupedRowStore
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
 )
@@ -124,6 +125,7 @@ from onyx.connectors.outlook.threads import (
     listing_row,
     plan_documents,
     roster_of,
+    rows_to_plan,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
@@ -165,10 +167,6 @@ CONVERSATIONS_PER_STEP = 25
 # Mailboxes walked side by side. Exchange throttles per app and mailbox, so
 # separate mailboxes do not slow one another.
 MAILBOX_WORKERS = 8
-# Listing rows one mailbox may hold in memory, a few hundred megabytes at
-# most across the mailboxes in flight. A mailbox past it is skipped by
-# indexing and fails a slim walk, since its threads cannot be decided whole.
-MAX_LISTING_ROWS_PER_MAILBOX = 250_000
 
 # Series ids the checkpoint carries across all active mailboxes. It is
 # written after every step, so the per-mailbox cap shrinks as more mailboxes run.
@@ -219,24 +217,13 @@ MAX_TRACKED_SERIES_PER_MAILBOX = TRACKED_SERIES_PER_STEP // MAILBOX_WORKERS
 SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 
-class _MailboxListing:
-    """One mailbox's listing rows while its folders are read, then its
-    conversations in listing order once they are. Lives in the process that
-    listed the mailbox, never in the checkpoint, so its size is bounded by
-    one mailbox, not the tenant."""
-
-    def __init__(self) -> None:
-        self.rows: list[ThreadListing] = []
-        self.conversations: list[list[ThreadListing]] = []
-        self.grouped = False
-
-    def group(self) -> None:
-        by_conversation: dict[str, list[ThreadListing]] = {}
-        for row in self.rows:
-            by_conversation.setdefault(row.conversation_id, []).append(row)
-        self.conversations = list(by_conversation.values())
-        self.rows = []
-        self.grouped = True
+def _mailbox_listing() -> GroupedRowStore[ThreadListing]:
+    """One mailbox's listing rows, grouped by conversation once its last
+    folder is read, since a copy's documents are decided across its folders.
+    Lives in the process that listed the mailbox, never in the checkpoint."""
+    return GroupedRowStore(
+        ThreadListing, lambda row: row.conversation_id, keep=rows_to_plan
+    )
 
 
 class OutlookCheckpoint(ConnectorCheckpoint):
@@ -254,7 +241,7 @@ class OutlookCheckpoint(ConnectorCheckpoint):
         if not isinstance(data, dict):
             return data
         # The table-based shape kept its listing in a store this connector
-        # no longer reads, so such an attempt starts over.
+        # does not read, so such an attempt starts over.
         if "listing_pages" in data:
             return {"has_more": True}
         if not data.get("current_mailbox"):
@@ -307,18 +294,6 @@ def _mailbox_failure(
         failure_message=message,
         exception=exception,
     )
-
-
-def _oversized_mailbox_message(mailbox: OutlookMailbox) -> str:
-    return (
-        f"Mailbox {mailbox.address} holds more than "
-        f"{MAX_LISTING_ROWS_PER_MAILBOX} messages, more than the connector "
-        "decides in memory. Exclude its largest folders or leave it out."
-    )
-
-
-def _oversized_mailbox_failure(mailbox: OutlookMailbox) -> ConnectorFailure:
-    return _mailbox_failure(mailbox.address, _oversized_mailbox_message(mailbox))
 
 
 def _format_recipient(recipient: OutlookRecipient) -> str:
@@ -699,7 +674,7 @@ class OutlookConnector(
         self.batch_size = batch_size
         self._ops: OutlookSourceOperations | None = None
         # The listings of the mailboxes in flight, by mailbox id.
-        self._listings: dict[str, _MailboxListing] = {}
+        self._listings: dict[str, GroupedRowStore[ThreadListing]] = {}
         # Whether each probed mailbox can be opened, so a thread's builder is
         # one that will build. Filled as mailboxes open and as builders are
         # probed, once per mailbox per process.
@@ -848,21 +823,17 @@ class OutlookConnector(
             max_workers=MAILBOX_WORKERS,
         )
         for cursor, result in zip(cursors, results, strict=True):
-            listing: _MailboxListing = self._listings.setdefault(
-                cursor.mailbox.id, _MailboxListing()
-            )
-            listing.rows.extend(result.rows)
+            if cursor.mailbox.id not in self._listings:
+                self._listings[cursor.mailbox.id] = _mailbox_listing()
+            listing: GroupedRowStore[ThreadListing] = self._listings[cursor.mailbox.id]
+            listing.add(result.rows)
             yield from result.items
-            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
-                yield _oversized_mailbox_failure(cursor.mailbox)
-                cursor.finished = True
-                continue
             if cursor.listed and not listing.grouped:
                 listing.group()
-                cursor.to_build = len(listing.conversations)
+                cursor.to_build = listing.group_count
         for cursor in cursors:
             if cursor.finished:
-                self._listings.pop(cursor.mailbox.id, None)
+                self._listings.pop(cursor.mailbox.id).close()
         checkpoint.mailboxes = queued
         checkpoint.active = [cursor for cursor in cursors if not cursor.finished]
 
@@ -920,12 +891,9 @@ class OutlookConnector(
     ) -> list[Document | ConnectorFailure]:
         """Builds the next CONVERSATIONS_PER_STEP conversations of the
         mailbox's listing, side by side."""
-        conversations: list[list[ThreadListing]] = self._listings[
-            cursor.mailbox.id
-        ].conversations
-        batch: list[list[ThreadListing]] = conversations[
-            cursor.built : cursor.built + CONVERSATIONS_PER_STEP
-        ]
+        batch: list[list[ThreadListing]] = self._listings[cursor.mailbox.id].groups(
+            cursor.built, CONVERSATIONS_PER_STEP
+        )
         excluded: set[str] = set(cursor.excluded_folder_ids)
         results: list[list[Document | ConnectorFailure]] = (
             run_functions_tuples_in_parallel(
@@ -1201,29 +1169,24 @@ class OutlookConnector(
         tree = list(self._walk_folder_tree(mailbox, excluded))
         access = owner_access(mailbox) if include_permissions else None
         yield list(self._hierarchy_nodes(mailbox, tree, access))
-        # A copy's documents are decided across its folders, so the mailbox's
-        # listing is held whole. One mailbox per worker at a time.
-        listing: _MailboxListing = _MailboxListing()
-        for rows in self._thread_listing_pages(mailbox, tree):
-            listing.rows.extend(rows)
-            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
-                # Listing nothing for it would prune its documents.
-                raise ConnectorValidationError(_oversized_mailbox_message(mailbox))
-            yield []
-        listing.group()
-        documents: list[SlimDocument | HierarchyNode] = []
-        for rows in listing.conversations or []:
-            documents.extend(
-                slim_documents(
-                    plan_documents(rows, mailbox, self._mailbox_available),
-                    include_permissions,
+        with _mailbox_listing() as listing:
+            for rows in self._thread_listing_pages(mailbox, tree):
+                listing.add(rows)
+                yield []
+            listing.group()
+            documents: list[SlimDocument | HierarchyNode] = []
+            for rows in listing.all_groups():
+                documents.extend(
+                    slim_documents(
+                        plan_documents(rows, mailbox, self._mailbox_available),
+                        include_permissions,
+                    )
                 )
-            )
-            if len(documents) >= SLIM_BATCH_SIZE:
+                if len(documents) >= SLIM_BATCH_SIZE:
+                    yield documents
+                    documents = []
+            if documents:
                 yield documents
-                documents = []
-        if documents:
-            yield documents
         if self.include_calendar:
             for events in self._event_slim_pages(mailbox, include_permissions):
                 yield [*events]
