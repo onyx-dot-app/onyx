@@ -227,6 +227,13 @@ def test_inventory_paginates_and_excludes_other_tenants() -> None:
     assert calls[0].kwargs["limit"] == 100
     assert "onyx.app/tenant-id=tenant-a" in calls[0].kwargs["label_selector"]
     assert calls[0].kwargs["_request_timeout"] <= 10
+    secret_selectors = [
+        call.kwargs["label_selector"]
+        for call in manager._core_api.list_namespaced_secret.call_args_list
+    ]
+    assert len(secret_selectors) == 2
+    assert "onyx.app/tenant-id=tenant-a" in secret_selectors[0]
+    assert "!onyx.app/tenant-id" in secret_selectors[1]
 
 
 def test_readiness_watch_uses_remaining_operation_budget(

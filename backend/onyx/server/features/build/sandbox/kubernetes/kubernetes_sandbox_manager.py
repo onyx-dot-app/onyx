@@ -1330,18 +1330,30 @@ class KubernetesSandboxManager(SandboxManager):
             f"{LABEL_TENANT_ID}={tenant_id},"
             f"{LABEL_K8S_COMPONENT} in ({LABEL_K8S_COMPONENT_SANDBOX},{LABEL_K8S_COMPONENT_AUTH})"
         )
+        legacy_secret_selector = (
+            f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_AUTH},!{LABEL_TENANT_ID}"
+        )
         if sandbox_id is not None:
             selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
-        for kind, list_resources in (
-            (SandboxResourceKind.POD, self._core_api.list_namespaced_pod),
-            (SandboxResourceKind.SERVICE, self._core_api.list_namespaced_service),
-            (SandboxResourceKind.SECRET, self._core_api.list_namespaced_secret),
+            legacy_secret_selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
+        for kind, list_resources, resource_selector in (
+            (SandboxResourceKind.POD, self._core_api.list_namespaced_pod, selector),
+            (
+                SandboxResourceKind.SERVICE,
+                self._core_api.list_namespaced_service,
+                selector,
+            ),
+            (
+                SandboxResourceKind.SECRET,
+                self._core_api.list_namespaced_secret,
+                selector,
+            ),
+            (
+                SandboxResourceKind.SECRET,
+                self._core_api.list_namespaced_secret,
+                legacy_secret_selector,
+            ),
         ):
-            resource_selector = selector
-            if kind == SandboxResourceKind.SECRET:
-                resource_selector = f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_AUTH}"
-                if sandbox_id is not None:
-                    resource_selector += f",{LABEL_SANDBOX_ID}={sandbox_id}"
             continuation = None
             while True:
                 page = list_resources(
