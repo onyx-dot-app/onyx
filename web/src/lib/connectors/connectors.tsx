@@ -306,8 +306,9 @@ const zoomWebinarIdsOption: ListOption = {
 };
 
 /**
- * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
- * the site URL in both connectors.
+ * Whether an Atlassian API token (Confluence, Jira) has scopes. It describes
+ * the token, so the form shows it with the account (`ACCOUNT_CONFIG_FIELDS`),
+ * but the connector config stores it.
  */
 const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   type: "checkbox",

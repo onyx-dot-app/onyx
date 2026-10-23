@@ -46,10 +46,14 @@ import {
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import { credentialBoundFieldNames } from "@/lib/connectors/utils";
+import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 import { AccountSummary } from "@/views/admin/connectors/AddConnectorPage/components/AccountSummary";
+
+type ConnectorField = ConnectionConfiguration["values"][number];
 
 interface AuthenticationAccountSectionProps {
   /** The source being set up. */
@@ -73,6 +77,12 @@ interface AuthenticationAccountSectionProps {
   editCCPairId?: number | null;
   /** Each increment opens the checks card and scrolls it into view. */
   expandChecksRequest?: number;
+  /**
+   * Connector config fields that describe the account
+   * (`ACCOUNT_CONFIG_FIELDS`). They show under the typed account's fields, or
+   * under the picked saved account.
+   */
+  accountFields?: ConnectorField[];
 }
 
 /**
@@ -91,6 +101,7 @@ export default function AuthenticationAccountSection({
   checksLocked,
   editCCPairId = null,
   expandChecksRequest = 0,
+  accountFields = [],
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
@@ -241,6 +252,26 @@ export default function AuthenticationAccountSection({
     refresh();
   }
 
+  /** The account's connector config fields, e.g. Scoped API Token. */
+  function renderAccountFields() {
+    if (accountFields.length === 0) return null;
+    return (
+      <Section alignItems="stretch" gap={4}>
+        {accountFields.map((field) => (
+          <RenderField
+            key={field.name}
+            field={field}
+            values={values}
+            connector={connector}
+            currentCredential={checkedCredential}
+            // Read before the checks run, so no listing.
+            reportScope={null}
+          />
+        ))}
+      </Section>
+    );
+  }
+
   /**
    * One route into the source, rendered inside the card. A source that
    * takes no extra OAuth fields is a plain hand-off, so its route is the
@@ -277,6 +308,7 @@ export default function AuthenticationAccountSection({
           nothing here. */}
           {!isOwnSetupMethod(typedSpec, newAccountMethod) && (
             <>
+              {renderAccountFields()}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               {/* Opens once the account's own fields are valid. */}
               <Disabled disabled={!newAccountReady}>
@@ -583,6 +615,8 @@ export default function AuthenticationAccountSection({
                 </div>
               </Fold>
             </div>
+            {/* A typed account shows these in its own form. */}
+            {selectedSavedId !== null && renderAccountFields()}
           </Section>
         )}
       </Section>

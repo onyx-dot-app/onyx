@@ -4,6 +4,7 @@ import { Text } from "@opal/components";
 import type { CredentialBindingFieldError } from "@/lib/connectors/bindingGate";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
+import { accountConfigFieldNames } from "@/lib/connectors/utils";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
 
@@ -41,9 +42,13 @@ export default function CredentialBoundFields({
   onFieldBlur,
 }: CredentialBoundFieldsProps) {
   const t = useTranslations("admin.connectorsList.boundFields");
-  const visibleFields = fields.filter((field) => !field.hidden);
+  // A field that describes the account sits in the account section.
+  const accountFieldNames = accountConfigFieldNames(connector);
+  const isShown = (field: ConnectorField) =>
+    !field.hidden && !accountFieldNames.has(field.name);
+  const visibleFields = fields.filter(isShown);
   const visibleAdvancedFields = showAdvancedFields
-    ? advancedFields.filter((field) => !field.hidden)
+    ? advancedFields.filter(isShown)
     : [];
 
   function errorText(error: CredentialBindingFieldError): string {

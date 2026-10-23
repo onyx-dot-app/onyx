@@ -653,8 +653,12 @@ run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
 [[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
 The create form locks its configuration only while no account is selected
-(`AddConnectorWrapper.tsx`). Create stays disabled, with the reason as its
-tooltip, until the bound fields pass the binding check and a run passes every
+(`AddConnectorWrapper.tsx`). It shows the bound fields above the account
+section. A field in `ACCOUNT_CONFIG_FIELDS` (`web/src/lib/connectors/utils.ts`;
+Confluence's and Jira's `scoped_token`) shows in the account section instead:
+under the draft account's fields, or under the picked saved account. It is
+still connector config. Create stays disabled,
+with the reason as its tooltip, until the bound fields pass the binding check and a run passes every
 check with `validates_binding` (`formUnlocked` in
 `web/src/lib/connectors/checks/hooks.ts`).
 Each source with named checks sets it on its sign-in check, and some sources also

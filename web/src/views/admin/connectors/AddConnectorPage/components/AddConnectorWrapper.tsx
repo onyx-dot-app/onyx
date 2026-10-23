@@ -13,6 +13,7 @@ import {
   getSourceDocLink,
   getSourceMetadata,
   isValidSource,
+  accountConfigFieldNames,
   connectorConfigFromForm,
   connectorFormControlFieldNames,
   createConnectorInitialValues,
@@ -301,6 +302,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     connector,
     configuration
   );
+  // Config fields the account section shows instead (`ACCOUNT_CONFIG_FIELDS`).
+  const accountFieldNames = accountConfigFieldNames(connector);
   // Form keys that are not connector config: tab controls, and the typed
   // account, which Create sends as the credential.
   const formControlFieldNames = connectorFormControlFieldNames(configuration, [
@@ -833,8 +836,14 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           ...(showAdvancedBoundFields
             ? credentialBoundFields.advancedValues
             : []),
-        ].filter((field) => !field.hidden);
+        ].filter(
+          (field) => !field.hidden && !accountFieldNames.has(field.name)
+        );
         const hasVisibleBoundFields = visibleBoundFields.length > 0;
+        // Bound fields that describe the account show in its section.
+        const accountFields = credentialBoundFields.values.filter(
+          (field) => !field.hidden && accountFieldNames.has(field.name)
+        );
         const checkedCredential = canCreate ? formCredential : null;
         // Another account than the pair's is a credential swap; the plan
         // offers to keep what is indexed or to re-index in full. A typed
@@ -1052,6 +1061,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 }
                                 editCCPairId={edit?.ccPair.id ?? null}
                                 expandChecksRequest={expandChecksRequest}
+                                accountFields={accountFields}
                               />
                             )}
 
