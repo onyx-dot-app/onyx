@@ -316,11 +316,10 @@ Other events are copied before publication returns and remain isolated between l
 Request settings, thinking blocks, and custom event subclasses use this snapshot path.
 Producers may change their local data after publishing it.
 
-The queue is limited by event count and estimated payload size. Size accounting includes events still being delivered.
-Shared deltas use string storage sizes plus envelope overhead. Snapshots use their serialized size.
-This budget is not an exact limit on Python heap usage.
+The event queue is unbounded. Slow listeners or replay writes can increase retained memory.
+Pending-event tracking includes queued events and events still being delivered.
 
-A slow listener does not block execution. If a listener throws, or events back up past the queue bound, the runtime rejects new observer events and sets the run's
+A slow listener does not block execution. If a listener throws or delivery does not drain within the two-second cleanup wait, the runtime sets the run's
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.
 

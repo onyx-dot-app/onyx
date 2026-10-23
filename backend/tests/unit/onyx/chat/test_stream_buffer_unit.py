@@ -470,6 +470,11 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
     monkeypatch: pytest.MonkeyPatch, single_event: bool
 ) -> None:
     monkeypatch.setattr("onyx.agents.concurrency.EVENT_FLUSH_INTERVAL_SECONDS", 60)
+    monkeypatch.setattr(
+        stream_buffer,
+        "_REPLAY_BACKLOG_MAX_BYTES",
+        stream_buffer._FLUSH_THRESHOLD_BYTES * 2,
+    )
     cache = FakeCache()
     session_id = uuid4()
     output = ChatDelivery(_make_writer(cache, session_id))
@@ -479,7 +484,7 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
             placement=Placement(turn_index=0, model_index=index % 2),
             obj=AgentResponseDelta(content=str(index)),
         )
-        for index in range(stream_buffer._BUFFER_WORK_CAPACITY * 2 + 1)
+        for index in range(1025)
     ]
 
     def receive(event: AgentEvent) -> None:
@@ -502,6 +507,57 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in packets
     )
+
+
+def test_pending_replay_retains_many_small_packets() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    packets = [
+        Packet(
+            placement=Placement(turn_index=0),
+            obj=AgentResponseDelta(content=str(index)),
+        )
+        for index in range(1025)
+    ]
+    for packet in packets:
+        output.publish(packet)
+    output.finish()
+
+    assert list(output.reader) == packets
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done and not saved.gap
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in packets
+    )
+
+
+@pytest.mark.parametrize("overflow", [False, True])
+def test_pending_replay_byte_limit_preserves_live_output(
+    monkeypatch: pytest.MonkeyPatch, overflow: bool
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    packet = Packet(
+        placement=Placement(turn_index=0), obj=AgentResponseDelta(content="🙂")
+    )
+    line = get_json_line(packet.model_dump())
+    monkeypatch.setattr(
+        stream_buffer,
+        "_REPLAY_BACKLOG_MAX_BYTES",
+        len(line.encode("utf-8")) * 2 - (1 if overflow else 0),
+    )
+    output.publish(packet)
+    output.publish(packet)
+    output.finish()
+
+    assert list(output.reader) == [packet, packet]
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done
+    assert saved.gap == overflow
+    if not overflow:
+        assert "".join(saved.blocks) == line * 2
 
 
 @pytest.mark.parametrize("cache_fails", [False, True])
@@ -528,12 +584,19 @@ def test_replay_failure_does_not_fail_live_output(
         assert saved is not None and saved.done and saved.gap
 
 
-def test_replay_overflow_does_not_suppress_a_later_live_gap() -> None:
+def test_replay_overflow_does_not_suppress_a_later_live_gap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     cache = FakeCache()
     session_id = uuid4()
     output = ChatDelivery(_make_writer(cache, session_id))
     packet = Packet(placement=Placement(turn_index=0), obj=OverallStop())
-    for _ in range(stream_buffer._BUFFER_WORK_CAPACITY + 1):
+    monkeypatch.setattr(
+        stream_buffer,
+        "_REPLAY_BACKLOG_MAX_BYTES",
+        len(get_json_line(packet.model_dump()).encode("utf-8")),
+    )
+    for _ in range(2):
         output.publish(packet)
         assert next(output.reader) == packet
     with patch("onyx.chat.stream_buffer.get_json_line") as serialize:
