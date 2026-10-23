@@ -394,10 +394,16 @@ function Main() {
   }
 
   // A delete or a background refresh can shrink the list below the current page.
+  // Store the clamped page, not just render it, so a later refresh that grows the
+  // list again does not jump back to the old page. Setting state during render
+  // makes React re-render before the table sees the stale page.
   const lastPage = Math.max(
     1,
     Math.ceil(filteredDocumentSets.length / numToDisplay)
   );
+  if (page > lastPage) {
+    setPage(lastPage);
+  }
 
   return (
     <div className="mb-8">
@@ -437,7 +443,7 @@ function Main() {
           {filteredDocumentSets.length > 0 ? (
             <DocumentSetTable
               documentSets={filteredDocumentSets}
-              page={Math.min(page, lastPage)}
+              page={page}
               onPageChange={setPage}
               refresh={refreshDocumentSets}
             />
