@@ -37,7 +37,7 @@ def _llm(response: str, max_input_tokens: int = 4096) -> MagicMock:
     llm = MagicMock(spec=LLM)
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         temperature=0,
         max_input_tokens=max_input_tokens,
     )

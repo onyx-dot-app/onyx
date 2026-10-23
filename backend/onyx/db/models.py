@@ -3806,7 +3806,7 @@ class ModelConfiguration(Base):
     # This field is primarily used for "Well Known LLM Providers", since for them,
     # we have a pre-defined list of LLM models that we allow them to choose from.
     # For example, for OpenAI, we allow the end-user to choose multiple models from
-    # `["gpt-4", "gpt-4o", etc.]`. Once they make their selections, we set each
+    # `["gpt-4", "gpt-6-sol", etc.]`. Once they make their selections, we set each
     # selected model to `is_visible = True`.
     #
     # For "Custom LLM Providers", we don't provide a comprehensive list of models
@@ -6609,7 +6609,7 @@ class ModelCostOverride(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # litellm-style model name (e.g. "gpt-4o").
+    # litellm-style model name (e.g. "gpt-6-sol").
     model: Mapped[str] = mapped_column(String, nullable=False)
     # Empty string (not NULL) for a provider-agnostic override, so the unique key
     # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).

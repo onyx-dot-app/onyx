@@ -326,7 +326,7 @@ def test_decision_scope_test_rejects_chat_model_even_with_client_decision_flag()
             api.test_decision_provider(
                 DecisionTestRequest(
                     provider="openai",
-                    model="gpt-4o",
+                    model="gpt-6-sol",
                     api_key="test-key",
                     api_key_changed=True,
                     custom_config_changed=True,

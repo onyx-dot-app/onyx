@@ -49,7 +49,7 @@ _BEDROCK_REGION_PREFIXES = (
 )
 
 # Providers whose entries should own a bare (unprefixed) model key when several
-# provider sections carry the same model id (e.g. "gpt-4o" under both "openai"
+# provider sections carry the same model id (e.g. "gpt-6-sol" under both "openai"
 # and "azure"). Matches the canonical-owner convention litellm's map followed.
 _BARE_KEY_PROVIDER_PRIORITY = (
     "openai",

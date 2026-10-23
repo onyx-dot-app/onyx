@@ -138,7 +138,7 @@ def get_openai_model_names() -> list[str]:
 
     # NOTE: We are explicitly excluding all "timestamped" models
     # because they are mostly just noise in the admin configuration panel
-    # e.g. gpt-4o-2025-07-16, gpt-3.5-turbo-0613, etc.
+    # e.g. gpt-6-sol-2025-07-16, gpt-3.5-turbo-0613, etc.
     date_pattern = re.compile(r"-\d{4}")
 
     def is_valid_model(model: str) -> bool:

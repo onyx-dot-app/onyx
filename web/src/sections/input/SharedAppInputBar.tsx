@@ -40,7 +40,7 @@ export default function SharedAppInputBar() {
           <div className="flex flex-row items-center gap-1">
             <OpenButton disabled icon={SvgOpenAI}>
               {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- model name, not copy */}
-              GPT-4o
+              GPT-6 Luna
             </OpenButton>
             <Button disabled icon={SvgArrowUp} />
           </div>

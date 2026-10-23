@@ -367,7 +367,7 @@ def test_scope_rejects_unverified_decision_flag(transaction: Session) -> None:
             DecisionProviderUpsertRequest(
                 name=f"invalid-decision-{uuid4().hex}",
                 provider="openai",
-                selected_model_names=["gpt-4o"],
+                selected_model_names=["gpt-6-sol"],
             ),
             transaction,
         )

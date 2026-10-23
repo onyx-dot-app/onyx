@@ -125,7 +125,7 @@ There are 4 main types of tests within Onyx:
 When a test makes a real LLM call (e.g. External Dependency Unit / integration tests
 that hit a live provider), use the cheap-and-fast tier for each provider:
 
-- **OpenAI**: `gpt-6-luna` (never `gpt-4o` / `gpt-4o-mini` / `gpt-5-mini`)
+- **OpenAI**: `gpt-6-luna`
 - **Anthropic**: `claude-haiku-4-5`
 
 ### Unit Tests

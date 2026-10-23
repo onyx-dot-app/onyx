@@ -137,8 +137,8 @@ class TestSyncModelConfigurations:
                     supports_image_input=True,
                 ),
                 SyncModelEntry(
-                    name="gpt-4o",
-                    display_name="GPT-4o",
+                    name="gpt-6-sol",
+                    display_name="GPT-6 Sol",
                     max_input_tokens=128000,
                     supports_image_input=True,
                 ),
@@ -147,7 +147,7 @@ class TestSyncModelConfigurations:
             # The bulk model insert returns the inserted (id, name) rows.
             mock_session.execute.return_value.all.return_value = [
                 (1, "gpt-4"),
-                (2, "gpt-4o"),
+                (2, "gpt-6-sol"),
             ]
 
             result = sync_model_configurations(
@@ -185,14 +185,14 @@ class TestSyncModelConfigurations:
                     supports_image_input=True,
                 ),
                 SyncModelEntry(
-                    name="gpt-4o",  # New - should be inserted
-                    display_name="GPT-4o",
+                    name="gpt-6-sol",  # New - should be inserted
+                    display_name="GPT-6 Sol",
                     max_input_tokens=128000,
                     supports_image_input=True,
                 ),
             ]
 
-            mock_session.execute.return_value.all.return_value = [(2, "gpt-4o")]
+            mock_session.execute.return_value.all.return_value = [(2, "gpt-6-sol")]
 
             result = sync_model_configurations(
                 db_session=mock_session,

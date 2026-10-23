@@ -2020,7 +2020,7 @@ describe("useBuildStreaming thinking packets", () => {
       session_loaded_in_sandbox: true,
       sandbox: { id: "sandbox-1", status: "running" },
       agent_provider: "openai",
-      agent_model: "gpt-5-mini",
+      agent_model: "gpt-6-luna",
     } as never);
     jest
       .mocked(fetchActiveTurn)

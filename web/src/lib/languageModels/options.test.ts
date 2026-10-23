@@ -46,10 +46,10 @@ describe("llmOptionKey", () => {
   it("gives distinct keys to same-named models from different providers", () => {
     const providers = [
       makeProvider(1, "OpenAI Main", "openai", [
-        makeModelConfiguration(11, "gpt-4o"),
+        makeModelConfiguration(11, "gpt-6-sol"),
       ]),
       makeProvider(2, "OpenAI Backup", "openai", [
-        makeModelConfiguration(22, "gpt-4o"),
+        makeModelConfiguration(22, "gpt-6-sol"),
       ]),
     ];
 
@@ -63,7 +63,7 @@ describe("llmOptionKey", () => {
     expect(
       llmOptionKey({
         provider: "openai",
-        modelName: "gpt-4o",
+        modelName: "gpt-6-sol",
         modelConfigurationId: 11,
       })
     ).toBe("mc:11");
@@ -73,12 +73,12 @@ describe("llmOptionKey", () => {
     expect(
       llmOptionKey({
         provider: "openai",
-        modelName: "gpt-4o",
+        modelName: "gpt-6-sol",
         modelConfigurationId: null,
       })
-    ).toBe("openai:gpt-4o");
-    expect(llmOptionKey({ provider: "openai", modelName: "gpt-4o" })).toBe(
-      "openai:gpt-4o"
+    ).toBe("openai:gpt-6-sol");
+    expect(llmOptionKey({ provider: "openai", modelName: "gpt-6-sol" })).toBe(
+      "openai:gpt-6-sol"
     );
   });
 });
@@ -151,12 +151,12 @@ describe("filterModelConfigurations", () => {
       model_configurations: [
         {
           id: 11,
-          name: "gpt-4o",
+          name: "gpt-6-sol",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: true,
           supports_reasoning: false,
-          effectiveDisplayName: "GPT-4o",
+          effectiveDisplayName: "GPT-6 Sol",
         },
         {
           id: 12,
@@ -215,12 +215,12 @@ describe("model select options", () => {
       model_configurations: [
         {
           id: 11,
-          name: "gpt-4o",
+          name: "gpt-6-sol",
           is_visible: true,
           max_input_tokens: null,
           supports_image_input: true,
           supports_reasoning: false,
-          effectiveDisplayName: "GPT-4o",
+          effectiveDisplayName: "GPT-6 Sol",
         },
         {
           id: 12,
@@ -274,13 +274,13 @@ describe("model select options", () => {
       expect(
         findDefaultModelDisplayName(providers, {
           provider_id: 9,
-          model_name: "gpt-4o",
+          model_name: "gpt-6-sol",
         })
       ).toBeNull();
       expect(
         findDefaultModelDisplayName(undefined, {
           provider_id: 1,
-          model_name: "gpt-4o",
+          model_name: "gpt-6-sol",
         })
       ).toBeNull();
     });
@@ -296,7 +296,7 @@ describe("model select options", () => {
       // A nameless provider groups under its product name.
       expect(dividers.map((d) => d.title)).toEqual(["Claude", "OpenAI"]);
       expect(rowsOf(dividers[1]!).map((o) => [o.value, o.title])).toEqual([
-        ["11", "GPT-4o"],
+        ["11", "GPT-6 Sol"],
         ["12", "o3-mini"],
       ]);
     });

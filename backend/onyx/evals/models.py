@@ -86,7 +86,7 @@ class EvalConfigurationOptions(BaseModel):
     builtin_tool_types: list[str] = list(BUILT_IN_TOOL_MAP.keys())
     llm: LLMOverride = LLMOverride(
         model_provider=None,
-        model_version="gpt-4o",
+        model_version="gpt-6-luna",
         temperature=0.0,
     )
     search_permissions_email: str

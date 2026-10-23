@@ -30,7 +30,7 @@ from onyx.server.manage.llm.models import (
 )
 
 # A deployment name LiteLLM does not know, so the lookup lands on the fallback.
-_UNKNOWN_MODEL = "gpt-5.6-not-a-real-deployment"
+_UNKNOWN_MODEL = "gpt-6.1-sol-not-a-real-deployment"
 _FALLBACK_RESOLVED = (
     GEN_AI_MODEL_FALLBACK_MAX_TOKENS - GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 )

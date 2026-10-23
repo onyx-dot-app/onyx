@@ -69,7 +69,7 @@ def test_send_message_api_runs_real_celery_turn(
     sandbox_id: UUID | None = None
     pod_name: str | None = None
     try:
-        # Pin the cheap model; the Build path defaults to gpt-5.5 otherwise.
+        # Pin the cheap model; the Build path defaults to gpt-6.1-sol otherwise.
         session = BuildSessionManager.create(
             api_user,
             headless=True,

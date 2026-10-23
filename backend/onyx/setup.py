@@ -321,7 +321,7 @@ def setup_postgres(db_session: Session) -> None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
-        llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
+        llm_model = GEN_AI_MODEL_VERSION or "gpt-6-luna"
         provider_name = "DevEnvPresetOpenAI"
         existing = fetch_existing_llm_provider(
             name=provider_name, db_session=db_session

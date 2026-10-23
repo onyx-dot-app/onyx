@@ -316,7 +316,7 @@ describe("useChatController", () => {
         llmOverride: {
           model_configuration_id: 7,
           model_provider: "OpenAI Prod",
-          model_version: "gpt-5",
+          model_version: "gpt-6-sol",
         },
       });
     });
@@ -337,7 +337,7 @@ describe("useChatController", () => {
     expect(body.llm_override).toEqual({
       model_configuration_id: 7,
       model_provider: "OpenAI Prod",
-      model_version: "gpt-5",
+      model_version: "gpt-6-sol",
     });
   });
 

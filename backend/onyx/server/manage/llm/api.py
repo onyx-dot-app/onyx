@@ -1697,7 +1697,7 @@ def get_valid_model_names_for_persona(
 ) -> list[str]:
     """Get all valid model names that a user can access for this persona.
 
-    Returns a list of model names (e.g., ["gpt-4o", "claude-3-5-sonnet"]) that are
+    Returns a list of model names (e.g., ["gpt-6-sol", "claude-3-5-sonnet"]) that are
     available to the user when using this persona, respecting all RBAC restrictions.
     Public providers are included unless they have persona restrictions that exclude this persona.
     """

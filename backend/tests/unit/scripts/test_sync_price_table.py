@@ -51,7 +51,7 @@ def test_merge_litellm_skips_non_gap_fill_chat_models() -> None:
         {
             "bedrock/ai21.j2-mid-v1": _chat_entry("bedrock"),
             "ft:gpt-4.1-2025-04-14": _chat_entry("openai"),
-            "eu/gpt-5": _chat_entry("openai"),
+            "eu/gpt-6-sol": _chat_entry("openai"),
             "gpt-retired": _chat_entry("openai", deprecation_date="2020-01-01"),
             "gpt-unpriced": _chat_entry("openai", output_cost_per_token=None),
         },

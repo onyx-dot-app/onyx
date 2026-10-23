@@ -361,11 +361,11 @@ def test_bridge_check_delegates_without_prefix() -> None:
 
     apply_monkey_patches()
     model_info, model = litellm_main.responses_api_bridge_check(
-        model="gpt-4o",
+        model="gpt-6-sol",
         custom_llm_provider="openai",
     )
     assert model_info.get("mode") != "responses"
-    assert model == "gpt-4o"
+    assert model == "gpt-6-sol"
 
 
 def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
@@ -379,7 +379,7 @@ def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
         side_effect=Exception("This model isn't mapped yet"),
     ) as get_model_info_mock:
         result = config.should_fake_stream(
-            model="bedrock_mantle/openai.gpt-5.6-sol",
+            model="bedrock_mantle/openai.gpt-6.1-sol",
             stream=True,
             custom_llm_provider="openai",
         )

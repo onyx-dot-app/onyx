@@ -35,7 +35,7 @@ describe("Bifrost embedding provider", () => {
       new Response(
         JSON.stringify({
           detail:
-            "The embedding provider rejected the model openai/gpt-5-mini: The model `gpt-5-mini` does not support embeddings.",
+            "The embedding provider rejected the model openai/gpt-6-luna: The model `gpt-6-luna` does not support embeddings.",
         }),
         {
           status: 400,
@@ -47,7 +47,7 @@ describe("Bifrost embedding provider", () => {
         providerType: "bifrost",
         apiKey: null,
         apiUrl: "https://bifrost.example",
-        modelName: "openai/gpt-5-mini",
+        modelName: "openai/gpt-6-luna",
         apiVersion: null,
         deploymentName: null,
         alwaysTest: true,

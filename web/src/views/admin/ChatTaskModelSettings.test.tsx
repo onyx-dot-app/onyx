@@ -40,9 +40,9 @@ const providers: LLMProviderView[] = [
     model_configurations: [
       {
         id: 11,
-        name: "gpt-4o",
-        display_name: "GPT-4o",
-        effectiveDisplayName: "GPT-4o",
+        name: "gpt-6-sol",
+        display_name: "GPT-6 Sol",
+        effectiveDisplayName: "GPT-6 Sol",
         is_visible: true,
         max_input_tokens: null,
         supports_image_input: true,
@@ -50,9 +50,9 @@ const providers: LLMProviderView[] = [
       },
       {
         id: 12,
-        name: "gpt-4o-mini",
-        display_name: "GPT-4o Mini",
-        effectiveDisplayName: "GPT-4o Mini",
+        name: "gpt-6-luna",
+        display_name: "GPT-6 Luna",
+        effectiveDisplayName: "GPT-6 Luna",
         is_visible: true,
         max_input_tokens: null,
         supports_image_input: false,
@@ -174,7 +174,7 @@ describe("ChatTaskModelSettings", () => {
           defaultChatNaming =
             init?.method === "DELETE"
               ? null
-              : { provider_id: 7, model_name: "gpt-4o-mini" };
+              : { provider_id: 7, model_name: "gpt-6-luna" };
         }
         return response;
       }
@@ -193,7 +193,7 @@ describe("ChatTaskModelSettings", () => {
         return new Response(
           JSON.stringify({
             providers: listedProviders,
-            default_text: { provider_id: 7, model_name: "gpt-4o" },
+            default_text: { provider_id: 7, model_name: "gpt-6-sol" },
             default_vision: null,
             default_chat_naming: defaultChatNaming,
             default_search_selection: defaultSearchSelection,
@@ -338,17 +338,17 @@ describe("ChatTaskModelSettings", () => {
     await user.click(taskSelector(0));
     await user.type(
       screen.getByRole("textbox", { name: "Search" }),
-      "GPT-4o Mini"
+      "GPT-6 Luna"
     );
-    await user.click(screen.getByRole("option", { name: /GPT-4o Mini/ }));
+    await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
 
-    expect(await screen.findByDisplayValue("GPT-4o Mini")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("GPT-6 Luna")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/admin/llm/default-chat-naming",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider_id: 7, model_name: "gpt-4o-mini" }),
+        body: JSON.stringify({ provider_id: 7, model_name: "gpt-6-luna" }),
       }
     );
     expect(toast.success).not.toHaveBeenCalled();
@@ -368,9 +368,9 @@ describe("ChatTaskModelSettings", () => {
     await user.click(selector);
     await user.type(
       screen.getByRole("textbox", { name: "Search" }),
-      "GPT-4o Mini"
+      "GPT-6 Luna"
     );
-    await user.click(screen.getByRole("option", { name: /GPT-4o Mini/ }));
+    await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("Provider is unavailable");
@@ -383,10 +383,10 @@ describe("ChatTaskModelSettings", () => {
   });
 
   test("picking Chat Default clears the chat naming model", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
+    defaultChatNaming = { provider_id: 7, model_name: "gpt-6-luna" };
     const user = setupUser();
     await renderTaskModels();
-    const selector = await screen.findByDisplayValue("GPT-4o Mini");
+    const selector = await screen.findByDisplayValue("GPT-6 Luna");
 
     await user.click(selector);
     await user.click(screen.getByRole("option", { name: /Chat Default/ }));
@@ -399,10 +399,10 @@ describe("ChatTaskModelSettings", () => {
   });
 
   test("saving a search model leaves the naming default unchanged", async () => {
-    defaultChatNaming = { provider_id: 7, model_name: "gpt-4o-mini" };
+    defaultChatNaming = { provider_id: 7, model_name: "gpt-6-luna" };
     const user = setupUser();
     await renderTaskModels();
-    await screen.findByDisplayValue("GPT-4o Mini");
+    await screen.findByDisplayValue("GPT-6 Luna");
     const selector = taskSelector(1);
     await user.click(selector);
     await user.type(
@@ -412,7 +412,7 @@ describe("ChatTaskModelSettings", () => {
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
 
     expect(await screen.findByDisplayValue("Search Mini")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("GPT-4o Mini")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("GPT-6 Luna")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/admin/llm/default-search-selection",
       {

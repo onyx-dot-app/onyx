@@ -50,7 +50,7 @@ Requirements:
   and `OPENAI_GATEWAY_PASSTHROUGH_ENABLED` (both default on).
 
 Models used: `claude-haiku-4-5` (Anthropic) and `gpt-6-luna` (OpenAI) — cheap
-tiers per repo convention. Never `gpt-4o-mini` or `gpt-5-mini`.
+tiers per repo convention.
 
 ## Coverage
 

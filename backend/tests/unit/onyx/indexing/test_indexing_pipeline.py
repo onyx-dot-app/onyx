@@ -240,7 +240,7 @@ def test_contextual_rag(
 
     mock_llm = Mock()
     mock_llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-6-sol"
     )
     mock_llm.invoke = mock_llm_invoke
 
@@ -297,7 +297,7 @@ def _contextual_chunks(
     tokenizer = embedder.embedding_model.tokenizer
     llm = Mock()
     llm.config.max_input_tokens = get_max_input_tokens(
-        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-6-sol"
     )
     llm.invoke = llm_invoke
     chunker = Chunker(

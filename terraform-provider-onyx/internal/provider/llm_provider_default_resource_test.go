@@ -26,14 +26,14 @@ resource "onyx_llm_provider" "for_default" {
   force_delete  = true
 
   model_configurations = [
-    { name = "gpt-5-mini" },
-    { name = "gpt-5-nano" },
+    { name = "gpt-6-luna" },
+    { name = "gpt-6-sol" },
   ]
 }
 
 resource "onyx_llm_provider_default" "test" {
   provider_id = onyx_llm_provider.for_default.id
-  model_name  = "gpt-5-mini"
+  model_name  = "gpt-6-luna"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -42,8 +42,8 @@ resource "onyx_llm_provider_default" "test" {
 						"onyx_llm_provider_default.test", "provider_id",
 						"onyx_llm_provider.for_default", "id",
 					),
-					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "model_name", "gpt-5-mini"),
-					testAccCheckServerDefaultModel(t, "onyx_llm_provider.for_default", "gpt-5-mini"),
+					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "model_name", "gpt-6-luna"),
+					testAccCheckServerDefaultModel(t, "onyx_llm_provider.for_default", "gpt-6-luna"),
 				),
 			},
 			{
@@ -55,19 +55,19 @@ resource "onyx_llm_provider" "for_default" {
   force_delete  = true
 
   model_configurations = [
-    { name = "gpt-5-mini" },
-    { name = "gpt-5-nano" },
+    { name = "gpt-6-luna" },
+    { name = "gpt-6-sol" },
   ]
 }
 
 resource "onyx_llm_provider_default" "test" {
   provider_id = onyx_llm_provider.for_default.id
-  model_name  = "gpt-5-nano"
+  model_name  = "gpt-6-sol"
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "model_name", "gpt-5-nano"),
-					testAccCheckServerDefaultModel(t, "onyx_llm_provider.for_default", "gpt-5-nano"),
+					resource.TestCheckResourceAttr("onyx_llm_provider_default.test", "model_name", "gpt-6-sol"),
+					testAccCheckServerDefaultModel(t, "onyx_llm_provider.for_default", "gpt-6-sol"),
 				),
 			},
 			{

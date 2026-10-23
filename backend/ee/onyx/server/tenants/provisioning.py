@@ -415,7 +415,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             logger.error(
                 "No default model found for %s in recommendations", OPENAI_PROVIDER_NAME
             )
-        default_model_name = default_model.name if default_model else "gpt-5.2"
+        default_model_name = default_model.name if default_model else "gpt-6-luna"
 
         openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
