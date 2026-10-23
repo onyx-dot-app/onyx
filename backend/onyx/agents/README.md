@@ -311,6 +311,15 @@ Observers must not wait for their own run to become idle.
 Delivery is best-effort. Chat shares one dispatcher across a turn. Each event enters its queue once.
 Foreground child events reach both child and ancestor listeners. Background runs have separate delivery.
 Each run tracks its accepted events until delivery finishes. Listener failures affect that subscription channel, not execution or storage.
+Text, thinking-text, and tool-argument deltas are shared between listeners when they contain no mutable attachments.
+Other events are copied before publication returns and remain isolated between listeners.
+Request settings, thinking blocks, and custom event subclasses use this snapshot path.
+Producers may change their local data after publishing it.
+
+The queue is limited by event count and estimated payload size. Size accounting includes events still being delivered.
+Shared deltas use string storage sizes plus envelope overhead. Snapshots use their serialized size.
+This budget is not an exact limit on Python heap usage.
+
 A slow listener does not block execution. If a listener throws, or events back up past the queue bound, the runtime rejects new observer events and sets the run's
 `delivery_failed` flag; the recorded state stays correct, and the consumer rebuilds its view
 from the snapshot. Already queued callbacks may still drain.

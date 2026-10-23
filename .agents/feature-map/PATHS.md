@@ -38,6 +38,7 @@ here. Read the component that documents the setting in its env table.
 |---|---|
 | `backend/onyx/chat/agent.py`, `backend/onyx/chat/prepare.py`, `backend/onyx/chat/execution.py`, `backend/onyx/agents/runtime.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
+| `backend/onyx/agents/concurrency.py`, `backend/onyx/agents/events.py`, `backend/onyx/agents/README.md` | core-chat-loop |
 | `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `backend/onyx/agents/compaction.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |

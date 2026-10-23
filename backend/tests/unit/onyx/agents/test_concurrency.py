@@ -6,11 +6,18 @@ from contextvars import ContextVar
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel
 
 from onyx.agents import concurrency, runtime
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import ExecutionWork
-from onyx.agents.events import AgentEvent, AgentStartEvent, ToolUpdateEvent
+from onyx.agents.events import (
+    AgentEvent,
+    AgentStartEvent,
+    MessageUpdateEvent,
+    ToolUpdateEvent,
+)
+from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
@@ -19,8 +26,16 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationContentEvent,
+    GenerationRequestParams,
+    ReasoningEffort,
     TextContent,
+    TextDeltaEvent,
+    ThinkingBlock,
+    ThinkingDeltaEvent,
     ToolCall,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
     ToolDefinition,
     ToolResult,
 )
@@ -305,7 +320,6 @@ def test_terminal_snapshot_rejects_late_tool_result(
 def test_discovery_reads_run_status_without_holding_coordinator_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.agents.execution_records import RunStatus
     from onyx.agents.models import AgentInfo
     from onyx.agents.runtime import Run
 
@@ -635,4 +649,243 @@ def test_child_delivery_copies_only_for_actual_listeners() -> None:
         grandchild.close()
         child.close()
         parent.close()
+        dispatcher.close()
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        TextDeltaEvent(content_index=0, text="Answer"),
+        TextDeltaEvent(content_index=0, text=""),
+        ThinkingDeltaEvent(content_index=0, text="Reasoning"),
+        ToolCallDeltaEvent(content_index=0, arguments_delta='{"query":'),
+    ],
+)
+def test_deltas_are_shared_across_listeners_and_ancestors(
+    update: GenerationContentEvent,
+) -> None:
+    event = MessageUpdateEvent(
+        run_id="child", message_id="message", step_index=0, generation_event=update
+    )
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    received: list[AgentEvent] = []
+    child.subscribe(received.append)
+    child.subscribe(received.append)
+    parent.subscribe(received.append)
+    try:
+        with (
+            patch("onyx.agents.concurrency.to_json") as serialize,
+            patch.object(
+                BaseModel, "model_dump", side_effect=AssertionError("Unexpected dump")
+            ) as dump,
+            patch.object(
+                BaseModel, "model_copy", side_effect=AssertionError("Unexpected copy")
+            ) as copy,
+        ):
+            child.publish(event)
+            assert child.tracker.wait_idle(2)
+            assert parent.tracker.wait_idle(2)
+            assert not child.failed.is_set()
+            assert not parent.failed.is_set()
+            assert len(received) == 3
+            assert all(item is event for item in received)
+            serialize.assert_not_called()
+            dump.assert_not_called()
+            copy.assert_not_called()
+    finally:
+        child.close()
+        parent.close()
+        dispatcher.close()
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        TextDeltaEvent(
+            content_index=0,
+            text="Answer",
+            request_params=GenerationRequestParams(
+                model_name="test",
+                model_provider="test",
+                reasoning_effort=ReasoningEffort.AUTO,
+                max_tokens=None,
+                sent_kwargs={"temperature": 0},
+            ),
+        ),
+        ThinkingDeltaEvent(content_index=0, text="Reasoning", blocks=[]),
+        ThinkingDeltaEvent(
+            content_index=0,
+            blocks=[ThinkingBlock(thinking="Reasoning", signature="signature")],
+        ),
+        ToolCallEndEvent(
+            content_index=0, tool_call=ToolCall(id="call", name="search", arguments={})
+        ),
+    ],
+)
+def test_mutable_generation_payloads_are_isolated(
+    update: GenerationContentEvent,
+) -> None:
+    event = MessageUpdateEvent(
+        run_id="child", message_id="message", step_index=0, generation_event=update
+    )
+    expected = event.model_copy(deep=True)
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[MessageUpdateEvent] = []
+
+    def mutate_payload(event: MessageUpdateEvent, value: str) -> None:
+        payload = event.generation_event
+        if isinstance(payload, TextDeltaEvent):
+            assert payload.request_params is not None
+            payload.request_params.sent_kwargs["mutation"] = value
+        elif isinstance(payload, ThinkingDeltaEvent):
+            assert payload.blocks is not None
+            payload.blocks.append(ThinkingBlock(thinking=value))
+        else:
+            assert isinstance(payload, ToolCallEndEvent)
+            payload.tool_call.arguments["mutation"] = value
+
+    def mutate(event: AgentEvent) -> None:
+        if isinstance(event, AgentStartEvent):
+            entered.set()
+            assert release.wait(3)
+        elif isinstance(event, MessageUpdateEvent):
+            mutate_payload(event, "listener")
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, MessageUpdateEvent):
+            received.append(event)
+
+    child.subscribe(mutate)
+    child.subscribe(observe)
+    parent.subscribe(observe)
+    try:
+        child.publish(AgentStartEvent(run_id="blocked"))
+        assert entered.wait(2)
+        child.publish(event)
+        mutate_payload(event, "producer")
+        release.set()
+        assert child.tracker.wait_idle(2)
+        assert parent.tracker.wait_idle(2)
+        assert not child.failed.is_set()
+        assert not parent.failed.is_set()
+        assert received == [expected, expected]
+        assert received[0] is not received[1]
+    finally:
+        release.set()
+        child.close()
+        parent.close()
+        dispatcher.close()
+
+
+@pytest.mark.parametrize("extend_envelope", [False, True])
+def test_extended_events_keep_snapshot_isolation(extend_envelope: bool) -> None:
+    class AnnotatedDelta(TextDeltaEvent):
+        notes: list[str]
+
+    class AnnotatedUpdate(MessageUpdateEvent):
+        notes: list[str]
+
+    event: MessageUpdateEvent
+    if extend_envelope:
+        extended = AnnotatedUpdate(
+            run_id="run",
+            message_id="message",
+            step_index=0,
+            generation_event=TextDeltaEvent(content_index=0, text="Answer"),
+            notes=[],
+        )
+        event = extended
+        notes = extended.notes
+    else:
+        update = AnnotatedDelta(content_index=0, text="Answer", notes=[])
+        event = MessageUpdateEvent(
+            run_id="run", message_id="message", step_index=0, generation_event=update
+        )
+        notes = update.notes
+    expected = event.model_copy(deep=True)
+    delivery = concurrency.EventDelivery()
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[AgentEvent] = []
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, AgentStartEvent):
+            entered.set()
+            assert release.wait(3)
+        else:
+            received.append(event)
+
+    delivery.subscribe(observe)
+    try:
+        delivery.publish(AgentStartEvent(run_id="blocked"))
+        assert entered.wait(2)
+        delivery.publish(event)
+        notes.append("producer mutation")
+        release.set()
+        assert delivery.tracker.wait_idle(2)
+        assert not delivery.failed.is_set()
+        assert received == [expected]
+        assert received[0] is not event
+    finally:
+        release.set()
+        delivery.close()
+
+
+def test_empty_event_remains_pending_until_ancestor_delivery_finishes() -> None:
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def observe(_event: AgentEvent) -> None:
+        entered.set()
+        assert release.wait(3)
+
+    parent.subscribe(observe)
+    try:
+        child.publish(AgentStartEvent(run_id="child"))
+        assert entered.wait(2)
+        assert dispatcher.has_pending_events
+        assert not child.tracker.wait_idle(0)
+        assert not parent.tracker.wait_idle(0)
+        release.set()
+        assert parent.tracker.wait_idle(2)
+        assert child.tracker.wait_idle(2)
+        assert not dispatcher.has_pending_events
+    finally:
+        release.set()
+        child.close()
+        parent.close()
+        dispatcher.close()
+
+
+@pytest.mark.parametrize("character,rejected", [("a", False), ("🙂", True)])
+def test_delta_budget_accounts_for_unicode(character: str, rejected: bool) -> None:
+    dispatcher = concurrency.EventDispatcher()
+    delivery = concurrency.EventDelivery(dispatcher)
+    received: list[AgentEvent] = []
+    delivery.subscribe(received.append)
+    event = MessageUpdateEvent(
+        run_id="run",
+        message_id="message",
+        step_index=0,
+        generation_event=TextDeltaEvent(
+            content_index=0, text=character * (1024 * 1024)
+        ),
+    )
+    try:
+        delivery.publish(event)
+        assert delivery.tracker.wait_idle(2)
+        assert delivery.failed.is_set() == rejected
+        assert received == ([] if rejected else [event])
+        assert not dispatcher.has_pending_events
+    finally:
+        delivery.close()
         dispatcher.close()
