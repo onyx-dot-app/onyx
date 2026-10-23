@@ -1160,7 +1160,8 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index
-# in a single pass
+# in a single pass. Connector deletion queues its per-document cleanup in batches
+# of this size, so the broker holds at most one batch per cc_pair.
 DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
