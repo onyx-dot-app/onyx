@@ -85,7 +85,7 @@ The complete feature set of Onyx which is recommended for serious users and larg
 - Performance optimizations for large scale use via in memory cache (Redis) and blob store (MinIO).
 
 > [!TIP]  
-> **To try Onyx for free without deploying, visit [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
+> **To try Onyx for free without deploying, visit [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)**.
 
 ---
 

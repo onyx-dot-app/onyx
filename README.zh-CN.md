@@ -89,7 +89,7 @@ Onyx 的完整功能集，推荐正式使用的用户与较大规模团队选用
 - 面向大规模使用的性能优化，包括内存缓存 (Redis) 与对象存储 (MinIO)。
 
 > [!TIP]
-> **想免部署免费试用 Onyx？访问 [Onyx Cloud](https://cloud.onyx.app/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
+> **如需免费试用 Onyx 且无需部署，请访问 [Onyx Cloud](https://cloud.onyx.app/auth/signup?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme)。**
 
 ---
 
