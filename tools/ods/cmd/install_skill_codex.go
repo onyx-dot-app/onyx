@@ -59,7 +59,7 @@ func writeAgentsLocal(
 
 	content := fmt.Sprintf(
 		"%s\n\n# Onyx developer-local agent guidance\n\n"+
-			"Always-on rules from onyx-infra agent-context. Never committed.\n\n%s\n",
+			"Always-on rules from the internal infra repo's agent-context. Never committed.\n\n%s\n",
 		generatedRuleMarker,
 		strings.Join(sections, "\n\n"),
 	)

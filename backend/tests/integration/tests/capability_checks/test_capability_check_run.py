@@ -157,6 +157,7 @@ def test_second_trigger_while_a_run_is_active_is_a_noop(
             connector_id=None,
             source=DocumentSource.MOCK_CONNECTOR,
             trigger=CapabilityCheckTrigger.MANUAL,
+            lease=timedelta(hours=1),
             active_within=timedelta(hours=1),
         )
         assert row is not None
@@ -176,31 +177,49 @@ def test_second_trigger_while_a_run_is_active_is_a_noop(
     assert datetime.fromisoformat(snapshot["run_started_at"]) == started_at
 
 
-def test_stale_running_mark_is_replaced_and_the_run_proceeds(
-    admin_user: DATestUser,
+def _seed_running_mark(
+    credential_id: int, *, started_at: datetime, deadline_at: datetime
 ) -> None:
-    # Precondition.
-    # An hours-old RUNNING mark: a crashed or expired run.
-    credential = CredentialManager.create(
-        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
-    )
-    stale_started_at = datetime.now(timezone.utc) - timedelta(hours=2)
     with get_session_with_current_tenant() as db_session:
         row = mark_capability_report_running(
             db_session,
-            credential_id=credential.id,
+            credential_id=credential_id,
             connector_id=None,
             source=DocumentSource.MOCK_CONNECTOR,
             trigger=CapabilityCheckTrigger.MANUAL,
-            active_within=timedelta(hours=1),
+            lease=timedelta(hours=1),
+            active_within=None,
         )
         assert row is not None
         db_session.execute(
             update(CredentialCapabilityReportRow)
             .where(CredentialCapabilityReportRow.id == row.id)
-            .values(run_started_at=stale_started_at)
+            .values(run_started_at=started_at, run_deadline_at=deadline_at)
         )
         db_session.commit()
+
+
+def test_run_past_its_deadline_reads_failed_and_rerun_replaces_it(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition.
+    # A fresh mark whose deadline passed: the worker died before renewing it,
+    # and the sweep has not retired it yet.
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
+    )
+    started_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    _seed_running_mark(
+        credential.id,
+        started_at=started_at,
+        deadline_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+
+    # Under test and postcondition (the read shows the dead run).
+    read = client.get(_report_url(credential.id), headers=admin_user.headers)
+    read.raise_for_status()
+    assert read.json()["run_status"] == CapabilityReportRunStatus.FAILED_TO_RUN.value
+    assert read.json()["progress"] is None
 
     # Under test.
     response = client.post(
@@ -210,7 +229,36 @@ def test_stale_running_mark_is_replaced_and_the_run_proceeds(
     # Postcondition.
     response.raise_for_status()
     snapshot = response.json()
-    assert datetime.fromisoformat(snapshot["run_started_at"]) > stale_started_at
+    assert snapshot["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    assert datetime.fromisoformat(snapshot["run_started_at"]) > started_at
+    _poll_until_run_status(
+        credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
+    )
+
+
+def test_rerun_replaces_a_live_run_started_minutes_ago(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition.
+    # A mark within its deadline but started long before the Re-run click.
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
+    )
+    started_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    _seed_running_mark(
+        credential.id,
+        started_at=started_at,
+        deadline_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+
+    # Under test.
+    response = client.post(
+        _check_url(credential.id), json={}, headers=admin_user.headers
+    )
+
+    # Postcondition.
+    response.raise_for_status()
+    assert datetime.fromisoformat(response.json()["run_started_at"]) > started_at
     _poll_until_run_status(
         credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
     )
@@ -299,8 +347,8 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
     admin_user: DATestUser,
 ) -> None:
     # Precondition.
-    # A completed report, then a RUNNING mark backdated past any derived
-    # ceiling: a run that died without a trace.
+    # A completed report, then a RUNNING mark past its deadline: a run that
+    # died without a trace.
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
     )
@@ -319,13 +367,14 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
             connector_id=None,
             source=DocumentSource.MOCK_CONNECTOR,
             trigger=CapabilityCheckTrigger.MANUAL,
+            lease=timedelta(hours=1),
             active_within=timedelta(hours=1),
         )
         assert row is not None
         db_session.execute(
             update(CredentialCapabilityReportRow)
             .where(CredentialCapabilityReportRow.id == row.id)
-            .values(run_started_at=datetime.now(timezone.utc) - timedelta(days=30))
+            .values(run_deadline_at=datetime.now(timezone.utc) - timedelta(minutes=1))
         )
         db_session.commit()
 

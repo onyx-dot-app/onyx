@@ -85,7 +85,7 @@ deletion units.
 | DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | Global `MANAGE_CONNECTORS` only. Same as the owner delete, so an admin also deletes a credential with no owner here. |
 | DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
-| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`. |
+| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Credentials the caller can use (§4.7), masked. Each snapshot carries `groups` and `is_owner`; a similar-credentials snapshot also carries `usages`, `usable` and `refusal_reason` ([[connectors]] §4.9). |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
 | PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
@@ -340,7 +340,11 @@ requests cancellation of any in-progress `IndexAttempt` rows
 (`IndexingCoordination.request_cancellation__no_commit`), and revokes their Celery
 tasks after the commit. A first
 attempt that waits for capability checks has no task, so it is canceled directly
-(`cancel_waiting_index_attempt__no_commit`).
+(`cancel_waiting_index_attempt__no_commit`). A prune that is queued but not started
+is revoked, its `PRUNING` sync record ends `CANCELED`, and its fence is reset
+(`pruning/tasks.py:reset_prune_and_cancel_sync_record`). The pair's prune request
+stays, so the prune runs again on resume. A started prune stops on the stop fence.
+Only the deletion beat clears a stop fence it set itself, for a `DELETING` pair.
 It updates `status=PAUSED` and immediately re-fires `CHECK_FOR_INDEXING` so the
 change is picked up without waiting for the next 15-second tick. Pausing stops
 new indexing, permission sync, and pruning from starting; it does not touch
@@ -429,7 +433,8 @@ the same split: CE refuses groups, EE checks they exist. Both create paths and
 
 USE access lets a user see a shared credential. To pair it, swap to it, edit
 its bound fields or run checks with it, a non-owner must also keep the bound
-values of a pair that uses it: see [[connectors]] §4.9
+values of a pair that uses it, when its source has bound fields that the
+credential does not derive: see [[connectors]] §4.9
 (`factory.py:assert_user_can_use_credential`).
 
 ---

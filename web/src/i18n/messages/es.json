@@ -2970,6 +2970,7 @@
           "label": "Tipo de ejecución",
           "all": "Todos los tipos",
           "indexing": "Índice de documentos",
+          "backfill": "Relleno de documentos",
           "doc_permission_sync": "Sincronización de permisos",
           "group_sync": "Sincronización de miembros de grupos",
           "pruning": "Depuración de documentos",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, one {# ejecución cancelada} other {# ejecuciones canceladas}}",
           "passedChecks": "{count, plural, one {# comprobación superada} other {# comprobaciones superadas}}",
           "failedChecks": "{count, plural, one {# comprobación fallida} other {# comprobaciones fallidas}}",
+          "incompleteChecks": "{count, plural, one {# comprobación incompleta} other {# comprobaciones incompletas}}",
           "skippedChecks": "{count, plural, one {# comprobación omitida} other {# comprobaciones omitidas}}",
           "syncedDocs": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}"
         },
@@ -3454,6 +3456,12 @@
           },
           "viewDetails": {
             "tooltip": "Ver detalles"
+          },
+          "failedToRun": {
+            "title": "No se pudieron ejecutar las comprobaciones"
+          },
+          "unavailable": {
+            "label": "No disponible"
           }
         },
         "accountUnavailable": {
@@ -9691,6 +9699,8 @@
         "deleting": "Eliminando",
         "failed": "Fallido",
         "indexed": "Indexado",
+        "backfilling": "Rellenando",
+        "backfilled": "Rellenado",
         "indexing": "Indexando",
         "initialIndexing": "Indexación inicial",
         "interrupted": "Interrumpido",
@@ -10822,18 +10832,18 @@
       "title": "Comprobaciones del conector",
       "groups": {
         "failed": "{count} fallidas",
-        "indeterminate": "{count} sin verificar",
+        "indeterminate": "{count} incompletas",
         "passed": "{count} correctas",
         "skipped": "{count} omitidas",
-        "running": "{count} en curso",
+        "running": "{count} en progreso",
         "expected": "{count} pendientes"
       },
       "status": {
-        "passed": "Superada",
+        "passed": "Correcta",
         "failed": "Fallida",
-        "indeterminate": "No se pudo verificar",
+        "indeterminate": "Incompleta",
         "skipped": "Omitida",
-        "running": "Probando…",
+        "running": "En ejecución…",
         "pending": "En cola",
         "waiting": "Esperando la configuración",
         "stopped": "Detenida por ti"
@@ -10849,9 +10859,10 @@
         "expand": "Ver todo"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} fallidas",
-        "unverified": "{count} sin verificar",
+        "unverified": "{count} incompletas",
         "inProgress": "{count} en curso",
         "expected": "{count} más pendientes",
         "skipped": "{count} omitidas",
@@ -10892,6 +10903,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "Las comprobaciones dejaron de responder. Inténtalo de nuevo.",
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "cancelFailed": {
+        "toast": "No se pudieron cancelar las comprobaciones. Inténtalo de nuevo."
       }
     },
     "connectorEdit": {

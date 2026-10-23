@@ -140,7 +140,7 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 
 func TestInstallSkill_agentCodexEndToEnd(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 
 	out, err := skillRun(t, "--source", source, "--agent", "codex")
@@ -232,7 +232,7 @@ func requireNonRoot(t *testing.T) {
 
 func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	_, repoRoot := skillEnv(t)
-	source := filepath.Join(t.TempDir(), "onyx-infra")
+	source := filepath.Join(t.TempDir(), "infra-repo")
 	skillWriteSource(t, source)
 	// .claude exists as a file, so creating the directory fails.
 	deployWriteFile(t, filepath.Join(repoRoot, ".claude"), "in the way")

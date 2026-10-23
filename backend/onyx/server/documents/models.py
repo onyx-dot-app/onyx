@@ -273,6 +273,12 @@ class CredentialUsage(BaseModel):
 class SimilarCredentialSnapshot(CredentialSnapshot):
     # Only connectors the requesting user can manage.
     usages: list[CredentialUsage] = Field(default_factory=list)
+    # Whether the requesting user may use the credential at all
+    # (``factory.credential_use_refusal`` with no config). A usable shared
+    # credential may still require the settings of a connector that uses it.
+    usable: bool
+    # The refusal's text when ``usable`` is False.
+    refusal_reason: str | None = None
 
 
 class IndexAttemptSnapshot(BaseModel):

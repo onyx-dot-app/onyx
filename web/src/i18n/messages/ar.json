@@ -2970,6 +2970,7 @@
           "label": "نوع التشغيل",
           "all": "كل الأنواع",
           "indexing": "فهرسة المستندات",
+          "backfill": "ملء المستندات السابقة",
           "doc_permission_sync": "مزامنة الأذونات",
           "group_sync": "مزامنة عضوية المجموعات",
           "pruning": "تقليم المستندات",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, one {تم إلغاء # تشغيل} other {تم إلغاء # تشغيلات}}",
           "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
           "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "incompleteChecks": "{count, plural, one {فحص واحد غير مكتمل} other {# فحوصات غير مكتملة}}",
           "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}",
           "syncedDocs": "{count, plural, one {تمت مزامنة مستند واحد} other {تمت مزامنة # مستندات}}"
         },
@@ -3454,6 +3456,12 @@
           },
           "viewDetails": {
             "tooltip": "عرض التفاصيل"
+          },
+          "failedToRun": {
+            "title": "تعذر تشغيل عمليات الفحص"
+          },
+          "unavailable": {
+            "label": "غير متاح"
           }
         },
         "accountUnavailable": {
@@ -9691,6 +9699,8 @@
         "deleting": "جارٍ الحذف",
         "failed": "فشلت",
         "indexed": "مفهرس",
+        "backfilling": "جارٍ الملء السابق",
+        "backfilled": "تم الملء السابق",
         "indexing": "جارٍ الفهرسة",
         "initialIndexing": "فهرسة أولية",
         "interrupted": "متقطعة",
@@ -10822,18 +10832,18 @@
       "title": "فحوصات الموصّل",
       "groups": {
         "failed": "{count} فشلت",
-        "indeterminate": "{count} لم يتم التحقق منها",
+        "indeterminate": "{count} غير مكتملة",
         "passed": "{count} ناجحة",
         "skipped": "{count} تم تخطيها",
-        "running": "{count} قيد التشغيل",
+        "running": "{count} قيد التنفيذ",
         "expected": "{count} متوقعة"
       },
       "status": {
-        "passed": "ناجح",
+        "passed": "نجح",
         "failed": "فاشل",
-        "indeterminate": "تعذّر التحقق",
+        "indeterminate": "غير مكتمل",
         "skipped": "تم التخطي",
-        "running": "جارٍ الاختبار…",
+        "running": "قيد التشغيل…",
         "pending": "في قائمة الانتظار",
         "waiting": "في انتظار الإعدادات",
         "stopped": "أوقفته أنت"
@@ -10849,9 +10859,10 @@
         "expand": "عرض الكل"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} فشلت",
-        "unverified": "{count} لم يتم التحقق منها",
+        "unverified": "{count} غير مكتملة",
         "inProgress": "{count} قيد التنفيذ",
         "expected": "{count} أخرى متوقعة",
         "skipped": "{count} تم تخطيها",
@@ -10892,6 +10903,13 @@
       },
       "docsButton": {
         "label": "المستندات"
+      },
+      "runLost": "توقفت عمليات الفحص عن الاستجابة. حاول مرة أخرى.",
+      "cancelButton": {
+        "label": "إلغاء"
+      },
+      "cancelFailed": {
+        "toast": "تعذر إلغاء عمليات الفحص. حاول مرة أخرى."
       }
     },
     "connectorEdit": {

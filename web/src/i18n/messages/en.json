@@ -2970,6 +2970,7 @@
           "label": "Run type",
           "all": "All Types",
           "indexing": "Document Index",
+          "backfill": "Document Backfill",
           "doc_permission_sync": "Permissions Sync",
           "group_sync": "Group Membership Sync",
           "pruning": "Document Pruning",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, one {# run canceled} other {# runs canceled}}",
           "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
           "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "incompleteChecks": "{count, plural, one {# check incomplete} other {# checks incomplete}}",
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
@@ -3454,6 +3456,12 @@
           },
           "viewDetails": {
             "tooltip": "View Details"
+          },
+          "failedToRun": {
+            "title": "Checks Failed to Run"
+          },
+          "unavailable": {
+            "label": "Not Available"
           }
         },
         "accountUnavailable": {
@@ -9691,6 +9699,8 @@
         "deleting": "Deleting",
         "failed": "Failed",
         "indexed": "Indexed",
+        "backfilling": "Backfilling",
+        "backfilled": "Backfilled",
         "indexing": "Indexing",
         "initialIndexing": "Initial Indexing",
         "interrupted": "Interrupted",
@@ -10822,18 +10832,18 @@
       "title": "Connector Checks",
       "groups": {
         "failed": "{count} Failed",
-        "indeterminate": "{count} Unverified",
+        "indeterminate": "{count} Incomplete",
         "passed": "{count} Successful",
         "skipped": "{count} Skipped",
-        "running": "{count} Running",
+        "running": "{count} in Progress",
         "expected": "{count} Expected"
       },
       "status": {
-        "passed": "Passed",
+        "passed": "Successful",
         "failed": "Failed",
-        "indeterminate": "Could not be verified",
+        "indeterminate": "Incomplete",
         "skipped": "Skipped",
-        "running": "Testing…",
+        "running": "Running…",
         "pending": "Queued",
         "waiting": "Waiting for settings",
         "stopped": "Stopped by you"
@@ -10849,9 +10859,10 @@
         "expand": "View All"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "{count} failed",
-        "unverified": "{count} unverified",
+        "unverified": "{count} incomplete",
         "inProgress": "{count} in progress",
         "expected": "{count} more expected",
         "skipped": "{count} skipped",
@@ -10892,6 +10903,13 @@
       },
       "docsButton": {
         "label": "Docs"
+      },
+      "runLost": "The checks stopped responding. Try again.",
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "cancelFailed": {
+        "toast": "Couldn't cancel the checks. Try again."
       }
     },
     "connectorEdit": {

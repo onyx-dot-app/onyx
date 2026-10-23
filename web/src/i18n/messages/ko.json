@@ -2970,6 +2970,7 @@
           "label": "실행 유형",
           "all": "모든 유형",
           "indexing": "문서 인덱스",
+          "backfill": "문서 백필",
           "doc_permission_sync": "권한 동기화",
           "group_sync": "그룹 멤버십 동기화",
           "pruning": "문서 정리",
@@ -3018,6 +3019,7 @@
           "canceled": "{count, plural, other {실행 #개 취소됨}}",
           "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
           "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "incompleteChecks": "{count, plural, one {검사 #개 미완료} other {검사 #개 미완료}}",
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
@@ -3454,6 +3456,12 @@
           },
           "viewDetails": {
             "tooltip": "세부 정보 보기"
+          },
+          "failedToRun": {
+            "title": "검사를 실행하지 못했습니다"
+          },
+          "unavailable": {
+            "label": "사용할 수 없음"
           }
         },
         "accountUnavailable": {
@@ -9691,6 +9699,8 @@
         "deleting": "삭제 중",
         "failed": "실패",
         "indexed": "인덱싱됨",
+        "backfilling": "백필 중",
+        "backfilled": "백필됨",
         "indexing": "인덱싱 중",
         "initialIndexing": "초기 인덱싱",
         "interrupted": "중단됨",
@@ -10822,18 +10832,18 @@
       "title": "커넥터 검사",
       "groups": {
         "failed": "실패 {count}개",
-        "indeterminate": "미확인 {count}개",
+        "indeterminate": "미완료 {count}개",
         "passed": "성공 {count}개",
         "skipped": "건너뜀 {count}개",
-        "running": "실행 중 {count}개",
+        "running": "진행 중 {count}개",
         "expected": "예정 {count}개"
       },
       "status": {
-        "passed": "통과",
+        "passed": "성공",
         "failed": "실패",
-        "indeterminate": "확인할 수 없음",
+        "indeterminate": "미완료",
         "skipped": "건너뜀",
-        "running": "테스트 중…",
+        "running": "실행 중…",
         "pending": "대기 중",
         "waiting": "설정을 기다리는 중",
         "stopped": "사용자가 중지함"
@@ -10849,9 +10859,10 @@
         "expand": "전체 보기"
       },
       "titleCount": "({complete}/{total})",
+      "titleTotal": "({total})",
       "summary": {
         "failed": "실패 {count}개",
-        "unverified": "미확인 {count}개",
+        "unverified": "미완료 {count}개",
         "inProgress": "진행 중 {count}개",
         "expected": "예정 {count}개",
         "skipped": "건너뜀 {count}개",
@@ -10892,6 +10903,13 @@
       },
       "docsButton": {
         "label": "문서"
+      },
+      "runLost": "검사가 응답하지 않습니다. 다시 시도하세요.",
+      "cancelButton": {
+        "label": "취소"
+      },
+      "cancelFailed": {
+        "toast": "검사를 취소하지 못했습니다. 다시 시도하세요."
       }
     },
     "connectorEdit": {

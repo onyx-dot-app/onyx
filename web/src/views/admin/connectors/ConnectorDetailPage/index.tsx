@@ -37,6 +37,7 @@ import {
 } from "@opal/icons";
 import { isPermSynced } from "@/lib/connectors/accessType";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -270,6 +271,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
     router.push(`/admin/connectors/${source}/edit/${ccPair.id}`);
   const onEdit = canOpenEditForm ? openEditForm : null;
   const canManageInlineFiles = source === "file" && can(ccPair, "edit");
+  // A credential-less source's pair holds a placeholder credential with no account or checks.
+  const takesCredential = getCredentialSpec(source) !== null;
 
   // Unlike `paused`, this excludes INVALID, whose menu still offers the re-index rows disabled with a reason.
   const strictlyPaused = ccPair.status === ConnectorCredentialPairStatus.PAUSED;
@@ -505,13 +508,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
               range={sliceRange}
               onRangeChange={setSliceRange}
             />
-            <PairChecksCard
-              source={source}
-              credentialId={ccPair.credential.id}
-              connectorId={ccPair.connector.id}
-              held={ccPair.indexing_hold !== null}
-              expandRequest={checksExpandRequest}
-            />
+            {takesCredential && (
+              <PairChecksCard
+                source={source}
+                credentialId={ccPair.credential.id}
+                connectorId={ccPair.connector.id}
+                held={ccPair.indexing_hold !== null}
+                expandRequest={checksExpandRequest}
+              />
+            )}
             {/* While a run row's popover is open, the sections step back; the status card stays full. */}
             <Section
               alignItems="stretch"
@@ -519,7 +524,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
               height="fit"
               className={focusDimClass(runFocus)}
             >
-              <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              {takesCredential && (
+                <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+              )}
               <IndexConfigurationsSection
                 ccPair={ccPair}
                 onEdit={onEdit}

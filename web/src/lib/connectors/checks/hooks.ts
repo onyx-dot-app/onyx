@@ -10,12 +10,12 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { useDebouncedValue } from "@opal/hooks";
-import { SvgProgressRing } from "@opal/icons";
+import { SvgCheckCircle, SvgProgressRing, SvgXOctagon } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetchWith, fetchErrorDetail } from "@/lib/fetcher";
 import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
@@ -28,7 +28,10 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
-import { checksProgress } from "@/lib/connectors/checks/progress";
+import {
+  type ChecksEndIcon,
+  checksProgress,
+} from "@/lib/connectors/checks/progress";
 import {
   optionsFinding,
   storedCheckResults,
@@ -58,6 +61,11 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { AccessType } from "@/lib/types";
 
 const RUNNING_POLL_INTERVAL_MS = 1500;
+// The server keeps a draft run for 30 minutes (`DRAFT_RUN_TTL_SECONDS`); a
+// run still "running" after that, plus a margin, has stopped responding.
+export const DRAFT_RUN_CLIENT_DEADLINE_MS = 31 * 60 * 1000;
+// A poll that has not settled by then ends, so a hung request cannot spin.
+export const DRAFT_RUN_POLL_TIMEOUT_MS = 60 * 1000;
 
 /**
  * One add-connector form's check session, kept in the SWR cache so every
@@ -78,6 +86,10 @@ interface ConnectorChecksSession {
   requesting: boolean;
   /** The last start request failed. */
   startFailed: boolean;
+  /** The server's reason for that failure, when it gave one. */
+  startFailureDetail: string | null;
+  /** When the latest run was accepted (ms since epoch); its polls stop after a deadline. */
+  startedAt: number | null;
   /** Increments per start, so only the newest request applies its result. */
   request: number;
   /** The next start runs every check again, cached results included. */
@@ -139,6 +151,12 @@ function toCheckResult(
     required: check.required,
     status: check.state,
     message: check.message,
+    summary: check.summary,
+    description: check.description,
+    error_kind: check.error_kind,
+    not_run_reason: check.not_run_reason,
+    // A draft check that does not apply is `not_applicable`, never finished.
+    applicable: true,
     remediation: check.remediation,
     docs_link: check.docs_link,
     duration_ms: check.duration_ms,
@@ -247,7 +265,25 @@ export interface UseConnectorChecksResult {
   skipCheck: (checkId: string) => void;
   /** Runs one check: a skipped one again, or a queued one next. */
   runCheck: (checkId: string) => void;
+  /**
+   * Why the checks failed to run, when known: the server's reason for
+   * refusing the start, else `runLost`. `null` with neither.
+   */
+  failure: ChecksFailure | null;
+  /**
+   * Stops the running run, and the checks go back to their start prompt.
+   * Rejects when the stop fails. `null` unless a started run is running.
+   */
+  cancel: (() => Promise<void>) | null;
 }
+
+/**
+ * Why a run failed to run. `refused`: the server refused the start, with its
+ * reason. `lost`: polling the run failed or passed the deadline.
+ */
+export type ChecksFailure =
+  | { kind: "refused"; detail: string }
+  | { kind: "lost" };
 
 /**
  * The capability checks for the unsaved add-connector form of `source`. The
@@ -297,14 +333,37 @@ export function useConnectorChecks({
   const actionInFlight = useRef<boolean>(false);
 
   const runId: string | null = session?.runId ?? null;
-  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+  const startedAt: number | null = session?.startedAt ?? null;
+  const { data: run, error: runError } = useSWR<DraftCheckRunSnapshot>(
     runId ? SWR_KEYS.connectorCheckRun(runId) : null,
-    errorHandlingFetcher,
+    async (url: string) => {
+      const latest = await errorHandlingFetchWith<DraftCheckRunSnapshot>(url, {
+        signal: AbortSignal.timeout(DRAFT_RUN_POLL_TIMEOUT_MS),
+      });
+      // Judged after the fetch, so a run that finished while the tab slept
+      // past the deadline still shows its results.
+      if (
+        latest.status === "running" &&
+        startedAt !== null &&
+        Date.now() > startedAt + DRAFT_RUN_CLIENT_DEADLINE_MS
+      ) {
+        throw new Error("Capability check run passed its client deadline");
+      }
+      return latest;
+    },
     {
+      // An error (e.g. the expired run's 404) keeps the last snapshot, so
+      // polling and retries stop there instead of spinning on it.
       refreshInterval: (latest) =>
         latest?.status === "running" ? RUNNING_POLL_INTERVAL_MS : 0,
+      shouldRetryOnError: false,
     }
   );
+  // Polling broke while the run still read as running.
+  const runLost: boolean =
+    runId !== null &&
+    runError !== undefined &&
+    !(run && run.run_id === runId && run.status !== "running");
 
   const start = useCallback(
     async (rerun: DraftRerunMode, actions: StartActions = {}) => {
@@ -333,6 +392,8 @@ export function useConnectorChecks({
           ranWithForm: formKey,
           requesting: true,
           startFailed: false,
+          startFailureDetail: null,
+          startedAt: null,
           request,
           rerunAll: false,
           skippedCheckIds: skipped,
@@ -390,6 +451,7 @@ export function useConnectorChecks({
         const current: boolean = await settle((session) => ({
           ...session,
           runId: accepted.run_id,
+          startedAt: Date.now(),
           requesting: false,
         }));
         if (!current) {
@@ -397,11 +459,12 @@ export function useConnectorChecks({
           // started, so nothing reads it and no reset could cancel it.
           cancelDraftCheckRun(accepted.run_id).catch(() => undefined);
         }
-      } catch {
+      } catch (error) {
         await settle((current) => ({
           ...current,
           requesting: false,
           startFailed: true,
+          startFailureDetail: fetchErrorDetail(error),
         }));
       }
     },
@@ -441,6 +504,7 @@ export function useConnectorChecks({
     if (run && run.run_id === runId && run.status === "superseded") {
       return "notStarted";
     }
+    if (runLost) return "failedToRun";
     if (!snapshot || snapshot.status === "running") return "running";
     if (snapshot.status === "failed_to_run") return "failedToRun";
     return checks.some(
@@ -468,18 +532,50 @@ export function useConnectorChecks({
       !applicable.some((check) => check.validates_binding);
   // A current run of this form that started fine. It need not be finished:
   // `createReady` waits only on required checks (see `blocks`), so a slow
-  // optional check such as discovery does not hold Create back.
+  // optional check such as discovery does not hold Create back. A failed
+  // start keeps the previous run, which checked other settings.
   const ranThisForm: boolean =
     !!session &&
     !session.requesting &&
+    !session.startFailed &&
     session.ranWithForm === formKey &&
     snapshot !== null &&
-    snapshot.status !== "failed_to_run";
+    snapshot.status !== "failed_to_run" &&
+    !runLost;
   const createReady: boolean =
     formUnlocked &&
     (!applicable.some((check) => check.required) ||
       (ranThisForm &&
         !checks.some((check) => check.required && blocks(check))));
+
+  const cancel = useCallback(async () => {
+    if (runId === null) return;
+    try {
+      await cancelDraftCheckRun(runId);
+    } catch (error) {
+      // The run may have ended meanwhile; show what it holds now.
+      await mutate(SWR_KEYS.connectorCheckRun(runId));
+      throw error;
+    }
+    // Drops the run; a newer start request still applies its own.
+    await mutate<ConnectorChecksSession>(
+      sessionKey,
+      (latest) =>
+        latest && latest.runId === runId
+          ? { ...latest, runId: null, startedAt: null }
+          : latest,
+      { revalidate: false }
+    );
+  }, [runId, sessionKey, mutate]);
+
+  const failure: ChecksFailure | null = (() => {
+    if (status !== "failedToRun") return null;
+    if (session?.startFailed) {
+      const detail: string | null = session.startFailureDetail;
+      return detail === null ? null : { kind: "refused", detail };
+    }
+    return runLost ? { kind: "lost" } : null;
+  })();
 
   return {
     status,
@@ -548,6 +644,11 @@ export function useConnectorChecks({
         actionInFlight.current = false;
       });
     },
+    failure,
+    cancel:
+      status === "running" && runId !== null && !session?.requesting
+        ? cancel
+        : null,
   };
 }
 
@@ -586,6 +687,8 @@ export function useResetChecksOnCredentialChange({
         ranWithForm: null,
         requesting: false,
         startFailed: false,
+        startFailureDetail: null,
+        startedAt: null,
         request: (session?.request ?? 0) + 1,
         rerunAll: true,
       },
@@ -705,10 +808,34 @@ export function useResetConnectorChecks(source: ConfigurableSources): void {
   }, [source, mutate]);
 }
 
+/**
+ * A red stop sign: a required check failed, or the run broke. Content colors
+ * its icon from its own stylesheet, so the color is an inline style.
+ */
+export function ChecksFailedIcon({ style, ...props }: IconProps) {
+  return createElement(SvgXOctagon, {
+    ...props,
+    style: { ...style, color: "var(--status-error-05)" },
+  });
+}
+
+/** A green check: every check succeeded. */
+function ChecksSucceededIcon({ style, ...props }: IconProps) {
+  return createElement(SvgCheckCircle, {
+    ...props,
+    style: { ...style, color: "var(--status-success-05)" },
+  });
+}
+
+const END_ICONS: Record<ChecksEndIcon, IconFunctionComponent> = {
+  succeeded: ChecksSucceededIcon,
+  requiredFailed: ChecksFailedIcon,
+};
+
 export interface ConnectorChecksProgress {
-  /** The header icon: the ring, or the spinner before anything starts. */
+  /** The header icon: the ring, the spinner before anything finishes, or an end state. */
   icon: IconFunctionComponent;
-  /** The `(complete/counted)` title suffix; absent with nothing to count. */
+  /** `(complete/counted)` while checks run, `(counted)` once all finished; absent with nothing to count. */
   suffix: string | undefined;
 }
 
@@ -718,10 +845,15 @@ export interface ConnectorChecksProgress {
  */
 export function useConnectorChecksProgress(
   counts: Record<DraftCheckStateKind, number>,
-  status: ConnectorChecksStatus
+  status: ConnectorChecksStatus,
+  requiredFailed: boolean
 ): ConnectorChecksProgress {
   const t = useTranslations("admin.connectorChecks");
-  const { ring, complete, counted } = checksProgress(counts, status);
+  const { ring, end, complete, counted } = checksProgress(
+    counts,
+    status,
+    requiredFailed
+  );
   const success = ring?.success;
   const error = ring?.error;
   const warning = ring?.warning;
@@ -745,9 +877,13 @@ export function useConnectorChecksProgress(
     [showRing, success, error, warning, neutral, rest]
   );
   return {
-    icon,
+    icon: end === null ? icon : END_ICONS[end],
     suffix:
-      counted > 0 ? t("titleCount", { complete, total: counted }) : undefined,
+      counted === 0
+        ? undefined
+        : complete === counted
+          ? t("titleTotal", { total: counted })
+          : t("titleCount", { complete, total: counted }),
   };
 }
 

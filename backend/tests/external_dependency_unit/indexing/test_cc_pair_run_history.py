@@ -348,6 +348,7 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
@@ -380,6 +381,7 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.SCHEDULED,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
@@ -397,19 +399,19 @@ def test_check_run_lifecycle_writes_one_history_row_per_run(
     assert broken.status == CapabilityCheckRunStatus.FAILED_TO_RUN
     assert broken.error_message == "broker down"
 
+    # Expired as soon as it is marked.
     third = mark_capability_report_running(
         db_session,
         credential_id=cc_pair.credential_id,
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(0),
         active_within=timedelta(hours=1),
     )
     db_session.commit()
     assert third is not None
-    retired = mark_stale_capability_runs_failed(
-        db_session, source=_SOURCE, stale_after=timedelta(seconds=0)
-    )
+    retired = mark_stale_capability_runs_failed(db_session, source=_SOURCE)
     db_session.commit()
     # The shared database can hold other stale runs of the source.
     assert retired >= 1
@@ -475,6 +477,7 @@ def test_release_lets_the_first_attempt_start_until_a_later_run(
         connector_id=cc_pair.connector_id,
         source=_SOURCE,
         trigger=CapabilityCheckTrigger.MANUAL,
+        lease=timedelta(hours=1),
         active_within=timedelta(hours=1),
     )
     db_session.commit()

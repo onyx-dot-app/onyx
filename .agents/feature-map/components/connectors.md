@@ -579,8 +579,13 @@ checks instead and stores the full report. Only a required check that `FAILED`
 within the blocking budget blocks the pairing. A check whose dependency did not
 finish in the budget counts as unfinished too, whatever its own result. Indexing and perm-sync attempts keep
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
-on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
-retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
+on the `capability_checks` queue. The RUNNING mark has a deadline
+(`run_deadline_at`): the task renews it before the checks and after every
+result (`runner.py:capability_check_run_lease`), and stops when a newer run took
+the row. A read past the deadline shows `failed_to_run`. A beat task,
+`CHECK_FOR_STALE_CAPABILITY_RUNS`, retires dead runs. A manual trigger is a
+no-op while a live run started less than five minutes ago; it replaces an older
+or dead run. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
 reuse their result at creation when the form is unchanged. A check the draft
 run is still running is not started again: the draft task marks its pending
 results in flight, creation waits for them within its blocking budget, and the
@@ -657,6 +662,10 @@ The create form locks its configuration only while no account is selected
 tooltip, until the bound fields pass the binding check and a run passes every
 check with `validates_binding` (`formUnlocked` in
 `web/src/lib/connectors/checks/hooks.ts`).
+The checks card shows the server's reason when it refuses a start (e.g. the
+credential use rule's 403). It stops polling a run when a fetch fails, does not
+settle within `DRAFT_RUN_POLL_TIMEOUT_MS`, or reads the run as still running after
+`DRAFT_RUN_CLIENT_DEADLINE_MS`, and shows the run as failed to run. Cancel, shown while a run runs, stops it and returns the card to Start Checks.
 Each source with named checks sets it on its sign-in check, and some sources also
 on a listing that runs after it (e.g. Jira's "List projects").
 When a check that is not required has `FAILED` in the form's latest run, Create first opens an advisory
@@ -701,18 +710,30 @@ credential with a config. Every pairing, credential swap, edit and check run
 applies it before it builds a connector. A user may use the credential when:
 
 - they own it, or it has no owner and they hold `MANAGE_CONNECTORS` globally;
-- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and the config's
-  bound values, as the binding model validates them, equal those of a pair of
-  the same source that uses the credential. A credential with no pair is for
-  its owner only. A config-less run still needs such a pair;
+- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and its source has
+  no credential-bound fields (no binding model, or only
+  `credential_derived_fields`), so no setting can send the secret elsewhere;
+- it is visible to them and the config's bound values, as the binding model
+  validates them, equal those of a pair of the same source that uses the
+  credential. A credential of a bound source with no pair is for its owner
+  only. A config-less run still needs such a pair;
 - the caller passes the pair the user edits or operates, and that pair already
   uses the credential with the same bound values; or
 - the credential is visible and its source has no real secret
   (`CREDENTIAL_PERMISSIONS_TO_IGNORE`).
 
-The comparison skips a binding's `credential_derived_fields`: values the form
-takes from the credential and `validate_credential` pins to it, such as Google
-Drive's `credential_kind`.
+The comparison uses `CredentialBinding.comparison_values`. It skips a binding's
+`credential_derived_fields`: values the form takes from the credential and
+`validate_credential` pins to it, such as Google Drive's `credential_kind`. It
+compares `site_url_fields` by `connector_config.py:site_url_key` (scheme and
+host in lower case, and a bare host's trailing slash ignored). A slash after a
+path stays significant, because `urljoin` resolves against `/foo/` and `/foo`
+differently; another path on the same host is another site. Confluence ignores
+the trailing slash, because its connector strips it, and Confluence Cloud also
+drops a trailing `/wiki`. A URL with no scheme does not match a URL with one, because
+the connector gets the value as entered. The stored config keeps the value as
+entered. A site URL that does not parse fails binding validation, so it is a
+field error and matches no pair.
 
 The pairs are the record of the bound values; the credential stores none. The
 rule runs in `validate_ccpair_for_user` (its `user` is None only for system
@@ -722,6 +743,11 @@ work), `validate_connector_credential_bindings`,
 runs), and `edit_plan/state.py:fetch_proposed_credential` (edit plan and
 apply). A refusal is `CREDENTIAL_NOT_FOUND` when the credential is not visible
 and `INSUFFICIENT_PERMISSIONS` when the bound values match no pair.
+`factory.py:credential_use_refusal` returns the refusal without raising. The
+binding-check endpoints report an `INSUFFICIENT_PERMISSIONS` refusal as a
+`shared_credential_settings` rejection with the same detail, and
+`/manage/admin/similar-credentials/{source}` sets each credential's `usable`
+and `refusal_reason` from the rule with no config.
 
 A realm (where an account works: its site, host or subdomain) lives in the
 credential only, and the connector reads it from there. The connector config does
@@ -729,7 +755,10 @@ not hold it. On the add-connector form the realm is a form-only field
 (`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
 spec's `realm` fields). The form shows it above the account section, copies it into
 a new account's values, and disables saved accounts whose stored realm differs
-(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+(`credentialMatchesBoundFields`). It also disables a saved account that the
+similar-credentials listing marks not `usable` (the credential use rule, §4.9) and
+shows its `refusal_reason`. Only the picked account offers Re-run Checks; on the
+connector page, Re-run Checks runs the pair's checks (`connector_id`). `withoutFormOnlyFields` removes it from every
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 

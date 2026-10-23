@@ -6,7 +6,7 @@ here gates connector creation or indexing, and check failures are report
 content, never an HTTP error.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -46,6 +46,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     CredentialBindingFieldError,
     credential_binding_field_errors,
+    credential_use_refusal,
     validate_connector_config,
     validate_credential_binding,
 )
@@ -57,6 +58,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.credential_capability import (
+    effective_run_status,
     get_capability_report_row,
     get_capability_report_rows_for_source,
 )
@@ -114,6 +116,7 @@ class CapabilityReportSnapshot(BaseModel):
 
     @classmethod
     def from_row(cls, row: CredentialCapabilityReportRow) -> "CapabilityReportSnapshot":
+        run_status = effective_run_status(row, datetime.now(timezone.utc))
         report: CredentialCapabilityReport | None = (
             CredentialCapabilityReport.model_validate(row.report)
             if row.report is not None
@@ -123,7 +126,7 @@ class CapabilityReportSnapshot(BaseModel):
             hide_findings_if_disabled(report.check_results)
         progress: StoredRunProgress | None = (
             load_stored_run_progress(row.run_id)
-            if row.run_status == CapabilityReportRunStatus.RUNNING
+            if run_status == CapabilityReportRunStatus.RUNNING
             and row.run_id is not None
             else None
         )
@@ -134,7 +137,7 @@ class CapabilityReportSnapshot(BaseModel):
             connector_id=row.connector_id,
             source=row.source,
             trigger=row.trigger,
-            run_status=row.run_status,
+            run_status=run_status,
             run_started_at=row.run_started_at,
             connector_config_hash=row.connector_config_hash,
             report=report,
@@ -220,8 +223,9 @@ def trigger_capability_check(
     """Marks the scope RUNNING, enqueues the check run, and returns the row.
 
     Accepted-style: the run happens on a worker and the caller polls the GET;
-    the previous report stays readable meanwhile. A run already RUNNING within
-    the staleness bound makes this a no-op returning the standing row. A
+    the previous report stays readable meanwhile. A run RUNNING before its
+    deadline that started only minutes ago makes this a no-op returning the
+    standing row; an older one is replaced, and its worker stops. A
     connector-scoped trigger requires the pairing to be visible to the caller.
     """
     # GATE 2 for ``allow_scope``, mirroring the report reads: credential
@@ -420,7 +424,11 @@ class CredentialBindingCheckRequest(BaseModel):
 
 
 class CredentialBindingRejectionCode(str, Enum):
+    # The credential records a different site than the bound fields.
     BINDING_REJECTED = "binding_rejected"
+    # The credential is shared with the user, and the bound fields match no
+    # connector that uses it (``credential_use_refusal``).
+    SHARED_CREDENTIAL_SETTINGS = "shared_credential_settings"
 
 
 class CredentialBindingRejection(BaseModel):
@@ -467,7 +475,7 @@ def check_credential_binding(
         user=user,
         db_session=db_session,
     )
-    return _check_binding(request, credential)
+    return _check_binding(request, credential, user, db_session)
 
 
 class DraftCredentialBindingCheckRequest(CredentialBindingCheckRequest):
@@ -504,7 +512,7 @@ def check_draft_credential_binding(
         user=user,
         db_session=db_session,
     )
-    result = _check_binding(request, credential)
+    result = _check_binding(request, credential, user, db_session)
     return DraftCredentialBindingCheckResponse(
         field_errors=result.field_errors,
         rejection=result.rejection,
@@ -515,12 +523,34 @@ def check_draft_credential_binding(
 def _check_binding(
     request: CredentialBindingCheckRequest,
     credential: Credential,
+    user: User,
+    db_session: Session,
 ) -> CredentialBindingCheckResponse:
+    """Applies the checks a run or pairing applies to the bound fields, so a
+    form that passes here is not refused later for them."""
     field_errors = credential_binding_field_errors(
         request.source, request.connector_specific_config
     )
     if field_errors:
         return CredentialBindingCheckResponse(field_errors=field_errors, rejection=None)
+    # Before validate_credential_binding, which decrypts the credential.
+    refusal = credential_use_refusal(
+        db_session,
+        user=user,
+        credential=credential,
+        source=request.source,
+        connector_specific_config=request.connector_specific_config,
+    )
+    if refusal is not None:
+        if refusal.error_code is not OnyxErrorCode.INSUFFICIENT_PERMISSIONS:
+            raise refusal
+        return CredentialBindingCheckResponse(
+            field_errors={},
+            rejection=CredentialBindingRejection(
+                code=CredentialBindingRejectionCode.SHARED_CREDENTIAL_SETTINGS,
+                detail=refusal.detail,
+            ),
+        )
     try:
         validate_credential_binding(
             request.source, request.connector_specific_config, credential

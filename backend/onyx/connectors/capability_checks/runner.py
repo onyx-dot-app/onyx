@@ -404,15 +404,28 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
 
 
-def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
-    """Age past which a RUNNING mark is a dead run, not a slow one.
+def capability_check_run_lease(source: DocumentSource) -> timedelta:
+    """How long a stored run's RUNNING mark lives without the worker renewing
+    it; past that, the run is dead and reads FAILED_TO_RUN.
 
-    The mark is set at trigger time, so a legitimate run's wall clock is queue
-    wait plus execution; the task expiry bounds the wait at one execution
-    ceiling, leaving two ceilings in total. Both the re-trigger guard and the
-    stale-run sweep use this cutoff.
+    The worker renews the mark as it starts the checks and after every result,
+    so the longest wait between renewals is the connector instantiation's guard
+    plus the slowest single check's guard, never the whole run. Bounding by
+    the slowest check rather than the sum keeps an orphaned run (a worker
+    restart) from spinning for hours.
     """
-    return timedelta(seconds=2 * capability_check_run_ceiling_seconds(source))
+    slowest_check_seconds = max(
+        (
+            effective_check_timeout_seconds(check)
+            for check in get_capability_checks(source)
+        ),
+        default=0,
+    )
+    return timedelta(
+        seconds=CAPABILITY_CHECK_TIMEOUT_SECONDS
+        + slowest_check_seconds
+        + _THREAD_RETURN_SLACK_SECONDS
+    )
 
 
 def _with_dependencies(checks: Sequence[CapabilityCheck], check_id: str) -> set[str]:
@@ -1085,9 +1098,9 @@ def generate_capability_report(
     )
     if should_instantiate:
         try:
-            # Under the guard the run ceiling budgets for it: construction and
+            # Under the guard the run lease budgets for it: construction and
             # ``load_credentials`` can probe the source with no timeout of their
-            # own, and the stale-run sweep trusts the ceiling.
+            # own, and the stale-run sweep trusts the lease.
             connector, fresh_credential_json = run_with_timeout(
                 _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
                 _instantiate_connector_isolated,

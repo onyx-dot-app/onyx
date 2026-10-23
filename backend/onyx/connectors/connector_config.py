@@ -1,6 +1,7 @@
 from typing import Annotated, Any, ClassVar, LiteralString
+from urllib.parse import urlparse, urlunparse
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
@@ -8,6 +9,23 @@ from onyx.db.enums import HierarchyNodeType
 
 # The pydantic error type of a config field rule.
 _FIELD_FORMAT_ERROR_TYPE = "connector_config_format"
+
+
+def site_url_key(url: str) -> str:
+    """``url`` as the credential use rule compares it: the scheme and host in
+    lower case, and a bare host with or without its trailing slash. A slash
+    after a path stays significant, because ``urljoin`` resolves against
+    ``/foo/`` and ``/foo`` differently. A URL with no scheme keeps none, so it
+    never matches a URL with one: the connector gets the value as entered."""
+    url = url.strip()
+    parsed = urlparse(url if "://" in url else f"//{url}")
+    return urlunparse(
+        parsed._replace(
+            scheme=parsed.scheme.lower(),
+            netloc=parsed.netloc.lower(),
+            path="" if parsed.path == "/" else parsed.path,
+        )
+    )
 
 
 def field_format_error(message: LiteralString) -> PydanticCustomError:
@@ -29,6 +47,29 @@ class CredentialBinding(BaseModel):
     # no place to send the credential, so the credential use rule
     # (``factory.assert_user_can_use_credential``) does not compare them.
     credential_derived_fields: ClassVar[frozenset[str]] = frozenset()
+    # URL fields the use rule compares by ``site_url_key``, so spellings of
+    # one site match.
+    site_url_fields: ClassVar[frozenset[str]] = frozenset()
+
+    @field_validator("*")
+    @classmethod
+    def _site_url_parses(cls, value: Any, info: ValidationInfo) -> Any:
+        if info.field_name not in cls.site_url_fields:
+            return value
+        try:
+            site_url_key(value)
+        except ValueError as e:
+            raise field_format_error("Enter a valid URL.") from e
+        return value
+
+    def comparison_values(self) -> dict[str, Any]:
+        """The values the credential use rule compares with those of a pair
+        that uses the credential. Spellings that reach the same place compare
+        equal; the stored config keeps the value as entered."""
+        values = self.model_dump(exclude=set(self.credential_derived_fields))
+        for field in self.site_url_fields:
+            values[field] = site_url_key(values[field])
+        return values
 
     def validate_credential(
         self,
@@ -42,6 +83,7 @@ class CredentialBinding(BaseModel):
 class BaseUrlCredentialBinding(CredentialBinding):
     """For sources whose only credential-bound field is the site URL."""
 
+    site_url_fields: ClassVar[frozenset[str]] = frozenset({"base_url"})
     base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
 
 

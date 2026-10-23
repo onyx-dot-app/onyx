@@ -3,8 +3,8 @@ name: Preview Deployment
 # Per-commit full-stack previews on the self-hosted preview server: the
 # Next.js frontend and the FastAPI backend running together at
 # <sha>-onyx.<the server's preview domain>. Which server that is lives
-# entirely in vars.PREVIEW_URL, managed in onyx-infra
-# (internal-tools/terraform/github-org) — nothing here names a host, so
+# entirely in vars.PREVIEW_URL, managed in the internal infra repo —
+# nothing here names a host, so
 # pointing this at a different deployment is a variable change, not a PR.
 #
 # The server does not watch this repo: it deploys only what this workflow

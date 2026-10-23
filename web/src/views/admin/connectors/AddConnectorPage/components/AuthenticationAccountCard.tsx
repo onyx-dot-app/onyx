@@ -82,8 +82,8 @@ interface AuthenticationAccountCardProps {
   /** Whether the connector will use this account. */
   selected: boolean;
   /**
-   * Whether the account can be picked: it works in the realm the form names.
-   * One that cannot is disabled.
+   * Whether the account can be picked: it works in the realm the form names,
+   * and the user may use it. One that cannot is disabled.
    */
   selectable: boolean;
   /**
@@ -151,6 +151,7 @@ export default function AuthenticationAccountCard({
     ? formatDateTimeLog(lastChecked)
     : null;
 
+  const failedToRun: boolean = checkReport?.run_status === "failed_to_run";
   // What the server holds, and what the select shows: group edits stay
   // local until focus leaves the group picker.
   const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
@@ -302,7 +303,9 @@ export default function AuthenticationAccountCard({
     return (
       <div className="p-1.5">
         <Text font="secondary-body" color="text-03">
-          {t("unsupportedRealm.label")}
+          {credential.usable
+            ? t("unsupportedRealm.label")
+            : t("unavailable.label")}
         </Text>
       </div>
     );
@@ -365,9 +368,11 @@ export default function AuthenticationAccountCard({
                 <Section gap={3} alignItems="stretch" width="full">
                   <ContentAction
                     title={
-                      checkedAt
-                        ? t("lastTested.title", { date: checkedAt })
-                        : t("notTested.title")
+                      failedToRun
+                        ? t("failedToRun.title")
+                        : checkedAt
+                          ? t("lastTested.title", { date: checkedAt })
+                          : t("notTested.title")
                     }
                     description={t("details.description")}
                     sizePreset="main-ui"
@@ -530,6 +535,14 @@ export default function AuthenticationAccountCard({
                   />
                 )}
               </div>
+              {/* Not `selectable`: a selected unusable account stays so. */}
+              {!credential.usable && credential.refusal_reason !== null && (
+                <div className="ps-5.5 pt-2">
+                  <Text font="secondary-body" color="text-03">
+                    {credential.refusal_reason}
+                  </Text>
+                </div>
+              )}
             </Section>
             <Section
               alignItems="end"

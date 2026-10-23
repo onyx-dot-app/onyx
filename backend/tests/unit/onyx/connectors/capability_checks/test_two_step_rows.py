@@ -429,6 +429,7 @@ def test_a_running_stored_run_shows_counting_while_the_step_runs() -> None:
             trigger=CapabilityCheckTrigger.MANUAL,
             run_status=CapabilityReportRunStatus.RUNNING,
             run_started_at=datetime.now(timezone.utc),
+            run_deadline_at=datetime.now(timezone.utc) + timedelta(minutes=5),
             run_id=run_id,
             connector_config_hash=None,
             report=None,

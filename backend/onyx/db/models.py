@@ -2163,6 +2163,11 @@ class CredentialCapabilityReportRow(Base):
     run_started_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When the RUNNING mark expires; the worker renews it as checks finish.
+    # Read only while RUNNING, where NULL (a pre-migration mark) is expired.
+    run_deadline_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # The run attempt owning the lifecycle mark; the task's terminal writes are
     # fenced on it. NULL: no attempt owns the row (recorder writes, legacy
     # rows), which no fenced write can match. Never searched on, so no index.
