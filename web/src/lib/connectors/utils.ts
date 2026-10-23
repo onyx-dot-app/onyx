@@ -215,6 +215,8 @@ interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
   /** Confluence's Select tab with no space and no page. */
   confluenceScopeRequired?: string;
+  /** Confluence's CQL Query tab with no query. */
+  confluenceCqlRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
   stringPairEmptyKey?: string;
@@ -385,6 +387,14 @@ export function createConnectorValidationSchema(
         return [values.space, values.page_id].some(hasScopeEntry);
       }
     );
+    // A blank query would index every page too.
+    fieldSchemas.cql_query = Yup.string().when("indexing_scope", {
+      is: "cql",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(messages.confluenceCqlRequired ?? "Add a CQL query."),
+    });
   }
 
   const object = Yup.object().shape({

@@ -4129,7 +4129,8 @@
               "description": "페이지만 반환하세요. 유형 필터는 `type=page`만 사용하세요.\n정렬과 날짜 필터는 피하세요. `order by` 또는 `lastModified`는 Onyx 자체 쿼리를 깨뜨립니다. [CQL 참조](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "쿼리 테스트"
-              }
+              },
+              "required": "CQL 쿼리를 추가하세요."
             },
             "include_attachments": {
               "description": "페이지에 첨부된 파일과 이미지를 색인합니다. [이미지 색인/처리 설정]({indexSettingsPath})을 참조하세요."

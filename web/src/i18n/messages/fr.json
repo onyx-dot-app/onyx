@@ -4129,7 +4129,8 @@
               "description": "Renvoyez uniquement des pages. Gardez `type=page` comme seul filtre de type.\nÉvitez le tri et les filtres de date. `order by` ou `lastModified` casseront la requête propre d'Onyx. [Référence CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "Tester la requête"
-              }
+              },
+              "required": "Ajoutez une requête CQL."
             },
             "include_attachments": {
               "description": "Indexe les fichiers et images joints aux pages. Voir [Paramètres d'indexation/de traitement des images]({indexSettingsPath})."

@@ -4129,7 +4129,8 @@
               "description": "Return pages only. Keep `type=page` as the only type filter.\nAvoid sorting and date filters. `order by` or `lastModified` will break Onyx’s own query. [CQL references](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "Test Query"
-              }
+              },
+              "required": "Add a CQL query."
             },
             "include_attachments": {
               "description": "Index files and images attached to pages. See [Image indexing/processing settings]({indexSettingsPath})."

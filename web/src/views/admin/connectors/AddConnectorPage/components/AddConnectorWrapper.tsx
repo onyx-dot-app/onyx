@@ -144,8 +144,6 @@ interface ConnectorChecksGateProps {
   credential: CredentialRef | null;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   ccPairId: number | null;
-  /** Called when a field runs a check, e.g. to open the checks card. */
-  onCheckRun?: () => void;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -158,7 +156,6 @@ function ConnectorChecksGate({
   source,
   credential,
   ccPairId,
-  onCheckRun,
   children,
 }: ConnectorChecksGateProps) {
   const { createReady, results, runCheck } = useConnectorChecks({
@@ -171,13 +168,8 @@ function ConnectorChecksGate({
   ).length;
   // A field (e.g. Confluence's CQL query) can run its check from the form.
   const actions: ConnectorCheckActions = useMemo(
-    () => ({
-      runCheck: (checkId, options) => {
-        runCheck(checkId);
-        if (options?.showChecks !== false) onCheckRun?.();
-      },
-    }),
-    [runCheck, onCheckRun]
+    () => ({ runCheck }),
+    [runCheck]
   );
   return (
     <ConnectorCheckActionsProvider value={actions}>
@@ -322,11 +314,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const [advisoryOpen, setAdvisoryOpen] = useState(false);
   // Counts View Failed Checks clicks, so the checks card opens and scrolls into view.
   const [expandChecksRequest, setExpandChecksRequest] = useState(0);
-  // Opens the checks card and scrolls it into view.
-  const openChecksCard = useCallback(
-    () => setExpandChecksRequest((count) => count + 1),
-    []
-  );
   // Edit mode: the plan shown for review, with the proposal it was computed
   // for, so a stale plan can be computed again.
   const [planning, setPlanning] = useState(false);
@@ -732,6 +719,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
+          confluenceCqlRequired: t(
+            "connectors.confluence.fields.cql_query.required"
+          ),
           confluenceScopeRequired: t(
             "connectors.confluence.fields.space.required"
           ),
@@ -794,7 +784,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             source={connector}
             credential={toCredentialRef(checkedCredential)}
             ccPairId={edit?.ccPair.id ?? null}
-            onCheckRun={openChecksCard}
           >
             {(checks) => {
               // Only a missing account locks the configuration. The bound

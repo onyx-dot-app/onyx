@@ -4129,7 +4129,8 @@
               "description": "仅返回页面。类型过滤器只保留 `type=page`。\n避免排序和日期过滤器。`order by` 或 `lastModified` 会破坏 Onyx 自身的查询。 [CQL 参考](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "测试查询"
-              }
+              },
+              "required": "请添加 CQL 查询。"
             },
             "include_attachments": {
               "description": "索引附加到页面的文件和图片。请参阅[图片索引/处理设置]({indexSettingsPath})。"

@@ -4129,7 +4129,8 @@
               "description": "Retorne apenas páginas. Mantenha `type=page` como o único filtro de tipo.\nEvite ordenação e filtros de data. `order by` ou `lastModified` quebrarão a consulta do próprio Onyx. [Referência de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "Testar consulta"
-              }
+              },
+              "required": "Adicione uma consulta CQL."
             },
             "include_attachments": {
               "description": "Indexa arquivos e imagens anexados às páginas. Veja [Configurações de indexação/processamento de imagens]({indexSettingsPath})."

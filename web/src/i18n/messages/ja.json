@@ -4129,7 +4129,8 @@
               "description": "ページのみを返します。タイプフィルターは `type=page` のみにしてください。\n並べ替えと日付フィルターは避けてください。`order by` や `lastModified` は Onyx 独自のクエリを壊します。 [CQL リファレンス](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
               "testButton": {
                 "label": "クエリをテスト"
-              }
+              },
+              "required": "CQL クエリを追加してください。"
             },
             "include_attachments": {
               "description": "ページに添付されたファイルと画像をインデックスします。[画像のインデックス/処理設定]({indexSettingsPath})を参照してください。"

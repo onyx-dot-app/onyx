@@ -215,9 +215,7 @@ function ListAvailability({
           type="button"
           tooltip={t("field.availableRefresh.tooltip")}
           aria-label={t("field.availableRefresh.tooltip")}
-          onClick={() =>
-            checkActions.runCheck(availability.checkId, { showChecks: false })
-          }
+          onClick={() => checkActions.runCheck(availability.checkId)}
         />
       )}
     </Section>
@@ -345,7 +343,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
-  const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
+  const { setFieldValue, setFieldTouched } = useFormikContext<FormValues>(); // Get Formik's context functions
 
   const label =
     typeof field.label === "function"
@@ -689,7 +687,16 @@ export const RenderField: FC<RenderFieldProps> = ({
                     icon={SvgRefreshCw}
                     prominence="secondary"
                     disabled={disabled || checkActions === null}
-                    onClick={() => checkActions?.runCheck(testCheck.checkId)}
+                    onClick={() => {
+                      // A blank query has nothing to test: the field shows
+                      // its error instead.
+                      const query: unknown = values[field.name];
+                      if (typeof query !== "string" || query.trim() === "") {
+                        void setFieldTouched(field.name, true, true);
+                        return;
+                      }
+                      checkActions?.runCheck(testCheck.checkId);
+                    }}
                   >
                     {testCheck.label}
                   </Button>
