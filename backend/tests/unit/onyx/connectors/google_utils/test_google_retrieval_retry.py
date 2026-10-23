@@ -1,6 +1,6 @@
-"""Drive/Gmail paginated retrieval must retry transient connection drops
-(broken pipe, reset, TLS EOF, timeout) instead of letting one dropped socket
-fail the whole crawl, and must re-raise when the drop persists."""
+"""Drive/Gmail retrieval and access probes must retry transient connection
+drops (broken pipe, reset, TLS EOF, timeout) instead of letting one dropped
+socket fail the whole crawl, and must re-raise when the drop persists."""
 
 import socket
 import ssl
@@ -18,6 +18,9 @@ class _Request:
     def execute(self) -> dict:
         return self._execute_fn()
 
+
+# tries of retry_transient_connection_errors
+_PROBE_CONNECTION_TRIES = 5
 
 _TRANSIENT_ERRORS = [
     BrokenPipeError(32, "Broken pipe"),
@@ -80,3 +83,38 @@ def test_retrieval_reraises_when_retries_exhausted(
 
     with pytest.raises(type(transient_error)):
         google_utils._execute_single_retrieval(retrieval_function)
+
+
+@pytest.mark.parametrize("transient_error", _TRANSIENT_ERRORS)
+def test_access_probe_retries_transient_connection_errors(
+    transient_error: Exception,
+) -> None:
+    attempts = {"count": 0}
+
+    def execute() -> dict:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise transient_error
+        return {"id": "drive"}
+
+    assert google_utils.execute_access_probe(_Request(execute)) == {"id": "drive"}
+    assert attempts["count"] == 2
+
+
+@pytest.mark.parametrize("transient_error", _TRANSIENT_ERRORS)
+def test_access_probe_reraises_when_retries_exhausted(
+    transient_error: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real retry wrapper, with only its sleep removed: the probe gives up
+    after the configured tries and the original error escapes."""
+    monkeypatch.setattr("tenacity.nap.time.sleep", lambda _seconds: None)
+    attempts = {"count": 0}
+
+    def execute() -> dict:
+        attempts["count"] += 1
+        raise transient_error
+
+    with pytest.raises(type(transient_error)):
+        google_utils.execute_access_probe(_Request(execute))
+    assert attempts["count"] == _PROBE_CONNECTION_TRIES
