@@ -73,6 +73,7 @@ def stubbed_sweep(
     monkeypatch.setattr(
         tasks_module, "get_sandbox_manager", lambda: stub_sandbox_manager
     )
+    monkeypatch.setattr(stub_sandbox_manager, "iter_resources", lambda *_args: iter(()))
     return stub_sandbox_manager
 
 
