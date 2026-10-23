@@ -2321,3 +2321,6 @@ export const MIN_PRUNE_FREQ_HOURS =
 const MAX_FREQ_SECONDS = 2_147_483_647;
 export const MAX_REFRESH_FREQ_MINUTES = Math.floor(MAX_FREQ_SECONDS / 60);
 export const MAX_PRUNE_FREQ_HOURS = Math.floor(MAX_FREQ_SECONDS / 3600);
+// The create form's floor for its hour fields (Prune, Run Checks): a whole
+// hour, above the backend's 5 minutes, which the connector page still allows.
+export const MIN_SCHEDULE_HOURS = 1;

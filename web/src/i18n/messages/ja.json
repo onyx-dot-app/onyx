@@ -3668,7 +3668,8 @@
           "title": "チェックの実行間隔",
           "description": "接続の機能と状態を確認します。",
           "placeholder": "なし"
-        }
+        },
+        "rangeRequired": "{min, number} - {max, number} の範囲で値を入力してください。"
       },
       "settings": {
         "description": "コネクタの情報とアクセス。",

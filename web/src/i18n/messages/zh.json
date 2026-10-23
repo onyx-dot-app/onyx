@@ -3668,7 +3668,8 @@
           "title": "检查运行间隔",
           "description": "检查连接的功能与健康状况。",
           "placeholder": "从不"
-        }
+        },
+        "rangeRequired": "请输入 {min, number} - {max, number} 范围内的值。"
       },
       "settings": {
         "description": "连接器信息与访问权限。",

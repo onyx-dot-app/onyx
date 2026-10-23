@@ -3668,7 +3668,8 @@
           "title": "Exécuter les vérifications toutes les",
           "description": "Vérifie la connexion, ses capacités et son état.",
           "placeholder": "Jamais"
-        }
+        },
+        "rangeRequired": "Veuillez saisir une valeur comprise dans la plage {min, number} - {max, number}."
       },
       "settings": {
         "description": "Informations et accès du connecteur.",

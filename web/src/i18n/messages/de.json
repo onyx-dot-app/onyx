@@ -3668,7 +3668,8 @@
           "title": "Prüfungen ausführen alle",
           "description": "Prüft die Verbindung auf Funktionen und Zustand.",
           "placeholder": "Nie"
-        }
+        },
+        "rangeRequired": "Bitte geben Sie einen Wert im Bereich {min, number} - {max, number} ein."
       },
       "settings": {
         "description": "Konnektor-Informationen und Zugriff.",

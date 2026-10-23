@@ -1479,7 +1479,6 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
 DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 7  # 7 days
 # What the create form fills in for a new connector's schedule.
 DEFAULT_REFRESH_FREQ = 60 * 30  # 30 minutes
-DEFAULT_CHECK_FREQ = 60 * 60 * 24  # 24 hours
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"

@@ -3668,7 +3668,8 @@
           "title": "تشغيل الفحوصات كل",
           "description": "يتحقق من الاتصال وقدراته وسلامته.",
           "placeholder": "أبدًا"
-        }
+        },
+        "rangeRequired": "يُرجى إدخال قيمة ضمن النطاق {min, number} - {max, number}."
       },
       "settings": {
         "description": "معلومات الموصل والوصول إليه.",

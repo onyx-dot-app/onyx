@@ -62,7 +62,13 @@ import type {
   CredentialRef,
   DraftCredential,
 } from "@/lib/credentials/types";
-import { useConnectorConfiguration } from "@/lib/connectors/connectors";
+import {
+  MAX_PRUNE_FREQ_HOURS,
+  MAX_REFRESH_FREQ_MINUTES,
+  MIN_REFRESH_FREQ_MINUTES,
+  MIN_SCHEDULE_HOURS,
+  useConnectorConfiguration,
+} from "@/lib/connectors/connectors";
 import type {
   ConnectionConfiguration,
   Connector,
@@ -464,9 +470,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   if (settings.default_pruning_freq !== undefined) {
     initialValues.pruneFreq = settings.default_pruning_freq / 3600;
   }
-  if (settings.default_check_freq !== undefined) {
-    initialValues.checkFreq = settings.default_check_freq / 3600;
-  }
   if (typedSpec) {
     initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
   }
@@ -722,12 +725,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         {
           required: (field) => tValidation("required", { field }),
           ...(edit === undefined && {
+            // The titles are terse, so a blank field names its range.
             scheduleRequired: {
-              refreshFreq: tValidation("required", {
-                field: t("scheduled.refreshFrequency.title"),
+              refreshFreq: t("scheduled.rangeRequired", {
+                min: MIN_REFRESH_FREQ_MINUTES,
+                max: MAX_REFRESH_FREQ_MINUTES,
               }),
-              pruneFreq: tValidation("required", {
-                field: t("scheduled.pruneFrequency.title"),
+              pruneFreq: t("scheduled.rangeRequired", {
+                min: MIN_SCHEDULE_HOURS,
+                max: MAX_PRUNE_FREQ_HOURS,
               }),
             },
           }),

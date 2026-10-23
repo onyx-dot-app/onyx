@@ -3668,7 +3668,8 @@
           "title": "Ejecutar comprobaciones cada",
           "description": "Comprueba la conexión, sus capacidades y su estado.",
           "placeholder": "Nunca"
-        }
+        },
+        "rangeRequired": "Introduce un valor en el rango {min, number} - {max, number}."
       },
       "settings": {
         "description": "Información y acceso del conector.",

@@ -6,7 +6,7 @@ import { InputNumberField } from "@opal/form";
 import {
   MAX_PRUNE_FREQ_HOURS,
   MAX_REFRESH_FREQ_MINUTES,
-  MIN_PRUNE_FREQ_HOURS,
+  MIN_SCHEDULE_HOURS,
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
 
@@ -110,7 +110,7 @@ export default function ScheduleSection({
           >
             <InputNumberField
               name="pruneFreq"
-              min={MIN_PRUNE_FREQ_HOURS}
+              min={MIN_SCHEDULE_HOURS}
               max={MAX_PRUNE_FREQ_HOURS}
               decimalPlaces={3}
               suffix={t("units.hours")}
@@ -130,8 +130,7 @@ export default function ScheduleSection({
             >
               <InputNumberField
                 name="checkFreq"
-                // The backend's minimum and maximum match pruning's.
-                min={MIN_PRUNE_FREQ_HOURS}
+                min={MIN_SCHEDULE_HOURS}
                 max={MAX_PRUNE_FREQ_HOURS}
                 decimalPlaces={3}
                 // Cleared, the checks run only on request.

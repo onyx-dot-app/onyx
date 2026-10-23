@@ -3668,7 +3668,8 @@
           "title": "검사 실행 주기",
           "description": "연결의 기능과 상태를 확인합니다.",
           "placeholder": "안 함"
-        }
+        },
+        "rangeRequired": "{min, number} - {max, number} 범위의 값을 입력하세요."
       },
       "settings": {
         "description": "커넥터 정보 및 액세스.",

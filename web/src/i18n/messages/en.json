@@ -3668,7 +3668,8 @@
           "title": "Run Checks Every",
           "description": "Check connection for capabilities and health.",
           "placeholder": "Never"
-        }
+        },
+        "rangeRequired": "Please enter in a value from the range {min, number} - {max, number}."
       },
       "settings": {
         "description": "Connector information and access.",

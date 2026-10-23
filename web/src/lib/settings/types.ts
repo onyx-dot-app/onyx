@@ -126,7 +126,6 @@ export interface Settings {
   default_pruning_freq?: number;
   // A new connector's schedule as the create form fills it in, in seconds.
   default_refresh_freq?: number;
-  default_check_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 

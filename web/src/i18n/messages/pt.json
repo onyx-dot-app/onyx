@@ -3668,7 +3668,8 @@
           "title": "Executar verificações a cada",
           "description": "Verifica a conexão, seus recursos e sua integridade.",
           "placeholder": "Nunca"
-        }
+        },
+        "rangeRequired": "Insira um valor no intervalo {min, number} - {max, number}."
       },
       "settings": {
         "description": "Informações e acesso do conector.",
