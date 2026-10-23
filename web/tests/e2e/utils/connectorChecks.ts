@@ -30,6 +30,8 @@ function signInCheck(state: DraftCheckState["state"]): DraftCheckState {
     duration_ms: state === "passed" ? 1 : null,
     from_cache: false,
     validates_binding: true,
+    summary: null,
+    reports_field: null,
     findings: [],
   };
 }

@@ -433,7 +433,7 @@ def test_invalid_actions_are_rejected_before_anything_starts(
     assert harness.cache.store == {}
 
 
-def test_run_order_start_now_keeps_discovery_after_validation() -> None:
+def test_run_order_start_now_moves_discovery_ahead_of_validation() -> None:
     runs: list[str] = []
     checks: list[CapabilityCheck] = [
         _Check(_SIGN_IN, runs),
@@ -443,7 +443,8 @@ def test_run_order_start_now_keeps_discovery_after_validation() -> None:
 
     ordered = [check.check_id for check in run_order(checks, _FIND)]
 
-    assert ordered == [_SIGN_IN, _LIST, _FIND]
+    # The admin asked for it: it runs after only the checks it needs.
+    assert ordered == [_SIGN_IN, _FIND, _LIST]
 
 
 def _result(

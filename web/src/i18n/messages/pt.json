@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "opcional"
+        },
+        "availableRefresh": {
+          "tooltip": "Atualizar a lista"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "URL do site",
-              "placeholder": "https://seu-dominio.atlassian.net/wiki"
+              "placeholder": "https://seu-dominio.atlassian.net/wiki",
+              "placeholderDataCenter": "https://seu-dominio.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Tudo"
+                  "label": "Indexar tudo"
                 },
-                "space": {
-                  "label": "Space"
-                },
-                "page": {
-                  "label": "Página"
+                "select": {
+                  "label": "Selecionar espaços/páginas"
                 },
                 "cql": {
                   "label": "Consulta CQL"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "Indexa todas as páginas que a conta pode ler",
-              "description": "O Onyx indexa todas as páginas de cada espaço que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
+              "label": "Indexar tudo",
+              "description": "O Onyx indexará todos os espaços e páginas aos quais a conta selecionada tem acesso."
             },
             "space": {
-              "label": "Chave do space",
-              "description": "A chave do space do Confluence a indexar (por exemplo, `KB`)."
+              "label": "Espaços",
+              "description": "Chaves de espaço que este conector indexa (por exemplo, ENG).",
+              "placeholder": "Adicione uma chave de espaço ou URL",
+              "required": "Adicione pelo menos um espaço ou uma página.",
+              "available": "{more, select, true {{count, number}+ espaços disponíveis} other {{count, plural, one {# espaço disponível} other {# espaços disponíveis}}}}"
             },
             "page_id": {
-              "label": "ID da página",
-              "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
+              "label": "Páginas",
+              "description": "IDs de página que este conector indexa (por exemplo, 123456).",
+              "placeholder": "Adicione um ID de página ou URL",
+              "available": "{more, select, true {{count, number}+ páginas disponíveis} other {{count, plural, one {# página disponível} other {# páginas disponíveis}}}}"
             },
             "index_recursively": {
-              "label": "Indexar recursivamente",
-              "description": "Se ativado, indexaremos a página indicada pelo ID da página, bem como todas as suas páginas filhas."
+              "label": "Incluir páginas filhas",
+              "description": "Também indexa todas as páginas aninhadas nas páginas indicadas acima, em qualquer profundidade."
             },
             "cql_query": {
               "label": "Consulta CQL",
-              "description": "IMPORTANTE: No momento, só oferecemos suporte a consultas CQL que retornam objetos do tipo 'page'. Isso significa que toda consulta CQL deve conter 'type=page' como único filtro de tipo. Também é importante não usar filtros de 'lastModified', pois eles causam problemas na lógica de sondagem do conector. Não use ORDER BY, porque o conector define sua própria ordenação. Ainda assim, obteremos todos os anexos e comentários das páginas retornadas pela consulta CQL. Qualquer filtro de 'lastmodified' será sobrescrito. Consulte a [documentação de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) da Atlassian para mais detalhes."
+              "description": "Retorne apenas páginas. Mantenha `type=page` como o único filtro de tipo.\nEvite ordenação e filtros de data. `order by` ou `lastModified` quebrarão a consulta do próprio Onyx. [Referência de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Testar consulta"
+              },
+              "required": "Adicione uma consulta CQL."
+            },
+            "include_attachments": {
+              "description": "Indexa arquivos e imagens anexados às páginas. Veja [Configurações de indexação/processamento de imagens]({indexSettingsPath})."
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "Erro ao enviar a credencial"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Adicione seu token de acesso pessoal"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Conteúdo do Zuliprc",
         "authenticationMethod": "Método de autenticação",
         "primaryAdminEmail": "E-mail do administrador principal",
-        "serviceAccountKey": "Chave da conta de serviço"
+        "serviceAccountKey": "Chave da conta de serviço",
+        "personalAccessToken": "Token de acesso pessoal"
       },
       "hints": {
         "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
         "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio."
+        "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio.",
+        "confluencePersonalAccessToken": "Cole o [token de acesso pessoal](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) da sua conta de administrador do Confluence."
       },
       "methods": {
         "labels": {

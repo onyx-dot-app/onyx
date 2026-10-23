@@ -149,9 +149,9 @@ def test_variants_and_steps_share_a_row() -> None:
         "confluence_space_listing",
     }
     assert len(rows["confluence_space_permissions_read"]) == 3
-    # 25 checks on the 17 rows of the design.
-    assert len({check.check_id for check in checks}) == 25
-    assert len(rows) == 17
+    # 26 checks on the 18 rows of the design.
+    assert len({check.check_id for check in checks}) == 26
+    assert len(rows) == 18
     assert all(len(check.display_name) <= 24 for check in checks)
 
 

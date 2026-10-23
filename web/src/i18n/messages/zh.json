@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "可选"
+        },
+        "availableRefresh": {
+          "tooltip": "刷新列表"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "站点 URL",
-              "placeholder": "https://nide-yuming.atlassian.net/wiki"
+              "placeholder": "https://nide-yuming.atlassian.net/wiki",
+              "placeholderDataCenter": "https://nide-yuming.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "全部"
+                  "label": "索引全部"
                 },
-                "space": {
-                  "label": "空间"
-                },
-                "page": {
-                  "label": "页面"
+                "select": {
+                  "label": "选择空间/页面"
                 },
                 "cql": {
                   "label": "CQL 查询"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "索引该账户可读取的所有页面",
-              "description": "Onyx 会索引所选账户可读取的每个空间中的全部页面。如需缩小范围，请选择其他标签页。"
+              "label": "索引全部",
+              "description": "Onyx 将索引所选账户有权访问的所有空间和页面。"
             },
             "space": {
-              "label": "空间键",
-              "description": "要索引的 Confluence 空间键（例如 `KB`）。"
+              "label": "空间",
+              "description": "此连接器要索引的空间键（例如 ENG）。",
+              "placeholder": "添加空间键或 URL",
+              "required": "请至少添加一个空间或页面。",
+              "available": "{more, select, true {{count, number}+ 个可用空间} other {{count, plural, one {# 个可用空间} other {# 个可用空间}}}}"
             },
             "page_id": {
-              "label": "页面 ID",
-              "description": "要索引的特定页面 ID（例如 `131368`）"
+              "label": "页面",
+              "description": "此连接器要索引的页面 ID（例如 123456）。",
+              "placeholder": "添加页面 ID 或 URL",
+              "available": "{more, select, true {{count, number}+ 个可用页面} other {{count, plural, one {# 个可用页面} other {# 个可用页面}}}}"
             },
             "index_recursively": {
-              "label": "递归索引",
-              "description": "设置后，将索引页面 ID 所指定的页面及其所有子页面。"
+              "label": "包含子页面",
+              "description": "同时索引嵌套在上述页面下的所有页面，无论层级深浅。"
             },
             "cql_query": {
               "label": "CQL 查询",
-              "description": "重要提示：目前仅支持返回“page”类型对象的 CQL 查询。这意味着所有 CQL 查询都必须包含“type=page”作为唯一的类型过滤条件。同时请勿使用“lastModified”过滤条件，否则会影响连接器的轮询逻辑。请勿使用 ORDER BY，因为连接器会设置自己的排序方式。我们仍会获取 CQL 查询所返回页面的所有附件和评论。任何“lastmodified”过滤条件都将被覆盖。更多详情请参阅 Atlassian 的 [CQL 文档](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)。"
+              "description": "仅返回页面。类型过滤器只保留 `type=page`。\n避免排序和日期过滤器。`order by` 或 `lastModified` 会破坏 Onyx 自身的查询。 [CQL 参考](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "测试查询"
+              },
+              "required": "请添加 CQL 查询。"
+            },
+            "include_attachments": {
+              "description": "索引附加到页面的文件和图片。请参阅[图片索引/处理设置]({indexSettingsPath})。"
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "提交凭据时出错"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "添加您的个人访问令牌"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Zuliprc 内容",
         "authenticationMethod": "身份验证方式",
         "primaryAdminEmail": "主管理员邮箱",
-        "serviceAccountKey": "服务账号密钥"
+        "serviceAccountKey": "服务账号密钥",
+        "personalAccessToken": "个人访问令牌"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
-        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。",
+        "confluencePersonalAccessToken": "粘贴您的 Confluence 管理员账户的[个人访问令牌](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)。"
       },
       "methods": {
         "labels": {

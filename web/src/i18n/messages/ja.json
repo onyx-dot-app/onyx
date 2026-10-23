@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "任意"
+        },
+        "availableRefresh": {
+          "tooltip": "リストを更新"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "サイト URL",
-              "placeholder": "https://domein-mei.atlassian.net/wiki"
+              "placeholder": "https://domein-mei.atlassian.net/wiki",
+              "placeholderDataCenter": "https://domein-mei.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "すべて"
+                  "label": "すべてをインデックス"
                 },
-                "space": {
-                  "label": "スペース"
-                },
-                "page": {
-                  "label": "ページ"
+                "select": {
+                  "label": "スペース/ページを選択"
                 },
                 "cql": {
                   "label": "CQL クエリ"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "アカウントが読み取れるすべてのページをインデックスします",
-              "description": "Onyx は、選択したアカウントが読み取れるすべてのスペースのすべてのページをインデックスします。対象を絞るには、別のタブを選択してください。"
+              "label": "すべてをインデックス",
+              "description": "Onyx は、選択したアカウントがアクセスできるすべてのスペースとページをインデックスします。"
             },
             "space": {
-              "label": "スペースキー",
-              "description": "インデックスする Confluence のスペースキー(例: `KB`)。"
+              "label": "スペース",
+              "description": "このコネクタでインデックスするスペースキー（例: ENG）。",
+              "placeholder": "スペースキーまたは URL を入力",
+              "required": "スペースまたはページを 1 つ以上追加してください。",
+              "available": "{more, select, true {利用可能なスペース: {count, number}+} other {{count, plural, one {利用可能なスペース: #} other {利用可能なスペース: #}}}}"
             },
             "page_id": {
-              "label": "ページ ID",
-              "description": "インデックスする特定のページ ID(例: `131368`)"
+              "label": "ページ",
+              "description": "このコネクタでインデックスするページ ID（例: 123456）。",
+              "placeholder": "ページ ID または URL を入力",
+              "available": "{more, select, true {利用可能なページ: {count, number}+} other {{count, plural, one {利用可能なページ: #} other {利用可能なページ: #}}}}"
             },
             "index_recursively": {
-              "label": "再帰的にインデックス",
-              "description": "オンにすると、ページ ID で指定したページと、そのすべての子ページをインデックスします。"
+              "label": "子ページを含める",
+              "description": "上で指定したページの下にネストされたすべてのページも、階層の深さを問わずインデックスします。"
             },
             "cql_query": {
               "label": "CQL クエリ",
-              "description": "重要: 現在、'page' タイプのオブジェクトを返す CQL クエリのみがサポートされています。つまり、すべての CQL クエリで、唯一のタイプフィルターとして 'type=page' を含める必要があります。また、コネクターのポーリングロジックに問題が生じるため、'lastModified' のフィルターは使用しないでください。コネクターが独自の並び順を設定するため、ORDER BY も使用しないでください。CQL クエリが返すページの添付ファイルとコメントは、すべて取得されます。'lastmodified' フィルターは上書きされます。詳細は、Atlassian の [CQL ドキュメント](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)を参照してください。"
+              "description": "ページのみを返します。タイプフィルターは `type=page` のみにしてください。\n並べ替えと日付フィルターは避けてください。`order by` や `lastModified` は Onyx 独自のクエリを壊します。 [CQL リファレンス](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "クエリをテスト"
+              },
+              "required": "CQL クエリを追加してください。"
+            },
+            "include_attachments": {
+              "description": "ページに添付されたファイルと画像をインデックスします。[画像のインデックス/処理設定]({indexSettingsPath})を参照してください。"
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "個人用アクセストークンを追加"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Zuliprc の内容",
         "authenticationMethod": "認証方法",
         "primaryAdminEmail": "プライマリ管理者のメールアドレス",
-        "serviceAccountKey": "サービスアカウントキー"
+        "serviceAccountKey": "サービスアカウントキー",
+        "personalAccessToken": "個人用アクセストークン"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。"
+        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。",
+        "confluencePersonalAccessToken": "Confluence 管理者アカウントの[個人用アクセストークン](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)を貼り付けてください。"
       },
       "methods": {
         "labels": {

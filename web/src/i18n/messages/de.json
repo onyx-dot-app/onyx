@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "optional"
+        },
+        "availableRefresh": {
+          "tooltip": "Liste aktualisieren"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "Site-URL",
-              "placeholder": "https://ihre-domain.atlassian.net/wiki"
+              "placeholder": "https://ihre-domain.atlassian.net/wiki",
+              "placeholderDataCenter": "https://ihre-domain.de/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Alles"
+                  "label": "Alles indexieren"
                 },
-                "space": {
-                  "label": "Space"
-                },
-                "page": {
-                  "label": "Seite"
+                "select": {
+                  "label": "Spaces/Seiten auswählen"
                 },
                 "cql": {
                   "label": "CQL-Abfrage"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "Indexiert jede Seite, die das Konto lesen kann",
-              "description": "Onyx indexiert alle Seiten in jedem Bereich, den das ausgewählte Konto lesen kann. Um weniger zu indexieren, wählen Sie einen anderen Tab."
+              "label": "Alles indexieren",
+              "description": "Onyx indexiert alle Bereiche und Seiten, auf die das ausgewählte Konto Zugriff hat."
             },
             "space": {
-              "label": "Space-Schlüssel",
-              "description": "Der zu indexierende Confluence-Space-Schlüssel (z. B. `KB`)."
+              "label": "Bereiche",
+              "description": "Bereichsschlüssel, die dieser Konnektor indexiert (z. B. ENG).",
+              "placeholder": "Bereichsschlüssel oder URL hinzufügen",
+              "required": "Fügen Sie mindestens einen Bereich oder eine Seite hinzu.",
+              "available": "{more, select, true {{count, number}+ Bereiche verfügbar} other {{count, plural, one {# Bereich verfügbar} other {# Bereiche verfügbar}}}}"
             },
             "page_id": {
-              "label": "Seiten-ID",
-              "description": "ID der zu indexierenden Seite (z. B. `131368`)"
+              "label": "Seiten",
+              "description": "Seiten-IDs, die dieser Konnektor indexiert (z. B. 123456).",
+              "placeholder": "Seiten-ID oder URL hinzufügen",
+              "available": "{more, select, true {{count, number}+ Seiten verfügbar} other {{count, plural, one {# Seite verfügbar} other {# Seiten verfügbar}}}}"
             },
             "index_recursively": {
-              "label": "Rekursiv indexieren",
-              "description": "Wenn aktiviert, indexieren wir die über die Seiten-ID angegebene Seite sowie alle ihre untergeordneten Seiten."
+              "label": "Unterseiten einbeziehen",
+              "description": "Indexiert auch alle Seiten, die unter den oben genannten Seiten verschachtelt sind, in jeder Tiefe."
             },
             "cql_query": {
               "label": "CQL-Abfrage",
-              "description": "WICHTIG: Derzeit werden nur CQL-Abfragen unterstützt, die Objekte vom Typ 'page' zurückgeben. Das heißt, jede CQL-Abfrage muss 'type=page' als einzigen Typfilter enthalten. Außerdem dürfen keine Filter für 'lastModified' verwendet werden, da sie die Polling-Logik unseres Konnektors stören. Verwenden Sie kein ORDER BY, da der Konnektor die Sortierung selbst festlegt. Zu den von der CQL-Abfrage gelieferten Seiten werden weiterhin alle Anhänge und Kommentare abgerufen. Alle 'lastmodified'-Filter werden überschrieben. Weitere Details finden Sie in der [CQL-Dokumentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) von Atlassian."
+              "description": "Nur Seiten zurückgeben. Behalten Sie `type=page` als einzigen Typfilter bei.\nVermeiden Sie Sortierung und Datumsfilter. `order by` oder `lastModified` stören die eigene Abfrage von Onyx. [CQL-Referenz](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Abfrage testen"
+              },
+              "required": "Fügen Sie eine CQL-Abfrage hinzu."
+            },
+            "include_attachments": {
+              "description": "Indexiert an Seiten angehängte Dateien und Bilder. Siehe [Einstellungen zur Bildindexierung/-verarbeitung]({indexSettingsPath})."
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "Fehler beim Übermitteln der Anmeldedaten"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Fügen Sie Ihr persönliches Zugriffstoken hinzu"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Zuliprc-Inhalt",
         "authenticationMethod": "Authentifizierungsmethode",
         "primaryAdminEmail": "E-Mail des primären Administrators",
-        "serviceAccountKey": "Dienstkontoschlüssel"
+        "serviceAccountKey": "Dienstkontoschlüssel",
+        "personalAccessToken": "Persönliches Zugriffstoken"
       },
       "hints": {
         "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein."
+        "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein.",
+        "confluencePersonalAccessToken": "Fügen Sie das [persönliche Zugriffstoken](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) Ihres Confluence-Administratorkontos ein."
       },
       "methods": {
         "labels": {

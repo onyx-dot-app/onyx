@@ -42,6 +42,8 @@ function checkState(findings: CheckFinding[]): DraftCheckState {
     duration_ms: 1,
     from_cache: false,
     validates_binding: false,
+    summary: null,
+    reports_field: null,
     findings,
   };
 }

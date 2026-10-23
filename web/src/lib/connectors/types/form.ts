@@ -59,6 +59,16 @@ export interface ListOption extends Option {
   optionsFinding?: CheckFindingKey;
   /** When true the field takes typed entries only, such as regex patterns. */
   plainListCondition?: (values: Record<string, unknown>) => boolean;
+  /**
+   * Beside the title: how many options a discovery check found, and a button
+   * that lists them again. `label` is a key formatted with `count` and
+   * `more` ("true" when the listing stopped at the backend's cap).
+   */
+  availableCount?: {
+    finding: CheckFindingKey;
+    checkId: string;
+    label: string;
+  };
 }
 
 export interface StringPairListOption extends Option {
@@ -81,8 +91,16 @@ export interface TextOption extends Option {
   default?: string;
   initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
-  /** Example value shown in the empty input. */
-  placeholder?: string;
+  /** Monospace text, for code or queries. Text areas only. */
+  mono?: boolean;
+  /**
+   * A button under the field that runs this capability check now, beside
+   * the description. The description's lines show one per row.
+   */
+  testCheck?: { checkId: string; label: string };
+  /** Example value shown in the empty input: a message key, or one picked by
+   * the form's values (e.g. Confluence's site URL per Cloud or Data Center). */
+  placeholder?: string | ((values: Record<string, unknown>) => string);
   /** Text below the input. It gets the connector's name as `connectorName`. */
   subDescription?: TextSubDescriptionKey;
 }

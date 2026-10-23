@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useMemo,
 } from "react";
 import {
   getSourceDisplayName,
@@ -85,6 +86,7 @@ import {
   newAccountSchema,
   typedAccountSpec,
   typedDraft,
+  type NewAccountSchema,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { deleteConnector } from "@/lib/connector";
 import {
@@ -99,6 +101,10 @@ import { visibleConnectorFields } from "@/views/admin/connectors/AddConnectorPag
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
+import {
+  ConnectorCheckActionsProvider,
+  type ConnectorCheckActions,
+} from "@/views/admin/connectors/AddConnectorPage/form/checkActions";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import { CredentialDerivedConfig } from "@/views/admin/connectors/AddConnectorPage/form/CredentialDerivedConfig";
@@ -152,7 +158,7 @@ function ConnectorChecksGate({
   ccPairId,
   children,
 }: ConnectorChecksGateProps) {
-  const { createReady, results } = useConnectorChecks({
+  const { createReady, results, runCheck } = useConnectorChecks({
     source,
     credential,
     ccPairId,
@@ -160,7 +166,16 @@ function ConnectorChecksGate({
   const optionalFailedCount: number = results.filter(
     (result) => result.status === "failed" && !result.required
   ).length;
-  return children({ createReady, optionalFailedCount });
+  // A field (e.g. Confluence's CQL query) can run its check from the form.
+  const actions: ConnectorCheckActions = useMemo(
+    () => ({ runCheck }),
+    [runCheck]
+  );
+  return (
+    <ConnectorCheckActionsProvider value={actions}>
+      {children({ createReady, optionalFailedCount })}
+    </ConnectorCheckActionsProvider>
+  );
 }
 
 async function submitConnector<T>(
@@ -372,16 +387,23 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const tValidation = useTranslations("admin.credentials.validation");
   const fieldCopy = useCredentialFieldCopy(connector);
   const typedSpec = typedAccountSpec(connector);
-  const accountSchema = typedSpec
-    ? newAccountSchema(typedSpec, {
-        fieldTitle: (key) => fieldCopy(key).title,
-        required: (field) => tValidation("required", { field }),
-        empty: (field) => tValidation("empty", { field }),
-        invalidEmail: (field) => tValidation("invalidEmail", { field }),
-        fileRequired: (field) => tValidation("fileRequired", { field }),
-        authMethodRequired: tValidation("authMethodRequired"),
-      })
-    : null;
+  // The account's fields follow the connector form (Confluence Cloud or Data
+  // Center), so its schema is built for the form's values.
+  const accountSchemaFor = (
+    values: Readonly<Record<string, unknown>>
+  ): NewAccountSchema | null => {
+    const spec = typedAccountSpec(connector, values);
+    return spec
+      ? newAccountSchema(spec, {
+          fieldTitle: (key) => fieldCopy(key, spec.fields[key]).title,
+          required: (field) => tValidation("required", { field }),
+          empty: (field) => tValidation("empty", { field }),
+          invalidEmail: (field) => tValidation("invalidEmail", { field }),
+          fileRequired: (field) => tValidation("fileRequired", { field }),
+          authMethodRequired: tValidation("authMethodRequired"),
+        })
+      : null;
+  };
 
   /**
    * The chosen account for these form values: the saved pick; else the typed
@@ -390,7 +412,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    currentCredential || typedDraft(connector, accountSchema, values) || null;
+    currentCredential ||
+    typedDraft(connector, accountSchemaFor(values), values) ||
+    null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go
@@ -695,6 +719,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
+          confluenceCqlRequired: t(
+            "connectors.confluence.fields.cql_query.required"
+          ),
+          confluenceScopeRequired: t(
+            "connectors.confluence.fields.space.required"
+          ),
           specificGroupsRequired: t(
             "settings.documentAccess.specificGroups.required"
           ),
@@ -706,7 +736,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         // Always checked, so its fields can show errors. With a saved pick
         // the typed account is not used, and Create ignores its errors (see
         // `blockingErrorsEmpty`).
-        [NEW_ACCOUNT_FIELD]: accountSchema ?? Yup.mixed(),
+        [NEW_ACCOUNT_FIELD]: typedSpec
+          ? Yup.lazy(
+              (_value, { parent }) => accountSchemaFor(parent) ?? Yup.mixed()
+            )
+          : Yup.mixed(),
       })}
       onSubmit={submitForm}
     >
@@ -719,7 +753,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             : null;
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
-          typedDraft(connector, accountSchema, formikProps.values) !== null;
+          typedDraft(
+            connector,
+            accountSchemaFor(formikProps.values),
+            formikProps.values
+          ) !== null;
         const showAdvancedBoundFields =
           !configuration.advancedValuesVisibleCondition ||
           configuration.advancedValuesVisibleCondition(

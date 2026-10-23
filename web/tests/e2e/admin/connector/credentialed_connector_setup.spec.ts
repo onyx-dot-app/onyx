@@ -20,6 +20,8 @@ const WIKI_BASE = "https://example.atlassian.net/wiki";
 const OTHER_WIKI_BASE = "https://other-example.atlassian.net/wiki";
 // The non-required check the mock fails on request.
 const OPTIONAL_CHECK = "Page comments are readable";
+// The scope tab that needs no spaces, pages or query.
+const SCOPE_EVERYTHING = "Index Everything";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
@@ -80,6 +82,9 @@ test.describe("Credentialed connector setup", () => {
     await expect(siteUrl).toBeEnabled();
     await siteUrl.fill(WIKI_BASE);
     await siteUrl.blur();
+    // The default scope needs spaces or pages; this test is about the
+    // credential, so index everything.
+    await setupPage.selectTab(SCOPE_EVERYTHING);
     await expect(setupPage.startChecksButton).toBeEnabled({ timeout: 10_000 });
     await expect(setupPage.createConnectorButton).toBeDisabled();
     await setupPage.runChecks();
@@ -143,6 +148,7 @@ test.describe("Credentialed connector setup", () => {
     const siteUrl = setupPage.textField("wiki_base");
     await siteUrl.fill(WIKI_BASE);
     await siteUrl.blur();
+    await setupPage.selectTab(SCOPE_EVERYTHING);
     await setupPage.runChecks();
     await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
 

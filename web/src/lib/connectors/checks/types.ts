@@ -31,6 +31,7 @@ export type CheckFindingKey =
   | "shared_drives"
   | "visible_organization_users"
   | "visible_spaces"
+  | "visible_pages"
   | "readable_channels"
   | "readable_mailboxes"
   | "readable_drives";
@@ -136,6 +137,10 @@ export interface DraftCheckState {
   /** The check proves the credential works with the credential-bound fields. */
   validates_binding: boolean;
   findings: CheckFinding[];
+  /** The row's short line, e.g. "No pages match the query". */
+  summary: string | null;
+  /** The config field whose error this check's failure is. */
+  reports_field: string | null;
 }
 
 export interface DraftCheckRunSnapshot {

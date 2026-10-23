@@ -30,7 +30,7 @@ import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
 import { checksProgress } from "@/lib/connectors/checks/progress";
 import {
-  findingOptions,
+  optionsFinding,
   storedCheckResults,
   type StoredReportScope,
 } from "@/lib/connectors/checks/findings";
@@ -52,6 +52,7 @@ import type {
   DraftCheckStateKind,
   DraftRerunMode,
   FindingOption,
+  OptionsFinding,
 } from "@/lib/connectors/checks/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { AccessType } from "@/lib/types";
@@ -537,9 +538,12 @@ export function useConnectorChecks({
           (check.state === "pending" || check.state === "waiting")
       );
       actionInFlight.current = true;
+      // Either way it starts now, ahead of any check the new run redoes.
       void start(
         "none",
-        queued ? { skip, startNow: checkId } : { skip, run: checkId }
+        queued
+          ? { skip, startNow: checkId }
+          : { skip, run: checkId, startNow: checkId }
       ).finally(() => {
         actionInFlight.current = false;
       });
@@ -590,12 +594,15 @@ export function useResetChecksOnCredentialChange({
   }, [stale, staleRunId, credentialKey, session?.request, sessionKey, mutate]);
 }
 
-/** Options a discovery check listed under `key`: the form's latest run, else the stored reports in `scope`. Starts no run. */
-export function useFindingOptions(
+/** The listing a discovery check found under `key`: the form's latest run, else the stored reports in `scope`. Starts no run. */
+export function useOptionsFinding(
   source: ConfigurableSources,
   key: CheckFindingKey,
-  scope: StoredReportScope | null
-): FindingOption[] {
+  scope: StoredReportScope | null,
+  // The latest run's empty listing is its answer (nothing found), not a
+  // reason to read an older stored report.
+  keepEmpty: boolean = false
+): OptionsFinding | null {
   const { data: session } = useSWR<ConnectorChecksSession>(
     SWR_KEYS.connectorCheckSession(source),
     null
@@ -612,13 +619,51 @@ export function useFindingOptions(
   const accountId: number | null =
     scope?.credentialId ?? savedDraft?.credential_id ?? null;
   return useMemo(() => {
-    const fromRun: FindingOption[] =
+    const fromRun: OptionsFinding | null =
       run && run.credential_id === accountId
-        ? findingOptions(run.checks, key)
-        : [];
-    if (fromRun.length > 0 || scope === null) return fromRun;
-    return findingOptions(storedCheckResults(reportFor, scope), key);
-  }, [run, accountId, key, scope, reportFor]);
+        ? optionsFinding(run.checks, key, keepEmpty)
+        : null;
+    if (fromRun !== null || scope === null) return fromRun;
+    return optionsFinding(storedCheckResults(reportFor, scope), key);
+  }, [run, accountId, key, scope, reportFor, keepEmpty]);
+}
+
+/**
+ * The error a failed check reports on `fieldName` (its `reports_field`), from
+ * the form's latest run of the current account; else null.
+ */
+export function useFieldCheckError(
+  source: ConfigurableSources,
+  fieldName: string,
+  scope: StoredReportScope | null
+): string | null {
+  const { data: session } = useSWR<ConnectorChecksSession>(
+    SWR_KEYS.connectorCheckSession(source),
+    null
+  );
+  const runId: string | null = session?.runId ?? null;
+  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    null
+  );
+  const { savedDraft } = useSavedDraftCredential(source);
+  const accountId: number | null =
+    scope?.credentialId ?? savedDraft?.credential_id ?? null;
+  if (!run || run.credential_id !== accountId) return null;
+  const failed = run.checks.find(
+    (check) => check.reports_field === fieldName && check.state === "failed"
+  );
+  return failed ? failed.summary || failed.message : null;
+}
+
+/** Options a discovery check listed under `key`; see `useOptionsFinding`. */
+export function useFindingOptions(
+  source: ConfigurableSources,
+  key: CheckFindingKey,
+  scope: StoredReportScope | null
+): FindingOption[] {
+  const finding = useOptionsFinding(source, key, scope);
+  return useMemo(() => finding?.options ?? [], [finding]);
 }
 
 const PLAN_DEBOUNCE_MS = 300;

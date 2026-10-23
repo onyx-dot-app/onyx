@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "선택 사항"
+        },
+        "availableRefresh": {
+          "tooltip": "목록 새로 고침"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "사이트 URL",
-              "placeholder": "https://domein.atlassian.net/wiki"
+              "placeholder": "https://domein.atlassian.net/wiki",
+              "placeholderDataCenter": "https://domein.com/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "전체"
+                  "label": "모두 색인"
                 },
-                "space": {
-                  "label": "스페이스"
-                },
-                "page": {
-                  "label": "페이지"
+                "select": {
+                  "label": "스페이스/페이지 선택"
                 },
                 "cql": {
                   "label": "CQL 쿼리"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "계정이 읽을 수 있는 모든 페이지를 색인합니다",
-              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 스페이스의 모든 페이지를 색인합니다. 범위를 줄이려면 다른 탭을 선택하세요."
+              "label": "모두 색인",
+              "description": "Onyx가 선택한 계정이 액세스할 수 있는 모든 스페이스와 페이지를 색인합니다."
             },
             "space": {
-              "label": "스페이스 키",
-              "description": "인덱싱할 Confluence 스페이스 키입니다 (예: `KB`)."
+              "label": "스페이스",
+              "description": "이 커넥터가 색인할 스페이스 키 (예: ENG).",
+              "placeholder": "스페이스 키 또는 URL 추가",
+              "required": "스페이스 또는 페이지를 하나 이상 추가하세요.",
+              "available": "{more, select, true {사용 가능한 스페이스 {count, number}+개} other {{count, plural, one {사용 가능한 스페이스 #개} other {사용 가능한 스페이스 #개}}}}"
             },
             "page_id": {
-              "label": "페이지 ID",
-              "description": "인덱싱할 특정 페이지 ID입니다 (예: `131368`)"
+              "label": "페이지",
+              "description": "이 커넥터가 색인할 페이지 ID (예: 123456).",
+              "placeholder": "페이지 ID 또는 URL 추가",
+              "available": "{more, select, true {사용 가능한 페이지 {count, number}+개} other {{count, plural, one {사용 가능한 페이지 #개} other {사용 가능한 페이지 #개}}}}"
             },
             "index_recursively": {
-              "label": "재귀적으로 인덱싱",
-              "description": "이 옵션을 설정하면 페이지 ID로 지정한 페이지와 모든 하위 페이지를 인덱싱합니다."
+              "label": "하위 페이지 포함",
+              "description": "위에 지정한 페이지 아래에 중첩된 모든 페이지도 깊이에 관계없이 색인합니다."
             },
             "cql_query": {
               "label": "CQL 쿼리",
-              "description": "중요: 현재 'page' 유형의 객체를 반환하는 CQL 쿼리만 지원합니다. 따라서 모든 CQL 쿼리에는 유일한 유형 필터로 'type=page'가 포함되어야 합니다. 'lastModified' 필터는 커넥터의 폴링 로직에 문제를 일으키므로 사용하지 마세요. 커넥터가 자체 정렬 순서를 설정하므로 ORDER BY도 사용하지 마세요. CQL 쿼리가 반환한 페이지의 모든 첨부 파일과 댓글은 그대로 가져옵니다. 'lastmodified' 필터는 덮어써집니다. 자세한 내용은 Atlassian의 [CQL 문서](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)를 참조하세요."
+              "description": "페이지만 반환하세요. 유형 필터는 `type=page`만 사용하세요.\n정렬과 날짜 필터는 피하세요. `order by` 또는 `lastModified`는 Onyx 자체 쿼리를 깨뜨립니다. [CQL 참조](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "쿼리 테스트"
+              },
+              "required": "CQL 쿼리를 추가하세요."
+            },
+            "include_attachments": {
+              "description": "페이지에 첨부된 파일과 이미지를 색인합니다. [이미지 색인/처리 설정]({indexSettingsPath})을 참조하세요."
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "개인 액세스 토큰 추가"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Zuliprc 내용",
         "authenticationMethod": "인증 방법",
         "primaryAdminEmail": "기본 관리자 이메일",
-        "serviceAccountKey": "서비스 계정 키"
+        "serviceAccountKey": "서비스 계정 키",
+        "personalAccessToken": "개인 액세스 토큰"
       },
       "hints": {
         "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요."
+        "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요.",
+        "confluencePersonalAccessToken": "Confluence 관리자 계정의 [개인 액세스 토큰](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html)을 붙여 넣으세요."
       },
       "methods": {
         "labels": {

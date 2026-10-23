@@ -3473,6 +3473,9 @@
       "field": {
         "optionalSuffix": {
           "label": "facultatif"
+        },
+        "availableRefresh": {
+          "tooltip": "Actualiser la liste"
         }
       },
       "gdrive": {
@@ -4084,18 +4087,16 @@
             },
             "wiki_base": {
               "label": "URL du site",
-              "placeholder": "https://votre-domaine.atlassian.net/wiki"
+              "placeholder": "https://votre-domaine.atlassian.net/wiki",
+              "placeholderDataCenter": "https://votre-domaine.fr/wiki"
             },
             "indexing_scope": {
               "tabs": {
                 "everything": {
-                  "label": "Tout"
+                  "label": "Tout indexer"
                 },
-                "space": {
-                  "label": "Espace"
-                },
-                "page": {
-                  "label": "Page"
+                "select": {
+                  "label": "Sélectionner des espaces/pages"
                 },
                 "cql": {
                   "label": "Requête CQL"
@@ -4103,24 +4104,36 @@
               }
             },
             "everything": {
-              "label": "Indexe toutes les pages que le compte peut lire",
-              "description": "Onyx indexe toutes les pages de chaque espace que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
+              "label": "Tout indexer",
+              "description": "Onyx indexera tous les espaces et toutes les pages auxquels le compte sélectionné a accès."
             },
             "space": {
-              "label": "Clé de l'espace",
-              "description": "La clé de l'espace Confluence à indexer (par ex. `KB`)."
+              "label": "Espaces",
+              "description": "Clés d'espace que ce connecteur indexe (par ex. ENG).",
+              "placeholder": "Ajoutez une clé d'espace ou une URL",
+              "required": "Ajoutez au moins un espace ou une page.",
+              "available": "{more, select, true {{count, number}+ espaces disponibles} other {{count, plural, one {# espace disponible} other {# espaces disponibles}}}}"
             },
             "page_id": {
-              "label": "ID de la page",
-              "description": "ID d'une page précise à indexer (par ex. `131368`)"
+              "label": "Pages",
+              "description": "ID de page que ce connecteur indexe (par ex. 123456).",
+              "placeholder": "Ajoutez un ID de page ou une URL",
+              "available": "{more, select, true {{count, number}+ pages disponibles} other {{count, plural, one {# page disponible} other {# pages disponibles}}}}"
             },
             "index_recursively": {
-              "label": "Indexer récursivement",
-              "description": "Si cette option est activée, nous indexerons la page indiquée par l'ID de page ainsi que toutes ses pages enfants."
+              "label": "Inclure les pages enfants",
+              "description": "Indexe aussi toutes les pages imbriquées sous les pages indiquées ci-dessus, à n'importe quelle profondeur."
             },
             "cql_query": {
               "label": "Requête CQL",
-              "description": "IMPORTANT : nous ne prenons en charge pour l'instant que les requêtes CQL qui renvoient des objets de type 'page'. Toutes les requêtes CQL doivent donc contenir 'type=page' comme seul filtre de type. N'utilisez pas non plus de filtres sur 'lastModified', car ils perturbent la logique d'interrogation de notre connecteur. N'utilisez pas ORDER BY, car le connecteur définit son propre ordre de tri. Nous récupérons toujours toutes les pièces jointes et tous les commentaires des pages renvoyées par la requête CQL. Les filtres 'lastmodified' sont écrasés. Consultez la [documentation CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) d'Atlassian pour plus de détails."
+              "description": "Renvoyez uniquement des pages. Gardez `type=page` comme seul filtre de type.\nÉvitez le tri et les filtres de date. `order by` ou `lastModified` casseront la requête propre d'Onyx. [Référence CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)",
+              "testButton": {
+                "label": "Tester la requête"
+              },
+              "required": "Ajoutez une requête CQL."
+            },
+            "include_attachments": {
+              "description": "Indexe les fichiers et images joints aux pages. Voir [Paramètres d'indexation/de traitement des images]({indexSettingsPath})."
             }
           }
         },
@@ -5143,6 +5156,9 @@
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"
+        },
+        "personalAccessTokenField": {
+          "placeholder": "Ajoutez votre jeton d'accès personnel"
         }
       },
       "delete": {
@@ -5201,7 +5217,8 @@
         "zuliprcContent": "Contenu de zuliprc",
         "authenticationMethod": "Méthode d'authentification",
         "primaryAdminEmail": "E-mail de l’administrateur principal",
-        "serviceAccountKey": "Clé du compte de service"
+        "serviceAccountKey": "Clé du compte de service",
+        "personalAccessToken": "Jeton d'accès personnel"
       },
       "hints": {
         "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
@@ -5213,7 +5230,8 @@
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
-        "googleServiceAccountKey": "Importez ou collez la clé `.json` d’un compte de service Google avec délégation au niveau du domaine."
+        "googleServiceAccountKey": "Importez ou collez la clé `.json` d’un compte de service Google avec délégation au niveau du domaine.",
+        "confluencePersonalAccessToken": "Collez le [jeton d'accès personnel](https://confluence.atlassian.com/enterprise/using-personal-access-tokens-1026032365.html) de votre compte administrateur Confluence."
       },
       "methods": {
         "labels": {

@@ -165,26 +165,30 @@ def test_blank_tab_fields_mean_everything_mode() -> None:
 
 
 @pytest.mark.parametrize(
-    "overrides,runnable_mode_check",
+    "overrides,runnable_mode_checks",
     [
-        ({"space": "KB"}, "confluence_configured_space"),
-        ({"space": "KB", "page_id": "42"}, "confluence_configured_page"),
+        ({"space": "KB"}, {"confluence_configured_space"}),
+        # Spaces and pages together index their union, so both checks run.
+        (
+            {"space": "KB", "page_id": "42"},
+            {"confluence_configured_space", "confluence_configured_page"},
+        ),
         (
             {"space": "KB", "page_id": "42", "cql_query": "type=page"},
-            "confluence_cql_query",
+            {"confluence_cql_query"},
         ),
-        ({"space": "  ", "page_id": "42"}, "confluence_configured_page"),
+        ({"space": "  ", "page_id": "42"}, {"confluence_configured_page"}),
     ],
 )
 def test_mode_checks_follow_the_connector_precedence(
-    overrides: dict[str, Any], runnable_mode_check: str
+    overrides: dict[str, Any], runnable_mode_checks: set[str]
 ) -> None:
     states = _draft_states(_form(**overrides))
 
     for check_id in _MODE_CHECK_IDS:
         expected = (
             DraftCheckStateKind.PENDING
-            if check_id == runnable_mode_check
+            if check_id in runnable_mode_checks
             else DraftCheckStateKind.NOT_APPLICABLE
         )
         assert states[check_id] == expected, check_id
@@ -822,7 +826,8 @@ def test_optional_checks_are_the_approved_ones() -> None:
         "confluence_user_names",
     }
     assert {check.check_id for check in checks if check.discovery} == {
-        "confluence_space_listing"
+        "confluence_space_listing",
+        "confluence_page_listing",
     }
 
 

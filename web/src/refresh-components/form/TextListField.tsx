@@ -91,6 +91,9 @@ export default function TextListField({
   const rowCount: number = lastIsEmpty ? items.length : items.length + 1;
 
   const listError: unknown = getIn(errors, name);
+  // A string is an error on the whole list. Read at a row's path, it would
+  // show as one of its characters, so rows then show no error of their own.
+  const rowErrors: boolean = typeof listError !== "string";
   const listErrorText: string | undefined =
     getIn(touched, name) && typeof listError === "string"
       ? listError
@@ -127,6 +130,7 @@ export default function TextListField({
                     placeholder={placeholder}
                     variant={disabled ? "disabled" : undefined}
                     autoComplete="off"
+                    showError={rowErrors}
                   />
                   <Button
                     icon={SvgMinusCircle}
@@ -142,12 +146,14 @@ export default function TextListField({
                     }}
                   />
                 </Section>
-                <ErrorMessage
-                  name={`${name}.${index}`}
-                  render={(msg) => (
-                    <InputErrorText type="error">{msg}</InputErrorText>
-                  )}
-                />
+                {rowErrors && (
+                  <ErrorMessage
+                    name={`${name}.${index}`}
+                    render={(msg) => (
+                      <InputErrorText type="error">{msg}</InputErrorText>
+                    )}
+                  />
+                )}
               </Section>
             );
           })}
