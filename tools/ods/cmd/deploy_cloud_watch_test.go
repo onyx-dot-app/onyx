@@ -35,6 +35,8 @@ func TestWatchCloudRelease(t *testing.T) {
 		// pollsUntilTimeout means the PR poll count depends on timing, so only
 		// at least one poll is required.
 		pollsUntilTimeout bool
+		// clearRepoEnv makes the watcher resolve the infra repo through gh.
+		clearRepoEnv bool
 	}{
 		{
 			name: "build succeeds and the bump PR opens after a poll",
@@ -128,6 +130,30 @@ func TestWatchCloudRelease(t *testing.T) {
 			wantPRPolls: 1,
 		},
 		{
+			name: "build succeeds but the infra repo lookup fails",
+			replies: map[string][]deployGHReply{
+				"run-list":     {deployRuns(t, cloudRun)},
+				"run-view":     {deployRun(t, succeeded)},
+				"variable-get": {deployGHFailure("HTTP 403")},
+			},
+			clearRepoEnv: true,
+			wantErr:      "could not read the CLOUD_DEPLOYMENT_REPO variable",
+			wantStdout:   deployRunURL + "\n",
+		},
+		{
+			name: "failed build whose infra repo lookup fails keeps the build error",
+			replies: map[string][]deployGHReply{
+				"run-list":     {deployRuns(t, cloudRun)},
+				"run-view":     {deployRun(t, failed)},
+				"run-jobs":     {dispatched},
+				"variable-get": {deployGHFailure("HTTP 403")},
+			},
+			clearRepoEnv: true,
+			wantErr:      `build run 900 concluded with status "failure"`,
+			wantStdout:   deployRunURL + "\n",
+			wantLogs:     []string{"Could not resolve the internal infra repo", "HTTP 403"},
+		},
+		{
 			name: "deployment run lookup fails",
 			replies: map[string][]deployGHReply{
 				"run-list": {deployGHFailure("HTTP 500")},
@@ -138,6 +164,9 @@ func TestWatchCloudRelease(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			gh := deployNewFakeGH(t, c.replies)
+			if c.clearRepoEnv {
+				t.Setenv(cloudDeploymentRepoEnv, "")
+			}
 			out := deployCaptureOutput(t)
 
 			err := watchCloudRelease(deployFastPolling(), deployCloudTag)

@@ -34,11 +34,6 @@ const (
 // workflow opens in the infra repo. Everything here is read-only polling, so
 // interrupting or re-running it is always safe.
 func watchCloudRelease(polling runPolling, tag string) error {
-	deployRepo, err := resolveInternalRepo(cloudDeploymentRepoEnv)
-	if err != nil {
-		return err
-	}
-
 	log.Info("Looking up the deployment run...")
 	// A cloud tag is unique per push and never reused, so any run on this
 	// branch is the right one. A prior-run-id floor above 0 would also break
@@ -67,6 +62,11 @@ func watchCloudRelease(polling runPolling, tag string) error {
 			return buildErr
 		}
 		log.Info("The bump dispatch succeeded; waiting for the bump PR...")
+		deployRepo, err := resolveInternalRepo(cloudDeploymentRepoEnv)
+		if err != nil {
+			log.Warnf("Could not resolve the internal infra repo: %v", err)
+			return buildErr
+		}
 		pr, err := waitForBumpPR(polling, deployRepo, tag)
 		if err != nil {
 			log.Warnf("Bump PR lookup failed: %v", err)
@@ -78,6 +78,11 @@ func watchCloudRelease(polling runPolling, tag string) error {
 	}
 
 	log.Info("Build completed; waiting for the bump PR...")
+	// Resolved this late so a lookup failure never hides the build progress.
+	deployRepo, err := resolveInternalRepo(cloudDeploymentRepoEnv)
+	if err != nil {
+		return err
+	}
 	pr, err := waitForBumpPR(polling, deployRepo, tag)
 	if err != nil {
 		return fmt.Errorf("%w; check https://github.com/%s/actions/workflows/%s", err, deployRepo, bumpWorkflowFile)
