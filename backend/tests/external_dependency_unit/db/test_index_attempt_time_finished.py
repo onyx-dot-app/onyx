@@ -80,7 +80,7 @@ def test_snapshot_falls_back_to_the_last_heartbeat(db_session: Session) -> None:
     db_session.commit()
 
     snapshot = IndexAttemptSnapshot.from_index_attempt_db_model(
-        attempt, error_count=0, open_doc_error_count=0
+        attempt, error_count=0, open_error_count=0, open_doc_error_count=0
     )
 
     assert snapshot.time_finished == heartbeat.isoformat()

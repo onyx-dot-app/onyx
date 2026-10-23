@@ -3159,6 +3159,7 @@
         "tags": {
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
+          "indexingItems": "{count, plural, other {# 个项目失败}}",
           "doc_permission_sync": "{count, plural, other {# 个文档的权限同步失败}}",
           "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
@@ -3180,9 +3181,9 @@
           "title": "无法加载活动。"
         },
         "docs": {
-          "title": "失败的文档",
+          "title": "失败的项目",
           "search": {
-            "placeholder": "搜索文档…"
+            "placeholder": "搜索项目…"
           },
           "resolveAll": "全部重试",
           "resolveAllTooltip": "重新索引此运行中所有失败的文档",
@@ -3192,8 +3193,8 @@
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",
-          "empty": "没有未解决的文档错误",
-          "loadError": "无法加载失败的文档。",
+          "empty": "没有未解决的错误",
+          "loadError": "无法加载失败的项目。",
           "open": "打开文档"
         },
         "trace": {

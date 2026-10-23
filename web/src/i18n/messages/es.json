@@ -3159,6 +3159,7 @@
         "tags": {
           "stackTrace": "Seguimiento de pila",
           "indexing": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
+          "indexingItems": "{count, plural, one {# elemento falló} other {# elementos fallaron}}",
           "doc_permission_sync": "{count, plural, one {Permisos de # documento sin sincronizar} other {Permisos de # documentos sin sincronizar}}",
           "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
           "pruning": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
@@ -3180,9 +3181,9 @@
           "title": "No se pudo cargar la actividad."
         },
         "docs": {
-          "title": "Documentos fallidos",
+          "title": "Elementos fallidos",
           "search": {
-            "placeholder": "Buscar documentos…"
+            "placeholder": "Buscar elementos…"
           },
           "resolveAll": "Reintentar todos",
           "resolveAllTooltip": "Reindexar todos los documentos fallidos de esta ejecución",
@@ -3192,8 +3193,8 @@
           "more": "Más",
           "less": "Menos",
           "unknownDocument": "Documento desconocido",
-          "empty": "Sin errores de documentos abiertos",
-          "loadError": "No se pudieron cargar los documentos fallidos.",
+          "empty": "Sin errores abiertos",
+          "loadError": "No se pudieron cargar los elementos fallidos.",
           "open": "Abrir el documento"
         },
         "trace": {

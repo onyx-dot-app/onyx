@@ -3159,6 +3159,7 @@
         "tags": {
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
+          "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
           "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
           "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
@@ -3180,9 +3181,9 @@
           "title": "Impossible de charger l'activité."
         },
         "docs": {
-          "title": "Documents en échec",
+          "title": "Éléments en échec",
           "search": {
-            "placeholder": "Rechercher des documents…"
+            "placeholder": "Rechercher des éléments…"
           },
           "resolveAll": "Tout réessayer",
           "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
@@ -3192,8 +3193,8 @@
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
-          "empty": "Aucune erreur de document ouverte",
-          "loadError": "Impossible de charger les documents en échec.",
+          "empty": "Aucune erreur ouverte",
+          "loadError": "Impossible de charger les éléments en échec.",
           "open": "Ouvrir le document"
         },
         "trace": {

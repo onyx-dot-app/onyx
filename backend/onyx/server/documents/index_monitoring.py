@@ -38,9 +38,9 @@ from onyx.db.enums import (
 )
 from onyx.db.federated import fetch_all_federated_connectors
 from onyx.db.index_attempt import (
+    OpenErrorCounts,
     get_error_counts_for_index_attempts,
     get_latest_index_attempts,
-    get_open_doc_error_counts_for_index_attempts,
     get_open_error_counts_for_index_attempts,
     get_queued_index_attempts,
 )
@@ -307,10 +307,7 @@ def get_indexing_connectors(
     )
     attempt_ids = [latest[cc_pair.id].id for cc_pair in page if cc_pair.id in latest]
     error_counts = get_error_counts_for_index_attempts(db_session, attempt_ids)
-    open_counts = get_open_doc_error_counts_for_index_attempts(db_session, attempt_ids)
-    open_error_counts = get_open_error_counts_for_index_attempts(
-        db_session, attempt_ids
-    )
+    open_counts = get_open_error_counts_for_index_attempts(db_session, attempt_ids)
     docs_indexed = _docs_indexed_by_pair(
         db_session, {cc_pair.id: cc_pair for cc_pair in page}
     )
@@ -318,6 +315,11 @@ def get_indexing_connectors(
 
     def row(cc_pair: ConnectorCredentialPair) -> IndexingConnectorRow:
         attempt = latest.get(cc_pair.id)
+        open_errors = (
+            OpenErrorCounts()
+            if attempt is None
+            else open_counts.get(attempt.id, OpenErrorCounts())
+        )
         return IndexingConnectorRow(
             cc_pair_id=cc_pair.id,
             name=cc_pair.name,
@@ -335,12 +337,11 @@ def get_indexing_connectors(
                 else IndexAttemptSnapshot.from_index_attempt_db_model(
                     attempt,
                     error_count=error_counts.get(attempt.id, 0),
-                    open_doc_error_count=open_counts.get(attempt.id, 0),
+                    open_error_count=open_errors.total,
+                    open_doc_error_count=open_errors.docs,
                 )
             ),
-            open_error_count=0
-            if attempt is None
-            else open_error_counts.get(attempt.id, 0),
+            open_error_count=open_errors.total,
             queue_position=queue_positions.get(cc_pair.id),
             permissions=cc_pair_permissions(
                 can_operate=cc_pair.id in operate_ids,
