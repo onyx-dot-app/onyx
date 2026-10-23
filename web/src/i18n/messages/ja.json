@@ -3084,7 +3084,8 @@
           "failures": "失敗",
           "errors": "エラー",
           "other": "その他",
-          "resolved": "解決済み"
+          "resolved": "解決済み",
+          "toggle": "フィルター"
         },
         "groups": {
           "failures": "{count, plural, =0 {失敗} other {失敗 # 件}}",

@@ -78,6 +78,7 @@ const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const tActivities = useTranslations("admin.indexing.activities");
   const router = useRouter();
 
   const {
@@ -546,6 +547,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               canResolve: canOperate && ccPair.supports_targeted_reindex,
               canResolveRuns: canOperate,
             }}
+            title={tActivities("title")}
+            foldFilters
             range={sliceRange}
           />
         </Section>

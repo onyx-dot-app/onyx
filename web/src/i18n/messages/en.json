@@ -3084,7 +3084,8 @@
           "failures": "Failures",
           "errors": "Errors",
           "other": "Other",
-          "resolved": "Resolved"
+          "resolved": "Resolved",
+          "toggle": "Filters"
         },
         "groups": {
           "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",

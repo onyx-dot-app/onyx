@@ -3084,7 +3084,8 @@
           "failures": "الإخفاقات",
           "errors": "الأخطاء",
           "other": "أخرى",
-          "resolved": "تم الحل"
+          "resolved": "تم الحل",
+          "toggle": "عوامل التصفية"
         },
         "groups": {
           "failures": "{count, plural, =0 {الإخفاقات} one {إخفاق واحد} two {إخفاقان} few {# إخفاقات} many {# إخفاقًا} other {# إخفاق}}",
