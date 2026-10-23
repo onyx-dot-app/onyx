@@ -46,6 +46,10 @@ function GroupCard({ group }: GroupCardProps) {
     }
   }
 
+  function openGroup() {
+    router.push(`/admin/groups/${group.id}`);
+  }
+
   return (
     <SelectCard
       state="filled"
@@ -53,6 +57,7 @@ function GroupCard({ group }: GroupCardProps) {
       padding={2}
       data-card
       rounding={4}
+      onClick={canManageMembers ? openGroup : undefined}
     >
       <ContentAction
         icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
@@ -74,7 +79,9 @@ function GroupCard({ group }: GroupCardProps) {
             prominence="tertiary"
             tooltip={t("card.viewGroup.label")}
             disabled={!canManageMembers}
-            onClick={() => router.push(`/admin/groups/${group.id}`)}
+            // Repeats the card's action: a click bubbles to the card's
+            // `openGroup`, and the card is the tab stop.
+            tabIndex={-1}
           >
             {formatMemberCount(
               group.users.filter((u) => u.is_active).length,
