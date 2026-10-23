@@ -95,6 +95,9 @@ const PASSED_CHECK = {
   required: true,
   status: "passed",
   message: "",
+  summary: null,
+  description: null,
+  applicable: true,
   remediation: null,
   docs_link: null,
 } as const;
@@ -116,7 +119,7 @@ test("lists every validation check when an access type change passes", () => {
 
   expect(screen.getByText("Validation passed")).toBeVisible();
   expect(screen.getByText("List file permissions")).toBeVisible();
-  expect(screen.getByText("Passed")).toBeVisible();
+  expect(screen.getByText("Successful")).toBeVisible();
 });
 
 test("shows warnings when a check could not finish", () => {

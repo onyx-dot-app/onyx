@@ -10,17 +10,31 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgListCheck, SvgX } from "@opal/icons";
-import type { CheckRunSnapshot } from "@/lib/connectors/types";
+import type { CheckRunSnapshot, CheckRunStatus } from "@/lib/connectors/types";
+import type {
+  CapabilityCheckResult,
+  ConnectorChecksStatus,
+} from "@/lib/connectors/checks/types";
 import {
   NO_CHECKS,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
 import { CheckLineGroups } from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
-import { checkCount } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import {
+  checkCount,
+  shownCheckResults,
+} from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
   PLACEMENT_PROPS,
   type PopoverPlacement,
 } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
+
+const RUN_STATUS: Record<CheckRunStatus, ConnectorChecksStatus> = {
+  running: "running",
+  passed: "passed",
+  failed: "failed",
+  failed_to_run: "failedToRun",
+};
 
 /** Opens the results of one check run. Place it inside the Popover that holds the content. */
 export interface CheckRunTriggerProps {
@@ -57,24 +71,29 @@ export default function CheckRunPopoverContent({
   const t = useTranslations("admin.connector.runs.checkResults");
   const tChecks = useTranslations("admin.connectorChecks");
   const format = useFormatter();
-  // Zero counts are left out, as the checks card does.
+  const results: CapabilityCheckResult[] = shownCheckResults(run);
+  // Zero counts are left out, in the groups' order, as the checks card does.
   const parts = [
     { label: "summary.failed", count: checkCount(run, "failed") },
     {
       label: "summary.unverified",
       count: checkCount(run, "incomplete") + checkCount(run, "indeterminate"),
     },
-    { label: "summary.skipped", count: checkCount(run, "skipped") },
     { label: "summary.successful", count: checkCount(run, "passed") },
+    { label: "summary.skipped", count: checkCount(run, "skipped") },
   ] as const;
   const labels: string[] = parts
     .filter((part) => part.count > 0)
     .map((part) => tChecks(part.label, { count: part.count }));
   const summary = format.list(labels, { type: "unit" });
   const stateCounts = { ...NO_CHECKS };
-  for (const result of run.check_results) stateCounts[result.status] += 1;
-  // The checks card's ring, for a stored run.
-  const { icon: Ring } = useConnectorChecksProgress(stateCounts, "passed");
+  for (const result of results) stateCounts[result.status] += 1;
+  // The checks card's header icon, for a stored run.
+  const { icon: Ring } = useConnectorChecksProgress(
+    stateCounts,
+    RUN_STATUS[run.status],
+    results.some((result) => result.status === "failed" && result.required)
+  );
 
   return (
     <Popover.Content
@@ -118,7 +137,7 @@ export default function CheckRunPopoverContent({
                 {t("title")}
               </Text>
               <Text font="main-ui-muted" color="text-03">
-                {t("count", { count: run.check_results.length })}
+                {t("count", { count: results.length })}
               </Text>
             </Section>
             <Text font="secondary-body" color="text-03">
@@ -136,7 +155,7 @@ export default function CheckRunPopoverContent({
         </Section>
         <ShadowDiv>
           <CheckLineGroups
-            lines={run.check_results.map((result) => ({
+            lines={results.map((result) => ({
               ...result,
               state: result.status,
             }))}

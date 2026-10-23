@@ -32,6 +32,9 @@ function signInCheck(state: DraftCheckState["state"]): DraftCheckState {
     validates_binding: true,
     is_fallback: false,
     summary: null,
+    description: null,
+    error_kind: null,
+    not_run_reason: null,
     reports_field: null,
     findings: [],
   };

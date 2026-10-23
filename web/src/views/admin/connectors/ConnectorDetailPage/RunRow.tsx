@@ -4,6 +4,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Popover, Tag, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
+  SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgFileMinus,
@@ -25,6 +26,11 @@ import type {
   CCPairRunKind,
   CheckRunSnapshot,
 } from "@/lib/connectors/types";
+import type {
+  CapabilityCheckResult,
+  CapabilityCheckStatus,
+} from "@/lib/connectors/checks/types";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
@@ -49,12 +55,20 @@ export const RUN_KIND_ICONS = {
   checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
-/** How many of a check run's checks ended in `status`. */
+/** The run's results that have a row: checks that apply to the pair. */
+export function shownCheckResults(
+  run: CheckRunSnapshot
+): CapabilityCheckResult[] {
+  return applicableResults(run.check_results);
+}
+
+/** How many of a check run's shown checks ended in `status`. */
 export function checkCount(
   run: CheckRunSnapshot,
-  status: CheckRunSnapshot["check_results"][number]["status"]
+  status: CapabilityCheckStatus
 ): number {
-  return run.check_results.filter((result) => result.status === status).length;
+  return shownCheckResults(run).filter((result) => result.status === status)
+    .length;
 }
 
 /** The run's own error message, without its trace. */
@@ -111,7 +125,7 @@ export function runMoved(run: CCPairRun): number {
     case "pruning":
       return run.attempt.docs_removed;
     case "checks":
-      return run.attempt.check_results.length;
+      return shownCheckResults(run.attempt).length;
   }
 }
 
@@ -395,14 +409,18 @@ function RunFigures({ run }: RunFiguresProps) {
       );
     case "checks": {
       const attempt = run.attempt;
+      const shown: number = shownCheckResults(attempt).length;
       const failed = checkCount(attempt, "failed");
+      const incomplete =
+        checkCount(attempt, "incomplete") +
+        checkCount(attempt, "indeterminate");
       const skipped = checkCount(attempt, "skipped");
       return (
         <>
           <Text font="secondary-body" color="text-03">
-            {t("figures.checksRun", { count: attempt.check_results.length })}
+            {t("figures.checksRun", { count: shown })}
           </Text>
-          {attempt.check_results.length > 0 && (
+          {shown > 0 && (
             <CountsRow>
               <Count
                 icon={SvgCheckCircle}
@@ -412,6 +430,14 @@ function RunFigures({ run }: RunFiguresProps) {
                   count: checkCount(attempt, "passed"),
                 })}
               />
+              {incomplete > 0 && (
+                <Count
+                  icon={SvgAlertCircle}
+                  look="plain"
+                  value={incomplete}
+                  tooltip={t("counts.incompleteChecks", { count: incomplete })}
+                />
+              )}
               {skipped > 0 && (
                 <Count
                   icon={SvgXCircle}
@@ -636,7 +662,7 @@ export default function RunRow({
                     <StageDetailsTrigger open={open} />
                   )}
                   {run.kind === "checks" &&
-                    run.attempt.check_results.length > 0 && (
+                    shownCheckResults(run.attempt).length > 0 && (
                       <CheckRunTrigger open={open} />
                     )}
                   <RunWarningsTag run={run} />
@@ -694,7 +720,7 @@ export default function RunRow({
         {run.kind === "indexing" && (
           <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
         )}
-        {run.kind === "checks" && run.attempt.check_results.length > 0 && (
+        {run.kind === "checks" && shownCheckResults(run.attempt).length > 0 && (
           <CheckRunPopoverContent run={run.attempt} />
         )}
       </Popover>
