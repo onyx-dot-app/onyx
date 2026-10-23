@@ -13,7 +13,7 @@ from onyx.tracing.framework.create import generation_span, trace
 def test_trace_configuration_and_errors_exclude_credentials() -> None:
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="test-private-key",
         custom_config={"custom_api_key": "test-custom-secret"},
         max_input_tokens=1000,
@@ -37,7 +37,7 @@ def test_trace_configuration_and_errors_exclude_credentials() -> None:
 def test_invoke_failure_marks_span_without_exposing_credentials() -> None:
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="synthetic-provider-secret",
         max_input_tokens=1000,
     )
@@ -61,7 +61,7 @@ def test_invoke_failure_marks_span_without_exposing_credentials() -> None:
 def test_redact_error_covers_custom_config_mapped_api_key() -> None:
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key=None,
         custom_config={"OPENAIAPIKEY": "mapped-provider-secret"},
         max_input_tokens=1000,
@@ -85,7 +85,7 @@ def test_cancelled_invoke_records_error_and_available_usage(
 
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="test",
         max_input_tokens=1000,
     )
@@ -144,7 +144,7 @@ def test_cancellation_when_span_opens_is_recorded(streaming: bool) -> None:
 
     client = LitellmLLM(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="test",
         max_input_tokens=1000,
     )

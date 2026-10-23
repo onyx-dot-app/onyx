@@ -1705,7 +1705,7 @@ class TestFallbackToolExtraction:
 
 
 class TestEmptyLlmResponseClassification:
-    def _make_llm(self, provider: str = "openai", model: str = "gpt-5.2") -> Mock:
+    def _make_llm(self, provider: str = "openai", model: str = "gpt-6.1-sol") -> Mock:
         llm = Mock()
         llm.config = LLMConfig(
             model_provider=provider,
@@ -1912,7 +1912,7 @@ def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> Non
     llm = Mock()
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5.2",
+        model_name="gpt-6.1-sol",
         temperature=0,
         max_input_tokens=100000,
     )
@@ -2010,7 +2010,7 @@ def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
     llm = Mock()
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5.2",
+        model_name="gpt-6.1-sol",
         temperature=0,
         max_input_tokens=100000,
     )
@@ -2084,7 +2084,7 @@ def _history_for_user(
     llm: Mock = Mock()
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5.2",
+        model_name="gpt-6.1-sol",
         temperature=0,
         max_input_tokens=100000,
     )
@@ -2177,7 +2177,7 @@ def test_project_instructions_supplement_agent_prompt(
     llm: Mock = Mock()
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5.2",
+        model_name="gpt-6.1-sol",
         temperature=0,
         max_input_tokens=100000,
     )
@@ -2260,7 +2260,7 @@ def test_each_llm_call_counts_as_a_query_cycle_before_it_runs() -> None:
     llm = Mock()
     llm.config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5.2",
+        model_name="gpt-6.1-sol",
         temperature=0,
         max_input_tokens=100000,
     )

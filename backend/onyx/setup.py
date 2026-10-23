@@ -10,7 +10,11 @@ from onyx.configs.app_configs import (
     LOCAL_EMBEDDING_MODEL_STARTUP_TIMEOUT,
 )
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.model_configs import GEN_AI_API_KEY, GEN_AI_MODEL_VERSION
+from onyx.configs.model_configs import (
+    DEFAULT_OPENAI_MODEL,
+    GEN_AI_API_KEY,
+    GEN_AI_MODEL_VERSION,
+)
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.connector import check_connectors_exist, create_initial_default_connector
 from onyx.db.connector_credential_pair import (
@@ -321,7 +325,7 @@ def setup_postgres(db_session: Session) -> None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
-        llm_model = GEN_AI_MODEL_VERSION or "gpt-4o-mini"
+        llm_model = GEN_AI_MODEL_VERSION or DEFAULT_OPENAI_MODEL
         provider_name = "DevEnvPresetOpenAI"
         existing = fetch_existing_llm_provider(
             name=provider_name, db_session=db_session

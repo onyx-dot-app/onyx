@@ -114,7 +114,7 @@ def generate_agent_instructions(
         template_path: Path to the AGENTS.template.md file
         connectable_apps_section: Pre-rendered connectable-apps list (may be empty)
         provider: LLM provider type (e.g., "openai", "anthropic")
-        model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
+        model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-6-sol")
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
         organization_instructions: Admin-set workspace-wide Craft instructions

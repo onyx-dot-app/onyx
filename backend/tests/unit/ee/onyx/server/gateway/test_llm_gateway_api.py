@@ -437,7 +437,7 @@ def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
 def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
     config = LLMConfig(
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-sol",
         temperature=0,
         max_input_tokens=128_000,
     )
@@ -546,12 +546,12 @@ def test_completion_payload_serializes_openai_shape() -> None:
     )
 
     payload = ChatCompletionResponse.from_model_response(
-        response, "3/gpt-5-mini"
+        response, "3/gpt-6-sol"
     ).to_wire()
 
     assert payload["object"] == "chat.completion"
     assert payload["created"] == 1784577906
-    assert payload["model"] == "3/gpt-5-mini"
+    assert payload["model"] == "3/gpt-6-sol"
     choice = payload["choices"][0]
     assert choice["finish_reason"] == "tool_calls"
     assert choice["message"]["role"] == "assistant"
@@ -1199,7 +1199,7 @@ def _catalog_provider() -> LLMProviderView:
     return _provider(
         7,
         "openai",
-        [_model("gpt-5-mini"), _model("hidden", is_visible=False)],
+        [_model("gpt-6-sol"), _model("hidden", is_visible=False)],
     )
 
 
@@ -1226,7 +1226,7 @@ def test_list_models_returns_openai_shape_excluding_hidden_models() -> None:
 
     payload = json.loads(bytes(response.body))
     assert payload["object"] == "list"
-    assert [m["id"] for m in payload["data"]] == ["7/gpt-5-mini"]
+    assert [m["id"] for m in payload["data"]] == ["7/gpt-6-sol"]
     assert payload["data"][0]["object"] == "model"
     assert payload["data"][0]["owned_by"] == "openai"
 
@@ -1260,7 +1260,7 @@ def test_list_models_ids_round_trip_through_resolve_gateway_model() -> None:
         )
 
     assert resolved_provider is provider
-    assert resolved_model.name == "gpt-5-mini"
+    assert resolved_model.name == "gpt-6-sol"
 
 
 def test_list_models_rejects_non_gateway_credentials() -> None:

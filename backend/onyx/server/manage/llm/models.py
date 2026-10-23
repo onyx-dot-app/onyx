@@ -714,7 +714,7 @@ class OpenRouterModelDetails(BaseModel):
 
 
 class OpenRouterFinalModelResponse(BaseModel):
-    name: str  # Model ID (e.g., "openai/gpt-5-pro")
+    name: str  # Model ID (e.g., "openai/gpt-6-astra")
     display_name: str  # Human-readable name from OpenRouter API
     max_input_tokens: (
         int | None
@@ -992,7 +992,7 @@ class PortkeyModelsRequest(BaseModel):
 
 
 class PortkeyFinalModelResponse(BaseModel):
-    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
+    name: str  # Model ID (e.g. "gpt-6-sol", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

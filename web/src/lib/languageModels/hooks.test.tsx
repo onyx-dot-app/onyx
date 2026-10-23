@@ -42,7 +42,7 @@ function mockProvidersResponse(
         model_configurations: [
           {
             id: p.id * 100,
-            name: "gpt-4o",
+            name: "gpt-6-sol",
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: true,
@@ -72,21 +72,21 @@ describe("useLlmDefaults", () => {
     // the admin pickers rendered it as unset.
     mockProvidersResponse([{ id: 7, name: null }], {
       provider_id: 7,
-      model_name: "gpt-4o",
+      model_name: "gpt-6-sol",
     });
 
     const { result } = renderHook(() => useLlmDefaults());
 
     expect(result.current.defaultVision).toEqual({
       providerId: 7,
-      modelName: "gpt-4o",
+      modelName: "gpt-6-sol",
     });
   });
 
   it("resolves a default whose provider has a display name", () => {
     mockProvidersResponse([{ id: 7, name: "Azure Prod" }], {
       provider_id: 7,
-      model_name: "gpt-4o",
+      model_name: "gpt-6-sol",
     });
 
     const { result } = renderHook(() => useLlmDefaults());
@@ -97,7 +97,7 @@ describe("useLlmDefaults", () => {
   it("returns null when the stored provider is no longer in the list", () => {
     mockProvidersResponse([{ id: 7, name: "Azure Prod" }], {
       provider_id: 999,
-      model_name: "gpt-4o",
+      model_name: "gpt-6-sol",
     });
 
     const { result } = renderHook(() => useLlmDefaults());
@@ -111,7 +111,7 @@ describe("useLlmDefaults", () => {
         { id: 43, name: "Daily" },
         { id: 54, name: "Daily" },
       ],
-      { provider_id: 54, model_name: "gpt-4o" }
+      { provider_id: 54, model_name: "gpt-6-sol" }
     );
 
     const { result } = renderHook(() => useLlmDefaults());
@@ -175,13 +175,13 @@ describe.each([
         { id: 8, name: "Search provider" },
       ],
       null,
-      { provider_id: 7, model_name: "gpt-4o-mini" },
+      { provider_id: 7, model_name: "gpt-6-luna" },
       { provider_id: 8, model_name: "search-mini" }
     );
     const { result } = renderHook(() => useModels());
     expect(result.current.defaultChatNaming).toEqual({
       provider_id: 7,
-      model_name: "gpt-4o-mini",
+      model_name: "gpt-6-luna",
     });
     expect(result.current.defaultSearchSelection).toEqual({
       provider_id: 8,
@@ -193,7 +193,7 @@ describe.each([
   it("does not derive search selection from the naming default", () => {
     mockProvidersResponse([{ id: 7, name: null }], null, {
       provider_id: 7,
-      model_name: "gpt-4o-mini",
+      model_name: "gpt-6-luna",
     });
     const { result } = renderHook(() => useModels());
     expect(result.current.defaultSearchSelection).toBeNull();

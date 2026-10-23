@@ -39,7 +39,7 @@ export const MOCK_LLM_API_KEY = "sk-mock-llm-server";
 // Deep Research needs at least 50000 input tokens.
 export const MOCK_LLM_MAX_INPUT_TOKENS = 200000;
 // Neutral names: Onyx special-cases catalog names and names that contain
-// claude, qwen, glm, or gpt-5.x.
+// claude, qwen, glm, or gpt-6-sol.x.
 export const MOCK_LLM_MODELS = [
   { name: "mock-model", displayName: "Mock Model" },
   { name: "mock-model-alt", displayName: "Mock Alt Model" },

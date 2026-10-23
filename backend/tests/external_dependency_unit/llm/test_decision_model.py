@@ -29,6 +29,7 @@ from onyx.server.manage.llm.models import (
     SyncModelEntry,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.common.models import CI_OPENAI_MODEL
 
 
 @pytest.fixture
@@ -121,7 +122,7 @@ def test_chat_model_cannot_replace_selected_decision_model(
             name="Chat",
             provider="openai",
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-5-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name=CI_OPENAI_MODEL, is_visible=True)
             ],
         ),
         db_session,
@@ -131,7 +132,7 @@ def test_chat_model_cannot_replace_selected_decision_model(
     )
     with pytest.raises(ValueError, match="is not a valid model"):
         update_default_model(
-            db_session, chat_provider.id, "gpt-5-mini", LLMModelFlowType.DECISION
+            db_session, chat_provider.id, CI_OPENAI_MODEL, LLMModelFlowType.DECISION
         )
     db_session.rollback()
     selected = fetch_default_model(db_session, LLMModelFlowType.DECISION)

@@ -44,7 +44,7 @@ def test_decision_scope_rejects_client_claim_for_chat_only_model() -> None:
             api.test_decision_provider(
                 LLMTestRequest(
                     provider="openai",
-                    model="gpt-4o",
+                    model="gpt-6-sol",
                     api_key="test-key",
                     api_key_changed=True,
                     custom_config_changed=True,

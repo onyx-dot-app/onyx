@@ -56,6 +56,7 @@ from tests.common.craft.skill_table_isolation import (
     snapshot_skill_tables,
 )
 from tests.common.craft.stubs import StubSandboxManager
+from tests.common.models import CI_OPENAI_MODEL
 from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
@@ -109,7 +110,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                         api_key_changed=True,
                         model_configurations=[
                             ModelConfigurationUpsertRequest(
-                                name="gpt-5-mini", is_visible=True
+                                name=CI_OPENAI_MODEL, is_visible=True
                             )
                         ],
                     ),
@@ -117,7 +118,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
                 )
                 update_default_model(
                     provider_id=provider.id,
-                    model="gpt-5-mini",
+                    model=CI_OPENAI_MODEL,
                     db_session=session,
                     flow_type=LLMModelFlowType.CHAT,
                 )

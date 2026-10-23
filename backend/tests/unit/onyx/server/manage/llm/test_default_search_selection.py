@@ -53,11 +53,11 @@ def test_manage_llms_can_set_and_clear_search_selection(client: TestClient) -> N
     ):
         response = client.post(
             "/admin/llm/default-search-selection",
-            json={"provider_id": 7, "model_name": "gpt-5-mini"},
+            json={"provider_id": 7, "model_name": "gpt-6-sol"},
         )
         assert (response.status_code, response.json()) == (200, None)
         assert set_default.call_args.kwargs["provider_id"] == 7
-        assert set_default.call_args.kwargs["model_name"] == "gpt-5-mini"
+        assert set_default.call_args.kwargs["model_name"] == "gpt-6-sol"
         response = client.delete("/admin/llm/default-search-selection")
         assert (response.status_code, response.json()) == (200, None)
         clear_default.assert_called_once()
@@ -85,7 +85,7 @@ def test_search_selection_requires_manage_llms(client: TestClient, method: str) 
         response = client.request(
             method,
             "/admin/llm/default-search-selection",
-            json={"provider_id": 7, "model_name": "gpt-5-mini"},
+            json={"provider_id": 7, "model_name": "gpt-6-sol"},
         )
     assert response.status_code == 403
     set_default.assert_not_called()
@@ -148,15 +148,15 @@ def test_admin_pins_hidden_search_selection_without_changing_chat_naming() -> No
             db_session=MagicMock(spec=Session),
         )
     assert response.default_chat_naming == DefaultModel(
-        provider_id=7, model_name="gpt-5-mini"
+        provider_id=7, model_name="gpt-6-sol"
     )
     assert response.default_search_selection == DefaultModel(
-        provider_id=7, model_name="gpt-5-nano"
+        provider_id=7, model_name="gpt-6-luna"
     )
     assert [
         (model.name, model.is_visible)
         for model in response.providers[0].model_configurations
-    ] == [("gpt-5-mini", True), ("gpt-5-nano", False)]
+    ] == [("gpt-6-sol", True), ("gpt-6-luna", False)]
     assert "sk-test-workspace-key-123456789" not in response.model_dump_json()
 
 
@@ -192,7 +192,7 @@ def test_user_listing_does_not_publish_search_selection(persona_id: int | None) 
             )
         )
     assert response.default_search_selection is None
-    assert "gpt-5-nano" not in response.model_dump_json()
+    assert "gpt-6-luna" not in response.model_dump_json()
     assert all(
         call.args[1] != LLMModelFlowType.SEARCH_SELECTION
         for call in fetch.call_args_list

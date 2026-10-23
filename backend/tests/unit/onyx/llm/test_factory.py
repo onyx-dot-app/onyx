@@ -247,7 +247,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
 ) -> None:
     model = ModelConfiguration(
         id=2,
-        name="gpt-4o-mini-2024-07-18",
+        name="gpt-6-luna-2024-07-18",
         is_visible=False,
         max_input_tokens=2048,
         temperature_default=0.4,
@@ -268,7 +268,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
         model_configurations=[
             ModelConfiguration(
                 id=1,
-                name="gpt-4o-mini",
+                name="gpt-6-luna",
                 is_visible=True,
                 max_input_tokens=128000,
                 is_router=False,
@@ -290,7 +290,7 @@ def test_utility_llm_preserves_selected_dated_model_configuration(
         )
         assert result is build.return_value
     kwargs = build.call_args.kwargs
-    assert kwargs["model"] == "gpt-4o-mini-2024-07-18"
+    assert kwargs["model"] == "gpt-6-luna-2024-07-18"
     assert kwargs["max_input_tokens"] == 2048
     assert kwargs["temperature"] == 0.4
     assert kwargs["reasoning_effort_default"] == ReasoningEffort.LOW
@@ -317,7 +317,7 @@ def test_get_llm_does_not_set_ollama_num_ctx_for_non_ollama_provider() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider=LlmProviderNames.OPENAI,
-            model="gpt-4o-mini",
+            model="gpt-6-luna",
             deployment_name=None,
             max_input_tokens=4096,
         )
@@ -396,7 +396,7 @@ def test_get_llm_policy_headers_win_over_every_other_source() -> None:
     ):
         get_llm(
             provider=BIFROST_PROVIDER_NAME,
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={header: "false"},
@@ -411,7 +411,7 @@ def test_get_llm_without_policy_headers_keeps_the_existing_merge() -> None:
     with patch("onyx.llm.factory.LitellmLLM") as mock_litellm_llm:
         get_llm(
             provider="openai",
-            model="gpt-4o",
+            model="gpt-6-sol",
             deployment_name=None,
             max_input_tokens=4096,
             additional_headers={"x-request-scoped": "a"},
@@ -431,7 +431,7 @@ def test_llm_from_provider_resolves_policy_headers_for_the_winning_provider() ->
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
         llm_from_provider(
-            model_name="gpt-4o",
+            model_name="gpt-6-sol",
             llm_provider=provider,
             policy_fn=partial(
                 incognito_llm_request_policy, IncognitoRecordMode.USAGE_ONLY
@@ -451,7 +451,7 @@ def test_llm_from_provider_without_policy_fn_passes_none() -> None:
     )
 
     with patch("onyx.llm.factory.get_llm") as mock_get_llm:
-        llm_from_provider(model_name="gpt-4o", llm_provider=provider)
+        llm_from_provider(model_name="gpt-6-sol", llm_provider=provider)
 
         assert mock_get_llm.call_args.kwargs["policy_headers"] is None
 
@@ -613,7 +613,7 @@ def test_client_config_is_a_defensive_snapshot() -> None:
     client: LitellmLLM = LitellmLLM(
         api_key="secret-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-astra",
         max_input_tokens=1000,
         custom_config=settings,
     )
@@ -673,7 +673,7 @@ def test_factory_captures_nested_request_and_policy_settings() -> None:
     policy_kwargs: dict[str, dict[str, bool]] = {"extra_body": {"store": False}}
     client: LitellmLLM = get_llm(
         provider="openai",
-        model="gpt-5-mini",
+        model="gpt-6-astra",
         deployment_name=None,
         max_input_tokens=4096,
         model_kwargs=kwargs,
@@ -733,7 +733,7 @@ def test_client_captures_nested_deployment_settings_after_merging() -> None:
     client: LitellmLLM = LitellmLLM(
         api_key="secret-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-astra",
         max_input_tokens=4096,
         extra_body=deployment_body,
         model_kwargs=kwargs,

@@ -15,14 +15,14 @@ describe("chat naming model default", () => {
       .spyOn(global, "fetch")
       .mockResolvedValue(new Response(null, { status: 204 }));
 
-    await setDefaultChatNamingModel(7, "gpt-4o-mini");
+    await setDefaultChatNamingModel(7, "gpt-6-luna");
 
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/admin/llm/default-chat-naming",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider_id: 7, model_name: "gpt-4o-mini" }),
+        body: JSON.stringify({ provider_id: 7, model_name: "gpt-6-luna" }),
       }
     );
   });
@@ -44,7 +44,7 @@ describe("chat naming model default", () => {
   });
 
   it.each([
-    ["saving", () => setDefaultChatNamingModel(7, "gpt-4o-mini")],
+    ["saving", () => setDefaultChatNamingModel(7, "gpt-6-luna")],
     ["clearing", deleteDefaultChatNamingModel],
   ])("reports API errors while %s", async (_action, mutateDefault) => {
     jest.spyOn(global, "fetch").mockResolvedValue(

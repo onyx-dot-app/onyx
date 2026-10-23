@@ -15,7 +15,7 @@ from onyx.server.manage.llm.models import ModelConfigurationView, OpenRouterMode
         ("zoom_ai", "zoom-decisions-pro", False, True),
         ("openai", "gpt-6-luna", True, True),
         ("openai", "openai/gpt-6-luna", True, True),
-        ("openai", "gpt-5-mini", True, False),
+        ("openai", "gpt-6-sol", True, False),
         ("azure", "gpt-6-luna", True, False),
         ("openrouter", "openai/gpt-6-luna", True, False),
         ("typesafe", "unknown", False, False),

@@ -420,7 +420,7 @@ def _is_retryable_bifrost_error(error: BaseException) -> bool:
 
 
 def _bifrost_error_message(response: httpx.Response) -> str:
-    """The gateway's error text, e.g. "The model `gpt-5-mini` does not support embeddings."."""
+    """The gateway's error text, e.g. "The model `gpt-6-luna` does not support embeddings."."""
     try:
         body: object = response.json()
     except ValueError:

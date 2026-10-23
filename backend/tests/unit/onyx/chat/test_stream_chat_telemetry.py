@@ -165,7 +165,7 @@ def test_stream_failure_still_emits_query_record(
         yield StreamingError(
             error="llm exploded",
             error_code="RATE_LIMIT",
-            details={"model": "gpt-4o", "provider": "openai"},
+            details={"model": "gpt-6-sol", "provider": "openai"},
         )
 
     _install_turn(monkeypatch, failing_turn)

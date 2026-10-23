@@ -22,7 +22,7 @@ def test_deadline_stops_cooperative_provider_call(streaming: bool) -> None:
     client = LitellmLLM(
         api_key="test-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
 
@@ -61,13 +61,13 @@ def test_public_calls_normalize_provider_failures(
     client = LitellmLLM(
         api_key="test-key",
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         max_input_tokens=1000,
     )
     error_type = RateLimitError if rate_limit else Timeout
     expected = LLMRateLimitError if rate_limit else LLMTimeoutError
     failure = error_type(
-        message="provider error", model="gpt-5-mini", llm_provider="openai"
+        message="provider error", model="gpt-6-luna", llm_provider="openai"
     )
     method = "stream_raw" if streaming else "invoke_raw"
     with patch.object(client, method, side_effect=failure):

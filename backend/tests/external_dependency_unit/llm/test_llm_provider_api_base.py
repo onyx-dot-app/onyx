@@ -34,6 +34,7 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
+from tests.common.models import CI_OPENAI_MODEL
 
 
 def _create_test_provider(
@@ -52,7 +53,7 @@ def _create_test_provider(
             api_base=api_base,
             custom_config=custom_config,
             model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
+                ModelConfigurationUpsertRequest(name=CI_OPENAI_MODEL, is_visible=True)
             ],
         ),
         db_session=db_session,
@@ -585,7 +586,7 @@ def test_upload_with_custom_config_then_change(
                             name=default_model_name, is_visible=True
                         ),
                         ModelConfigurationUpsertRequest(
-                            name="gpt-4o-mini", is_visible=True
+                            name=CI_OPENAI_MODEL, is_visible=True
                         ),
                     ],
                     api_key_changed=False,
