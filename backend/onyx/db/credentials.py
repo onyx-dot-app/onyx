@@ -57,10 +57,12 @@ PUBLIC_CREDENTIAL_ID = 0
 class CredentialAccessLevel(str, Enum):
     """What the caller needs to do with a credential. USE covers listing it,
     pairing it with a connector and running its checks; EDIT covers changing,
-    sharing or deleting it, which only its owner may do."""
+    sharing or renaming it, which only its owner may do; DELETE is the owner,
+    or a global admin when the credential has no owner."""
 
     USE = "use"
     EDIT = "edit"
+    DELETE = "delete"
 
 
 def _build_credential_group_access_clause(
@@ -100,6 +102,17 @@ def _add_user_filters(
 
     authority = has_permission(user, Permission.MANAGE_CONNECTORS)
     access_clauses: list[ColumnElement[bool]] = [Credential.user_id == user.id]
+    if access_level is CredentialAccessLevel.DELETE:
+        # An ownerless credential has no owner to delete it. The seeded
+        # public credential stays: sources that need no auth use it.
+        if authority is PermissionAuthority.GLOBAL:
+            access_clauses.append(
+                and_(
+                    Credential.user_id.is_(None),
+                    Credential.id != PUBLIC_CREDENTIAL_ID,
+                )
+            )
+        return stmt.where(or_(*access_clauses))
     if authority is PermissionAuthority.GLOBAL:
         access_clauses += [
             Credential.user_id.is_(None),
@@ -766,9 +779,10 @@ def delete_credential_for_user(
     db_session: Session,
     force: bool = False,
 ) -> None:
-    """Delete a credential that belongs to a specific user"""
+    """Delete a credential the user owns, or an ownerless one when the user
+    is a global admin."""
     credential = fetch_credential_by_id_for_user(
-        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+        credential_id, user, db_session, access_level=CredentialAccessLevel.DELETE
     )
     if credential is None:
         raise OnyxError(
