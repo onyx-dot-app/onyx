@@ -337,6 +337,38 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         expected={ZENDESK},
     ),
     ScopeEvalCase(
+        name="standing-directive-outlives-history-window",
+        category="multi-turn",
+        user_turns=[
+            "For anything I ask, always check Zendesk only.",
+            "How do I reset a customer's 2FA?",
+            "What's the escalation path for a P1 ticket?",
+            "Who owns the billing integration?",
+            "How long do we keep chat transcripts?",
+            "What's the SLA for enterprise customers?",
+            "What's our refund processing time?",
+        ],
+        connected_sources=[ZENDESK, CONFLUENCE, SLACK],
+        current_queries=["refund processing time"],
+        expected={ZENDESK},
+    ),
+    ScopeEvalCase(
+        name="old-one-off-directive-does-not-leak-past-window",
+        category="multi-turn",
+        user_turns=[
+            "Search Zendesk for the login bug ticket.",
+            "How do I reset a customer's 2FA?",
+            "What's the escalation path for a P1 ticket?",
+            "Who owns the billing integration?",
+            "How long do we keep chat transcripts?",
+            "What's the SLA for enterprise customers?",
+            "What's our parental leave policy?",
+        ],
+        connected_sources=[ZENDESK, CONFLUENCE, GOOGLE_DRIVE],
+        current_queries=["parental leave policy"],
+        expected=None,
+    ),
+    ScopeEvalCase(
         name="one-off-directive-does-not-leak-to-new-topic",
         category="multi-turn",
         user_turns=[
