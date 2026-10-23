@@ -298,6 +298,10 @@ export class UsersAdminPage {
       .click();
   }
 
+  async expectJoinedGroup(groupName: string) {
+    await expect(this.editGroupsDialog.getByText(groupName)).toBeVisible();
+  }
+
   async saveGroupsModal() {
     await this.editGroupsDialog
       .getByRole("button", { name: "Save Changes" })

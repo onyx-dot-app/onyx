@@ -535,7 +535,7 @@ test.describe("Users page: group management", () => {
     await usersPage.goto();
     await usersPage.search(testUserEmail);
     await usersPage.openEditGroupsModal(testUserEmail);
-    await expect(usersPage.editGroupsDialog.getByText(groupName)).toBeVisible();
+    await usersPage.expectJoinedGroup(groupName);
   });
 
   test("remove user from group via edit groups modal", async ({
