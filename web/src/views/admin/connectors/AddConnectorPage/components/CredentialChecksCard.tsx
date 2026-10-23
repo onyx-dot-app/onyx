@@ -41,10 +41,9 @@ import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import {
   cn,
   escapeMarkdown,
-  findScrollParent,
   markdown,
   noProp,
-  smoothScroll,
+  smoothScrollToCenter,
 } from "@opal/utils";
 import { Hoverable } from "@opal/core";
 import type {
@@ -538,18 +537,8 @@ export function CheckCardView({
     void expand().then(() => setCenterRequest((request) => request + 1));
   }, [expandRequest, expand]);
   useEffect(() => {
-    const card = cardRef.current;
-    if (centerRequest === 0 || !card) return;
-    // Animated, like the scroll back to the card's place in the form.
-    const container: Element | null = findScrollParent(card);
-    const view = container?.getBoundingClientRect() ?? {
-      top: 0,
-      height: window.innerHeight,
-    };
-    const box: DOMRect = card.getBoundingClientRect();
-    void smoothScroll(container, {
-      by: box.top + box.height / 2 - (view.top + view.height / 2),
-    });
+    if (centerRequest === 0 || !cardRef.current) return;
+    void smoothScrollToCenter(cardRef.current);
   }, [centerRequest]);
 
   const lines: CheckLine[] = useMemo(
