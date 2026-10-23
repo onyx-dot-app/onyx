@@ -1085,10 +1085,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                       paddingPerpendicular={0}
                                     />
                                     <ScheduleSection
-                                      showCheckFreq={
-                                        edit === undefined &&
-                                        checks.hasNamedChecks
-                                      }
+                                      showCheckFreq={checks.hasNamedChecks}
                                       disabled={!formUnlocked}
                                     />
                                   </>

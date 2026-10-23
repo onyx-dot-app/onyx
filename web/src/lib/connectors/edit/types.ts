@@ -26,6 +26,7 @@ export interface ConnectorEditProposal {
   name: string;
   refresh_freq: number | null;
   prune_freq: number | null;
+  check_freq: number | null;
 }
 
 /** Mirrors `EditStepKind` in `backend/onyx/connectors/edit_plan/models.py`. */

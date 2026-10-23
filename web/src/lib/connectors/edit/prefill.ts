@@ -157,7 +157,8 @@ export function editInitialValues(
 ): ConnectorFormValues {
   const config: Record<string, unknown> =
     ccPair.connector.connector_specific_config ?? {};
-  const { refresh_freq, prune_freq, indexing_start } = ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq, indexing_start } =
+    ccPair.connector;
   return {
     ...createConnectorInitialValues(source),
     ...tabValues(
@@ -170,6 +171,7 @@ export function editInitialValues(
     name: ccPair.name,
     refreshFreq: refresh_freq === null ? undefined : refresh_freq / 60,
     pruneFreq: prune_freq === null ? undefined : prune_freq / 3600,
+    checkFreq: check_freq === null ? undefined : check_freq / 3600,
     // The date picker holds "YYYY-MM-DD".
     indexingStart: indexing_start === null ? "" : indexing_start.slice(0, 10),
   };
@@ -332,6 +334,13 @@ export function buildEditProposal(
       values.pruneFreq,
       initialValues.pruneFreq,
       ccPair.connector.prune_freq,
+      3600
+    ),
+    // Cleared, null: the checks run only on request.
+    check_freq: proposedSeconds(
+      values.checkFreq,
+      initialValues.checkFreq,
+      ccPair.connector.check_freq,
       3600
     ),
   };

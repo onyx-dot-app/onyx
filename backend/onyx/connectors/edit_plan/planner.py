@@ -52,6 +52,7 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _NAME_SETTING = "name"
 _REFRESH_FREQ_SETTING = "refresh_freq"
 _PRUNE_FREQ_SETTING = "prune_freq"
+_CHECK_FREQ_SETTING = "check_freq"
 
 _STEP_ORDER: tuple[EditStepKind, ...] = (
     EditStepKind.ACCESS_GROUPS,
@@ -536,6 +537,7 @@ def _changed_settings(current: PairState, proposed: ProposedPairState) -> list[s
         _NAME_SETTING: (current.name, proposed.name),
         _REFRESH_FREQ_SETTING: (current.refresh_freq, proposed.refresh_freq),
         _PRUNE_FREQ_SETTING: (current.prune_freq, proposed.prune_freq),
+        _CHECK_FREQ_SETTING: (current.check_freq, proposed.check_freq),
     }
     return [name for name, (old, new) in settings.items() if old != new]
 

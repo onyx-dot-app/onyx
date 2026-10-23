@@ -93,6 +93,7 @@ def write_edited_pair_state__no_commit(
     name: str,
     refresh_freq: int | None,
     prune_freq: int | None,
+    check_freq: int | None,
 ) -> None:
     """Writes the edited config and settings. The config, indexing_start and
     frequencies live on the connector, which all its pairs share.
@@ -112,8 +113,10 @@ def write_edited_pair_state__no_commit(
     )
     connector.refresh_freq = refresh_freq
     connector.prune_freq = prune_freq
+    connector.check_freq = check_freq
     connector.validate_refresh_freq()
     connector.validate_prune_freq()
+    connector.validate_check_freq()
 
 
 def reactivate_invalid_cc_pair__no_commit(db_session: Session, cc_pair_id: int) -> bool:

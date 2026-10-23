@@ -194,6 +194,7 @@ def _proposed_state(
         name=proposal.name,
         refresh_freq=proposal.refresh_freq,
         prune_freq=proposal.prune_freq,
+        check_freq=proposal.check_freq,
     )
 
 

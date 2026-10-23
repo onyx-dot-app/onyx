@@ -228,6 +228,7 @@ def _write_edit__no_commit(
             name=proposed.name,
             refresh_freq=proposed.refresh_freq,
             prune_freq=proposed.prune_freq,
+            check_freq=proposed.check_freq,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
