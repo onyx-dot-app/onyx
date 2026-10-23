@@ -182,3 +182,25 @@ export function smoothScroll(
     requestAnimationFrame(step);
   });
 }
+
+/**
+ * `smoothScroll`s the nearest scroll parent of `element` until the element
+ * sits in the middle of the view, like `scrollIntoView({ block: "center" })`
+ * with an animation.
+ */
+export function smoothScrollToCenter(
+  element: Element,
+  options?: SmoothScrollOptions
+): Promise<void> {
+  const container: Element | null = findScrollParent(element);
+  const view = container?.getBoundingClientRect() ?? {
+    top: 0,
+    height: window.innerHeight,
+  };
+  const box: DOMRect = element.getBoundingClientRect();
+  return smoothScroll(
+    container,
+    { by: box.top + box.height / 2 - (view.top + view.height / 2) },
+    options
+  );
+}

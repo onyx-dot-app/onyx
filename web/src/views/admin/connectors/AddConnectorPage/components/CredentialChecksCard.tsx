@@ -38,7 +38,13 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { cn, escapeMarkdown, markdown, noProp } from "@opal/utils";
+import {
+  cn,
+  escapeMarkdown,
+  markdown,
+  noProp,
+  smoothScrollToCenter,
+} from "@opal/utils";
 import { Hoverable } from "@opal/core";
 import type {
   CapabilityCheckResult,
@@ -519,8 +525,8 @@ export function CheckCardView({
     void expand().then(() => setCenterRequest((request) => request + 1));
   }, [expandRequest, expand]);
   useEffect(() => {
-    if (centerRequest === 0) return;
-    cardRef.current?.scrollIntoView({ block: "center" });
+    if (centerRequest === 0 || !cardRef.current) return;
+    void smoothScrollToCenter(cardRef.current);
   }, [centerRequest]);
 
   const lines: CheckLine[] = useMemo(
