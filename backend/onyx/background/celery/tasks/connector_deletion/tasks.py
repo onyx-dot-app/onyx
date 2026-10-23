@@ -15,6 +15,9 @@ from onyx.background.celery.celery_redis import (
     celery_get_queue_length,
     celery_get_queued_task_ids,
 )
+from onyx.background.celery.tasks.pruning.tasks import (
+    reset_prune_and_cancel_sync_record,
+)
 from onyx.configs.app_configs import DOCUMENT_INDEX_SYNC_MAX_TASKS, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -184,21 +187,21 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
 
             r.set(OnyxRedisSignals.BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES, 1, ex=300)
 
-        # collect cc_pair_ids and note whether any are in DELETING status
+        # collect cc_pair_ids and the ones in DELETING status
         cc_pair_ids: list[int] = []
-        has_deleting_cc_pair = False
+        deleting_cc_pair_ids: set[int] = set()
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_connector_credential_pairs(db_session)
             for cc_pair in cc_pairs:
                 cc_pair_ids.append(cc_pair.id)
                 if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-                    has_deleting_cc_pair = True
+                    deleting_cc_pair_ids.add(cc_pair.id)
 
         # Tenant-work-gating hook: mark only when at least one cc_pair is in
         # DELETING status. Marking on bare cc_pair existence would keep
         # nearly every tenant in the active set since most have cc_pairs
         # but almost none are actively being deleted on any given cycle.
-        if has_deleting_cc_pair:
+        if deleting_cc_pair_ids:
             maybe_mark_tenant_active(tenant_id, caller="connector_deletion")
 
         # try running cleanup on the cc_pair_ids
@@ -216,7 +219,9 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                     # is exceeded
                     task_logger.info(str(e))
 
-                    if not redis_connector.stop.fenced:
+                    # Keyed on the timeout, not the fence: a pause sets the
+                    # fence too, and must not skip the revoke and the wait.
+                    if not redis_connector.stop.timeout_set:
                         # one time revoke of celery tasks
                         task_logger.info("Revoking any tasks blocking deletion.")
                         revoke_tasks_blocking_deletion(
@@ -232,7 +237,9 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                                 "Timed out waiting for tasks blocking deletion. Resetting blocking fences."
                             )
 
-                            redis_connector.prune.reset()
+                            reset_prune_and_cancel_sync_record(
+                                redis_connector, db_session
+                            )
                             cancel_open_doc_permission_sync_attempt(
                                 cc_pair_id,
                                 db_session,
@@ -247,8 +254,11 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                             # just wait
                             pass
                 else:
-                    # clear the stop signal if it exists ... no longer needed
-                    redis_connector.stop.set_fence(False)
+                    # Deletion no longer waits on other tasks, so clear the stop
+                    # signal it set. Another pair's signal belongs to its pause.
+                    if cc_pair_id in deleting_cc_pair_ids:
+                        redis_connector.stop.set_fence(False)
+                        redis_connector.stop.clear_timeout()
 
         lock_beat.reacquire()
         keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
