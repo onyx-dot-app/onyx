@@ -162,6 +162,33 @@ def test_reasoning_from_reasoning_capability() -> None:
     assert by_name["inworld/models/inworld-llm-small"].supports_reasoning is False
 
 
+def test_catalog_capabilities_override_reasoning_name_heuristics() -> None:
+    by_name = _fetch(
+        {
+            "models": [
+                {
+                    # The catalog omits reasoningCapability for non-reasoning
+                    # models; the name alone would read as a reasoning model.
+                    "model": "grok-4.20-non-reasoning",
+                    "provider": "xai",
+                    "spec": {
+                        "outputModalities": ["text"],
+                        "capabilities": {"functionCalling": True},
+                    },
+                },
+                {
+                    # Without capability data, fall back to name heuristics.
+                    "model": "o3",
+                    "provider": "openai",
+                    "spec": {"outputModalities": ["text"]},
+                },
+            ]
+        }
+    )
+    assert by_name["xai/grok-4.20-non-reasoning"].supports_reasoning is False
+    assert by_name["openai/o3"].supports_reasoning is True
+
+
 def test_display_name_drops_inworld_models_prefix() -> None:
     by_name = _fetch()
     assert by_name["openai/gpt-5.4"].display_name == "gpt-5.4"

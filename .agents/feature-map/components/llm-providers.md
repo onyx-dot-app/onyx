@@ -369,6 +369,8 @@ Inworld Router uses the OpenAI chat completions surface. Its API key is a Base64
 and replaces the SDK's Bearer header, because the router reads Bearer as a JWT.
 Its model discovery reads `/llm/v1alpha/models` on the API host, because the
 public gateway does not route `/v1/models`. Discovery adds the `auto` router model.
+Reasoning support comes from the catalog's `capabilities`. Name heuristics apply
+only to entries without capability data.
 The LiteLLM request adds an `openai/` routing prefix. LiteLLM removes this prefix
 before sending the full Inworld model ID, including IDs that start with `openai/`.
 

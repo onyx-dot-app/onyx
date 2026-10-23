@@ -3030,12 +3030,20 @@ def _inworld_model_to_response(model: dict) -> InworldFinalModelResponse | None:
         return None
 
     display_name = model_name.removeprefix("models/")
-    capabilities = spec.get("capabilities") or {}
-    reasoning_capability = capabilities.get("reasoningCapability") or {}
-    supports_reasoning = bool(reasoning_capability.get("supported")) or (
-        model_is_reasoning_model(model_id, LlmProviderNames.INWORLD)
-        or is_reasoning_model(model_id, display_name)
-    )
+    capabilities = spec.get("capabilities")
+    if isinstance(capabilities, dict):
+        # The catalog omits false flags, so a missing reasoningCapability
+        # means no reasoning. Name heuristics would mark models like
+        # `xai/grok-4.20-non-reasoning` as reasoning.
+        reasoning_capability = capabilities.get("reasoningCapability") or {}
+        supports_reasoning = bool(reasoning_capability.get("supported"))
+    else:
+        capabilities = {}
+        # No capability data from the source; fall back to the LiteLLM
+        # cost map, then the substring heuristic
+        supports_reasoning = model_is_reasoning_model(
+            model_id, LlmProviderNames.INWORLD
+        ) or is_reasoning_model(model_id, display_name)
     supports_image_input = bool(capabilities.get("vision")) or (
         "image" in (spec.get("inputModalities") or [])
     )
