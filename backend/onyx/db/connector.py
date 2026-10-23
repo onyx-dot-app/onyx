@@ -155,6 +155,7 @@ def create_connector(
         ),
         check_freq=connector_data.check_freq,
     )
+    connector.validate_prune_freq()
     connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
@@ -187,6 +188,7 @@ def update_connector(
     # (the connector then never prunes).
     if "prune_freq" in connector_data.model_fields_set:
         connector.prune_freq = connector_data.prune_freq
+        connector.validate_prune_freq()
     # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
     if "check_freq" in connector_data.model_fields_set:
         connector.check_freq = connector_data.check_freq

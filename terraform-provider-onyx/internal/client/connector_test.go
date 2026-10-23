@@ -46,10 +46,15 @@ func TestCreateConnector(t *testing.T) {
 		t.Errorf("unexpected body: %s", captured.Body)
 	}
 	// Omitting these deletes the schedule server-side, so they are always sent.
-	for _, field := range []string{"refresh_freq", "prune_freq", "indexing_start"} {
+	for _, field := range []string{"refresh_freq", "indexing_start"} {
 		if v, present := body[field]; !present || v != nil {
 			t.Errorf("%s should be explicitly null, body: %s", field, captured.Body)
 		}
+	}
+	// An unset prune_freq is omitted: null would turn pruning off, and
+	// omitted takes the server's default.
+	if _, present := body["prune_freq"]; present {
+		t.Errorf("an unset prune_freq should be omitted, body: %s", captured.Body)
 	}
 }
 
