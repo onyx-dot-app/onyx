@@ -231,7 +231,7 @@ attribution (§4.6).
 
 ### 4.3 Tier gating
 
-Enforced by `add_tier_gate_middleware`
+Enforced by `tier_gate_middleware`
 (`ee/onyx/server/middleware/tier_gate.py`) against the
 longest-matching-prefix entry in `PATH_PREFIX_MIN_TIER`
 (`ee/onyx/configs/license_enforcement_config.py`), where
