@@ -6190,7 +6190,7 @@
           "title": "未找到用户组"
         },
         "search": {
-          "placeholder": "搜索用户组..."
+          "placeholder": "搜索用户组，或按 \"/\" 聚焦..."
         }
       },
       "members": {

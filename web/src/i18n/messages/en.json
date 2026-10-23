@@ -6190,7 +6190,7 @@
           "title": "No groups found"
         },
         "search": {
-          "placeholder": "Search groups..."
+          "placeholder": "Search groups or press \"/\" to focus..."
         }
       },
       "members": {
