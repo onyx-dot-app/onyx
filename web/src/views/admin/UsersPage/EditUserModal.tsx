@@ -128,7 +128,7 @@ export default function EditUserModal({
     }
   };
 
-  const displayName = user.personal_name ?? user.email;
+  const displayName = user.personal_name || user.email;
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
   const contentRef = useCallback((node: HTMLDivElement | null) => {
     setContentEl(node);
