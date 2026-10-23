@@ -606,3 +606,39 @@ def test_service_desk_comment_timestamp_updates_doc(
     assert doc.doc_updated_at == datetime(2026, 10, 20, 15, 30, tzinfo=timezone.utc)
     assert "Fixed this today!" in doc.sections[0].text
 
+
+@patch.object(JiraServiceManagementApiClient, "get_customer_requests")
+@patch.object(JiraServiceManagementApiClient, "get_request_comments")
+def test_retrieve_all_slim_docs_propagates_comment_fetch_error(
+    mock_comments: MagicMock,
+    mock_requests: MagicMock,
+) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://example.atlassian.net",
+        service_desk_id="10",
+    )
+    connector.load_credentials(
+        {
+            "jira_base_url": "https://example.atlassian.net",
+            "jira_api_token": "tok",
+        }
+    )
+
+    mock_requests.return_value = {
+        "values": [
+            {
+                "issueKey": "SD-102",
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Failing comment ticket"},
+                    {"fieldId": "updated", "value": "2026-10-01T10:00:00.000Z"},
+                ],
+            }
+        ],
+        "isLastPage": True,
+    }
+    mock_comments.side_effect = requests.exceptions.HTTPError("502 Bad Gateway")
+
+    with pytest.raises(requests.exceptions.HTTPError):
+        list(connector.retrieve_all_slim_docs(start=1700000000, end=1700086400))
+
+

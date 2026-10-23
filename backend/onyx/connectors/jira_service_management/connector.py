@@ -779,6 +779,7 @@ class JiraServiceManagementConnector(
                                 issue_key,
                                 e,
                             )
+                            raise
 
                     if start_dt is not None and req_updated_dt and req_updated_dt < start_dt:
                         continue
