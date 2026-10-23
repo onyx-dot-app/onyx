@@ -22,6 +22,7 @@ from onyx.configs.app_configs import (
     REQUEST_TIMEOUT_SECONDS,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
@@ -114,17 +115,19 @@ def _build_jsm_jql(
         clauses.append(f"({custom_jql})")
     elif project_key:
         clauses.append(f'project = "{project_key}"')
+    elif service_desk_id:
+        clauses.append(f'project = "{service_desk_id}"')
 
     if start is not None:
         clauses.append(f'updated >= "{_format_jql_timestamp(start)}"')
     if end is not None:
         clauses.append(f'updated <= "{_format_jql_timestamp(end)}"')
 
-    query_str = " AND ".join(clauses) if clauses else "ORDER BY updated ASC"
-    if clauses:
-        query_str += " ORDER BY updated ASC"
+    if not clauses:
+        # Jira Cloud search/jql can reject queries without a search restriction.
+        clauses.append("project is not EMPTY")
 
-    return query_str
+    return " AND ".join(clauses) + " ORDER BY updated ASC"
 
 
 def _extract_request_type(issue: dict[str, Any]) -> str | None:
@@ -262,6 +265,7 @@ def _request_to_document(
     jira_base_url: str,
     comments: list[dict[str, Any]] | None = None,
     comment_email_blacklist: tuple[str, ...] = (),
+    labels_to_skip: set[str] | None = None,
 ) -> Document | None:
     """Converts a Jira Service Management /rest/servicedeskapi/request object into an Onyx Document."""
     issue_key = req.get("issueKey") or req.get("issueId")
@@ -274,6 +278,8 @@ def _request_to_document(
     summary = ""
     description = ""
     priority = ""
+    req_labels: list[str] = []
+    updated_dt: datetime | None = None
 
     for fv in field_values:
         fid = fv.get("fieldId")
@@ -287,6 +293,16 @@ def _request_to_document(
                 priority = val.get("name", "")
             elif isinstance(val, str):
                 priority = val
+        elif fid == "labels":
+            if isinstance(val, list):
+                req_labels = [str(item) for item in val]
+            elif isinstance(val, str):
+                req_labels = [val]
+        elif fid == "updated" and isinstance(val, str):
+            updated_dt = _parse_timestamp(val)
+
+    if labels_to_skip and any(label in labels_to_skip for label in req_labels):
+        return None
 
     current_status = req.get("currentStatus") or {}
     status = current_status.get("status", "")
@@ -298,6 +314,15 @@ def _request_to_document(
     created_info = req.get("createdDate") or {}
     created_iso = created_info.get("iso8601", "") if isinstance(created_info, dict) else str(created_info)
     created_dt = _parse_timestamp(created_iso)
+
+    if not updated_dt:
+        status_date = current_status.get("statusDate")
+        if isinstance(status_date, dict):
+            updated_dt = _parse_timestamp(status_date.get("iso8601"))
+        elif status_date:
+            updated_dt = _parse_timestamp(str(status_date))
+    if not updated_dt:
+        updated_dt = created_dt
 
     service_desk_id = str(req.get("serviceDeskId", ""))
     request_type_id = str(req.get("requestTypeId", ""))
@@ -343,6 +368,8 @@ def _request_to_document(
         "reporter_email": reporter_email,
         "created": created_iso,
     }
+    if req_labels:
+        metadata["labels"] = req_labels
 
     return Document(
         id=page_url,
@@ -350,7 +377,7 @@ def _request_to_document(
         source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         semantic_identifier=f"{issue_key}: {summary}" if summary else issue_key,
         title=f"{issue_key} {summary}".strip(),
-        doc_updated_at=None,
+        doc_updated_at=updated_dt or created_dt,
         doc_created_at=created_dt,
         metadata=metadata,
     )
@@ -364,8 +391,13 @@ class JiraServiceManagementApiClient:
         jira_base_url: str,
         jira_user_email: str | None,
         jira_api_token: str,
+        scoped_token: bool = False,
     ) -> None:
-        self.jira_base_url = jira_base_url.rstrip("/")
+        self.raw_base_url = jira_base_url.rstrip("/")
+        if scoped_token:
+            self.jira_base_url = scoped_url(self.raw_base_url, "jira").rstrip("/")
+        else:
+            self.jira_base_url = self.raw_base_url
         if jira_user_email:
             self.auth: tuple[str, str] | None = (jira_user_email, jira_api_token)
             self.headers = {"Accept": "application/json"}
@@ -485,11 +517,18 @@ class JiraServiceManagementApiClient:
                 if e.response is not None and e.response.status_code in (404, 410):
                     continue
                 raise
-            except Exception:
-                continue
 
-        # If loop completes without return, try final POST /rest/api/3/search
-        return self._request("POST", _JIRA_V3_SEARCH_ENDPOINT, json_data={"jql": jql, "maxResults": max_results})
+        # If GET endpoints are not found, fallback to POST /rest/api/3/search with requested fields
+        post_body: dict[str, Any] = {
+            "jql": jql,
+            "maxResults": max_results,
+            "fields": fields or _SEARCH_FIELDS,
+        }
+        if next_page_token:
+            post_body["nextPageToken"] = next_page_token
+        elif start_at > 0:
+            post_body["startAt"] = start_at
+        return self._request("POST", _JIRA_V3_SEARCH_ENDPOINT, json_data=post_body)
 
 
 class JiraServiceManagementConnector(
@@ -501,7 +540,7 @@ class JiraServiceManagementConnector(
 
     def __init__(
         self,
-        jira_base_url: str | None = None,
+        jira_base_url: str,
         project_key: str | None = None,
         service_desk_id: str | None = None,
         jql_query: str | None = None,
@@ -509,7 +548,6 @@ class JiraServiceManagementConnector(
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         batch_size: int = INDEX_BATCH_SIZE,
         scoped_token: bool = False,
-        **kwargs: Any,
     ) -> None:
         self.jira_base_url = (jira_base_url or "").rstrip("/")
         self.project_key = (project_key or "").strip() or None
@@ -541,6 +579,7 @@ class JiraServiceManagementConnector(
             jira_base_url=self.jira_base_url,
             jira_user_email=jira_user_email,
             jira_api_token=jira_api_token,
+            scoped_token=self.scoped_token,
         )
 
     def _ensure_client(self) -> JiraServiceManagementApiClient:
@@ -556,8 +595,10 @@ class JiraServiceManagementConnector(
         client = self._ensure_client()
         current_batch: list[Document] = []
 
-        # If specific service desk ID is configured and no custom JQL/project, use JSM REST API directly
-        if self.service_desk_id and not self.jql_query and not self.project_key:
+        # If specific service desk ID is configured and no custom JQL, use JSM REST API directly
+        if self.service_desk_id and not self.jql_query:
+            start_dt = datetime.fromtimestamp(start, timezone.utc) if start is not None else None
+            end_dt = datetime.fromtimestamp(end, timezone.utc) if end is not None else None
             start_idx = 0
             limit = 50
             while True:
@@ -568,19 +609,36 @@ class JiraServiceManagementConnector(
                 )
                 values = resp.get("values", [])
                 for req in values:
-                    issue_key = req.get("issueKey") or req.get("issueId")
-                    comments = client.get_request_comments(issue_key) if issue_key else []
                     doc = _request_to_document(
                         req=req,
                         jira_base_url=self.jira_base_url,
-                        comments=comments,
                         comment_email_blacklist=self.comment_email_blacklist,
+                        labels_to_skip=self.labels_to_skip,
                     )
-                    if doc is not None:
-                        current_batch.append(doc)
-                        if len(current_batch) >= self.batch_size:
-                            yield current_batch
-                            current_batch = []
+                    if doc is None:
+                        continue
+                    if start_dt is not None and doc.doc_updated_at and doc.doc_updated_at < start_dt:
+                        continue
+                    if end_dt is not None and doc.doc_updated_at and doc.doc_updated_at > end_dt:
+                        continue
+
+                    issue_key = req.get("issueKey") or req.get("issueId")
+                    comments = client.get_request_comments(issue_key) if issue_key else []
+                    if comments:
+                        doc = _request_to_document(
+                            req=req,
+                            jira_base_url=self.jira_base_url,
+                            comments=comments,
+                            comment_email_blacklist=self.comment_email_blacklist,
+                            labels_to_skip=self.labels_to_skip,
+                        )
+                        if doc is None:
+                            continue
+
+                    current_batch.append(doc)
+                    if len(current_batch) >= self.batch_size:
+                        yield current_batch
+                        current_batch = []
 
                 if resp.get("isLastPage", True) or not values:
                     break
@@ -657,12 +715,16 @@ class JiraServiceManagementConnector(
         client = self._ensure_client()
         current_batch: list[SlimDocument] = []
 
-        if self.service_desk_id and not self.jql_query and not self.project_key:
+        if self.service_desk_id and not self.jql_query:
+            start_dt = datetime.fromtimestamp(start, timezone.utc) if start is not None else None
+            end_dt = datetime.fromtimestamp(end, timezone.utc) if end is not None else None
             start_idx = 0
             limit = 50
             while True:
                 if callback:
-                    callback.heartbeat()
+                    if callback.should_stop():
+                        return
+                    callback.progress("jsm_slim_docs", 0)
                 resp = client.get_customer_requests(
                     service_desk_id=self.service_desk_id,
                     start=start_idx,
@@ -671,13 +733,48 @@ class JiraServiceManagementConnector(
                 values = resp.get("values", [])
                 for req in values:
                     issue_key = req.get("issueKey") or req.get("issueId")
-                    if issue_key:
-                        current_batch.append(
-                            SlimDocument(id=build_jira_url(self.jira_base_url, issue_key))
-                        )
-                        if len(current_batch) >= self.batch_size:
-                            yield current_batch
-                            current_batch = []
+                    if not issue_key:
+                        continue
+
+                    field_values = req.get("requestFieldValues") or []
+                    req_labels: list[str] = []
+                    req_updated_dt: datetime | None = None
+                    for fv in field_values:
+                        fid = fv.get("fieldId")
+                        val = fv.get("value")
+                        if fid == "labels":
+                            if isinstance(val, list):
+                                req_labels = [str(item) for item in val]
+                            elif isinstance(val, str):
+                                req_labels = [val]
+                        elif fid == "updated" and isinstance(val, str):
+                            req_updated_dt = _parse_timestamp(val)
+
+                    if self.labels_to_skip and any(l in self.labels_to_skip for l in req_labels):
+                        continue
+
+                    if not req_updated_dt:
+                        status_date = (req.get("currentStatus") or {}).get("statusDate")
+                        if isinstance(status_date, dict):
+                            req_updated_dt = _parse_timestamp(status_date.get("iso8601"))
+                        elif status_date:
+                            req_updated_dt = _parse_timestamp(str(status_date))
+                    if not req_updated_dt:
+                        created_info = req.get("createdDate") or {}
+                        created_iso = created_info.get("iso8601", "") if isinstance(created_info, dict) else str(created_info)
+                        req_updated_dt = _parse_timestamp(created_iso)
+
+                    if start_dt is not None and req_updated_dt and req_updated_dt < start_dt:
+                        continue
+                    if end_dt is not None and req_updated_dt and req_updated_dt > end_dt:
+                        continue
+
+                    current_batch.append(
+                        SlimDocument(id=build_jira_url(self.jira_base_url, issue_key))
+                    )
+                    if len(current_batch) >= self.batch_size:
+                        yield current_batch
+                        current_batch = []
 
                 if resp.get("isLastPage", True) or not values:
                     break
@@ -701,7 +798,9 @@ class JiraServiceManagementConnector(
 
         while True:
             if callback:
-                callback.heartbeat()
+                if callback.should_stop():
+                    return
+                callback.progress("jsm_slim_docs", 0)
             resp = client.search_issues_jql(
                 jql=jql,
                 next_page_token=next_page_token,

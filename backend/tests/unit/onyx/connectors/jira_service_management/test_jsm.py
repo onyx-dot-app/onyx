@@ -24,6 +24,7 @@ from onyx.connectors.jira_service_management.connector import (
     _request_to_document,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 
 def test_jsm_config_validation() -> None:
@@ -64,9 +65,16 @@ def test_jsm_planning_rule() -> None:
 
 
 def test_build_jsm_jql() -> None:
+    # Empty clauses fallback to valid search restriction
+    assert _build_jsm_jql() == "project is not EMPTY ORDER BY updated ASC"
+
     # Project key only
     jql = _build_jsm_jql(project_key="ITSM")
     assert jql == 'project = "ITSM" ORDER BY updated ASC'
+
+    # Service desk ID only
+    jql = _build_jsm_jql(service_desk_id="12")
+    assert jql == 'project = "12" ORDER BY updated ASC'
 
     # Custom JQL
     jql = _build_jsm_jql(custom_jql="issuetype = 'Service Request'")
@@ -375,10 +383,11 @@ def test_connector_retrieve_all_slim_docs(mock_search: MagicMock) -> None:
     }
     connector.labels_to_skip = {"skip_me"}
 
-    mock_callback = MagicMock()
+    mock_callback = MagicMock(spec=IndexingHeartbeatInterface)
+    mock_callback.should_stop.return_value = False
     batches = list(connector.retrieve_all_slim_docs(callback=mock_callback))
 
-    assert mock_callback.heartbeat.called
+    assert mock_callback.progress.called
     flat_docs = [doc for batch in batches for doc in batch]
     assert len(flat_docs) == 2
     assert flat_docs[0].id == "https://example.atlassian.net/browse/ITSM-1"
@@ -421,3 +430,117 @@ def test_connector_service_desk_api_mode(
     assert len(batches[0]) == 1
     assert batches[0][0].id == "https://example.atlassian.net/browse/IT-99"
     assert batches[0][0].title == "IT-99 Service Desk ticket"
+
+
+@patch.object(JiraServiceManagementApiClient, "get_customer_requests")
+@patch.object(JiraServiceManagementApiClient, "get_request_comments")
+def test_connector_service_desk_labels_and_time_filter(
+    mock_comments: MagicMock,
+    mock_requests: MagicMock,
+) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://example.atlassian.net",
+        service_desk_id="5",
+        labels_to_skip=["skip_me"],
+    )
+    connector.load_credentials(
+        {
+            "jira_base_url": "https://example.atlassian.net",
+            "jira_api_token": "tok",
+        }
+    )
+
+    mock_requests.return_value = {
+        "values": [
+            {
+                "issueKey": "IT-1",
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Normal ticket"},
+                    {"fieldId": "updated", "value": "2026-10-10T12:00:00.000Z"},
+                ],
+            },
+            {
+                "issueKey": "IT-2",
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Skipped label"},
+                    {"fieldId": "labels", "value": ["skip_me"]},
+                    {"fieldId": "updated", "value": "2026-10-10T12:00:00.000Z"},
+                ],
+            },
+            {
+                "issueKey": "IT-3",
+                "requestFieldValues": [
+                    {"fieldId": "summary", "value": "Old ticket"},
+                    {"fieldId": "updated", "value": "2026-09-01T12:00:00.000Z"},
+                ],
+            },
+        ],
+        "isLastPage": True,
+    }
+    mock_comments.return_value = []
+
+    # Polling from 2026-10-01
+    start = int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2026, 10, 31, tzinfo=timezone.utc).timestamp())
+    batches = list(connector.poll_source(start=start, end=end))
+    assert len(batches) == 1
+    assert len(batches[0]) == 1
+    assert batches[0][0].id == "https://example.atlassian.net/browse/IT-1"
+
+
+@patch.object(JiraServiceManagementApiClient, "get_customer_requests")
+def test_connector_service_desk_retrieve_all_slim_docs(mock_requests: MagicMock) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://example.atlassian.net",
+        service_desk_id="5",
+        labels_to_skip=["skip_me"],
+    )
+    connector.load_credentials(
+        {
+            "jira_base_url": "https://example.atlassian.net",
+            "jira_api_token": "tok",
+        }
+    )
+
+    mock_requests.return_value = {
+        "values": [
+            {
+                "issueKey": "IT-1",
+                "requestFieldValues": [
+                    {"fieldId": "labels", "value": []},
+                    {"fieldId": "updated", "value": "2026-10-10T12:00:00.000Z"},
+                ],
+            },
+            {
+                "issueKey": "IT-2",
+                "requestFieldValues": [
+                    {"fieldId": "labels", "value": ["skip_me"]},
+                    {"fieldId": "updated", "value": "2026-10-10T12:00:00.000Z"},
+                ],
+            },
+        ],
+        "isLastPage": True,
+    }
+
+    mock_callback = MagicMock(spec=IndexingHeartbeatInterface)
+    mock_callback.should_stop.return_value = False
+    batches = list(connector.retrieve_all_slim_docs(callback=mock_callback))
+
+    assert mock_callback.progress.called
+    flat_docs = [doc for batch in batches for doc in batch]
+    assert len(flat_docs) == 1
+    assert flat_docs[0].id == "https://example.atlassian.net/browse/IT-1"
+
+
+@patch("onyx.connectors.jira_service_management.connector.scoped_url")
+def test_api_client_scoped_token(mock_scoped_url: MagicMock) -> None:
+    mock_scoped_url.return_value = "https://api.atlassian.com/ex/jira/12345"
+    client = JiraServiceManagementApiClient(
+        jira_base_url="https://example.atlassian.net",
+        jira_user_email="agent@example.com",
+        jira_api_token="token",
+        scoped_token=True,
+    )
+    assert client.jira_base_url == "https://api.atlassian.com/ex/jira/12345"
+    assert client.raw_base_url == "https://example.atlassian.net"
+    mock_scoped_url.assert_called_once_with("https://example.atlassian.net", "jira")

@@ -1353,6 +1353,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian Service Desk & Anfragen"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4175,6 +4178,45 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Konnektor konfigurieren",
+          "subtext": "Legen Sie fest, welche Jira Service Management-Inhalte indexiert werden. Sie können alles indexieren oder ein bestimmtes Projekt bzw. einen Service Desk angeben.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site-URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Alles"
+                },
+                "project": {
+                  "label": "Projekt"
+                },
+                "jql": {
+                  "label": "JQL-Abfrage"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexiert jede Anfrage, die das Konto lesen kann",
+              "description": "Onyx indexiert alle Kundenanfragen und Tickets in jedem Service Desk, auf den das ausgewählte Konto Lesezugriff hat."
+            },
+            "project_key": {
+              "label": "Projektschlüssel",
+              "description": "Der Schlüssel eines bestimmten Service-Desk-Projekts zum Indexieren (z. B. 'ITSM')."
+            },
+            "jql_query": {
+              "label": "JQL-Abfrage",
+              "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern von Jira Service Management-Anfragen.\n\nWICHTIG: Keine zeitbasierten Filter oder ORDER BY-Klauseln einschließen."
+            },
+            "comment_email_blacklist": {
+              "label": "Kommentar-E-Mail-Ausschlussliste",
+              "description": "Nützlich zum Ignorieren von Bots. Geben Sie Benutzer-E-Mails an, deren Kommentare NICHT indexiert werden sollen."
             }
           }
         },

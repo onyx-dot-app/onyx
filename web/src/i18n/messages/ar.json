@@ -1353,6 +1353,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "مكتب خدمة وطلبات أتلاسيان"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4175,6 +4178,45 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "تهيئة محتوى Jira Service Management المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين أو مكتب خدمة محدد.",
+          "fields": {
+            "jira_base_url": {
+              "label": "رابط الموقع",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "الكل"
+                },
+                "project": {
+                  "label": "المشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "فهرسة كل طلب يمكن للحساب قراءته",
+              "description": "يقوم Onyx بفهرسة جميع طلبات العملاء والتذاكر في كل مكتب خدمة يمكن للحساب المحدد قراءته."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع مكتب خدمة معين لطلب فهرسته (مثال: 'ITSM')."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية طلبات Jira Service Management.\n\nهام: لا تقم بتضمين أي عوامل تصفية تستند إلى الوقت أو عبارات ORDER BY في استعلام JQL."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة حظر البريد الإلكتروني للتعليقات",
+              "description": "مفيد لتجاهل بعض البوتات. أضف رسائل البريد الإلكتروني للمستخدمين الذين لا ينبغي فهرسة تعليقاتهم."
             }
           }
         },
