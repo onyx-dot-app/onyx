@@ -32,13 +32,14 @@ def _no_env_injection() -> Generator[None, None, None]:
         yield
 
 
-def make_llm(api_base: str) -> LitellmLLM:
+def make_llm(api_base: str, custom_config: dict[str, str] | None = None) -> LitellmLLM:
     return LitellmLLM(
         api_key="sk-mock-llm-server",
         model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
         model_name="mock-model",
         max_input_tokens=200000,
         api_base=api_base,
+        custom_config=custom_config,
     )
 
 
