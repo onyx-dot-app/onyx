@@ -3087,7 +3087,8 @@
           "failures": "실패",
           "errors": "오류",
           "other": "기타",
-          "resolved": "해결됨"
+          "resolved": "해결됨",
+          "toggle": "필터"
         },
         "groups": {
           "failures": "{count, plural, =0 {실패} other {실패 #개}}",

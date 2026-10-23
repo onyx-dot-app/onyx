@@ -3087,7 +3087,8 @@
           "failures": "失败",
           "errors": "错误",
           "other": "其他",
-          "resolved": "已解决"
+          "resolved": "已解决",
+          "toggle": "筛选"
         },
         "groups": {
           "failures": "{count, plural, =0 {失败} other {# 次失败}}",
