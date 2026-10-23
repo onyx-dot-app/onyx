@@ -40,6 +40,7 @@ class ConnectorEditProposal(BaseModel):
     name: str
     refresh_freq: int | None = None
     prune_freq: int | None = None
+    check_freq: int | None = None
 
 
 class ConnectorEditPlanResponse(BaseModel):

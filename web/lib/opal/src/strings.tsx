@@ -124,6 +124,11 @@ export type OpalStrings = {
   keyValueGroup: (keyTitle: string, valueTitle: string) => string;
   keyValueInput: (label: string, index: number) => string;
   keyValuePairFallback: string;
+  /** A number field's value outside its range. Either bound may be absent. */
+  inputNumberOutOfRange: (
+    min: number | undefined,
+    max: number | undefined
+  ) => string;
   keyValueRemovePair: (label: string, index: number) => string;
 
   /** Locale digits, no grouping, for the counts Opal renders itself (footer range, page numbers). */
@@ -254,6 +259,12 @@ export const defaultOpalStrings: OpalStrings = {
       : `${count} validation errors found`,
   keyValueGroup: (keyTitle, valueTitle) =>
     `${keyTitle} and ${valueTitle} pairs`,
+  inputNumberOutOfRange: (min, max) =>
+    min !== undefined && max !== undefined
+      ? `Enter a number from ${min} to ${max}`
+      : min !== undefined
+        ? `Enter a number of at least ${min}`
+        : `Enter a number of at most ${max}`,
   keyValueInput: (label, index) => `${label} ${index}`,
   keyValuePairFallback: "key-value",
   keyValueRemovePair: (label, index) => `Remove ${label} pair ${index}`,

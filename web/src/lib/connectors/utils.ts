@@ -13,11 +13,7 @@ import type {
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  connectorConfigs,
-  MIN_PRUNE_FREQ_HOURS,
-  MIN_REFRESH_FREQ_MINUTES,
-} from "@/lib/connectors/connectors";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
@@ -212,6 +208,11 @@ export function splitCredentialBoundFields(
 interface ConnectorValidationMessages {
   /** A required field left empty, named by its label. */
   required?: (field: string) => string;
+  /**
+   * Set on create: Refresh Every and Prune Every must hold a value, each with
+   * this message. Edit keeps a pair's empty schedule.
+   */
+  scheduleRequired?: { refreshFreq: string; pruneFreq: string };
   oneDriveUsersRequired?: string;
   /** Confluence's Select tab with no space and no page. */
   confluenceScopeRequired?: string;
@@ -306,6 +307,14 @@ export function createConnectorInitialValues(
     ...buildInitialValuesForFields(configuration.values),
     ...buildInitialValuesForFields(configuration.advanced_values),
   };
+}
+
+/** `schema`, required with `message` when one is given. */
+function requiredIf(
+  schema: Yup.NumberSchema<number | undefined>,
+  message: string | undefined
+): Yup.NumberSchema<number | undefined> {
+  return message === undefined ? schema : schema.required(message);
 }
 
 /** A scope list as the form holds it, or a stored comma-separated string. */
@@ -419,13 +428,11 @@ export function createConnectorValidationSchema(
     ...fieldSchemas,
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(
-      MIN_PRUNE_FREQ_HOURS,
-      "Prune frequency must be at least 0.083 hours (5 minutes)"
-    ),
-    refreshFreq: Yup.number().min(
-      MIN_REFRESH_FREQ_MINUTES,
-      "Refresh frequency must be at least 1 minute"
+    // Their ranges are checked by the fields themselves (InputNumberField).
+    pruneFreq: requiredIf(Yup.number(), messages.scheduleRequired?.pruneFreq),
+    refreshFreq: requiredIf(
+      Yup.number(),
+      messages.scheduleRequired?.refreshFreq
     ),
   });
 

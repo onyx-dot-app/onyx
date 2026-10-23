@@ -3669,8 +3669,10 @@
         },
         "checkFrequency": {
           "title": "검사 실행 주기",
-          "description": "연결의 기능과 상태를 확인합니다."
-        }
+          "description": "연결의 기능과 상태를 확인합니다.",
+          "placeholder": "안 함"
+        },
+        "rangeRequired": "{min, number} - {max, number} 범위의 값을 입력하세요."
       },
       "settings": {
         "description": "커넥터 정보 및 액세스.",
@@ -16068,6 +16070,11 @@
     "sidebar": {
       "open": "사이드바 열기",
       "close": "사이드바 닫기"
+    },
+    "inputNumber": {
+      "outOfRange": "{min, number}에서 {max, number} 사이의 숫자를 입력하세요",
+      "belowMin": "{min, number} 이상의 숫자를 입력하세요",
+      "aboveMax": "{max, number} 이하의 숫자를 입력하세요"
     }
   },
   "settings": {

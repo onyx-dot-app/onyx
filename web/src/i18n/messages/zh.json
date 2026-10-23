@@ -3669,8 +3669,10 @@
         },
         "checkFrequency": {
           "title": "检查运行间隔",
-          "description": "检查连接的功能与健康状况。"
-        }
+          "description": "检查连接的功能与健康状况。",
+          "placeholder": "从不"
+        },
+        "rangeRequired": "请输入 {min, number} - {max, number} 范围内的值。"
       },
       "settings": {
         "description": "连接器信息与访问权限。",
@@ -16068,6 +16070,11 @@
     "sidebar": {
       "open": "打开侧边栏",
       "close": "关闭侧边栏"
+    },
+    "inputNumber": {
+      "outOfRange": "请输入 {min, number} 到 {max, number} 之间的数字",
+      "belowMin": "请输入不小于 {min, number} 的数字",
+      "aboveMax": "请输入不大于 {max, number} 的数字"
     }
   },
   "settings": {

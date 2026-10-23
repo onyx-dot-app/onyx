@@ -3669,8 +3669,10 @@
         },
         "checkFrequency": {
           "title": "تشغيل الفحوصات كل",
-          "description": "يتحقق من الاتصال وقدراته وسلامته."
-        }
+          "description": "يتحقق من الاتصال وقدراته وسلامته.",
+          "placeholder": "أبدًا"
+        },
+        "rangeRequired": "يُرجى إدخال قيمة ضمن النطاق {min, number} - {max, number}."
       },
       "settings": {
         "description": "معلومات الموصل والوصول إليه.",
@@ -16068,6 +16070,11 @@
     "sidebar": {
       "open": "فتح الشريط الجانبي",
       "close": "إغلاق الشريط الجانبي"
+    },
+    "inputNumber": {
+      "outOfRange": "أدخل رقمًا من {min, number} إلى {max, number}",
+      "belowMin": "أدخل رقمًا لا يقل عن {min, number}",
+      "aboveMax": "أدخل رقمًا لا يزيد عن {max, number}"
     }
   },
   "settings": {

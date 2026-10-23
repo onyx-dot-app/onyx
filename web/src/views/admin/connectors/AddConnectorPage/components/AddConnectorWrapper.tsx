@@ -64,7 +64,10 @@ import type {
   DraftCredential,
 } from "@/lib/credentials/types";
 import {
-  defaultRefreshFreqMinutes,
+  MAX_PRUNE_FREQ_HOURS,
+  MAX_REFRESH_FREQ_MINUTES,
+  MIN_REFRESH_FREQ_MINUTES,
+  MIN_SCHEDULE_HOURS,
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
 import type {
@@ -137,6 +140,8 @@ interface ConnectorChecksGates {
   createReady: boolean;
   /** How many non-required checks failed: Create warns of them first. */
   optionalFailedCount: number;
+  /** The source has checks of its own, so they can run on a schedule. */
+  hasNamedChecks: boolean;
 }
 
 interface ConnectorChecksGateProps {
@@ -144,6 +149,8 @@ interface ConnectorChecksGateProps {
   credential: CredentialRef | null;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   ccPairId: number | null;
+  /** Told whether the source has checks of its own, once the plan says. */
+  onNamedChecksChange: (hasNamedChecks: boolean) => void;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -156,9 +163,10 @@ function ConnectorChecksGate({
   source,
   credential,
   ccPairId,
+  onNamedChecksChange,
   children,
 }: ConnectorChecksGateProps) {
-  const { createReady, results, runCheck } = useConnectorChecks({
+  const { createReady, results, plan, runCheck } = useConnectorChecks({
     source,
     credential,
     ccPairId,
@@ -166,6 +174,11 @@ function ConnectorChecksGate({
   const optionalFailedCount: number = results.filter(
     (result) => result.status === "failed" && !result.required
   ).length;
+  const hasNamedChecks: boolean =
+    plan?.checks.some((check) => !check.is_fallback) ?? false;
+  useEffect(() => {
+    onNamedChecksChange(hasNamedChecks);
+  }, [hasNamedChecks, onNamedChecksChange]);
   // A field (e.g. Confluence's CQL query) can run its check from the form.
   const actions: ConnectorCheckActions = useMemo(
     () => ({ runCheck }),
@@ -173,7 +186,7 @@ function ConnectorChecksGate({
   );
   return (
     <ConnectorCheckActionsProvider value={actions}>
-      {children({ createReady, optionalFailedCount })}
+      {children({ createReady, optionalFailedCount, hasNamedChecks })}
     </ConnectorCheckActionsProvider>
   );
 }
@@ -255,9 +268,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const keyValueT = useTranslations("opal.keyValue");
   const router = useRouter();
   const settings = useSettings();
-  const defaultPruneFreqHours = settings.default_pruning_freq
-    ? settings.default_pruning_freq / 3600
-    : 600; // 25 days fallback until settings load
+  // Whether the source's checks can run on a schedule (Run Checks Every).
+  const [hasNamedChecks, setHasNamedChecks] = useState(false);
 
   // The picked saved account. Clicking a saved card picks it; typing into
   // the new account drops the pick (see AuthenticationAccountSection). Edit
@@ -474,6 +486,14 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   const initialValues: ReturnType<typeof createConnectorInitialValues> =
     createConnectorInitialValues(connector);
+  // A new connector's schedule starts at the backend's defaults (seconds).
+  // Edit mode lays the pair's own values over these.
+  if (settings.default_refresh_freq !== undefined) {
+    initialValues.refreshFreq = settings.default_refresh_freq / 60;
+  }
+  if (settings.default_pruning_freq !== undefined) {
+    initialValues.pruneFreq = settings.default_pruning_freq / 3600;
+  }
   if (typedSpec) {
     initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
   }
@@ -501,6 +521,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       pruneFreq,
       indexingStart,
       refreshFreq,
+      checkFreq,
       auto_sync_options,
       ...configValues
     } = values;
@@ -526,9 +547,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     // Apply advanced configuration-specific transforms.
     const advancedConfiguration: any = {
       // The backend stores whole seconds.
-      pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
+      pruneFreq: pruneFreq === undefined ? null : Math.round(pruneFreq * 3600),
       indexingStart: indexingStartIso(indexingStart),
-      refreshFreq: Math.round((refreshFreq ?? defaultRefreshFreqMinutes) * 60),
+      refreshFreq:
+        refreshFreq === undefined ? null : Math.round(refreshFreq * 60),
     };
 
     // File-specific handling
@@ -599,6 +621,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         refresh_freq: advancedConfiguration.refreshFreq || null,
         prune_freq: advancedConfiguration.pruneFreq || null,
         indexing_start: advancedConfiguration.indexingStart || null,
+        // Only a source with checks of its own runs them on a schedule.
+        // Cleared, it is null: the checks run only on request.
+        check_freq:
+          hasNamedChecks && typeof checkFreq === "number"
+            ? Math.round(checkFreq * 3600)
+            : null,
         groups: groups,
       };
       const connectorCreationPromise = (async () => {
@@ -703,6 +731,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     await createConnectorFromForm(values);
   };
 
+  // The schedule starts at the backend's defaults, which the settings carry;
+  // Formik reads its initial values once.
+  if (settings.isLoading) return <PageLoader />;
+
   return (
     <Formik
       // Edit mode lays the pair's state over the create form's values, so
@@ -716,6 +748,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         isScopedManager && edit === undefined,
         {
           required: (field) => tValidation("required", { field }),
+          ...(edit === undefined &&
+            // The File connector has no Schedule section to fill in.
+            connector !== "file" && {
+              // The titles are terse, so a blank field names its range.
+              scheduleRequired: {
+                refreshFreq: t("scheduled.rangeRequired", {
+                  min: MIN_REFRESH_FREQ_MINUTES,
+                  max: MAX_REFRESH_FREQ_MINUTES,
+                }),
+                pruneFreq: t("scheduled.rangeRequired", {
+                  min: MIN_SCHEDULE_HOURS,
+                  max: MAX_PRUNE_FREQ_HOURS,
+                }),
+              },
+            }),
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
@@ -784,6 +831,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
             source={connector}
             credential={toCredentialRef(checkedCredential)}
             ccPairId={edit?.ccPair.id ?? null}
+            onNamedChecksChange={setHasNamedChecks}
           >
             {(checks) => {
               // Only a missing account locks the configuration. The bound
@@ -1075,9 +1123,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                       paddingPerpendicular={0}
                                     />
                                     <ScheduleSection
-                                      defaultPruneFreqHours={
-                                        defaultPruneFreqHours
-                                      }
+                                      showCheckFreq={checks.hasNamedChecks}
                                       disabled={!formUnlocked}
                                     />
                                   </>

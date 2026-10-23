@@ -127,6 +127,7 @@ describe("buildEditProposal", () => {
       name: "Docs repos",
       refresh_freq: 1800,
       prune_freq: 86400,
+      check_freq: null,
     });
   });
 
