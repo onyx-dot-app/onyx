@@ -217,6 +217,17 @@ def thread_root(rows: Iterable[ThreadListing]) -> ThreadListing | None:
     return min(roots, key=_row_order) if roots else None
 
 
+def rows_to_plan(rows: list[ThreadListing]) -> list[ThreadListing]:
+    """The rows of a copy ``plan_documents`` reads: its newest messages and
+    its first, each message once. Trimming in steps keeps the same rows as
+    trimming at once, so a long copy can be trimmed as it loads."""
+    kept: list[ThreadListing] = newest_rows(rows, MAX_MESSAGES_PER_CONVERSATION)
+    root: ThreadListing | None = thread_root(rows)
+    if root is not None and root.message_id not in {row.message_id for row in kept}:
+        kept.append(root)
+    return kept
+
+
 def _named_ids(row: ThreadListing) -> set[str]:
     return {mailbox.id for mailbox in row.named}
 
