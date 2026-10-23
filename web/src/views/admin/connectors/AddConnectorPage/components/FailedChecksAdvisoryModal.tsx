@@ -2,9 +2,8 @@
 
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { BasicModalFooter, Button, Modal, Text } from "@opal/components";
+import { BasicModalFooter, Button, Modal } from "@opal/components";
 import { SvgAlertTriangle, SvgListTree } from "@opal/icons";
-import { Section } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 
 export interface FailedChecksAdvisoryModalProps {
@@ -44,18 +43,13 @@ export default function FailedChecksAdvisoryModal({
           icon={SvgAlertTriangle}
           color="warning"
           title={t("title")}
+          description={markdown(
+            t("description", { count: failedCount }),
+            "",
+            t("proceed")
+          )}
           onClose={onClose}
         />
-        <Modal.Body>
-          <Section gap={2} alignItems="stretch" height="fit">
-            <Text as="p" font="main-ui-body" color="text-03">
-              {markdown(t("description", { count: failedCount }))}
-            </Text>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {t("proceed")}
-            </Text>
-          </Section>
-        </Modal.Body>
         <Modal.Footer>
           <BasicModalFooter
             left={
