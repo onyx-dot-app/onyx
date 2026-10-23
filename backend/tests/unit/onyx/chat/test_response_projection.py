@@ -169,10 +169,10 @@ def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
         running.result(timeout=2)
 
 
-@pytest.mark.parametrize("delivery", ["complete", "detached", "overflow"])
+@pytest.mark.parametrize("delivery", ["complete", "detached", "gap"])
 @pytest.mark.parametrize("sources_known_at_generation", [True, False])
 def test_full_response_content_survives_delivery_gaps(
-    delivery: str, sources_known_at_generation: bool, monkeypatch: pytest.MonkeyPatch
+    delivery: str, sources_known_at_generation: bool
 ) -> None:
     documents = [
         SearchDoc(
@@ -205,8 +205,6 @@ def test_full_response_content_survives_delivery_gaps(
         ),
     )
     response_future: Future[ChatResponseOutcome] = Future()
-    if delivery == "overflow":
-        monkeypatch.setattr("onyx.chat.stream_buffer._STREAM_QUEUE_CAPACITY", 2)
     output = ChatDelivery(None)
 
     def observe(run: Run) -> None:
@@ -227,6 +225,8 @@ def test_full_response_content_survives_delivery_gaps(
     packets: list[AnswerStreamPart] = [
         MessageResponseIDInfo(user_message_id=41, reserved_assistant_message_id=42)
     ]
+    if delivery == "gap":
+        output.report_gap()
     output.finish()
     packets.extend(output.reader)
     response = gather_stream_full(iter(packets), response_future)
@@ -242,7 +242,7 @@ def test_full_response_content_survives_delivery_gaps(
     ] == ([(2, "doc-2"), (1, "doc-1")] if sources_known_at_generation else [])
     assert response.error_msg == (
         "The live stream is incomplete. Reload this conversation."
-        if delivery == "overflow"
+        if delivery == "gap"
         else None
     )
 

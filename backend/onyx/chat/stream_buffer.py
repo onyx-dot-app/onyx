@@ -32,7 +32,6 @@ logger = setup_logger()
 _PREFIX = "chatstream"
 # Idle flushes bound latency below the chunk-size threshold.
 _FLUSH_THRESHOLD_BYTES = 32 * 1024
-_STREAM_QUEUE_CAPACITY = 1024
 _BUFFER_WORK_CAPACITY = 256
 
 
@@ -283,11 +282,11 @@ class _StreamStatus(str, Enum):
 
 
 class ChatStream(Iterator[Packet | StreamingError]):
-    """A bounded reader whose closure leaves execution and cache delivery running."""
+    """Buffer live packets until consumed; closing detaches only the reader."""
 
     def __init__(self) -> None:
-        self._queue: queue.Queue[Packet | StreamingError | _StreamStatus] = queue.Queue(
-            _STREAM_QUEUE_CAPACITY
+        self._queue: queue.Queue[Packet | StreamingError | _StreamStatus] = (
+            queue.Queue()
         )
         self._lock = threading.Lock()
         self._closed = False
@@ -296,14 +295,7 @@ class ChatStream(Iterator[Packet | StreamingError]):
         with self._lock:
             if self._closed:
                 return
-            try:
-                self._queue.put_nowait(item)
-            except queue.Full:
-                logger.warning("Chat reader fell behind; use persisted history")
-                self._discard_pending()
-                self._queue.put_nowait(_stream_gap())
-                self._queue.put_nowait(_StreamStatus.DONE)
-                self._closed = True
+            self._queue.put_nowait(item)
 
     def __next__(self) -> Packet | StreamingError:
         try:
