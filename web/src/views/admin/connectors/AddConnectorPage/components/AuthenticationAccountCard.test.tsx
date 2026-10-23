@@ -45,7 +45,6 @@ function renderCard(overrides: Partial<SimilarCredential> = {}) {
       detailsOpen={false}
       onDetailsOpenChange={jest.fn()}
       checkReport={null}
-      onRerunChecks={jest.fn().mockResolvedValue(undefined)}
       groupsLocked={false}
       onSaveAccount={props.onSaveAccount}
     />
