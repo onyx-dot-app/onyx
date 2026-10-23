@@ -89,10 +89,7 @@ def fragments(text: str, width: int) -> list[str]:
 def citation_ids(request: ChatCompletionRequest) -> list[int]:
     """Read only the tool-result envelope, never citation-like document prose."""
     ids: set[int] = set()
-    last_user = max(
-        (i for i, message in enumerate(request.messages) if message.role == "user"),
-        default=-1,
-    )
+    last_user = _last_user_index(request.messages)
     for message in request.messages[last_user + 1 :]:
         if message.role != "tool" or not isinstance(message.content, str):
             continue
@@ -234,11 +231,24 @@ def _content_text(content: str | list[Any] | None) -> str | None:
     return None
 
 
-def _last_user_text(messages: list[ChatMessage]) -> str:
-    for message in reversed(messages):
+def _last_user_index(messages: list[ChatMessage]) -> int:
+    """Ignore Onyx's operational reminders when locating the user turn."""
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
         if message.role != "user":
             continue
-        text = _content_text(message.content)
+        text = (_content_text(message.content) or "").strip()
+        # llm_step.py serializes USER_REMINDER messages with this wrapper.
+        if text.startswith("<system-reminder>") and text.endswith("</system-reminder>"):
+            continue
+        return index
+    return -1
+
+
+def _last_user_text(messages: list[ChatMessage]) -> str:
+    index = _last_user_index(messages)
+    if index >= 0:
+        text = _content_text(messages[index].content)
         if text is not None:
             return text
     return "load test query"
@@ -343,10 +353,7 @@ def _pick_tool(
         and "internal_search" in by_name
         and _GENERATE_PLAN not in by_name
     ):
-        last_user = max(
-            (i for i, message in enumerate(messages) if message.role == "user"),
-            default=-1,
-        )
+        last_user = _last_user_index(messages)
         completed_rounds = sum(
             any(
                 call.function.name == "internal_search"

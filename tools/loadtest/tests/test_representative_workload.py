@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,7 +34,10 @@ def question_for(rounds: int) -> str:
 
 
 @pytest.mark.parametrize("rounds", [1, 2, 3, 4])
-def test_complete_search_turn_stops_at_planned_rounds(rounds: int) -> None:
+@pytest.mark.parametrize("reminder", [False, True])
+def test_complete_search_turn_stops_at_planned_rounds(
+    rounds: int, reminder: bool
+) -> None:
     question = question_for(rounds)
     messages = [{"role": "user", "content": question}]
     for step in range(rounds + 1):
@@ -46,6 +50,13 @@ def test_complete_search_turn_stops_at_planned_rounds(rounds: int) -> None:
             },
         )
         assert response.status_code == 200
+        plan = prepare_response(
+            ChatCompletionRequest.model_validate(
+                {"model": MODEL, "messages": messages, "tools": [INTERNAL_SEARCH_TOOL]}
+            ),
+            Knobs(MODEL),
+        )
+        assert plan.profile == turn_profile("search", question)
         choice = response.json()["choices"][0]
         message = choice["message"]
         if step == rounds:
@@ -70,6 +81,13 @@ def test_complete_search_turn_stops_at_planned_rounds(rounds: int) -> None:
                 },
             ]
         )
+        if reminder:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "<system-reminder>\nCite retrieved documents.\n</system-reminder>",
+                }
+            )
     # A new user message begins a fresh search sequence in a multi-turn session.
     messages.append({"role": "user", "content": question})
     restarted = client.post(
@@ -335,3 +353,44 @@ def test_manifest_rejects_unmodeled_overrides(
     with pytest.raises(SystemExit) as error:
         manifest_main()
     assert error.value.code == 2
+
+
+def test_setup_failures_are_failed_turns() -> None:
+    # Keep Locust's gevent patching out of the FastAPI test process.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+from unittest.mock import patch
+from locust.env import Environment
+from onyx_client.chat_user import OnyxChatUser
+from onyx_client import workload_metrics
+from capacity_report import assess
+
+OnyxChatUser.host = "http://localhost"
+environment = Environment()
+user = OnyxChatUser(environment)
+user.messages = ["Question"]
+user.message_order = [0]
+user.turn_index = 0
+user._session_id = None
+recorded = []
+environment.events.request.add_listener(lambda **event: recorded.append(event))
+workload_metrics.reset()
+for failure in (None, ValueError("Invalid session JSON"), RuntimeError("Connection failed")):
+    with patch.object(user, "_next_payload", return_value=None, side_effect=failure):
+        user.chat_turn()
+assert len(recorded) == 3
+assert all(event["name"].endswith(":total_turn") for event in recorded)
+assert all(event["exception"] is not None for event in recorded)
+counts = workload_metrics.snapshot()[user.scenario_prefix]
+assert counts["active"] == 0 and counts["started"] == counts["finished"] == 3
+result = assess({"Name": "chat:total_turn", "Request Count": "103", "Failure Count": "3",
+                 "50%": "100", "95%": "100", "Requests/s": "2"}, 30, 0.01, 100)
+assert not result["passed"]
+""",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )

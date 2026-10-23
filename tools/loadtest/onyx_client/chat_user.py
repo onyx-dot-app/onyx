@@ -213,8 +213,14 @@ class OnyxChatUser(HttpUser):
         ]
         self.turn_index += 1
 
-        payload = self._next_payload(message)
-        if payload is None:
+        setup_start = time.perf_counter()
+        try:
+            payload = self._next_payload(message)
+            if payload is None:
+                raise RuntimeError("Could not create chat session")
+        except Exception as exc:
+            self._session_id = None
+            self._fire("total_turn", setup_start, exception=exc)
             return
 
         analyzer = ChatStreamAnalyzer()

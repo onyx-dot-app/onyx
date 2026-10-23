@@ -491,7 +491,7 @@ the milestone packet arrives; Locust aggregates percentiles per name:
 - `*:first_search_doc` — elapsed time from request start to the first document batch; includes earlier model work
 - `*:first_answer_token` — elapsed time to first answer content, including earlier searches and model calls
 - `*:first_dr_plan` / `*:first_research_agent` — deep-research phase starts
-- `*:total_turn` — full turn wall time; success/failure recorded here
+- `*:total_turn` — chat-stream wall time; setup failures also record a failed turn with elapsed setup time
 - `*:send (headers)` — raw HTTP request (headers-only timing)
 - `*:create-session` — multi-turn session creation (LongConversationUser)
 - `disconnect:disconnected` — turns ended by a deliberate mid-stream
