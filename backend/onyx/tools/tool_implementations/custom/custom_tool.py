@@ -165,7 +165,9 @@ class CustomTool(Tool):
         reader = csv.DictReader(csv_file)
         return list(reader)
 
-    def _failed_response(self, status_code: int | None, message: str) -> ToolResult:
+    def _failed_response(
+        self, status_code: int | None, message: str, is_unreachable: bool = False
+    ) -> ToolResult:
         return ToolResult(
             content=message,
             is_error=True,
@@ -173,7 +175,11 @@ class CustomTool(Tool):
                 tool_name=self._name,
                 response_type="text",
                 tool_result=None,
-                error=CustomToolErrorInfo(status_code=status_code, message=message),
+                error=CustomToolErrorInfo(
+                    status_code=status_code,
+                    message=message,
+                    is_unreachable=is_unreachable,
+                ),
             ),
         )
 
@@ -227,7 +233,6 @@ class CustomTool(Tool):
         except requests.exceptions.Timeout:
             logger.warning("%s request timed out", self._name, exc_info=True)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=f"The {self._name} tool could not reach its server (timed out).",
                 is_unreachable=True,
@@ -235,7 +240,6 @@ class CustomTool(Tool):
         except requests.exceptions.ConnectionError:
             logger.warning("%s request could not connect", self._name, exc_info=True)
             return self._failed_response(
-                placement,
                 status_code=None,
                 message=(
                     f"The {self._name} tool could not reach its server "

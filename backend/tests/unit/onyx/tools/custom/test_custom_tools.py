@@ -842,13 +842,16 @@ def _run_ping(server_url: str) -> ToolResult:
     return response
 
 
-def _assert_failed(response: ToolResult, status_code: int | None) -> None:
+def _assert_failed(
+    response: ToolResult, status_code: int | None, is_unreachable: bool = False
+) -> None:
     assert isinstance(response.details, CustomToolCallSummary)
     assert response.is_error
     error = response.details.error
     assert error is not None
     assert not error.is_auth_error
     assert error.status_code == status_code
+    assert error.is_unreachable == is_unreachable
     assert response.text == error.message
 
 
@@ -916,3 +919,54 @@ def test_call_refuses_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         _assert_failed(_run_ping("https://api.example.com"), status_code=302)
     pinned.assert_called_once()
+
+
+def test_validate_all_allows_private_network_on_self_hosted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accepted risk (ENG-4421): self-hosted custom tools reach RFC1918 hosts
+    even at VALIDATE_ALL. Change this test only with a deliberate policy change."""
+    _set_ssrf_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    _validate_tool_definition(_schema("http://10.0.0.1"))
+    response = unittest.mock.MagicMock()
+    response.is_redirect = False
+    response.status_code = 200
+    response.headers = {"Content-Type": "application/json"}
+    response.json.return_value = {"ok": True}
+    with patch("onyx.utils.url._pinned_request", return_value=response) as pinned:
+        result = _run_ping("http://10.0.0.1")
+    pinned.assert_called_once()
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.error is None
+
+
+_RAW_URLLIB3_MESSAGE = (
+    "HTTPConnectionPool(host='10.255.255.1', port=80): Max retries exceeded "
+    "with url: /ping (Caused by ConnectTimeoutError("
+    "<urllib3.connection.HTTPConnection object at 0x1>, "
+    "'Connection to 10.255.255.1 timed out. (connect timeout=10)'))"
+)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_reason"),
+    [
+        (requests.exceptions.ConnectTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
+        (requests.exceptions.ReadTimeout(_RAW_URLLIB3_MESSAGE), "(timed out)"),
+        (
+            requests.exceptions.ConnectionError(_RAW_URLLIB3_MESSAGE),
+            "(connection failed)",
+        ),
+    ],
+)
+def test_call_network_error_returns_clean_message(
+    error: requests.exceptions.RequestException, expected_reason: str
+) -> None:
+    with patch("onyx.utils.url._pinned_request", side_effect=error):
+        response = _run_ping("http://10.255.255.1")
+    _assert_failed(response, status_code=None, is_unreachable=True)
+    assert response.text == (
+        f"The ping tool could not reach its server {expected_reason}."
+    )
+    for internal_detail in ("urllib3", "HTTPConnectionPool", "Max retries", "10.255"):
+        assert internal_detail not in response.text

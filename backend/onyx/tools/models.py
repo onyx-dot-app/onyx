@@ -16,6 +16,7 @@ from onyx.utils.headers import HeaderItemDict
 
 
 class CustomToolErrorInfo(BaseModel):
+    is_unreachable: bool = False
     is_auth_error: bool = False
     status_code: int | None
     message: str

@@ -388,6 +388,7 @@ class ChatReminderContext(BaseModel):
 class ChatPrompt(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: Message | None
+    user_info_prompt: Message | None = None
     custom_prompt: Message | None
     reminder: Message | None
 
