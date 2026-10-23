@@ -509,25 +509,31 @@ export function CheckCardView({
   const stickyRef = useRef<StickyBoxItemHandle>(null);
   // Pinned, the card first scrolls back to its place in the form, so it
   // opens there instead of jumping out of the pin.
-  // The fold button's click also reaches the card; one scroll runs at a time.
-  const expanding = useRef(false);
-  const expand = useCallback(async () => {
-    if (expanding.current) return;
-    expanding.current = true;
-    try {
-      await stickyRef.current?.scrollToPlace();
-      setCollapsed(false);
-    } finally {
-      expanding.current = false;
-    }
+  // The fold button's click also reaches the card; one scroll runs at a time,
+  // and a second caller waits for it.
+  const expanding = useRef<Promise<void> | null>(null);
+  const expand = useCallback((): Promise<void> => {
+    expanding.current ??= (async () => {
+      try {
+        await stickyRef.current?.scrollToPlace();
+        setCollapsed(false);
+      } finally {
+        expanding.current = null;
+      }
+    })();
+    return expanding.current;
   }, []);
   // The card can outgrow the viewport. Centered, its failed rows still show.
+  // It centers once the opened card has rendered, not the folded one.
+  const [centerRequest, setCenterRequest] = useState(0);
   useEffect(() => {
     if (expandRequest === 0) return;
-    void expand().then(() =>
-      cardRef.current?.scrollIntoView({ block: "center" })
-    );
+    void expand().then(() => setCenterRequest((request) => request + 1));
   }, [expandRequest, expand]);
+  useEffect(() => {
+    if (centerRequest === 0) return;
+    cardRef.current?.scrollIntoView({ block: "center" });
+  }, [centerRequest]);
 
   const lines: CheckLine[] = useMemo(
     () => [
