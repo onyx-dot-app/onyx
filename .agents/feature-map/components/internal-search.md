@@ -462,3 +462,12 @@ than launching Playwright ad hoc.
 - **The Slack lane is not ACL-filtered the same way as every other lane.** Its
   `IndexFilters.access_control_list` is `None` by construction; access is
   whatever the pre-fetched Slack token can see. See §5.8.
+
+### Synthetic load-test helper responses
+
+`tools/loadtest/mock_llm/search_workload.py` supplies valid selection, classification,
+and neutral scope responses. Its sanitized `search_calibration.json` records weighted
+selection ranks and classification labels from a single ERAG sample. It models
+application work, not answer quality. `tools/loadtest/tests/test_mock_llm.py` reads
+production prompt constants without importing backend runtime dependencies.
+See `tools/loadtest/README.md` for calibration limits and explicit stress knobs.

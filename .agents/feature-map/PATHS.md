@@ -262,3 +262,5 @@ The component is unmapped. Do two things:
 2. Say in the PR that you verified against an unmapped area, and add the path here.
 
 Never treat "not in the map" as "low risk".
+
+| `tools/loadtest/mock_llm/` | internal-search (synthetic load-test helper responses) |

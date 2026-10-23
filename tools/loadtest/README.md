@@ -47,7 +47,9 @@ Behavior knobs ride in the model name (litellm passes it through verbatim):
 |---|---|---|
 | `ttft<ms>` | `mock-ttft500` | time to first token |
 | `itl<ms>` | `mock-itl20` | inter-token delay |
-| `len<n>` | `mock-len400` | answer length in tokens |
+| `len<n>` | `mock-len400` | generic answer length in whitespace chunks; does not pad search helper outputs |
+| `sections<n>` | `mock-sections10` | select up to `n` valid sections, capped by candidates and prompt maximum |
+| `class<n>` | `mock-class2` | force context expansion class `0`–`3` for controlled stress tests |
 | `tools<n>` | `mock-tools1` | call up to `n` retrieval tools (in parallel for `n>1`) on the first AUTO cycle |
 | `agents<n>` | `mock-agents2` | parallel research agents per DR orchestrator cycle |
 
@@ -55,6 +57,40 @@ The mock understands Onyx's LLM-loop contract: `tool_choice` none/auto/
 required/forced, the deep-research phase sequence (clarification →
 plan → orchestrator → research agents → reports), and `max_tokens` caps.
 Contract tests: `uv run --group loadtest pytest tests/ -q`.
+
+### Search workload calibration
+
+Search helpers return valid outputs instead of generic filler. Semantic rewrites
+keep the question. Keyword rewrites keep its terms and remove common question
+words. Section selection returns offered IDs. Classification returns one digit
+from `0` through `3`. These outputs drive real retrieval and context expansion.
+
+The default selection and classification distributions come from 396 successful
+ERAG questions with one search each, using Luna medium on 2026-10-22. The sanitized
+[calibration file](mock_llm/search_calibration.json) contains selection rank lists
+and aggregate classification counts. It contains no prompts or document content.
+Stable request hashes select weighted samples, so transports and repeated calls
+produce the same answer. Selection retains the sampled rank preference, caps IDs
+to available candidates, and fills missing ranks from the remaining candidates.
+The observed selection median was four sections. Classification counts were
+`0: 56`, `1: 707`, `2: 1020`, and `3: 24`; one failed classification was excluded.
+This sample describes one corpus and model, not all production workloads.
+
+Source and time helpers return valid neutral decisions: `[]` and
+`updated (None, None)`. The calibration sample had no such calls. These responses
+exercise unscoped searches; they do not simulate user-directed source or date
+filters. Unknown prompts still receive generic filler.
+
+Visible output differs from provider usage. Each successful real classification
+returned one visible character but reported five completion tokens. The mock
+uses whitespace chunks for emission, timing, and estimated usage; it does not
+simulate hidden reasoning tokens or provider billing. TTFT and ITL remain explicit
+scenario controls. They are not fitted to the real helper latency distribution.
+Both transports return the same text, including whitespace and line breaks.
+
+Use `sections` and `class` to isolate expansion costs. Keep model knobs and corpus
+identical across builds. Preserve the old mock image digest when reproducing old
+runs; this version intentionally corrects the helper workload.
 
 ### Provider profiles
 

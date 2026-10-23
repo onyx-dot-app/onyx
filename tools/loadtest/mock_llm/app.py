@@ -32,9 +32,8 @@ Knob combinations can imitate provider latency profiles (see README:
 Branching follows the contract of Onyx's LLM loops (chat llm_loop.py and
 deep_research/dr_loop.py):
 
-- tool_choice NONE / no tools        → stream plain filler text ("stop").
-  Covers: final answers, DR plan / intermediate / final reports, and
-  secondary invoke() flows (query rephrase, doc selection, ...).
+- tool_choice NONE / no tools        → answer recognized search helper prompts
+  with valid structured outputs; use filler for final answers and DR reports.
 - tool_choice forced to one function → call exactly that tool.
 - tool_choice REQUIRED               → must emit a tool call. Priority:
   `research_agent` if not yet called in this history (DR orchestrator),
@@ -83,6 +82,7 @@ from mock_llm.models import (
     ToolDefinition,
     Usage,
 )
+from mock_llm.search_workload import keyword_query, search_helper_answer
 
 app = FastAPI()
 
@@ -90,7 +90,7 @@ DEFAULT_TTFT_MS = int(os.environ.get("MOCK_TTFT_MS", "300"))
 DEFAULT_ITL_MS = int(os.environ.get("MOCK_ITL_MS", "15"))
 DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
-_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx)(\d+)")
+_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx|sections|class)(\d+)")
 
 _FILLER_WORDS = (
     "This is deterministic mock answer content used only for load testing "
@@ -109,6 +109,8 @@ class Knobs:
         self.ttft_s: float = DEFAULT_TTFT_MS / 1000.0
         self.itl_s: float = DEFAULT_ITL_MS / 1000.0
         self.n_tokens: int = DEFAULT_LEN_TOKENS
+        self.selected_count: int | None = None
+        self.classification: int | None = None
         # Retrieval tools to call in parallel on an AUTO cycle (0=none,
         # 1=mock-tools1, 2+=multi-tool); capped by tools the persona offers.
         self.n_auto_tools: int = 0
@@ -127,6 +129,12 @@ class Knobs:
                 self.n_auto_tools = int(value)
             elif name == "agents":
                 self.n_agents = max(1, int(value))
+            elif name == "sections":
+                self.selected_count = int(value)
+            elif name == "class":
+                if int(value) > 3:
+                    raise HTTPException(400, "class must be between 0 and 3")
+                self.classification = int(value)
             elif name == "maxctx":
                 self.max_ctx_tokens = int(value)
 
@@ -416,10 +424,29 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
     n_tokens = knobs.n_tokens
     if request.effective_max_tokens is not None:
         n_tokens = min(n_tokens, max(1, request.effective_max_tokens))
-    if _is_echo_flow(request.messages):
+    helper_answer = (
+        search_helper_answer(
+            _last_user_text(request.messages).strip(),
+            selected_count=knobs.selected_count,
+            classification=knobs.classification,
+        )
+        if not emit_tools
+        else None
+    )
+    if helper_answer is not None:
+        answer = helper_answer
+        n_tokens = len(answer.split())
+    elif _is_echo_flow(request.messages):
         # NOTE: invoke() also streams at the litellm layer, so echo-flow
         # detection must come from the prompt, not the stream flag.
         answer = _echo_answer(request.messages)
+        if any(
+            message.role == "system"
+            and isinstance(message.content, str)
+            and "standalone keyword queries" in message.content
+            for message in request.messages
+        ):
+            answer = keyword_query(answer)
         n_tokens = len(answer.split())
     else:
         answer = " ".join(
@@ -506,12 +533,12 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
                     None,
                 )
             )
-            for word in answer.split():
+            for word in re.findall(r"\S+\s*", answer):
                 yield _sse(
                     _make_chunk(
                         request.model,
                         completion_id,
-                        ChunkDelta(content=word + " "),
+                        ChunkDelta(content=word),
                         None,
                     )
                 )
