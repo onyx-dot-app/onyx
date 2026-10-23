@@ -73,12 +73,15 @@ VALUES
 INSERT INTO index_attempt
   (id, connector_credential_pair_id, from_beginning, status, error_msg,
    total_docs_indexed, total_chunks, total_batches, completed_batches,
-   time_updated, is_synthetic_seed)
+   time_updated, time_finished, is_synthetic_seed)
 VALUES
-  (1, 1, true, 'FAILED', 'PRIVATE: 401 unauthorized', 20, 30, 4, 2, now(), false),
-  (2, 1, false, 'IN_PROGRESS', NULL, 5, 9, 4, 1, now() - interval '3 days', false),
-  (3, 2, false, 'SUCCESS', NULL, 1, 1, 1, 1, now() - interval '3 days', false),
-  (4, 1, false, 'IN_PROGRESS', NULL, 0, 0, 0, 0, now(), true);
+  (1, 1, true, 'FAILED', 'PRIVATE: 401 unauthorized', 20, 30, 4, 2, now(),
+   now() - interval '2 days', false),
+  (2, 1, false, 'IN_PROGRESS', NULL, 5, 9, 4, 1, now() - interval '3 days', NULL,
+   false),
+  (3, 2, false, 'SUCCESS', NULL, 1, 1, 1, 1, now() - interval '3 days',
+   now() - interval '3 days', false),
+  (4, 1, false, 'IN_PROGRESS', NULL, 0, 0, 0, 0, now(), NULL, true);
 INSERT INTO index_attempt_errors
   (index_attempt_id, connector_credential_pair_id, failure_message, error_type,
    is_resolved)
@@ -251,6 +254,10 @@ def test_one_pass_sends_only_safe_events(
         data for data in by_type["attempt"] if data["state"] == "failed"
     )
     assert failed["error_code"] == "auth"
+    # A later update, such as checkpoint cleanup, does not move the end.
+    assert datetime.fromisoformat(failed["ended_at"]) < datetime.now(
+        timezone.utc
+    ) - timedelta(days=1)
     assert by_type["connector"][0]["metadata"]["permission_sync_enabled"] is True
     assert {data["cc_pair_id"]: data["doc_count"] for data in by_type["connector"]} == {
         1: 1,

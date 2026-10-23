@@ -56,7 +56,9 @@ def _attempt_row(**overrides: Any) -> dict[str, Any]:
         "total_batches": 4,
         "completed_batches": 2,
         "started_at": _NOW - timedelta(minutes=3),
+        "time_created": _NOW - timedelta(minutes=4),
         "time_updated": _NOW - timedelta(minutes=1),
+        "time_finished": None,
         "last_progress_at": _NOW - timedelta(minutes=1),
         "last_heartbeat_at": _NOW,
         "error_sample": None,
@@ -209,6 +211,7 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     failed: dict[str, Any] = collector.attempt_data(
         _attempt_row(
             status=IndexingStatus.FAILED,
+            time_finished=_NOW - timedelta(minutes=1),
             error_sample="Embedding request for PRIVATE-DOC failed",
         )
     )
@@ -218,6 +221,37 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     assert "PRIVATE" not in json.dumps(failed)
     for data in (running, failed):
         assert fleet.sanitize_data("attempt", data) == data
+
+
+def test_an_attempt_ends_when_it_finished_not_when_it_was_last_updated() -> None:
+    # Checkpoint cleanup updates a finished attempt days later.
+    cleaned: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            time_finished=_NOW - timedelta(days=6),
+            time_updated=_NOW,
+        )
+    )
+    assert cleaned["ended_at"] == (_NOW - timedelta(days=6)).isoformat()
+    unfinished: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.FAILED,
+            last_heartbeat_at=_NOW - timedelta(days=7),
+            time_updated=_NOW,
+        )
+    )
+    assert unfinished["ended_at"] == (_NOW - timedelta(days=7)).isoformat()
+    # Canceled in bulk before it started: no finish time, heartbeat, or start.
+    never_started: dict[str, Any] = collector.attempt_data(
+        _attempt_row(
+            status=IndexingStatus.CANCELED,
+            started_at=None,
+            last_heartbeat_at=None,
+            time_created=_NOW - timedelta(days=2),
+            time_updated=_NOW,
+        )
+    )
+    assert never_started["ended_at"] == (_NOW - timedelta(days=2)).isoformat()
 
 
 def test_an_attempt_without_counts_reports_zero() -> None:
