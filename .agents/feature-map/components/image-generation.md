@@ -27,8 +27,11 @@ conversation) instead of generating from scratch.
 An admin configures the capability at `/admin/image-generation`: pick a
 provider (OpenAI, Azure, or Vertex AI), supply credentials, and choose it as
 default. The model list in the admin form includes the GPT Image 2.5 variants
-(`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2`, `gpt-image-1.5`, and
-`gpt-image-1` (`web/src/views/admin/ImageGenerationPage/constants.ts`).
+(`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2` and `gpt-image-1.5`
+(`web/src/views/admin/ImageGenerationPage/constants.ts`). A card with `deprecated: true` (for
+example `gpt-image-1`, which OpenAI shut down) shows only while it is connected, so an admin can
+disconnect it. Migration `cf5fe008f2f1` moves a connected `openai_gpt_image_1` config to the
+default model in `backend/onyx/db/image_generation.py`.
 Until an admin does this, the tool does not appear at all. Missing or
 incomplete configuration hides the tool. A rejected API key does not, and it
 fails only when the tool runs. The exception is EE tenant provisioning, which creates a default config from the OpenAI key (`ee/onyx/server/tenants/provisioning.py`). The tool does not appear in a deployment without a default config; the model

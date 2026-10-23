@@ -8,7 +8,7 @@ const IMAGE_GENERATION_URL = `http://localhost:3000${ADMIN_ROUTES.IMAGE_GENERATI
 // Provider IDs matching constants.ts
 const PROVIDERS = [
   { id: "openai_gpt_image_1_5", title: "GPT Image 1.5" },
-  { id: "openai_gpt_image_1", title: "GPT Image 1" },
+  { id: "openai_gpt_image_2_5_flare", title: "GPT Image 2.5 Flare" },
 ];
 
 // Helper to find a provider card by its aria-label
@@ -80,7 +80,7 @@ test.describe("Image Generation Provider Configuration", () => {
     );
   });
 
-  test.describe("OpenAI GPT Image 1 Configuration", () => {
+  test.describe("OpenAI GPT Image 2.5 Flare Configuration", () => {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
     test.skip(!OPENAI_API_KEY, "OPENAI_API_KEY environment variable not set");
@@ -89,22 +89,26 @@ test.describe("Image Generation Provider Configuration", () => {
       // Clean up the image generation config created during the test
       const apiClient = new OnyxApiClient(page.request);
       try {
-        await apiClient.deleteImageGenerationConfig("openai_gpt_image_1");
-        console.log("[image-gen-test] Cleaned up GPT Image 1 config");
+        await apiClient.deleteImageGenerationConfig(
+          "openai_gpt_image_2_5_flare"
+        );
+        console.log("[image-gen-test] Cleaned up GPT Image 2.5 Flare config");
       } catch (error) {
         console.warn(
-          `[image-gen-test] Failed to clean up GPT Image 1 config: ${error}`
+          `[image-gen-test] Failed to clean up GPT Image 2.5 Flare config: ${error}`
         );
       }
     });
 
-    test.skip("should configure GPT Image 1 with API key", async ({ page }) => {
-      // Click Connect on GPT Image 1 card using aria-label
-      await openProviderModal(page, "openai_gpt_image_1");
+    test.skip("should configure GPT Image 2.5 Flare with API key", async ({
+      page,
+    }) => {
+      // Click Connect on GPT Image 2.5 Flare card using aria-label
+      await openProviderModal(page, "openai_gpt_image_2_5_flare");
 
       // Wait for modal to open
       const modalDialog = page.getByRole("dialog", {
-        name: /connect gpt image 1/i,
+        name: /connect gpt image 2\.5 flare/i,
       });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
@@ -139,13 +143,15 @@ test.describe("Image Generation Provider Configuration", () => {
       // Wait for page to update
       await page.waitForLoadState("networkidle");
 
-      // Verify GPT Image 1 is now configured - should show "Current Default"
-      const gptImageCard = getProviderCard(page, "openai_gpt_image_1");
+      // Verify GPT Image 2.5 Flare is now configured - should show "Current Default"
+      const gptImageCard = getProviderCard(page, "openai_gpt_image_2_5_flare");
       await expect(
         gptImageCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
 
-      console.log("[image-gen-test] GPT Image 1 configured successfully");
+      console.log(
+        "[image-gen-test] GPT Image 2.5 Flare configured successfully"
+      );
     });
   });
 });
