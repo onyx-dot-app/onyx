@@ -192,7 +192,8 @@ against stale provisioning attempts), `skills_hash`, `mcp_config_hash`,
 `encrypted_pat`. Owned in depth by `[[craft-sandboxes]]`; this document only
 reads it to decide whether a turn can run.
 `cleanup_checkpoint` records committed cleanup proof for one attempt, workspace storage instance, and heartbeat.
-Idle and FAILED cleanup commit this proof before deleting runtime resources.
+Idle and FAILED cleanup commit this proof before deleting runtime resources that hold prior work.
+FAILED cleanup skips the proof for runtimes from the current attempt and when no workspace storage identity exists.
 Retries reuse it only while the runtime is absent and all three values match.
 The reaper can resume deletion after runtime loss. New provisioning and successful sleep clear this proof.
 Heartbeat updates clear it too. Uploads and file deletions commit that update before changing files.
@@ -502,7 +503,9 @@ preserve-opencode-sessions.md` and confirmed against
      (`sandbox_lifecycle.py`), best-effort, before terminating an
      **unhealthy** sandbox during recovery.
   4. `_checkpoint_failed_runtime` (`session/resource_cleanup.py`), before collecting
-     a FAILED owner's runtime that can contain prior session work. Checkpoint
+     a FAILED owner's runtime that can contain prior session work. It captures
+     opencode history only when the manager sets
+     `supports_opencode_history_persistence`. Checkpoint
      failure preserves those resources for retry. Fresh Kubernetes pods with current
      attempt labels do not require this checkpoint. Retained Docker volumes do.
 
