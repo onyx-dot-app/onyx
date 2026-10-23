@@ -326,9 +326,12 @@ def assert_user_can_use_credential(
       caller has authorized the user for that pair, so the use adds nothing.
     - The user owns the credential, or it has no owner and the user holds
       MANAGE_CONNECTORS globally (an admin).
-    - The user can see the credential (it is shared with them) and the bound
-      values equal those of a pair that uses it. The pairs record the values
-      the credential is used with; a shared credential with no pair is for its
+    - The user can see the credential (it is shared with them) and its source
+      has no credential-bound fields other than ``credential_derived_fields``,
+      so no setting can send it elsewhere.
+    - The user can see the credential and the bound values equal those of a
+      pair that uses it. The pairs record the values the credential is used
+      with; a shared credential of a bound source with no pair is for its
       owner only. A config of None (a config-less run) supplies no bound
       values but still needs such a pair.
     - The user can see the credential and its source has no real secret
@@ -377,18 +380,26 @@ def assert_user_can_use_credential(
         return
     if credential.source in CREDENTIAL_PERMISSIONS_TO_IGNORE:
         return
+    bound_fields = (
+        sorted(
+            set(binding_class.model_fields) - binding_class.credential_derived_fields
+        )
+        if binding_class
+        else []
+    )
+    if not bound_fields:
+        return
     if any(
         _matches(pair)
         for pair in get_cc_pairs_using_credential(db_session, credential.id, source)
     ):
         return
 
-    bound_fields = sorted(binding_class.model_fields) if binding_class else []
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
         f"Credential {credential.id} is shared with you. You can use it only "
-        "with the settings of a connector that already uses it"
-        + (f" ({', '.join(bound_fields)})." if bound_fields else "."),
+        "with the settings of a connector that already uses it "
+        f"({', '.join(bound_fields)}).",
     )
 
 

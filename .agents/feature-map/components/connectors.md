@@ -592,10 +592,13 @@ credential with a config. Every pairing, credential swap, edit and check run
 applies it before it builds a connector. A user may use the credential when:
 
 - they own it, or it has no owner and they hold `MANAGE_CONNECTORS` globally;
-- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and the config's
-  bound values, as the binding model validates them, equal those of a pair of
-  the same source that uses the credential. A credential with no pair is for
-  its owner only. A config-less run still needs such a pair;
+- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and its source has
+  no credential-bound fields (no binding model, or only
+  `credential_derived_fields`), so no setting can send the secret elsewhere;
+- it is visible to them and the config's bound values, as the binding model
+  validates them, equal those of a pair of the same source that uses the
+  credential. A credential of a bound source with no pair is for its owner
+  only. A config-less run still needs such a pair;
 - the caller passes the pair the user edits or operates, and that pair already
   uses the credential with the same bound values; or
 - the credential is visible and its source has no real secret
