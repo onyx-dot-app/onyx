@@ -783,6 +783,10 @@ export default function CredentialChecksCard({
             <Button
               icon={SvgPlay}
               disabled={locked}
+              // Locked until the form has a usable account to check.
+              tooltip={
+                locked ? promptT("startButton.disabledTooltip") : undefined
+              }
               onClick={() => {
                 checks.begin();
                 onStart?.();

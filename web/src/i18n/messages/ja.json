@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "アカウントを削除",
-            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。",
+            "notOwnerTooltip": "この認証情報を削除できるのは所有者のみです"
           },
           "updateButton": {
             "label": "認証情報を更新",
-            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。"
+            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。",
+            "notOwnerTooltip": "この認証情報を更新できるのは所有者のみです"
           },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "チェックを再実行"
           },
+          "renameButton": {
+            "tooltip": "アカウント名を変更"
+          },
           "authenticationType": {
             "label": "認証タイプ"
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
-          },
-          "shareSaved": {
-            "toast": "共有を更新しました。"
           },
           "shareFailed": {
             "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
@@ -3448,7 +3450,7 @@
             "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
           },
           "shareLocked": {
-            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
+            "tooltip": "この認証情報を共有できるのは所有者のみです"
           },
           "viewDetails": {
             "tooltip": "詳細を表示"
@@ -5171,9 +5173,9 @@
           "message": "この認証情報を削除してもよろしいですか?稼働中のコネクタに関連付けられた認証情報は削除できません。"
         },
         "confirmButton": {
-          "label": "確認"
+          "label": "削除"
         },
-        "confirmTitle": "削除の確認"
+        "confirmTitle": "*{name}* を削除"
       },
       "displayNames": {
         "accessKeyId": "{source} アクセスキー ID",
@@ -10813,7 +10815,8 @@
         "title": "接続をテスト",
         "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
         "startButton": {
-          "label": "チェックを開始"
+          "label": "チェックを開始",
+          "disabledTooltip": "チェックを開始するには、上でアカウントを選択するか、新しいアカウントを入力してください"
         }
       },
       "title": "コネクターチェック",

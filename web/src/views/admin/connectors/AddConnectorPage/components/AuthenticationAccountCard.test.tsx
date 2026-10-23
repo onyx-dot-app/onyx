@@ -108,7 +108,7 @@ describe("AuthenticationAccountCard rename", () => {
     const user = userEvent.setup({ delay: null });
     const { onSelect } = renderCard();
 
-    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Rename Account" }));
 
     expect(screen.getByDisplayValue("Prod Confluence")).toHaveFocus();
     expect(onSelect).not.toHaveBeenCalled();
@@ -117,6 +117,6 @@ describe("AuthenticationAccountCard rename", () => {
   it("does not offer a rename to a user who cannot edit the account", () => {
     renderCard({ is_owner: false, user_id: "someone-else" });
 
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename Account" })).toBeNull();
   });
 });

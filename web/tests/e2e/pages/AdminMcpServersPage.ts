@@ -140,6 +140,10 @@ export class AdminMcpServersPage {
         name: new RegExp(`^${group.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
       })
       .click();
+    // The group list stays open for more picks and can cover the modal's
+    // buttons; Escape closes the list alone, not the modal.
+    await this.page.keyboard.press("Escape");
+    await expect(this.page.getByRole("listbox")).toBeHidden();
   }
 
   async selectGroupAccess(): Promise<void> {

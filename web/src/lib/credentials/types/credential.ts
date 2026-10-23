@@ -212,7 +212,7 @@ export interface CredentialSharing {
  */
 export interface DraftCredential {
   source: ValidSources;
-  /** The values as typed. */
+  /** The values as typed, with text trimmed. */
   credential_json: Record<string, unknown>;
   sharing: CredentialSharing;
 }

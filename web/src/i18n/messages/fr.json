@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "Supprimer le compte",
-            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent."
+            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent.",
+            "notOwnerTooltip": "Seul le propriétaire peut supprimer cet identifiant"
           },
           "updateButton": {
             "label": "Mettre à jour les identifiants",
-            "tooltip": "Modifie les valeurs enregistrées pour chaque connecteur qui utilise ce compte."
+            "tooltip": "Modifie les valeurs enregistrées pour chaque connecteur qui utilise ce compte.",
+            "notOwnerTooltip": "Seul le propriétaire peut mettre à jour cet identifiant"
           },
           "usedBy": {
             "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "Relancer les vérifications"
           },
+          "renameButton": {
+            "tooltip": "Renommer le compte"
+          },
           "authenticationType": {
             "label": "Type d’authentification"
           },
           "rerunFailed": {
             "toast": "Impossible de lancer les vérifications. Réessayez."
-          },
-          "shareSaved": {
-            "toast": "Partage mis à jour."
           },
           "shareFailed": {
             "toast": "Impossible de modifier qui peut utiliser ce compte. Réessayez."
@@ -3448,7 +3450,7 @@
             "tooltip": "Seule la personne qui a ajouté ce compte peut le rendre privé."
           },
           "shareLocked": {
-            "tooltip": "Seule la personne qui a ajouté ce compte, ou un administrateur avec qui il est partagé, peut modifier qui peut l'utiliser."
+            "tooltip": "Seul le propriétaire peut partager cet identifiant"
           },
           "viewDetails": {
             "tooltip": "Voir les détails"
@@ -5171,9 +5173,9 @@
           "message": "Voulez-vous vraiment supprimer cet identifiant ? Vous ne pouvez pas supprimer des identifiants liés à des connecteurs actifs."
         },
         "confirmButton": {
-          "label": "Confirmer"
+          "label": "Supprimer"
         },
-        "confirmTitle": "Confirmer la suppression"
+        "confirmTitle": "Supprimer *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID de clé d'accès {source}",
@@ -10813,7 +10815,8 @@
         "title": "Tester la connexion",
         "description": "{appName} effectuera des vérifications pour valider les autorisations requises avant de continuer.",
         "startButton": {
-          "label": "Lancer les vérifications"
+          "label": "Lancer les vérifications",
+          "disabledTooltip": "Choisissez un compte ou renseignez-en un nouveau ci-dessus pour lancer les vérifications"
         }
       },
       "title": "Vérifications du connecteur",

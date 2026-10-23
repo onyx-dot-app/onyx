@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "Eliminar cuenta",
-            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando."
+            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando.",
+            "notOwnerTooltip": "Solo el propietario puede eliminar esta credencial"
           },
           "updateButton": {
             "label": "Actualizar credenciales",
-            "tooltip": "Cambia los valores guardados para cada conector que usa esta cuenta."
+            "tooltip": "Cambia los valores guardados para cada conector que usa esta cuenta.",
+            "notOwnerTooltip": "Solo el propietario puede actualizar esta credencial"
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "Volver a ejecutar comprobaciones"
           },
+          "renameButton": {
+            "tooltip": "Cambiar el nombre de la cuenta"
+          },
           "authenticationType": {
             "label": "Tipo de autenticación"
           },
           "rerunFailed": {
             "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
-          },
-          "shareSaved": {
-            "toast": "Uso compartido actualizado."
           },
           "shareFailed": {
             "toast": "No se pudo cambiar quién puede usar esta cuenta. Inténtalo de nuevo."
@@ -3448,7 +3450,7 @@
             "tooltip": "Solo quien añadió esta cuenta puede hacerla privada."
           },
           "shareLocked": {
-            "tooltip": "Solo quien añadió esta cuenta, o un administrador con quien está compartida, puede cambiar quién puede usarla."
+            "tooltip": "Solo el propietario puede compartir esta credencial"
           },
           "viewDetails": {
             "tooltip": "Ver detalles"
@@ -5171,9 +5173,9 @@
           "message": "¿Seguro que quieres eliminar esta credencial? No puedes eliminar credenciales vinculadas a conectores activos."
         },
         "confirmButton": {
-          "label": "Confirmar"
+          "label": "Eliminar"
         },
-        "confirmTitle": "Confirmar eliminación"
+        "confirmTitle": "Eliminar *{name}*"
       },
       "displayNames": {
         "accessKeyId": "ID de clave de acceso de {source}",
@@ -10813,7 +10815,8 @@
         "title": "Probar conexión",
         "description": "{appName} ejecutará comprobaciones para validar los permisos necesarios antes de continuar.",
         "startButton": {
-          "label": "Iniciar comprobaciones"
+          "label": "Iniciar comprobaciones",
+          "disabledTooltip": "Elige una cuenta o completa una nueva arriba para iniciar las comprobaciones"
         }
       },
       "title": "Comprobaciones del conector",

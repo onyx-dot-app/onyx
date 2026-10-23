@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "계정 삭제",
-            "inUseTooltip": "다른 커넥터가 이 자격 증명을 사용하고 있어 삭제할 수 없습니다."
+            "inUseTooltip": "다른 커넥터가 이 자격 증명을 사용하고 있어 삭제할 수 없습니다.",
+            "notOwnerTooltip": "소유자만 이 자격 증명을 삭제할 수 있습니다"
           },
           "updateButton": {
             "label": "자격 증명 업데이트",
-            "tooltip": "이 계정을 사용하는 모든 커넥터의 저장된 값을 변경합니다."
+            "tooltip": "이 계정을 사용하는 모든 커넥터의 저장된 값을 변경합니다.",
+            "notOwnerTooltip": "소유자만 이 자격 증명을 업데이트할 수 있습니다"
           },
           "usedBy": {
             "label": "{count, plural, other {커넥터 #개}}에서 사용 중"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "검사 다시 실행"
           },
+          "renameButton": {
+            "tooltip": "계정 이름 변경"
+          },
           "authenticationType": {
             "label": "인증 유형"
           },
           "rerunFailed": {
             "toast": "검사를 시작할 수 없습니다. 다시 시도하세요."
-          },
-          "shareSaved": {
-            "toast": "공유가 업데이트되었습니다."
           },
           "shareFailed": {
             "toast": "이 계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
@@ -3448,7 +3450,7 @@
             "tooltip": "이 계정을 추가한 사람만 비공개로 설정할 수 있습니다."
           },
           "shareLocked": {
-            "tooltip": "이 계정을 추가한 사람 또는 공유된 관리자만 사용할 수 있는 사람을 변경할 수 있습니다."
+            "tooltip": "소유자만 이 자격 증명을 공유할 수 있습니다"
           },
           "viewDetails": {
             "tooltip": "세부 정보 보기"
@@ -5171,9 +5173,9 @@
           "message": "이 자격 증명을 삭제하시겠습니까? 활성 커넥터에 연결된 자격 증명은 삭제할 수 없습니다."
         },
         "confirmButton": {
-          "label": "확인"
+          "label": "삭제"
         },
-        "confirmTitle": "삭제 확인"
+        "confirmTitle": "*{name}* 삭제"
       },
       "displayNames": {
         "accessKeyId": "{source} 액세스 키 ID",
@@ -10813,7 +10815,8 @@
         "title": "연결 테스트",
         "description": "{appName}이(가) 계속하기 전에 필요한 범위를 확인하는 검사를 실행합니다.",
         "startButton": {
-          "label": "검사 시작"
+          "label": "검사 시작",
+          "disabledTooltip": "검사를 시작하려면 위에서 계정을 선택하거나 새 계정을 입력하세요"
         }
       },
       "title": "커넥터 검사",

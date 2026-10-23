@@ -9,13 +9,10 @@ import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import {
-  adminDeleteCredential,
   deleteCredential,
   startCredentialCheckRun,
   updateCredentialSharing,
 } from "@/lib/credentials/svc";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
   getCredentialSpec,
@@ -174,9 +171,6 @@ export function useCredentialLoad(
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   const { credentials, oauthDetails, isLoading, error } =
     useCredentialLoad(sourceType);
-  const { isGlobalHolder } = usePermissionAuthority(
-    Permission.MANAGE_CONNECTORS
-  );
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
   );
@@ -239,12 +233,8 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   ): Promise<string | null> {
     let response: Response;
     try {
-      // A global connector manager sees every credential and deletes any of
-      // them through the admin route. A scoped manager may not use that
-      // route; they delete through the owner route, which covers their own.
-      response = isGlobalHolder
-        ? await adminDeleteCredential(credential.id)
-        : await deleteCredential(credential.id);
+      // Only the owner may delete a credential.
+      response = await deleteCredential(credential.id);
     } catch (error) {
       // The request never landed, so nothing changed and nothing refreshes.
       return errorMessage(error) || failureMessage;

@@ -3402,11 +3402,13 @@
           },
           "deleteButton": {
             "label": "Delete Account",
-            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
+            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it.",
+            "notOwnerTooltip": "Only the owner can delete this credential"
           },
           "updateButton": {
             "label": "Update Credentials",
-            "tooltip": "Changes the saved values for every connector that uses this account."
+            "tooltip": "Changes the saved values for every connector that uses this account.",
+            "notOwnerTooltip": "Only the owner can update this credential"
           },
           "usedBy": {
             "label": "Used by {count, plural, one {# connector} other {# connectors}}"
@@ -3426,14 +3428,14 @@
           "rerunButton": {
             "label": "Re-run Checks"
           },
+          "renameButton": {
+            "tooltip": "Rename Account"
+          },
           "authenticationType": {
             "label": "Authentication Type"
           },
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
-          },
-          "shareSaved": {
-            "toast": "Sharing updated."
           },
           "shareFailed": {
             "toast": "Couldn't change who can use this account. Try again."
@@ -3448,7 +3450,7 @@
             "tooltip": "Only the person who added this account can make it private."
           },
           "shareLocked": {
-            "tooltip": "Only the person who added this account, or an admin it is shared with, can change who may use it."
+            "tooltip": "Only the owner can share this credential"
           },
           "viewDetails": {
             "tooltip": "View Details"
@@ -5171,9 +5173,9 @@
           "message": "Are you sure you want to delete this credential? You cannot delete credentials that are linked to live connectors."
         },
         "confirmButton": {
-          "label": "Confirm"
+          "label": "Delete"
         },
-        "confirmTitle": "Confirm Deletion"
+        "confirmTitle": "Delete *{name}*"
       },
       "displayNames": {
         "accessKeyId": "{source} Access Key ID",
@@ -10813,7 +10815,8 @@
         "title": "Test Connection",
         "description": "{appName} will run checks to validate required scopes before proceeding.",
         "startButton": {
-          "label": "Start Checks"
+          "label": "Start Checks",
+          "disabledTooltip": "Choose an account or fill in a new one above to start the checks"
         }
       },
       "title": "Connector Checks",
