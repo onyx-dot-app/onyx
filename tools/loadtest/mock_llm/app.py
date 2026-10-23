@@ -435,7 +435,6 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
     )
     if helper_answer is not None:
         answer = helper_answer
-        n_tokens = len(answer.split())
     elif _is_echo_flow(request.messages):
         # NOTE: invoke() also streams at the litellm layer, so echo-flow
         # detection must come from the prompt, not the stream flag.
@@ -447,7 +446,6 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
             for message in request.messages
         ):
             answer = keyword_query(answer)
-        n_tokens = len(answer.split())
     else:
         answer = " ".join(
             _FILLER_WORDS[i % len(_FILLER_WORDS)] for i in range(n_tokens)
