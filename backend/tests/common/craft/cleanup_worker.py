@@ -11,8 +11,11 @@ from kubernetes import client
 
 from onyx.background.celery.apps.client import celery_app
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
-from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
-from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
+    SandboxBackend,
+)
 
 APP_NAMESPACE = os.environ.get("HELM_RELEASE_NAMESPACE", "onyx")
 
@@ -94,7 +97,7 @@ def wait_for_resource_grace(
 ) -> None:
     pod = core.read_namespaced_pod(pod_name, namespace, _request_timeout=10)
     eligible_at = pod.metadata.creation_timestamp + timedelta(
-        seconds=RESOURCE_GRACE_SECONDS + 2
+        seconds=SANDBOX_RESOURCE_GRACE_SECONDS + 2
     )
     while (remaining := (eligible_at - datetime.now(timezone.utc)).total_seconds()) > 0:
         time.sleep(min(2, remaining))

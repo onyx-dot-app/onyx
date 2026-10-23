@@ -16,13 +16,13 @@ from onyx.db.models import Sandbox
 from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
     SandboxBackend,
 )
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
 from onyx.server.features.build.timeouts import ATTEMPT_DEADLINE_SECONDS
 from tests.common.craft.cleanup_worker import (
     isolated_cleanup_deployment as isolated_cleanup_deployment,
@@ -71,7 +71,7 @@ def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows
     all_owners = [*owners, foreign]
     lease = get_cache_backend(tenant_id="public").lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
-        timeout=RESOURCE_GRACE_SECONDS + 1800,
+        timeout=SANDBOX_RESOURCE_GRACE_SECONDS + 1800,
     )
     try:
         for owner in owners:

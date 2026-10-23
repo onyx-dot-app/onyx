@@ -17,13 +17,13 @@ from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
     SANDBOX_NAMESPACE,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
     SandboxBackend,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.session.resource_cleanup import RESOURCE_GRACE_SECONDS
 from tests.common.craft.cleanup_worker import (
     APP_NAMESPACE,
     require_isolated_cleanup_deployment,
@@ -76,7 +76,6 @@ def _assert_marker(
 def test_idle_cleanup_restores_two_sessions_and_their_opencode_history(
     owned_live_pod: OwnedLivePod,
     k8s_client: client.CoreV1Api,
-    k8s_manager: KubernetesSandboxManager,
     db_session: Session,
 ) -> None:
     owned = owned_live_pod
@@ -126,12 +125,10 @@ def test_idle_cleanup_restores_two_sessions_and_their_opencode_history(
         response = BuildSessionManager.restore(owned.api_user, session_id)
         assert response.session_loaded_in_sandbox
         _assert_marker(k8s_client, owned.pod_name, session_id, marker)
-        assert (
-            k8s_manager.ensure_opencode_session(
-                sandbox_id, session_id, history_ids[session_id]
-            )
-            == history_ids[session_id]
-        )
+        session = db_session.get(BuildSession, session_id)
+        assert session is not None
+        db_session.refresh(session)
+        assert session.opencode_session_id == history_ids[session_id]
     replacement = k8s_client.read_namespaced_pod(owned.pod_name, SANDBOX_NAMESPACE)
     assert replacement.metadata.uid != original.metadata.uid
 
@@ -148,7 +145,7 @@ def test_failed_cleanup_retains_checkpoint_across_worker_restart_and_restores_fi
     _write_marker(core, owned.pod_name, owned.session_id, "retained-failed-work")
     lease = get_cache_backend(tenant_id="public").lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
-        timeout=RESOURCE_GRACE_SECONDS + 1800,
+        timeout=SANDBOX_RESOURCE_GRACE_SECONDS + 1800,
     )
     assert lease.acquire(blocking=True, blocking_timeout=30)
     try:

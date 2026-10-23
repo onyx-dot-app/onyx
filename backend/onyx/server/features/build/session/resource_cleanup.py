@@ -9,7 +9,10 @@ from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
+)
 from onyx.server.features.build.db.build_session import get_orphan_build_session_ids
 from onyx.server.features.build.db.sandbox import (
     fail_stale_provisioning__no_commit,
@@ -35,7 +38,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-RESOURCE_GRACE_SECONDS = 15 * 60
 MAX_CLEANUP_RESOURCES = 100
 RESOURCE_RETRY_SECONDS = max(60, SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 16)
 
@@ -201,7 +203,7 @@ def reconcile_sandbox_resources(
             continue
 
     grace_cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=RESOURCE_GRACE_SECONDS
+        seconds=SANDBOX_RESOURCE_GRACE_SECONDS
     )
     attempted = 0
     verified_owners: set[UUID] = set()
@@ -211,9 +213,7 @@ def reconcile_sandbox_resources(
             verified_owners.add(resource.sandbox_id)
         if resource.tenant_id != tenant_id or resource.created_at > grace_cutoff:
             continue
-        retry_key = (
-            f"sandbox_cleanup_retry:{resource.kind.value}:{resource.instance_id}"
-        )
+        retry_key = f"sandbox_cleanup_retry:{resource.kind.value}:{resource.name}:{resource.instance_id}"
         if cache.get(retry_key) is not None:
             continue
         try:

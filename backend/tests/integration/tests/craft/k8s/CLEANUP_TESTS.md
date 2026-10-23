@@ -28,6 +28,7 @@ The tests change only test accounts, but database fault injection temporarily re
 The recovery test also replaces the isolated deployment's cleanup worker pod.
 Do not enable these tests against shared Craft Dev.
 
-Resource reconciliation observes the real 15-minute creation grace period.
+Resource reconciliation observes the real creation grace period.
+CI shortens it to 180 seconds. The workflow sets `SANDBOX_RESOURCE_GRACE_SECONDS` once for the worker and the test process.
 The FAILED checkpoint test clears only its own resource retry keys after repairing the injected failure.
-It does not shorten the creation grace period or change the production clock.
+It does not change the production clock.
