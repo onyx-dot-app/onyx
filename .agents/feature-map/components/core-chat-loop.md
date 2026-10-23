@@ -265,6 +265,8 @@ whenever you touch this component.
    isolated between observers. Payload accounting
    includes both queued events and events still being delivered. Payload size is an
    estimate, not an exact Python heap limit.
+   The live reader queue is unbounded: unread packets drain before completion.
+   Disconnecting clears its backlog without stopping execution or replay storage.
 5. **Root finalization uses `ChatResponsePersistence`.** It reports one final
    outcome. Progressive execution saves and checkpoints belong to `ChatRunStore`.
 6. **The assistant message row exists before the first token.** IDs are reserved up
