@@ -34,14 +34,14 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
-from onyx.configs.app_configs import JOB_TIMEOUT, PERMISSION_SYNC_TIMEOUT
+from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     PERMISSION_SYNC_HEARTBEAT_INTERVAL,
-    PERMISSION_SYNC_LEASE_OVERRUN,
     PERMISSION_SYNC_LEASE_SELF_EXPIRY,
     PERMISSION_SYNC_LEASE_TIMEOUT,
     PERMISSION_SYNC_LOST_TASK_GRACE,
+    PERMISSION_SYNC_STALL_TIMEOUT,
     PERMISSION_SYNC_TASK_EXPIRES,
     DocumentSource,
     OnyxCeleryPriority,
@@ -162,10 +162,11 @@ def fail_expired_doc_permission_sync_attempts_for_tenant() -> None:
             # Celery has dropped the task by then, so it can never start
             not_started_timeout=timedelta(seconds=PERMISSION_SYNC_TASK_EXPIRES)
             + lease_timeout,
+            stall_timeout=timedelta(seconds=PERMISSION_SYNC_STALL_TIMEOUT),
         )
     if failed_ids:
         task_logger.warning(
-            f"Failed doc permission sync attempts with expired leases: {failed_ids}"
+            f"Failed doc permission sync attempts with expired leases or stalled progress: {failed_ids}"
         )
 
 
@@ -425,7 +426,7 @@ def try_creating_permissions_sync_task(
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
     acks_late=False,
-    soft_time_limit=JOB_TIMEOUT,
+    # No time limit by design: a crawl that keeps yielding may run for days
     track_started=True,
     trail=False,
     bind=True,
@@ -479,12 +480,11 @@ def connector_permission_sync_generator_task(
         renew=partial(_renew_doc_permission_sync_lease, attempt_id, progress),
         interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
         max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
-        max_duration=PERMISSION_SYNC_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
+        max_duration=None,
     )
     heartbeat.start()
     callback = PermissionSyncCallback(
         redis_connector,
-        timeout_seconds=PERMISSION_SYNC_TIMEOUT,
         lease=heartbeat,
         sync_progress=progress,
     )
@@ -606,7 +606,6 @@ def connector_permission_sync_generator_task(
                 checkpointer.freeze()
             progress.total_docs_synced = tasks_generated
             progress.docs_with_permission_errors = docs_with_errors
-            progress.last_progress_at = datetime.now(timezone.utc)
 
         if checkpointed_doc_sync_func is not None:
             checkpointer = FileStoreDocSyncCheckpointer(
@@ -650,6 +649,9 @@ def connector_permission_sync_generator_task(
                     )
 
                 pending_writes.append(doc_external_access)
+                # Every yielded element is progress, even from a source that
+                # never reports it
+                callback.progress("element_yielded", 1)
                 if len(pending_writes) >= PERMISSION_WRITE_BATCH_SIZE:
                     flush_pending_writes()
         finally:
@@ -922,41 +924,23 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
     def __init__(
         self,
         redis_connector: RedisConnector,
-        timeout_seconds: int | None = None,
         lease: LeaseHeartbeat | None = None,
         sync_progress: DocPermissionSyncProgress | None = None,
     ):
         super().__init__()
         self.redis_connector: RedisConnector = redis_connector
-        self.start_monotonic = time.monotonic()
-        self.timeout_seconds = timeout_seconds
         self.lease = lease
         self.sync_progress = sync_progress
 
     def stop_reason(self) -> str | None:
-        """Why the sync must stop, or None when it may continue."""
+        """Why the sync must stop, or None when it may continue. There is no
+        time limit: a stalled crawl loses its lease once the reaper fails the
+        attempt on its stale progress."""
         if self.redis_connector.stop.fenced:
             return "stop signal set (the connector is being deleted or paused)"
 
         if self.lease is not None and self.lease.is_lost():
             return "attempt lost its lease (the reaper or a cancel closed it)"
-
-        # Check if the task has exceeded its timeout
-        # NOTE: Celery's soft_time_limit does not work with thread pools,
-        # so we must enforce timeouts internally.
-        if self.timeout_seconds is not None:
-            elapsed = time.monotonic() - self.start_monotonic
-            if elapsed > self.timeout_seconds:
-                logger.warning(
-                    "PermissionSyncCallback - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
-                    format(elapsed, ".0f"),
-                    self.timeout_seconds,
-                    self.redis_connector.cc_pair_id,
-                )
-                return (
-                    f"timed out after {elapsed:.0f}s "
-                    f"(PERMISSION_SYNC_TIMEOUT_SECONDS={self.timeout_seconds})"
-                )
 
         return None
 

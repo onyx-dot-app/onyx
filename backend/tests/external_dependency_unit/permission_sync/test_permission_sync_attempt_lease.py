@@ -67,7 +67,11 @@ _DOC = _AttemptKind(
     create=create_doc_permission_sync_attempt,
     start=mark_doc_permission_sync_attempt_in_progress,
     renew=renew_doc_permission_sync_attempt_lease,
-    reap=fail_expired_doc_permission_sync_attempts,
+    reap=lambda db_session, lease, not_started: (
+        fail_expired_doc_permission_sync_attempts(
+            db_session, lease, not_started, stall_timeout=_LEASE
+        )
+    ),
     fail=lambda attempt_id, db_session, msg: mark_doc_permission_sync_attempt_failed(
         attempt_id, db_session, error_message=msg
     ),
@@ -162,6 +166,53 @@ def test_reaper_fails_only_expired_attempts(
     assert _status(kind, db_session, fresh) == PermissionSyncStatus.IN_PROGRESS
     for attempt_id in (expired, legacy, never_started):
         assert _status(kind, db_session, attempt_id) == PermissionSyncStatus.FAILED
+
+
+def test_doc_reaper_fails_stalled_attempts_but_not_live_ones(
+    db_session: Session,
+) -> None:
+    """A doc sync has no time limit: the reaper fails an attempt by stale
+    progress, never by how long it has run."""
+    long_ago = datetime.now(timezone.utc) - timedelta(hours=3)
+    now = datetime.now(timezone.utc)
+
+    # Old, still yielding: a large source mid-crawl.
+    progressing = _started_attempt(_DOC, db_session)
+    _set_times(
+        _DOC,
+        db_session,
+        progressing,
+        time_started=long_ago,
+        heartbeat_at=now,
+        last_progress_at=now,
+    )
+
+    # Alive, but its crawl stopped yielding.
+    stalled = _started_attempt(_DOC, db_session)
+    _set_times(_DOC, db_session, stalled, heartbeat_at=now, last_progress_at=long_ago)
+
+    # Alive, never yielded anything since it started.
+    never_progressed = _started_attempt(_DOC, db_session)
+    _set_times(
+        _DOC,
+        db_session,
+        never_progressed,
+        time_started=long_ago,
+        heartbeat_at=now,
+        last_progress_at=None,
+    )
+
+    failed_ids = _DOC.reap(db_session, _LEASE, _LEASE)
+
+    assert {stalled, never_progressed} <= set(failed_ids)
+    assert progressing not in failed_ids
+    assert _status(_DOC, db_session, progressing) == PermissionSyncStatus.IN_PROGRESS
+    for attempt_id in (stalled, never_progressed):
+        attempt = db_session.get(DocPermissionSyncAttempt, attempt_id)
+        assert attempt is not None
+        assert attempt.status == PermissionSyncStatus.FAILED
+        assert attempt.error_message is not None
+        assert "no progress" in attempt.error_message
 
 
 def test_worker_cannot_overwrite_reaped_attempt(

@@ -316,7 +316,16 @@ generator, and a set of lightweight fan-out subtasks, tied together by a fence:
    in `celery_redis.py`). If a fence's payload fails to parse (schema drift), it
    is reset rather than left stuck. This is the mechanism by which a fence whose
    generator task died without cleaning up gets recovered without manual
-   intervention; `pruning/tasks.py:validate_pruning_fence` has a comment
+   intervention. Either reset also ends the pair's `IN_PROGRESS` prune
+   `SyncRecord` as `FAILED` with the reason (`fail_orphaned_prune_records`,
+   called while the fence still blocks a new prune), and the primary worker's
+   single-tenant startup reset of every prune fence
+   (`reset_prune_fences_on_startup`, which holds the prune dispatch lock with
+   a longer TTL than a dispatch and renews it between steps, so an API call
+   cannot start a prune half inside the reset) does the same for every
+   running prune record, which would otherwise stay `IN_PROGRESS` with no
+   reason until the next prune cancels it;
+   `pruning/tasks.py:validate_pruning_fence` has a comment
    pointing at `validate_indexing_fence` as the canonical description of the
    flow. `[[indexing-pipeline]]` documents the indexing-specific version of this
    same pattern; `[[permission-sync]]` describes the lease that replaced

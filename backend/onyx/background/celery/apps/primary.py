@@ -17,6 +17,7 @@ from redis.lock import Lock as RedisLock
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.background.celery.tasks.pruning.tasks import reset_prune_fences_on_startup
 from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
 from onyx.configs.constants import (
@@ -29,7 +30,6 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.index_attempt import get_index_attempt, mark_attempt_canceled
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
@@ -193,7 +193,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     RedisDocumentSet.reset_all(r)
     RedisUserGroup.reset_all(r)
     RedisConnectorDelete.reset_all(r)
-    RedisConnectorPrune.reset_all(r)
+    reset_prune_fences_on_startup(r)
     RedisConnectorStop.reset_all(r)
 
     # mark orphaned index attempts as failed
