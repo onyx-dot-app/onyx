@@ -268,6 +268,13 @@ POST /auth/login     → fastapi-users login router
      | SingleTenantJWTStrategy, keyed by AUTH_BACKEND
 ```
 
+The captcha middleware in `server/auth/captcha_api.py` uses pure ASGI calls.
+`LoginCaptchaMiddleware` checks guarded login requests before the handler runs.
+`CaptchaCookieMiddleware` checks guarded OAuth callbacks and appends cookie deletion
+at response start. Other cookies remain intact. Unguarded requests pass through
+without a body relay. `utils/client_ip.py:ClientIPMiddleware` keeps client IP context
+through stream completion and restores the caller's context in `finally`.
+
 ### 4.2 OAuth / OIDC (single- and multi-provider)
 
 ```

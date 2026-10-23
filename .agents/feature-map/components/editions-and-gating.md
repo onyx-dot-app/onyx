@@ -67,7 +67,7 @@ without overriding disabled actions.
 
 | Variable | Read in | Default | Effect |
 |---|---|---|---|
-| `MULTI_TENANT` | `backend/shared_configs/configs.py` | `false` | Cloud mode. Selects control-plane gating (`add_api_server_tenant_id_middleware`) over the self-hosted license middleware in `backend/ee/onyx/main.py:get_application`. Also gates whether `backend/onyx/feature_flags/factory.py:get_default_feature_flag_provider` even attempts the PostHog provider. |
+| `MULTI_TENANT` | `backend/shared_configs/configs.py` | `false` | Cloud mode. Selects control-plane gating (`tenant_id_middleware`) over the self-hosted license middleware in `backend/ee/onyx/main.py:get_application`. Also gates whether `backend/onyx/feature_flags/factory.py:get_default_feature_flag_provider` even attempts the PostHog provider. |
 
 No environment variable selects the edition. On a self-hosted deployment, none
 turns license enforcement off.
@@ -253,7 +253,7 @@ cloud licensing is driven by the control plane and the `gated_tenants` Redis
 key instead. `backend/ee/onyx/server/middleware/license_enforcement.py`
 enforces license state (`GATED_ACCESS`, seat limits) on every self-hosted
 deployment; MULTI_TENANT
-deployments get `add_api_server_tenant_id_middleware` instead
+deployments get `tenant_id_middleware` instead
 (`backend/ee/onyx/main.py:get_application`). Whether EE *features* (as
 opposed to EE *code*) are actually unlocked is a separate question, answered
 by `backend/ee/onyx/utils/tier.py:get_tier` and, for the UI, by the

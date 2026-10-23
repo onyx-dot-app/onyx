@@ -182,6 +182,11 @@ Mobile mirrors this independently: `mobile/src/chat/ndjson.ts:NdjsonBuffer` is a
 pure line-buffer with the same brace-recovery fallback, explicitly commented as
 matching web's `handleSSEStream` internals.
 
+The API's context, captcha, and enterprise gating middleware use pure ASGI calls.
+They do not relay each body chunk through `BaseHTTPMiddleware` tasks and queues.
+Request context remains set until the downstream response finishes. The synchronous
+chat generator still runs through Starlette's thread pool for each yielded packet.
+
 ### 4.5 Buffering and resume
 
 `process_message.py` constructs one `StreamBufferWriter` per run
