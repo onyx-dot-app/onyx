@@ -32,7 +32,10 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     );
   }
 
-  const builtInGroups = filtered.filter(isBuiltInGroup);
+  // Basic leads the built-in groups, above Admin.
+  const builtInGroups = filtered
+    .filter(isBuiltInGroup)
+    .sort((a, b) => Number(b.name === "Basic") - Number(a.name === "Basic"));
   const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
   return (
