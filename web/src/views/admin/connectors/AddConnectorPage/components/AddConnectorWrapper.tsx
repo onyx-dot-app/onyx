@@ -24,7 +24,15 @@ import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
-import { IllustrationContent, PageCenter, Section, SettingsLayouts, StickyBox, toast, useToastFromQuery } from "@opal/layouts";
+import {
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  StickyBox,
+  toast,
+  useToastFromQuery,
+} from "@opal/layouts";
 import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { Button, Divider, MessageCard } from "@opal/components";
@@ -924,7 +932,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 )}
                               </>
                             )}
-  
+
                             {!noCredentials && (
                               <AuthenticationAccountSection
                                 connector={connector}
@@ -943,22 +951,24 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 expandChecksRequest={expandChecksRequest}
                               />
                             )}
-  
+
                             {credentialSwapped && (
                               <MessageCard
                                 variant="info"
                                 title={editT("credentialSwap.title")}
-                                description={editT("credentialSwap.description")}
+                                description={editT(
+                                  "credentialSwap.description"
+                                )}
                               />
                             )}
-  
+
                             {(!noCredentials || hasVisibleBoundFields) && (
                               <Divider
                                 paddingParallel={0}
                                 paddingPerpendicular={0}
                               />
                             )}
-  
+
                             {/* Locked, under one Disabled that blocks pointer
                         and keyboard, until an account is selected. */}
                             <Disabled
@@ -969,7 +979,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                               tooltipAlign="follow"
                               data-testid="connector-form"
                             >
-                              <Section gap={6} alignItems="stretch" width="full">
+                              <Section
+                                gap={6}
+                                alignItems="stretch"
+                                width="full"
+                              >
                                 {/* A source with no fields (Gmail) shows only the
                                 start date; the file source shows neither. */}
                                 {(hasContentFields || indexesFromStart) && (
@@ -985,7 +999,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                           : {
                                               credentialId: formCredentialId,
                                               connectorId:
-                                                edit?.ccPair.connector.id ?? null,
+                                                edit?.ccPair.connector.id ??
+                                                null,
                                             }
                                       }
                                       disabled={!formUnlocked}
@@ -1001,7 +1016,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                         />
                                       )}
                                     </ConnectorContentSection>
-  
+
                                     <Divider
                                       paddingParallel={0}
                                       paddingPerpendicular={0}
@@ -1014,7 +1029,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                   disabled={!formUnlocked}
                                   editing={edit !== undefined}
                                 />
-  
+
                                 {connector !== "file" && (
                                   <>
                                     <Divider
