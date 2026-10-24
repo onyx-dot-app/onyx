@@ -42,6 +42,7 @@ def build_decision_client(
     api_base: str | None = None,
     zoom_voice_provider_id: int | None = None,
     extra_headers: dict[str, str] | None = None,
+    model_configuration_id: int | None = None,
 ) -> DecisionClient:
     if zoom_voice_provider_id is not None and provider != DecisionProvider.ZOOM_AI:
         raise ValueError("Only Zoom Decisions can link a Zoom Scribe connection")
@@ -58,4 +59,5 @@ def build_decision_client(
             if zoom_voice_provider_id is not None
             else None
         ),
+        model_configuration_id=model_configuration_id,
     )
