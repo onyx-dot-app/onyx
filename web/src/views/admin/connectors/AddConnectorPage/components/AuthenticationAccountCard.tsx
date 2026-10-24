@@ -259,7 +259,7 @@ export default function AuthenticationAccountCard({
   const ownerName: string | null =
     credential.user_id === null
       ? null
-      : (credential.user_personal_name ?? credential.user_email);
+      : credential.user_personal_name || credential.user_email;
   // The account's name, which its editors can change in place; an unnamed
   // account shows who created it.
   const accountName: string =

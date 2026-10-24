@@ -119,7 +119,7 @@ function nameColumn(
       <Content
         sizePreset="main-ui"
         variant="section"
-        title={row.personal_name ?? row.email}
+        title={row.personal_name || row.email}
         description={row.personal_name ? row.email : undefined}
         tag={
           isManager?.(row)
