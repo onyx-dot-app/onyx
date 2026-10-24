@@ -28,6 +28,7 @@ class WebSearchProviderType(str, Enum):
     EXA = "exa"
     SEARXNG = "searxng"
     BRAVE = "brave"
+    OLLAMA = "ollama"
     TAVILY = "tavily"
     FIRECRAWL = "firecrawl"
 
