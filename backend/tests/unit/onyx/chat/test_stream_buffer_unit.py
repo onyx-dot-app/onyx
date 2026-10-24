@@ -310,6 +310,7 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
         second_write.result(timeout=2)
     delivery.finish()
     delivery.publish(first)
+    delivery.finished.result(timeout=3)
 
     assert list(delivery.reader) == [first, second]
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
@@ -318,6 +319,51 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     assert "".join(saved.blocks) == "".join(
         get_json_line(packet.model_dump()) for packet in (first, second)
     )
+
+
+def test_final_replay_batch_and_live_completion_exclude_late_packets() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    output = ChatDelivery(_make_writer(cache, session_id))
+    first = Packet(
+        placement=Placement(turn_index=0), obj=AgentResponseDelta(content="first")
+    )
+    late = Packet(
+        placement=Placement(turn_index=0), obj=AgentResponseDelta(content="late")
+    )
+    finalizing = Event()
+    release = Event()
+    publishing = Event()
+    finish_live = output._finish_live
+
+    def finish() -> None:
+        finalizing.set()
+        assert release.wait(3)
+        finish_live()
+
+    def publish() -> None:
+        publishing.set()
+        output.publish(late)
+
+    output.publish(first)
+    with patch.object(output, "_finish_live", side_effect=finish):
+        output.events.close()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            try:
+                assert finalizing.wait(2)
+                pending = executor.submit(publish)
+                assert publishing.wait(2)
+                with pytest.raises(TimeoutError):
+                    pending.result(timeout=0.05)
+            finally:
+                release.set()
+            pending.result(timeout=2)
+        output.finished.result(timeout=3)
+
+    assert list(output.reader) == [first]
+    saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
+    assert saved is not None and saved.done and not saved.gap
+    assert "".join(saved.blocks) == get_json_line(first.model_dump())
 
 
 def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
@@ -397,6 +443,7 @@ def test_event_delivery_and_cache_writes_share_worker(
             placement=Placement(turn_index=0), obj=OverallStop(stop_reason="second")
         ),
     ]
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert len(workers) == 1
@@ -418,7 +465,6 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
     channel = EventDelivery(output.events)
     entered = Event()
     release = Event()
-    finishing = Event()
 
     def receive(event: AgentEvent) -> None:
         if event.run_id == "first":
@@ -431,24 +477,13 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
             )
         )
 
-    def finish() -> None:
-        finishing.set()
-        output.finish()
-
     channel.subscribe(receive)
     channel.publish(AgentStartEvent(run_id="first"))
     try:
         assert entered.wait(2)
         channel.publish(AgentStartEvent(run_id="second"))
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            closing = executor.submit(contextvars.copy_context().run, finish)
-            try:
-                assert finishing.wait(2)
-                with pytest.raises(TimeoutError):
-                    closing.result(timeout=0.05)
-            finally:
-                release.set()
-            closing.result(timeout=2)
+        output.finish()
+        assert not output.finished.done()
     finally:
         release.set()
         channel.close()
@@ -458,6 +493,7 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
         for reason in ("first", "second")
     ]
     assert list(output.reader) == packets
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
@@ -502,6 +538,7 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
         channel.close()
         output.finish()
     assert list(output.reader) == packets
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
@@ -525,6 +562,7 @@ def test_pending_replay_retains_many_small_packets() -> None:
     output.finish()
 
     assert list(output.reader) == packets
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
@@ -553,6 +591,7 @@ def test_pending_replay_byte_limit_preserves_live_output(
     output.finish()
 
     assert list(output.reader) == [packet, packet]
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done
     assert saved.gap == overflow
@@ -576,6 +615,7 @@ def test_replay_failure_does_not_fail_live_output(
     output.publish(packet)
     output.finish()
     assert list(output.reader) == [packet]
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     if delete_on_done:
         assert saved is None
@@ -610,15 +650,15 @@ def test_replay_overflow_does_not_suppress_a_later_live_gap(
     assert len(remaining) == 1
     assert isinstance(remaining[0], StreamingError)
     assert remaining[0].error_code == "STREAM_GAP"
+    output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and saved.gap
 
 
 @pytest.mark.parametrize("periodic_flush", [False, True])
-def test_cache_cleanup_timeout_does_not_fail_completed_live_output(
+def test_live_completion_does_not_wait_for_replay_storage(
     monkeypatch: pytest.MonkeyPatch, periodic_flush: bool
 ) -> None:
-    monkeypatch.setattr("onyx.agents.concurrency.CLEANUP_SECONDS", 0.01)
     cache = FakeCache()
     session_id = uuid4()
     output = ChatDelivery(_make_writer(cache, session_id))
@@ -652,10 +692,10 @@ def test_cache_cleanup_timeout_does_not_fail_completed_live_output(
     assert saved is not None and saved.done and not saved.gap
 
 
-def test_event_delivery_timeout_reports_missing_live_output(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("detached", [False, True])
+def test_completion_drains_delayed_events_before_closing_live_output(
+    detached: bool,
 ) -> None:
-    monkeypatch.setattr("onyx.agents.concurrency.CLEANUP_SECONDS", 0.01)
     cache = FakeCache()
     session_id = uuid4()
     output = ChatDelivery(_make_writer(cache, session_id))
@@ -663,20 +703,27 @@ def test_event_delivery_timeout_reports_missing_live_output(
     entered = Event()
     release = Event()
 
-    def receive(_event: AgentEvent) -> None:
+    packets = [
+        Packet(placement=Placement(turn_index=0), obj=AgentResponseDelta(content=text))
+        for text in ("first", "second")
+    ]
+
+    def receive(event: AgentEvent) -> None:
         entered.set()
         assert release.wait(5)
-        output.publish(Packet(placement=Placement(turn_index=0), obj=OverallStop()))
+        output.publish(packets[int(event.run_id)])
 
     channel.subscribe(receive)
-    channel.publish(AgentStartEvent(run_id="response"))
+    channel.publish(AgentStartEvent(run_id="0"))
     try:
         assert entered.wait(2)
+        channel.publish(AgentStartEvent(run_id="1"))
+        if detached:
+            output.reader.close()
+        channel.close()
         output.finish()
-        items = list(output.reader)
-        assert len(items) == 1
-        assert isinstance(items[0], StreamingError)
-        assert items[0].error_code == "STREAM_GAP"
+        assert not channel.failed.is_set()
+        assert not output.finished.done()
     finally:
         release.set()
         assert channel.tracker.wait_idle(timeout=3)
@@ -684,4 +731,8 @@ def test_event_delivery_timeout_reports_missing_live_output(
         output.events.close()
         output.finished.result(timeout=3)
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
-    assert saved is not None and saved.done and saved.gap
+    assert saved is not None and saved.done and not saved.gap
+    assert list(output.reader) == ([] if detached else packets)
+    assert "".join(saved.blocks) == "".join(
+        get_json_line(packet.model_dump()) for packet in packets
+    )

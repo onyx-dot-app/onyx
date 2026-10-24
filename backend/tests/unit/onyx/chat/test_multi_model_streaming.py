@@ -1368,6 +1368,8 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
 
     setup = _make_setup()
     buffer = MagicMock(truncated=False)
+    replay_finished = threading.Event()
+    buffer.mark_done.side_effect = replay_finished.set
     with (
         mock_model_execution(),
         patch(
@@ -1376,6 +1378,7 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
         ) as save,
     ):
         packets = list(_start_chat_turn(setup, MagicMock(), stream_buffer=buffer))
+        assert replay_finished.wait(2)
 
     errors = [packet for packet in packets if isinstance(packet, StreamingError)]
     assert len(errors) == 1
@@ -1394,6 +1397,8 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
 def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
     setup = _make_setup(2)
     buffer = MagicMock(truncated=False)
+    replay_finished = threading.Event()
+    buffer.mark_done.side_effect = replay_finished.set
 
     def start_job(operation: Callable[[], None], **kwargs: Any) -> Future[None]:
         name = kwargs.get("name")
@@ -1428,6 +1433,7 @@ def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
             assert all(call.kwargs["response"].error for call in save.call_args_list)
             assert any(isinstance(packet, StreamingError) for packet in packets)
         prepare.assert_not_called()
+        assert replay_finished.wait(2)
     buffer.mark_done.assert_called_once()
 
 
@@ -1680,7 +1686,6 @@ def test_overflowed_stream_storage_finishes_retention_cleanup() -> None:
 
     with (
         patch("onyx.chat.stream_buffer._REPLAY_BACKLOG_MAX_BYTES", 512),
-        patch("onyx.agents.concurrency.CLEANUP_SECONDS", 0.02),
         mock_model_execution(side_effect=execute),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
@@ -1709,6 +1714,8 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
     release = threading.Event()
     cache_failed = threading.Event()
     buffer = MagicMock(truncated=False)
+    replay_finished = threading.Event()
+    buffer.mark_done.side_effect = replay_finished.set
 
     def fail_cache(_line: str) -> None:
         cache_failed.set()
@@ -1743,6 +1750,7 @@ def test_cache_failure_does_not_finalize_active_execution() -> None:
             remaining = list(reader)
         assert not any(isinstance(item, StreamingError) for item in remaining)
         persist.assert_called_once()
+        assert replay_finished.wait(2)
     buffer.mark_done.assert_called_once()
     buffer.mark_truncated.assert_called_once()
 

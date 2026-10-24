@@ -79,7 +79,9 @@ def _run(
 
 
 def test_captures_model_identity_and_sent_temperature() -> None:
-    params = _run(_make_llm(temperature=0.3, model_name="custom-chat-model"), ReasoningEffort.AUTO)
+    params = _run(
+        _make_llm(temperature=0.3, model_name="custom-chat-model"), ReasoningEffort.AUTO
+    )
 
     assert params is not None
     assert params.model_name == "custom-chat-model"
@@ -142,7 +144,8 @@ def test_tracing_and_events_receive_the_same_parameters() -> None:
 def test_non_finite_floats_are_dropped() -> None:
     """Postgres JSONB rejects non-finite numbers."""
     params = _run(
-        _make_llm(temperature=float("nan"), model_name="custom-chat-model"), ReasoningEffort.AUTO
+        _make_llm(temperature=float("nan"), model_name="custom-chat-model"),
+        ReasoningEffort.AUTO,
     )
 
     assert params is not None
@@ -154,7 +157,10 @@ def test_nested_generations_keep_their_request_parameters() -> None:
 
     def completion(_kwargs: dict[str, JsonValue]) -> None:
         nested.append(
-            _run(_make_llm(temperature=0.7, model_name="custom-chat-model"), ReasoningEffort.AUTO)
+            _run(
+                _make_llm(temperature=0.7, model_name="custom-chat-model"),
+                ReasoningEffort.AUTO,
+            )
         )
 
     outer = _run(
