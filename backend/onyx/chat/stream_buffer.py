@@ -310,23 +310,12 @@ class ChatStream(Iterator[Packet | StreamingError]):
     def close(self) -> None:
         with self._lock:
             self._closed = True
-            self._discard_pending()
+            while True:
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    break
             self._queue.put_nowait(_StreamStatus.DONE)
-
-    def _discard_pending(self) -> None:
-        while True:
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                return
-
-
-def _stream_gap() -> StreamingError:
-    return StreamingError(
-        error="The live stream is incomplete. Reload this conversation.",
-        error_code="STREAM_GAP",
-        is_retryable=True,
-    )
 
 
 class ChatDelivery:
@@ -403,7 +392,13 @@ class ChatDelivery:
             self._replay_unavailable.set()
             self._pending_replay.clear()
             self._pending_replay_bytes = 0
-            self.reader.publish(_stream_gap())
+            self.reader.publish(
+                StreamingError(
+                    error="The live stream is incomplete. Reload this conversation.",
+                    error_code="STREAM_GAP",
+                    is_retryable=True,
+                )
+            )
 
     def finish(self) -> None:
         with self._publish_lock:
@@ -414,26 +409,30 @@ class ChatDelivery:
             self.events.close()
         except Exception:
             logger.exception("Chat delivery could not finalize")
-            self._finished.set()
             self.report_gap()
             if not self.finished.done():
                 self.finished.set_result(None)
-        if not self.finished.done():
-            if self.events.has_pending_events:
-                logger.warning("Chat event delivery exceeded its wait bound")
-                self.report_gap()
-            else:
-                logger.warning("Chat cache delivery cleanup exceeded its wait bound")
+            self._finish_live()
+            return
+        if not self.events.has_pending_events:
+            self._finish_live()
+
+    def _finish_live(self) -> None:
+        with self._publish_lock:
+            if self._finished.is_set():
+                return
+            self._finished.set()
         if self._query_observation is not None:
             self._query_observation.finish()
         self.reader.publish(_StreamStatus.DONE)
 
     def _flush_replay(self, final: bool) -> None:
         with self._publish_lock:
-            if final:
-                self._finished.set()
             if self.finished.done():
                 return
+            # Seal publication before taking the final replay batch.
+            if final:
+                self._finish_live()
             lines = self._pending_replay
             self._pending_replay = []
             self._pending_replay_bytes = 0

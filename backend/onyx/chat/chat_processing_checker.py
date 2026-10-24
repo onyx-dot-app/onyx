@@ -1,7 +1,12 @@
 import time
 from uuid import UUID, uuid4
 
-from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
+from onyx.cache.interface import (
+    CACHE_TRANSIENT_ERRORS,
+    CacheBackend,
+    CacheLock,
+    CacheLockLostError,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -17,6 +22,7 @@ PROCESSING_REFRESH_INTERVAL_S = 5.0
 _ADMISSION_LOCK_TTL_SECONDS = 30
 _ADMISSION_LOCK_WAIT_SECONDS = 5
 _ADMISSION_EXPIRY_MARGIN_SECONDS = 5
+_ADMISSION_RENEWAL_ATTEMPTS = 2
 
 
 def _get_fence_key(chat_session_id: UUID) -> str:
@@ -83,20 +89,31 @@ class ChatTurnAdmission:
             raise CacheLockLostError("Chat session admission renewal expired")
 
     def _renew_owner(self, session_id: UUID, lease_seconds: int) -> None:
-        self._check_deadline()
-        started = time.monotonic()
-        # A lost reply may still shorten the lease. Keep its conservative deadline.
-        self._lease_seconds = lease_seconds
-        if not self.cache.renew_if_value(
-            self._owner_key(session_id), self._token, lease_seconds
-        ):
-            raise CacheLockLostError("Chat session admission was lost")
-        if (
-            time.monotonic() - started
-            >= lease_seconds - _ADMISSION_EXPIRY_MARGIN_SECONDS
-        ):
-            raise CacheLockLostError("Chat session admission renewal expired")
-        self._last_refresh = started
+        for attempt in range(_ADMISSION_RENEWAL_ATTEMPTS):
+            self._check_deadline()
+            started = time.monotonic()
+            # A lost reply may still shorten the lease. Keep its conservative deadline.
+            self._lease_seconds = lease_seconds
+            try:
+                renewed = self.cache.renew_if_value(
+                    self._owner_key(session_id), self._token, lease_seconds
+                )
+            except CACHE_TRANSIENT_ERRORS:
+                if attempt + 1 == _ADMISSION_RENEWAL_ATTEMPTS:
+                    raise
+                logger.warning(
+                    "Chat session owner renewal failed; retrying", exc_info=True
+                )
+                continue
+            if not renewed:
+                raise CacheLockLostError("Chat session admission was lost")
+            if (
+                time.monotonic() - started
+                >= lease_seconds - _ADMISSION_EXPIRY_MARGIN_SECONDS
+            ):
+                raise CacheLockLostError("Chat session admission renewal expired")
+            self._last_refresh = started
+            return
 
     def publish(self, stream_id: int) -> None:
         session_id = self._session_id

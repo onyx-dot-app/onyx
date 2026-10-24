@@ -9,12 +9,15 @@ import contextvars
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from redis import Redis
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
+from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.chat.chat_processing_checker import (
     ACTIVE_LEASE_SECONDS,
     PREPARATION_LEASE_SECONDS,
@@ -28,6 +31,7 @@ from onyx.chat.stop_signal_checker import (
     is_stop_requested,
     request_stop,
 )
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class _MemoryCacheBackend(CacheBackend):
@@ -285,6 +289,98 @@ def test_late_renewal_cannot_reclaim_expired_admission() -> None:
     ):
         with pytest.raises(CacheLockLostError):
             admission.refresh()
+
+
+@pytest.mark.parametrize("timeout_at", ["watch", "execute"])
+def test_admission_retries_redis_renewal_timeout(timeout_at: str) -> None:
+    cache = _AdmissionCache()
+    admission = ChatTurnAdmission(cache)
+    session_id = uuid4()
+    admission.claim(session_id)
+    owner_key = f"chatprocessing_owner_{session_id}"
+    token = cache.get(owner_key)
+    redis = MagicMock(spec=Redis)
+    pipeline = redis.pipeline.return_value.__enter__.return_value
+    pipeline.get.return_value = token
+    executions = 0
+
+    def execute() -> list[bool]:
+        nonlocal executions
+        executions += 1
+        cache.expire(owner_key, PREPARATION_LEASE_SECONDS)
+        if timeout_at == "execute" and executions == 1:
+            raise RedisTimeoutError("Renewal reply was lost")
+        return [True]
+
+    pipeline.execute.side_effect = execute
+    if timeout_at == "watch":
+        pipeline.watch.side_effect = [RedisTimeoutError("WATCH timed out"), None]
+    backend = RedisCacheBackend(TenantRedisClient("tenant", redis))
+    try:
+        with patch.object(
+            cache, "renew_if_value", side_effect=backend.renew_if_value
+        ) as renew:
+            admission.refresh()
+        assert renew.call_count == 2
+        assert all(
+            call.args == (owner_key, token, PREPARATION_LEASE_SECONDS)
+            for call in renew.call_args_list
+        )
+        assert pipeline.watch.call_count == 2
+        pipeline.get.assert_called_with(f"tenant:{owner_key}")
+        assert cache.get(owner_key) == token
+        assert cache.ttl(owner_key) == PREPARATION_LEASE_SECONDS
+    finally:
+        admission.release()
+
+
+def test_admission_renewal_retry_is_bounded() -> None:
+    cache = _AdmissionCache()
+    admission = ChatTurnAdmission(cache)
+    admission.claim(uuid4())
+    last_refresh = admission._last_refresh
+    try:
+        with patch.object(
+            cache, "renew_if_value", side_effect=RedisTimeoutError("Cache unavailable")
+        ) as renew:
+            with pytest.raises(RedisTimeoutError):
+                admission.refresh()
+        assert renew.call_count == 2
+        assert admission._last_refresh == last_refresh
+    finally:
+        admission.release()
+
+
+@pytest.mark.parametrize("lease_expired", [False, True])
+def test_admission_retry_cannot_reclaim_lost_ownership(lease_expired: bool) -> None:
+    cache = _AdmissionCache()
+    admission = ChatTurnAdmission(cache)
+    session_id = uuid4()
+    admission.claim(session_id)
+    owner_key = f"chatprocessing_owner_{session_id}"
+    original_renew = cache.renew_if_value
+    attempts = 0
+
+    def renew(key: str, expected: bytes, seconds: int) -> bool:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            if lease_expired:
+                admission._last_refresh -= PREPARATION_LEASE_SECONDS
+            else:
+                cache.set(owner_key, b"replacement", ex=PREPARATION_LEASE_SECONDS)
+            raise RedisTimeoutError("Renewal timed out")
+        return original_renew(key, expected, seconds)
+
+    try:
+        with patch.object(cache, "renew_if_value", side_effect=renew):
+            with pytest.raises(CacheLockLostError):
+                admission.refresh()
+        assert attempts == (1 if lease_expired else 2)
+        if not lease_expired:
+            assert cache.get(owner_key) == b"replacement"
+    finally:
+        admission.release()
 
 
 def test_claim_write_timeout_can_release_its_own_admission() -> None:
