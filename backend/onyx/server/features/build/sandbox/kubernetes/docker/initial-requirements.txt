@@ -1,4 +1,5 @@
 defusedxml>=0.7.1
+certifi>=2026.10.19
 google-genai>=1.0.0
 lxml>=5.0.0
 markitdown>=0.1.2

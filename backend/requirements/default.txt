@@ -96,7 +96,7 @@ botocore==1.39.11
 botocore-stubs==1.40.74
     # via boto3-stubs
 braintrust==0.3.9
-brotli==1.2.0
+brotli==1.2.1
     # via onyx
 bytecode==0.17.0
     # via ddtrace
@@ -105,13 +105,14 @@ cachetools==6.2.2
 caio==0.9.25
     # via aiofile
 celery==5.5.1
-certifi==2025.11.12
+certifi==2026.10.19
     # via
     #   asana
     #   httpcore
     #   httpx
     #   hubspot-api-client
     #   kubernetes
+    #   onyx
     #   opensearch-py
     #   requests
     #   sentry-sdk

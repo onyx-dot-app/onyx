@@ -54,15 +54,16 @@ botocore==1.39.11
     #   aiobotocore
     #   boto3
     #   s3transfer
-brotli==1.2.0
+brotli==1.2.1
     # via onyx
 celery==5.5.1
     # via sentry-sdk
-certifi==2025.11.12
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
     #   kubernetes
+    #   onyx
     #   requests
     #   sentry-sdk
 cffi==2.0.0 ; platform_python_implementation != 'PyPy'
